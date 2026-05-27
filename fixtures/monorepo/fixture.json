@@ -1,0 +1,45 @@
+{
+  "id": "monorepo",
+  "type": "monorepo",
+  "label": "Monorepo fixture",
+  "description": "Minimal multi-package workspace fixture with local package dependency validation.",
+  "files": [
+    "package.json",
+    "prd.json",
+    "packages/app/src/index.ts",
+    "packages/app/test.ts",
+    "packages/utils/src/math.ts"
+  ],
+  "project": {
+    "language": "javascript",
+    "package_manager": "npm",
+    "layout": "monorepo",
+    "test_framework": "node:test"
+  },
+  "requirement": {
+    "id": "REQ-MONO-001",
+    "text": "Expose an app summary that uses a shared workspace utility."
+  },
+  "spec": {
+    "id": "SPEC-MONO-001",
+    "requirement_id": "REQ-MONO-001",
+    "design_id": "DES-MONO-001",
+    "task_id": "FIX-MONO-001"
+  },
+  "task": {
+    "id": "FIX-MONO-001",
+    "prd": "prd.json"
+  },
+  "run": {
+    "mode": "dry-run",
+    "supports_dry_run": true,
+    "commands": [
+      "node --test packages/app/test.ts"
+    ]
+  },
+  "evidence": {
+    "expected": [
+      "state/evidence/FIX-MONO-001/run.json"
+    ]
+  }
+}

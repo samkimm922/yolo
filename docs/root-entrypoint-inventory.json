@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-05-26",
+  "policy": {
+    "new_root_ts_allowed": false,
+    "goal": "Root .ts files must be explicit public entrypoints or temporary compatibility shims; non-public tooling belongs in bin/ or src/."
+  },
+  "entries": [
+    {
+      "file": "gate.ts",
+      "role": "compat_cli",
+      "status": "shim_to_src",
+      "target": "src/cli/gate.ts",
+      "package_script": true,
+      "reason": "Root gate remains only as a compatibility entry while the package bin and npm script route through the src CLI."
+    },
+    {
+      "file": "learn.ts",
+      "role": "runtime_state_tool",
+      "status": "shim_to_src",
+      "target": "src/runtime/learning/learn.ts",
+      "package_script": true,
+      "reason": "Root learn is now a compatibility CLI shim while the implementation lives under runtime learning."
+    },
+    {
+      "file": "prompt.ts",
+      "role": "compat_cli",
+      "status": "shim_to_src",
+      "target": "src/cli/prompt.ts",
+      "package_script": true,
+      "reason": "Root prompt remains only as a compatibility entry while bin/yolo-prompt routes through the src CLI."
+    },
+    {
+      "file": "runner.ts",
+      "role": "runner_entry",
+      "status": "shim_to_src",
+      "target": "src/runtime/runner-core.ts",
+      "package_script": true,
+      "reason": "Runner root is a thin compatibility entry over the src runtime core and is kept as the known manual entrypoint."
+    },
+    {
+      "file": "sdk.ts",
+      "role": "public_export",
+      "status": "keep_root",
+      "target": "sdk.ts",
+      "public_export": true,
+      "reason": "Package root export is intentionally a root SDK facade for Node package compatibility."
+    },
+    {
+      "file": "session-memory.ts",
+      "role": "runtime_state_tool",
+      "status": "shim_to_src",
+      "target": "src/runtime/evidence/session-memory.ts",
+      "reason": "Root session-memory is now a compatibility CLI shim while the implementation lives under runtime evidence."
+    },
+    {
+      "file": "state-snapshot.ts",
+      "role": "runtime_state_tool",
+      "status": "shim_to_src",
+      "target": "src/runtime/evidence/state-snapshot.ts",
+      "reason": "Root state-snapshot is now a compatibility CLI shim while the implementation lives under runtime evidence."
+    },
+    {
+      "file": "task-logger.ts",
+      "role": "runtime_support_module",
+      "status": "shim_to_src",
+      "target": "src/runtime/logging/task-logger.ts",
+      "reason": "Root task-logger is now a compatibility import shim while the implementation lives under runtime logging."
+    }
+  ]
+}

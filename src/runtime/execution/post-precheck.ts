@@ -1,0 +1,142 @@
+import {
+  existsSync as defaultExistsSync,
+  readFileSync as defaultReadFileSync,
+} from "node:fs";
+import { resolve } from "node:path";
+import { execSync as defaultExecSync } from "node:child_process";
+import { skipTaskTransition } from "../task-state/transitions.js";
+
+export function taskForValidSkipPostconditions(task = {}) {
+  return {
+    ...task,
+    scope: {
+      ...(task.scope || {}),
+      expected_zero_business_code: true,
+    },
+  };
+}
+
+export function explicitCodePostconditionsPass({
+  task = {},
+  rootDir,
+  existsSync = defaultExistsSync,
+  readFileSync = defaultReadFileSync,
+} = {}) {
+  const postConditions = task.post_conditions || [];
+  if (postConditions.length === 0) {
+    return { passed: false, reason: "no_post_conditions" };
+  }
+
+  for (const condition of postConditions) {
+    if (condition.type !== "code_contains" && condition.type !== "code_not_contains") {
+      continue;
+    }
+    const file = condition.params?.file;
+    const text = condition.params?.text;
+    if (!file || !text) continue;
+
+    const absolutePath = resolve(rootDir, file);
+    if (!existsSync(absolutePath)) {
+      return { passed: false, reason: "target_missing", file };
+    }
+
+    const content = readFileSync(absolutePath, "utf8");
+    const contains = content.includes(text);
+    if (condition.type === "code_contains" && !contains) {
+      return { passed: false, reason: "code_contains_failed", file };
+    }
+    if (condition.type === "code_not_contains" && contains) {
+      return { passed: false, reason: "code_not_contains_failed", file };
+    }
+  }
+
+  return { passed: true };
+}
+
+export function parseTscErrorFiles(tscOutput = "") {
+  const errorLines = String(tscOutput)
+    .split("\n")
+    .filter((line) => /error TS\d+:/.test(line));
+  const files = new Set(
+    errorLines
+      .map((line) => line.split("(")[0].trim())
+      .filter((file) => file.endsWith(".ts") || file.endsWith(".tsx")),
+  );
+  return { errorLines, files };
+}
+
+export function targetFilesHaveTscErrors(targetFiles = [], errorFiles = new Set()) {
+  return targetFiles.some((file) => {
+    const rel = String(file || "").replace(/^\.\//, "");
+    return errorFiles.has(rel) || [...errorFiles].some((errorFile) => errorFile.endsWith(rel) || rel.endsWith(errorFile));
+  });
+}
+
+export function inspectPostPrecheckSkip({
+  task = {},
+  rootDir,
+  typeCheckCommand,
+  execSync = defaultExecSync,
+  existsSync = defaultExistsSync,
+  readFileSync = defaultReadFileSync,
+} = {}) {
+  const explicit = explicitCodePostconditionsPass({
+    task,
+    rootDir,
+    existsSync,
+    readFileSync,
+  });
+  if (!explicit.passed) {
+    return { shouldSkip: false, reason: explicit.reason, file: explicit.file };
+  }
+
+  const targetFiles = (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
+  if (targetFiles.length > 0 && typeCheckCommand) {
+    try {
+      execSync(`${typeCheckCommand} 2>&1`, {
+        encoding: "utf8",
+        cwd: rootDir,
+        timeout: 120000,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (error) {
+      const tscOutput = `${error.stdout || ""}${error.stderr || ""}`;
+      const { errorLines, files } = parseTscErrorFiles(tscOutput);
+      if (errorLines.length > 0 && targetFilesHaveTscErrors(targetFiles, files)) {
+        return {
+          shouldSkip: false,
+          reason: "target_tsc_errors",
+          logMessage: `[precheck] TSC 编译错误仍涉及目标文件（${errorLines.length} 条错误中有目标文件），不跳过`,
+        };
+      }
+    }
+  }
+
+  const skipTask = taskForValidSkipPostconditions(task);
+  return {
+    shouldSkip: true,
+    reason: "post-precheck: 已修复",
+    logMessage: "已修复预检: 显式 POST conditions 全部通过（主目录），跳过",
+    transition: skipTaskTransition({
+      taskId: task.id,
+      reason: "post-precheck: 主目录已满足修复条件",
+      result: {
+        skip_kind: "valid_skip_already_satisfied",
+        counts_as_completed: true,
+      },
+      prdUpdate: {
+        scope: skipTask.scope,
+        skip_kind: "valid_skip_already_satisfied",
+        counts_as_completed: true,
+        phase: "done",
+        phaseDetail: "post-precheck: 已修复",
+      },
+    }),
+    result: {
+      status: "skipped",
+      skip_kind: "valid_skip_already_satisfied",
+      counts_as_completed: true,
+      reason: "post-precheck: 已修复",
+    },
+  };
+}

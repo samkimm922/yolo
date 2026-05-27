@@ -1,0 +1,45 @@
+{
+  "id": "backend-api",
+  "type": "backend-api",
+  "label": "Backend API fixture",
+  "description": "Dependency-free Node HTTP API fixture with node:test smoke validation.",
+  "files": [
+    "package.json",
+    "prd.json",
+    "src/server.ts",
+    "test/server.test.ts"
+  ],
+  "project": {
+    "language": "javascript",
+    "package_manager": "npm",
+    "framework": "node-http",
+    "architecture": "backend-api",
+    "test_framework": "node:test"
+  },
+  "requirement": {
+    "id": "REQ-API-001",
+    "text": "Expose a health endpoint and a user-list JSON endpoint for backend API smoke validation."
+  },
+  "spec": {
+    "id": "SPEC-API-001",
+    "requirement_id": "REQ-API-001",
+    "design_id": "DES-API-001",
+    "task_id": "FIX-API-001"
+  },
+  "task": {
+    "id": "FIX-API-001",
+    "prd": "prd.json"
+  },
+  "run": {
+    "mode": "dry-run",
+    "supports_dry_run": true,
+    "commands": [
+      "npm test"
+    ]
+  },
+  "evidence": {
+    "expected": [
+      "state/evidence/FIX-API-001/run.json"
+    ]
+  }
+}

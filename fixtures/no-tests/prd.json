@@ -1,0 +1,62 @@
+{
+  "version": "2.0",
+  "id": "PRD-20260524-NO-TESTS",
+  "title": "No tests fixture",
+  "project": {
+    "name": "yolo-fixture-no-tests",
+    "language": "javascript",
+    "package_manager": "npm"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-24T00:00:00.000Z",
+  "base_commit": "abcdef0",
+  "requirements": [
+    {
+      "id": "REQ-NOTEST-001",
+      "text": "Expose a deterministic status function without relying on project tests."
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-NOTEST-001",
+      "text": "Use a pure function and smoke command as degraded validation."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "FIX-NOTEST-001",
+      "title": "Verify no-tests degraded validation",
+      "type": "feature",
+      "priority": "P3",
+      "status": "pending",
+      "requirement_ids": [
+        "REQ-NOTEST-001"
+      ],
+      "design_ids": [
+        "DES-NOTEST-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/index.ts"
+          }
+        ],
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-FILE",
+          "type": "file_exists",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/index.ts"
+          }
+        }
+      ],
+      "acceptance_criteria": [
+        "node src/index.ts prints ok"
+      ]
+    }
+  ]
+}

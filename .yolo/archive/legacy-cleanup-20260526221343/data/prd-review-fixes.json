@@ -1,0 +1,752 @@
+{
+  "tasks": [
+    {
+      "id": "BUG-R-001",
+      "title": "stockOut 事务分页用 $or 字面量且缺循环上限",
+      "type": "bugfix",
+      "description": "src/services/stock-out.service.ts 第 24-45 行：1) 把 condition.$or = [...] 改为 condition.$or = _.or([{purchase_date: _.gt(lastCursor.purchase_date)}, {purchase_date: _.eq(lastCursor.purchase_date), _id: _.gt(lastCursor._id)}]) 形式，使用 _.or() 操作符替代 MongoDB $or 字面量；正确做法是把 condition 与 _.or(...) 合并：const condition = _.or([{card_id, purchase_date: _.gt(lastCursor.purchase_date)}, {card_id, purchase_date: _.eq(lastCursor.purchase_date), _id: _.gt(lastCursor._id)}])，无 cursor 时使用 {card_id}；2) 把 for(;;) 改为 for(let round = 0; round < MAX_ROUNDS; round++)，定义 const MAX_ROUNDS = 500，循环结束后若仍未读完应抛错或记录 truncated。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stock-out.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "condition.$or = ["
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "for (;;)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "condition.$or = ["
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "for (;;)"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "MAX_ROUNDS"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "事务内分页查询使用 _.or() 操作符而不是 $or 字面量",
+        "循环带有 MAX_ROUNDS 上限保护，避免死循环"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-002",
+      "title": "fetchMonthlySales 分页未推进游标导致重复读取",
+      "type": "bugfix",
+      "description": "src/services/dashboard/dashboard-stats.ts 第 36-45 行：while 循环里 query 没有使用 skip 或 cursor 推进，每次 .where(filter).field(...).limit(20).get() 返回的都是同一批前 20 条数据，导致 sales 数组重复填充、月度利润严重偏高。修复：改为基于 _id 的游标分页，循环内维护 lastId，query 加上 .where({...filter, _id: _.gt(lastId)})、.orderBy('_id', 'asc')；或改为按 sale_date desc + _id 复合游标。同时把 processed 推进逻辑改成基于实际拿到的 lastId 是否变化判断终止。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard-stats.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "while (processed < totalSalesCount)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "_id: _.gt("
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "分页查询使用 _id 游标推进，避免重复读取同一批数据",
+        "月度利润统计结果不会因循环而被放大"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-003",
+      "title": "stats-time 游标字段不一致且重新覆盖 where",
+      "type": "bugfix",
+      "description": "src/services/stats-time.service.ts 第 55-68 行：paginationQuery 使用 orderBy('sale_date', 'desc')，但游标推进用 _id + db.command.gt(cursor)，排序字段与游标字段不一致，会跳过/重复数据；并且第 64-67 行 cursorQuery.where({...filter, _id: db.command.gt(cursor)}) 重新覆盖了基础 query 的 where。修复：把 orderBy 改为 orderBy('_id', 'asc')；构建 cursorQuery 时不要重置 paginationQuery，直接 db.collection(COLLECTIONS.SALES).where({...filter, _id: db.command.gt(cursor)}).orderBy('_id','asc').limit(BATCH) 重新构建。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stats-time.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stats-time.service.ts",
+            "text": ".orderBy('sale_date', 'desc')"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stats-time.service.ts",
+            "text": "let cursorQuery = paginationQuery"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/stats-time.service.ts",
+            "text": "let cursorQuery = paginationQuery"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "游标排序字段与推进字段一致（统一为 _id asc）",
+        "查询不再重新覆盖 paginationQuery 的 where 条件"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-004",
+      "title": "ADMIN_OPENID_WHITELIST 写死空数组导致 checkAuth 必失败",
+      "type": "bugfix",
+      "description": "src/services/constants.ts 第 79 行 ADMIN_OPENID_WHITELIST 写死为 []，配合 src/services/db.ts 第 19-21 行 checkAuth 逻辑，任何写操作都会抛 '管理员 OPENID 白名单为空'。修复：把 ADMIN_OPENID_WHITELIST 改为从环境变量读取，例如 const _whitelist = process.env.ADMIN_OPENID_WHITELIST; export const ADMIN_OPENID_WHITELIST: string[] = _whitelist ? _whitelist.split(',').map(s => s.trim()).filter(Boolean) : []; 并在 checkAuth 处给出更明确的部署指引；或允许通过云函数动态获取白名单。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/constants.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/constants.ts",
+            "text": "export const ADMIN_OPENID_WHITELIST: string[] = [];"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/constants.ts",
+            "text": "export const ADMIN_OPENID_WHITELIST: string[] = [];"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/constants.ts",
+            "text": "process.env.ADMIN_OPENID_WHITELIST"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "白名单可从环境变量配置而不是硬编码空数组",
+        "正确配置环境变量后 checkAuth 不会再抛白名单为空错误"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-005",
+      "title": "updateSale 缺少与 createSale 一致的输入校验",
+      "type": "bugfix",
+      "description": "src/services/sale.service.ts 第 102-114 行 updateSale 直接把 partial data 写库，没有对 sale_price (>0)、platform (在 SALE_PLATFORMS 内)、buyer_note (字符串、长度<=500) 做校验，导致脏数据可写入。修复：在 update 前对传入字段逐项校验，复用 createSale 中第 69-85 行的校验逻辑（抽出 validateSaleFields 辅助函数），仅校验 data 中存在的字段。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/sale.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/sale.service.ts",
+            "text": "async updateSale(\n    id: string,\n    data: Partial<Pick<Sale,"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/sale.service.ts",
+            "text": "updateSale: sale_price"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/sale.service.ts",
+            "text": "updateSale: platform"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "updateSale 对 sale_price/platform/buyer_note 做与 createSale 同等校验",
+        "非法字段值会抛出明确的错误信息"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-006",
+      "title": "updateSale/deleteSale 缺少 operation_audit 审计",
+      "type": "bugfix",
+      "description": "src/services/sale.service.ts 第 102-119 行 updateSale 和 deleteSale 操作没有写入 operation_audit 集合（COLLECTIONS.OPERATION_AUDIT），无法追溯销售单变更历史。修复：在 updateSale 成功 update 后、deleteSale 成功 remove 后追加一条 operation_audit 记录，包含 operator_openid、operation_type ('update_sale' | 'delete_sale')、target_id、before/after 数据快照、created_at。可抽取 writeAuditLog 辅助函数复用。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/sale.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/sale.service.ts",
+            "text": "OPERATION_AUDIT"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/sale.service.ts",
+            "text": "OPERATION_AUDIT"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "updateSale 和 deleteSale 都会写入 operation_audit 记录",
+        "审计记录包含 operator_openid 和操作类型"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-007",
+      "title": "batchStockIn 未对 _.in(cardNumbers) 分块",
+      "type": "bugfix",
+      "description": "src/services/batch-stockin.service.ts 第 38-40 行 fetchAllFromCollection(COLLECTIONS.CARDS, { series_id: seriesId, card_number: _.in(cardNumbers) }) 一次性把所有 cardNumbers 传入 _.in，wx 云数据库 _.in 一次最多 100 个元素，超量会失败。修复：把 cardNumbers 按 100 一批切片，多次 fetchAllFromCollection 调用合并结果；或在 fetchAllFromCollection 调用前 chunked 处理，每批最多 100 个 card_number。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/batch-stockin.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/batch-stockin.service.ts",
+            "text": "card_number: _.in(cardNumbers)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/batch-stockin.service.ts",
+            "text": "card_number: _.in(cardNumbers)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "cardNumbers 分批处理，每批不超过 100 个",
+        "超过 100 个 cardNumber 时不会因 _.in 限制而失败"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-008",
+      "title": "stats-time 时区按本机偏移导致报表偏差",
+      "type": "bugfix",
+      "description": "src/services/stats-time.service.ts 第 113 行 const dtUtc = new Date(dt.getTime() + dt.getTimezoneOffset() * 60000) 是把本机时区偏移加到 UTC 上，结果其实是用『当前运行机器的本地时区』分桶，不是项目业务期望的 UTC+8（北京时间）。修复：固定按 UTC+8 计算，例如 const offsetMs = 8 * 60 * 60 * 1000; const dtUtc = new Date(dt.getTime() + offsetMs); 之后用 getUTCxxx 取年月日；或抽出 toBeijingDate 工具函数集中处理。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stats-time.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stats-time.service.ts",
+            "text": "dt.getTimezoneOffset() * 60000"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/stats-time.service.ts",
+            "text": "dt.getTimezoneOffset() * 60000"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "时区处理使用固定的 UTC+8 偏移而不是本机时区",
+        "无论运行环境时区如何，统计分桶结果一致"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-009",
+      "title": "products.tsx 对 rarity 使用赤裸 as 断言",
+      "type": "bugfix",
+      "description": "src/pages/products/products.tsx 第 58 行 const rarity = String(item.rarity) as 'Base' | 'Black' | 'Blue' | 'Gold' | 'Purple' | 'Red' | 'Aqua'; 是赤裸字符串断言，无法保证字符串实际属于该联合类型。修复：导入 RARITY_LIST 并做 type guard，例如 const rarityStr = String(item.rarity); const rarity: typeof RARITY_LIST[number] | '' = (RARITY_LIST as readonly string[]).includes(rarityStr) ? rarityStr as typeof RARITY_LIST[number] : ''; 后续判断使用安全的 rarity 值。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/products/products.tsx"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/pages/products/products.tsx",
+            "text": "as 'Base' | 'Black' | 'Blue' | 'Gold' | 'Purple' | 'Red' | 'Aqua'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/pages/products/products.tsx",
+            "text": "as 'Base' | 'Black' | 'Blue' | 'Gold' | 'Purple' | 'Red' | 'Aqua'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "rarity 字段通过 type guard 而非赤裸断言确认类型",
+        "未识别的 rarity 字符串不会进入分类判断"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-010",
+      "title": "useInventory 返回类型未泛型化致页面重复 as InventoryType",
+      "type": "bugfix",
+      "description": "src/pages/inventory/inventory.tsx 第 39、56、103 行重复出现 const inv = item as InventoryType; 根因是 src/hooks/use-inventory.ts 中 useInventory 的返回类型没有泛型化（依赖 getInventory 的返回类型），导致页面拿到的 inventoryList 是 unknown[]。修复：在 src/services/inventory/inventory-query.ts 的 getInventory 返回明确 Promise<Inventory[]>；或在 useInventory hook 上加 useQuery<Inventory[]> 泛型；之后页面去掉 item as InventoryType 断言，直接 inventoryList.map((inv) => ...)。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/inventory/inventory.tsx"
+          },
+          {
+            "file": "src/hooks/use-inventory.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/pages/inventory/inventory.tsx",
+            "text": "as InventoryType"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/pages/inventory/inventory.tsx",
+            "text": "as InventoryType"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "useInventory 返回明确的 Inventory[] 类型",
+        "页面 inventory.tsx 不再需要 as InventoryType 断言"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-011",
+      "title": "fetchMonthlySales field() 用硬断言且类型与签名不一致",
+      "type": "bugfix",
+      "description": "src/services/dashboard/dashboard-stats.ts 第 39 行 .field({_id: true, sale_price: true, inventory_id: true, cost_price: true} as Record<string, boolean>) 用 as 硬断言绕过 wx.cloud 类型；同时 sales 类型签名包含 sale_date，但 field 投影中没有 sale_date，会导致 sale.sale_date 永远 undefined。修复：1) 在 field 中加上 sale_date: true；2) 移除 as Record<string, boolean> 断言，使用 wx.cloud 自带的 field 参数类型，或在 src/types/global.d.ts 中补充正确的 field 参数类型签名后去掉断言。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard-stats.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "} as Record<string, boolean>)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "} as Record<string, boolean>)"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "sale_date: true"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "field 投影包含 sale_date 字段",
+        "去掉 as Record<string, boolean> 断言"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-012",
+      "title": "db.ts 用 as unknown as 双断言把 mock 强转为 wx 类型",
+      "type": "bugfix",
+      "description": "src/services/db.ts 第 103、123、124 行使用 as unknown as WechatMiniprogram.Database / DatabaseCommand 双断言把 mock 强转，掩盖了 mock 类型与真实类型的差异。修复：定义专用的 MockDatabase / MockDatabaseCommand interface 与 mockDb 字段对齐；或在 db / _ 的导出类型上使用联合类型 (WechatMiniprogram.Database | MockDatabase)；至少把 as unknown as 改为单层 as 并在 mock 实现中补全方法签名。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/db.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/db.ts",
+            "text": "as unknown as WechatMiniprogram.Database"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/db.ts",
+            "text": "as unknown as WechatMiniprogram.Database"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "移除 as unknown as 双断言",
+        "mock 类型与真实 wx.cloud 类型通过明确的接口对齐"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-013",
+      "title": "index.tsx 残留 // TODO: 实现低库存查询逻辑",
+      "type": "bugfix",
+      "description": "src/pages/index/index.tsx 第 32 行 queryFn 内只有 // TODO: 实现低库存查询逻辑 然后 return []，dashboard 卡片永远显示空数据。修复：实现 inventoryService.getLowStockItems(threshold = 10) 在 src/services/inventory/inventory-query.ts，查询 quantity <= threshold 的库存项并 join card 名称返回；index.tsx 的 queryFn 改成调用该 service。如果短期内不实现，至少把 TODO 升级为 issue 链接并隐藏 lowStock 区块，但首选是补全实现。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/index/index.tsx"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/pages/index/index.tsx",
+            "text": "// TODO: 实现低库存查询逻辑"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/pages/index/index.tsx",
+            "text": "// TODO: 实现低库存查询逻辑"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "index.tsx 不再保留 TODO 注释",
+        "lowStockItems 查询有真实实现或被显式禁用"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-014",
+      "title": "brand-profile 类型注释与 service 集合写入不同步",
+      "type": "bugfix",
+      "description": "src/types/brand-profile.ts 第 22 行注释说『品牌功能未实现，暂时移除 BrandProfileSeries 和 BrandProfileProduct 类型』，但 src/services/constants.ts 第 23-24 行仍定义了 BRAND_PROFILE_SERIES / BRAND_PROFILE_PRODUCTS 集合，且 brand-profile.service.ts 在使用 BRAND_PROFILES。修复：1) 如果功能未实现，从 constants.ts 的 COLLECTIONS 中移除 BRAND_PROFILE_SERIES 与 BRAND_PROFILE_PRODUCTS；2) 如果功能在用，恢复 BrandProfileSeries / BrandProfileProduct 类型定义并删除该 TODO 注释。两者必须同步，不能保留 dead 集合常量+缺类型的状态。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/types/brand-profile.ts"
+          },
+          {
+            "file": "src/services/constants.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/types/brand-profile.ts",
+            "text": "TODO: 品牌功能未实现，暂时移除"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/types/brand-profile.ts",
+            "text": "TODO: 品牌功能未实现，暂时移除"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "类型定义与 COLLECTIONS 常量保持一致",
+        "不再保留功能未实现但仍残留集合常量的中间状态"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-015",
+      "title": "stats-time 批量取 inventory 成本未去重 + 串行 await",
+      "type": "bugfix",
+      "description": "src/services/stats-time.service.ts 第 90-107 行：invIds 已经 Array.from(new Set(...)) 去重了（去重 OK），但是循环里每批 20 条都是串行 await 的，无法并发；同时 invPrices 已知就缓存得很合理但每次新调用都重建 Map。修复：把内部循环改为 Promise.all 并发，例如 const batches: Promise<void>[] = []; for (let i = 0; i < invIds.length; i += 20) { batches.push((async () => { ... invPrices.set(...) })()); } await Promise.all(batches); 注意保留 try/catch 防止单批失败影响整体。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stats-time.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stats-time.service.ts",
+            "text": "for (let i = 0; i < invIds.length; i += 20)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stats-time.service.ts",
+            "text": "Promise.all"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "inventory 成本批量查询使用 Promise.all 并发执行",
+        "单批失败不会影响其它批次"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-016",
+      "title": "useBlindboxItems 命名暗示已废弃集合，应重命名",
+      "type": "bugfix",
+      "description": "src/hooks/use-cards.ts 第 55 行 export const useBlindboxItems = (seriesId?: string) => useQuery({ queryKey: ['blindboxItems', seriesId], queryFn: () => cardService.getCards(...) }) 函数名暗示 blindbox_items 集合（在 constants.ts 已被 @deprecated），实际查询的是 cards 集合。修复：把 hook 重命名为 useProductCards 或 useProductItems，queryKey 同步改为 ['productCards', seriesId]；同步更新所有调用方（grep 'useBlindboxItems' 全项目替换），src/pages/products/products.tsx 第 4、24 行的 import 与解构都要改。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/hooks/use-cards.ts"
+          },
+          {
+            "file": "src/pages/products/products.tsx"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/hooks/use-cards.ts",
+            "text": "useBlindboxItems"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/hooks/use-cards.ts",
+            "text": "useBlindboxItems"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/pages/products/products.tsx",
+            "text": "useBlindboxItems"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "hook 重命名为 useProductCards 或 useProductItems",
+        "全项目不再有 useBlindboxItems 引用"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    }
+  ],
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "version": "2.0",
+  "id": "PRD-20260508--------------15",
+  "title": "PRD Migration",
+  "project": {
+    "name": "SamKimTest",
+    "language": "typescript"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-08T23:30:03.278Z",
+  "base_commit": "fb5a8975"
+}

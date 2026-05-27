@@ -1,0 +1,101 @@
+// diff-quality-gate.js — keep provider patches proportional to task complexity
+
+import { execFileSync } from "node:child_process";
+import { classifyTaskExecution } from "../task-loop/router.js";
+
+function execGit(cwd, args) {
+  try {
+    return execFileSync("git", ["-C", cwd, ...args], {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 10000,
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
+function targetFiles(task = {}) {
+  return (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
+}
+
+function parseNumstat(output) {
+  return output.split("\n").filter(Boolean).map((line) => {
+    const [addedRaw, removedRaw, file] = line.split("\t");
+    return {
+      file,
+      added: addedRaw === "-" ? 0 : Number(addedRaw) || 0,
+      removed: removedRaw === "-" ? 0 : Number(removedRaw) || 0,
+    };
+  });
+}
+
+function changedFiles(cwd) {
+  const tracked = execGit(cwd, ["diff", "--name-only"]).split("\n").filter(Boolean);
+  const untracked = execGit(cwd, ["ls-files", "--others", "--exclude-standard"]).split("\n").filter(Boolean);
+  return [...new Set([...tracked, ...untracked])];
+}
+
+export function validateDiffQuality(task = {}, options = {}) {
+  const cwd = options.cwd || process.cwd();
+  const route = classifyTaskExecution(task);
+  if (route.quality_profile !== "single_line_mechanical") {
+    return {
+      status: "pass",
+      blocks_execution: false,
+      skipped: true,
+      route,
+      summary: `quality gate skipped for ${route.quality_profile}`,
+      failures: [],
+    };
+  }
+
+  const targets = targetFiles(task);
+  const numstat = parseNumstat(execGit(cwd, ["diff", "--numstat", "--", ...targets]));
+  const changed = changedFiles(cwd).filter((file) => targets.includes(file));
+  const untracked = execGit(cwd, ["ls-files", "--others", "--exclude-standard", "--", ...targets])
+    .split("\n")
+    .filter(Boolean);
+
+  const added = numstat.reduce((sum, item) => sum + item.added, 0);
+  const removed = numstat.reduce((sum, item) => sum + item.removed, 0);
+  const total = added + removed;
+  const budget = {
+    max_files: task.quality_budget?.max_files ?? 1,
+    max_added_lines: task.quality_budget?.max_added_lines ?? 8,
+    max_removed_lines: task.quality_budget?.max_removed_lines ?? 8,
+    max_total_lines: task.quality_budget?.max_total_lines ?? 20,
+  };
+
+  const failures = [];
+  if (changed.length > budget.max_files) {
+    failures.push({
+      code: "TOO_MANY_FILES_FOR_MECHANICAL_FIX",
+      detail: `changed files ${changed.length} > ${budget.max_files}: ${changed.join(", ")}`,
+    });
+  }
+  if (untracked.length > 0) {
+    failures.push({
+      code: "NEW_FILES_FOR_MECHANICAL_FIX",
+      detail: `mechanical single-line fixes cannot create files: ${untracked.join(", ")}`,
+    });
+  }
+  if (added > budget.max_added_lines || removed > budget.max_removed_lines || total > budget.max_total_lines) {
+    failures.push({
+      code: "DIFF_TOO_LARGE_FOR_MECHANICAL_FIX",
+      detail: `diff +${added}/-${removed} total ${total}; budget +${budget.max_added_lines}/-${budget.max_removed_lines} total ${budget.max_total_lines}`,
+    });
+  }
+
+  return {
+    status: failures.length > 0 ? "fail" : "pass",
+    blocks_execution: failures.length > 0,
+    route,
+    budget,
+    metrics: { files: changed.length, added, removed, total, changed_files: changed },
+    failures,
+    recovery_hint: failures.length > 0
+      ? "这是机械小修任务。不要重写 mock/重构结构/新增文件；只做最小局部替换，让目标 post_conditions 通过。"
+      : "diff size is proportional to task complexity",
+  };
+}

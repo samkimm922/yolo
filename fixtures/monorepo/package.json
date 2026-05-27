@@ -1,0 +1,12 @@
+{
+  "name": "yolo-fixture-monorepo",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "node --test packages/app/test.ts"
+  }
+}

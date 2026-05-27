@@ -1,0 +1,103 @@
+{
+  "version": "2.0",
+  "title": "修复 CLOUD_ENV 测试阻塞 + ESLint 错误",
+  "generated_at": "2026-05-04T16:49:43.788Z",
+  "tasks": [
+    {
+      "id": "FEATUR-FEAT-001",
+      "title": "新功能: refactor",
+      "description": "- [HIGH] src/services/constants.ts 第42-46行在 import 时直接 throw Error，导致31个测试文件全部失败。需要将 throw Error 改为 console.warn 并提供 fallback 默认值 '__test_env__'，确保测试环境下可以正常导入。 → 将第42-46行的 throw Error 逻辑改为 console.error 输出警告信息，同时返回 fallback 值 '__test_env__'，保证在测试环境下模块可以正常加载。",
+      "priority": "P1",
+      "status": "failed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/constants.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/services/constants.ts 第42-46行在 import 时直接 throw Error，导致31个测试文件全部失败。需要将 throw Error 改为 console.warn 并提供 fallback 默认值 '__test_env__'，确保测试环境下可以正常导入。 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "feature"
+    },
+    {
+      "id": "FEATUR-FEAT-002",
+      "title": "新功能: refactor",
+      "description": "- [MEDIUM] src/pages/products/products.ProductList.tsx 第25行和第64行的 ListItem 和 GridItem memo 组件缺少 displayName 属性，导致 eslint react/display-name 规则报错。需要为这两个组件添加 displayName 以符合 React 最佳实践。 → 在第25行和第64行的 memo() 调用后添加 .displayName 属性：ListItem.displayName = 'ListItem' 和 GridItem.displayName = 'GridItem'。",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/products/products.ProductList.tsx"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/pages/products/products.ProductList.tsx 第25行和第64行的 ListItem 和 GridItem memo 组件缺少 displayName 属性，导致 eslint react/display-name 规则报错。需要为这两个组件添加 displayName 以符合 React 最佳实践。 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "feature"
+    },
+    {
+      "id": "FEATUR-FEAT-003",
+      "title": "新功能: refactor",
+      "description": "- [LOW] src/services/__tests__/brand.service.test.ts 第84/118/131行存在多余分号，导致 eslint no-extra-semi 规则报错。需要删除这三行的多余分号。 → 删除第84行、第118行、第131行的多余分号，保持代码符合 eslint 规范。",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/brand.service.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/services/__tests__/brand.service.test.ts 第84/118/131行存在多余分号，导致 eslint no-extra-semi 规则报错。需要删除这三行的多余分号。 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "feature"
+    },
+    {
+      "id": "FEATUR-FEAT-004",
+      "title": "新功能: refactor",
+      "description": "- [LOW] src/services/__tests__/series.service.test.ts 第102/113行存在多余分号，第14行存在未使用变量 name，导致 eslint 报错。需要删除多余分号并移除未使用的变量。 → 删除第102行和第113行的多余分号；删除第14行未使用的 name 变量声明。",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/series.service.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/services/__tests__/series.service.test.ts 第102/113行存在多余分号，第14行存在未使用变量 name，导致 eslint 报错。需要删除多余分号并移除未使用的变量。 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "feature"
+    }
+  ],
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "id": "PRD-20260508---------3",
+  "project": {
+    "name": "SamKimTest",
+    "language": "typescript"
+  },
+  "generated_by": "other",
+  "base_commit": "fb5a8975"
+}

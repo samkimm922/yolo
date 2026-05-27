@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-05-26",
+  "purpose": "Define the boundary between v1 closed-loop assets and the v2 public SDK/runtime surface.",
+  "legacy_dirs": [
+    {
+      "dir": "closed-loop",
+      "archive_dir": ".yolo/archive/legacy-cleanup-20260526221343/closed-loop",
+      "status": "archived_readonly",
+      "file_count": 45,
+      "policy": "Do not restore package exports, SDK namespaces, runner imports, or public workflows that execute closed-loop modules. Archive content is evidence only unless an operator explicitly restores it for migration."
+    }
+  ],
+  "allowed_references": [
+    {
+      "file": "scripts/migrate-prds.ts",
+      "type": "migration_tool",
+      "reason": "One-time migration utility can read legacy PRD JSON if an operator restores archived evidence for migration."
+    },
+    {
+      "file": "src/runtime/memory/center.ts",
+      "type": "memory_audit",
+      "reason": "Memory audit classifies legacy JSONL paths as read-only evidence but does not import or execute legacy modules."
+    },
+    {
+      "file": "src/runtime/learning/center.ts",
+      "type": "learning_migration",
+      "reason": "Learning migration reads legacy closed-loop JSONL knowledge as data and writes normalized state/learning.jsonl records without importing or executing legacy modules."
+    },
+    {
+      "file": "src/release/pack-smoke.ts",
+      "type": "package_exclusion_policy",
+      "reason": "Package smoke forbids closed-loop files from entering the public tarball; it must not import or execute closed-loop modules."
+    },
+    {
+      "file": "src/release/readiness.ts",
+      "type": "package_exclusion_policy",
+      "reason": "Release readiness checks package files allowlist entries for legacy closed-loop leakage; it must not import or execute closed-loop modules."
+    }
+  ],
+  "prohibited": [
+    "package.json exports or bin targets under closed-loop/",
+    "sdk.ts imports from closed-loop/",
+    "src/**/*.ts imports, dynamic imports, or child-process execution of closed-loop modules",
+    "new root entrypoints that wrap closed-loop modules as public SDK features"
+  ],
+  "canonical_replacements": {
+    "prd_json": "data/prd/current and data/prd/archive",
+    "runtime_state": "state/runtime and state/reports",
+    "review_findings": "src/review/findings.ts and yolo/review/findings",
+    "evidence": "src/evidence/* and yolo/evidence/*",
+    "workflow": "src/workflows/* and yolo/workflows*"
+  }
+}

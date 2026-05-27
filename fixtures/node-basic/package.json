@@ -1,0 +1,9 @@
+{
+  "name": "yolo-fixture-node-basic",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --import tsx --test"
+  }
+}

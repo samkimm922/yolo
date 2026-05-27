@@ -1,0 +1,25 @@
+node_modules/
+dist/
+.DS_Store
+__pycache__/
+*.py[cod]
+
+# Local agent/runtime artifacts.
+.agents/
+
+# Append-only runtime state and generated evidence.
+.yolo/state/
+state/*.jsonl
+state/archive/
+state/runtime/
+state/evidence/
+
+# Local logs and scratch files.
+logs/
+tmp/
+*.log
+
+# Local session handoff files.
+DELIVERY_LOG.md
+SESSION.md
+SNAPSHOT.md

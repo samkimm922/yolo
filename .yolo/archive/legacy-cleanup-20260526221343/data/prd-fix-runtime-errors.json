@@ -1,0 +1,89 @@
+{
+  "version": "2.0",
+  "title": "修复运行时错误：Taro未定义 + vendors.js缺失",
+  "description": "两个运行时 bug：1) src/custom-tab-bar/index.js 调用 Taro.switchTab/Taro.reLaunch/Taro.vibrateShort 但没有 import Taro，导致 ReferenceError: Taro is not defined；2) config/index.js 中 mini.webpack5.optimization.splitChunks 设为 false，Taro 不生成 vendors.js 公共文件，微信开发者工具找不到该文件",
+  "tasks": [
+    {
+      "id": "BUGFIX-TASK-009",
+      "title": "修复 custom-tab-bar 中 Taro 未定义错误",
+      "description": "src/custom-tab-bar/index.js 在 switchTab 和 tapCenter 方法中直接调用 Taro.switchTab、Taro.reLaunch、Taro.vibrateShort，但文件顶部没有 import Taro from '@tarojs/taro'。这是一个纯 JS 文件（非 JSX），需要添加 Taro 的 require 或 import 语句。由于微信小程序自定义 TabBar 是独立组件上下文，需要确认 Taro 是否通过全局变量可用，或者需要显式引入。修复方案：在文件顶部添加 const Taro = require('@tarojs/taro')。",
+      "type": "bugfix",
+      "priority": "P0",
+      "scope": {
+        "expected_zero_business_code": true,
+        "targets": [
+          {
+            "file": "src/custom-tab-bar/index.js"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "severity": "WARN",
+          "id": "POST-1",
+          "type": "no_new_type_errors",
+          "params": {}
+        },
+        {
+          "severity": "WARN",
+          "id": "POST-2",
+          "type": "no_new_lint_errors",
+          "params": {}
+        }
+      ],
+      "acceptance_criteria": [
+        "src/custom-tab-bar/index.js 文件顶部添加 const Taro = require('@tarojs/taro')",
+        "Taro.switchTab、Taro.reLaunch、Taro.vibrateShort 调用不再抛出 ReferenceError",
+        "不影响 custom-tab-bar 的其他功能（导航防抖、页面路由）"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "BUGFIX-TASK-010",
+      "title": "修复 splitChunks:false 导致 vendors.js 不生成",
+      "description": "config/index.js 第37行 mini.webpack5.optimization.splitChunks 设为 false，Taro 构建时不生成 vendors.js 公共文件。微信开发者工具报错找不到 dist/vendors.js。修复方案：移除 splitChunks: false，改用 Taro 默认的 splitChunks 配置，或设置为合理的拆包策略（如将 node_modules 打包到 vendors）。",
+      "type": "bugfix",
+      "priority": "P1",
+      "scope": {
+        "expected_zero_business_code": true,
+        "targets": [
+          {
+            "file": "config/index.js"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "severity": "WARN",
+          "id": "POST-1",
+          "type": "no_new_type_errors",
+          "params": {}
+        },
+        {
+          "severity": "WARN",
+          "id": "POST-2",
+          "type": "no_new_lint_errors",
+          "params": {}
+        }
+      ],
+      "acceptance_criteria": [
+        "config/index.js 中 mini.webpack5.optimization 不再包含 splitChunks: false",
+        "使用合理的 splitChunks 配置（默认值或显式配置）",
+        "构建后 dist/ 目录生成 vendors.js 文件",
+        "不影响 H5 构建配置（h5 部分的 splitChunks 保持不变）"
+      ],
+      "status": "completed"
+    }
+  ],
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "id": "PRD-20260508--------------------8",
+  "project": {
+    "name": "SamKimTest",
+    "language": "typescript"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-08T23:30:03.260Z",
+  "base_commit": "fb5a8975"
+}

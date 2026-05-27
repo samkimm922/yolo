@@ -1,0 +1,466 @@
+{
+  "version": "2.0",
+  "title": "Review R4 Bugfix",
+  "source": "review-r4",
+  "tasks": [
+    {
+      "id": "BUG-R-4-001",
+      "title": "拆分 import-template-validation.test.ts（244行）",
+      "type": "refactor",
+      "description": "文件 244 行超过 150 行限制（R9 规则）。拆分为：1) validateImportData.test.ts - 核心验证逻辑测试（第 4-195 行）；2) validateRow.test.ts - 行级验证测试（预留位置，当前文件 validateImportData 测试行级验证需迁移到新文件）。操作步骤：1) 创建 validateImportData.test.ts，移动第 4-195 行内容；2) 创建 validateRow.test.ts，为 validateRow 函数添加测试；3) 删除原文件",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/import-template-validation.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation.test.ts",
+            "text": "describe('validateImportData', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation.test.ts",
+            "text": "describe('validateImportData', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "validateImportData.test.ts 包含核心验证逻辑测试，行数 < 150",
+        "validateRow.test.ts 包含行级验证测试，行数 < 150",
+        "原文件已删除",
+        "所有测试通过（npm test）"
+      ],
+      "status": "done",
+      "task_kind": "review_fix",
+      "phase": "done",
+      "updatedAt": "2026-05-08T05:28:32.015Z"
+    },
+    {
+      "id": "BUG-R-4-002",
+      "title": "拆分 inventory-mutation.test.ts（233行）",
+      "type": "refactor",
+      "description": "文件 233 行超过 150 行限制（R9 规则）。按 describe 分组拆分：1) deleteInventory.test.ts - 移动第 55-70 行；2) rollbackInventory.test.ts - 移动第 72-113 行；3) createInventory.test.ts - 移动第 115-180 行；4) updateInventory.test.ts - 移动第 182-231 行。每个新文件包含：imports、mocks、describe、it tests，行数均 < 150",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-mutation.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "text": "describe('deleteInventory', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "text": "describe('deleteInventory', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "4 个新测试文件各自行数 < 150",
+        "原文件已删除",
+        "所有测试通过（npm test）"
+      ],
+      "status": "done",
+      "task_kind": "review_fix",
+      "phase": "done",
+      "updatedAt": "2026-05-08T05:31:46.833Z"
+    },
+    {
+      "id": "BUG-R-4-003",
+      "title": "拆分 inventory-query.test.ts（194行）",
+      "type": "refactor",
+      "description": "文件 194 行超过 150 行限制（R9 规则）。按功能拆分：1) getInventory.test.ts - 移动第 49-112 行（getInventory 测试）；2) getInventoryById.test.ts - 移动第 114-151 行（getInventoryById 测试）；3) getLowStockItems.test.ts - 移动第 153-192 行（getLowStockItems 测试）。每个新文件包含：imports、mocks、describe、it tests，行数均 < 150",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-query.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts",
+            "text": "describe('getInventory', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts",
+            "text": "describe('getInventory', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "3 个新测试文件各自行数 < 150",
+        "原文件已删除",
+        "所有测试通过（npm test）"
+      ],
+      "status": "done",
+      "task_kind": "review_fix",
+      "phase": "done",
+      "updatedAt": "2026-05-08T05:36:57.568Z"
+    },
+    {
+      "id": "BUG-R-4-004",
+      "title": "拆分 inventory.service.test.ts（273行）",
+      "type": "refactor",
+      "description": "文件 273 行超过 150 行限制（R9 规则）。按 query/mutation 拆分：1) inventory-query-wrapper.test.ts - 移动第 49-152 行（getInventory、getInventoryById、getLowStockItems 测试）；2) inventory-mutation-wrapper.test.ts - 移动第 154-272 行（createInventory、updateInventory、deleteInventory、rollbackInventory 测试）。每个新文件包含：imports、mocks、describe、it tests，行数均 < 150",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('getInventory', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('getInventory', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "2 个新测试文件各自行数 < 150",
+        "原文件已删除",
+        "所有测试通过（npm test）"
+      ],
+      "status": "done",
+      "task_kind": "review_fix",
+      "phase": "done",
+      "updatedAt": "2026-05-08T05:38:50.234Z",
+      "failReason": "claude 退出失败: [signal:SIGKILL]"
+    },
+    {
+      "id": "BUG-R-4-005",
+      "title": "拆分 sale-service-create.test.ts（196行）",
+      "type": "refactor",
+      "description": "文件 196 行超过 150 行限制（R9 规则）。按验证和成功场景拆分：1) sale-create-validation.test.ts - 移动验证相关测试（第 75-173 行：inventory_id、quantity、sale_price、platform、buyer_note 验证）；2) sale-create-success.test.ts - 保留成功场景测试（第 54-74 行、175-194 行）。每个新文件包含：imports、mocks、describe、it tests，行数均 < 150",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/sale-service-create.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale-service-create.test.ts",
+            "text": "describe('createSale', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/sale-service-create.test.ts",
+            "text": "describe('createSale', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "2 个新测试文件各自行数 < 150",
+        "原文件已删除",
+        "所有测试通过（npm test）"
+      ],
+      "status": "done",
+      "task_kind": "review_fix",
+      "phase": "done",
+      "updatedAt": "2026-05-08T06:06:13.043Z"
+    },
+    {
+      "id": "BUG-R-4-006",
+      "title": "拆分 sale-service-get.test.ts（165行）",
+      "type": "refactor",
+      "description": "文件 165 行超过 150 行限制（R9 规则）。按方法拆分：1) getSales.test.ts - 移动 getSales 测试（第 55-130 行）；2) getSaleById.test.ts - 移动 getSaleById 测试（第 132-163 行）。每个新文件包含：imports、mocks、describe、it tests，行数均 < 150",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/sale-service-get.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale-service-get.test.ts",
+            "text": "describe('getSales', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/sale-service-get.test.ts",
+            "text": "describe('getSales', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "2 个新测试文件各自行数 < 150",
+        "原文件已删除",
+        "所有测试通过（npm test）"
+      ],
+      "status": "done",
+      "task_kind": "review_fix",
+      "phase": "done",
+      "updatedAt": "2026-05-08T06:10:14.753Z"
+    },
+    {
+      "id": "BUG-R-4-007",
+      "title": "拆分 sale.service.test.ts（382行）",
+      "type": "refactor",
+      "description": "文件 382 行超过 150 行限制（R9 规则）。按方法拆分：1) getSales.test.ts - 移动 getSales 测试（第 56-131 行）；2) createSale.test.ts - 移动 createSale 测试（第 166-306 行）；3) updateSale.test.ts - 移动 updateSale 测试（第 308-361 行）；4) deleteSale.test.ts - 移动 deleteSale 测试（第 363-381 行）。每个新文件包含：imports、mocks、describe、it tests，行数均 < 150",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('getSales', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('getSales', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "4 个新测试文件各自行数 < 150",
+        "原文件已删除",
+        "所有测试通过（npm test）"
+      ],
+      "status": "failed",
+      "task_kind": "review_fix",
+      "phase": "claude",
+      "updatedAt": "2026-05-08T06:13:47.727Z",
+      "failReason": "claude 退出失败: [signal:SIGKILL]"
+    },
+    {
+      "id": "BUG-R-4-008",
+      "title": "拆分 stats-ranking.service.test.ts（196行）",
+      "type": "refactor",
+      "description": "文件 196 行超过 150 行限制（R9 规则）。按方法拆分：1) getTopSellingCards.test.ts - 移动 getTopSellingCards 测试（第 41-97 行）；2) getTopSellingSeries.test.ts - 移动 getTopSellingSeries 测试（第 99-143 行）；3) getSlowMovingCards.test.ts - 移动 getSlowMovingCards 测试（第 146-195 行）。每个新文件包含：imports、mocks、describe、it tests，行数均 < 150",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts",
+            "text": "describe('getTopSellingCards', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts",
+            "text": "describe('getTopSellingCards', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "3 个新测试文件各自行数 < 150",
+        "原文件已删除",
+        "所有测试通过（npm test）"
+      ],
+      "status": "running",
+      "task_kind": "review_fix",
+      "phase": "claude",
+      "updatedAt": "2026-05-08T06:46:47.077Z"
+    },
+    {
+      "id": "BUG-R-4-009",
+      "title": "拆分 stock-in-transaction.test.ts（253行）",
+      "type": "refactor",
+      "description": "文件 253 行超过 150 行限制（R9 规则）。按场景拆分：1) stock-in-success.test.ts - 移动成功场景测试（第 63-114 行、116-164 行：成功处理新增库存、处理已有库存加权平均）；2) stock-in-validation.test.ts - 移动验证逻辑测试（第 166-227 行：quantity、costPrice、card_number 验证 + 错误处理测试）。每个新文件包含：imports、mocks、describe、it tests，行数均 < 150",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "describe('processStockInBatchTransaction', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "describe('processStockInBatchTransaction', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "2 个新测试文件各自行数 < 150",
+        "原文件已删除",
+        "所有测试通过（npm test）"
+      ],
+      "status": "pending",
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-4-010",
+      "title": "拆分 validators.test.ts（346行）",
+      "type": "refactor",
+      "description": "文件 346 行超过 150 行限制（R9 规则）。按验证字段拆分：1) validateQuantity.test.ts - 移动 quantity 相关测试（第 58-146 行：valid data、invalid quantity）；2) validateCostPrice.test.ts - 移动 cost_price 相关测试（第 148-212 行：invalid cost price）；3) validateCardNumber.test.ts - 移动 card_number 相关测试（第 214-278 行：invalid card number）+ edge cases（第 280-345 行）。每个新文件包含：imports、describe、it tests，行数均 < 150",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/validators.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('invalid quantity', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('invalid quantity', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "3 个新测试文件各自行数 < 150",
+        "原文件已删除",
+        "所有测试通过（npm test）"
+      ],
+      "status": "pending",
+      "task_kind": "review_fix"
+    }
+  ]
+}

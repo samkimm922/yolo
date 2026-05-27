@@ -1,0 +1,71 @@
+{
+  "version": "2.0",
+  "id": "PRD-20260525-BACKEND-API",
+  "title": "Backend API fixture",
+  "project": {
+    "name": "yolo-fixture-backend-api",
+    "language": "javascript",
+    "package_manager": "npm",
+    "framework": "node-http",
+    "test_framework": "node:test"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-25T00:00:00.000Z",
+  "base_commit": "abcdef0",
+  "requirements": [
+    {
+      "id": "REQ-API-001",
+      "text": "Expose a health endpoint and a user-list JSON endpoint for backend API smoke validation."
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-API-001",
+      "text": "Keep the API fixture dependency-free by using the Node HTTP server and node:test."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "FIX-API-001",
+      "title": "Verify backend API smoke endpoints",
+      "type": "feature",
+      "priority": "P3",
+      "status": "pending",
+      "requirement_ids": [
+        "REQ-API-001"
+      ],
+      "design_ids": [
+        "DES-API-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/server.ts"
+          },
+          {
+            "file": "test/server.test.ts"
+          }
+        ],
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-TEST",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "npm test",
+            "file": "test/server.test.ts"
+          }
+        }
+      ],
+      "acceptance_criteria": [
+        "npm test passes",
+        "GET /health returns status ok",
+        "GET /api/users returns fixture users",
+        "Unknown routes return 404"
+      ]
+    }
+  ]
+}

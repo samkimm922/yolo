@@ -1,0 +1,66 @@
+{
+  "version": "2.0",
+  "id": "PRD-20260524-FAILING-BASELINE",
+  "title": "Failing baseline fixture",
+  "project": {
+    "name": "yolo-fixture-failing-baseline",
+    "language": "javascript",
+    "package_manager": "npm",
+    "scenario": "failing-baseline"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-24T00:00:00.000Z",
+  "base_commit": "abcdef0",
+  "requirements": [
+    {
+      "id": "REQ-BASELINE-001",
+      "text": "Separate known baseline failures from the current task verification."
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-BASELINE-001",
+      "text": "Record known baseline failures and run a scoped baseline check instead of claiming old failures are new."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "FIX-BASELINE-001",
+      "title": "Verify known baseline failure handling",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "requirement_ids": [
+        "REQ-BASELINE-001"
+      ],
+      "design_ids": [
+        "DES-BASELINE-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/index.ts"
+          }
+        ],
+        "readonly_files": [
+          "state/baseline/test-failures.txt"
+        ],
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-BASELINE",
+          "type": "file_exists",
+          "severity": "FAIL",
+          "params": {
+            "file": "state/baseline/test-failures.txt"
+          }
+        }
+      ],
+      "acceptance_criteria": [
+        "known baseline failure is recorded separately from task smoke"
+      ]
+    }
+  ]
+}

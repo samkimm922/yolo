@@ -1,0 +1,71 @@
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  formatSpecGovernanceBlockers,
+  inspectSpecGovernanceGate,
+  specGovernancePolicy,
+} from "../src/runtime/gates/spec-governance-gate.js";
+
+describe("spec governance gate", () => {
+  test("defaults to fail-closed trace requirements", () => {
+    assert.deepEqual(specGovernancePolicy(), {
+      requireRequirements: true,
+      requireDesign: true,
+      requireEvidenceForTerminal: true,
+    });
+  });
+
+  test("returns a blocked gate for tasks without required spec traces", () => {
+    const gate = inspectSpecGovernanceGate({
+      prd: {
+        tasks: [{
+          id: "FIX-SPEC-GATE-001",
+          status: "pending",
+        }],
+      },
+    });
+
+    assert.equal(gate.status, "blocked");
+    assert.equal(gate.code, "PRD_SPEC_GOVERNANCE_BLOCKED");
+    assert.equal(gate.exit_code, 1);
+    assert.equal(gate.result.blocks_execution, true);
+    assert.deepEqual(gate.result.blockers.map((blocker) => blocker.code), [
+      "MISSING_REQUIREMENT_TRACE",
+      "MISSING_DESIGN_TRACE",
+    ]);
+    assert.match(gate.summary, /MISSING_REQUIREMENT_TRACE task=FIX-SPEC-GATE-001/);
+  });
+
+  test("passes when pending tasks link requirement and design traces", () => {
+    const gate = inspectSpecGovernanceGate({
+      prd: {
+        tasks: [{
+          id: "FIX-SPEC-GATE-002",
+          status: "pending",
+          requirement_ids: ["REQ-1"],
+          design_ids: ["DES-1"],
+        }],
+      },
+    });
+
+    assert.equal(gate.status, "pass");
+    assert.equal(gate.code, "PRD_SPEC_GOVERNANCE_PASS");
+    assert.equal(gate.exit_code, 0);
+    assert.equal(gate.result.blocks_execution, false);
+    assert.equal(gate.summary, "");
+  });
+
+  test("formats blocker summaries with a hard display limit", () => {
+    const blockers = Array.from({ length: 10 }, (_, index) => ({
+      code: `BLOCK_${index}`,
+      task_id: `FIX-${index}`,
+      message: `message ${index}`,
+    }));
+
+    const summary = formatSpecGovernanceBlockers(blockers, 3);
+
+    assert.equal(summary.split("\n").length, 3);
+    assert.match(summary, /BLOCK_0 task=FIX-0: message 0/);
+    assert.doesNotMatch(summary, /BLOCK_3/);
+  });
+});

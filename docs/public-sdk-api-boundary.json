@@ -1,0 +1,923 @@
+{
+  "schema_version": "1.0",
+  "last_reviewed": "2026-05-26",
+  "purpose": "Machine-readable public SDK/API stability boundary. package.json exports, sdk.ts named exports, and createYoloSdk() namespaces must be classified here before they are treated as public.",
+  "version_policy": {
+    "stable": {
+      "compatibility": "External projects may depend on this API.",
+      "breaking_change": "Breaking changes require a major version bump or a compatibility shim with migration notes.",
+      "deprecation": "Deprecations require documentation and at least one minor release of overlap before removal."
+    },
+    "stable_alias": {
+      "compatibility": "Alias for a stable API. The target API owns behavior and compatibility.",
+      "breaking_change": "Alias behavior must remain equivalent to its target while the alias exists.",
+      "deprecation": "Alias removal requires migration notes to the canonical stable path."
+    },
+    "experimental": {
+      "compatibility": "External projects may try this API, but shape and semantics can change before public beta.",
+      "breaking_change": "Breaking changes are allowed in minor or beta releases when documented.",
+      "deprecation": "Deprecations should name the replacement or explain why the API is being withdrawn."
+    },
+    "experimental_alias": {
+      "compatibility": "Alias for an experimental API. The target API owns behavior and compatibility.",
+      "breaking_change": "Alias behavior may change when its experimental target changes.",
+      "deprecation": "Alias removal should name the canonical experimental path."
+    },
+    "compatibility": {
+      "compatibility": "Legacy public surface kept to avoid breaking existing local usage.",
+      "breaking_change": "Do not add new behavior here. Move implementation under src/ and keep this as a shim where possible.",
+      "deprecation": "Removal requires a replacement path and migration notes."
+    },
+    "internal": {
+      "compatibility": "No public compatibility promise.",
+      "breaking_change": "Can change at any time as long as package exports, bins, and documented SDK APIs stay compatible.",
+      "deprecation": "No deprecation window required unless it has leaked into package exports."
+    }
+  },
+  "package_exports": [
+    {
+      "export": ".",
+      "target": "./dist/sdk.js",
+      "tier": "stable",
+      "reason": "Primary SDK facade."
+    },
+    {
+      "export": "./agents",
+      "target": "./dist/src/agents/presets.js",
+      "tier": "stable",
+      "reason": "Model-agnostic preset discovery and plan generation."
+    },
+    {
+      "export": "./pi",
+      "target": "./dist/src/agents/pi.js",
+      "tier": "experimental",
+      "reason": "Highest-level PI preset still depends on evolving runner/runtime adapter contracts."
+    },
+    {
+      "export": "./pi-runtimes",
+      "target": "./dist/src/runtime/pi-runtimes.js",
+      "tier": "experimental",
+      "reason": "Runtime action map is still expanding."
+    },
+    {
+      "export": "./runtime",
+      "target": "./dist/src/runtime/runner-runtime.js",
+      "tier": "experimental",
+      "reason": "Runner runtime implementation is freeze-ready, but the export remains experimental until explicit stable-boundary approval and public release evidence exist."
+    },
+    {
+      "export": "./runtime/adapters",
+      "target": "./dist/src/runtime/adapters/agent-contract.js",
+      "tier": "experimental",
+      "reason": "Agent adapter capability, budget, and sandbox contract is usable; provider/runtime and CLI dry-run matrices remain exposed through sdk.provider while the adapter surface evolves."
+    },
+    {
+      "export": "./runtime/adapter-evidence",
+      "target": "./dist/src/runtime/adapters/evidence-collector.js",
+      "tier": "experimental",
+      "reason": "Adapter evidence collector can plan or explicitly execute acceptance adapter commands, but execution policy is still beta-only and requires operator authorization."
+    },
+    {
+      "export": "./runtime/progress-ui-evidence",
+      "target": "./dist/src/runtime/progress/ui-evidence.js",
+      "tier": "experimental",
+      "reason": "Progress dashboard UI/UX evidence harness can generate local-first HTML snapshot evidence and adapter-consumable ui_evidence; browser execution and schema remain beta-only."
+    },
+    {
+      "export": "./core/bootstrap",
+      "target": "./dist/src/core/bootstrap.js",
+      "tier": "experimental",
+      "reason": "Project bootstrap structure is required for public beta but may expand as spec lifecycle matures."
+    },
+    {
+      "export": "./core/init-smoke",
+      "target": "./dist/src/core/init-smoke.js",
+      "tier": "experimental",
+      "reason": "Init-to-first-PRD smoke proves bootstrap, spec, preflight, and runner dry-run readiness, but smoke shape may expand before beta."
+    },
+    {
+      "export": "./core/config",
+      "target": "./dist/src/core/config.js",
+      "tier": "stable",
+      "reason": "Config loading is a stable integration primitive."
+    },
+    {
+      "export": "./core/paths",
+      "target": "./dist/src/core/paths.js",
+      "tier": "stable",
+      "reason": "Path resolution and canonical directory setup are stable integration primitives."
+    },
+    {
+      "export": "./prd/migration",
+      "target": "./dist/src/prd/migration.js",
+      "tier": "experimental",
+      "reason": "Gate migration strategy may evolve with PRD contract strictness."
+    },
+    {
+      "export": "./prd/preflight",
+      "target": "./dist/src/prd/preflight.js",
+      "tier": "stable",
+      "reason": "Execution readiness gate is required before runner entry."
+    },
+    {
+      "export": "./spec/lifecycle",
+      "target": "./dist/src/spec/lifecycle.js",
+      "tier": "experimental",
+      "reason": "Spec lifecycle artifact helpers are usable, but schemas are not frozen."
+    },
+    {
+      "export": "./spec/traceability",
+      "target": "./dist/src/spec/traceability.js",
+      "tier": "experimental",
+      "reason": "Spec lifecycle artifacts are not fully frozen."
+    },
+    {
+      "export": "./evidence/ledger",
+      "target": "./dist/src/evidence/ledger.js",
+      "tier": "experimental",
+      "reason": "Ledger facade is usable, but evidence schema evolution is still active."
+    },
+    {
+      "export": "./evidence/report",
+      "target": "./dist/src/evidence/report.js",
+      "tier": "experimental",
+      "reason": "Run report generation is usable, but report schema is still active."
+    },
+    {
+      "export": "./review/findings",
+      "target": "./dist/src/review/findings.js",
+      "tier": "experimental",
+      "reason": "Review finding v1 helpers can still gain fields before beta."
+    },
+    {
+      "export": "./workflows",
+      "target": "./dist/src/workflows/registry.js",
+      "tier": "experimental",
+      "reason": "Workflow/skill descriptor registry is usable, with installer helpers exposed separately."
+    },
+    {
+      "export": "./workflows/install",
+      "target": "./dist/src/workflows/install.js",
+      "tier": "experimental",
+      "reason": "Workflow skill install artifacts include target rules, trigger index, and target smoke; real agent execution conventions may still expand."
+    },
+    {
+      "export": "./fixtures",
+      "target": "./dist/src/fixtures/registry.js",
+      "tier": "experimental",
+      "reason": "Fixture registry exists, but the cross-project matrix is incomplete."
+    },
+    {
+      "export": "./fixtures/harness",
+      "target": "./dist/src/fixtures/harness.js",
+      "tier": "experimental",
+      "reason": "Fixture harness is usable but still expanding across project types."
+    },
+    {
+      "export": "./release/readiness",
+      "target": "./dist/src/release/readiness.js",
+      "tier": "experimental",
+      "reason": "Public beta readiness checks are active, package files allowlist is checked, and release still fails closed while private=true."
+    },
+    {
+      "export": "./release/pack-smoke",
+      "target": "./dist/src/release/pack-smoke.js",
+      "tier": "experimental",
+      "reason": "Package tarball install smoke proves external import/bin readiness, but release workflow is still private and beta-only."
+    },
+    {
+      "export": "./release/hardening-drill",
+      "target": "./dist/src/release/hardening-drill.js",
+      "tier": "experimental",
+      "reason": "Public beta hardening drill composes readiness, pack/install, fixtures, API docs, provider dry-run, and workflow smoke while refusing publish or billable execution."
+    },
+    {
+      "export": "./release/decision-gate",
+      "target": "./dist/src/release/decision-gate.js",
+      "tier": "experimental",
+      "reason": "Controlled beta release decision gate requires a human decision record before private removal, publishing, credential, or billable provider actions are authorized."
+    },
+    {
+      "export": "./release/operator-state",
+      "target": "./dist/src/release/operator-state.js",
+      "tier": "experimental",
+      "reason": "Operator-approved release-state mutation helper can dry-run or explicitly apply private removal after the controlled decision gate, while still refusing publish, credentials, and provider execution."
+    },
+    {
+      "export": "./release/operator-runbook",
+      "target": "./dist/src/release/operator-runbook.js",
+      "tier": "experimental",
+      "reason": "Operator release runbook gate turns publish, credential, billable provider, and public dogfood report decisions into auditable manual commands while refusing to execute them inside the SDK."
+    },
+    {
+      "export": "./release/post-release-audit",
+      "target": "./dist/src/release/post-release-audit.js",
+      "tier": "experimental",
+      "reason": "Post-release audit gate verifies manual external release records, post-release hardening, package install smoke, and dogfood evidence without executing release side effects."
+    },
+    {
+      "export": "./release/stable-graduation",
+      "target": "./dist/src/release/stable-graduation.js",
+      "tier": "experimental",
+      "reason": "Stable graduation gate composes post-release audit, public readiness, root-entrypoint budget, stability review, and runtime API freeze checks before stable SDK claims."
+    },
+    {
+      "export": "./release/manual-external-release",
+      "target": "./dist/src/release/manual-external-release.js",
+      "tier": "experimental",
+      "reason": "Manual external release evidence gate verifies human-run publish, credential, billable provider, public dogfood, post-release audit, and stable graduation evidence while refusing to execute those actions inside the SDK."
+    },
+    {
+      "export": "./release/agent-integration-doctor",
+      "target": "./dist/src/release/agent-integration-doctor.js",
+      "tier": "experimental",
+      "reason": "Native agent integration doctor validates installed Codex/Claude skills, slash/source commands, and workflow artifacts without installing or mutating host state."
+    },
+    {
+      "export": "./release/real-project-dogfood",
+      "target": "./dist/src/release/real-project-dogfood.js",
+      "tier": "experimental",
+      "reason": "Real-project dogfood gate validates chat-driven plan/check/review evidence against an external project without editing code or executing providers."
+    },
+    {
+      "export": "./release/pi-execution-drill",
+      "target": "./dist/src/release/pi-execution-drill.js",
+      "tier": "experimental",
+      "reason": "PI execution drill gate validates mock/dry-run or externally authorized controlled billable PI evidence while refusing SDK-executed provider actions."
+    },
+    {
+      "export": "./release/runtime-boundary-decision",
+      "target": "./dist/src/release/runtime-boundary-decision.js",
+      "tier": "experimental",
+      "reason": "Runtime boundary decision gate validates explicit human approval for ./runtime experimental-to-stable promotion without applying API boundary changes."
+    },
+    {
+      "export": "./release/public-beta-evidence",
+      "target": "./dist/src/release/public-beta-evidence.js",
+      "tier": "experimental",
+      "reason": "Public beta evidence bundle gate aggregates agent integration, real-project dogfood, PI drill, runtime decision, and optional manual external release evidence without executing release side effects."
+    },
+    {
+      "export": "./release/real-project-dogfood-pack",
+      "target": "./dist/src/release/real-project-dogfood-pack.js",
+      "tier": "experimental",
+      "reason": "Isolated real-project dogfood pack runs init, agent bridge dry-run, skill/command dry-run doctor, and idea/discovery/plan/PRD/check/review/accept/controlled-run evidence gates without provider or release side effects."
+    },
+    {
+      "export": "./release/experience-pack-audit",
+      "target": "./dist/src/release/experience-pack-audit.js",
+      "tier": "experimental",
+      "reason": "Experience pack effectiveness audit validates relevant bounded prompt injection without blocking prompt generation or executing providers."
+    },
+    {
+      "export": "./release/nontechnical-ux-doctor",
+      "target": "./dist/src/release/nontechnical-ux-doctor.js",
+      "tier": "experimental",
+      "reason": "Non-technical UX doctor validates one-sentence Codex/Claude entrypoints and chat-first command artifacts without mutating workspace."
+    },
+    {
+      "export": "./eval/benchmark",
+      "target": "./dist/src/eval/benchmark.js",
+      "tier": "experimental",
+      "reason": "Benchmark fixtures and rubric scoring are public beta readiness evidence, but fixture set and thresholds may evolve before stable."
+    },
+    {
+      "export": "./pm",
+      "target": "./dist/src/pm/index.js",
+      "tier": "experimental",
+      "reason": "Requirement-to-findings PM module input contract is not frozen."
+    },
+    {
+      "export": "./audit-to-prd",
+      "target": "./dist/src/prd/audit-to-prd.js",
+      "tier": "experimental",
+      "reason": "Audit input shape is not frozen."
+    },
+    {
+      "export": "./prd-migrate-gates",
+      "target": "./dist/src/prd/migration.js",
+      "tier": "experimental_alias",
+      "reason": "Compatibility alias for prd/migration."
+    },
+    {
+      "export": "./prd-preflight",
+      "target": "./dist/src/prd/preflight.js",
+      "tier": "stable_alias",
+      "reason": "Compatibility alias for prd/preflight."
+    },
+    {
+      "export": "./validate-prd",
+      "target": "./dist/src/prd/validate.js",
+      "tier": "stable",
+      "reason": "PRD schema validation is a stable integration primitive."
+    },
+    {
+      "export": "./contract",
+      "target": "./dist/src/prd/contract.js",
+      "tier": "stable",
+      "reason": "Condition evaluation is a stable gate primitive."
+    },
+    {
+      "export": "./scanner",
+      "target": "./dist/src/review/scanner.js",
+      "tier": "stable",
+      "reason": "Deterministic review scanning is stable for public callers."
+    },
+    {
+      "export": "./config",
+      "target": "./dist/src/core/config.js",
+      "tier": "stable_alias",
+      "reason": "Compatibility alias for core/config."
+    }
+  ],
+  "sdk_module_exports": {
+    "stable": [
+      "config",
+      "createAgentPlan",
+      "createYoloSdk",
+      "default",
+      "detectModelProvider",
+      "evaluatePostConditions",
+      "evaluatePreConditions",
+      "getAgentPreset",
+      "inspectAtomicTask",
+      "inspectPrdContract",
+      "inspectTaskFromPrd",
+      "listAgentPresets",
+      "loadConfig",
+      "preflightAllPrds",
+      "preflightPrd",
+      "scanFile",
+      "scanProject",
+      "supportedConditionTypes",
+      "toGateFormat",
+      "validatePrdPath"
+    ],
+    "experimental": [
+      "EVIDENCE_ARTIFACT_SCHEMA",
+      "EVIDENCE_SCHEMA_VERSION",
+      "LEDGER_EVENT_SCHEMA",
+      "PACKAGE_INSTALL_SMOKE_SCHEMA_VERSION",
+      "CONTROLLED_BETA_RELEASE_ACTIONS",
+      "CONTROLLED_BETA_RELEASE_DECISION_SCHEMA_VERSION",
+      "OPERATOR_RELEASE_OPERATIONS",
+      "OPERATOR_RELEASE_RUNBOOK_SCHEMA_VERSION",
+      "OPERATOR_RELEASE_STATE_SCHEMA_VERSION",
+      "POST_RELEASE_AUDIT_SCHEMA_VERSION",
+      "PUBLIC_BETA_HARDENING_DRILL_SCHEMA_VERSION",
+      "STABLE_GRADUATION_SCHEMA_VERSION",
+      "MANUAL_EXTERNAL_RELEASE_SCHEMA_VERSION",
+      "AGENT_INTEGRATION_DOCTOR_SCHEMA_VERSION",
+      "REAL_PROJECT_DOGFOOD_SCHEMA_VERSION",
+      "PI_EXECUTION_DRILL_SCHEMA_VERSION",
+      "RUNTIME_BOUNDARY_DECISION_SCHEMA_VERSION",
+      "PUBLIC_BETA_EVIDENCE_SCHEMA_VERSION",
+      "REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION",
+      "EXPERIENCE_PACK_AUDIT_SCHEMA_VERSION",
+      "NONTECHNICAL_UX_DOCTOR_SCHEMA_VERSION",
+      "YOLO_CODEX_FALLBACK_ENTRY",
+      "YOLO_ONE_SENTENCE_ENTRY",
+      "ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION",
+      "PROGRESS_DASHBOARD_UI_EVIDENCE_SCHEMA_VERSION",
+      "YOLO_BENCHMARK_RUBRIC",
+      "YOLO_BENCHMARK_SCHEMA_VERSION",
+      "YOLO_COMMAND_REGISTRY_SCHEMA_VERSION",
+      "YOLO_DOCTOR_SCHEMA_VERSION",
+      "CONTROLLED_PARALLEL_SCHEMA_VERSION",
+      "REVIEW_FINDING_SCHEMA",
+      "REVIEW_OUTPUT_SCHEMA",
+      "appendJsonlRecord",
+      "appendRunEvent",
+      "appendStateEvent",
+      "buildAcceptanceReport",
+      "buildAdapterEvidencePlan",
+      "buildAgentAdapterCapabilities",
+      "buildAgentAdapterContract",
+      "buildProgressDashboardUiEvidence",
+      "buildControlledParallelExecutionPlan",
+      "buildTaskDependencyGraph",
+      "buildYoloCommandRegistry",
+      "buildYoloDoctorReport",
+      "buildYoloBenchmarkPlan",
+      "buildControlledBetaReleaseDecisionPlan",
+      "buildOperatorReleaseRunbookPlan",
+      "buildOperatorReleaseStatePlan",
+      "buildPostReleaseAuditPlan",
+      "buildEvidenceArtifact",
+      "buildChangeArtifact",
+      "buildDesignArtifact",
+      "buildDiscoveryArtifact",
+      "buildDiscoveryPlan",
+      "buildInitToFirstPrdSmokePlan",
+      "buildLedgerRecord",
+      "buildLifecycleStageReport",
+      "buildPackageInstallSmokePlan",
+      "buildProjectBootstrapPlan",
+      "buildPublicBetaHardeningDrillPlan",
+      "buildStableGraduationPlan",
+      "buildManualExternalReleasePlan",
+      "buildAgentIntegrationDoctorPlan",
+      "buildRealProjectDogfoodPlan",
+      "buildPiExecutionDrillPlan",
+      "buildRuntimeBoundaryDecisionPlan",
+      "buildPublicBetaEvidencePlan",
+      "buildRealProjectDogfoodPackPlan",
+      "buildExperiencePackEffectivenessAuditPlan",
+      "buildNonTechnicalUxDoctorPlan",
+      "buildPrdFromDiscovery",
+      "buildRequirementArtifact",
+      "buildReviewFixPrd",
+      "buildReviewOutput",
+      "buildRunFinalAnswer",
+      "buildSpecLifecyclePackage",
+      "buildTaskArtifact",
+      "buildRunReport",
+      "buildTraceabilityMatrix",
+      "buildWorkflowSkillInstallPlan",
+      "buildWorkflowSkillTargetSmokePlan",
+      "convertAuditToPrd",
+      "copyFixtureToWorkspace",
+      "createEvidenceLedger",
+      "createPiAgent",
+      "createPiRunPlan",
+      "createPrdMigrationAdvice",
+      "createWorkflowPlan",
+      "defaultDiscoveryPath",
+      "defaultDiscoveryPlanPath",
+      "defaultDiscoveryPrdPath",
+      "discoverPackManifests",
+      "detectParallelConflicts",
+      "fixtureEvidenceRecord",
+      "formatAcceptanceReportText",
+      "formatControlledParallelPlanText",
+      "formatRunFinalAnswerMarkdown",
+      "formatRunReportMarkdown",
+      "formatYoloBenchmarkText",
+      "formatYoloCheckText",
+      "formatYoloDoctorText",
+      "generateFindingsFromRequirement",
+      "getFixtureDefinition",
+      "getWorkflow",
+      "getYoloCommand",
+      "inspectFixtureDefinition",
+      "inspectFixtureRegistry",
+      "inspectPackageReadiness",
+      "inspectPackedPackage",
+      "inspectAgentBridgeDryRunDoctor",
+      "inspectParallelMergeGate",
+      "inspectPublicBetaReadiness",
+      "inspectAcceptanceReport",
+      "inspectAgentAdapterContract",
+      "inspectProgressDashboardUiEvidence",
+      "inspectReviewFixLoop",
+      "inspectSpecGovernance",
+      "inspectSpecLifecyclePackage",
+      "inspectWorkflowSkillInstallPlan",
+      "inspectYoloCheck",
+      "initProject",
+      "runInitToFirstPrdSmoke",
+      "installWorkflowSkills",
+      "listBenchmarkFixtures",
+      "listFixtureDefinitions",
+      "listYoloBridgeWorkflowIds",
+      "listYoloCommandNames",
+      "listYoloCommands",
+      "listWorkflowSkillDescriptors",
+      "listWorkflows",
+      "migratePrdFile",
+      "migratePrdGates",
+      "mergeParallelEvidence",
+      "normalizeAgentProvider",
+      "normalizeReviewFinding",
+      "normalizeReviewFindings",
+      "readDiscoveryArtifact",
+      "readPackManifest",
+      "resolveProjectContext",
+      "runFixtureHarness",
+      "runControlledBetaReleaseDecisionGate",
+      "runOperatorReleaseRunbookGate",
+      "runPackageInstallSmoke",
+      "runOperatorReleaseStateMutation",
+      "runPostReleaseAuditGate",
+      "runPublicBetaHardeningDrill",
+      "runStableGraduationGate",
+      "runManualExternalReleaseGate",
+      "runAgentIntegrationDoctor",
+      "runAdapterEvidenceCollector",
+      "runProgressDashboardUiEvidence",
+      "runBenchmark",
+      "runDiscoveryPlanRuntime",
+      "runDiscoveryPrdRuntime",
+      "runDiscoveryRuntime",
+      "runRealProjectDogfoodGate",
+      "runPiExecutionDrillGate",
+      "runRuntimeBoundaryDecisionGate",
+      "runPublicBetaEvidenceGate",
+      "runRealProjectDogfoodPack",
+      "runExperiencePackEffectivenessAudit",
+      "runNonTechnicalUxDoctor",
+      "runYoloBenchmark",
+      "runPiAgent",
+      "runPiRuntime",
+      "runReportPaths",
+      "runRunnerRuntime",
+      "runWorkflowSkillTargetSmoke",
+      "planControlledParallelWaves",
+      "renderYoloCommandUsage",
+      "specLifecycleToPrd",
+      "scoreBenchmarkScenario",
+      "summarizeReviewFindings",
+      "validateEvidenceArtifact",
+      "validateLedgerRecord",
+      "validatePackManifest",
+      "validateReviewFinding",
+      "validateWorkflowSkillDescriptor",
+      "workflowToSkillDescriptor",
+      "writeJsonArtifact",
+      "writeLifecycleStageReport",
+      "writeRunReport"
+    ]
+  },
+  "create_yolo_sdk": {
+    "namespaces": [
+      {
+        "namespace": "config",
+        "tier": "stable",
+        "shape": "opaque",
+        "entries": {}
+      },
+      {
+        "namespace": "paths",
+        "tier": "stable",
+        "shape": "object",
+        "entries": {
+          "projectRoot": "stable",
+          "resolvePrdPath": "stable",
+          "stateRoot": "stable",
+          "yoloPath": "stable",
+          "yoloRoot": "stable"
+        }
+      },
+      {
+        "namespace": "project",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "buildInitPlan": "experimental",
+          "buildInitToFirstPrdSmokePlan": "experimental",
+          "initProject": "experimental",
+          "runInitToFirstPrdSmoke": "experimental"
+        }
+      },
+      {
+        "namespace": "contract",
+        "tier": "stable",
+        "shape": "object",
+        "entries": {
+          "evaluatePostConditions": "stable",
+          "evaluatePreConditions": "stable",
+          "inspectPrdContract": "stable",
+          "supportedConditionTypes": "stable",
+          "toGateFormat": "stable"
+        }
+      },
+      {
+        "namespace": "prd",
+        "tier": "mixed",
+        "shape": "object",
+        "entries": {
+          "convertAuditToPrd": "experimental",
+          "createPrdMigrationAdvice": "experimental",
+          "generateFindingsFromRequirement": "experimental",
+          "migratePrdFile": "experimental",
+          "migratePrdGates": "experimental",
+          "preflightAllPrds": "stable",
+          "preflightPrd": "stable",
+          "validatePrdPath": "stable"
+        }
+      },
+      {
+        "namespace": "task",
+        "tier": "mixed",
+        "shape": "object",
+        "entries": {
+          "classifyTaskExecution": "experimental",
+          "inspectAtomicTask": "stable",
+          "inspectTaskFromPrd": "stable",
+          "validateDiffQuality": "experimental",
+          "validateTestGeneration": "experimental"
+        }
+      },
+      {
+        "namespace": "spec",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "buildChangeArtifact": "experimental",
+          "buildDesignArtifact": "experimental",
+          "buildRequirementArtifact": "experimental",
+          "buildSpecLifecyclePackage": "experimental",
+          "buildTaskArtifact": "experimental",
+          "buildTraceabilityMatrix": "experimental",
+          "inspectSpecLifecyclePackage": "experimental",
+          "specLifecycleToPrd": "experimental",
+          "inspectSpecGovernance": "experimental"
+        }
+      },
+      {
+        "namespace": "evidence",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "EVIDENCE_ARTIFACT_SCHEMA": "experimental",
+          "EVIDENCE_SCHEMA_VERSION": "experimental",
+          "LEDGER_EVENT_SCHEMA": "experimental",
+          "appendJsonlRecord": "experimental",
+          "appendRunEvent": "experimental",
+          "appendStateEvent": "experimental",
+          "buildEvidenceArtifact": "experimental",
+          "buildLedgerRecord": "experimental",
+          "buildRunFinalAnswer": "experimental",
+          "buildRunReport": "experimental",
+          "createEvidenceLedger": "experimental",
+          "formatRunFinalAnswerMarkdown": "experimental",
+          "formatRunReportMarkdown": "experimental",
+          "runReportPaths": "experimental",
+          "validateEvidenceArtifact": "experimental",
+          "validateLedgerRecord": "experimental",
+          "writeJsonArtifact": "experimental",
+          "writeRunReport": "experimental"
+        }
+      },
+      {
+        "namespace": "lifecycle",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "buildStageReport": "experimental",
+          "writeStageReport": "experimental"
+        }
+      },
+      {
+        "namespace": "discovery",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "buildArtifact": "experimental",
+          "buildPlan": "experimental",
+          "buildPrd": "experimental",
+          "defaultPath": "experimental",
+          "defaultPlanPath": "experimental",
+          "defaultPrdPath": "experimental",
+          "readArtifact": "experimental",
+          "run": "experimental",
+          "runPlan": "experimental",
+          "runPrd": "experimental"
+        }
+      },
+      {
+        "namespace": "packs",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "discoverManifests": "experimental",
+          "readManifest": "experimental",
+          "resolveProjectContext": "experimental",
+          "validateManifest": "experimental"
+        }
+      },
+      {
+        "namespace": "acceptance",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "buildAdapterEvidencePlan": "experimental",
+          "buildReport": "experimental",
+          "collectAdapterEvidence": "experimental",
+          "formatReportText": "experimental",
+          "inspectReport": "experimental"
+        }
+      },
+      {
+        "namespace": "progress",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "buildUiEvidence": "experimental",
+          "inspectUiEvidence": "experimental",
+          "runUiEvidence": "experimental"
+        }
+      },
+      {
+        "namespace": "eval",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "buildBenchmarkPlan": "experimental",
+          "formatBenchmarkText": "experimental",
+          "listBenchmarkFixtures": "experimental",
+          "rubric": "experimental",
+          "runBenchmark": "experimental",
+          "scoreScenario": "experimental"
+        }
+      },
+      {
+        "namespace": "commands",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "buildRegistry": "experimental",
+          "get": "experimental",
+          "list": "experimental",
+          "listBridgeWorkflowIds": "experimental",
+          "listNames": "experimental",
+          "renderUsage": "experimental",
+          "schemaVersion": "experimental"
+        }
+      },
+      {
+        "namespace": "doctor",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "buildReport": "experimental",
+          "formatReportText": "experimental",
+          "schemaVersion": "experimental"
+        }
+      },
+      {
+        "namespace": "parallel",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "buildExecutionPlan": "experimental",
+          "buildTaskDependencyGraph": "experimental",
+          "detectConflicts": "experimental",
+          "formatPlanText": "experimental",
+          "inspectMergeGate": "experimental",
+          "mergeEvidence": "experimental",
+          "planWaves": "experimental"
+        }
+      },
+      {
+        "namespace": "workflows",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "buildSkillInstallPlan": "experimental",
+          "buildSkillTargetSmokePlan": "experimental",
+          "createWorkflowPlan": "experimental",
+          "getWorkflow": "experimental",
+          "installSkills": "experimental",
+          "inspectSkillInstallPlan": "experimental",
+          "listWorkflowSkillDescriptors": "experimental",
+          "listWorkflows": "experimental",
+          "runSkillTargetSmoke": "experimental",
+          "validateSkillDescriptor": "experimental",
+          "workflowToSkillDescriptor": "experimental"
+        }
+      },
+      {
+        "namespace": "fixtures",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "copyFixtureToWorkspace": "experimental",
+          "fixtureEvidenceRecord": "experimental",
+          "getFixtureDefinition": "experimental",
+          "inspectFixtureDefinition": "experimental",
+          "inspectFixtureRegistry": "experimental",
+          "listFixtureDefinitions": "experimental",
+          "runFixtureHarness": "experimental"
+        }
+      },
+      {
+        "namespace": "release",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "buildPackageInstallSmokePlan": "experimental",
+          "buildControlledBetaReleaseDecisionPlan": "experimental",
+          "buildOperatorReleaseRunbookPlan": "experimental",
+          "buildOperatorReleaseStatePlan": "experimental",
+          "buildPostReleaseAuditPlan": "experimental",
+          "buildPublicBetaHardeningDrillPlan": "experimental",
+          "buildStableGraduationPlan": "experimental",
+          "buildManualExternalReleasePlan": "experimental",
+          "buildAgentIntegrationDoctorPlan": "experimental",
+          "buildRealProjectDogfoodPlan": "experimental",
+          "buildPiExecutionDrillPlan": "experimental",
+          "buildRuntimeBoundaryDecisionPlan": "experimental",
+          "buildPublicBetaEvidencePlan": "experimental",
+          "buildRealProjectDogfoodPackPlan": "experimental",
+          "buildExperiencePackEffectivenessAuditPlan": "experimental",
+          "buildNonTechnicalUxDoctorPlan": "experimental",
+          "inspectAgentBridgeDryRunDoctor": "experimental",
+          "inspectPackedPackage": "experimental",
+          "inspectPackageReadiness": "experimental",
+          "inspectPublicBetaReadiness": "experimental",
+          "runPackageInstallSmoke": "experimental",
+          "runControlledBetaReleaseDecisionGate": "experimental",
+          "runOperatorReleaseRunbookGate": "experimental",
+          "runOperatorReleaseStateMutation": "experimental",
+          "runPostReleaseAuditGate": "experimental",
+          "runPublicBetaHardeningDrill": "experimental",
+          "runStableGraduationGate": "experimental",
+          "runManualExternalReleaseGate": "experimental",
+          "runAgentIntegrationDoctor": "experimental",
+          "runRealProjectDogfoodGate": "experimental",
+          "runPiExecutionDrillGate": "experimental",
+          "runRuntimeBoundaryDecisionGate": "experimental",
+          "runPublicBetaEvidenceGate": "experimental",
+          "runRealProjectDogfoodPack": "experimental",
+          "runExperiencePackEffectivenessAudit": "experimental",
+          "runNonTechnicalUxDoctor": "experimental"
+        }
+      },
+      {
+        "namespace": "provider",
+        "tier": "mixed",
+        "shape": "object",
+        "entries": {
+          "buildAgentAdapterCapabilities": "experimental",
+          "buildAgentAdapterContract": "experimental",
+          "buildProviderCliDryRunMatrix": "experimental",
+          "buildProviderRuntimeMatrix": "experimental",
+          "detectModelProvider": "stable",
+          "inspectAgentAdapterContract": "experimental",
+          "inspectProviderCliDryRunMatrix": "experimental",
+          "inspectProviderRuntimeMatrix": "experimental",
+          "normalizeAgentProvider": "experimental"
+        }
+      },
+      {
+        "namespace": "runtime",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "formatCheckText": "experimental",
+          "inspectCheck": "experimental",
+          "runPiRuntime": "experimental",
+          "runRunner": "experimental"
+        }
+      },
+      {
+        "namespace": "agents",
+        "tier": "mixed",
+        "shape": "object",
+        "entries": {
+          "createPiAgent": "experimental",
+          "createPiPlan": "experimental",
+          "createPlan": "stable",
+          "getPreset": "stable",
+          "listPresets": "stable",
+          "runPi": "experimental"
+        }
+      },
+      {
+        "namespace": "pi",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "createAgent": "experimental",
+          "createPlan": "experimental",
+          "run": "experimental"
+        }
+      },
+      {
+        "namespace": "review",
+        "tier": "mixed",
+        "shape": "object",
+        "entries": {
+          "REVIEW_FINDING_SCHEMA": "experimental",
+          "REVIEW_OUTPUT_SCHEMA": "experimental",
+          "buildReviewFixPrd": "experimental",
+          "buildReviewOutput": "experimental",
+          "inspectReviewFixLoop": "experimental",
+          "normalizeReviewFinding": "experimental",
+          "normalizeReviewFindings": "experimental",
+          "scanFile": "stable",
+          "scanProject": "stable",
+          "summarizeReviewFindings": "experimental",
+          "validateReviewFinding": "experimental"
+        }
+      }
+    ]
+  },
+  "internal_surfaces": [
+    "Root .mjs files not exported by package.json, except sdk.mjs as the package entrypoint.",
+    "src/runtime/gates/*",
+    "src/runtime/evidence/*",
+    "src/runtime/task-state/*",
+    "src/runtime/task-loop/*",
+    "src/runtime/run-lifecycle/*",
+    "src/runtime/recovery/*",
+    "src/runtime/review-loop/*",
+    "src/runtime/execution/*",
+    "lib/*",
+    "closed-loop/*",
+    "data/*",
+    "state/*",
+    "hooks/*"
+  ]
+}

@@ -1,0 +1,2037 @@
+{
+  "version": "2.0",
+  "title": "修复 Review R1 发现的 11 个代码问题",
+  "generated_at": "2026-05-05T07:32:02.565Z",
+  "tasks": [
+    {
+      "id": "BUGFIX-FIX-001",
+      "title": "修复: BUG-R-001",
+      "description": "- [HIGH] 使用 as unknown as Sale 类型断言绕过类型检查 → 应该在类型源头（typedCollection 或数据层）解决类型不匹配问题，而不是在消费端使用类型断言绕过检查",
+      "priority": "P1",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/sale.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "使用 as unknown as Sale 类型断言绕过类型检查 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-002",
+      "title": "修复: BUG-R-002",
+      "description": "- [HIGH] updateSale 方法使用 .doc(id).update()，没有版本检查，缺少乐观锁 → 应该添加 version 字段检查，或者在条件更新中使用 db.command.and 确保只更新预期的版本",
+      "priority": "P1",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/sale.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "updateSale 方法使用 .doc(id).update()，没有版本检查，缺少乐观锁 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-003",
+      "title": "修复: BUG-R-003",
+      "description": "- [HIGH] while 循环没有游标推进，使用深度 skip 分页，性能会随着 skip 值增加而显著下降 → 应该像 stats-time.service.ts 和 db-utils.ts 一样使用游标分页（基于 _id 的 db.command.gt 游标）",
+      "priority": "P1",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard-stats.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "while 循环没有游标推进，使用深度 skip 分页，性能会随着 skip 值增加而显著下降 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-004",
+      "title": "修复: BUG-R-004",
+      "description": "- [MEDIUM] 使用 Date.parse 处理时间字符串，存在时区问题风险 → 应该统一使用 db.serverDate() 或确保时间格式为 UTC 时间戳（数字格式）",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard-recent.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "使用 Date.parse 处理时间字符串，存在时区问题风险 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-005",
+      "title": "修复: BUG-R-005",
+      "description": "- [MEDIUM] TODO 标记未完成：品牌功能未实现，暂时移除 BrandProfileSeries 和 BrandProfileProduct 类型 → 应该实现品牌功能或者移除 TODO 标记并明确说明这些类型的当前状态",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/types/brand-profile.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "TODO 标记未完成：品牌功能未实现，暂时移除 BrandProfileSeries 和 BrandProfileProduct 类型 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-006",
+      "title": "修复: BUG-R-006",
+      "description": "- [MEDIUM] TODO 标记未完成：低库存查询逻辑未实现，目前返回空数组 → 应该实现低库存查询逻辑（参考 dashboard-alerts.ts 中的 getLowStockAlerts）",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/index/index.tsx"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "TODO 标记未完成：低库存查询逻辑未实现，目前返回空数组 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-007",
+      "title": "修复: BUG-R-007",
+      "description": "- [MEDIUM] 文件行数为 150 行，刚好达到上限，建议拆分 → 可以提取过滤逻辑、状态计算逻辑到单独的 hooks 或 utils 文件",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/inventory/inventory.tsx"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "文件行数为 150 行，刚好达到上限，建议拆分 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-008",
+      "title": "修复: BUG-R-008",
+      "description": "- [MEDIUM] 文件行数为 148 行，接近上限 → 可以提取销售表单逻辑、数据处理逻辑到单独的组件或 hooks",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/sales/sales.tsx"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "文件行数为 148 行，接近上限 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-009",
+      "title": "修复: BUG-R-009",
+      "description": "- [MEDIUM] 文件行数为 149 行，接近上限 → 可以提取图表渲染逻辑、数据处理逻辑到单独的组件",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/stats/ranking.tsx"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "文件行数为 149 行，接近上限 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-010",
+      "title": "修复: BUG-R-010",
+      "description": "- [MEDIUM] 使用 as unknown as Record<string, unknown> 类型断言 → 应该在 payload 类型定义中明确定义 AuditPayload，而不是在写入时使用类型断言",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/config/log.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "使用 as unknown as Record<string, unknown> 类型断言 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-011",
+      "title": "修复: BUG-R-011",
+      "description": "- [LOW] wx.cloud.callFunction 返回的 result 类型未知，直接使用 .openid 访问属性 → 应该定义明确的云函数返回类型接口，如 interface LoginResult { openid: string }",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/db.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "wx.cloud.callFunction 返回的 result 类型未知，直接使用 .openid 访问属性 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUG-R-192",
+      "title": "db.ts:105 双重类型断言绕过类型检查",
+      "type": "bugfix",
+      "description": "在 src/services/db.ts 第 105 行，将 `command: mockCommand as unknown as WechatMiniprogram.DatabaseCommand,` 重构为：1) 为 mockCommand 定义正确的返回类型，使其兼容 WechatMiniprogram.DatabaseCommand 接口；或 2) 使用类型保护机制，在运行时检查 mockCommand 的类型。禁止使用双重类型断言绕过类型检查。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/db.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/db.ts",
+            "text": "mockCommand as unknown as"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/db.ts",
+            "text": "as unknown as"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "mockCommand 返回类型与 WechatMiniprogram.DatabaseCommand 兼容",
+        "代码中不再出现双重类型断言",
+        "TypeScript 编译通过，无类型错误"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-193",
+      "title": "db.ts:125 双重类型断言将 mockDb 赋值给 db 变量",
+      "type": "bugfix",
+      "description": "在 src/services/db.ts 第 125 行，将 `db = mockDb as unknown as WechatMiniprogram.Database;` 重构为：1) 修改 mockDb 的类型定义，使其直接兼容 WechatMiniprogram.Database 接口；或 2) 使用类型守卫机制，在赋值前进行类型检查。禁止使用双重类型断言。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/db.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/db.ts",
+            "text": "mockDb as unknown as"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/db.ts",
+            "text": "as unknown as"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "mockDb 类型与 WechatMiniprogram.Database 兼容",
+        "代码中不再出现双重类型断言",
+        "TypeScript 编译通过，无类型错误"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-195",
+      "title": "stock-out.service.ts:24 for(;;) 无限循环可读性差",
+      "type": "bugfix",
+      "description": "在 src/services/stock-out.service.ts 第 24 行，将 `for (;;) {` 循环重构为明确的循环条件：`while (invList.length < quantity || (invList.length > 0 && (invList[invList.length-1] as { _id: string; purchase_date: Date })?.purchase_date)) {`。保持现有的 break 逻辑（第 42 行的 `if (data.length < 20) break;`），但循环条件更加明确，提高代码可读性。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stock-out.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "for (;;)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "for (;;)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "循环使用明确的 while 条件，不再使用 for(;;)",
+        "保持原有的 break 逻辑和功能不变",
+        "代码可读性提升"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-196",
+      "title": "format.test.ts 文件超过 200 行（237 行）",
+      "type": "refactor",
+      "description": "将 src/utils/format.test.ts 拆分为多个测试文件，按功能分组：1) format.test.ts - 保留 formatTime 测试；2) format-datetime.test.ts - 移动 formatDateTime 和 formatDateTimeCompact 测试；3) relative-time.test.ts - 移动 getRelativeTime 测试。每个文件不超过 150 行，提高可维护性。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/utils/format.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/utils/format.test.ts",
+            "operator": "gt",
+            "value": 200
+          },
+          "severity": "WARN"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/utils/format.test.ts",
+            "operator": "lte",
+            "value": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/utils/format-datetime.test.ts",
+            "operator": "lte",
+            "value": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/utils/relative-time.test.ts",
+            "operator": "lte",
+            "value": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原 format.test.ts 文件拆分为 3 个文件",
+        "每个新文件不超过 150 行",
+        "所有测试用例保持不变，测试全部通过",
+        "文件按功能分组命名：format.test.ts, format-datetime.test.ts, relative-time.test.ts"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-197",
+      "title": "stats-time.service.ts:46 MAX_ROUNDS 设置为 500 需优化",
+      "type": "bugfix",
+      "description": "在 src/services/stats-time.service.ts 第 46 行，将 `const MAX_ROUNDS = 500;` 降低为 `const MAX_ROUNDS = 200;`，并在循环外添加超时保护机制。在处理大量数据时，如果循环执行超过 5 秒，提前终止并设置 truncated 标志。添加注释说明 MAX_ROUNDS 的作用是防止长时间运行的事务阻塞。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stats-time.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stats-time.service.ts",
+            "text": "const MAX_ROUNDS = 500;"
+          },
+          "severity": "WARN"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stats-time.service.ts",
+            "text": "const MAX_ROUNDS = 200;"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "MAX_ROUNDS 降低为 200",
+        "添加超时保护机制（5 秒超时）",
+        "添加注释说明 MAX_ROUNDS 和超时机制的作用",
+        "保持原有功能不变，不影响正常使用"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-198",
+      "title": "stockOut 函数超长需拆分",
+      "type": "bugfix",
+      "description": "在 src/services/stock-out.service.ts 中，将 stockOut 函数（第14-111行，98行）拆分为3个子函数：1) fetchInventoryList - 处理事务内库存列表查询（第21-45行）；2) calculateDeduction - 处理库存扣减计算（第50-75行）；3) createSaleRecord - 处理销售记录创建（第77-107行）。在主函数中调用这3个子函数，保持函数长度不超过50行。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stock-out.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "async stockOut(params: StockOutParams): Promise<{ sale_id: string }>"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "max_lines": 113
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "fetchInventoryList"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "calculateDeduction"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "createSaleRecord"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "function": "stockOut",
+            "max_lines": 50
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "stockOut 函数不超过50行",
+        "新增 fetchInventoryList 函数处理库存列表查询",
+        "新增 calculateDeduction 函数处理库存扣减计算",
+        "新增 createSaleRecord 函数处理销售记录创建",
+        "所有子函数不超过50行",
+        "保持事务逻辑完整性",
+        "测试通过且不影响现有功能"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-199",
+      "title": "stock-out.service.ts 中 while (true) 循环需改为明确条件",
+      "type": "bugfix",
+      "description": "在 src/services/stock-out.service.ts 第24行，将 `while (true)` 改为 `let hasMoreRecords = true; while (hasMoreRecords)`，并在第42行 break 处改为 `hasMoreRecords = false`，使循环条件更清晰。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stock-out.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "while (true)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "while (true)"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "while (hasMoreRecords)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "移除 while (true) 无限循环写法",
+        "使用 hasMoreRecords 明确表达循环条件",
+        "在适当位置更新 hasMoreRecords 为 false",
+        "保持原有逻辑不变",
+        "测试通过且不影响现有功能"
+      ],
+      "status": "skipped",
+      "phaseDetail": "precheck: 目标模式已不存在，无需修复",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-200",
+      "title": "dashboard-stats.ts 第34行 for (;;) 循环需改为明确条件",
+      "type": "bugfix",
+      "description": "在 src/services/dashboard/dashboard-stats.ts 第34行，将 `for (;;)` 改为 `let hasMoreRecords = true; while (hasMoreRecords)`，并在第39行 break 处改为 `hasMoreRecords = false`，使循环条件更清晰。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard-stats.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "for (;;)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "for (;;)"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "while (hasMoreRecords)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "移除 for (;;) 无限循环写法",
+        "使用 hasMoreRecords 明确表达循环条件",
+        "在适当位置更新 hasMoreRecords 为 false",
+        "保持原有逻辑不变",
+        "测试通过且不影响现有功能"
+      ],
+      "status": "skipped",
+      "phaseDetail": "precheck: 目标模式已不存在，无需修复",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-201",
+      "title": "dashboard-stats.ts 第61行 for (;;) 循环需改为明确条件",
+      "type": "bugfix",
+      "description": "在 src/services/dashboard/dashboard-stats.ts 第61行，将 `for (;;)` 改为 `let hasMoreRecords = true; while (hasMoreRecords)`，并在第70行 break 处改为 `hasMoreRecords = false`，使循环条件更清晰。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard-stats.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "for (;;)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "for (;;)"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "while (hasMoreRecords)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "移除所有 for (;;) 无限循环写法（第34行和第61行）",
+        "使用 hasMoreRecords 明确表达循环条件",
+        "在适当位置更新 hasMoreRecords 为 false",
+        "保持原有逻辑不变",
+        "测试通过且不影响现有功能"
+      ],
+      "status": "skipped",
+      "phaseDetail": "precheck: 目标模式已不存在，无需修复",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-202",
+      "title": "stock-in-batch-transaction.test.ts 测试文件超长需拆分",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/stock-in-batch-transaction.test.ts（460行）按功能拆分为3个测试文件：1) stock-in-batch-transaction-create.test.ts - 测试新建库存记录逻辑（第60-133行）；2) stock-in-batch-transaction-update.test.ts - 测试更新库存记录逻辑（第135-329行）；3) stock-in-batch-transaction-validation.test.ts - 测试输入验证和错误处理（第331-458行）。每个文件不超过200行。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts",
+            "max_lines": 460
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction-create.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction-update.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction-validation.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件被删除",
+        "新增 stock-in-batch-transaction-create.test.ts 包含新建库存测试",
+        "新增 stock-in-batch-transaction-update.test.ts 包含更新库存测试",
+        "新增 stock-in-batch-transaction-validation.test.ts 包含验证和错误处理测试",
+        "每个新测试文件不超过200行",
+        "所有测试用例完整保留",
+        "测试通过且覆盖率不低于原文件"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-203",
+      "title": "dashboard-stats.ts:34 for(;;) 无限循环可读性差",
+      "type": "bugfix",
+      "description": "将 src/services/dashboard/dashboard-stats.ts:34 的 fetchMonthlySales 函数中的 for (;;) 改为 while (hasMore) 形式。在循环前初始化 hasMore = true，在循环体内第 41 行 break 之前设置 hasMore = pageData.length >= DB_BATCH_SIZE",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard-stats.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "for (;;) {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "for (;;)"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "while (hasMore)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "fetchMonthlySales 函数中不再使用 for(;;) 无限循环",
+        "使用 hasMore 变量控制循环退出条件",
+        "原有功能行为不变，测试通过"
+      ],
+      "status": "skipped",
+      "phaseDetail": "precheck: 目标模式已不存在，无需修复",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-204",
+      "title": "dashboard-stats.ts:61 for(;;) 无限循环可读性差",
+      "type": "bugfix",
+      "description": "将 src/services/dashboard/dashboard-stats.ts:61 的 batchFetchInventoryCosts 函数中的 for (;;) 改为 while (hasMore) 形式。在循环前初始化 hasMore = true，在循环体内第 71 行 break 之前设置 hasMore = data.length >= DB_BATCH_SIZE",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard-stats.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "for (;;) {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "for (;;)"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-stats.ts",
+            "text": "while (hasMore)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "batchFetchInventoryCosts 函数中不再使用 for(;;) 无限循环",
+        "使用 hasMore 变量控制循环退出条件",
+        "原有功能行为不变，测试通过"
+      ],
+      "status": "skipped",
+      "phaseDetail": "precheck: 目标模式已不存在，无需修复",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-205",
+      "title": "stock-in-batch-transaction.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "拆分 src/services/__tests__/stock-in-batch-transaction.test.ts（459 行）为以下文件：\n1. stock-in-batch-transaction.create.test.ts - 新建库存记录测试\n2. stock-in-batch-transaction.update.test.ts - 更新库存记录测试\n3. stock-in-batch-transaction.validation.test.ts - 输入验证测试\n4. stock-in-batch-transaction.error.test.ts - 错误处理测试",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts",
+            "text": "describe('processStockInBatchTransaction', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts",
+            "text": "describe('processStockInBatchTransaction', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.create.test.ts",
+            "text": "describe('when creating new inventory record', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.update.test.ts",
+            "text": "describe('when updating existing inventory record', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.validation.test.ts",
+            "text": "describe('input validation', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.error.test.ts",
+            "text": "describe('error handling', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件删除或重命名",
+        "新拆分的 4 个测试文件每个不超过 150 行",
+        "所有测试用例迁移完整，测试通过率不变"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-206",
+      "title": "sale.service.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "拆分 src/services/__tests__/sale.service.test.ts（371 行）为以下文件：\n1. sale.service.query.test.ts - 查询相关测试（getSales, getSaleById）\n2. sale.service.create.test.ts - 创建相关测试（createSale）\n3. sale.service.update.test.ts - 更新相关测试（updateSale）\n4. sale.service.delete.test.ts - 删除相关测试（deleteSale）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('saleService', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('saleService', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.query.test.ts",
+            "text": "describe('getSales', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.create.test.ts",
+            "text": "describe('createSale', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.update.test.ts",
+            "text": "describe('updateSale', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.delete.test.ts",
+            "text": "describe('deleteSale', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件删除或重命名",
+        "新拆分的 4 个测试文件每个不超过 150 行",
+        "所有测试用例迁移完整，测试通过率不变"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-207",
+      "title": "batch-import.service.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "拆分 src/services/__tests__/batch-import.service.test.ts（365 行）为以下文件：\n1. batch-import.service.success.test.ts - 成功场景测试\n2. batch-import.service.batch.test.ts - 批量处理测试\n3. batch-import.service.failure.test.ts - 失败场景测试\n4. batch-import.service.validation.test.ts - 字段验证测试",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/batch-import.service.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/batch-import.service.test.ts",
+            "text": "describe('batchImportCards', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/batch-import.service.test.ts",
+            "text": "describe('batchImportCards', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/batch-import.service.success.test.ts",
+            "text": "it('should import cards successfully', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/batch-import.service.batch.test.ts",
+            "text": "it('should process cards in batches of 5', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/batch-import.service.failure.test.ts",
+            "text": "it('should handle partial batch failure', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/batch-import.service.validation.test.ts",
+            "text": "it('should filter allowed card fields only', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件删除或重命名",
+        "新拆分的 4 个测试文件每个不超过 150 行",
+        "所有测试用例迁移完整，测试通过率不变"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-208",
+      "title": "validators.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "拆分 src/services/__tests__/validators.test.ts（345 行）为以下文件：\n1. validators.quantity.test.ts - 数量验证测试\n2. validators.cost-price.test.ts - 成本价验证测试\n3. validators.card-number.test.ts - 卡片编号验证测试\n4. validators.edge-cases.test.ts - 边缘情况测试",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/validators.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('validateBatchStockInData', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('validateBatchStockInData', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.quantity.test.ts",
+            "text": "describe('invalid quantity', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.cost-price.test.ts",
+            "text": "describe('invalid cost price', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.card-number.test.ts",
+            "text": "describe('invalid card number', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.edge-cases.test.ts",
+            "text": "describe('edge cases', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件删除或重命名",
+        "新拆分的 4 个测试文件每个不超过 150 行",
+        "所有测试用例迁移完整，测试通过率不变"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-209",
+      "title": "batch-stockin-template.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "拆分 src/services/__tests__/batch-stockin-template.test.ts（288 行）为以下文件：\n1. batch-stockin-template.validation.test.ts - 数据验证测试\n2. batch-stockin-template.columns.test.ts - 列定义测试",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/batch-stockin-template.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/batch-stockin-template.test.ts",
+            "text": "describe('batch-stockin-template', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/batch-stockin-template.test.ts",
+            "text": "describe('batch-stockin-template', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/batch-stockin-template.validation.test.ts",
+            "text": "describe('validateStockInData', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/batch-stockin-template.columns.test.ts",
+            "text": "describe('BATCH_STOCKIN_COLUMNS', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件删除或重命名",
+        "新拆分的 2 个测试文件每个不超过 150 行",
+        "所有测试用例迁移完整，测试通过率不变"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-210",
+      "title": "card.service.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "拆分 src/services/__tests__/card.service.test.ts（277 行）为以下文件：\n1. card.service.get.test.ts - 查询相关测试（getCards, getCardById）\n2. card.service.create.test.ts - 创建相关测试（createCard, createProductCard）\n3. card.service.search.test.ts - 搜索相关测试（searchCards）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/card.service.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/card.service.test.ts",
+            "text": "describe('cardService', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/card.service.test.ts",
+            "text": "describe('cardService', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/card.service.get.test.ts",
+            "text": "describe('getCards', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/card.service.create.test.ts",
+            "text": "describe('createCard', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/card.service.search.test.ts",
+            "text": "describe('searchCards', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件删除或重命名",
+        "新拆分的 3 个测试文件每个不超过 150 行",
+        "所有测试用例迁移完整，测试通过率不变"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-211",
+      "title": "inventory.service.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "拆分 src/services/__tests__/inventory.service.test.ts（272 行）为以下文件：\n1. inventory.service.query.test.ts - 查询相关测试（getInventory, getInventoryById, getLowStockItems）\n2. inventory.service.mutation.test.ts - 变更相关测试（createInventory, updateInventory, deleteInventory, rollbackInventory）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory.service.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('inventoryService', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('inventoryService', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.query.test.ts",
+            "text": "describe('getInventory', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.mutation.test.ts",
+            "text": "describe('createInventory', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件删除或重命名",
+        "新拆分的 2 个测试文件每个不超过 150 行",
+        "所有测试用例迁移完整，测试通过率不变"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-212",
+      "title": "import-template.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "拆分 src/services/__tests__/import-template.test.ts（269 行）为以下文件：\n1. import-template.validation.test.ts - 验证相关测试\n2. import-template.columns.test.ts - 列定义测试",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/import-template.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template.test.ts",
+            "text": "describe('import-template', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template.test.ts",
+            "text": "describe('import-template', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template.validation.test.ts",
+            "text": "describe('validateImportData', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template.columns.test.ts",
+            "text": "describe('CARD_IMPORT_COLUMNS', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件删除或重命名",
+        "新拆分的 2 个测试文件每个不超过 150 行",
+        "所有测试用例迁移完整，测试通过率不变"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-213",
+      "title": "stock-in-transaction.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "拆分 src/services/__tests__/stock-in-transaction.test.ts（259 行）为以下文件：\n1. stock-in-transaction.success.test.ts - 成功场景测试\n2. stock-in-transaction.update.test.ts - 更新库存测试\n3. stock-in-transaction.validation.test.ts - 输入验证测试\n4. stock-in-transaction.error.test.ts - 错误处理测试",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "describe('stockInBatchTransactionService', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "describe('stockInBatchTransactionService', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.success.test.ts",
+            "text": "it('should process stock in transaction successfully', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.update.test.ts",
+            "text": "it('should handle existing inventory with weighted average', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.validation.test.ts",
+            "text": "it('should validate quantity > 0', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.error.test.ts",
+            "text": "it('should handle database errors gracefully', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件删除或重命名",
+        "新拆分的 4 个测试文件每个不超过 150 行",
+        "所有测试用例迁移完整，测试通过率不变"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-214",
+      "title": "inventory-mutation.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "拆分 src/services/__tests__/inventory-mutation.test.ts（227 行）为以下文件：\n1. inventory-mutation.delete.test.ts - 删除相关测试\n2. inventory-mutation.rollback.test.ts - 回滚相关测试\n3. inventory-mutation.create.test.ts - 创建相关测试\n4. inventory-mutation.update.test.ts - 更新相关测试",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-mutation.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "text": "describe('inventoryMutation', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "text": "describe('inventoryMutation', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.delete.test.ts",
+            "text": "describe('deleteInventory', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.rollback.test.ts",
+            "text": "describe('rollbackInventory', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.create.test.ts",
+            "text": "describe('createInventory', ()"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.update.test.ts",
+            "text": "describe('updateInventory', ()"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件删除或重命名",
+        "新拆分的 4 个测试文件每个不超过 150 行",
+        "所有测试用例迁移完整，测试通过率不变"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-215",
+      "title": "sale.service.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "测试文件 372 行超过 R9 规则（150 行），拆分为：1) sale.service.test.ts（getSales、getSaleById、updateSale、deleteSale）2) sale.service.validation.test.ts（createSale 验证逻辑）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('createSale')"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('createSale')"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "拆分为 2 个文件，每个不超过 150 行",
+        "所有验证逻辑测试移到 validation.test.ts",
+        "npm test 通过"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-216",
+      "title": "batch-import.service.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "测试文件 366 行超过 R9 规则（150 行），拆分为：1) batch-import.service.test.ts（基础导入、批次处理、字段过滤）2) batch-import.service.validation.test.ts（字段转换、默认值、错误处理）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/batch-import.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/batch-import.service.test.ts",
+            "text": "should filter allowed card fields only"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/batch-import.service.test.ts",
+            "text": "should filter allowed card fields only"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "拆分为 2 个文件，每个不超过 150 行",
+        "验证和转换逻辑测试独立",
+        "npm test 通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-217",
+      "title": "validators.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "测试文件 346 行超过 R9 规则（150 行），拆分为：1) validators.numeric.test.ts（quantity、cost_price 验证）2) validators.string.test.ts（card_number 验证）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/validators.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('invalid quantity')"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('invalid quantity')"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "拆分为 2 个文件，每个不超过 150 行",
+        "数值验证和字符串验证分开",
+        "npm test 通过"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-218",
+      "title": "card.service.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "测试文件 278 行超过 R9 规则（150 行），拆分为：1) card.service.test.ts（getCards、getCardById、createCard）2) card.service.business.test.ts（createProductCard、searchCards）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/card.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/card.service.test.ts",
+            "text": "describe('createProductCard')"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/card.service.test.ts",
+            "text": "describe('createProductCard')"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "拆分为 2 个文件，每个不超过 150 行",
+        "基础 CRUD 和业务逻辑分离",
+        "npm test 通过"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-219",
+      "title": "inventory.service.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "测试文件 273 行超过 R9 规则（150 行），拆分为：1) inventory.query.test.ts（getInventory、getInventoryById、getLowStockItems）2) inventory.mutation.test.ts（createInventory、updateInventory、deleteInventory、rollbackInventory）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('createInventory')"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('createInventory')"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "拆分为 2 个文件，每个不超过 150 行",
+        "查询和变更逻辑分离",
+        "npm test 通过"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-220",
+      "title": "import-template.test.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "测试文件 270 行超过 R9 规则（150 行），拆分为：1) import-template.test.ts（validateImportData 测试）2) import-template.columns.test.ts（CARD_IMPORT_COLUMNS 常量测试）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/import-template.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template.test.ts",
+            "text": "describe('CARD_IMPORT_COLUMNS')"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template.test.ts",
+            "text": "describe('CARD_IMPORT_COLUMNS')"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "拆分为 2 个文件，每个不超过 150 行",
+        "验证逻辑和常量测试分离",
+        "npm test 通过"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-221",
+      "title": "stock-out.service.ts 超过 150 行",
+      "type": "bugfix",
+      "description": "服务文件 170 行超过 R9 规则（150 行），提取函数到独立文件：1) 新建 src/services/stock-out.utils.ts，移入 fetchInventoryList、calculateDeduction、createSaleRecord 2) 在 stock-out.service.ts 中 import 这三个函数",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stock-out.service.ts"
+          },
+          {
+            "file": "src/services/stock-out.utils.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "async function fetchInventoryList"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/stock-out.service.ts",
+            "text": "async function fetchInventoryList"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "stock-out.service.ts 缩减到 150 行以内",
+        "新建 stock-out.utils.ts 包含三个工具函数",
+        "stockOutService 功能完全保持不变",
+        "npm run lint 通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-222",
+      "title": "stats-time.service.ts 接近 150 行",
+      "type": "bugfix",
+      "description": "服务文件 150 行达到 R9 规则上限，提前拆分：1) 新建 src/services/stats-time.utils.ts，移入时间分组逻辑（第 113-137 行的 grouped 计算逻辑）2) 在 stats-time.service.ts 中 import 分组函数",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stats-time.service.ts"
+          },
+          {
+            "file": "src/services/stats-time.utils.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/stats-time.service.ts",
+            "text": "const grouped = new Map<string"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/stats-time.service.ts",
+            "text": "const grouped = new Map<string"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "stats-time.service.ts 缩减到 130 行以内",
+        "时间分组逻辑移到独立文件",
+        "getSalesStatsByTime 功能完全保持不变",
+        "npm run lint 通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-223",
+      "title": "dashboard-recent.ts Date.parse 兼容性问题",
+      "type": "bugfix",
+      "description": "第 31 行 normalizeTimestamp 函数使用 Date.parse()，改用 new Date(str).getTime() 或统一时间戳字段。修复：在第 31 行，把 `return Number(created_at) || Date.parse(created_at);` 改为 `return Number(created_at) || new Date(String(created_at)).getTime();`",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard-recent.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-recent.ts",
+            "text": "Date.parse(created_at)"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/dashboard/dashboard-recent.ts",
+            "text": "Date.parse"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "Date.parse 替换为 new Date().getTime()",
+        "normalizeTimestamp 功能保持不变",
+        "npm run lint 通过",
+        "时间戳解析兼容性提升"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    }
+  ],
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "id": "PRD-20260508--------------1-1",
+  "project": {
+    "name": "SamKimTest",
+    "language": "typescript"
+  },
+  "generated_by": "other",
+  "base_commit": "fb5a8975"
+}

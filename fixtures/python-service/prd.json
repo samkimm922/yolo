@@ -1,0 +1,78 @@
+{
+  "version": "2.0",
+  "id": "PRD-20260525-PYTHON-SERVICE",
+  "title": "Python service fixture",
+  "project": {
+    "name": "yolo-fixture-python-service",
+    "language": "python",
+    "package_manager": null,
+    "architecture": "service",
+    "test_framework": "unittest"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-25T00:00:00.000Z",
+  "base_commit": "abcdef0",
+  "requirements": [
+    {
+      "id": "REQ-PYSVC-001",
+      "text": "Expose inventory reorder alerts with a machine-readable CLI payload."
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-PYSVC-001",
+      "text": "Keep service behavior dependency-free with separate model, repository, alert, and CLI modules."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "FIX-PYSVC-001",
+      "title": "Verify Python inventory service fixture",
+      "type": "feature",
+      "priority": "P3",
+      "status": "pending",
+      "requirement_ids": [
+        "REQ-PYSVC-001"
+      ],
+      "design_ids": [
+        "DES-PYSVC-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/inventory_service/models.py"
+          },
+          {
+            "file": "src/inventory_service/repository.py"
+          },
+          {
+            "file": "src/inventory_service/alerts.py"
+          },
+          {
+            "file": "src/inventory_service/cli.py"
+          },
+          {
+            "file": "tests/test_inventory_service.py"
+          }
+        ],
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-TEST",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "python3 -m unittest discover -s tests -p 'test_*.py'",
+            "file": "tests/test_inventory_service.py"
+          }
+        }
+      ],
+      "acceptance_criteria": [
+        "python3 -m unittest discover passes",
+        "CLI emits JSON with summary and alert payloads"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,2910 @@
+{
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "version": "2.0",
+  "id": "TASK-20260502-M0-001",
+  "title": "M0 基础配置管理（IP/系列/稀有度/工艺/位置/签名类型/IP 特有字段）",
+  "description": "M0 基础配置管理（IP/系列/稀有度/工艺/位置/签名类型/IP 特有字段）",
+  "project": {
+    "name": "SamKimTest",
+    "language": "typescript",
+    "framework": "taro-react",
+    "package_manager": "pnpm",
+    "test_framework": "vitest",
+    "lint_tool": "eslint",
+    "type_checker": "tsc --noEmit"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-02T19:48:52.462Z",
+  "base_commit": "0000000",
+  "tasks": [
+    {
+      "id": "FEATUR-SH-01",
+      "title": "配置层 TypeScript 类型定义",
+      "priority": "P0",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为后续 service/页面/云函数共用的类型源，提供 IP/Series/Rarity/Craft/Location/IPField/AuditLogEntry 全套 interface 与 DTO，让所有调用方靠类型契约对齐字段。\n\n验收标准:\n- src/types/config.ts 导出 IP/Series/Rarity/Craft/Location/IPField/AuditLogEntry 七类 interface 字段与 PRD AC-010~AC-015 完全一致\n- FieldType 联合类型 'dropdown'|'text'|'number' 用 string literal union（不用 enum）\n- src/types/config.dto.ts 导出 *CreateDTO / *UpdateDTO，剔除 _id/created_at/updated_at\n- 禁止使用 any，外部输入用 unknown 后窄化\n- 软删要求：IP/Series/Rarity/Craft/Location/IPField 六类 interface 全部包含 deleted_at: number | null 字段（默认 null）；service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；集合 schema 含 deleted_at(number | null) 字段，默认 null；禁用 db.remove() 物理删除",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/types/config.ts",
+            "description": "七类 interface 类型定义文件"
+          },
+          {
+            "file": "src/types/config.dto.ts",
+            "description": "CreateDTO/UpdateDTO 派生类型"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "src/types/config.ts 导出 IP/Series/Rarity/Craft/Location/IPField/AuditLogEntry 七类 interface 字段与 PRD AC-010~AC-015 完全一致",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "FieldType 联合类型 'dropdown'|'text'|'number' 用 string literal union（不用 enum）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "src/types/config.dto.ts 导出 *CreateDTO / *UpdateDTO，剔除 _id/created_at/updated_at",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "禁止使用 any，外部输入用 unknown 后窄化",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "软删要求：IP/Series/Rarity/Craft/Location/IPField 六类 interface 全部包含 deleted_at: number | null 字段（默认 null）；service 删除 = update",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "必须创建 src/types/config.ts 文件,包含 IP/Series/Rarity/Craft/Location/IPField/AuditLogEntry 七类 interface",
+        "必须创建 src/types/config.dto.ts 文件,导出 *CreateDTO / *UpdateDTO",
+        "FieldType 用 string literal union (不用 enum)",
+        "IP/Series/Rarity/Craft/Location/IPField 六类 interface 全部包含 deleted_at: number | null 字段",
+        "禁止使用 any"
+      ]
+    },
+    {
+      "id": "FEATUR-BE-01",
+      "title": "COLLECTIONS 常量扩展 + 签名类型常量",
+      "priority": "P0",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为常量入口，在 src/services/constants.ts 新增 7 个配置集合键和 SIGNATURE_TYPES 数组，让所有 service/云函数禁字符串字面量访问 DB。\n\n验收标准:\n- COLLECTIONS 新增 IPS/SERIES_CONFIG/RARITIES/CRAFTS/LOCATIONS_CONFIG/IP_FIELDS 6 个键，命名带 CONFIG 后缀避免与 CARD_SERIES/STORAGE_LOCATIONS 混淆\n- 导出 SIGNATURE_TYPES = ['无','亲签','印签'] as const，长度 ===3\n- 现有键 0 改动，无 deprecated 影响\n- tsc 通过，npm run gate 通过",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/constants.ts",
+            "description": "COLLECTIONS 新增 6 键 + SIGNATURE_TYPES 常量"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "COLLECTIONS 新增 IPS/SERIES_CONFIG/RARITIES/CRAFTS/LOCATIONS_CONFIG/IP_FIELDS 6 个键，命名带 CONFIG 后缀避免与 CARD_SERIES/STORAGE_LO",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "导出 SIGNATURE_TYPES = ['无','亲签','印签'] as const，长度 ===3",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "现有键 0 改动，无 deprecated 影响",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "tsc 通过，npm run gate 通过",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-BE-08",
+      "title": "签名类型硬编码常量文件",
+      "priority": "P1",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为只读签名类型源，导出 SIGNATURE_TYPES 与 SignatureType 类型，让前端只读页直接消费、不入库、不可编辑。\n\n验收标准:\n- src/services/config/signature-type.constant.ts 文件 ≤25 行\n- 导出 SIGNATURE_TYPES = ['无','亲签','印签'] as const\n- 导出 type SignatureType = typeof SIGNATURE_TYPES[number]\n- 无任何 wx.cloud 调用",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/config/signature-type.constant.ts",
+            "description": "SIGNATURE_TYPES 硬编码常量文件"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "src/services/config/signature-type.constant.ts 文件 ≤25 行",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "导出 SIGNATURE_TYPES = ['无','亲签','印签'] as const",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "导出 type SignatureType = typeof SIGNATURE_TYPES[number]",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "无任何 wx.cloud 调用",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-SH-02",
+      "title": "配置层共用校验器",
+      "priority": "P1",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为前端 + service + 云函数三方共用的校验源，提供 name/color/sort_weight/options 校验函数，让校验规则单点真相。\n\n验收标准:\n- src/services/config/config.validators.ts 与 cloudfunctions/dbGateway/handlers/config-validators.js 行为完全一致（cjs 镜像）\n- validateName 校验长度 1~50、trim 后非空、字符白名单（中英数/. - _ / 空格）\n- validateHexColor 通过 /^#[0-9a-fA-F]{6}$/ 正则\n- validateSortWeight 仅接受 0~9999 整数\n- validateOptions：dropdown 类型时 ≥1 项每项 1~50 字符且数组内去重；其他类型必须为空数组\n- 单测覆盖率 ≥90%",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/config/config.validators.ts",
+            "description": "前端校验器（hex/sort_weight/name 等）"
+          },
+          {
+            "file": "cloudfunctions/dbGateway/handlers/config-validators.js",
+            "description": "云函数侧校验器镜像"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "src/services/config/config.validators.ts 与 cloudfunctions/dbGateway/handlers/config-validators.js 行为完全一致（cjs 镜像）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "validateName 校验长度 1~50、trim 后非空、字符白名单（中英数/. - _ / 空格）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "validateHexColor 通过 /^#[0-9a-fA-F]{6}$/ 正则",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "validateSortWeight 仅接受 0~9999 整数",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "validateOptions：dropdown 类型时 ≥1 项每项 1~50 字符且数组内去重；其他类型必须为空数组",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "单测覆盖率 ≥90%",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-008",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-BE-09",
+      "title": "M6 操作日志服务（M0 简易版）",
+      "priority": "P1",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为审计日志写入入口，封装通用 payload 结构 {action,target_collection,target_id,snapshot,refs,operator,timestamp}，让所有增删改自动留痕。\n\n验收标准:\n- src/services/config/log.service.ts 提供 logCreate/logUpdate/logDelete 方法，写入 operation_audit 集合\n- snapshot 存被删项完整字段，refs 存引用关系清单\n- operator 取自 wx.cloud 调用上下文（OPENID）\n- timestamp 用毫秒整数\n- M6 模块接管时接口签名不变",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/config/log.service.ts",
+            "description": "操作审计日志 service"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "src/services/config/log.service.ts 提供 logCreate/logUpdate/logDelete 方法，写入 operation_audit 集合",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "snapshot 存被删项完整字段，refs 存引用关系清单",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "operator 取自 wx.cloud 调用上下文（OPENID）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "timestamp 用毫秒整数",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "M6 模块接管时接口签名不变",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-BE-02",
+      "title": "IP 顶层 CRUD service",
+      "priority": "P1",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为 IP 配置数据访问层，提供 getIPs/getIPById/createIP/updateIP（删除走云函数），让页面只编排不直连 DB。\n\n验收标准:\n- createIP 内做全局重名校验（trim+大小写敏感），重名拒绝并抛 'IP 名称已存在'\n- 使用 COLLECTIONS.IPS，零字符串字面量\n- createIP/updateIP 自动写 created_at/updated_at（毫秒时间戳）\n- 调用 logService 留痕\n- 文件 ≤150 行\n- 软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；重名校验查询带 deleted_at: null 条件；集合 schema 含 deleted_at(number | null) 字段，默认 null；禁用 db.remove() 物理删除",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/config/ip.service.ts",
+            "description": "IP 顶层 CRUD service（含软删）"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "createIP 内做全局重名校验（trim+大小写敏感），重名拒绝并抛 'IP 名称已存在'",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "使用 COLLECTIONS.IPS，零字符串字面量",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "createIP/updateIP 自动写 created_at/updated_at（毫秒时间戳）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "调用 logService 留痕",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "文件 ≤150 行",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；重名校验查询带 deleted_at: null",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-008",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-BE-03",
+      "title": "系列子表 CRUD service",
+      "priority": "P1",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为系列配置数据访问层，提供按 ip_id 范围的 CRUD，让 IP 详情页系列子表读写解耦于旧业务 series.service.ts。\n\n验收标准:\n- getSeriesByIP(ip_id) 返回该 IP 下全部系列\n- createSeries 校验同 IP 内重名，重名拒绝\n- 使用 COLLECTIONS.SERIES_CONFIG，禁混用 COLLECTIONS.CARD_SERIES\n- 调用 logService 留痕\n- ip_id 必填，缺失抛错\n- 软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；重名校验查询带 deleted_at: null 条件；集合 schema 含 deleted_at(number | null) 字段，默认 null；禁用 db.remove() 物理删除",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/config/series.service.ts",
+            "description": "系列子表 CRUD service（按 ip_id）"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "getSeriesByIP(ip_id) 返回该 IP 下全部系列",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "createSeries 校验同 IP 内重名，重名拒绝",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "使用 COLLECTIONS.SERIES_CONFIG，禁混用 COLLECTIONS.CARD_SERIES",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "调用 logService 留痕",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "ip_id 必填，缺失抛错",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；重名校验查询带 deleted_at: null",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-008",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-BE-04",
+      "title": "稀有度 CRUD service",
+      "priority": "P1",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为稀有度配置数据访问层，校验 hex 颜色与排序权重并按 sort_weight 升序返回列表，让卡牌侧拿到的稀有度天然有序。\n\n验收标准:\n- createRarity/updateRarity 调用 validateHexColor 与 validateSortWeight，非法值拒绝写入\n- getRaritiesByIP(ip_id) 按 sort_weight asc 返回\n- 同 IP 内重名拒绝（联合唯一）\n- 使用 COLLECTIONS.RARITIES\n- 颜色字段类型 string（hex），不写入 hex 之外格式\n- 软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；重名校验查询带 deleted_at: null 条件；集合 schema 含 deleted_at(number | null) 字段，默认 null；禁用 db.remove() 物理删除",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/config/rarity.service.ts",
+            "description": "稀有度 CRUD service（hex/sort_weight）"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "createRarity/updateRarity 调用 validateHexColor 与 validateSortWeight，非法值拒绝写入",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "getRaritiesByIP(ip_id) 按 sort_weight asc 返回",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "同 IP 内重名拒绝（联合唯一）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "使用 COLLECTIONS.RARITIES",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "颜色字段类型 string（hex），不写入 hex 之外格式",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；重名校验查询带 deleted_at: null",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-008",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-BE-05",
+      "title": "工艺 CRUD service",
+      "priority": "P2",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为工艺配置数据访问层，与系列同结构提供 ip 范围内的 CRUD，让 IP 详情工艺子表用同一套交互模式。\n\n验收标准:\n- getCraftsByIP/createCraft/updateCraft 接口签名与 series.service 对齐\n- 同 IP 内重名拒绝\n- 使用 COLLECTIONS.CRAFTS\n- 调用 logService 留痕\n- 软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；重名校验查询带 deleted_at: null 条件；集合 schema 含 deleted_at(number | null) 字段，默认 null；禁用 db.remove() 物理删除",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/config/craft.service.ts",
+            "description": "工艺子表 CRUD service"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "getCraftsByIP/createCraft/updateCraft 接口签名与 series.service 对齐",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "同 IP 内重名拒绝",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "使用 COLLECTIONS.CRAFTS",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "调用 logService 留痕",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；重名校验查询带 deleted_at: null",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-BE-06",
+      "title": "位置顶层 CRUD service",
+      "priority": "P2",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为位置配置数据访问层，提供全局唯一的位置 CRUD，与旧 storage-location.service 解耦让 M0 配置中心独立演进。\n\n验收标准:\n- createLocation 全局重名校验（不区分 IP）\n- 使用 COLLECTIONS.LOCATIONS_CONFIG，禁混用 STORAGE_LOCATIONS\n- 默认数据 3 条（主卡盒/副卡盒 1/展柜）由 seed 脚本写入\n- 调用 logService 留痕\n- 软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；重名校验查询带 deleted_at: null 条件；集合 schema 含 deleted_at(number | null) 字段，默认 null；禁用 db.remove() 物理删除",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/config/location.service.ts",
+            "description": "位置顶层 CRUD service（全局重名）"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "createLocation 全局重名校验（不区分 IP）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "使用 COLLECTIONS.LOCATIONS_CONFIG，禁混用 STORAGE_LOCATIONS",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "默认数据 3 条（主卡盒/副卡盒 1/展柜）由 seed 脚本写入",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "调用 logService 留痕",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；重名校验查询带 deleted_at: null",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-BE-07",
+      "title": "IP 特有字段定义 CRUD service",
+      "priority": "P2",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为 IP 特有字段定义层，管理 dropdown/text/number 三种类型与 options 数组，让 NBA「球队」这类字段一次定义、卡牌侧多处复用。\n\n验收标准:\n- createIPField 校验 options：dropdown 时 ≥1 项每项 1~50 字符且数组内去重；其他类型必须 []\n- updateIPField 类型变更时返回受影响卡牌 id 列表\n- 同 IP 内字段名重名拒绝\n- 使用 COLLECTIONS.IP_FIELDS\n- options 数组上限 200（M0 软限制）\n- 软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；重名校验查询带 deleted_at: null 条件；集合 schema 含 deleted_at(number | null) 字段，默认 null；禁用 db.remove() 物理删除",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/config/ip-field.service.ts",
+            "description": "IP 特有字段定义 CRUD service"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "createIPField 校验 options：dropdown 时 ≥1 项每项 1~50 字符且数组内去重；其他类型必须 []",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "updateIPField 类型变更时返回受影响卡牌 id 列表",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "同 IP 内字段名重名拒绝",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "使用 COLLECTIONS.IP_FIELDS",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "options 数组上限 200（M0 软限制）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；重名校验查询带 deleted_at: null",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-008",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-BE-13",
+      "title": "use-config TanStack Query hooks",
+      "priority": "P2",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为 7 类配置项的 React Query 入口，统一 queryKey ['config',...] 与 mutation 失效策略，让前端组件零样板拿到数据并自动刷新。\n\n验收标准:\n- 提供 useIPs/useIP/useSeriesByIP/useRaritiesByIP/useCraftsByIP/useLocations/useIPFieldsByIP 等 useQuery hooks\n- 提供 useCreate*/useUpdate*/useDelete* 等 useMutation hooks，删除调用云函数\n- queryKey 集中在 use-config.keys.ts\n- mutation 成功后 invalidateQueries 对应 key\n- 禁止 useEffect 手搓请求",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/hooks/use-config.ts",
+            "description": "TanStack Query hooks 入口"
+          },
+          {
+            "file": "src/hooks/use-config.keys.ts",
+            "description": "queryKey 集中文件"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "提供 useIPs/useIP/useSeriesByIP/useRaritiesByIP/useCraftsByIP/useLocations/useIPFieldsByIP 等 useQuery hooks",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "提供 useCreate*/useUpdate*/useDelete* 等 useMutation hooks，删除调用云函数",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "queryKey 集中在 use-config.keys.ts",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "mutation 成功后 invalidateQueries 对应 key",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "禁止 useEffect 手搓请求",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-TASK-012",
+      "title": "搭建 dbGateway 云函数骨架",
+      "priority": "P2",
+      "type": "feature",
+      "status": "completed",
+      "description": "作为后端开发者，我需要先有一个 dbGateway 云函数入口，否则后续 BE-10b/BE-11/BE-12 的 handler 无处挂载。\n\n验收标准:\n- AC-1: cloudfunctions/dbGateway/index.js 存在且导出 main 函数（actionMap 模式分发）\n- AC-2: cloudfunctions/dbGateway/package.json 声明 wx-server-sdk 依赖\n- AC-3: 云函数 wx cloud deploy 成功，调用未注册 action 返回 {code:404, message:'unknown action'}",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "cloudfunctions/dbGateway/index.js",
+            "description": "dbGateway 云函数入口骨架"
+          },
+          {
+            "file": "cloudfunctions/dbGateway/package.json",
+            "description": "云函数依赖声明"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "AC-1: cloudfunctions/dbGateway/index.js 存在且导出 main 函数（actionMap 模式分发）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "AC-2: cloudfunctions/dbGateway/package.json 声明 wx-server-sdk 依赖",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "AC-3: 云函数 wx cloud deploy 成功，调用未注册 action 返回 {code:404, message:'unknown action'}",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-005",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-TASK-013",
+      "title": "dbGateway 路由扩展 config-delete 入口",
+      "priority": "P2",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为云函数路由分发层，新增 config-delete action 分支，让客户端通过统一网关调用配置删除事务。\n\n验收标准:\n- cloudfunctions/dbGateway/index.js 新增 case 'config-delete' 分发\n- 鉴权沿用既有 dbGateway 逻辑\n- 入参校验 {target_collection, target_id, mode:'child'|'parent'}\n- 异常时返回 {success:false, error} 不抛\n- AC-DEP: 此任务依赖 BE-10a 完成（dbGateway 骨架已就绪）",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "cloudfunctions/dbGateway/index.js",
+            "description": "dbGateway 路由扩展 config-delete 入口"
+          },
+          {
+            "file": "cloudfunctions/dbGateway/handlers/config-delete.js",
+            "description": "config-delete handler"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "cloudfunctions/dbGateway/index.js 新增 case 'config-delete' 分发",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "鉴权沿用既有 dbGateway 逻辑",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "入参校验 {target_collection, target_id, mode:'child'|'parent'}",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "异常时返回 {success:false, error} 不抛",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "AC-DEP: 此任务依赖 BE-10a 完成（dbGateway 骨架已就绪）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-BE-11",
+      "title": "config-delete 子级删除事务",
+      "priority": "P2",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为子级配置删除的原子操作执行者，在 runTransaction 内顺序执行删配置项+清空引用卡牌字段+写审计日志，让任一步失败整体回滚。\n\n验收标准:\n- 支持 series/rarities/crafts/ip_fields/locations 五种 target_collection\n- 事务内顺序：软删 target_id 记录（执行 update({ deleted_at: Date.now() })，禁用 db.remove() 物理删除） → cards 表对应字段置 null → 写 operation_audit 一条 delete 日志\n- snapshot 包含被删项全部字段；refs.affected_card_ids 列出所有受影响卡牌 _id\n- 事务任一步抛错整体回滚（数据无变化、无半成品日志）\n- 引用卡牌数 0 时跳过清空步骤但仍写日志\n- 软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；集合 schema 含 deleted_at(number | null) 字段，默认 null；禁用 db.remove() 物理删除",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "cloudfunctions/dbGateway/handlers/config-delete-child.js",
+            "description": "子级删除事务（runTransaction）"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "支持 series/rarities/crafts/ip_fields/locations 五种 target_collection",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "事务内顺序：软删 target_id 记录（执行 update({ deleted_at: Date.now() })，禁用 db.remove() 物理删除） → cards 表对应字段置 null → 写 operation_audit",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "snapshot 包含被删项全部字段；refs.affected_card_ids 列出所有受影响卡牌 _id",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "事务任一步抛错整体回滚（数据无变化、无半成品日志）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "引用卡牌数 0 时跳过清空步骤但仍写日志",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；集合 schema 含 deleted_at(n",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-008",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-BE-12",
+      "title": "config-delete 父级 IP 级联事务",
+      "priority": "P2",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为 IP 父级删除的级联执行者，先聚合下属全部子配置与引用卡牌再走单个 runTransaction 删全部并写完整快照，让 N1+N2+N3+N4+N5 数据原子归零。\n\n验收标准:\n- 事务前先聚合：series/rarities/crafts/ip_fields 中 ip_id==target_id 的全量未软删记录（where deleted_at == null）+ cards 中 ip_id==target_id 的全量列表\n- runTransaction 内：软删 ips/series/rarities/crafts/ip_fields 命中记录（批量 update set deleted_at=Date.now()，禁用 db.remove() 物理删除） → 清空 cards 的 ip_id/series_id/rarity_id/craft_id/ip_field_values → 写一条含全部子配置快照与每张卡牌旧值的 audit 日志\n- 事务任一步失败整体回滚\n- 云函数加 timeout=15s 早退保护\n- 返回 {N1,N2,N3,N4,N5,success:true}\n- 软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；集合 schema 含 deleted_at(number | null) 字段，默认 null；禁用 db.remove() 物理删除",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "cloudfunctions/dbGateway/handlers/config-delete-parent.js",
+            "description": "父级 IP 级联事务"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "事务前先聚合：series/rarities/crafts/ip_fields 中 ip_id==target_id 的全量未软删记录（where deleted_at == null）+ cards 中 ip_id==target_id ",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "runTransaction 内：软删 ips/series/rarities/crafts/ip_fields 命中记录（批量 update set deleted_at=Date.now()，禁用 db.remove() 物理删除） →",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "事务任一步失败整体回滚",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "云函数加 timeout=15s 早退保护",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "返回 {N1,N2,N3,N4,N5,success:true}",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "软删要求：service 删除 = update({ deleted_at: Date.now() })，service 查询默认 where deleted_at == null 自动过滤；集合 schema 含 deleted_at(n",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-008",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-SH-03",
+      "title": "页面路由注册",
+      "priority": "P2",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为 Taro 路由源，在 app.config.ts 新增 5 个 config 子页面路径，让导航跳转可达。\n\n验收标准:\n- app.config.ts pages 数组新增 pages/config/index/index、pages/config/ip-list/ip-list、pages/config/ip-detail/ip-detail、pages/config/location-list/location-list、pages/config/signature-types/signature-types\n- src/types/pages.d.ts 类型同步\n- Taro.navigateTo 跳转 5 条路径无报错",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/types/pages.d.ts",
+            "description": "页面路由类型声明"
+          },
+          {
+            "file": "src/app.config.ts",
+            "description": "路由注册（pages 数组）"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "app.config.ts pages 数组新增 pages/config/index/index、pages/config/ip-list/ip-list、pages/config/ip-detail/ip-detail、pages/co",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "src/types/pages.d.ts 类型同步",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "Taro.navigateTo 跳转 5 条路径无报错",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-005",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-FE-10",
+      "title": "DeleteConfirmDialog 强警告组件",
+      "priority": "P2",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为通用删除强警告对话框，根据 refs 渲染 N1~N5 影响范围文案与二次确认按钮，让用户删除前明确认知后果。\n\n验收标准:\n- props 接收 {refs:{cards?:N5, series?:N1, rarities?:N2, crafts?:N3, fields?:N4}}\n- 子级删除场景仅显示 cards 计数；父级 IP 删除显示完整 N1~N5\n- 二次确认按钮需点击两次（第一次显示倒计时 3s）\n- 确认后回调 onConfirm，关闭通过 onCancel\n- 复用 src/components/Drawer 或 Taroify Dialog",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/components/delete-confirm-dialog/index.tsx",
+            "description": "DeleteConfirmDialog 强警告组件"
+          },
+          {
+            "file": "src/components/delete-confirm-dialog/index.module.css",
+            "description": "组件样式"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "props 接收 {refs:{cards?:N5, series?:N1, rarities?:N2, crafts?:N3, fields?:N4}}",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "子级删除场景仅显示 cards 计数；父级 IP 删除显示完整 N1~N5",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "二次确认按钮需点击两次（第一次显示倒计时 3s）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "确认后回调 onConfirm，关闭通过 onCancel",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "复用 src/components/Drawer 或 Taroify Dialog",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-FE-01",
+      "title": "配置中心入口页",
+      "priority": "P2",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为「我的」页平铺的 3 个顶层入口，让用户一眼看到 IP/位置/签名类型并点击进入对应列表。\n\n验收标准:\n- 页面渲染 3 个入口卡片（IP/位置/签名类型）\n- 点击跳转 pages/config/ip-list、pages/config/location-list、pages/config/signature-types\n- 图标使用 lucide-react-taro\n- 卡片间距遵守 4px 系统（CLAUDE.md §12），圆角 12-16px\n- Tailwind class，零硬编码颜色",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/config/index.tsx",
+            "description": "配置中心入口页（3 卡片）"
+          },
+          {
+            "file": "src/pages/config/index.config.ts",
+            "description": "页面配置"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "页面渲染 3 个入口卡片（IP/位置/签名类型）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "点击跳转 pages/config/ip-list、pages/config/location-list、pages/config/signature-types",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "图标使用 lucide-react-taro",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "卡片间距遵守 4px 系统（CLAUDE.md §12），圆角 12-16px",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "Tailwind class，零硬编码颜色",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-FE-02",
+      "title": "IP 列表页 + IPDrawer 表单",
+      "priority": "P2",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为 IP 顶层管理界面，展示 ips 列表并支持新增/编辑/删除（删除走云函数），让用户管理多个 IP 命名空间。\n\n验收标准:\n- 调用 useIPs hook 加载列表，使用 Skeleton 占位\n- 空状态显示「还没配置任何 IP」+ [新增 IP] 按钮（按钮文案禁止+号）\n- 点击列表项跳转 pages/config/ip-detail?id={ip_id}\n- 新增/编辑使用 IPDrawer，名字字段做 validateName 校验\n- 删除前调用 useDeleteIP mutation 前先取引用计数（series/rarities/crafts/ip_fields/cards）传给 DeleteConfirmDialog",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/config/ip-list.tsx",
+            "description": "IP 列表页"
+          },
+          {
+            "file": "src/pages/config/ip-list.config.ts",
+            "description": "页面配置"
+          },
+          {
+            "file": "src/components/ip-drawer/index.tsx",
+            "description": "IPDrawer 表单组件"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "调用 useIPs hook 加载列表，使用 Skeleton 占位",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "空状态显示「还没配置任何 IP」+ [新增 IP] 按钮（按钮文案禁止+号）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "点击列表项跳转 pages/config/ip-detail?id={ip_id}",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "新增/编辑使用 IPDrawer，名字字段做 validateName 校验",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "删除前调用 useDeleteIP mutation 前先取引用计数（series/rarities/crafts/ip_fields/cards）传给 DeleteConfirmDialog",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-FE-03",
+      "title": "IP 详情页主框架",
+      "priority": "P3",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为 IP 详情容器，读路由参数 ip_id 加载 IP 信息并渲染下方 4 个子表 section，让用户在一屏内管理该 IP 全部子配置。\n\n验收标准:\n- useIP(ip_id) 加载 IP 名字与编辑入口\n- 下方按顺序渲染 SeriesSection / RaritySection / CraftSection / FieldSection 4 个 section\n- section 间用 0.5px 边框分隔\n- 向下滚动支持，每个 section 独立维护数据\n- 返回按钮回到 IP 列表",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/config/ip-detail.tsx",
+            "description": "IP 详情页主框架"
+          },
+          {
+            "file": "src/pages/config/ip-detail.config.ts",
+            "description": "页面配置"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "useIP(ip_id) 加载 IP 名字与编辑入口",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "下方按顺序渲染 SeriesSection / RaritySection / CraftSection / FieldSection 4 个 section",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "section 间用 0.5px 边框分隔",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "向下滚动支持，每个 section 独立维护数据",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "返回按钮回到 IP 列表",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-FE-04",
+      "title": "系列子表 section + Drawer",
+      "priority": "P3",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为 IP 详情页的系列子表，列出该 IP 全部系列并支持 CRUD，让用户为每个 IP 维护独立系列命名空间。\n\n验收标准:\n- 调用 useSeriesByIP(ip_id) 加载\n- 空状态「还没配置任何系列」+ [新增系列] 按钮\n- 新增/编辑走 SeriesDrawer，校验同 IP 内重名\n- 删除前调用 useDeleteSeries 前取被引用卡牌计数传给 DeleteConfirmDialog",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/components/series-section/index.tsx",
+            "description": "系列子表 section + Drawer"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "调用 useSeriesByIP(ip_id) 加载",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "空状态「还没配置任何系列」+ [新增系列] 按钮",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "新增/编辑走 SeriesDrawer，校验同 IP 内重名",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "删除前调用 useDeleteSeries 前取被引用卡牌计数传给 DeleteConfirmDialog",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-FE-05",
+      "title": "稀有度子表 section + Drawer + 颜色预览",
+      "priority": "P3",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为稀有度管理界面，提供名字+hex 颜色输入+排序权重，让用户对每张卡的稀有度做视觉区分。\n\n验收标准:\n- useRaritiesByIP 加载列表，按 sort_weight asc 渲染\n- 颜色输入框右侧实时预览色块（style 属性渲染，不写入硬编码 Tailwind）\n- 非法 hex 显示「颜色格式必须为 #RRGGBB（6 位 hex）」\n- sort_weight 输入 0~9999 整数，超出范围禁止保存\n- 编辑名字后引用卡牌列表实时显示新名字（rarity_id 不变）",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/components/rarity-section/index.tsx",
+            "description": "稀有度子表 section + 颜色预览"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "useRaritiesByIP 加载列表，按 sort_weight asc 渲染",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "颜色输入框右侧实时预览色块（style 属性渲染，不写入硬编码 Tailwind）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "非法 hex 显示「颜色格式必须为 #RRGGBB（6 位 hex）」",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "sort_weight 输入 0~9999 整数，超出范围禁止保存",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "编辑名字后引用卡牌列表实时显示新名字（rarity_id 不变）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-FE-06",
+      "title": "工艺子表 section + Drawer",
+      "priority": "P3",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为工艺子表，与系列子表交互一致提供 CRUD，让用户为每个 IP 维护工艺命名空间。\n\n验收标准:\n- 结构与 SeriesSection 完全一致\n- useCraftsByIP 加载\n- 同 IP 内重名拒绝\n- 删除走云函数事务",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/components/craft-section/index.tsx",
+            "description": "工艺子表 section + Drawer"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "结构与 SeriesSection 完全一致",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "useCraftsByIP 加载",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "同 IP 内重名拒绝",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "删除走云函数事务",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-FE-07",
+      "title": "IP 特有字段子表 + 选项管理",
+      "priority": "P3",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为 IP 特有字段定义入口，让用户先定义字段再在卡牌中填值，并支持类型变更带影响范围警告。\n\n验收标准:\n- 字段类型选择 dropdown/text/number，dropdown 时显示 FieldOptionsManager 子组件\n- 选项可增删，每项 1~50 字符且数组内去重\n- 类型变更（dropdown→其他）弹确认对话框「已有 N 张卡使用此字段，类型变更后旧值原样保留」\n- 保存后写 operation_audit 类型变更日志含 affected_card_ids 与 old_values\n- 禁止使用 any，options 数组类型 string[]",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/components/field-section/index.tsx",
+            "description": "IP 特有字段子表"
+          },
+          {
+            "file": "src/components/field-options-manager/index.tsx",
+            "description": "选项管理子组件"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "字段类型选择 dropdown/text/number，dropdown 时显示 FieldOptionsManager 子组件",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "选项可增删，每项 1~50 字符且数组内去重",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "类型变更（dropdown→其他）弹确认对话框「已有 N 张卡使用此字段，类型变更后旧值原样保留」",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "保存后写 operation_audit 类型变更日志含 affected_card_ids 与 old_values",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "禁止使用 any，options 数组类型 string[]",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-FE-08",
+      "title": "位置列表页",
+      "priority": "P3",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为位置顶层管理界面，展示全局唯一的位置列表，让用户独立于 IP 管理实物存放位置。\n\n验收标准:\n- useLocations 加载列表\n- 顶部标注「全 IP 共用」徽章\n- 新增/编辑校验全局重名\n- 首次进入预置 3 条（主卡盒/副卡盒 1/展柜）\n- 删除走云函数事务（child mode）",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/config/location-list.tsx",
+            "description": "位置列表页（全 IP 共用）"
+          },
+          {
+            "file": "src/pages/config/location-list.config.ts",
+            "description": "页面配置"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "useLocations 加载列表",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "顶部标注「全 IP 共用」徽章",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "新增/编辑校验全局重名",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "首次进入预置 3 条（主卡盒/副卡盒 1/展柜）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "删除走云函数事务（child mode）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-FE-09",
+      "title": "签名类型只读展示页",
+      "priority": "P3",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为签名类型只读页，渲染 SIGNATURE_TYPES 常量数组的 3 项并明示「系统内置 不可编辑」，让用户清楚此项不可改。\n\n验收标准:\n- 渲染 ['无','亲签','印签'] 三条\n- DOM 中不存在任何 add/edit/delete 按钮、菜单、滑动手势、长按入口\n- 顶部徽章「系统内置 不可编辑」\n- 页面无任何 wx.cloud 调用\n- 下拉刷新无加号入口",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/config/signature-types.tsx",
+            "description": "签名类型只读展示页"
+          },
+          {
+            "file": "src/pages/config/signature-types.config.ts",
+            "description": "页面配置"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "渲染 ['无','亲签','印签'] 三条",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "DOM 中不存在任何 add/edit/delete 按钮、菜单、滑动手势、长按入口",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "顶部徽章「系统内置 不可编辑」",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "页面无任何 wx.cloud 调用",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "下拉刷新无加号入口",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-FE-11",
+      "title": "配置页接入配置中心入口",
+      "priority": "P3",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为配置页（src/pages/config/config.tsx）的 ConfigEntries 板块，平铺 3 个顶层入口卡片，让用户进入配置中心。\n\n验收标准:\n- src/pages/config/config.tsx 引入 ConfigEntries 组件\n- 不破坏现有 src/pages/config 页其他内容\n- 卡片视觉与配置中心入口页一致（FE-01）\n- Tailwind 风格统一",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/config/config.ts",
+            "description": "配置页接入配置中心入口"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "src/pages/config/config.tsx 引入 ConfigEntries 组件",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "不破坏现有 src/pages/config 页其他内容",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "卡片视觉与配置中心入口页一致（FE-01）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "Tailwind 风格统一",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-SH-04",
+      "title": "Excel 提取脚本",
+      "priority": "P3",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为本地一次性运行的 Python 脚本，用 openpyxl 从 NBA Excel 提取去重的稀有度/系列/工艺并产出 preset-nba.json，让 seed 流程可复现。\n\n验收标准:\n- scripts/seed/preset-nba-data.py 读 /Users/sippingroom/Desktop/NBA_Match_Attax_2025-26_Copy.xlsx\n- 提取去重后输出 scripts/seed/preset-nba.json\n- print 实际 N_rarity / N_series / N_craft 整数\n- 列名映射可配置，列名不存在时明确报错\n- scripts/seed/README.md 写明运行方式",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "scripts/seed/preset-nba-data.py",
+            "description": "Excel 提取脚本"
+          },
+          {
+            "file": "scripts/seed/README.md",
+            "description": "seed 流程说明"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "scripts/seed/preset-nba-data.py 读 /Users/sippingroom/Desktop/NBA_Match_Attax_2025-26_Copy.xlsx",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "提取去重后输出 scripts/seed/preset-nba.json",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "print 实际 N_rarity / N_series / N_craft 整数",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "列名映射可配置，列名不存在时明确报错",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "scripts/seed/README.md 写明运行方式",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-SH-05",
+      "title": "云数据库 seed 脚本",
+      "priority": "P3",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为 Node 一次性运行脚本，将预置 JSON + 30 NBA 球队 + 3 位置写入云数据库，让首次部署后开箱即用。\n\n验收标准:\n- scripts/seed/seed-config.mjs 写 NBA IP 1 条 + 3 位置 + 球队 ip_field 30 选项 + N_rarity/N_series/N_craft 条配置\n- 执行后输出实际写入条数到控制台\n- DELIVERY_LOG.md 同步写入实测整数\n- 脚本幂等（重复执行不重复写）\n- 失败任一步打印明确错误并退出码非 0",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "scripts/seed/seed-config.mjs",
+            "description": "云数据库 seed 脚本"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "scripts/seed/seed-config.mjs 写 NBA IP 1 条 + 3 位置 + 球队 ip_field 30 选项 + N_rarity/N_series/N_craft 条配置",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "执行后输出实际写入条数到控制台",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "DELIVERY_LOG.md 同步写入实测整数",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "脚本幂等（重复执行不重复写）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "失败任一步打印明确错误并退出码非 0",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-SH-06",
+      "title": "service 层单元测试",
+      "priority": "P3",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为 service 层质量保障，覆盖校验函数与 CRUD 重名拒绝路径，让 90%+ 关键逻辑被测。\n\n验收标准:\n- Vitest 单测覆盖 createIP 重名拒绝、稀有度 sort_weight 排序、ip_field options 去重、签名类型常量长度\n- 校验器单测覆盖率 ≥90%\n- 测试遵守 AAA 模式\n- npm run gate:full 通过",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "tests/services/config/ip.service.spec.ts",
+            "description": "IP service 单测"
+          },
+          {
+            "file": "tests/services/config/rarity.service.spec.ts",
+            "description": "稀有度 service 单测"
+          },
+          {
+            "file": "tests/services/config/ip-field.service.spec.ts",
+            "description": "IP 字段 service 单测"
+          },
+          {
+            "file": "tests/services/config/config.validators.spec.ts",
+            "description": "校验器单测"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "Vitest 单测覆盖 createIP 重名拒绝、稀有度 sort_weight 排序、ip_field options 去重、签名类型常量长度",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "校验器单测覆盖率 ≥90%",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "测试遵守 AAA 模式",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "npm run gate:full 通过",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-SH-07",
+      "title": "云函数事务集成测试",
+      "priority": "P3",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为云函数事务质量保障，覆盖子级清空引用、父级级联递归、事务失败回滚三大场景，让 AC-004/AC-008/AC-009 落地。\n\n验收标准:\n- config-delete-child 测试：删一个被 N 张卡引用的稀有度，验 cards.rarity_id 全部置 null + 1 条 audit 日志\n- config-delete-parent 测试：删 NBA IP，验 series/rarities/crafts/ip_fields 中 ip_id 命中记录全部删除 + 引用卡牌字段全清 + 1 条含完整快照的 audit\n- 回滚测试：手动让事务中途 throw，验数据完全回到删除前状态\n- 测试 mock cards/operation_audit/ips 等集合",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "tests/cloudfunctions/dbGateway/config-delete-child.spec.ts",
+            "description": "子级删除事务集成测试"
+          },
+          {
+            "file": "tests/cloudfunctions/dbGateway/config-delete-parent.spec.ts",
+            "description": "父级级联事务集成测试"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "config-delete-child 测试：删一个被 N 张卡引用的稀有度，验 cards.rarity_id 全部置 null + 1 条 audit 日志",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "config-delete-parent 测试：删 NBA IP，验 series/rarities/crafts/ip_fields 中 ip_id 命中记录全部删除 + 引用卡牌字段全清 + 1 条含完整快照的 audit",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "回滚测试：手动让事务中途 throw，验数据完全回到删除前状态",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "测试 mock cards/operation_audit/ips 等集合",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    },
+    {
+      "id": "FEATUR-SH-08",
+      "title": "文档同步与交付记录",
+      "priority": "P3",
+      "type": "feature",
+      "status": "completed",
+      "description": "我作为交付收尾步骤，更新 PROJECT_MAP/BUSINESS_RULES_RAW/DELIVERY_LOG，让团队下次开工时能找到全部新增资产。\n\n验收标准:\n- PROJECT_MAP.md 新增 7) 配置中心层段落\n- BUSINESS_RULES_RAW.md 追加 M0 业务规则（删除事务、级联策略、签名类型不可改）\n- DELIVERY_LOG.md 追加交付记录含实测 N_rarity/N_series/N_craft 整数\n- SESSION.md 追加 session 记录\n- 三文件备份硬闸门通过",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": ".ai-rules/PROJECT_MAP.md",
+            "description": "新增 7) 配置中心层段落"
+          },
+          {
+            "file": ".ai-rules/BUSINESS_RULES_RAW.md",
+            "description": "M0 业务规则"
+          },
+          {
+            "file": "DELIVERY_LOG.md",
+            "description": "交付记录含实测整数"
+          },
+          {
+            "file": "SESSION.md",
+            "description": "session 记录"
+          }
+        ],
+        "allow_new_files": true,
+        "max_files": 5,
+        "max_lines_per_file": 150,
+        "expected_zero_business_code": true,
+        "forbidden_patterns": [
+          {
+            "pattern": "as any",
+            "severity": "WARN",
+            "description": "类型安全绕过"
+          },
+          {
+            "pattern": "console\\.log\\(",
+            "severity": "WARN",
+            "is_regex": true,
+            "description": "调试代码"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-001",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "PROJECT_MAP.md 新增 7) 配置中心层段落",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-002",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "BUSINESS_RULES_RAW.md 追加 M0 业务规则（删除事务、级联策略、签名类型不可改）",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-003",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "DELIVERY_LOG.md 追加交付记录含实测 N_rarity/N_series/N_craft 整数",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-004",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "SESSION.md 追加 session 记录",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-005",
+          "type": "acceptance_criteria",
+          "params": {},
+          "message": "三文件备份硬闸门通过",
+          "severity": "WARN"
+        },
+        {
+          "id": "POST-006",
+          "type": "no_new_type_errors",
+          "params": {},
+          "message": "无新增 TypeScript 类型错误",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-007",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "message": "无新增 ESLint 错误",
+          "severity": "FAIL"
+        }
+      ]
+    }
+  ],
+  "defaults": {
+    "retry": {
+      "max_retries": 5,
+      "strategy": "narrower",
+      "staleness_check": true
+    },
+    "scope": {
+      "max_files": 5,
+      "max_lines_per_file": 150,
+      "allow_new_files": false
+    }
+  },
+  "conflict_policy": {
+    "on_overlap": "fail_fast",
+    "overlap_detection": "diff_lines"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "version": "2.0",
+  "title": "修复 config 页面路径不匹配 — Review前补修R1 — 补修R1-重试3",
+  "description": "app.config.ts 中 5 个 config 页面路径用了两级目录，但实际文件是扁平结构，导致编译报错",
+  "tasks": [
+    {
+      "id": "FIX-CONFIG-001",
+      "title": "修复 config 页面路径从两级目录改为扁平格式",
+      "description": "src/app.config.ts 第40-44行有5个config页面路径使用了错误的两级目录格式（如 pages/config/index/index），但实际文件是扁平结构（src/pages/config/index.tsx），需要改为扁平格式（pages/config/index）",
+      "task_kind": "atomic_fix",
+      "priority": "P0",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/app.config.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "condition": "no_new_type_errors",
+          "evaluator": "no_new_type_errors",
+          "severity": "FAIL"
+        },
+        {
+          "condition": "no_new_lint_errors",
+          "evaluator": "no_new_lint_errors",
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "app.config.ts 中 pages/config/index/index 改为 pages/config/index",
+        "app.config.ts 中 pages/config/ip-list/ip-list 改为 pages/config/ip-list",
+        "app.config.ts 中 pages/config/ip-detail/ip-detail 改为 pages/config/ip-detail",
+        "app.config.ts 中 pages/config/location-list/location-list 改为 pages/config/location-list",
+        "app.config.ts 中 pages/config/signature-types/signature-types 改为 pages/config/signature-types",
+        "tsc 编译通过"
+      ],
+      "status": "failed",
+      "phase": "claude",
+      "updatedAt": "2026-05-04T22:41:53.197Z",
+      "failReason": "连续同因"
+    }
+  ]
+}

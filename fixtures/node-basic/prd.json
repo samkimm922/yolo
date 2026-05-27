@@ -1,0 +1,64 @@
+{
+  "version": "2.0",
+  "id": "PRD-20260524-NODE-BASIC",
+  "title": "Node basic fixture",
+  "project": {
+    "name": "yolo-fixture-node-basic",
+    "language": "javascript",
+    "package_manager": "npm",
+    "test_framework": "node:test"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-24T00:00:00.000Z",
+  "base_commit": "abcdef0",
+  "requirements": [
+    {
+      "id": "REQ-NODE-001",
+      "text": "Expose an add function that returns the sum of two numbers."
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-NODE-001",
+      "text": "Keep the public API as a single pure function."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "FIX-NODE-001",
+      "title": "Verify add function behavior",
+      "type": "feature",
+      "priority": "P3",
+      "status": "pending",
+      "requirement_ids": [
+        "REQ-NODE-001"
+      ],
+      "design_ids": [
+        "DES-NODE-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/index.ts"
+          }
+        ],
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-TEST",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "npm test",
+            "file": "test/index.test.ts"
+          }
+        }
+      ],
+      "acceptance_criteria": [
+        "npm test passes"
+      ]
+    }
+  ]
+}

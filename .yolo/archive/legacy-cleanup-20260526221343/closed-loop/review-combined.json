@@ -1,0 +1,157 @@
+{
+  "generated_at": "2026-05-08T22:54:08.470Z",
+  "dimensions": {
+    "code-quality": {
+      "label": "代码质量",
+      "findings": [],
+      "summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "_error": "Command failed: claude -p '你是高级代码审查专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【代码质量】专项审查。\n\n## 审查范围\nsrc/pages/、src/components/、src/hooks/ 下所有 .ts/.tsx 文件\n\n## 重点检查\n1. 代码重复：是否存在复制粘贴逻辑应提取为公共函数/hook\n2. 超大函数：单个函数超过 80 行的应拆分\n3. 缺失错误处理：未处理异常、缺少 try/catch、空 catch 块\n4. 不当 React 模式：\n   - useEffect 缺少",
+      "_parse_error": null
+    },
+    "service-layer": {
+      "label": "Service 层",
+      "findings": [],
+      "summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "_error": "Command failed: claude -p '你是高级代码审查专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【Service 层】专项审查。\n\n## 审查范围\nsrc/services/ 下所有文件，以及 pages/components 中是否存在绕过 service 层直接调用数据库的代码\n\n## 重点检查\n1. 分层违规：pages/ 或 components/ 中是否直接调用了 wx.cloud.database() 或 Taro.cloud，而非通过 service 层\n2. 空 catch 块：catch(e) {",
+      "_parse_error": null
+    },
+    "security": {
+      "label": "安全漏洞",
+      "findings": [],
+      "summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "_error": "Command failed: claude -p '你是高级安全审计专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【安全】专项审计。\n\n## 审查范围\n全部 src/ 目录下文件，重点关注 config、service、cloud functions\n\n## 重点检查\n1. 硬编码敏感信息：API Key、AppID、AppSecret、token、密码等写死在代码中\n2. Math.random() 用于安全场景（如随机抽奖、token 生成、订单号）\n3. 未消毒的用户输入：直接将用户输入拼接到数据库查询或渲染为 HTML\n4.",
+      "_parse_error": null
+    },
+    "type-safety": {
+      "label": "类型安全",
+      "findings": [],
+      "summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "_error": "Command failed: claude -p '你是 TypeScript 类型系统专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【类型安全】专项审查。\n\n## 审查范围\n全部 src/ 目录下 .ts/.tsx 文件\n\n## 重点检查\n1. `as` 类型断言滥用：特别是 as any、as unknown as Xxx，应该用类型守卫（type guard）替代\n2. any 类型泄漏：显式 : any、隐式 any（未标注类型）、@ts-ignore / @ts-nocheck\n3. 缺失泛型：Hooks 和 Servic",
+      "_parse_error": null
+    },
+    "performance": {
+      "label": "性能",
+      "findings": [],
+      "summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "_error": "Command failed: claude -p '你是前端性能优化专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【性能】专项审查。\n\n## 审查范围\n全部 src/ 目录下文件，重点关注页面组件和 hooks\n\n## 重点检查\n1. 不必要的重渲染：\n   - JSX 中内联创建对象 { style: { color: '\\''red'\\'' } } 或函数 onClick={() => ...}\n   - 缺少 React.memo / useMemo / useCallback\n   - Context value 每次渲染都",
+      "_parse_error": null
+    },
+    "platform-compat": {
+      "label": "小程序兼容",
+      "findings": [],
+      "summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "_error": "Command failed: claude -p '你是 Taro + 微信小程序开发专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【平台兼容性】专项审查。\n\n## 审查范围\n全部 src/ 目录下文件\n\n## 重点检查\n1. 浏览器 API 使用：window.、document.、navigator.、localStorage 等在小程序中不可用\n   - 应使用 Taro.getApp()、Taro.getStorageSync() 等替代\n2. Taro API vs wx API：\n   - 是否有直接调用 wx.xxx ",
+      "_parse_error": null
+    },
+    "cloud-database": {
+      "label": "云数据库专项",
+      "findings": [],
+      "summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "_error": "Command failed: claude -p '你是微信云数据库专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【云数据库】专项审查。\n\n## 审查范围\n全部 src/services/ 文件及任何涉及数据库操作的代码\n\n## 重点检查\n1. read-then-write 模式：先读取再写入的原子性问题（如库存扣减应该用 _.inc() 而非先 get 再 set）\n2. 连续 .where() 调用：第二个 .where() 会覆盖第一个条件而非叠加，应合并\n3. 缺少分页限制：查询未设置 .limit() 或 .skip()",
+      "_parse_error": null
+    },
+    "data-model": {
+      "label": "数据模型一致性",
+      "findings": [],
+      "summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "_error": "Command failed: claude -p '你是数据架构专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【数据模型一致性】专项审查。\n\n## 审查范围\nsrc/services/ 下所有文件，包括旧文件（如 series.ts, items.ts 等）和新文件（如 series.service.ts）\n\n## 重点检查\n1. 新旧服务文件并存：\n   - 旧文件 series.ts 和新文件 series.service.ts 是否同时存在\n   - 是否有页面仍在 import 旧文件（如 from '\\''../../se",
+      "_parse_error": null
+    },
+    "dependency": {
+      "label": "依赖审计",
+      "findings": [],
+      "summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "_error": "Command failed: npm audit --json 2>/dev/null",
+      "_parse_error": null
+    },
+    "state-mgmt": {
+      "label": "状态管理",
+      "findings": [],
+      "summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "_error": "Command failed: claude -p '你是 TanStack Query (React Query) 状态管理专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【状态管理】专项审查。\n\n## 审查范围\n全部 src/ 目录下使用 useQuery、useMutation、useInfiniteQuery 的文件\n\n## 重点检查\n1. staleTime / cacheTime (gcTime) 设置：\n   - 未设置 staleTime 导致过度 refetch\n   - staleTime 设置过长导致数据不一致\n ",
+      "_parse_error": null
+    },
+    "dead-code": {
+      "label": "死代码检测",
+      "findings": [],
+      "summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "_error": "Command failed: claude -p '你是代码清理专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【死代码检测】专项审查。\n\n## 审查范围\n全部 src/ 目录下文件\n\n## 重点检查\n1. 未被导入的文件：src/ 中存在但从未被任何其他文件 import 的 .ts/.tsx 文件\n2. 未使用的 export：函数、类型、常量被 export 但从未被其他文件导入\n3. 不可达代码：if (false) 块、return 之后的代码、永远不会执行的分支\n4. 已废弃的文件：文件名含 .old.、.bak.、.de",
+      "_parse_error": null
+    },
+    "error-resilience": {
+      "label": "错误边界与韧性",
+      "findings": [],
+      "summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "_error": "Command failed: claude -p '你是容错系统设计专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【错误边界与韧性】专项审查。\n\n## 审查范围\n全部 src/ 目录下文件\n\n## 重点检查\n1. React ErrorBoundary：\n   - 是否有全局 ErrorBoundary 包裹路由\n   - 关键组件是否有局部 ErrorBoundary\n   - ErrorBoundary 的 fallback 是否用户友好\n2. 未处理的 Promise 拒绝：\n   - async 函数中缺少 .catch 或",
+      "_parse_error": null
+    }
+  },
+  "totals": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "all_findings": [],
+  "total_findings": 0
+}

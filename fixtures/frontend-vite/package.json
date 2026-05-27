@@ -1,0 +1,9 @@
+{
+  "name": "yolo-fixture-frontend-vite",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/counter.test.ts"
+  }
+}

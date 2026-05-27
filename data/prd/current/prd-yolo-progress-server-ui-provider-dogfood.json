@@ -1,0 +1,355 @@
+{
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "version": "2.0",
+  "id": "PRD-20260526-PROGRESS-SERVER-UI-DOGFOOD",
+  "title": "Provider-backed progress server UI dogfood",
+  "description": "Use the real YOLO runner/provider path to improve the progress server UI and prove the result through strict check, UI evidence, tests, and review gates.",
+  "project": {
+    "name": "yolo",
+    "language": "javascript",
+    "framework": "node",
+    "package_manager": "npm",
+    "test_framework": "node:test",
+    "lint_tool": "node --check",
+    "type_checker": "node --check"
+  },
+  "generated_by": "human",
+  "generated_at": "2026-05-26T00:00:00.000Z",
+  "base_commit": "0000000",
+  "requirements": [
+    {
+      "id": "REQ-PROGRESS-UI-DOGFOOD-001",
+      "text": "The progress server UI must expose a clearer operator-facing UI/UX evidence area instead of relying only on hidden artifacts."
+    },
+    {
+      "id": "REQ-PROGRESS-UI-DOGFOOD-002",
+      "text": "The UI must remain compact, responsive, escaped, and useful for active and idle runner states."
+    },
+    {
+      "id": "REQ-PROGRESS-UI-DOGFOOD-003",
+      "text": "The work must be executed by the real YOLO runner/provider path and then validated by strict local gates and adapter evidence."
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-PROGRESS-UI-DOGFOOD-001",
+      "text": "Add a first-class UI evidence panel to the progress dashboard that summarizes page reachability, critical path, required state, layout health, runtime errors, responsive viewports, and visual artifacts.",
+      "requirement_ids": [
+        "REQ-PROGRESS-UI-DOGFOOD-001",
+        "REQ-PROGRESS-UI-DOGFOOD-002"
+      ]
+    },
+    {
+      "id": "DES-PROGRESS-UI-DOGFOOD-002",
+      "text": "Keep all dynamic task, gate, run, review, and evidence values escaped before insertion into HTML or client-side strings.",
+      "requirement_ids": [
+        "REQ-PROGRESS-UI-DOGFOOD-002"
+      ]
+    },
+    {
+      "id": "DES-PROGRESS-UI-DOGFOOD-003",
+      "text": "Validate through node --check, progress dashboard tests, progress UI evidence tests, yolo check, yolo accept, and yolo run adapter evidence.",
+      "requirement_ids": [
+        "REQ-PROGRESS-UI-DOGFOOD-003"
+      ]
+    }
+  ],
+  "state_matrix": {
+    "idle": "Dashboard shows lifecycle summary and UI evidence summary when there is no active run.",
+    "active": "Dashboard shows progress, task cards, failed gate stats, review state, and UI evidence summary during a run.",
+    "error": "Dashboard shows runtime/UI evidence failures as visible blockers rather than silent success.",
+    "mobile": "Dashboard remains readable below 640px without horizontal overflow.",
+    "desktop": "Dashboard keeps dense operator layout from 640px upward."
+  },
+  "evidence_plan": {
+    "ui": [
+      "progress dashboard HTML snapshot",
+      "progress dashboard UI evidence JSON",
+      "adapter evidence collector output",
+      "node:test progress dashboard suites"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "UI-PROGRESS-SERVER-001",
+      "title": "Add visible UI evidence panel to progress server",
+      "priority": "P1",
+      "type": "feature",
+      "task_kind": "atomic_fix",
+      "status": "done",
+      "ui": true,
+      "surface": "progress-dashboard",
+      "description": "Improve src/runtime/progress/server.ts so the progress dashboard renders a visible, escaped UI evidence panel for active and idle states. Keep the change compact and do not weaken existing escaping or lifecycle behavior.",
+      "requirement_ids": [
+        "REQ-PROGRESS-UI-DOGFOOD-001",
+        "REQ-PROGRESS-UI-DOGFOOD-002"
+      ],
+      "design_ids": [
+        "DES-PROGRESS-UI-DOGFOOD-001",
+        "DES-PROGRESS-UI-DOGFOOD-002"
+      ],
+      "evidence_files": [
+        ".yolo/state/runtime/task-logs/UI-PROGRESS-SERVER-001.jsonl",
+        ".yolo/state/yolo-output.log"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/progress/server.ts",
+            "description": "Progress dashboard UI rendering"
+          }
+        ],
+        "readonly_files": [
+          "src/runtime/progress/ui-evidence.ts",
+          "src/runtime/progress/lifecycle-dashboard.ts"
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 180
+      },
+      "state_matrix": {
+        "idle": "UI evidence panel visible without active run.",
+        "active": "UI evidence panel visible with active run data.",
+        "mobile": "Panel stacks without overflow below 640px.",
+        "desktop": "Panel scans as part of operator dashboard."
+      },
+      "acceptance_criteria": [
+        "A visible progress dashboard UI evidence panel exists in server-rendered HTML.",
+        "The panel reports page, state, layout, runtime error, viewport, and visual artifact status.",
+        "The panel does not insert unescaped task, gate, or artifact strings into HTML.",
+        "Existing lifecycle summary, task cards, SSE refresh, and review state behavior continue to work."
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-UI-PANEL-SERVER-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/progress/server.ts"
+          },
+          "message": "Provider must modify the progress server UI implementation."
+        },
+        {
+          "id": "POST-UI-PANEL-ID",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/progress/server.ts",
+            "text": "uiEvidencePanel"
+          },
+          "message": "Progress server must render a stable uiEvidencePanel element."
+        },
+        {
+          "id": "POST-UI-PANEL-COPY",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/progress/server.ts",
+            "text": "UI Evidence"
+          },
+          "message": "Progress server must show UI Evidence as a visible operator-facing section."
+        },
+        {
+          "id": "POST-SERVER-SYNTAX",
+          "type": "tests_pass",
+          "severity": "FAIL",
+          "params": {
+            "command": "npm run build --silent"
+          },
+          "message": "Progress server must remain valid JavaScript."
+        },
+        {
+          "id": "POST-PROGRESS-DASHBOARD-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/progress-dashboard.test.ts __tests__/progress-dashboard-ui-evidence.test.ts"
+          },
+          "message": "Progress dashboard and UI evidence tests must pass."
+        }
+      ],
+      "phase": "done",
+      "updatedAt": "2026-05-26T12:24:08.000Z"
+    },
+    {
+      "id": "TEST-PROGRESS-SERVER-002",
+      "title": "Strengthen progress dashboard UI tests for evidence panel",
+      "priority": "P1",
+      "type": "feature",
+      "task_kind": "atomic_fix",
+      "status": "done",
+      "ui": true,
+      "surface": "progress-dashboard",
+      "depends_on": [
+        "UI-PROGRESS-SERVER-001"
+      ],
+      "description": "Add deterministic tests that fail if the visible UI evidence panel disappears or stops escaping dangerous evidence/task strings.",
+      "requirement_ids": [
+        "REQ-PROGRESS-UI-DOGFOOD-002",
+        "REQ-PROGRESS-UI-DOGFOOD-003"
+      ],
+      "design_ids": [
+        "DES-PROGRESS-UI-DOGFOOD-002",
+        "DES-PROGRESS-UI-DOGFOOD-003"
+      ],
+      "evidence_files": [
+        ".yolo/state/runtime/task-logs/TEST-PROGRESS-SERVER-002.jsonl",
+        ".yolo/state/yolo-output.log"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "__tests__/progress-dashboard.test.ts",
+            "description": "Progress dashboard UI panel tests"
+          },
+          {
+            "file": "__tests__/progress-dashboard-ui-evidence.test.ts",
+            "description": "UI evidence panel/evidence tests"
+          }
+        ],
+        "readonly_files": [
+          "src/runtime/progress/server.ts",
+          "src/runtime/progress/ui-evidence.ts"
+        ],
+        "allow_new_files": false,
+        "max_files": 2,
+        "max_lines_per_file": 180
+      },
+      "state_matrix": {
+        "idle": "Test verifies idle HTML contains UI evidence panel.",
+        "active": "Test verifies active HTML/evidence contains UI evidence state.",
+        "dangerous": "Test verifies raw dangerous markup is escaped."
+      },
+      "acceptance_criteria": [
+        "Tests fail if uiEvidencePanel is missing.",
+        "Tests fail if dangerous UI evidence strings enter HTML unescaped.",
+        "Tests keep using deterministic local fixtures and do not require provider execution."
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-TEST-FILE-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/progress-dashboard.test.ts"
+          },
+          "message": "Progress dashboard tests must be strengthened."
+        },
+        {
+          "id": "POST-UI-EVIDENCE-TEST-FILE-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/progress-dashboard-ui-evidence.test.ts"
+          },
+          "message": "Progress dashboard UI evidence tests must be strengthened."
+        },
+        {
+          "id": "POST-TEST-PANEL-ID",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/progress-dashboard.test.ts",
+            "text": "uiEvidencePanel"
+          },
+          "message": "Tests must assert the UI evidence panel exists."
+        },
+        {
+          "id": "POST-TESTS-PASS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/progress-dashboard.test.ts __tests__/progress-dashboard-ui-evidence.test.ts"
+          },
+          "message": "Strengthened progress dashboard tests must pass."
+        }
+      ],
+      "phase": "done",
+      "updatedAt": "2026-05-26T12:28:30.743Z"
+    },
+    {
+      "id": "ACCEPT-PROGRESS-SERVER-003",
+      "title": "Run strict UI evidence acceptance after provider changes",
+      "priority": "P1",
+      "type": "cleanup",
+      "task_kind": "deterministic_check",
+      "status": "done",
+      "ui": true,
+      "surface": "progress-dashboard",
+      "depends_on": [
+        "UI-PROGRESS-SERVER-001",
+        "TEST-PROGRESS-SERVER-002"
+      ],
+      "description": "Collect adapter-backed UI evidence and ensure progress dashboard acceptance is blocked on missing state, layout blockers, runtime errors, or missing visual artifacts.",
+      "requirement_ids": [
+        "REQ-PROGRESS-UI-DOGFOOD-003"
+      ],
+      "design_ids": [
+        "DES-PROGRESS-UI-DOGFOOD-003"
+      ],
+      "evidence_files": [
+        ".yolo/state/runtime/task-logs/ACCEPT-PROGRESS-SERVER-003.jsonl",
+        ".yolo/state/evidence/adapters/progress-dashboard-ui-latest.json",
+        ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": ".yolo/adapters/progress-dashboard-ui.manifest.json",
+            "description": "Progress dashboard UI adapter manifest"
+          }
+        ],
+        "readonly_files": [
+          "src/runtime/progress/server.ts",
+          "__tests__/progress-dashboard.test.ts",
+          "__tests__/progress-dashboard-ui-evidence.test.ts"
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true,
+        "max_files": 1,
+        "max_lines_per_file": 120
+      },
+      "state_matrix": {
+        "acceptance": "Adapter evidence collector produces UI evidence or blocks the run."
+      },
+      "acceptance_criteria": [
+        "yolo check passes before execution.",
+        "yolo accept with collect/execute/allow adapter evidence passes after execution.",
+        "Missing UI evidence, runtime errors, overflow, overlap, or missing required states block acceptance."
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-ADAPTER-MANIFEST",
+          "type": "file_exists",
+          "severity": "FAIL",
+          "params": {
+            "file": ".yolo/adapters/progress-dashboard-ui.manifest.json"
+          },
+          "message": "Progress dashboard UI adapter manifest must exist."
+        },
+        {
+          "id": "POST-YOLO-CHECK",
+          "type": "tests_pass",
+          "severity": "FAIL",
+          "params": {
+            "command": "node bin/yolo.ts check data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json --json"
+          },
+          "message": "YOLO check must pass with resolver-backed UI adapter readiness."
+        },
+        {
+          "id": "POST-UI-EVIDENCE-COLLECT",
+          "type": "tests_pass",
+          "severity": "FAIL",
+          "params": {
+            "command": "node bin/yolo.ts progress-ui-evidence . --json"
+          },
+          "message": "UI evidence collector must produce adapter-backed evidence; final yolo accept runs after the run report exists."
+        }
+      ],
+      "phase": "done",
+      "updatedAt": "2026-05-26T12:53:41.177Z",
+      "phaseDetail": "deterministic_check",
+      "completedAt": "2026-05-26T12:53:42.194Z"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "schema": "yolo.manifest.v1",
+  "id": "progress-dashboard-ui",
+  "kind": "acceptance_adapter",
+  "description": "Progress dashboard UI/UX evidence adapter for YOLO self-dogfood runs.",
+  "inputs": ["projectRoot", "stateRoot"],
+  "outputs": ["ui_evidence"],
+  "commands": [
+    {
+      "id": "progress-dashboard-ui-evidence",
+      "command": "node bin/yolo.mjs progress-ui-evidence . --json",
+      "timeout_ms": 90000,
+      "evidence_path": ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json"
+    }
+  ],
+  "evidence": ["screenshot", "runtime_log", "ui_contract"],
+  "capabilities": ["ui", "browser", "page_reachable", "critical_path_passed", "screenshot"],
+  "applies_to": ["ui", "progress-dashboard"],
+  "state_matrix": {
+    "idle": "Lifecycle summary is visible when no runner is active.",
+    "active": "Active run progress, task list, failed gates, and review state are visible.",
+    "mobile": "Layout remains readable below 640px.",
+    "desktop": "Layout uses a dense two-column operator view from 640px upward."
+  }
+}

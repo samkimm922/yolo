@@ -1,0 +1,193 @@
+{
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "version": "2.0",
+  "id": "PRD-001-TSC",
+  "title": "TEST: 修复全部 186 个 tsc 编译错误",
+  "project": {
+    "name": "SamKimTest",
+    "language": "typescript"
+  },
+  "generated_by": "human",
+  "generated_at": "2026-05-09T00:35:22.268Z",
+  "base_commit": "c766bfca",
+  "tasks": [
+    {
+      "id": "TSC-FIX-001",
+      "title": "src/components/series-section/index.tsx: 1 tsc errors [TS2339]",
+      "type": "bugfix",
+      "priority": "P1",
+      "status": "running",
+      "description": "目标文件 src/components/series-section/index.tsx 存在 1 个 TypeScript 错误:\n- L66: TS2339: Property 'getCards' does not exist on type '{}'.",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/components/series-section/index.tsx"
+          }
+        ],
+        "max_files": 2,
+        "max_lines_per_file": 200
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/components/series-section/index.tsx"
+          },
+          "severity": "FAIL",
+          "message": "目标文件存在"
+        },
+        {
+          "id": "PRE-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/components/series-section/index.tsx",
+            "text": "Property 'getCards' does not e"
+          },
+          "severity": "FAIL",
+          "message": "TS2339 bug exists at L66"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL",
+          "message": "无新增 tsc 错误"
+        },
+        {
+          "id": "POST-LINT",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "severity": "FAIL",
+          "message": "无新增 lint 错误"
+        },
+        {
+          "id": "POST-FORBID",
+          "type": "no_forbidden_patterns",
+          "params": {
+            "patterns": [
+              {
+                "pattern": "as any",
+                "severity": "FAIL"
+              },
+              {
+                "pattern": "console\\.log",
+                "severity": "WARN"
+              }
+            ]
+          },
+          "severity": "WARN",
+          "message": "无禁用模式"
+        }
+      ],
+      "acceptance_criteria": [
+        "src/components/series-section/index.tsx 不再报告 tsc 错误",
+        "文件行数 ≤ 200",
+        "无新增 lint 错误"
+      ],
+      "phase": "claude",
+      "updatedAt": "2026-05-09T00:36:09.606Z"
+    },
+    {
+      "id": "TSC-FIX-002",
+      "title": "src/hooks/use-cards.ts: 8 tsc errors [TS2339]",
+      "type": "bugfix",
+      "priority": "P1",
+      "status": "running",
+      "description": "目标文件 src/hooks/use-cards.ts 存在 8 个 TypeScript 错误:\n- L9: TS2339: Property 'getCards' does not exist on type '{}'.\n- L16: TS2339: Property 'getCardById' does not exist on type '{}'.\n- L25: TS2339: Property 'createCard' does not exist on type '{}'.\n- L33: TS2339: Property 'updateCard' does not exist on type '{}'.\n- L34: TS2339: Property 'updateCard' does not exist on type '{}'.\n- L42: TS2339: Property 'deleteCard' does not exist on type '{}'.\n- L49: TS2339: Property 'searchCards' does not exist on type '{}'.\n- L57: TS2339: Property 'getCards' does not exist on type '{}'.",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/hooks/use-cards.ts"
+          }
+        ],
+        "max_files": 2,
+        "max_lines_per_file": 200
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/hooks/use-cards.ts"
+          },
+          "severity": "FAIL",
+          "message": "目标文件存在"
+        },
+        {
+          "id": "PRE-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/hooks/use-cards.ts",
+            "text": "Property 'getCards' does not e"
+          },
+          "severity": "FAIL",
+          "message": "TS2339 bug exists at L9"
+        },
+        {
+          "id": "PRE-3",
+          "type": "code_contains",
+          "params": {
+            "file": "src/hooks/use-cards.ts",
+            "text": "Property 'getCardById' does no"
+          },
+          "severity": "FAIL",
+          "message": "TS2339 bug exists at L16"
+        },
+        {
+          "id": "PRE-4",
+          "type": "code_contains",
+          "params": {
+            "file": "src/hooks/use-cards.ts",
+            "text": "Property 'createCard' does not"
+          },
+          "severity": "FAIL",
+          "message": "TS2339 bug exists at L25"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL",
+          "message": "无新增 tsc 错误"
+        },
+        {
+          "id": "POST-LINT",
+          "type": "no_new_lint_errors",
+          "params": {},
+          "severity": "FAIL",
+          "message": "无新增 lint 错误"
+        },
+        {
+          "id": "POST-FORBID",
+          "type": "no_forbidden_patterns",
+          "params": {
+            "patterns": [
+              {
+                "pattern": "as any",
+                "severity": "FAIL"
+              },
+              {
+                "pattern": "console\\.log",
+                "severity": "WARN"
+              }
+            ]
+          },
+          "severity": "WARN",
+          "message": "无禁用模式"
+        }
+      ],
+      "acceptance_criteria": [
+        "src/hooks/use-cards.ts 不再报告 tsc 错误",
+        "文件行数 ≤ 200",
+        "无新增 lint 错误"
+      ],
+      "phase": "claude",
+      "updatedAt": "2026-05-09T00:36:15.211Z"
+    }
+  ]
+}

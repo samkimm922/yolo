@@ -1,0 +1,72 @@
+{
+  "no_new_type_errors": {
+    "rule": "避免 no_new_type_errors: 新增 40 个 tsc 错误: src/components/Drawer/Drawer.tsx:TS2352, src/services/__tests__/",
+    "strategy": "避免 no_new_type_errors: 新增 40 个 tsc 错误: src/components/Drawer/Drawer.tsx:TS2352, src/services/__tests__/",
+    "gate": "gate-exit-no_new_type_errors",
+    "since": "2026-05-02",
+    "learned_at": "2026-05-02"
+  },
+  "no_new_lint_errors": {
+    "rule": "避免 no_new_lint_errors: 新增 17 个 eslint 问题: src/app.tsx:@typescript-eslint/no-unused-vars, src/pages/prod",
+    "strategy": "避免 no_new_lint_errors: 新增 17 个 eslint 问题: src/app.tsx:@typescript-eslint/no-unused-vars, src/pages/prod",
+    "gate": "gate-exit-no_new_lint_errors",
+    "since": "2026-05-02",
+    "learned_at": "2026-05-02"
+  },
+  "business_code_min": {
+    "rule": "避免 business_code_min: 未检测到 src/cloudfunctions 真业务代码改动(白名单文件 0 < 1)",
+    "strategy": "避免 business_code_min: 未检测到 src/cloudfunctions 真业务代码改动(白名单文件 0 < 1)",
+    "gate": "gate-exit-business_code_min",
+    "since": "2026-05-02",
+    "learned_at": "2026-05-02"
+  },
+  "tsc": {
+    "rule": "类型错误: no_new_type_errors: 新增 41 个 tsc 错误: src/components/Drawer/Drawer.tsx:TS2352, src",
+    "gate": "gate-exit-1",
+    "since": "2026-05-02",
+    "strategy": "修改前先运行 tsc --noEmit 确认类型安全",
+    "learned_at": "2026-05-02"
+  },
+  "gate-exit-1": {
+    "rule": "business_code_min: 未检测到 src/cloudfunctions 真业务代码改动(白名单文件 0 < 1)",
+    "gate": "gate-exit-1",
+    "since": "2026-05-02",
+    "strategy": "确保至少有一个业务代码文件改动",
+    "learned_at": "2026-05-02"
+  },
+  "file_lines_max": {
+    "rule": "避免 file_lines_max: src/components/craft-section/index.tsx: 161 行（限制 150 行）",
+    "strategy": "避免 file_lines_max: src/components/craft-section/index.tsx: 161 行（限制 150 行）",
+    "gate": "gate-exit-file_lines_max",
+    "since": "2026-05-03",
+    "learned_at": "2026-05-03"
+  },
+  "merge_conflict": {
+    "rule": "避免 merge_conflict: REBASE_CONFLICT: yolo-FEAT-002-1777913509349",
+    "strategy": "避免 merge_conflict: REBASE_CONFLICT: yolo-FEAT-002-1777913509349",
+    "gate": "gate-exit-merge_conflict",
+    "since": "2026-05-04",
+    "learned_at": "2026-05-04"
+  },
+  "code_contains": {
+    "rule": "避免 code_contains: src/services/category.ts: 期望 1~∞ 处匹配 \"where({ _id: id, version:\"，实际 0 处",
+    "strategy": "避免 code_contains: src/services/category.ts: 期望 1~∞ 处匹配 \"where({ _id: id, version:\"，实际 0 处",
+    "gate": "gate-exit-code_contains",
+    "since": "2026-05-05",
+    "learned_at": "2026-05-05"
+  },
+  "code_not_contains": {
+    "rule": "避免 code_not_contains: src/services/category.ts: 仍包含 \"as unknown as\"（1 处）",
+    "strategy": "避免 code_not_contains: src/services/category.ts: 仍包含 \"as unknown as\"（1 处）",
+    "gate": "gate-exit-code_not_contains",
+    "since": "2026-05-05",
+    "learned_at": "2026-05-05"
+  },
+  "file_exists": {
+    "rule": "避免 file_exists: src/services/__tests__/stock-in-batch-transaction-update.test.ts 不存在",
+    "strategy": "避免 file_exists: src/services/__tests__/stock-in-batch-transaction-update.test.ts 不存在",
+    "gate": "gate-exit-file_exists",
+    "since": "2026-05-05",
+    "learned_at": "2026-05-05"
+  }
+}

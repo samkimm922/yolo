@@ -1,0 +1,47 @@
+{
+  "id": "python-service",
+  "type": "python-service",
+  "label": "Python service fixture",
+  "description": "Multi-module Python service fixture with repository, domain logic, CLI, and unittest smoke validation.",
+  "files": [
+    "prd.json",
+    "src/inventory_service/__init__.py",
+    "src/inventory_service/models.py",
+    "src/inventory_service/repository.py",
+    "src/inventory_service/alerts.py",
+    "src/inventory_service/cli.py",
+    "tests/test_inventory_service.py"
+  ],
+  "project": {
+    "language": "python",
+    "package_manager": null,
+    "architecture": "service",
+    "test_framework": "unittest"
+  },
+  "requirement": {
+    "id": "REQ-PYSVC-001",
+    "text": "Expose inventory reorder alerts with a machine-readable CLI payload."
+  },
+  "spec": {
+    "id": "SPEC-PYSVC-001",
+    "requirement_id": "REQ-PYSVC-001",
+    "design_id": "DES-PYSVC-001",
+    "task_id": "FIX-PYSVC-001"
+  },
+  "task": {
+    "id": "FIX-PYSVC-001",
+    "prd": "prd.json"
+  },
+  "run": {
+    "mode": "dry-run",
+    "supports_dry_run": true,
+    "commands": [
+      "python3 -m unittest discover -s tests -p 'test_*.py'"
+    ]
+  },
+  "evidence": {
+    "expected": [
+      "state/evidence/FIX-PYSVC-001/run.json"
+    ]
+  }
+}

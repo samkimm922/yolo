@@ -1,0 +1,65 @@
+{
+  "version": "2.0",
+  "id": "PRD-20260524-FRONTEND-VITE",
+  "title": "Frontend Vite fixture",
+  "project": {
+    "name": "yolo-fixture-frontend-vite",
+    "language": "javascript",
+    "package_manager": "npm",
+    "framework": "vite",
+    "test_framework": "node:test"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-24T00:00:00.000Z",
+  "base_commit": "abcdef0",
+  "requirements": [
+    {
+      "id": "REQ-VITE-001",
+      "text": "Expose a counter label helper for frontend rendering."
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-VITE-001",
+      "text": "Keep the UI helper as a pure JavaScript function that can be tested without a browser."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "FIX-VITE-001",
+      "title": "Verify frontend counter label helper",
+      "type": "feature",
+      "priority": "P3",
+      "status": "pending",
+      "requirement_ids": [
+        "REQ-VITE-001"
+      ],
+      "design_ids": [
+        "DES-VITE-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/counter.ts"
+          }
+        ],
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-TEST",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "npm test",
+            "file": "test/counter.test.ts"
+          }
+        }
+      ],
+      "acceptance_criteria": [
+        "npm test passes"
+      ]
+    }
+  ]
+}

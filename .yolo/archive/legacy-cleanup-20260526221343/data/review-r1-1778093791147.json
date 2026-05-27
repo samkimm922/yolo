@@ -1,0 +1,235 @@
+{
+  "version": "2.0",
+  "title": "Review R1 Bugfix",
+  "source": "review-r1",
+  "tasks": [
+    {
+      "id": "BUG-R-224",
+      "title": "by-location.tsx 文件长度超过 150 行",
+      "type": "bugfix",
+      "description": "src/pages/inventory/by-location.tsx 共 151 行，超过 150 行限制。需要拆分为更小的组件：1. 提取 LocationItem 组件（第 75-139 行）到独立文件 LocationItem.tsx；2. 提取 ContainerRow 子组件（第 106-129 行）；3. 提取统计数据计算逻辑到 useLocationStats hook",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/inventory/by-location.tsx"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "line_count",
+          "params": {
+            "file": "src/pages/inventory/by-location.tsx",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "line_count",
+          "params": {
+            "file": "src/pages/inventory/by-location.tsx",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "主文件行数 ≤ 150 行",
+        "提取的组件命名合理、职责单一",
+        "类型定义完整导入",
+        "样式类名原样复制不修改",
+        "功能与原页面一致（展开/收起、统计数据显示）"
+      ],
+      "status": "running",
+      "task_kind": "review_fix",
+      "phase": "claude",
+      "updatedAt": "2026-05-06T18:56:31.150Z"
+    },
+    {
+      "id": "BUG-R-225",
+      "title": "edit.tsx 文件长度接近 150 行",
+      "type": "bugfix",
+      "description": "src/pages/series/edit.tsx 共 149 行，接近 150 行限制。需要：1. 提取表单验证逻辑（checkNameDuplicate、checkYearDuplicate、canSubmit 计算）到 useSeriesFormValidation hook；2. 提取图片上传逻辑（handleUpload）到 useSeriesImageUpload hook；3. 提取提交逻辑（handleSubmit）到 useSeriesSubmit hook",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/series/edit.tsx"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "line_count",
+          "params": {
+            "file": "src/pages/series/edit.tsx",
+            "min_lines": 140
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "line_count",
+          "params": {
+            "file": "src/pages/series/edit.tsx",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "主文件行数 ≤ 150 行",
+        "提取的 hooks 职责单一、命名清晰",
+        "重复名称验证逻辑正确",
+        "图片上传大小验证（10MB）保留",
+        "提交成功后震动反馈和返回导航保留"
+      ],
+      "status": "pending",
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-226",
+      "title": "index.tsx 文件长度接近 150 行",
+      "type": "bugfix",
+      "description": "src/pages/stock-out/index.tsx 共 148 行，接近 150 行限制。需要：1. 提取库存列表展示组件（第 82-100 行）到 StockInInventoryList.tsx；2. 提取表单输入组件（第 103-131 行）到 StockOutForm.tsx；3. 提取表单验证逻辑（第 56-60 行）到 useStockOutValidation hook",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/stock-out/index.tsx"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "line_count",
+          "params": {
+            "file": "src/pages/stock-out/index.tsx",
+            "min_lines": 140
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "line_count",
+          "params": {
+            "file": "src/pages/stock-out/index.tsx",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "主文件行数 ≤ 150 行",
+        "库存不足提示（红色背景）保留",
+        "FIFO 列表展示逻辑正确",
+        "表单验证（数量≥1、价格>0、库存充足）保留"
+      ],
+      "status": "pending",
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-227",
+      "title": "location-list.tsx 类型断言优化",
+      "type": "bugfix",
+      "description": "src/pages/config/location-list.tsx 第 37 行使用 as unknown as 类型断言。修复方式：在 src/types/wx-api.d.ts 中为 Taro.showModal 添加精确的类型定义：interface ModalResult { confirm: boolean; cancel: boolean; content?: string; }，然后修改第 31-38 行，用正确的类型替换断言",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/config/location-list.tsx"
+          },
+          {
+            "file": "src/types/wx-api.d.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/pages/config/location-list.tsx",
+            "text": "as unknown as { confirm: boolean; content: string }"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/pages/config/location-list.tsx",
+            "text": "as unknown as"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "移除 as unknown as 断言",
+        "wx-api.d.ts 新增 ModalResult 接口定义",
+        "promptName 函数使用正确的类型",
+        "功能逻辑不变（新增/编辑位置）"
+      ],
+      "status": "pending",
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-228",
+      "title": "Drawer.tsx 类型断言优化",
+      "type": "bugfix",
+      "description": "src/components/Drawer/Drawer.tsx 第 77 行使用 as unknown as 类型断言访问 e.target.className。修复方式：1. 定义 EventTarget 类型 interface TaroEventTarget { className?: string; }，2. 修改 handleOverlayClick 函数，使用类型守卫：if (e.target && typeof (e.target as { className?: unknown }).className === 'string' && (e.target as { className: string }).className.includes('drawer-overlay'))",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/components/Drawer/Drawer.tsx"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/components/Drawer/Drawer.tsx",
+            "text": "as unknown as Record<string, unknown>"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/components/Drawer/Drawer.tsx",
+            "text": "as unknown as"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "移除 as unknown as 断言",
+        "使用类型守卫确保类型安全",
+        "点击遮罩层关闭抽屉功能正常",
+        "点击内容区域不关闭抽屉功能正常"
+      ],
+      "status": "pending",
+      "task_kind": "review_fix"
+    }
+  ]
+}

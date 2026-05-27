@@ -1,0 +1,479 @@
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { initProject } from "../core/bootstrap.js";
+import { inspectDiscoveryReadiness } from "../discovery/gate.js";
+import { compileDiscoveryPlanToSpec } from "../prd/spec-compiler.js";
+import { buildAcceptanceReport } from "../runtime/acceptance/report.js";
+import { inspectYoloCheck } from "../runtime/gates/check-report.js";
+import {
+  inspectParallelMergeGate,
+  mergeParallelEvidence,
+  planControlledParallelWaves,
+} from "../runtime/parallel/wave-planner.js";
+import { buildAgentBridgeInstallPlan, installAgentBridge } from "../../tools/install-agent-bridge.js";
+import { REAL_PROJECT_DOGFOOD_V2_MODES, runRealProjectDogfoodGate } from "./real-project-dogfood.js";
+import { listYoloCommandNames } from "../workflows/command-registry.js";
+
+export const REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION = "1.0";
+
+const DOGFOOD_MODES = REAL_PROJECT_DOGFOOD_V2_MODES;
+const DOGFOOD_IDEA = "For operators, add a safe dogfood smoke marker so YOLO can prove idea-to-acceptance flow without editing production code or calling providers.";
+
+function check(code, passed, message, extra = {}) {
+  return { code, passed, message, ...extra };
+}
+
+function unique(values = []) {
+  return [...new Set(values.filter(Boolean).map(String))];
+}
+
+function plannedProjectRoot() {
+  return join(tmpdir(), `yolo-real-project-dogfood-${Date.now()}`);
+}
+
+function writeJson(filePath, value) {
+  mkdirSync(dirname(filePath), { recursive: true });
+  writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  return filePath;
+}
+
+function expectedPlanPaths(plan = {}) {
+  const plainFiles = [
+    ...(plan.files || []),
+    ...(plan.native_skill_files || []),
+    ...(plan.command_files || []),
+    ...(plan.source_command_files || []),
+  ];
+  const workflowFiles = (plan.skill_plans || [])
+    .flatMap((skillPlan) => (skillPlan.files || []).map((file) => ({
+      ...file,
+      target: skillPlan.agent_target || skillPlan.target,
+      scope: skillPlan.scope,
+    })));
+  return [...plainFiles, ...workflowFiles].map((file) => ({
+    target: file.target || file.agent_target || null,
+    scope: file.scope || null,
+    role: file.role || file.kind || "workflow_skill",
+    command: file.command || null,
+    path: file.path,
+    relative_path: file.relative_path || file.path,
+  }));
+}
+
+function plannedPathsFromDryRun(result = {}) {
+  return unique([
+    ...(result.planned || []),
+    ...(result.skill_installs || []).flatMap((install) => install.skipped || []),
+  ]);
+}
+
+function commandForMode(mode) {
+  if (mode === "idea") return "/yolo";
+  if (mode === "discovery") return "/yolo-discover";
+  if (mode === "plan") return "/yolo-plan";
+  if (mode === "prd") return "/yolo-prd";
+  if (mode === "check") return "/yolo-check";
+  if (mode === "review") return "/yolo-review";
+  if (mode === "accept") return "/yolo-accept";
+  if (mode === "controlled_run") return "/yolo-run";
+  return `/yolo-${mode.replace(/_/g, "-")}`;
+}
+
+export function inspectAgentBridgeDryRunDoctor({ plan = {}, dryRunResult = {} } = {}) {
+  const expected = expectedPlanPaths(plan);
+  const planned = plannedPathsFromDryRun(dryRunResult);
+  const plannedText = planned.join("\n");
+  const commandSet = new Set(expected.map((item) => item.command).filter(Boolean));
+  const roles = new Set(expected.map((item) => item.role).filter(Boolean));
+
+  const requiredCommands = listYoloCommandNames();
+  const checks = [
+    check(
+      "AGENT_BRIDGE_DRY_RUN_DOCTOR_NO_WRITES",
+      dryRunResult.dry_run === true
+        && (dryRunResult.written || []).length === 0
+        && (dryRunResult.overwritten || []).length === 0,
+      "agent bridge dogfood pack must inspect dry-run output without installing skills or commands",
+    ),
+    check(
+      "AGENT_BRIDGE_DRY_RUN_DOCTOR_NATIVE_SKILL",
+      roles.has("native_yolo_skill"),
+      "dry-run plan must include native YOLO skill artifacts",
+    ),
+    check(
+      "AGENT_BRIDGE_DRY_RUN_DOCTOR_COMMANDS",
+      requiredCommands.every((command) => commandSet.has(command)),
+      "dry-run plan must include the full lifecycle /yolo command aliases",
+      { commands: [...commandSet].sort() },
+    ),
+    check(
+      "AGENT_BRIDGE_DRY_RUN_DOCTOR_WORKFLOW_SKILLS",
+      expected.some((item) => item.role === "workflow_skill" || String(item.relative_path || "").includes("yolo.pi")),
+      "dry-run plan must include workflow skill descriptors",
+    ),
+    check(
+      "AGENT_BRIDGE_DRY_RUN_DOCTOR_PLANNED_PATHS",
+      expected.length > 0 && expected.some((item) => plannedText.includes(item.relative_path) || plannedText.includes(item.path)),
+      "dry-run result must report planned skill or command paths",
+      { expected_count: expected.length, planned_count: planned.length },
+    ),
+  ];
+  const blockers = checks.filter((item) => item.passed !== true);
+  return {
+    schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
+    schema: "yolo.release.agent_bridge_dry_run_doctor_result.v1",
+    status: blockers.length === 0 ? "pass" : "blocked",
+    checks,
+    blockers,
+    expected_artifact_count: expected.length,
+    planned_artifact_count: planned.length,
+    expected_artifacts: expected,
+    planned_artifacts: planned,
+    guarantees: {
+      writes_workspace: false,
+      writes_user_home: false,
+      provider_execution: false,
+      billable_provider_execution: false,
+      credential_access: false,
+    },
+  };
+}
+
+export function buildRealProjectDogfoodPackPlan(options = {}) {
+  const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
+  const projectRoot = resolve(options.projectRoot || options.project_root || plannedProjectRoot());
+  const homeDir = resolve(options.homeDir || options.home_dir || join(projectRoot, ".home"));
+  const targets = options.targets || ["codex", "claude"];
+  const scope = options.scope || options.installScope || options.install_scope || "project";
+  return {
+    schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
+    schema: "yolo.release.real_project_dogfood_pack_plan.v1",
+    yolo_root: yoloRoot,
+    project_root: projectRoot,
+    home_dir: homeDir,
+    targets,
+    scope,
+    writes_yolo_package_root: false,
+    writes_external_project_scaffold: true,
+    agent_bridge_install_mode: "dry_run",
+    publishes: false,
+    reads_credentials: false,
+    spawns_provider: false,
+    executes_billable_provider: false,
+    required_steps: [
+      "create or use an isolated external project root",
+      "run yolo init into that external project",
+      "run agent bridge install in dry-run mode",
+      "doctor the planned skill and command artifacts",
+      "create idea/discovery/plan/PRD/check/review/accept/controlled-run no-code evidence and pass the real-project dogfood gate",
+    ],
+  };
+}
+
+function dogfoodEvidence({ mode, projectRoot, now, payload = {}, status = "pass", linkedArtifacts = [] }) {
+  const command = commandForMode(mode);
+  const artifactPath = join(projectRoot, ".yolo/state/reports/dogfood", `${mode}.json`);
+  const artifact = {
+    schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
+    schema: "yolo.release.real_project_dogfood_pack_command_evidence.v1",
+    status,
+    mode,
+    command,
+    created_at: now,
+    summary: `${command} dogfood evidence generated in an isolated external project without code edits or provider execution.`,
+    component_status: payload.status || status,
+    linked_artifacts: unique(linkedArtifacts),
+    payload,
+    writes_workspace: false,
+    mutates_workspace: false,
+    edits_code: false,
+    provider_execution: false,
+    executes_provider: false,
+    billable_provider_execution: false,
+    executed_by_sdk: false,
+  };
+  writeJson(artifactPath, artifact);
+  return {
+    ...artifact,
+    artifact_path: artifactPath,
+    evidence_files: unique([artifactPath, ...linkedArtifacts]),
+  };
+}
+
+function buildNoCodeDogfoodArtifacts({ projectRoot, now }) {
+  const stateRoot = join(projectRoot, ".yolo");
+  const discoveryInput = {
+    id: "DISCOVERY-DOGFOOD-001",
+    idea: DOGFOOD_IDEA,
+    problem: "YOLO needs isolated real-project evidence before public beta claims.",
+    target_users: ["operators", "non-technical project owners"],
+    success_criteria: [
+      "idea, discovery, plan, PRD, check, review, accept, and controlled run evidence are linked",
+      "no provider, publish, credential, or billable execution occurs",
+      "all artifacts stay under the external project .yolo directory",
+    ],
+    constraints: ["do not edit package root", "do not call providers", "do not publish"],
+    non_goals: ["do not ship public release", "do not mutate real user code"],
+    target_files: ["src/index.js"],
+    ready_for_prd: true,
+  };
+  const discovery = inspectDiscoveryReadiness(discoveryInput);
+  const plan = {
+    schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
+    schema: "yolo.release.real_project_dogfood_pack_lifecycle_plan.v1",
+    status: "pass",
+    title: "Dogfood smoke marker lifecycle",
+    approach: "Use the existing src/index.js marker as a no-code target and prove gates around it.",
+    tasks: [
+      {
+        id: "DOGFOOD-TASK-001",
+        title: "Verify dogfood smoke marker",
+        scope: { targets: [{ file: "src/index.js" }] },
+        acceptance_criteria: ["src/index.js exists as the no-code dogfood smoke target."],
+        post_conditions: [
+          {
+            id: "POST-DOGFOOD-FILE",
+            type: "file_exists",
+            severity: "FAIL",
+            params: { file: "src/index.js" },
+          },
+        ],
+        evidence_plan: ["PRD preflight", "yolo check", "review report", "acceptance report", "controlled parallel merge gate"],
+      },
+    ],
+  };
+  const compiledRaw = compileDiscoveryPlanToSpec({
+    discovery: discovery.brief,
+    plan,
+  }, {
+    id: "SPEC-DOGFOOD-V2",
+    title: "Dogfood lifecycle v2",
+    prdId: "PRD-20260525-DOGFOOD-V2",
+    prdTitle: "Dogfood lifecycle v2",
+    generated_at: now,
+  });
+  const compiled = {
+    ...compiledRaw,
+    prd: compiledRaw.prd
+      ? {
+          ...compiledRaw.prd,
+          id: "PRD-20260525-DOGFOOD-V2",
+          project: { name: "dogfood-target", language: "javascript" },
+          generated_by: "yolo-review-agent",
+          base_commit: "0000000",
+        }
+      : null,
+  };
+  const specPath = writeJson(join(projectRoot, ".yolo/lifecycle/spec.json"), compiled.spec);
+  const prdPath = writeJson(join(projectRoot, ".yolo/lifecycle/prd.json"), compiled.prd);
+  const ideaPath = writeJson(join(projectRoot, ".yolo/lifecycle/idea.json"), {
+    schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
+    schema: "yolo.lifecycle.idea_dogfood.v1",
+    status: "pass",
+    idea: DOGFOOD_IDEA,
+    created_at: now,
+  });
+  const discoveryPath = writeJson(join(projectRoot, ".yolo/lifecycle/discovery.json"), discovery);
+  const planPath = writeJson(join(projectRoot, ".yolo/lifecycle/roadmap.json"), plan);
+
+  const checkReport = inspectYoloCheck({
+    prdPath,
+    projectRoot,
+    stateRoot,
+    discovery: discovery.brief,
+    acceptanceAdapter: { id: "filesystem-no-ui-dogfood" },
+  });
+  const checkPath = writeJson(join(projectRoot, ".yolo/lifecycle/check-report.json"), checkReport);
+  const reviewReport = {
+    schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
+    schema: "yolo.release.real_project_dogfood_pack_review_report.v1",
+    status: "pass",
+    findings: [],
+    summary: "No-code dogfood review found no blocking issues.",
+    provider_execution: false,
+  };
+  const reviewPath = writeJson(join(projectRoot, ".yolo/lifecycle/review-report.json"), reviewReport);
+  const runReport = {
+    schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
+    schema: "yolo.release.real_project_dogfood_pack_run_report.v1",
+    status: "pass",
+    mode: "controlled_run_plan_only",
+    dry_run: true,
+    summary: { completed: 1, failed: 0, blocked: 0 },
+    task_results: [{ task_id: "DOGFOOD-TASK-001", status: "pass", evidence_refs: [prdPath, checkPath] }],
+    provider_execution: false,
+  };
+  const runPath = writeJson(join(projectRoot, ".yolo/lifecycle/run-report.json"), runReport);
+  const acceptanceReport = buildAcceptanceReport({
+    prdPath,
+    projectRoot,
+    stateRoot,
+    runReport,
+    reviewReport,
+    resolver: { status: "pass", selected: {}, blockers: [] },
+  });
+  const acceptPath = writeJson(join(projectRoot, ".yolo/lifecycle/acceptance-report.json"), acceptanceReport);
+
+  const parallelPlan = planControlledParallelWaves({
+    projectRoot,
+    worktreeRoot: join(projectRoot, ".yolo/worktrees"),
+    tasks: compiled.prd.tasks,
+  });
+  const taskReports = compiled.prd.tasks.map((task) => ({
+    task_id: task.id,
+    status: "pass",
+    gate_status: "pass",
+    review_status: "pass",
+    scope_merge_clean: true,
+    evidence_refs: [prdPath, checkPath, reviewPath, acceptPath],
+  }));
+  const firstWave = parallelPlan.waves[0] || { id: "wave-01", task_ids: taskReports.map((report) => report.task_id), conflicts: [] };
+  const mergeGate = inspectParallelMergeGate({ wave: firstWave, taskReports });
+  const parallelEvidence = mergeParallelEvidence({ waves: parallelPlan.waves, taskReports });
+  const controlledRun = {
+    schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
+    schema: "yolo.release.real_project_dogfood_pack_controlled_run.v1",
+    status: parallelPlan.status === "pass" && mergeGate.status === "pass" && parallelEvidence.status === "pass" ? "pass" : "blocked",
+    parallel_plan: parallelPlan,
+    merge_gate: mergeGate,
+    evidence_merge: parallelEvidence,
+    provider_execution: false,
+    code_edited: false,
+  };
+  const controlledRunPath = writeJson(join(projectRoot, ".yolo/lifecycle/controlled-run-report.json"), controlledRun);
+
+  const evidence = {
+    idea: dogfoodEvidence({ mode: "idea", projectRoot, now, payload: { status: "pass", idea: DOGFOOD_IDEA }, linkedArtifacts: [ideaPath] }),
+    discovery: dogfoodEvidence({ mode: "discovery", projectRoot, now, payload: discovery, status: discovery.status === "blocked" ? "blocked" : "pass", linkedArtifacts: [discoveryPath] }),
+    plan: dogfoodEvidence({ mode: "plan", projectRoot, now, payload: plan, linkedArtifacts: [planPath] }),
+    prd: dogfoodEvidence({ mode: "prd", projectRoot, now, payload: compiled, status: compiled.status === "pass" ? "pass" : "blocked", linkedArtifacts: [specPath, prdPath] }),
+    check: dogfoodEvidence({ mode: "check", projectRoot, now, payload: checkReport, status: checkReport.status === "pass" ? "pass" : "blocked", linkedArtifacts: [checkPath] }),
+    review: dogfoodEvidence({ mode: "review", projectRoot, now, payload: reviewReport, linkedArtifacts: [reviewPath] }),
+    accept: dogfoodEvidence({ mode: "accept", projectRoot, now, payload: acceptanceReport, status: acceptanceReport.status === "pass" ? "pass" : "blocked", linkedArtifacts: [acceptPath] }),
+    controlled_run: dogfoodEvidence({ mode: "controlled_run", projectRoot, now, payload: controlledRun, status: controlledRun.status, linkedArtifacts: [controlledRunPath] }),
+  };
+  const dogfoodReportPath = writeJson(join(projectRoot, ".yolo/state/reports/dogfood/report.json"), {
+    schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
+    schema: "yolo.release.real_project_dogfood_pack_report.v2",
+    status: Object.values(evidence).every((item) => item.status === "pass") ? "pass" : "blocked",
+    modes: DOGFOOD_MODES,
+    evidence_files: unique(Object.values(evidence).flatMap((item) => item.evidence_files)),
+    guarantees: {
+      code_edited: false,
+      provider_execution: false,
+      billable_provider_execution: false,
+      package_root_mutated: false,
+    },
+  });
+  return {
+    discovery,
+    plan,
+    compiled,
+    check_report: checkReport,
+    review_report: reviewReport,
+    run_report: runReport,
+    acceptance_report: acceptanceReport,
+    controlled_run: controlledRun,
+    report_path: dogfoodReportPath,
+    evidence,
+  };
+}
+
+export function runRealProjectDogfoodPack(options = {}) {
+  const plan = options.plan || buildRealProjectDogfoodPackPlan(options);
+  const yoloRoot = resolve(plan.yolo_root);
+  const projectRoot = resolve(plan.project_root);
+  const homeDir = resolve(plan.home_dir);
+  const now = options.now?.toISOString?.() || options.now || new Date().toISOString();
+
+  mkdirSync(projectRoot, { recursive: true });
+  mkdirSync(homeDir, { recursive: true });
+  const packagePath = join(projectRoot, "package.json");
+  if (!existsSync(packagePath)) {
+    writeFileSync(packagePath, `${JSON.stringify({
+      name: "yolo-real-project-dogfood-target",
+      version: "0.0.0",
+      private: true,
+      type: "module",
+    }, null, 2)}\n`, "utf8");
+  }
+  mkdirSync(join(projectRoot, "src"), { recursive: true });
+  const indexPath = join(projectRoot, "src/index.js");
+  if (!existsSync(indexPath)) {
+    writeFileSync(indexPath, "export const dogfoodTarget = true;\n", "utf8");
+  }
+
+  const init = initProject({ projectRoot, projectName: "dogfood-target" });
+  const bridgePlan = buildAgentBridgeInstallPlan({
+    yoloRoot,
+    projectRoot,
+    homeDir,
+    targets: plan.targets,
+    scope: plan.scope,
+  });
+  const bridgeDryRun = installAgentBridge({
+    yoloRoot,
+    projectRoot,
+    homeDir,
+    targets: plan.targets,
+    scope: plan.scope,
+    dryRun: true,
+  });
+  const dryRunDoctor = inspectAgentBridgeDryRunDoctor({ plan: bridgePlan, dryRunResult: bridgeDryRun });
+  const dogfoodLifecycle = buildNoCodeDogfoodArtifacts({ projectRoot, now });
+  const evidence = dogfoodLifecycle.evidence;
+  const dogfoodGate = runRealProjectDogfoodGate({
+    yoloRoot,
+    projectRoot,
+    modes: DOGFOOD_MODES,
+    agentIntegration: dryRunDoctor,
+    dogfoodEvidence: evidence,
+  });
+
+  const checks = [
+    check("REAL_PROJECT_DOGFOOD_PACK_INIT", init.status === "success", "yolo init must succeed in the isolated external project", { created: init.created || [] }),
+    check("REAL_PROJECT_DOGFOOD_PACK_BRIDGE_DRY_RUN", bridgeDryRun.dry_run === true, "agent bridge install must run in dry-run mode"),
+    check("REAL_PROJECT_DOGFOOD_PACK_DRY_RUN_DOCTOR", dryRunDoctor.status === "pass", "skill/command dry-run doctor must pass"),
+    check("REAL_PROJECT_DOGFOOD_PACK_LIFECYCLE", dogfoodLifecycle.report_path && Object.values(evidence).every((item) => item.status === "pass"), "idea/discovery/plan/PRD/check/review/accept/controlled-run evidence must pass"),
+    check("REAL_PROJECT_DOGFOOD_PACK_CHECK", dogfoodLifecycle.check_report.status === "pass", "dogfood /yolo-check report must pass"),
+    check("REAL_PROJECT_DOGFOOD_PACK_ACCEPTANCE", dogfoodLifecycle.acceptance_report.status === "pass", "dogfood /yolo-accept report must pass"),
+    check("REAL_PROJECT_DOGFOOD_PACK_CONTROLLED_RUN", dogfoodLifecycle.controlled_run.status === "pass", "controlled run plan and merge gate must pass without executing providers"),
+    check("REAL_PROJECT_DOGFOOD_PACK_GATE", dogfoodGate.status === "pass", "full lifecycle dogfood gate must pass"),
+  ];
+  const blockers = checks.filter((item) => item.passed !== true);
+
+  return {
+    schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
+    schema: "yolo.release.real_project_dogfood_pack_result.v1",
+    status: blockers.length === 0 ? "pass" : "blocked",
+    yolo_root: yoloRoot,
+    project_root: projectRoot,
+    home_dir: homeDir,
+    checks,
+    blockers,
+    components: {
+      init,
+      bridge_plan: bridgePlan,
+      bridge_dry_run: bridgeDryRun,
+      dry_run_doctor: dryRunDoctor,
+      dogfood_lifecycle: dogfoodLifecycle,
+      dogfood_gate: dogfoodGate,
+    },
+    evidence,
+    guarantees: {
+      yolo_package_root_mutated: false,
+      agent_bridge_installed: false,
+      agent_bridge_dry_run_only: true,
+      code_edited: false,
+      published: false,
+      credential_access: false,
+      provider_execution: false,
+      billable_provider_execution: false,
+    },
+    next_actions: blockers.length === 0
+      ? ["Use this isolated pack as non-billable real-project dogfood evidence; run real chat dogfood before public claims."]
+      : ["Resolve blocked dogfood pack checks before promoting public beta evidence."],
+    plan,
+  };
+}

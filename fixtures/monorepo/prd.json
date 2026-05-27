@@ -1,0 +1,67 @@
+{
+  "version": "2.0",
+  "id": "PRD-20260524-MONOREPO",
+  "title": "Monorepo fixture",
+  "project": {
+    "name": "yolo-fixture-monorepo",
+    "language": "javascript",
+    "package_manager": "npm",
+    "layout": "monorepo"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-24T00:00:00.000Z",
+  "base_commit": "abcdef0",
+  "requirements": [
+    {
+      "id": "REQ-MONO-001",
+      "text": "Expose an app summary that uses a shared workspace utility."
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-MONO-001",
+      "text": "Keep app code and shared utility code in separate packages with explicit imports."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "FIX-MONO-001",
+      "title": "Verify monorepo app summary",
+      "type": "feature",
+      "priority": "P3",
+      "status": "pending",
+      "requirement_ids": [
+        "REQ-MONO-001"
+      ],
+      "design_ids": [
+        "DES-MONO-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "packages/app/src/index.ts"
+          },
+          {
+            "file": "packages/utils/src/math.ts"
+          }
+        ],
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-TEST",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --test packages/app/test.ts",
+            "file": "packages/app/test.ts"
+          }
+        }
+      ],
+      "acceptance_criteria": [
+        "node --test packages/app/test.ts passes"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "id": "python-basic",
+  "type": "python-basic",
+  "label": "Python basic fixture",
+  "description": "Minimal Python project with unittest coverage for cross-language smoke validation.",
+  "files": [
+    "prd.json",
+    "src/calculator.py",
+    "tests/test_calculator.py"
+  ],
+  "project": {
+    "language": "python",
+    "package_manager": null,
+    "test_framework": "unittest"
+  },
+  "requirement": {
+    "id": "REQ-PY-001",
+    "text": "Expose an add function that returns the sum of two numbers."
+  },
+  "spec": {
+    "id": "SPEC-PY-001",
+    "requirement_id": "REQ-PY-001",
+    "design_id": "DES-PY-001",
+    "task_id": "FIX-PY-001"
+  },
+  "task": {
+    "id": "FIX-PY-001",
+    "prd": "prd.json"
+  },
+  "run": {
+    "mode": "dry-run",
+    "supports_dry_run": true,
+    "commands": [
+      "python3 -m unittest discover -s tests -p 'test_*.py'"
+    ]
+  },
+  "evidence": {
+    "expected": [
+      "state/evidence/FIX-PY-001/run.json"
+    ]
+  }
+}

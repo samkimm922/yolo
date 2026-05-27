@@ -1,0 +1,243 @@
+{
+  "version": "2.0",
+  "title": "Review R1 Bugfix",
+  "source": "review-r1",
+  "tasks": [
+    {
+      "id": "BUG-R-229",
+      "title": "sale.service.ts:108 不安全的双重类型断言",
+      "type": "bugfix",
+      "description": "在 src/services/sale.service.ts 第 108 行，将 `const existingSale = existingDoc.data as unknown as Sale | undefined;` 改为使用类型守卫：`const existingData = existingDoc.data; const existingSale = existingData && typeof existingData === 'object' ? existingData as Sale : undefined;`",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/sale.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/sale.service.ts",
+            "text": "as unknown as Sale | undefined"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/sale.service.ts",
+            "text": "as unknown as Sale | undefined"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "移除双重类型断言，使用类型守卫确保运行时安全",
+        "TypeScript 编译通过，无类型错误"
+      ],
+      "status": "done",
+      "task_kind": "review_fix",
+      "phase": "done",
+      "updatedAt": "2026-05-06T20:32:53.150Z"
+    },
+    {
+      "id": "BUG-R-230",
+      "title": "sales.tsx 文件长度 147 行超过上限",
+      "type": "refactor",
+      "description": "将 src/pages/sales/sales.tsx 中剩余的内联逻辑拆分到独立组件/文件中。具体操作：1）将 handleSale 函数抽离到 src/pages/sales/hooks/useSaleForm.ts；2）将 recentSales 的 useMemo 逻辑移到 useSalesRecent hook；3）确保主文件只保留组件编排，不超过 150 行",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/sales/sales.tsx"
+          },
+          {
+            "file": "src/pages/sales/hooks/useSaleForm.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_line_count",
+          "params": {
+            "file": "src/pages/sales/sales.tsx",
+            "max_lines": 145
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_line_count",
+          "params": {
+            "file": "src/pages/sales/sales.tsx",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "src/pages/sales/sales.tsx 文件行数 ≤ 150",
+        "新增的 hook 文件存在且功能正常",
+        "保持原有业务逻辑不变"
+      ],
+      "status": "running",
+      "task_kind": "review_fix",
+      "phase": "claude",
+      "updatedAt": "2026-05-06T20:32:53.150Z"
+    },
+    {
+      "id": "BUG-R-231",
+      "title": "batch-stockin/index.tsx 文件长度 147 行超过上限",
+      "type": "refactor",
+      "description": "将 src/pages/batch-stockin/index.tsx 拆分为多个独立组件。具体操作：1）SeriesSelector 组件（系列选择，第 102-111 行）；2）FileUploader 组件（文件上传，第 114-128 行）；3）ExecutionResult 组件（执行结果，第 134-143 行）；4）主文件只保留步骤编排和数据流，不超过 150 行",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/batch-stockin/index.tsx"
+          },
+          {
+            "file": "src/pages/batch-stockin/components/SeriesSelector.tsx"
+          },
+          {
+            "file": "src/pages/batch-stockin/components/FileUploader.tsx"
+          },
+          {
+            "file": "src/pages/batch-stockin/components/ExecutionResult.tsx"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_line_count",
+          "params": {
+            "file": "src/pages/batch-stockin/index.tsx",
+            "max_lines": 145
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_line_count",
+          "params": {
+            "file": "src/pages/batch-stockin/index.tsx",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "src/pages/batch-stockin/index.tsx 文件行数 ≤ 150",
+        "3 个新组件文件存在且功能正常",
+        "保持原有业务逻辑和 UI 不变"
+      ],
+      "status": "pending",
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-232",
+      "title": "use-series-form.ts 文件长度 146 行超过上限",
+      "type": "refactor",
+      "description": "将 src/pages/series/hooks/use-series-form.ts 的图片上传逻辑抽离到独立 hook。具体操作：1）创建 src/pages/series/hooks/useImageUpload.ts，将第 53-84 行的 handleUpload 逻辑移入；2）useSeriesForm 调用新 hook 获取 handleUpload；3）主 hook 只负责表单状态管理，不超过 150 行",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/series/hooks/use-series-form.ts"
+          },
+          {
+            "file": "src/pages/series/hooks/useImageUpload.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_line_count",
+          "params": {
+            "file": "src/pages/series/hooks/use-series-form.ts",
+            "max_lines": 145
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_line_count",
+          "params": {
+            "file": "src/pages/series/hooks/use-series-form.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "src/pages/series/hooks/use-series-form.ts 文件行数 ≤ 150",
+        "新增的 useImageUpload hook 存在且功能正常",
+        "保持原有业务逻辑不变"
+      ],
+      "status": "pending",
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-233",
+      "title": "batch-stockin.service.ts 文件长度 147 行超过上限",
+      "type": "refactor",
+      "description": "将 src/services/batch-stockin.service.ts 的复杂逻辑拆分到独立函数/模块。具体操作：1）将验证逻辑（第 30-34 行）抽离到独立函数 validateBatchStockInRows；2）将卡片和容器映射构建逻辑（第 36-54 行）抽离到 buildCardAndContainerMaps；3）将单条记录验证逻辑（第 62-96 行）抽离到 validateStockInRow；4）主函数 batchStockIn 只保留批次编排，不超过 150 行",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/batch-stockin.service.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_line_count",
+          "params": {
+            "file": "src/services/batch-stockin.service.ts",
+            "max_lines": 145
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_line_count",
+          "params": {
+            "file": "src/services/batch-stockin.service.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "src/services/batch-stockin.service.ts 文件行数 ≤ 150",
+        "3 个新函数存在且逻辑正确",
+        "保持原有业务逻辑不变"
+      ],
+      "status": "pending",
+      "task_kind": "review_fix"
+    }
+  ]
+}

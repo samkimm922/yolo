@@ -1,0 +1,10 @@
+{
+  "findings": [],
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "_error": "Command failed: claude -p '你是高级代码审查专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【代码质量】专项审查。\n\n## 审查范围\nsrc/pages/、src/components/、src/hooks/ 下所有 .ts/.tsx 文件\n\n## 重点检查\n1. 代码重复：是否存在复制粘贴逻辑应提取为公共函数/hook\n2. 超大函数：单个函数超过 80 行的应拆分\n3. 缺失错误处理：未处理异常、缺少 try/catch、空 catch 块\n4. 不当 React 模式：\n   - useEffect 缺少"
+}

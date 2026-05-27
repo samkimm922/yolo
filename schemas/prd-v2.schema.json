@@ -1,0 +1,743 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "title": "YOLO Loop Contract-Based PRD v2.0",
+  "description": "Universal, language-agnostic PRD format for automated bug-fixing pipeline. Every task is a contract: pre_conditions verify the bug exists, post_conditions verify it's fixed. Guarantees no infinite retry loops via staleness checks + hard retry limits.",
+  "type": "object",
+  "x-vocabulary": {
+    "taskType": [
+      "bugfix",
+      "feature",
+      "refactor",
+      "cleanup",
+      "security"
+    ],
+    "taskPriority": [
+      "P0",
+      "P1",
+      "P2",
+      "P3"
+    ],
+    "taskStatus": [
+      "pending",
+      "done",
+      "completed",
+      "invalid",
+      "skipped",
+      "stuck",
+      "failed",
+      "blocked",
+          "waiting_evidence",
+          "merged_into",
+          "needs_contract_review",
+          "split",
+          "blocked_by_split"
+        ],
+    "conditionType": [
+      "file_exists",
+      "dir_exists",
+      "file_not_exists",
+      "code_contains",
+      "code_not_contains",
+      "code_matches",
+      "ast_callback_uses_param",
+      "ast_find_by_property",
+      "function_contains_call",
+      "function_contains_text",
+      "no_new_type_errors",
+      "type_errors_contain",
+      "no_new_lint_errors",
+      "tests_pass",
+      "test_file_passes",
+      "files_modified_max",
+      "file_lines_max",
+      "target_file_modified",
+      "no_forbidden_patterns",
+      "required_imports_present",
+      "no_new_dead_code",
+      "no_file_over_max_lines",
+      "build_pass",
+      "business_code_min",
+      "acceptance_criteria"
+    ],
+    "conditionSeverity": [
+      "PASS",
+      "FAIL",
+      "WARN"
+    ],
+    "generatedBy": [
+      "human",
+      "code-review-agent",
+      "security-review-agent",
+      "yolo-review-agent",
+      "other"
+    ],
+    "retryStrategy": [
+      "same",
+      "narrower",
+      "fresh"
+    ]
+  },
+  "required": [
+    "version",
+    "id",
+    "title",
+    "project",
+    "generated_by",
+    "generated_at",
+    "base_commit",
+    "tasks"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema URI for validation"
+    },
+    "version": {
+      "type": "string",
+      "const": "2.0",
+      "description": "Schema version. Runner rejects other versions."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Z]+-[0-9]+-[A-Z0-9-]+$",
+      "description": "Unique PRD identifier in kebab-case upper format, e.g. PRD-20260426-CURSOR-FIX"
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Human-readable PRD title"
+    },
+    "description": {
+      "type": "string",
+      "description": "High-level summary of what this PRD accomplishes"
+    },
+    "project": {
+      "type": "object",
+      "required": [
+        "name",
+        "language"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Project name for logging/reporting"
+        },
+        "language": {
+          "type": "string",
+          "enum": [
+            "typescript",
+            "javascript",
+            "python",
+            "go",
+            "rust",
+            "java",
+            "kotlin",
+            "dart",
+            "c",
+            "cpp",
+            "swift",
+            "ruby",
+            "php",
+            "elixir",
+            "other"
+          ],
+          "description": "Primary programming language"
+        },
+        "framework": {
+          "type": "string",
+          "default": "generic",
+          "description": "Framework name for test runner selection"
+        },
+        "package_manager": {
+          "type": "string",
+          "default": "npm",
+          "enum": [
+            "npm",
+            "yarn",
+            "pnpm",
+            "pip",
+            "poetry",
+            "cargo",
+            "go",
+            "maven",
+            "gradle",
+            "other"
+          ],
+          "description": "Package manager for run commands"
+        },
+        "test_framework": {
+          "type": "string",
+          "description": "Test framework for test_passes condition, e.g. vitest, jest, pytest, cargo test"
+        },
+        "lint_tool": {
+          "type": "string",
+          "description": "Lint tool for no_new_lint_errors condition, e.g. eslint, ruff, golangci-lint"
+        },
+        "type_checker": {
+          "type": "string",
+          "description": "Type checker command for no_new_type_errors condition, e.g. 'tsc --noEmit', 'mypy src/', 'cargo check'"
+        }
+      }
+    },
+    "generated_by": {
+      "type": "string",
+      "enum": [
+        "human",
+        "code-review-agent",
+        "security-review-agent",
+        "yolo-review-agent",
+        "other"
+      ],
+      "description": "What generated this PRD (traceability)"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of generation"
+    },
+    "base_commit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{7,40}$",
+      "description": "Git SHA at generation time. Runner warns if HEAD has diverged."
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/task"
+      },
+      "description": "List of task objects"
+    },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "retry": {
+          "$ref": "#/definitions/retry"
+        },
+        "scope": {
+          "$ref": "#/definitions/scopeDefaults"
+        }
+      },
+      "description": "Default retry and scope values inherited by all tasks"
+    },
+    "conflict_policy": {
+      "type": "object",
+      "properties": {
+        "on_overlap": {
+          "type": "string",
+          "enum": [
+            "fail_fast",
+            "merge",
+            "sequential"
+          ],
+          "default": "fail_fast",
+          "description": "How to handle tasks that target overlapping code"
+        },
+        "overlap_detection": {
+          "type": "string",
+          "enum": [
+            "file_only",
+            "diff_lines",
+            "ast_diff"
+          ],
+          "default": "diff_lines",
+          "description": "Granularity of conflict detection"
+        }
+      },
+      "description": "Conflict resolution policy for overlapping tasks"
+    }
+  },
+  "definitions": {
+    "task": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "priority",
+        "type",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z]+-[A-Z0-9-]+-[0-9]+[A-Z]*$",
+          "description": "Unique within PRD. Convention: TYPE-SUBSYSTEM-NUMBER, e.g. FIX-CURSOR-001"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Human-readable title"
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "P0",
+            "P1",
+            "P2",
+            "P3"
+          ],
+          "description": "P0=critical, P1=high, P2=medium, P3=low"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "bugfix",
+            "feature",
+            "refactor",
+            "cleanup",
+            "security"
+          ],
+          "description": "Task type. Affects default scope.allow_new_files (feature=true, others=false)"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "done",
+            "completed",
+            "invalid",
+            "skipped",
+            "stuck",
+            "failed",
+            "blocked",
+            "waiting_evidence",
+            "merged_into",
+            "needs_contract_review",
+            "split",
+            "blocked_by_split"
+          ],
+          "default": "pending"
+        },
+        "description": {
+          "type": "string",
+          "description": "Natural language description of what needs to be done and why"
+        },
+        "skip_kind": {
+          "type": "string",
+          "enum": [
+            "valid_skip_already_satisfied",
+            "dependency_blocked",
+            "blocked_skip_missing_evidence",
+            "stale_review_skip"
+          ],
+          "description": "Structured skip/block reason. Only valid_skip_already_satisfied counts as completed."
+        },
+        "counts_as_completed": {
+          "type": "boolean",
+          "description": "Whether this non-done state can satisfy dependencies. Must be false for dependency_blocked and blocked_skip_missing_evidence."
+        },
+        "blocked_by": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Task IDs or evidence IDs that block execution/recovery."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Task IDs that must complete before this task can start"
+        },
+        "scope": {
+          "$ref": "#/definitions/scope"
+        },
+        "pre_conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/condition"
+          },
+          "description": "Conditions that verify the bug/task-still-needs-doing. ALL must pass before AI is spawned."
+        },
+        "post_conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/condition"
+          },
+          "description": "Conditions that verify the fix is correct. ALL must pass to mark task complete."
+        },
+        "retry": {
+          "$ref": "#/definitions/retry"
+        },
+        "task_kind": {
+          "type": "string",
+          "description": "Runner-specific task kind, e.g. review_fix or yolo_engine_change"
+        },
+        "test_generation": {
+          "$ref": "#/definitions/testGeneration"
+        },
+        "source_finding_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dedupe_key": {
+          "type": "string"
+        },
+        "must_fix_before_ship": {
+          "type": "boolean"
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/target"
+          },
+          "description": "Files the AI should focus on"
+        },
+        "allow_new_files": {
+          "type": "boolean",
+          "default": false
+        },
+        "allow_delete_files": {
+          "type": "boolean",
+          "default": false
+        },
+        "max_files": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 5
+        },
+        "max_lines_per_file": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 200
+        },
+        "forbidden_patterns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/forbiddenPattern"
+          }
+        },
+        "required_imports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/requiredImport"
+          }
+        },
+        "readonly_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Files the AI MUST NOT modify"
+        }
+      }
+    },
+    "scopeDefaults": {
+      "type": "object",
+      "properties": {
+        "max_files": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 5
+        },
+        "max_lines_per_file": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 200
+        },
+        "allow_new_files": {
+          "type": "boolean",
+          "default": false
+        },
+        "allow_delete_files": {
+          "type": "boolean",
+          "default": false
+        },
+        "forbidden_patterns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/forbiddenPattern"
+          }
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "File path relative to project root"
+        },
+        "regions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "start_line",
+              "end_line"
+            ],
+            "properties": {
+              "start_line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "end_line": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "description": "Specific line ranges to focus on"
+        },
+        "description": {
+          "type": "string",
+          "description": "What to find in this file"
+        }
+      }
+    },
+    "forbiddenPattern": {
+      "type": "object",
+      "required": [
+        "pattern",
+        "severity"
+      ],
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "Regex or literal pattern that must NOT appear in diff"
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "WARN",
+            "FAIL"
+          ],
+          "description": "FAIL blocks task completion, WARN logs but allows"
+        },
+        "is_regex": {
+          "type": "boolean",
+          "default": false
+        },
+        "description": {
+          "type": "string",
+          "description": "Why this pattern is forbidden"
+        }
+      }
+    },
+    "requiredImport": {
+      "type": "object",
+      "required": [
+        "file",
+        "import_path"
+      ],
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "Which file needs the import"
+        },
+        "import_path": {
+          "type": "string",
+          "description": "The import source path"
+        },
+        "named": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Named imports"
+        },
+        "default": {
+          "type": "string",
+          "description": "Default import name"
+        }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "params"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^(PRE|POST|AUTO)-[A-Z0-9_-]+$",
+          "description": "Unique within the task. Convention: PRE-XXX for pre_conditions, POST-XXX for post_conditions"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "file_exists",
+            "dir_exists",
+            "file_not_exists",
+            "code_contains",
+            "code_not_contains",
+            "code_matches",
+            "ast_callback_uses_param",
+            "ast_find_by_property",
+            "function_contains_call",
+            "function_contains_text",
+            "no_new_type_errors",
+            "type_errors_contain",
+            "no_new_lint_errors",
+            "tests_pass",
+            "test_file_passes",
+            "files_modified_max",
+            "file_lines_max",
+            "target_file_modified",
+            "no_forbidden_patterns",
+            "required_imports_present",
+            "no_new_dead_code",
+            "no_file_over_max_lines",
+            "build_pass",
+            "business_code_min",
+            "acceptance_criteria"
+          ],
+          "description": "Condition type from the catalog"
+        },
+        "params": {
+          "type": "object",
+          "description": "Type-specific parameters (see spec for each type's required fields)"
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable explanation of what this condition checks"
+        },
+        "invert": {
+          "type": "boolean",
+          "default": false,
+          "description": "Invert the result. E.g., test_passes with invert=true asserts the test FAILS"
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "default": 30000,
+          "description": "Max time to wait for external commands"
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "WARN"
+          ],
+          "default": "FAIL",
+          "description": "WARN failures are logged but do not block task completion"
+        }
+      }
+    },
+    "retry": {
+      "type": "object",
+      "properties": {
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 5,
+          "description": "Hard retry limit. After this, task is marked failed."
+        },
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "same",
+            "narrower",
+            "fresh"
+          ],
+          "default": "narrower",
+          "description": "Retry prompt strategy"
+        },
+        "staleness_check": {
+          "type": "boolean",
+          "default": true,
+          "description": "Re-check pre_conditions before each retry"
+        },
+        "cooldown_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300000,
+          "default": 0,
+          "description": "Optional delay between retries (ms)"
+        }
+      }
+    },
+    "testGeneration": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "reuse_existing",
+            "add_minimal",
+            "forbid"
+          ],
+          "default": "reuse_existing"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "allowed_test_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbidden_test_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "max_new_test_files": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "max_test_lines_changed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "required_commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "failure_policy": {
+          "type": "object",
+          "properties": {
+            "test_compile_error": {
+              "type": "string",
+              "enum": [
+                "fix_once_then_block",
+                "blocked",
+                "retry"
+              ]
+            },
+            "test_assertion_error": {
+              "type": "string",
+              "enum": [
+                "classify_business_or_test_bug",
+                "blocked",
+                "retry"
+              ]
+            },
+            "same_failure_limit": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 2
+            }
+          }
+        }
+      }
+    }
+  }
+}

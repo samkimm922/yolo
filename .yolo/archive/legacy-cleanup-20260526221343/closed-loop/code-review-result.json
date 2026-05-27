@@ -1,0 +1,25 @@
+{
+  "findings": [
+    {
+      "severity": "HIGH",
+      "file": "src/pages/import/preview.tsx",
+      "line": 40,
+      "description": "handleImport 未检查 importing 状态，快速点击会导致重复发起批量导入请求，可能造成数据重复写入。",
+      "suggestion": "在函数开头添加 if (importing) return; 防护，配合 UI 按钮禁用状态。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "src/pages/import/preview.tsx",
+      "line": 44,
+      "description": "batchImportCards 返回包含 failed 计数，但代码未检查 failed > 0 的情况，部分导入失败时用户无感知。",
+      "suggestion": "设置 result 后检查 res.failed，若大于 0 则显示警告提示（如 showToast 提示成功/失败条数）。"
+    }
+  ],
+  "summary": {
+    "critical": 0,
+    "high": 1,
+    "medium": 1,
+    "low": 0,
+    "total_files": 1
+  }
+}

@@ -1,0 +1,352 @@
+export const CONTROLLED_PARALLEL_SCHEMA_VERSION = "1.0";
+export const CONTROLLED_PARALLEL_PLAN_SCHEMA = "yolo.runtime.controlled_parallel_plan.v1";
+export const CONTROLLED_PARALLEL_MERGE_GATE_SCHEMA = "yolo.runtime.parallel_merge_gate.v1";
+export const CONTROLLED_PARALLEL_EVIDENCE_SCHEMA = "yolo.runtime.parallel_evidence_merge.v1";
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function clean(value) {
+  return String(value ?? "").trim();
+}
+
+function asArray(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (value == null || value === "") return [];
+  return [value];
+}
+
+function normalizePath(value = "") {
+  return clean(value).replace(/\\/g, "/").replace(/^\.\//, "").replace(/:\d+(?:-\d+)?$/, "");
+}
+
+function taskId(task = {}) {
+  return clean(task.id || task.task_id);
+}
+
+function taskStatus(task = {}) {
+  return clean(task.status || "pending").toLowerCase();
+}
+
+function taskTargets(task = {}) {
+  return [
+    ...asArray(task.scope?.targets).map((target) => normalizePath(target.file || target.path || target)),
+    ...asArray(task.files).map(normalizePath),
+    ...asArray(task.target_files).map(normalizePath),
+  ].filter(Boolean);
+}
+
+function taskDependencies(task = {}) {
+  return asArray(task.depends_on || task.dependencies).map(String).filter(Boolean);
+}
+
+function taskKind(task = {}) {
+  const text = [task.type, task.task_kind, task.title, task.description].filter(Boolean).join(" ").toLowerCase();
+  if (/review|审查/.test(text)) return "review";
+  if (/accept|qa|ui|验收/.test(text)) return "qa";
+  return "implementation";
+}
+
+function agentForTask(task = {}) {
+  const kind = taskKind(task);
+  if (kind === "review") return "reviewer-agent";
+  if (kind === "qa") return "qa-agent";
+  return "implementer-agent";
+}
+
+function taskCanRun(task = {}) {
+  return !["done", "completed", "skipped", "merged_into"].includes(taskStatus(task));
+}
+
+function intersects(a = [], b = []) {
+  const set = new Set(a);
+  return b.filter((item) => set.has(item));
+}
+
+function isExclusiveTask(task = {}) {
+  const targets = taskTargets(task);
+  if (targets.length === 0) return true;
+  if (task.parallel === false || task.allow_parallel === false) return true;
+  if (task.scope?.exclusive === true || task.scope?.serial === true) return true;
+  return false;
+}
+
+function conflictBetween(left = {}, right = {}) {
+  const leftTargets = taskTargets(left);
+  const rightTargets = taskTargets(right);
+  const shared = intersects(leftTargets, rightTargets);
+  if (shared.length > 0) {
+    return {
+      code: "PARALLEL_FILE_SCOPE_CONFLICT",
+      message: "Tasks modify overlapping scope targets and cannot run in the same wave.",
+      task_ids: [taskId(left), taskId(right)],
+      files: shared,
+    };
+  }
+  if (isExclusiveTask(left) || isExclusiveTask(right)) {
+    return {
+      code: "PARALLEL_EXCLUSIVE_TASK",
+      message: "Unscoped or explicitly serial tasks cannot share a parallel wave.",
+      task_ids: [taskId(left), taskId(right)],
+      files: [],
+    };
+  }
+  return null;
+}
+
+export function detectParallelConflicts(tasks = []) {
+  const conflicts = [];
+  for (let leftIndex = 0; leftIndex < tasks.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < tasks.length; rightIndex += 1) {
+      const conflict = conflictBetween(tasks[leftIndex], tasks[rightIndex]);
+      if (conflict) conflicts.push(conflict);
+    }
+  }
+  return conflicts;
+}
+
+export function buildTaskDependencyGraph(input = {}) {
+  const tasks = asArray(input.tasks || input.prd?.tasks).filter((task) => taskId(task));
+  const ids = new Set(tasks.map(taskId));
+  const nodes = tasks.map((task) => {
+    const dependencies = taskDependencies(task);
+    const targets = taskTargets(task);
+    return {
+      id: taskId(task),
+      status: taskStatus(task),
+      dependencies,
+      missing_dependencies: dependencies.filter((dependency) => !ids.has(dependency)),
+      targets,
+      exclusive: isExclusiveTask(task),
+      agent_id: agentForTask(task),
+      runnable: taskCanRun(task),
+    };
+  });
+  const edges = nodes.flatMap((node) => node.dependencies.map((dependency) => ({
+    from: dependency,
+    to: node.id,
+  })));
+  const missing = nodes.flatMap((node) => node.missing_dependencies.map((dependency) => ({
+    code: "TASK_DEPENDENCY_MISSING",
+    message: "Task depends on an id that is not present in the PRD.",
+    task_id: node.id,
+    dependency_id: dependency,
+  })));
+  return {
+    schema_version: CONTROLLED_PARALLEL_SCHEMA_VERSION,
+    schema: "yolo.runtime.task_dependency_graph.v1",
+    nodes,
+    edges,
+    blockers: missing,
+  };
+}
+
+function canJoinWave(task, waveTasks) {
+  return !waveTasks.some((existing) => conflictBetween(task, existing));
+}
+
+function worktreeForTask({ task, waveIndex, worktreeRoot }) {
+  const id = taskId(task);
+  return {
+    task_id: id,
+    path: `${worktreeRoot}/${id}`,
+    branch: `yolo-${id}-wave-${waveIndex}`,
+    isolation: "git_worktree",
+    merge_back: "copy_scoped_files_after_gate",
+  };
+}
+
+function waveRecord({ waveIndex, tasks, worktreeRoot }) {
+  const conflicts = detectParallelConflicts(tasks);
+  return {
+    id: `wave-${String(waveIndex).padStart(2, "0")}`,
+    index: waveIndex,
+    status: conflicts.length > 0 ? "blocked" : "planned",
+    task_ids: tasks.map(taskId),
+    agents: tasks.map((task) => ({
+      task_id: taskId(task),
+      agent_id: agentForTask(task),
+      may_edit_code: agentForTask(task) === "implementer-agent",
+    })),
+    worktrees: tasks.map((task) => worktreeForTask({ task, waveIndex, worktreeRoot })),
+    merge_gate: {
+      required_after_wave: ["task_result_pass", "post_conditions_pass", "scope_merge_clean", "review_or_skip_recorded", "evidence_recorded"],
+      fail_closed: true,
+    },
+    conflicts,
+  };
+}
+
+export function planControlledParallelWaves(input = {}, options = {}) {
+  const projectRoot = clean(input.projectRoot || input.project_root || options.projectRoot || options.project_root || process.cwd());
+  const worktreeRoot = normalizePath(input.worktreeRoot || input.worktree_root || options.worktreeRoot || options.worktree_root || `${projectRoot}/../.yolo-worktrees`);
+  const graph = buildTaskDependencyGraph(input);
+  const tasks = asArray(input.tasks || input.prd?.tasks).filter((task) => taskId(task) && taskCanRun(task));
+  const taskById = new Map(tasks.map((task) => [taskId(task), task]));
+  const completed = new Set(asArray(input.completedTaskIds || input.completed_task_ids));
+  for (const node of graph.nodes) {
+    if (!taskCanRun({ status: node.status })) completed.add(node.id);
+  }
+  const planned = new Set();
+  const waves = [];
+  const blockers = [...graph.blockers];
+  let guard = 0;
+
+  while (planned.size < tasks.length && guard < tasks.length + 5) {
+    guard += 1;
+    const ready = tasks.filter((task) => {
+      const id = taskId(task);
+      if (planned.has(id)) return false;
+      return taskDependencies(task).every((dependency) => completed.has(dependency) || planned.has(dependency));
+    });
+    if (ready.length === 0) break;
+
+    const waveTasks = [];
+    for (const task of ready) {
+      if (canJoinWave(task, waveTasks)) waveTasks.push(task);
+    }
+    if (waveTasks.length === 0) break;
+
+    const waveIndex = waves.length + 1;
+    const wave = waveRecord({ waveIndex, tasks: waveTasks, worktreeRoot });
+    waves.push(wave);
+    for (const task of waveTasks) planned.add(taskId(task));
+  }
+
+  const unscheduled = tasks.filter((task) => !planned.has(taskId(task)));
+  for (const task of unscheduled) {
+    const dependencies = taskDependencies(task);
+    const missing = dependencies.filter((dependency) => !taskById.has(dependency) && !completed.has(dependency));
+    blockers.push({
+      code: missing.length > 0 ? "TASK_DEPENDENCY_MISSING" : "TASK_DEPENDENCY_CYCLE_OR_BLOCKED",
+      message: missing.length > 0
+        ? "Task has missing dependencies and cannot be scheduled."
+        : "Task dependencies cannot be satisfied without a cycle or blocked predecessor.",
+      task_id: taskId(task),
+      dependencies,
+      missing_dependencies: missing,
+    });
+  }
+
+  const waveConflicts = waves.flatMap((wave) => wave.conflicts.map((conflict) => ({ ...conflict, wave_id: wave.id })));
+  const status = blockers.length > 0 || waveConflicts.length > 0 ? "blocked" : "pass";
+  return {
+    schema_version: CONTROLLED_PARALLEL_SCHEMA_VERSION,
+    schema: CONTROLLED_PARALLEL_PLAN_SCHEMA,
+    status,
+    project_root: projectRoot,
+    worktree_root: worktreeRoot,
+    task_count: tasks.length,
+    wave_count: waves.length,
+    graph,
+    waves,
+    blockers: [...blockers, ...waveConflicts],
+    policies: {
+      dependency_policy: "dependencies must be completed in a prior planned wave",
+      conflict_policy: "overlapping target files or exclusive/unscoped tasks cannot share a wave",
+      merge_policy: "each wave must pass merge gate before the next wave starts",
+      rollback_policy: "failed wave worktrees are removed without copying files back to mainline",
+      retry_policy: "retry only the failed task or wave after fixing the blocker; do not continue later waves",
+      escalation_policy: "stop on missing dependency, repeated gate failure, merge conflict, or review blocker",
+    },
+    next_actions: status === "pass"
+      ? ["Execute waves sequentially; tasks inside each wave may run in isolated worktrees, then pass the merge gate before the next wave."]
+      : ["Fix dependency or conflict blockers before enabling parallel execution."],
+  };
+}
+
+export const buildControlledParallelExecutionPlan = planControlledParallelWaves;
+
+function reportForTask(taskIdValue, taskReports = []) {
+  return taskReports.find((report) => clean(report.task_id || report.taskId || report.id) === taskIdValue);
+}
+
+function statusIsPass(value) {
+  return ["pass", "passed", "success", "completed", "done"].includes(clean(value).toLowerCase());
+}
+
+export function inspectParallelMergeGate(input = {}, options = {}) {
+  const wave = input.wave || {};
+  const taskReports = asArray(input.taskReports || input.task_reports || options.taskReports || options.task_reports);
+  const blockers = [];
+  const taskChecks = asArray(wave.task_ids).map((id) => {
+    const report = reportForTask(id, taskReports);
+    const gateStatus = report?.gate_status || report?.gate?.status || report?.post_conditions_status || report?.status;
+    const reviewStatus = report?.review_status || report?.review?.status || (report?.review_skipped === true ? "pass" : report?.status);
+    const scopeClean = report?.scope_merge_clean !== false && asArray(report?.out_of_scope_files).length === 0;
+    const evidenceRecorded = asArray(report?.evidence_refs || report?.artifacts || report?.evidence).length > 0;
+    const passed = Boolean(report) && statusIsPass(report.status) && statusIsPass(gateStatus) && statusIsPass(reviewStatus) && scopeClean && evidenceRecorded;
+    if (!report) blockers.push({ code: "PARALLEL_TASK_REPORT_MISSING", message: "Wave task is missing a task report.", task_id: id });
+    else if (!statusIsPass(report.status)) blockers.push({ code: "PARALLEL_TASK_NOT_PASS", message: "Wave task did not complete successfully.", task_id: id, status: report.status });
+    else if (!statusIsPass(gateStatus)) blockers.push({ code: "PARALLEL_GATE_NOT_PASS", message: "Wave task gate did not pass.", task_id: id, gate_status: gateStatus });
+    else if (!statusIsPass(reviewStatus)) blockers.push({ code: "PARALLEL_REVIEW_NOT_PASS", message: "Wave task review did not pass or record a skip.", task_id: id, review_status: reviewStatus });
+    else if (!scopeClean) blockers.push({ code: "PARALLEL_SCOPE_MERGE_DIRTY", message: "Wave task merge had out-of-scope files.", task_id: id, out_of_scope_files: report.out_of_scope_files || [] });
+    else if (!evidenceRecorded) blockers.push({ code: "PARALLEL_EVIDENCE_MISSING", message: "Wave task is missing evidence references.", task_id: id });
+    return {
+      task_id: id,
+      passed,
+      status: report?.status || "missing",
+      gate_status: gateStatus || "missing",
+      review_status: reviewStatus || "missing",
+      scope_merge_clean: scopeClean,
+      evidence_recorded: evidenceRecorded,
+    };
+  });
+  for (const conflict of asArray(input.conflicts || wave.conflicts)) {
+    blockers.push({ ...conflict, code: conflict.code || "PARALLEL_WAVE_CONFLICT" });
+  }
+  const status = blockers.length > 0 ? "blocked" : "pass";
+  return {
+    schema_version: CONTROLLED_PARALLEL_SCHEMA_VERSION,
+    schema: CONTROLLED_PARALLEL_MERGE_GATE_SCHEMA,
+    status,
+    wave_id: wave.id || null,
+    task_checks: taskChecks,
+    blockers,
+    next_actions: status === "pass"
+      ? ["Merge scoped files, record wave evidence, then continue to the next wave."]
+      : ["Stop this wave, discard failed worktrees, and retry only after blockers are fixed."],
+  };
+}
+
+export function mergeParallelEvidence(input = {}, options = {}) {
+  const waves = asArray(input.waves || input.plan?.waves || options.waves);
+  const taskReports = asArray(input.taskReports || input.task_reports || options.taskReports || options.task_reports);
+  const waveReports = waves.map((wave) => inspectParallelMergeGate({ wave, taskReports }));
+  const blockers = waveReports.flatMap((report) => report.blockers.map((blocker) => ({ ...blocker, wave_id: report.wave_id })));
+  const artifacts = [...new Set(taskReports.flatMap((report) => asArray(report.evidence_refs || report.artifacts || report.evidence)))];
+  return {
+    schema_version: CONTROLLED_PARALLEL_SCHEMA_VERSION,
+    schema: CONTROLLED_PARALLEL_EVIDENCE_SCHEMA,
+    status: blockers.length > 0 ? "blocked" : "pass",
+    wave_count: waves.length,
+    task_report_count: taskReports.length,
+    wave_reports: waveReports,
+    blockers,
+    artifacts,
+    summary: {
+      waves_passed: waveReports.filter((report) => report.status === "pass").length,
+      waves_blocked: waveReports.filter((report) => report.status === "blocked").length,
+      artifacts: artifacts.length,
+    },
+    next_actions: blockers.length === 0
+      ? ["Attach merged evidence to the run report and continue review/acceptance."]
+      : ["Do not merge later waves until blocked wave evidence is fixed."],
+  };
+}
+
+export function formatControlledParallelPlanText(plan = {}) {
+  const lines = [`[yolo parallel] ${plan.status}: ${plan.wave_count || 0} wave(s), ${plan.task_count || 0} task(s)`];
+  for (const wave of asArray(plan.waves)) {
+    lines.push(`- ${wave.id}: ${wave.task_ids.join(", ")} (${wave.status})`);
+  }
+  for (const blocker of asArray(plan.blockers).slice(0, 10)) {
+    lines.push(`blocker: ${blocker.code}${blocker.task_id ? ` task=${blocker.task_id}` : ""} ${blocker.message || ""}`.trim());
+  }
+  if (plan.next_actions?.length) {
+    lines.push("next:");
+    for (const action of plan.next_actions) lines.push(`  - ${action}`);
+  }
+  return lines.join("\n");
+}

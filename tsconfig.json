@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": ".",
+    "outDir": "dist",
+    "declaration": true,
+    "sourceMap": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "noCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": [
+    "*.ts",
+    "bin/**/*.ts",
+    "hooks/**/*.ts",
+    "lib/**/*.ts",
+    "scripts/**/*.ts",
+    "skills/**/*.ts",
+    "src/**/*.ts",
+    "tools/**/*.ts",
+    "fixtures/**/*.ts"
+  ],
+  "exclude": [
+    "__tests__",
+    ".yolo",
+    "dist",
+    "node_modules"
+  ]
+}

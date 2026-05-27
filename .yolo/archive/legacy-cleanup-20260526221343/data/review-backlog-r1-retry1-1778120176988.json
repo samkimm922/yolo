@@ -1,0 +1,101 @@
+{
+  "version": "2.0",
+  "title": "修复全部 tsc 类型错误 — 补修R1-重试1",
+  "source": "/tmp/tsc-audit.json",
+  "generated_at": "2026-05-06T18:19:50.909Z",
+  "tasks": [
+    {
+      "id": "BUG-R-243",
+      "title": "拆分 sales/index.tsx（136 行）",
+      "type": "bugfix",
+      "description": "将 136 行的页面拆分为：SalesList、SalesFilters、SalesStats",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/sales/index.tsx"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/pages/sales/index.tsx",
+            "text": "const dateRange = useMemo"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/pages/sales/index.tsx",
+            "text": "const dateRange = useMemo"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "新组件文件 < 80 行",
+        "主文件 < 80 行",
+        "功能无变化",
+        "截图对比无差异"
+      ],
+      "status": "failed",
+      "task_kind": "review_fix",
+      "phase": "claude",
+      "updatedAt": "2026-05-07T02:16:16.990Z",
+      "failReason": "claude 退出失败: "
+    },
+    {
+      "id": "BUG-R-246",
+      "title": "拆分 SeriesForm.tsx（133 行）",
+      "type": "bugfix",
+      "description": "将 133 行的组件拆分为：SeriesBasicInfo、SeriesImageUpload、SeriesMeta",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/series/components/SeriesForm.tsx"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/pages/series/components/SeriesForm.tsx",
+            "text": "return ("
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/pages/series/components/SeriesForm.tsx",
+            "text": "return ("
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "新组件文件 < 70 行",
+        "主文件 < 70 行",
+        "功能无变化",
+        "截图对比无差异"
+      ],
+      "status": "pending",
+      "task_kind": "review_fix"
+    }
+  ]
+}

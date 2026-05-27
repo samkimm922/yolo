@@ -1,0 +1,44 @@
+{
+  "id": "frontend-vite",
+  "type": "frontend-vite",
+  "label": "Frontend Vite fixture",
+  "description": "Minimal Vite-style frontend fixture with dependency-free node:test smoke validation.",
+  "files": [
+    "package.json",
+    "prd.json",
+    "src/counter.ts",
+    "test/counter.test.ts"
+  ],
+  "project": {
+    "language": "javascript",
+    "package_manager": "npm",
+    "framework": "vite",
+    "test_framework": "node:test"
+  },
+  "requirement": {
+    "id": "REQ-VITE-001",
+    "text": "Expose a counter label helper for frontend rendering."
+  },
+  "spec": {
+    "id": "SPEC-VITE-001",
+    "requirement_id": "REQ-VITE-001",
+    "design_id": "DES-VITE-001",
+    "task_id": "FIX-VITE-001"
+  },
+  "task": {
+    "id": "FIX-VITE-001",
+    "prd": "prd.json"
+  },
+  "run": {
+    "mode": "dry-run",
+    "supports_dry_run": true,
+    "commands": [
+      "npm test"
+    ]
+  },
+  "evidence": {
+    "expected": [
+      "state/evidence/FIX-VITE-001/run.json"
+    ]
+  }
+}

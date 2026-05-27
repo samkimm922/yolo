@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-05-08T22:54:09.674Z",
+  "summary": {
+    "total_tasks": 37,
+    "completed": 32,
+    "failed": 0,
+    "overall_success_rate": 0.865
+  },
+  "lessons_summary": {
+    "total": 37,
+    "pass": 32,
+    "partial": 5,
+    "fail": 0,
+    "pass_rate": 0.865
+  },
+  "phrases": [
+    {
+      "phrase": "≤ 200 行",
+      "used_count": 31,
+      "success_rate": 0
+    },
+    {
+      "phrase": "包含 must_use/must_not_use 约束提醒",
+      "used_count": 9,
+      "success_rate": 0
+    },
+    {
+      "phrase": "包含 SPLIT_TASK 拆分指令",
+      "used_count": 37,
+      "success_rate": 0.865
+    }
+  ],
+  "top_failure_gates": [
+    {
+      "gate": "File Scope Guard",
+      "count": 29
+    },
+    {
+      "gate": "PRD Constraints (must_use/must_not_use)",
+      "count": 5
+    },
+    {
+      "gate": "PRD Constraints (must_use/must_not_use 三层语义)",
+      "count": 4
+    }
+  ],
+  "recommendations": [
+    "\"File Scope Guard\" 失败 29 次，建议放宽行数限制到 ≤ 200 行或加强拆分提示",
+    "当前 prompt 未要求根因分析，建议添加\"修改前必须先分析根本原因\"的指令"
+  ],
+  "prompt_snapshot": {
+    "has_split_task": true,
+    "has_must_use": true,
+    "has_root_cause": false,
+    "line_limit": 200
+  }
+}

@@ -1,0 +1,1818 @@
+{
+  "title": "全量审查 Bugfix — 207 个问题 / 74 个任务",
+  "description": "基于 review-code(121) + review-service(198) + review-security(6) 合并去重后，过滤信息性条目，实际需修复 207 个问题",
+  "tasks": [
+    {
+      "id": "BUG-FULL-001",
+      "title": "[CRITICAL] 修复 src/pages/sales/components/SalesHero.tsx (2个问题)",
+      "description": "文件 src/pages/sales/components/SalesHero.tsx 存在以下问题，需全部修复:\n  1. [CRITICAL] 第20行: Math.random() 直接在 JSX render 中调用，导致每次 render 结果非确定性，可能引发 hydration mismatch 和 UI 闪烁\n  2. [CRITICAL] 第25行: Math.random() 直接在 JSX render 中调用，导致每次 render 结果非确定性",
+      "type": "bugfix",
+      "priority": "P1",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/sales/components/SalesHero.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 18
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-002",
+      "title": "[CRITICAL] 修复 src/hooks/use-quick-entry.ts (6个问题)",
+      "description": "文件 src/hooks/use-quick-entry.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第85行: Hook 中直接调用 Taro.cloud.database()，违反 R12（页面/Hook 禁止直调 DB，应走 service 层）\n  2. [HIGH] 第81行: 空 catch 块吞掉错误，失败时无日志、无用户反馈\n  3. [HIGH] 第101行: 空 catch 块吞掉回滚失败错误\n  4. [CRITICAL] 第85行: Hook 直接调用 wx.cloud.database()（Taro.cloud.database()），绕过 service 层。撤销逻辑中直接用 Taro.cloud.database() 和 db.collection() 操作 inventory，违反 R12（页面/Hook 禁直调 DB，必须走 service 层）。\n  5. [HIGH] 第16行: useQuickEntry 返回的对象中 undoLastEntry 使用 useCallback，但依赖数组中只有 [qc]，而函数内部使用了 inventoryService.deleteInventory 和 Taro.cloud.database()，这些不是 reactive 依赖，逻辑正确。\n  6. [HIGH] 第101行: 内层 catch 块静默吞掉错误（注释为'回滚失败，静默放弃'）。虽然此处在执行补偿性回滚操作（尝试恢复已删除的 inventory 记录），但完全静默忽略失败会导致数据不一致时没有任何日志或告警，运维无法感知回滚失败。",
+      "type": "bugfix",
+      "priority": "P1",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/hooks/use-quick-entry.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 34
+      },
+      "post_conditions": [
+        {
+          "id": "POST-MUST-1",
+          "type": "code_contains",
+          "params": {
+            "text": "logger.error",
+            "file": "src/hooks/use-quick-entry.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": []
+    },
+    {
+      "id": "BUG-FULL-032",
+      "title": "[CRITICAL] 修复 src/pages/categories/categories.tsx (2个问题)",
+      "description": "文件 src/pages/categories/categories.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: 深层嵌套超过 4 层（最大 7 层）\n  2. [CRITICAL] 第5行: 页面直接调用 service（categoriesService），未通过 hooks。categories.tsx 直接 import categoriesService 并调用 updateCategory/createCategory/deleteCategory，违反 R1（页面只做编排，业务逻辑在 service/hooks）和 R5（数据获取用 TanStack Query）。",
+      "type": "bugfix",
+      "priority": "P1",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/categories/categories.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 18
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-042",
+      "title": "[CRITICAL] 修复 src/pages/products/products.useProductActions.ts (2个问题)",
+      "description": "文件 src/pages/products/products.useProductActions.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: 深层嵌套超过 4 层（最大 6 层）\n  2. [CRITICAL] 第2行: 页面（自定义 hook 文件位于 pages 目录）直接调用 service（cardService），未通过 hooks。products.useProductActions.ts 直接 import cardService 并调用 updateProductCard/createProductCard/deleteCard，违反 R1 和 R5。",
+      "type": "bugfix",
+      "priority": "P1",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/products/products.useProductActions.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 18
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-052",
+      "title": "[CRITICAL] 修复 src/pages/series/series.tsx (1个问题)",
+      "description": "文件 src/pages/series/series.tsx 存在以下问题，需全部修复:\n  1. [CRITICAL] 第4行: 页面直接调用 service（seriesService），未通过 hooks。series.tsx 直接 import seriesService 并调用 updateSeries/createSeries/deleteSeries，违反 R1 和 R5。",
+      "type": "bugfix",
+      "priority": "P1",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/series/series.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-003",
+      "title": "[HIGH] 修复 src/utils/navigation.ts (1个问题)",
+      "description": "文件 src/utils/navigation.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第16行: doNavigate 函数超过 50 行（约 70 行），职责过重",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/utils/navigation.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-004",
+      "title": "[HIGH] 修复 src/services/sale.service.ts (7个问题)",
+      "description": "文件 src/services/sale.service.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第48行: 类型断言滥用：as Sale[]\n  2. [HIGH] 第54行: 类型断言滥用：as unknown as Sale\n  3. [HIGH] 第1行: 深层嵌套超过 4 层（最大 8 层）\n  4. [HIGH] 第55行: 空 catch 块吞掉错误：getSaleById 中 catch 后直接 return null，没有记录日志。\n  5. [HIGH] 第84行: createSale 使用 db.runTransaction，但 transaction.collection 返回的类型在 global.d.ts 中可能未完全定义，存在运行时类型风险。\n  6. [HIGH] 第60行: createSale 中 sale_date 使用 (sanitized.sale_date as number | Date) ?? now，如果传入的是 Date 对象，而数据库中存储的是 number（timestamp），类型不一致可能导致查询问题。\n  7. [HIGH] 第22行: sale.service.ts 中 GetSalesOptions 的 start_date 和 end_date 是 Date 类型，但 filter 中使用 start_date.getTime()，如果传入的是字符串或其他类型，会抛出错误，缺乏输入验证。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/sale.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 38
+      },
+      "post_conditions": [
+        {
+          "id": "POST-MUST-1",
+          "type": "code_contains",
+          "params": {
+            "text": "logger.error",
+            "file": "src/services/sale.service.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": []
+    },
+    {
+      "id": "BUG-FULL-005",
+      "title": "[HIGH] 修复 src/services/batch-stockin.service.ts (8个问题)",
+      "description": "文件 src/services/batch-stockin.service.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第28行: 类型断言滥用：as Record<string, unknown>\n  2. [HIGH] 第51行: 类型断言滥用：as Card[]\n  3. [HIGH] 第95行: 类型断言滥用：as StorageContainer[]\n  4. [HIGH] 第1行: 深层嵌套超过 4 层（最大 7 层）\n  5. [HIGH] 第87行: batchStockIn 使用 db.runTransaction，但 existRes.data[0] 类型为 unknown，做了 Record<string, unknown> 断言，存在类型风险。\n  6. [HIGH] 第14行: fetchAllFromCollection 中 maxIterations=10000 过大，虽然实际受数据量限制，但极端情况下可能导致长时间运行，且没有超时控制。\n  7. [HIGH] 第99行: batchStockIn 中 avgCost 计算与 stockIn.service.ts 相同，存在浮点数精度问题。\n  8. [HIGH] 第62行: batchStockIn 中 valid 数组逐个处理，每条记录一个事务，如果批量导入 1000 条，会产生 1000 个事务，性能极差。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/batch-stockin.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 42
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-006",
+      "title": "[HIGH] 修复 src/services/dashboard.ts (3个问题)",
+      "description": "文件 src/services/dashboard.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: 深层嵌套超过 4 层（最大 8 层）\n  2. [HIGH] 第1行: 新旧服务混用：存在两个 dashboardService（src/services/dashboard.ts 和 src/services/dashboard.service.ts）。dashboard.service.ts 导出的是 dashboard/index.ts 中的实现，而 dashboard.ts 是独立的旧实现，两者功能重叠。\n  3. [HIGH] 第1行: dashboard.ts（旧实现）和 dashboard.service.ts（新实现）同时存在，且 dashboard.ts 中使用了 typedCollection 但 dashboard-alerts.ts 中没有，实现风格不一致。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 22
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-007",
+      "title": "[HIGH] 修复 src/services/dashboard-stats.ts (3个问题)",
+      "description": "文件 src/services/dashboard-stats.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第45行: 类型断言滥用：as Record<string, boolean>\n  2. [HIGH] 第49行: 类型断言滥用：as SR[]\n  3. [HIGH] 第62行: 类型断言滥用：as Inventory[]",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard-stats.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 22
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-008",
+      "title": "[HIGH] 修复 src/services/dashboard-alerts.ts (6个问题)",
+      "description": "文件 src/services/dashboard-alerts.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第17行: 类型断言滥用：as Inventory[]\n  2. [HIGH] 第36行: 类型断言滥用：as Card[]\n  3. [HIGH] 第39行: 类型断言滥用：as Series[]\n  4. [HIGH] 第44行: 类型断言滥用：as StockInRecord[]\n  5. [HIGH] 第47行: 类型断言滥用：as StockOutRecord[]\n  6. [HIGH] 第51行: 类型断言滥用：as Sale[]",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard-alerts.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 34
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-009",
+      "title": "[HIGH] 修复 src/services/card.service.ts (批次 1/2)",
+      "description": "文件 src/services/card.service.ts 存在以下问题（批次 1/2）:\n  1. [HIGH] 第52行: 类型断言滥用：as Card[]\n  2. [HIGH] 第58行: 类型断言滥用：as unknown as Card\n  3. [HIGH] 第58行: 空 catch 块吞掉错误\n  4. [HIGH] 第72行: 类型断言滥用：as { errMsg?: string }\n  5. [HIGH] 第58行: 空 catch 块吞掉错误：getCardById 中 catch 后直接 return null，没有记录日志。\n  6. [HIGH] 第51行: getCards 查询硬编码 limit(100)，没有分页参数，当卡片数量超过 100 时会导致数据截断。\n  7. [HIGH] 第33行: mapProductFormToCard 中 barcode 映射到 card_number，但 ProductFormData 中 barcode 是 string 类型，card_number 也是 string 类型，映射正确。但 rarity 硬编码为 'Base'，category 硬编码为 '现役'，可能不符合业务需求。\n  8. [HIGH] 第63行: createCard 中 catch 块处理 duplicate key error，但 errMsg 的匹配逻辑依赖数据库错误消息字符串，如果微信云数据库升级修改错误消息格式，该逻辑会失效。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/card.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 50
+      },
+      "post_conditions": [
+        {
+          "id": "POST-MUST-1",
+          "type": "code_contains",
+          "params": {
+            "text": "logger.error",
+            "file": "src/services/card.service.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": []
+    },
+    {
+      "id": "BUG-FULL-010",
+      "title": "[HIGH] 修复 src/services/card.service.ts (批次 2/2)",
+      "description": "文件 src/services/card.service.ts 存在以下问题（批次 2/2）:\n  1. [HIGH] 第11行: GetCardsOptions 中 rarity 和 category 使用 Rarity 和 CardCategory 类型，但 filter 构建时直接赋值，没有验证值是否在枚举范围内，可能传入无效值。\n  2. [HIGH] 第88行: createProductCard 使用 this.createCard，但 cardService 是对象字面量，this 指向正确。但如果解构调用（如 const { createProductCard } = cardService; createProductCard(...)），this 会丢失。\n  3. [HIGH] 第92行: updateProductCard 同样使用 this.updateCard，存在 this 绑定风险。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/card.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 50
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-011",
+      "title": "[HIGH] 修复 src/services/brand.service.ts (6个问题)",
+      "description": "文件 src/services/brand.service.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第19行: 类型断言滥用：as Brand[]\n  2. [HIGH] 第25行: 类型断言滥用：as unknown as Brand\n  3. [HIGH] 第26行: 空 catch 块吞掉错误\n  4. [HIGH] 第26行: 空 catch 块吞掉错误：getBrandById 中 catch 后直接 return null，没有记录日志。\n  5. [HIGH] 第15行: getBrands 查询硬编码 limit(100)，没有分页参数，当品牌数量超过 100 时会导致数据截断。\n  6. [HIGH] 第8行: BrandCreateDTO 使用 Partial<Omit<Brand, '_id' | 'created_at' | 'updated_at'>> & { name: string }，但 createBrand 中只验证了 name.trim()，没有验证其他字段（如 logo_url 格式、description 长度等）。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/brand.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 34
+      },
+      "post_conditions": [
+        {
+          "id": "POST-MUST-1",
+          "type": "code_contains",
+          "params": {
+            "text": "logger.error",
+            "file": "src/services/brand.service.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": []
+    },
+    {
+      "id": "BUG-FULL-012",
+      "title": "[HIGH] 修复 src/services/series.service.ts (6个问题)",
+      "description": "文件 src/services/series.service.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第30行: 类型断言滥用：as Series[]\n  2. [HIGH] 第36行: 类型断言滥用：as unknown as Series\n  3. [HIGH] 第37行: 空 catch 块吞掉错误\n  4. [HIGH] 第37行: 空 catch 块吞掉错误：getSeriesById 中 catch 后直接 return null，没有记录日志，调试时无法追踪查询失败原因。\n  5. [HIGH] 第19行: getSeries 查询硬编码 pageSize=20 且没有总页数或 hasMore 返回，当系列数量超过 20 时页面可能只显示部分数据。\n  6. [HIGH] 第7行: series.service.ts 中 SERIES_CREATE_FIELDS 包含 'brand_id'，但旧 series.ts 中没有 brand_id，两个服务的数据模型不一致。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/series.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 34
+      },
+      "post_conditions": [
+        {
+          "id": "POST-MUST-1",
+          "type": "code_contains",
+          "params": {
+            "text": "logger.error",
+            "file": "src/services/series.service.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": []
+    },
+    {
+      "id": "BUG-FULL-013",
+      "title": "[HIGH] 修复 src/services/categories.ts (6个问题)",
+      "description": "文件 src/services/categories.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第19行: 类型断言滥用：as Category[]\n  2. [HIGH] 第38行: 类型断言滥用：as unknown as Category\n  3. [HIGH] 第38行: 空 catch 块吞掉错误\n  4. [HIGH] 第1行: 新旧服务混用：categories.ts 操作旧集合 categories（已标记 @deprecated），但 pages/categories/categories.tsx 和 hooks/use-stats.ts 仍在使用。新数据模型使用 brands 集合替代 categories，存在数据模型不一致风险。\n  5. [HIGH] 第30行: 空 catch 块吞掉错误：categories.ts 中所有方法（getCategories/createCategory/updateCategory/deleteCategory）的 catch 块都直接 throw new Error('...')，没有记录原始错误日志，丢失根因信息。\n  6. [HIGH] 第15行: getCategories 查询硬编码 limit(100)，没有分页参数。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/categories.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 34
+      },
+      "post_conditions": [
+        {
+          "id": "POST-MUST-1",
+          "type": "code_contains",
+          "params": {
+            "text": "logger.error",
+            "file": "src/services/categories.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": []
+    },
+    {
+      "id": "BUG-FULL-014",
+      "title": "[HIGH] 修复 src/services/items.ts (4个问题)",
+      "description": "文件 src/services/items.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第15行: 类型断言滥用：as unknown as Record<string, unknown>\n  2. [HIGH] 第1行: 废弃服务仍在代码库中：items.ts 操作旧集合 blindbox_items（已标记 @deprecated），虽然当前没有页面直接引用 itemsService，但文件未被删除，存在未来被误引用的风险（参考 lessons.md BUGFIX-002 的教训）。\n  3. [HIGH] 第1行: items.ts 中所有方法都使用 try-catch，但 catch 块中 logger.error 后直接 throw error，虽然记录了日志，但错误信息没有包装成用户友好的消息，直接抛出原始错误可能包含敏感信息。\n  4. [HIGH] 第56行: items.ts 中 createItem 设置了 rarity: (sanitized.rarity as string) || 'R'，但新数据模型中 Rarity 类型为 'Base' | 'Black' | 'Blue' | 'Gold' | 'Purple' | 'Red' | 'Aqua'，'R' 不是有效值。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/items.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 26
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-015",
+      "title": "[HIGH] 修复 src/services/inventory/inventory-query.ts (4个问题)",
+      "description": "文件 src/services/inventory/inventory-query.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第24行: 类型断言滥用：as Inventory[]\n  2. [HIGH] 第14行: getInventory 中 BATCH_LIMIT=20 且 MAX_ITERATIONS=500，但 requestedPageSize 可能大于 BATCH_LIMIT，此时进入全量分页模式，但循环中没有处理 filter 变化，且 throttle 50ms 可能不必要地延迟大数据量查询。\n  3. [HIGH] 第8行: getInventory 中 filter 使用 Record<string, unknown>，但 options 中的 card_id 和 container_id 是 string 类型，类型安全性不足。\n  4. [HIGH] 第15行: getInventory 中正确区分了单页模式（pageSize <= 20）和全量模式（pageSize > 20），但 normalizePagination（来自 pagination.ts）允许 pageSize 最大 100，如果其他 service 直接使用 normalizePagination 而不做二次限制，会出问题。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/inventory/inventory-query.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 26
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-016",
+      "title": "[HIGH] 修复 src/services/inventory/inventory-mutation.ts (5个问题)",
+      "description": "文件 src/services/inventory/inventory-mutation.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第12行: 类型断言滥用：as unknown as Record<string, unknown>\n  2. [HIGH] 第38行: 类型断言滥用：as { _id: string }\n  3. [HIGH] 第29行: deleteInventory 在删除 inventory 前先查询关联的 sales 和 stock_out，然后逐个删除 stock_in 记录，但没有使用事务保护，存在并发修改风险。\n  4. [HIGH] 第30行: deleteInventory 中 stockInRes.data 的类型为 unknown，逐个删除 stock_in 记录时使用了 (record as { _id: string })._id，类型断言不够安全。\n  5. [HIGH] 第36行: deleteInventory 中清理 stock_in 记录时，逐个调用 .remove()，如果关联记录很多，性能较差，且没有使用批量删除。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/inventory/inventory-mutation.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 30
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-017",
+      "title": "[HIGH] 修复 src/services/stock-in.service.ts (3个问题)",
+      "description": "文件 src/services/stock-in.service.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第30行: 类型断言滥用：as Record<string, unknown>\n  2. [HIGH] 第23行: stockIn 使用 db.runTransaction，但 existRes.data[0] 的类型为 unknown，虽然代码中做了 Record<string, unknown> 断言，但仍存在类型不安全风险。\n  3. [HIGH] 第37行: stockIn 中 avgCost 计算使用 Math.round(... * 100) / 100，精度为 2 位小数，但 cost_price 是 number 类型，JavaScript 浮点数精度可能导致微小误差累积。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stock-in.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 22
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-018",
+      "title": "[HIGH] 修复 src/services/stock-out.service.ts (5个问题)",
+      "description": "文件 src/services/stock-out.service.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第29行: 类型断言滥用：as typeof inventories\n  2. [HIGH] 第50行: 类型断言滥用：as Record<string, unknown>\n  3. [HIGH] 第42行: stockOut 使用 db.runTransaction，事务内先 get() 再 update()，逻辑正确，但 invDoc.data 类型为 unknown，存在类型断言风险。\n  4. [HIGH] 第17行: stockOut 中 sale_price 和 platform 是必填参数，但 addStockOut 函数（在 stock-out.ts 中）调用时 sale_price=0, platform='其他'，这种默认值可能不符合业务逻辑。\n  5. [HIGH] 第23行: stockOut 中 inventories 数组类型定义为 { _id: string; quantity: number; purchase_date?: unknown; cost_price?: unknown }[]，但 quantity 和 cost_price 来自事务外查询，可能被并发修改，虽然事务内会重新 get()，但类型定义暗示这些值是可信的，存在误导性。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stock-out.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 30
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-019",
+      "title": "[HIGH] 修复 src/services/stock-in.ts (5个问题)",
+      "description": "文件 src/services/stock-in.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第26行: 类型断言滥用：as unknown as Record<string, unknown>\n  2. [HIGH] 第35行: 类型断言滥用：as { _id: string; [key: string]: unknown }\n  3. [HIGH] 第41行: 类型断言滥用：as { _id: string }\n  4. [HIGH] 第1行: 废弃服务仍在代码库中：stock-in.ts 使用旧数据模型（item_id），虽然标记了 @deprecated，但文件存在且导出了 stockInService，可能与新的 stock-in.service.ts 混淆。\n  5. [HIGH] 第38行: 旧 stockInService（stock-in.ts）中 transaction.collection(COLLECTIONS.INVENTORY).where({ item_id: data.item_id }) 使用了旧字段 item_id，但新数据模型使用 card_id，如果该服务被误用，会导致查询不到记录。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stock-in.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 30
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-020",
+      "title": "[HIGH] 修复 src/services/stats-platform.service.ts (5个问题)",
+      "description": "文件 src/services/stats-platform.service.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第39行: 类型断言滥用：as { _id: string; sale_price: number; quantity: number; created_at: Date }[]\n  2. [HIGH] 第52行: 类型断言滥用：as { _id: string; cost_price: number }[]\n  3. [HIGH] 第44行: statsPlatformService 中 invPrices 查找逻辑与 statsTimeService 相同，如果 inventory 记录被删除，成本价 fallback 为 0，利润计算不准确。\n  4. [HIGH] 第19行: statsPlatformService 中 start_date 和 end_date 也是 Date 类型，同样缺乏输入验证。\n  5. [HIGH] 第32行: statsPlatformService 中 for 循环没有总数量限制，MAX_PAGES=500 但每页 20 条，最大 10000 条，如果 sales 集合超过 10000 条，数据会被截断但没有 truncated 标记。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stats-platform.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 30
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-021",
+      "title": "[HIGH] 修复 src/services/stats-time.service.ts (5个问题)",
+      "description": "文件 src/services/stats-time.service.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第48行: 类型断言滥用：as typeof allSales\n  2. [HIGH] 第38行: statsTimeService.getSalesStatsByTime 中 MAX_RECORDS = 250000（500*500），但 MAX_ROUNDS=500 和 BATCH=20 实际最大只取 10000 条，且 countRes.total 可能远大于实际获取量，truncated 标记可能不准确。\n  3. [HIGH] 第36行: statsTimeService 中 allSales 数组类型定义包含 inventory_id，但后续 profit 计算时从 invPrices Map 查找成本价，如果 inventory 记录已被删除，成本价会 fallback 为 0，导致利润计算不准确。\n  4. [HIGH] 第22行: statsTimeService 中 start_date 和 end_date 也是 Date 类型，同样缺乏输入验证。\n  5. [HIGH] 第41行: statsTimeService 中 for 循环条件 offset < countRes.total，但 countRes.total 可能很大（如数十万），而 MAX_RECORDS=10000，循环会在 allSales.length >= MAX_RECORDS 时停止，但 offset 仍然递增，可能导致不必要的跳过查询。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stats-time.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 30
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-022",
+      "title": "[HIGH] 修复 src/services/stats-ranking/stats-ranking.utils.ts (8个问题)",
+      "description": "文件 src/services/stats-ranking/stats-ranking.utils.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第19行: 类型断言滥用：as { _id: string; name: string; series_id: string }[]\n  2. [HIGH] 第32行: 类型断言滥用：as { _id: string; name: string }[]\n  3. [HIGH] 第42行: 类型断言滥用：as { card_id: string; quantity: number; created_at: Date }[]\n  4. [HIGH] 第25行: buildInvCardMap 中如果 inventory 记录缺少 card_id，会导致 cardDataMap 查找失败，最终该 sale 被跳过不计入统计，数据完整性风险。\n  5. [HIGH] 第16行: fetchSalesInRange 中 MAX_FETCH_ROUNDS=500，batchSize=20，最大 10000 条，但 isComplete 标记只在 allSales.length < MAX_FETCH_ROUNDS * batchSize 时为 true，如果数据量正好是 10000 条，isComplete 为 false，标记不准确。\n  6. [HIGH] 第82行: fetchInventoryWithCards 中 MAX_INV_ROUNDS=20，batchSize=20，最大 400 条 inventory 记录，如果库存记录超过 400 条，isComplete 为 false，但 slow moving 计算只基于这 400 条，数据不完整。\n  7. [HIGH] 第112行: fetchRecentSoldCardIds 中 MAX_SALES_ROUNDS=20，batchSize=20，最大 400 条销售记录，如果 30 天内销售记录超过 400 条，isComplete 为 false，recentSoldCardIds 不完整。\n  8. [HIGH] 第156行: fetchBatchLastSaleDates 中 MAX_SALES_ROUNDS=50，batchSize=20，最大 1000 条，但如果某个 slowInvId 对应的销售记录超过 1000 条，可能找不到最后销售日期。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stats-ranking/stats-ranking.utils.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 42
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-023",
+      "title": "[HIGH] 修复 src/services/migration-verify.service.ts (1个问题)",
+      "description": "文件 src/services/migration-verify.service.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第51行: 类型断言滥用：as { _id: string; series_id?: string; category_id?: string; brand_id?: string; storage_location_id?: string; storage_container_id?: string }",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/migration-verify.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-024",
+      "title": "[HIGH] 修复 src/services/brand-profile.service.ts (7个问题)",
+      "description": "文件 src/services/brand-profile.service.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第21行: 类型断言滥用：as BrandProfile[]\n  2. [HIGH] 第27行: 类型断言滥用：as unknown as BrandProfile\n  3. [HIGH] 第28行: 空 catch 块吞掉错误\n  4. [HIGH] 第28行: 空 catch 块吞掉错误：getBrandProfileById 中 catch 后直接 return null，没有记录日志。\n  5. [HIGH] 第17行: getBrandProfileList 查询硬编码 limit(100)，没有分页参数。\n  6. [HIGH] 第64行: deleteBrandProfile 中抛出错误消息 'BRAND_PROFILE_HAS_RELATIONS' 是硬编码的英文错误码，没有提供中文用户友好消息，前端展示体验差。\n  7. [HIGH] 第10行: BRAND_PROFILE_FIELDS 包含 'status' 和 'founded_year'，但 createBrandProfile 中没有验证 founded_year 是否为有效数字、status 是否为有效枚举值。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/brand-profile.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 38
+      },
+      "post_conditions": [
+        {
+          "id": "POST-MUST-1",
+          "type": "code_contains",
+          "params": {
+            "text": "logger.error",
+            "file": "src/services/brand-profile.service.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": []
+    },
+    {
+      "id": "BUG-FULL-025",
+      "title": "[HIGH] 修复 src/services/storage-container.service.ts (4个问题)",
+      "description": "文件 src/services/storage-container.service.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第22行: 类型断言滥用：as StorageContainer[]\n  2. [HIGH] 第30行: 类型断言滥用：as unknown as StorageContainer\n  3. [HIGH] 第30行: 空 catch 块吞掉错误\n  4. [HIGH] 第30行: 空 catch 块吞掉错误：getContainerById 中 catch 后直接 return null，没有记录日志。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/storage-container.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 26
+      },
+      "post_conditions": [
+        {
+          "id": "POST-MUST-1",
+          "type": "code_contains",
+          "params": {
+            "text": "logger.error",
+            "file": "src/services/storage-container.service.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": []
+    },
+    {
+      "id": "BUG-FULL-026",
+      "title": "[HIGH] 修复 src/services/storage-location.service.ts (5个问题)",
+      "description": "文件 src/services/storage-location.service.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第12行: 类型断言滥用：as StorageLocation[]\n  2. [HIGH] 第18行: 类型断言滥用：as unknown as StorageLocation\n  3. [HIGH] 第18行: 空 catch 块吞掉错误\n  4. [HIGH] 第18行: 空 catch 块吞掉错误：getLocationById 中 catch 后直接 return null，没有记录日志。\n  5. [HIGH] 第8行: getLocations 查询硬编码 limit(100)，没有分页参数。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/storage-location.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 30
+      },
+      "post_conditions": [
+        {
+          "id": "POST-MUST-1",
+          "type": "code_contains",
+          "params": {
+            "text": "logger.error",
+            "file": "src/services/storage-location.service.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": []
+    },
+    {
+      "id": "BUG-FULL-027",
+      "title": "[HIGH] 修复 src/pages/series/index.tsx (2个问题)",
+      "description": "文件 src/pages/series/index.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第40行: 空 catch 块吞掉错误\n  2. [HIGH] 第1行: 深层嵌套超过 4 层（最大 7 层）",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/series/index.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 18
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-028",
+      "title": "[HIGH] 修复 src/pages/series/edit.tsx (3个问题)",
+      "description": "文件 src/pages/series/edit.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第69行: 空 catch 块吞掉错误\n  2. [HIGH] 第1行: 深层嵌套超过 4 层（最大 6 层）\n  3. [HIGH] 第65行: 使用 Math.random().toString(36).slice(2) 生成云存储文件路径的随机部分。Math.random() 是可预测的伪随机数生成器，不适合用于文件命名/路径生成，攻击者可能预测文件名并尝试未授权访问。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/series/edit.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 22
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-029",
+      "title": "[HIGH] 修复 src/pages/brands/index.tsx (2个问题)",
+      "description": "文件 src/pages/brands/index.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第27行: 空 catch 块吞掉错误\n  2. [HIGH] 第1行: 深层嵌套超过 4 层（最大 6 层）",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/brands/index.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 18
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-030",
+      "title": "[HIGH] 修复 src/pages/brands/edit.tsx (3个问题)",
+      "description": "文件 src/pages/brands/edit.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第38行: 空 catch 块吞掉错误\n  2. [HIGH] 第1行: 深层嵌套超过 4 层（最大 6 层）\n  3. [HIGH] 第34行: 使用 Math.random().toString(36).slice(2) 生成云存储文件路径的随机部分。Math.random() 是可预测的伪随机数生成器，不适合用于文件命名/路径生成。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/brands/edit.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 22
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-031",
+      "title": "[HIGH] 修复 src/pages/cards/edit.tsx (3个问题)",
+      "description": "文件 src/pages/cards/edit.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第65行: 空 catch 块吞掉错误\n  2. [HIGH] 第1行: 深层嵌套超过 4 层（最大 6 层）\n  3. [HIGH] 第61行: 使用 Math.random().toString(36).slice(2) 生成云存储文件路径的随机部分。Math.random() 是可预测的伪随机数生成器，不适合用于文件命名/路径生成。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/cards/edit.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 22
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-033",
+      "title": "[HIGH] 修复 src/pages/locations/index.tsx (2个问题)",
+      "description": "文件 src/pages/locations/index.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第39行: 空 catch 块吞掉错误\n  2. [HIGH] 第1行: 深层嵌套超过 4 层（最大 7 层）",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/locations/index.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 18
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-034",
+      "title": "[HIGH] 修复 src/pages/locations/edit.tsx (1个问题)",
+      "description": "文件 src/pages/locations/edit.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第57行: 空 catch 块吞掉错误",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/locations/edit.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-035",
+      "title": "[HIGH] 修复 src/pages/containers/index.tsx (2个问题)",
+      "description": "文件 src/pages/containers/index.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第38行: 空 catch 块吞掉错误\n  2. [HIGH] 第1行: 深层嵌套超过 4 层（最大 7 层）",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/containers/index.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 18
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-036",
+      "title": "[HIGH] 修复 src/pages/containers/edit.tsx (1个问题)",
+      "description": "文件 src/pages/containers/edit.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第60行: 空 catch 块吞掉错误",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/containers/edit.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-037",
+      "title": "[HIGH] 修复 src/pages/batch-stockin/index.tsx (3个问题)",
+      "description": "文件 src/pages/batch-stockin/index.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第78行: 空 catch 块吞掉错误\n  2. [HIGH] 第1行: 深层嵌套超过 4 层（最大 6 层）\n  3. [HIGH] 第8行: batch-stockin/index.tsx 使用 validateStockInData（来自 batch-stockin-template.ts）和 batchStockIn（来自 batch-stockin.service.ts），batchStockIn 是 service 层封装，架构正确。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/batch-stockin/index.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 22
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-038",
+      "title": "[HIGH] 修复 src/pages/stock-out/index.tsx (1个问题)",
+      "description": "文件 src/pages/stock-out/index.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第50行: 空 catch 块吞掉错误",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/stock-out/index.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-039",
+      "title": "[HIGH] 修复 src/pages/quick-entry/entry.tsx (1个问题)",
+      "description": "文件 src/pages/quick-entry/entry.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第54行: 空 catch 块吞掉错误",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/quick-entry/entry.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-040",
+      "title": "[HIGH] 修复 src/pages/import/preview.tsx (3个问题)",
+      "description": "文件 src/pages/import/preview.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第27行: 空 catch 块吞掉错误（catch { /* invalid data */ }）\n  2. [HIGH] 第4行: import/preview.tsx 使用 batchImportCards（来自 batch-import.service.ts）和 logger（来自 logger.ts），batchImportCards 是 service 层封装，架构正确。\n  3. [HIGH] 第27行: catch 块静默吞掉 JSON.parse 异常（注释为'invalid data'）。如果 localStorage 中的导入数据被篡改或损坏，页面会静默进入空状态，用户无法得知数据为何消失。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/import/preview.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 22
+      },
+      "post_conditions": [
+        {
+          "id": "POST-MUST-1",
+          "type": "code_contains",
+          "params": {
+            "text": "logger.error",
+            "file": "src/pages/import/preview.tsx"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": []
+    },
+    {
+      "id": "BUG-FULL-041",
+      "title": "[HIGH] 修复 src/pages/sales/index.tsx (1个问题)",
+      "description": "文件 src/pages/sales/index.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: 深层嵌套超过 4 层（最大 6 层）",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/sales/index.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-043",
+      "title": "[HIGH] 修复 src/pages/inventory/inventory.tsx (1个问题)",
+      "description": "文件 src/pages/inventory/inventory.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: 深层嵌套超过 4 层（最大 6 层）",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/inventory/inventory.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-044",
+      "title": "[HIGH] 修复 src/pages/inventory/by-card.tsx (1个问题)",
+      "description": "文件 src/pages/inventory/by-card.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: 深层嵌套超过 4 层（最大 6 层）",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/inventory/by-card.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-045",
+      "title": "[HIGH] 修复 src/pages/inventory/by-location.tsx (1个问题)",
+      "description": "文件 src/pages/inventory/by-location.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: 深层嵌套超过 4 层（最大 7 层）",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/inventory/by-location.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-046",
+      "title": "[HIGH] 修复 src/pages/inventory/by-container.tsx (1个问题)",
+      "description": "文件 src/pages/inventory/by-container.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: 深层嵌套超过 4 层（最大 6 层）",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/inventory/by-container.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-047",
+      "title": "[HIGH] 修复 src/pages/inventory/components/ContainerItem.tsx (1个问题)",
+      "description": "文件 src/pages/inventory/components/ContainerItem.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: 深层嵌套超过 4 层（最大 6 层）",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/inventory/components/ContainerItem.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-048",
+      "title": "[HIGH] 修复 src/pages/inventory/components/CardGroupItem.tsx (1个问题)",
+      "description": "文件 src/pages/inventory/components/CardGroupItem.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: 深层嵌套超过 4 层（最大 6 层）",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/inventory/components/CardGroupItem.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-049",
+      "title": "[HIGH] 修复 src/pages/stats/ranking.tsx (3个问题)",
+      "description": "文件 src/pages/stats/ranking.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第52行: 类型断言滥用：as CardRanking[]\n  2. [HIGH] 第53行: 类型断言滥用：as SeriesRanking[]\n  3. [HIGH] 第54行: 类型断言滥用：as SlowMovingCard[]",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/stats/ranking.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 22
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-050",
+      "title": "[HIGH] 修复 src/pages/stats/index.tsx (1个问题)",
+      "description": "文件 src/pages/stats/index.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: 深层嵌套超过 4 层（最大 6 层）",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/stats/index.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-051",
+      "title": "[HIGH] 修复 src/pages/products/products.tsx (4个问题)",
+      "description": "文件 src/pages/products/products.tsx 存在以下问题，需全部修复:\n  1. [HIGH] 第53行: 类型断言滥用：as ProductItem\n  2. [HIGH] 第57行: 类型断言滥用：as 'Base' | 'Black' | 'Gold' | 'Silver' | 'Special' | 'Secret'\n  3. [HIGH] 第97行: 类型断言滥用：as SalesRecord[]\n  4. [HIGH] 第4行: products.tsx 使用 useBlindboxItems（来自 use-inventory.ts，使用 cardService），但 products.useProductActions.ts 直接调用 cardService，同一页面同时通过 hooks 和直接 service 调用两种方式操作数据，架构不一致。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/products/products.tsx"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 26
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-053",
+      "title": "[HIGH] 修复 src/services/series.ts (3个问题)",
+      "description": "文件 src/services/series.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: 新旧服务混用：存在两个 seriesService（src/services/series.ts 操作旧集合 blindbox_series，src/services/series.service.ts 操作新集合 card_series）。hooks/use-series-mutation.ts 引用旧服务（series.ts），hooks/use-series.ts 引用新服务（series.service.ts），导致同一领域有两个独立实现，数据模型不一致。\n  2. [HIGH] 第1行: series.ts 使用旧集合 BLINDBOX_SERIES（已标记 @deprecated），但 COLLECTIONS 常量使用正确。\n  3. [HIGH] 第6行: series.ts 中 SERIES_CREATE_FIELDS 包含 'price' 和 'total_quantity'，但新数据模型 Series 类型中没有这两个字段，存在数据模型不一致。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/series.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 22
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-054",
+      "title": "[HIGH] 修复 src/services/stock-out.ts (2个问题)",
+      "description": "文件 src/services/stock-out.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: 废弃服务仍在代码库中：stock-out.ts 标记 @deprecated 且委托给新服务，但文件仍然存在，可能被误 import。\n  2. [HIGH] 第22行: 旧 stockOutService（stock-out.ts）中 addStockOut 将 item_id 作为 card_id 传入新的 stockOutService，如果 item_id 和 card_id 不是同一值，会导致数据错误。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stock-out.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 18
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-055",
+      "title": "[HIGH] 修复 src/services/db.ts (2个问题)",
+      "description": "文件 src/services/db.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: db.ts 是唯一的 wx.cloud.database() 入口，所有 service 都通过它访问数据库，符合架构规范。但需注意：db.ts 在 H5 环境下使用 Proxy 抛出错误，这是正确的防御性编程。\n  2. [HIGH] 第14行: db.ts 中 H5 环境下使用 Proxy 抛出错误，但错误消息是 'wx.cloud is not available in this environment'，如果某些 service 在 H5 下被调用，会抛出这个错误，但没有更优雅的处理方式（如返回 mock 数据或空数组）。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/db.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 18
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-056",
+      "title": "[HIGH] 修复 src/hooks/use-inventory.ts (2个问题)",
+      "description": "文件 src/hooks/use-inventory.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第3行: Hook 同时引用新旧两个 seriesService：use-inventory.ts 从 series.service.ts import seriesService，而 use-series-mutation.ts 从 series.ts import seriesService，存在命名冲突风险。\n  2. [HIGH] 第3行: use-inventory.ts 同时 import inventoryService、seriesService 和 cardService，其中 seriesService 来自 series.service.ts（新服务），但 use-series-mutation.ts 使用的是 series.ts（旧服务），存在同一领域两个服务并行使用的风险。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/hooks/use-inventory.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 18
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-057",
+      "title": "[HIGH] 修复 src/services/batch-import.service.ts (3个问题)",
+      "description": "文件 src/services/batch-import.service.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第50行: batchImportCards 使用 db.runTransaction，事务内批量添加卡片，但事务类型参数 WechatMiniprogram.Transaction 可能未在 global.d.ts 中完整定义。\n  2. [HIGH] 第12行: ALLOWED_CARD_FIELDS 包含 'code' 和 'cost_price'，但 toCardData 中没有处理这两个字段，导致导入时丢失这些字段的数据。\n  3. [HIGH] 第47行: batchImportCards 中每 BATCH_SIZE=20 条一个事务，如果导入 1000 条，产生 50 个事务，虽然比 batchStockIn 好，但仍然存在性能问题。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/batch-import.service.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 22
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-058",
+      "title": "[HIGH] 修复 src/services/dashboard/dashboard-alerts.ts (2个问题)",
+      "description": "文件 src/services/dashboard/dashboard-alerts.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: dashboard-alerts.ts 中 COLLECTIONS 常量从 dashboard.types.ts import，而不是从 ../constants.ts import，存在常量来源不一致的风险。\n  2. [HIGH] 第4行: dashboard-alerts.ts 中 Card 类型从 dashboard.types.ts import，但全局类型文件 types/card-catalog.ts 中也定义了 Card 类型，存在命名冲突和类型不一致风险。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard-alerts.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 18
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-059",
+      "title": "[HIGH] 修复 src/services/dashboard/dashboard.types.ts (2个问题)",
+      "description": "文件 src/services/dashboard/dashboard.types.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: dashboard.types.ts 中重复定义了 COLLECTIONS 常量（从 ../constants.ts 复制），而不是直接引用 ../constants.ts，存在维护不一致的风险。\n  2. [HIGH] 第1行: dashboard.types.ts 中重新定义了 Card、LowStockAlert、RecentOperation 等类型，与全局 types/ 目录下的类型可能存在重复或不一致。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard.types.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 18
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-060",
+      "title": "[HIGH] 修复 src/hooks/use-stats.ts (1个问题)",
+      "description": "文件 src/hooks/use-stats.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第4行: use-stats.ts 同时 import inventoryService、statsService 和 categoriesService，其中 categoriesService 是旧服务，存在新旧服务混用。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/hooks/use-stats.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-061",
+      "title": "[HIGH] 修复 src/services/sanitize.ts (1个问题)",
+      "description": "文件 src/services/sanitize.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第5行: sanitizeUpdateData 使用 ReadonlyArray<keyof T> 作为白名单，但 T 是 Record<string, unknown> 时 keyof T 为 string | number | symbol，类型安全性不足，可能导致运行时字段过滤不准确。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/sanitize.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-062",
+      "title": "[HIGH] 修复 src/services/dashboard/dashboard-stats.ts (1个问题)",
+      "description": "文件 src/services/dashboard/dashboard-stats.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第28行: getMonthlySalesAndProfit 中 salesWhere 使用 monthStart.getTime()，但 sale_date 在数据库中可能是 Date 对象或 number，类型不一致可能导致查询不匹配。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard-stats.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-063",
+      "title": "[HIGH] 修复 src/services/constants.ts (2个问题)",
+      "description": "文件 src/services/constants.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: COLLECTIONS 中 CATEGORIES 标记为 @deprecated，但仍有代码（categories.ts、use-stats.ts）在使用，存在数据模型不一致风险。\n  2. [HIGH] 第28行: 云环境 ID 硬编码在源码中（CLOUD_ENV = 'cloud1-1gguwc44510afdeb'）。虽然微信云环境 ID 本身不是高敏感凭证，但硬编码配置违反了安全最佳实践，导致环境切换困难且容易在分叉/开源场景中泄露部署信息。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/constants.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 18
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-064",
+      "title": "[HIGH] 修复 src/hooks/use-series.ts (1个问题)",
+      "description": "文件 src/hooks/use-series.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第2行: use-series.ts 从 series.service.ts import，而 use-series-mutation.ts 从 series.ts import，两个 hook 文件操作不同的 seriesService，可能导致缓存不一致（queryKey 不同：'series' vs 'blindboxSeries'）。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/hooks/use-series.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-065",
+      "title": "[HIGH] 修复 src/hooks/use-products.ts (3个问题)",
+      "description": "文件 src/hooks/use-products.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第2行: use-products.ts 使用 cardService.createProductCard / updateProductCard / deleteCard，但 products.tsx 使用 useBlindboxItems（queryKey: 'blindboxItems'），mutation 成功后只 invalidate 'blindboxItems'，而 products.tsx 也使用 'inventory' 和 'stats'，缓存一致性需要确认。\n  2. [HIGH] 第5行: useCreateProductCard 中 mutationFn 使用 cardService.createProductCard，但 cardService.createProductCard 内部使用 this.createCard，如果 mutationFn 被解构调用，this 会丢失。\n  3. [HIGH] 第17行: useUpdateProductCard 同样存在 this 绑定风险。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/hooks/use-products.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 22
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-066",
+      "title": "[HIGH] 修复 src/services/inventory/inventory.types.ts (1个问题)",
+      "description": "文件 src/services/inventory/inventory.types.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第15行: queryWithRetry 中返回值类型为 Promise<T[]>，但 fn 返回的是 Promise<{ data: T[] }>，如果 fn 抛出的错误被重试后仍然失败，会抛出错误而不是返回空数组，类型签名暗示总是返回数组，不完全准确。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/inventory/inventory.types.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-067",
+      "title": "[HIGH] 修复 src/services/import-template.ts (1个问题)",
+      "description": "文件 src/services/import-template.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第64行: limited_print 的 validator 要求值必须 >= 1，但 toCardData 中如果 limited_print 为 0 或空字符串，会转为 undefined，不会触发 validator 的错误，数据一致性风险。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/import-template.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-068",
+      "title": "[HIGH] 修复 src/services/batch-stockin-template.ts (1个问题)",
+      "description": "文件 src/services/batch-stockin-template.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第36行: quantity 的 validator 要求 >= 1，但 batchStockIn 中 quantity 使用 Number(row.quantity)，如果值为 0 或负数，validator 会拦截，但类型转换在验证之后，逻辑正确。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/batch-stockin-template.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-069",
+      "title": "[HIGH] 修复 src/services/types.ts (1个问题)",
+      "description": "文件 src/services/types.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第8行: typedCollection 函数返回 WechatMiniprogram.TypedCollection<T>，但 TypedCollection 接口在 global.d.ts 中可能没有完整定义（如缺少 aggregate、watch 等方法），使用时可能遇到类型错误。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/types.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-070",
+      "title": "[HIGH] 修复 src/services/logger.ts (1个问题)",
+      "description": "文件 src/services/logger.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第20行: logger 使用 console.warn/info/error 输出 JSON 字符串，但在生产环境中（小程序），console 输出可能被微信开发者工具或真机日志系统收集，存在性能开销。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/logger.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-071",
+      "title": "[HIGH] 修复 src/services/search-history.ts (1个问题)",
+      "description": "文件 src/services/search-history.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第1行: search-history.ts 使用队列模式（_queue）确保存储操作顺序执行，但 addHistory/removeHistory/clearHistory 的返回值是 Promise<void>，调用方无法知道操作是否成功，且错误被静默捕获（只记录日志）。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/search-history.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-072",
+      "title": "[HIGH] 修复 src/services/pagination.ts (1个问题)",
+      "description": "文件 src/services/pagination.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第3行: normalizePagination 中 pageSize 上限为 100，但微信小程序端云数据库单次查询上限为 20，如果 service 直接使用 pageSize=100 查询，会触发数据库错误。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/pagination.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-073",
+      "title": "[HIGH] 修复 src/hooks/use-inventory-mutation.ts (1个问题)",
+      "description": "文件 src/hooks/use-inventory-mutation.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第7行: useCreateInventory 使用 inventoryService.createInventory，但 onSuccess 中 invalidate 了多个 queryKey，如果某个 queryKey 不存在，不会报错，逻辑正确。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/hooks/use-inventory-mutation.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    },
+    {
+      "id": "BUG-FULL-074",
+      "title": "[HIGH] 修复 src/hooks/use-entry-cache.ts (1个问题)",
+      "description": "文件 src/hooks/use-entry-cache.ts 存在以下问题，需全部修复:\n  1. [HIGH] 第2行: use-entry-cache.ts 使用 logger（来自 logger.ts），这是日志服务，架构正确。",
+      "type": "bugfix",
+      "priority": "P2",
+      "status": "pending",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/hooks/use-entry-cache.ts"
+          }
+        ],
+        "max_files": 5,
+        "max_lines_per_file": 14
+      },
+      "acceptance_criteria": [
+        "所有 listed 问题全部修复",
+        "通过 gate-chain-v2"
+      ],
+      "pre_conditions": [],
+      "post_conditions": []
+    }
+  ],
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "version": "2.0",
+  "id": "PRD-20260508-----------------24",
+  "project": {
+    "name": "SamKimTest",
+    "language": "typescript"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-08T23:30:03.319Z",
+  "base_commit": "fb5a8975"
+}

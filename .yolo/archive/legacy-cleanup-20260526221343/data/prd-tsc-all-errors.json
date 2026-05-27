@@ -1,0 +1,4246 @@
+{
+  "version": "2.0",
+  "title": "修复全部 tsc 编译错误 (全量扫描 2026-05-07)",
+  "generated_at": "2026-05-07T10:00:00.000Z",
+  "tasks": [
+    {
+      "id": "BUG-TSC-001",
+      "title": "修复 hooks 层类型错误 (use-ip-delete, use-sales-recent)",
+      "description": "- [HIGH] src/hooks/use-ip-delete.ts(44,34): error TS7006: Parameter 'card' implicitly has an 'any' type\n- [HIGH] src/hooks/use-sales-recent.ts(16,9): error TS2322: Type 'DashboardRecord[]' is not assignable to type 'SalesRecord[]'\n- [HIGH] src/hooks/use-sales-recent.ts(16,78): error TS2677: A type predicate's type must be assignable to its parameter's type\n\n给隐式 any 参数添加显式类型注解；修复 DashboardRecord/SalesRecord 类型不兼容问题",
+      "priority": "P1",
+      "status": "skipped",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/hooks/use-ip-delete.ts"
+          },
+          {
+            "file": "src/hooks/use-sales-recent.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/hooks/use-ip-delete.ts 无 tsc 错误",
+        "src/hooks/use-sales-recent.ts 无 tsc 错误",
+        "pnpm exec tsc --noEmit 对这两个文件零错误",
+        "src/hooks/use-ip-delete.ts 第44行 card 参数缺少类型注解",
+        "src/hooks/use-sales-recent.ts DashboardRecord[] 不能赋值给 SalesRecord[]",
+        "pnpm exec tsc --noEmit 通过，hooks 文件零错误"
+      ],
+      "phaseDetail": "post-precheck: 已修复",
+      "type": "bugfix"
+    },
+    {
+      "id": "BUG-TSC-002",
+      "title": "修复 pages 模块导入和类型错误 (config, containers, inventory)",
+      "description": "- [HIGH] src/pages/config/location-list.tsx(1,26): error TS2307: Cannot find module './components/LocationList'\n- [HIGH] src/pages/config/use-location-list.ts(11,5): error TS2353: 'editable' does not exist in type 'Option'\n- [HIGH] src/pages/containers/detail.tsx(27,24): error TS7006: Parameter 'c' implicitly has an 'any' type\n- [HIGH] src/pages/inventory/by-card.tsx(8,31): error TS2307: Cannot find module './hooks/use-card-groups'\n- [HIGH] src/pages/inventory/by-card.tsx(69,70-73): error TS7006: Parameters 's','g','group' implicitly any\n- [HIGH] src/pages/inventory/components/ContainerList.tsx(3,15): error TS2305: No exported member 'InventoryWithCard'\n- [HIGH] src/pages/inventory/components/ContainerList.tsx(76,30): error TS7006: Parameter 'con' implicitly any\n- [HIGH] src/pages/inventory/components/InventoryItem.tsx(5,54): error TS2307: Cannot find module '../utils/inventory-utils'\n- [HIGH] src/pages/inventory/inventory.tsx(8,12): error TS2307: Cannot find module '../../types/card' and './utils/inventory-utils'\n- [HIGH] src/pages/inventory/inventory.tsx(35-36): error TS2786: 'Text' cannot be used as a JSX component\n\n修复缺失的模块导入（可能需要创建缺失文件或修正路径）；添加隐式 any 参数类型；修复 InventoryWithCard 导出；修复 Text JSX 类型冲突",
+      "priority": "P1",
+      "status": "pending",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/config/location-list.tsx"
+          },
+          {
+            "file": "src/pages/config/use-location-list.ts"
+          },
+          {
+            "file": "src/pages/containers/detail.tsx"
+          },
+          {
+            "file": "src/pages/inventory/by-card.tsx"
+          },
+          {
+            "file": "src/pages/inventory/components/ContainerList.tsx"
+          },
+          {
+            "file": "src/pages/inventory/components/InventoryItem.tsx"
+          },
+          {
+            "file": "src/pages/inventory/inventory.tsx"
+          },
+          {
+            "file": "src/types/inventory.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/pages/config/location-list.tsx 无 tsc 错误",
+        "src/pages/config/use-location-list.ts 无 tsc 错误",
+        "src/pages/containers/detail.tsx 无 tsc 错误",
+        "src/pages/inventory/ 下所有文件无 tsc 错误",
+        "location-list.tsx 导入的 LocationList 组件不存在",
+        "use-location-list.ts 的 Option 类型缺少 editable 属性",
+        "by-card.tsx 导入的 use-card-groups 不存在",
+        "ContainerList.tsx 导入 InventoryWithCard 但 inventory types 未导出",
+        "inventory.tsx Text 组件 JSX 类型冲突",
+        "所有缺失模块导入已修正或创建占位文件",
+        "隐式 any 参数已添加类型注解",
+        "pnpm exec tsc --noEmit 对这些文件零错误"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUG-TSC-003",
+      "title": "修复 pages 模块导入和类型错误 (products, quick-entry, sales, series)",
+      "description": "- [HIGH] src/pages/inventory/use-by-container.ts(28,24): error TS7006: Parameter 'c' implicitly any\n- [HIGH] src/pages/products/products.ProductDrawer.tsx(46,50): error TS7006: Parameters 'prev' implicitly any\n- [HIGH] src/pages/products/products.tsx(53,34): error TS7006: Parameter 'raw' implicitly any\n- [HIGH] src/pages/quick-entry/entry.tsx(7-11): error TS2307: Cannot find modules QuickEntryHeader, QuickEntryForm, QuickEntrySkeleton, useQuickEntryForm, useQuickEntrySubmit\n- [HIGH] src/pages/sales/index.tsx(30,33): error TS2322: Sale[] not assignable to SaleItem[] (sale_date Date vs number)\n- [HIGH] src/pages/sales/sales.tsx(16): error TS2307: Cannot find module './hooks/useSaleForm'\n- [HIGH] src/pages/sales/sales.tsx(39,34): error TS7006: Parameter 'c' implicitly any\n- [HIGH] src/pages/sales/useSalesFilters.ts(26,30): error TS7006: Parameter 'c' implicitly any\n- [HIGH] src/pages/series/detail.tsx(81,48): error TS7006: Parameter 'card' implicitly any\n\n添加隐式 any 参数类型注解；修复 Sale sale_date 类型兼容问题；修正或创建缺失的模块导入",
+      "priority": "P1",
+      "status": "pending",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/inventory/use-by-container.ts"
+          },
+          {
+            "file": "src/pages/products/products.ProductDrawer.tsx"
+          },
+          {
+            "file": "src/pages/products/products.tsx"
+          },
+          {
+            "file": "src/pages/quick-entry/entry.tsx"
+          },
+          {
+            "file": "src/pages/sales/index.tsx"
+          },
+          {
+            "file": "src/pages/sales/sales.tsx"
+          },
+          {
+            "file": "src/pages/sales/useSalesFilters.ts"
+          },
+          {
+            "file": "src/pages/series/detail.tsx"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/pages/products/ 下文件无 tsc 错误",
+        "src/pages/quick-entry/ 下文件无 tsc 错误",
+        "src/pages/sales/ 下文件无 tsc 错误",
+        "src/pages/series/detail.tsx 无 tsc 错误",
+        "src/pages/inventory/use-by-container.ts 无 tsc 错误",
+        "多个 pages 文件有隐式 any 参数",
+        "quick-entry/entry.tsx 导入的5个模块均不存在",
+        "sales/index.tsx Sale.sale_date 类型为 number|Date 但 SaleItem 期望 number",
+        "sales/sales.tsx 导入的 useSaleForm 不存在",
+        "所有隐式 any 参数已添加类型注解",
+        "缺失模块已修正或创建占位",
+        "Sale/SaleItem sale_date 类型兼容"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUG-TSC-004",
+      "title": "修复 services 层类型断言错误 (brand, brand-profile, category, series, storage)",
+      "description": "- [HIGH] src/services/brand-profile.service.ts(25,12): error TS2352: Record<string, unknown> 转 BrandProfile 可能错误\n- [HIGH] src/services/brand-profile.service.ts(50,39): error TS2339: Property 'version' does not exist on BrandProfile\n- [HIGH] src/services/brand.service.ts(20,14)(48,23): error TS2352: Record<string, unknown> 转 Brand 可能错误\n- [HIGH] src/services/category.ts(57,24)(91,26): error TS2352: Record<string, unknown> 转 Category 可能错误\n- [HIGH] src/services/series.service.ts(67,25): error TS2352: Record<string, unknown> 转 Series 可能错误\n- [HIGH] src/services/storage-container.service.ts(27,14)(48,23)(49,30): error TS2352: 转 StorageContainer 可能错误\n- [HIGH] src/services/storage-location.service.ts(24,26)(45,31): error TS2352: 转 StorageLocation 可能错误\n\n修复方式：在 Record<string, unknown> 转换前先 as unknown 再 as 目标类型，或使用类型守卫验证",
+      "priority": "P1",
+      "status": "pending",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/brand-profile.service.ts"
+          },
+          {
+            "file": "src/services/brand.service.ts"
+          },
+          {
+            "file": "src/services/category.ts"
+          },
+          {
+            "file": "src/services/series.service.ts"
+          },
+          {
+            "file": "src/services/storage-container.service.ts"
+          },
+          {
+            "file": "src/services/storage-location.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/services/brand-profile.service.ts 无 tsc 错误",
+        "src/services/brand.service.ts 无 tsc 错误",
+        "src/services/category.ts 无 tsc 错误",
+        "src/services/series.service.ts 无 tsc 错误",
+        "src/services/storage-container.service.ts 无 tsc 错误",
+        "src/services/storage-location.service.ts 无 tsc 错误",
+        "多个 service 文件直接将 Record<string, unknown> 断言为具体类型，TypeScript 报 insufficient overlap",
+        "brand-profile.service.ts 访问不存在的 version 属性",
+        "所有类型断言使用 as unknown as T 双重断言模式或类型守卫",
+        "BrandProfile 类型包含或移除 version 属性访问",
+        "pnpm exec tsc --noEmit 对这些文件零错误"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUG-TSC-005",
+      "title": "修复 services config 模块类型错误 (ip-field, ip, location)",
+      "description": "- [HIGH] src/services/config/ip-field.service.ts(49,22): error TS2352: Record 转 IPField 可能错误\n- [HIGH] src/services/config/ip-field.service.ts(55,62,64,65,78): error TS18047: 'existing' is possibly null (5处)\n- [HIGH] src/services/config/ip.service.ts(19,20)(65,21)(66,28): error TS2352: 转 IP 可能错误 + possibly null\n- [HIGH] src/services/config/location.service.ts(19,20)(65,21)(66,28): error TS2352: 转 Location 可能错误 + possibly null\n\n修复类型断言和 null 检查",
+      "priority": "P1",
+      "status": "pending",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/config/ip-field.service.ts"
+          },
+          {
+            "file": "src/services/config/ip.service.ts"
+          },
+          {
+            "file": "src/services/config/location.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/services/config/ip-field.service.ts 无 tsc 错误",
+        "src/services/config/ip.service.ts 无 tsc 错误",
+        "src/services/config/location.service.ts 无 tsc 错误",
+        "ip-field.service.ts: existing 变量可能为 null 但未做 null 检查即访问",
+        "ip.service.ts / location.service.ts: Record 转 IP/Location 类型断言失败 + current 可能为 null",
+        "所有 possibly null 变量已添加 null 检查",
+        "类型断言使用 as unknown as T 模式",
+        "pnpm exec tsc --noEmit 零错误"
+      ],
+      "phaseDetail": "post-precheck: 已修复",
+      "type": "bugfix"
+    },
+    {
+      "id": "BUG-TSC-006",
+      "title": "修复 services 其他类型错误 (card, batch-stockin, inventory, saleMutations, stats-ranking, auth-helpers, t...",
+      "description": "- [HIGH] src/services/card.service.ts(2-4): error TS2307: Cannot find modules cardValidators, cardQueries, cardMutations\n- [HIGH] src/services/batch-stockin.service.ts(1-2): error TS2307: Cannot find module './batch-stockin'\n- [HIGH] src/services/batch-stockin.validator.ts(6,34): error TS2307: Cannot find module './types/wx-database'\n- [HIGH] src/services/inventory/inventory-mutation.ts(76,22)(87,11): error TS2352 + TS2322: Record 转 Inventory + unknown not number\n- [HIGH] src/services/inventory/inventory-query.ts(48,20): error TS2352: Record 转 Inventory 可能错误\n- [HIGH] src/services/saleMutations.ts(43,77): error TS2352: Record 转 Sale 可能错误\n- [HIGH] src/services/stats-ranking/stats-ranking.utils.ts(12,3): error TS2305: No exported member 'fetchBatchLastSaleDates'\n- [HIGH] src/services/auth-helpers.ts(13,30): error TS2694: Namespace has no exported member 'CallFunctionSuccessCallbackResult'\n- [HIGH] src/services/__tests__/test-utils.ts(2,15): error TS2305: No exported member 'DatabaseCommand'\n\n修复缺失模块导入、类型断言、null 检查问题",
+      "priority": "P1",
+      "status": "pending",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/card.service.ts"
+          },
+          {
+            "file": "src/services/batch-stockin.service.ts"
+          },
+          {
+            "file": "src/services/batch-stockin.validator.ts"
+          },
+          {
+            "file": "src/services/inventory/inventory-mutation.ts"
+          },
+          {
+            "file": "src/services/inventory/inventory-query.ts"
+          },
+          {
+            "file": "src/services/saleMutations.ts"
+          },
+          {
+            "file": "src/services/stats-ranking/stats-ranking.utils.ts"
+          },
+          {
+            "file": "src/services/auth-helpers.ts"
+          },
+          {
+            "file": "src/services/__tests__/test-utils.ts"
+          },
+          {
+            "file": "src/types/wx-database.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/services/card.service.ts 无 tsc 错误",
+        "src/services/batch-stockin.service.ts 无 tsc 错误",
+        "src/services/batch-stockin.validator.ts 无 tsc 错误",
+        "src/services/inventory/ 下文件无 tsc 错误",
+        "src/services/saleMutations.ts 无 tsc 错误",
+        "src/services/stats-ranking/ 下文件无 tsc 错误",
+        "src/services/auth-helpers.ts 无 tsc 错误",
+        "src/services/__tests__/test-utils.ts 无 tsc 错误",
+        "card.service.ts 导入的3个 card 子模块不存在",
+        "batch-stockin.service.ts 导入 './batch-stockin' 不存在",
+        "batch-stockin.validator.ts 导入路径 './types/wx-database' 错误",
+        "inventory-mutation.ts / inventory-query.ts 类型断言失败",
+        "saleMutations.ts 类型断言失败",
+        "stats-ranking.utils.ts 缺少 fetchBatchLastSaleDates 导出",
+        "auth-helpers.ts WechatMiniprogram 命名空间缺少 CallFunctionSuccessCallbackResult",
+        "test-utils.ts wx-database 缺少 DatabaseCommand 导出",
+        "缺失模块已修正导入路径或创建占位",
+        "类型断言使用 as unknown as T",
+        "pnpm exec tsc --noEmit 零错误"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUG-TSC-007",
+      "title": "修复测试文件 MockCollection/Mock 类型不匹配 (card, brand-profile, category, batch-stockin)",
+      "description": "- [HIGH] src/services/__tests__/batch-stockin.service.test.ts(67,75): error TS7006: Parameter 'e' implicitly any\n- [HIGH] src/services/__tests__/brand-profile.service.test.ts(47,46): error TS2345: MockCollection not assignable to TypedCollection (缺少 aggregate)\n- [HIGH] src/services/__tests__/card.service.create.test.ts(39,45): error TS2345+TS2352: MockCollection 类型不匹配\n- [HIGH] src/services/__tests__/card.service.get.test.ts(65,73): error TS2345+TS2352: MockCollection 类型不匹配\n- [HIGH] src/services/__tests__/card.service.search.test.ts(42,52): error TS2345+TS2352: MockCollection 类型不匹配\n- [HIGH] src/services/__tests__/card.service.test.ts(65,73,97,103,130,140): error TS2345+TS2352: MockCollection 类型不匹配 (6处)\n- [HIGH] src/services/__tests__/category.test.ts(39,46): error TS2345: MockCollection 缺少 aggregate\n\n修复方式：更新 MockCollection 类型定义添加缺失属性(aggregate, doc, add, limit, get, field, orderBy, skip 等)，或使用 as unknown as TypedCollection 双重断言",
+      "priority": "P1",
+      "status": "pending",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/batch-stockin.service.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/brand-profile.service.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/card.service.create.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/card.service.get.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/card.service.search.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/card.service.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/category.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/test-utils.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/services/__tests__/card.service.*.test.ts 无 tsc 错误",
+        "src/services/__tests__/brand-profile.service.test.ts 无 tsc 错误",
+        "src/services/__tests__/category.test.ts 无 tsc 错误",
+        "src/services/__tests__/batch-stockin.service.test.ts 无 tsc 错误",
+        "MockCollection 类型定义不完整，缺少 aggregate, doc, add, limit, get, field, orderBy, skip, count 等方法",
+        "导致所有使用 MockCollection 的测试文件类型不匹配",
+        "MockCollection 包含 TypedCollection 的全部必要属性",
+        "所有测试文件不再报 MockCollection 类型不匹配错误"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUG-TSC-008",
+      "title": "修复测试文件 inventory-mutation 测试类型错误 (mockCollection 缺失 + condition_grade 类型)",
+      "description": "- [HIGH] src/services/__tests__/inventory-mutation.create.test.ts(29,45): error TS2304+TS2339: Cannot find name 'mockCollection' + no 'mockReturnValue'\n- [HIGH] src/services/__tests__/inventory-mutation.delete.test.ts(29,45): error TS2304+TS2339: 同上\n- [HIGH] src/services/__tests__/inventory-mutation.rollback.test.ts(29,45): error TS2304+TS2339: 同上\n- [HIGH] src/services/__tests__/inventory-mutation.test.ts(34,50): error TS2304+TS2339: 同上\n- [HIGH] src/services/__tests__/inventory-mutation.test.ts(195,210,220,229): error TS2345: condition_grade string not ConditionGrade (4处)\n- [HIGH] src/services/__tests__/inventory-mutation.update.test.ts(29,45): error TS2304+TS2339: 同上\n- [HIGH] src/services/__tests__/inventory-mutation.update.test.ts(63,78,88,97): error TS2345: condition_grade string not ConditionGrade (4处)\n- [HIGH] src/services/__tests__/inventory.service.test.ts(197,211): error TS2345: condition_grade string not ConditionGrade\n- [HIGH] src/services/__tests__/inventory.service.update.test.ts(59,73): error TS2345: condition_grade string not ConditionGrade\n\n修复 mockCollection 引用（改为正确的 mock 方式）；condition_grade 使用正确的 ConditionGrade 类型常量",
+      "priority": "P1",
+      "status": "pending",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-mutation.create.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/inventory-mutation.delete.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/inventory-mutation.rollback.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/inventory-mutation.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/inventory-mutation.update.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/inventory.service.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/inventory.service.update.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/services/__tests__/inventory-mutation.*.test.ts 无 tsc 错误",
+        "src/services/__tests__/inventory.service.test.ts 无 tsc 错误",
+        "src/services/__tests__/inventory.service.update.test.ts 无 tsc 错误",
+        "inventory-mutation.*.test.ts 文件引用了不存在的 mockCollection 变量",
+        "getCollection mock 对象没有 mockReturnValue 方法",
+        "多处 condition_grade 传入 string 但期望 ConditionGrade 类型",
+        "mockCollection 引用修正为正确导入或声明",
+        "condition_grade 使用 ConditionGrade 类型常量（如 'mint' as ConditionGrade）",
+        "pnpm exec tsc --noEmit 零错误"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUG-TSC-009",
+      "title": "修复测试文件 inventory-query 测试类型错误 (mockReturnValue + data/reason 属性)",
+      "description": "- [HIGH] src/services/__tests__/inventory-query.get.test.ts(37): error TS2339: no 'mockReturnValue' on getCollection\n- [HIGH] src/services/__tests__/inventory-query.getById.test.ts(37): error TS2339: no 'mockReturnValue'\n- [HIGH] src/services/__tests__/inventory-query.getById.test.ts(66,80): error TS2339: Property 'data'/'reason' not on discriminated union\n- [HIGH] src/services/__tests__/inventory-query.lowStock.test.ts(37): error TS2339: no 'mockReturnValue'\n- [HIGH] src/services/__tests__/inventory-query.test.ts(41): error TS2339: no 'mockReturnValue'\n- [HIGH] src/services/__tests__/inventory-query.test.ts(135,149): error TS2339: Property 'data'/'reason' not on discriminated union\n\n修复 getCollection mock 的 mockReturnValue 调用；添加类型窄化（if found guard）访问 data/reason",
+      "priority": "P1",
+      "status": "pending",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-query.get.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/inventory-query.getById.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/inventory-query.lowStock.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/inventory-query.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/services/__tests__/inventory-query.*.test.ts 无 tsc 错误",
+        "getCollection 函数类型上没有 mockReturnValue 方法",
+        "discriminated union 类型需要先窄化才能访问 data 或 reason",
+        "mock 调用方式修正",
+        "discriminated union 使用 if (result.found) 窄化后访问",
+        "pnpm exec tsc --noEmit 零错误"
+      ],
+      "phaseDetail": "post-precheck: 已修复",
+      "type": "bugfix"
+    },
+    {
+      "id": "BUG-TSC-010",
+      "title": "修复测试文件 stock-in-transaction 测试类型错误 (Card/StorageContainer 部分字段缺失)",
+      "description": "- [HIGH] src/services/__tests__/stock-in-transaction.error.test.ts(63): error TS2345: card missing series_id, rarity, category, created_at, updated_at\n- [HIGH] src/services/__tests__/stock-in-transaction.success.test.ts(71,126): error TS2345: card missing fields (2处)\n- [HIGH] src/services/__tests__/stock-in-transaction.test.ts(92,154,183,204,225,249): error TS2345: card/container missing fields (6处)\n- [HIGH] src/services/__tests__/stock-in-transaction.update.test.ts(8,22): error TS2694: Namespace 'global.jest' has no exported member 'Mock'\n- [HIGH] src/services/__tests__/stock-in-transaction.update.test.ts(108): error TS2345: card missing fields\n- [HIGH] src/services/__tests__/stock-in-transaction.validation.test.ts(61,82,103): error TS2345: card/container missing fields (3处)\n\n补全 mock 对象中缺失的 Card 必填字段(series_id, rarity, category, created_at, updated_at)；修复 jest.Mock 导入",
+      "priority": "P1",
+      "status": "pending",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-transaction.error.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/stock-in-transaction.success.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/stock-in-transaction.update.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/stock-in-transaction.validation.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/services/__tests__/stock-in-transaction.*.test.ts 无 tsc 错误",
+        "所有 stock-in-transaction 测试文件中的 mock card 对象缺少 series_id, rarity, category, created_at, updated_at 字段",
+        "update.test.ts 使用了 jest.Mock 但 vitest 环境中没有 global.jest 命名空间",
+        "所有 mock 对象补全 Card/StorageContainer 必填字段",
+        "jest.Mock 替换为 vitest 的 vi.fn()/Mock 类型",
+        "pnpm exec tsc --noEmit 零错误"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUG-TSC-011",
+      "title": "修复测试文件其他类型错误 (dashboard, sale.service, sale.service.delete, sale.service.query)",
+      "description": "- [HIGH] src/services/__tests__/dashboard.service.test.ts(111,72): error TS2352: MockRecord[] 转 DashboardRecord[] 缺少 'time'\n- [HIGH] src/services/__tests__/sale.service.query.test.ts(22,18): error TS2322: VitestUtils not assignable to HookCleanupCallback\n- [HIGH] src/services/__tests__/sale.service.query.test.ts(30,45,60,73,86,102,112): error TS2345: mock collection 不匹配 TypedCollection (7处)\n- [HIGH] src/services/__tests__/sale.service.delete.test.ts(28,38,41): error TS2339: no 'mockReturnValue'/'mock' on getCollection\n\n补全 MockRecord 的 time 字段；修复 VitestUtils 类型；修正 mock collection 类型",
+      "priority": "P1",
+      "status": "pending",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/dashboard.service.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/sale.service.query.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/sale.service.delete.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "src/services/__tests__/dashboard.service.test.ts 无 tsc 错误",
+        "src/services/__tests__/sale.service.query.test.ts 无 tsc 错误",
+        "src/services/__tests__/sale.service.delete.test.ts 无 tsc 错误",
+        "dashboard.service.test.ts: MockRecord 缺少 time 字段导致无法转为 DashboardRecord",
+        "sale.service.query.test.ts: VitestUtils 类型不匹配 HookCleanupCallback + mock collection 缺少 TypedCollection 属性",
+        "sale.service.delete.test.ts: getCollection 没有 mockReturnValue/mock 方法",
+        "MockRecord 包含 time 字段",
+        "vitest afterEach 类型修正",
+        "mock collection 使用正确的类型断言",
+        "pnpm exec tsc --noEmit 零错误"
+      ],
+      "phaseDetail": "post-precheck: 已修复",
+      "type": "bugfix"
+    },
+    {
+      "id": "BUG-R-2-001",
+      "title": "拆分 card.service.test.ts 文件（151行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/card.service.test.ts 按测试场景拆分为三个子文件：1) card.service.create.test.ts（测试 createCard 和 searchCards），2) card.service.update.test.ts（测试 updateCard，如果有的话），3) card.service.query.test.ts（测试 getCards 和 getCardById）。每个子文件不超过150行，保持原有的 mock 设置和测试逻辑。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/card.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/card.service.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/card.service.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/card.service.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/card.service.create.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/card.service.create.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/card.service.query.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/card.service.query.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 card.service.test.ts 已删除",
+        "创建的子文件数量≥2个",
+        "每个子文件行数≤150行",
+        "所有测试用例都被迁移到子文件中",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-2-002",
+      "title": "拆分 import-parser.test.ts 文件（188行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/import-parser.test.ts 按解析器类型拆分为两个子文件：1) import-parser.excel.test.ts（测试 parseExcelFile 函数的所有场景），2) import-parser.validation.test.ts（测试验证相关的场景）。每个子文件不超过150行，保持原有的 mock 设置和测试逻辑。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/import-parser.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/import-parser.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/import-parser.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/import-parser.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/import-parser.excel.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/import-parser.excel.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/import-parser.validation.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/import-parser.validation.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 import-parser.test.ts 已删除",
+        "创建的子文件数量=2个",
+        "每个子文件行数≤150行",
+        "所有测试用例都被迁移到子文件中",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-2-003",
+      "title": "拆分 import-template.test.ts 文件（270行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/import-template.test.ts 按模板类型拆分为两个子文件：1) batch-stockin-template.test.ts（测试 validateImportData 和 CARD_IMPORT_COLUMNS），2) batch-stockout-template.test.ts（如果有出库相关的测试）。每个子文件不超过150行，保持原有的测试逻辑。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/import-template.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/import-template.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/import-template.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/import-template.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/batch-stockin-template.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/batch-stockin-template.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 import-template.test.ts 已删除",
+        "创建的子文件数量≥1个",
+        "每个子文件行数≤150行",
+        "所有测试用例都被迁移到子文件中",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-2-004",
+      "title": "拆分 inventory-mutation.test.ts 文件（233行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory-mutation.test.ts 按操作类型拆分为两个子文件：1) inventory-mutation.create.test.ts（测试 createInventory），2) inventory-mutation.delete-rollback.test.ts（测试 deleteInventory 和 rollbackInventory）。每个子文件不超过150行。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-mutation.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.create.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.create.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.delete-rollback.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.delete-rollback.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 inventory-mutation.test.ts 已删除",
+        "创建的子文件数量=2个",
+        "每个子文件行数≤150行",
+        "所有测试用例都被迁移到子文件中",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-2-005",
+      "title": "拆分 inventory-query.test.ts 文件（194行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory-query.test.ts 按查询类型拆分为两个子文件：1) inventory-query.filter.test.ts（测试 getInventory 的各种过滤场景），2) inventory-query.search.test.ts（测试 getInventoryById 和 getLowStockItems）。每个子文件不超过150行。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-query.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.filter.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.filter.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.search.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.search.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 inventory-query.test.ts 已删除",
+        "创建的子文件数量=2个",
+        "每个子文件行数≤150行",
+        "所有测试用例都被迁移到子文件中",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-2-006",
+      "title": "拆分 inventory.service.get.test.ts 文件（154行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory.service.get.test.ts 按获取方式拆分为两个子文件：1) inventory.service.byFilters.test.ts（测试 getInventory 的各种过滤场景），2) inventory.service.byId.test.ts（测试 getInventoryById 和 getLowStockItems）。每个子文件不超过150行。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory.service.get.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.get.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.get.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.get.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.byFilters.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.byFilters.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.byId.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.byId.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 inventory.service.get.test.ts 已删除",
+        "创建的子文件数量=2个",
+        "每个子文件行数≤150行",
+        "所有测试用例都被迁移到子文件中",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-2-007",
+      "title": "拆分 inventory.service.test.ts 文件（273行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory.service.test.ts 按功能拆分为两个子文件：1) inventory.service.query.test.ts（测试 getInventory、getInventoryById、getLowStockItems），2) inventory.service.mutation.test.ts（测试 createInventory、updateInventory、deleteInventory、rollbackInventory）。每个子文件不超过150行。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.query.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.query.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.mutation.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.mutation.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 inventory.service.test.ts 已删除",
+        "创建的子文件数量=2个",
+        "每个子文件行数≤150行",
+        "所有测试用例都被迁移到子文件中",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-2-008",
+      "title": "拆分 sale.service.test.ts 文件（382行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/sale.service.test.ts 按操作拆分为三个子文件：1) sale.service.query.test.ts（测试 getSales、getSaleById），2) sale.service.create.test.ts（测试 createSale 及其验证逻辑），3) sale.service.update-delete.test.ts（测试 updateSale 和 deleteSale）。每个子文件不超过150行。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/sale.service.query.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/sale.service.query.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/sale.service.create.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/sale.service.create.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-6",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/sale.service.update-delete.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-7",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/sale.service.update-delete.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 sale.service.test.ts 已删除",
+        "创建的子文件数量=3个",
+        "每个子文件行数≤150行",
+        "所有测试用例都被迁移到子文件中",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "skipped",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-2-009",
+      "title": "拆分 stats-ranking.service.test.ts 文件（196行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/stats-ranking.service.test.ts 按排行类型拆分为两个子文件：1) stats-ranking.series.test.ts（测试 getTopSellingCards 和 getTopSellingSeries），2) stats-ranking.slow-moving.test.ts（测试 getSlowMovingCards）。每个子文件不超过150行。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.series.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.series.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.slow-moving.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.slow-moving.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 stats-ranking.service.test.ts 已删除",
+        "创建的子文件数量=2个",
+        "每个子文件行数≤150行",
+        "所有测试用例都被迁移到子文件中",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-2-010",
+      "title": "拆分 stock-in-batch-transaction.test.ts 文件（460行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/stock-in-batch-transaction.test.ts 按场景拆分为三个子文件：1) stock-in-batch.create.test.ts（测试创建新库存记录的场景），2) stock-in-batch.update.test.ts（测试更新现有库存记录和加权平均成本计算），3) stock-in-batch.validation-error.test.ts（测试输入验证和错误处理场景）。每个子文件不超过150行。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch.create.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch.create.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch.update.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch.update.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-6",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch.validation-error.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-7",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch.validation-error.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 stock-in-batch-transaction.test.ts 已删除",
+        "创建的子文件数量=3个",
+        "每个子文件行数≤150行",
+        "所有测试用例都被迁移到子文件中",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-2-011",
+      "title": "拆分 stock-in-transaction.test.ts 文件（253行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/stock-in-transaction.test.ts 按操作类型拆分为两个子文件：1) stock-in-transaction.create.test.ts（测试成功创建库存和加权平均成本计算），2) stock-in-transaction.validation-error.test.ts（测试输入验证和错误处理）。每个子文件不超过150行。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.create.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.create.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.validation-error.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.validation-error.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 stock-in-transaction.test.ts 已删除",
+        "创建的子文件数量=2个",
+        "每个子文件行数≤150行",
+        "所有测试用例都被迁移到子文件中",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-2-012",
+      "title": "拆分 validators.test.ts 文件（346行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/validators.test.ts 按验证器类型拆分为三个子文件：1) validators.batch-stockin.test.ts（测试 validateBatchStockInData），2) validators.rarity.test.ts（测试稀有度验证），3) validators.category.test.ts（测试分类验证）。每个子文件不超过150行。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/validators.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "PRE-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/validators.batch-stockin.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/validators.batch-stockin.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/validators.rarity.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/validators.rarity.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-6",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/validators.category.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-7",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/validators.category.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 validators.test.ts 已删除",
+        "创建的子文件数量=3个",
+        "每个子文件行数≤150行",
+        "所有测试用例都被迁移到子文件中",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-9-001",
+      "title": "拆分 card.service.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/card.service.test.ts（151行）拆分为多个文件：1. card.service.get.test.ts（测试 getCards, getCardById, searchCards）2. card.service.create.test.ts（测试 createCard）3. card.service.test.ts（保留头部导入和mock设置，仅作为索引文件，引用其他拆分文件的测试）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/card.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/card.service.test.ts",
+            "text": "describe('cardService', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/card.service.test.ts",
+            "text": "describe('getCards', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "card.service.test.ts 拆分完成，所有子文件不超过150行",
+        "所有测试用例保持原有逻辑和mock设置",
+        "运行 npm test 确保所有测试通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-9-002",
+      "title": "拆分 import-parser.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/import-parser.test.ts（188行）拆分为多个文件：1. import-parser.parse.test.ts（测试 parseExcelFile 的各种场景：成功解析、空文件、无工作表、错误处理）2. import-parser.mapping.test.ts（测试 columnMapping 相关场景）3. import-parser.test.ts（保留头部导入和mock设置，引用其他拆分文件的测试）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/import-parser.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/import-parser.test.ts",
+            "text": "describe('importParser', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/import-parser.test.ts",
+            "text": "it('should parse Excel file successfully'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "import-parser.test.ts 拆分完成，所有子文件不超过150行",
+        "所有测试用例保持原有逻辑和mock设置",
+        "运行 npm test 确保所有测试通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-9-003",
+      "title": "拆分 import-template.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/import-template.test.ts（270行）拆分为多个文件：1. import-template.validate.test.ts（测试 validateImportData：必填字段、稀有度、分类、空数据、空字符串）2. import-template.limited-print.test.ts（测试 limited_print 验证：0、负数、小数、字符串数字、NaN）3. import-template.columns.test.ts（测试 CARD_IMPORT_COLUMNS 定义）4. import-template.test.ts（保留头部导入，引用其他拆分文件的测试）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/import-template.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template.test.ts",
+            "text": "describe('import-template', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template.test.ts",
+            "text": "it('should validate valid data correctly'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "import-template.test.ts 拆分完成，所有子文件不超过150行",
+        "所有测试用例保持原有逻辑",
+        "运行 npm test 确保所有测试通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-9-004",
+      "title": "拆分 inventory-mutation.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory-mutation.test.ts（233行）拆分为多个文件：1. inventory-mutation.delete.test.ts（测试 deleteInventory）2. inventory-mutation.rollback.test.ts（测试 rollbackInventory）3. inventory-mutation.create.test.ts（测试 createInventory）4. inventory-mutation.update.test.ts（测试 updateInventory，包含保护字段验证）5. inventory-mutation.test.ts（保留头部导入和mock设置，引用其他拆分文件的测试）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-mutation.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "text": "describe('inventoryMutation', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "text": "describe('deleteInventory', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "inventory-mutation.test.ts 拆分完成，所有子文件不超过150行",
+        "所有测试用例保持原有逻辑和mock设置",
+        "运行 npm test 确保所有测试通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-9-005",
+      "title": "拆分 inventory-query.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory-query.test.ts（194行）拆分为多个文件：1. inventory-query.get.test.ts（测试 getInventory：默认选项、card_id 过滤、container_id 过滤）2. inventory-query.getbyid.test.ts（测试 getInventoryById）3. inventory-query.lowstock.test.ts（测试 getLowStockItems）4. inventory-query.test.ts（保留头部导入和mock设置，引用其他拆分文件的测试）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-query.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts",
+            "text": "describe('inventoryQuery', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts",
+            "text": "describe('getInventory', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "inventory-query.test.ts 拆分完成，所有子文件不超过150行",
+        "所有测试用例保持原有逻辑和mock设置",
+        "运行 npm test 确保所有测试通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-9-006",
+      "title": "拆分 inventory.service.get.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory.service.get.test.ts（154行）拆分为多个文件：1. inventory.service.get.test.ts（保留 getInventory 相关测试）2. inventory.service.getbyid.test.ts（提取 getInventoryById 测试）3. inventory.service.lowstock.test.ts（提取 getLowStockItems 测试）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory.service.get.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.get.test.ts",
+            "text": "describe('getInventory', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.get.test.ts",
+            "text": "describe('getInventoryById', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "inventory.service.get.test.ts 拆分完成，所有子文件不超过150行",
+        "所有测试用例保持原有逻辑和mock设置",
+        "运行 npm test 确保所有测试通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-9-007",
+      "title": "拆分 inventory.service.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory.service.test.ts（273行）拆分为多个文件：1. inventory.service.get.test.ts（测试 getInventory 所有场景：无过滤、card_id 过滤、container_id 过滤、自定义页面大小、错误处理）2. inventory.service.getbyid.test.ts（测试 getInventoryById）3. inventory.service.lowstock.test.ts（测试 getLowStockItems）4. inventory.service.create.test.ts（测试 createInventory）5. inventory.service.update.test.ts（测试 updateInventory）6. inventory.service.delete.test.ts（测试 deleteInventory）7. inventory.service.rollback.test.ts（测试 rollbackInventory）8. inventory.service.test.ts（保留头部导入和mock设置，引用其他拆分文件的测试）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('inventoryService', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('getInventory', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "inventory.service.test.ts 拆分完成，所有子文件不超过150行",
+        "所有测试用例保持原有逻辑和mock设置",
+        "运行 npm test 确保所有测试通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-9-008",
+      "title": "拆分 sale.service.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/sale.service.test.ts（382行）拆分为多个文件：1. sale.service.get.test.ts（测试 getSales：所有记录、日期范围过滤、平台过滤、分页）2. sale.service.getbyid.test.ts（测试 getSaleById）3. sale.service.create.test.ts（测试 createSale：必填字段、quantity 验证、sale_price 验证、platform 验证、buyer_note 长度验证）4. sale.service.update.test.ts（测试 updateSale）5. sale.service.delete.test.ts（测试 deleteSale）6. sale.service.test.ts（保留头部导入和mock设置，引用其他拆分文件的测试）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('saleService', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('getSales', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "sale.service.test.ts 拆分完成，所有子文件不超过150行",
+        "所有测试用例保持原有逻辑和mock设置",
+        "运行 npm test 确保所有测试通过"
+      ],
+      "status": "failed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-9-009",
+      "title": "拆分 stats-ranking.service.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/stats-ranking.service.test.ts（196行）拆分为多个文件：1. stats-ranking.service.topselling.test.ts（测试 getTopSellingCards 和 getTopSellingSeries）2. stats-ranking.service.slowmoving.test.ts（测试 getSlowMovingCards）3. stats-ranking.service.test.ts（保留头部导入和mock设置，引用其他拆分文件的测试）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts",
+            "text": "describe('statsRankingService', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts",
+            "text": "describe('getTopSellingCards', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "stats-ranking.service.test.ts 拆分完成，所有子文件不超过150行",
+        "所有测试用例保持原有逻辑和mock设置",
+        "运行 npm test 确保所有测试通过"
+      ],
+      "status": "failed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-9-010",
+      "title": "拆分 stock-in-batch-transaction.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/stock-in-batch-transaction.test.ts（460行）拆分为多个文件：1. stock-in-batch-transaction.new.test.ts（测试创建新库存记录场景）2. stock-in-batch-transaction.update.test.ts（测试更新现有库存记录：加权平均、乐观锁、版本处理、成本为零、数量异常）3. stock-in-batch-transaction.validation.test.ts（测试输入验证：quantity、costPrice、card_number）4. stock-in-batch-transaction.error.test.ts（测试错误处理：入库流水失败、null _id）5. stock-in-batch-transaction.test.ts（保留头部导入和mock设置，引用其他拆分文件的测试）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts",
+            "text": "describe('processStockInBatchTransaction', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts",
+            "text": "describe('when creating new inventory record', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "stock-in-batch-transaction.test.ts 拆分完成，所有子文件不超过150行",
+        "所有测试用例保持原有逻辑和mock设置",
+        "运行 npm test 确保所有测试通过"
+      ],
+      "status": "failed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-9-011",
+      "title": "拆分 stock-in-transaction.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/stock-in-transaction.test.ts（253行）拆分为多个文件：1. stock-in-transaction.success.test.ts（测试成功场景：新库存、加权平均）2. stock-in-transaction.validation.test.ts（测试验证：quantity、costPrice、card_number）3. stock-in-transaction.error.test.ts（测试错误处理：数据库错误）4. stock-in-transaction.test.ts（保留头部导入和mock设置，引用其他拆分文件的测试）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "describe('stockInBatchTransactionService', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "it('should process stock in transaction successfully'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "stock-in-transaction.test.ts 拆分完成，所有子文件不超过150行",
+        "所有测试用例保持原有逻辑和mock设置",
+        "运行 npm test 确保所有测试通过"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-9-012",
+      "title": "拆分 validators.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/validators.test.ts（346行）拆分为多个文件：1. validators.valid.test.ts（测试有效数据场景：正确数据、字符串数量、小数数量、零成本价、数字编号）2. validators.quantity.test.ts（测试数量验证：0、负数、字符串0、负字符串、NaN、undefined、null、空字符串）3. validators.costprice.test.ts（测试成本价验证：负数、负字符串、NaN、undefined、零、正小数）4. validators.cardnumber.test.ts（测试卡片编号验证：空字符串、空白字符串、undefined、null、非空、带空格）5. validators.edge.test.ts（测试边缘情况：所有字段缺失、部分字段缺失、字符串数值、零数量字符串、负成本价字符串）6. validators.test.ts（保留头部导入，引用其他拆分文件的测试）",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/validators.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('validateBatchStockInData', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('valid data', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "validators.test.ts 拆分完成，所有子文件不超过150行",
+        "所有测试用例保持原有逻辑",
+        "运行 npm test 确保所有测试通过"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-4-001",
+      "title": "拆分 import-template.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/import-template.test.ts 拆分为两个文件: (1) 创建 import-template-validation.test.ts,把 validateImportData 的所有测试用例(第6-245行)移到新文件; (2) 原文件只保留 CARD_IMPORT_COLUMNS 测试(第247-269行)和导入语句。两个文件都必须包含完整的导入语句和 vitest 导入。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/import-template.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/import-template-validation.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template.test.ts",
+            "text": "describe('validateImportData'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template.test.ts",
+            "text": "describe('validateImportData'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation.test.ts",
+            "text": "describe('validateImportData'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "import-template.test.ts 文件行数 < 150 行",
+        "import-template-validation.test.ts 文件存在且包含 validateImportData 测试",
+        "两个文件都包含正确的导入语句",
+        "运行 npm test 两个文件的测试全部通过"
+      ],
+      "status": "failed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-4-002",
+      "title": "拆分 inventory-mutation.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory-mutation.test.ts 按函数拆分为4个文件: (1) deleteInventory.test.ts - 包含 deleteInventory 测试(第55-70行); (2) rollbackInventory.test.ts - 包含 rollbackInventory 测试(第72-113行); (3) createInventory.test.ts - 包含 createInventory 测试(第115-180行); (4) updateInventory.test.ts - 包含 updateInventory 测试(第182-231行)。每个文件都包含完整的导入语句、mock 设置和 vitest 导入。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-mutation.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/deleteInventory.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/rollbackInventory.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/createInventory.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/updateInventory.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "text": "describe('inventoryMutation'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "text": "describe('inventoryMutation'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/deleteInventory.test.ts",
+            "text": "describe('deleteInventory'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原 inventory-mutation.test.ts 文件可以删除或清空",
+        "4个新测试文件都存在且包含对应的测试用例",
+        "所有新文件都包含完整的导入语句和 mock 设置",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "failed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-4-003",
+      "title": "拆分 inventory-query.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory-query.test.ts 按函数拆分为3个文件: (1) getInventory.test.ts - 包含 getInventory 测试(第49-112行); (2) getInventoryById.test.ts - 包含 getInventoryById 测试(第114-151行); (3) getLowStockItems.test.ts - 包含 getLowStockItems 测试(第153-192行)。每个文件都包含完整的导入语句、mock 设置和 vitest 导入。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-query.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/getInventory.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/getInventoryById.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/getLowStockItems.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts",
+            "text": "describe('inventoryQuery'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts",
+            "text": "describe('inventoryQuery'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/getInventory.test.ts",
+            "text": "describe('getInventory'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原 inventory-query.test.ts 文件可以删除或清空",
+        "3个新测试文件都存在且包含对应的测试用例",
+        "所有新文件都包含完整的导入语句和 mock 设置",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-4-004",
+      "title": "拆分 inventory.service.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory.service.test.ts 按 service 方法拆分为3个文件: (1) inventory-get.test.ts - 包含 getInventory、getInventoryById、getLowStockItems 测试(第49-152行); (2) inventory-mutation.test.ts - 包含 createInventory、updateInventory 测试(第154-222行); (3) inventory-validation.test.ts - 包含 deleteInventory、rollbackInventory 测试(第224-272行)。每个文件都包含完整的导入语句和 mock 设置。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory.service.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/inventory-get.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/inventory-mutation.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/inventory-validation.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('inventoryService'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('inventoryService'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-get.test.ts",
+            "text": "describe('getInventory'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原 inventory.service.test.ts 文件可以删除或清空",
+        "3个新测试文件都存在且包含对应的测试用例",
+        "所有新文件都包含完整的导入语句和 mock 设置",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-4-005",
+      "title": "拆分 sale.service.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/sale.service.test.ts 按 service 方法拆分为4个文件: (1) sale-get.test.ts - 包含 getSales、getSaleById 测试(第56-164行); (2) sale-create.test.ts - 包含 createSale 测试(第166-306行); (3) sale-update.test.ts - 包含 updateSale 测试(第308-361行); (4) sale-delete.test.ts - 包含 deleteSale 测试(第363-381行)。每个文件都包含完整的导入语句、mock 设置和 vitest 导入。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/sale-get.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/sale-create.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/sale-update.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/sale-delete.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('saleService'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('saleService'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale-get.test.ts",
+            "text": "describe('getSales'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原 sale.service.test.ts 文件可以删除或清空",
+        "4个新测试文件都存在且包含对应的测试用例",
+        "所有新文件都包含完整的导入语句和 mock 设置",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-4-006",
+      "title": "拆分 stats-ranking.service.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/stats-ranking.service.test.ts 按函数拆分为3个文件: (1) getTopSellingCards.test.ts - 包含 getTopSellingCards 测试(第41-97行); (2) getTopSellingSeries.test.ts - 包含 getTopSellingSeries 测试(第99-144行); (3) getSlowMovingCards.test.ts - 包含 getSlowMovingCards 测试(第146-195行)。每个文件都包含完整的导入语句和 mock 设置。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/getTopSellingCards.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/getTopSellingSeries.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/getSlowMovingCards.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts",
+            "text": "describe('getTopSellingCards'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts",
+            "text": "describe('getTopSellingCards'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/getTopSellingCards.test.ts",
+            "text": "describe('getTopSellingCards'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原 stats-ranking.service.test.ts 文件可以删除或清空",
+        "3个新测试文件都存在且包含对应的测试用例",
+        "所有新文件都包含完整的导入语句和 mock 设置",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-4-007",
+      "title": "拆分 stock-in-transaction.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/stock-in-transaction.test.ts 按测试用例分组拆分为3个文件: (1) transaction-success.test.ts - 包含成功场景测试(第63-164行); (2) transaction-validation.test.ts - 包含验证场景测试(第166-227行); (3) transaction-error.test.ts - 包含错误处理测试(第229-252行)。每个文件都包含完整的导入语句、mock 设置和 vitest 导入。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/transaction-success.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/transaction-validation.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/transaction-error.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "describe('stockInBatchTransactionService'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "describe('stockInBatchTransactionService'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/transaction-success.test.ts",
+            "text": "describe('processStockInBatchTransaction'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原 stock-in-transaction.test.ts 文件可以删除或清空",
+        "3个新测试文件都存在且包含对应的测试用例",
+        "所有新文件都包含完整的导入语句和 mock 设置",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-4-008",
+      "title": "拆分 validators.test.ts 测试文件",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/validators.test.ts 按验证逻辑拆分为3个文件: (1) validators-quantity.test.ts - 包含 valid data 和 invalid quantity 测试(第4-146行); (2) validators-costprice.test.ts - 包含 invalid cost price 测试(第148-212行); (3) validators-cardnumber.test.ts - 包含 invalid card number 和 edge cases 测试(第214-346行)。每个文件都包含完整的导入语句和 vitest 导入。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/validators.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/validators-quantity.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/validators-costprice.test.ts"
+          },
+          {
+            "file": "src/services/__tests__/validators-cardnumber.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('validateBatchStockInData'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('validateBatchStockInData'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators-quantity.test.ts",
+            "text": "describe('invalid quantity'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原 validators.test.ts 文件可以删除或清空",
+        "3个新测试文件都存在且包含对应的测试用例",
+        "所有新文件都包含完整的导入语句",
+        "运行 npm test 所有测试通过"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-5-002",
+      "title": "拆分 import-template-validation.test.ts（244行 → 多文件）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/import-template-validation.test.ts（244行）拆分为 3 个文件：1）validateImportData.test.ts - 第 4-180 行的 validateImportData 测试；2）validateRow.test.ts - 如果有 validateRow 函数测试则提取；3）validateBatchStockInData.test.ts - validateBatchStockInData 相关测试（如果存在）。每个文件按 describe 块组织，保持原有的测试逻辑和 mock 设置。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/import-template-validation.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation.test.ts",
+            "text": "describe('validateImportData', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件拆分为 2-3 个测试文件，每个文件不超过 150 行",
+        "所有测试用例保持原有逻辑和覆盖率",
+        "运行 npm run test 通过所有测试"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-5-003",
+      "title": "拆分 inventory-mutation.test.ts（233行 → 多文件）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory-mutation.test.ts（233行）按 describe 块拆分为 4 个文件：1）deleteInventory.test.ts - 第 55-70 行；2）rollbackInventory.test.ts - 第 72-113 行；3）createInventory.test.ts - 第 115-180 行；4）updateInventory.test.ts - 第 182-232 行。每个文件保留对应的 describe 块和必要的 mock 设置。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-mutation.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "text": "describe('deleteInventory', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件拆分为 4 个测试文件，每个文件不超过 150 行",
+        "所有测试用例保持原有逻辑和覆盖率",
+        "运行 npm run test 通过所有测试"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-5-004",
+      "title": "拆分 inventory-query.test.ts（194行 → 多文件）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory-query.test.ts（194行）按 describe 块拆分为 3 个文件：1）getInventory.test.ts - 第 49-112 行；2）getInventoryById.test.ts - 第 114-151 行；3）getLowStockItems.test.ts - 第 153-193 行。每个文件保留对应的 describe 块和必要的 mock 设置。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-query.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts",
+            "text": "describe('getInventory', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件拆分为 3 个测试文件，每个文件不超过 150 行",
+        "所有测试用例保持原有逻辑和覆盖率",
+        "运行 npm run test 通过所有测试"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-5-005",
+      "title": "拆分 inventory.service.test.ts（273行 → 多文件）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory.service.test.ts（273行）按 describe 块拆分为 6 个文件：1）inventory.service.getInventory.test.ts - 第 49-92 行；2）inventory.service.getInventoryById.test.ts - 第 94-128 行；3）inventory.service.getLowStockItems.test.ts - 第 130-152 行；4）inventory.service.createInventory.test.ts - 第 154-185 行；5）inventory.service.updateInventory.test.ts - 第 187-222 行；6）inventory.service.deleteInventory.test.ts - 合并第 224-272 行（deleteInventory 和 rollbackInventory）。每个文件保留对应的 describe 块和必要的 mock 设置。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('getInventory', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件拆分为 6 个测试文件，每个文件不超过 150 行",
+        "所有测试用例保持原有逻辑和覆盖率",
+        "运行 npm run test 通过所有测试"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-5-006",
+      "title": "拆分 sale.service.test.ts（382行 → 多文件）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/sale.service.test.ts（382行）按 describe 块拆分为 5 个文件：1）getSales.test.ts - 第 56-131 行；2）getSaleById.test.ts - 第 133-164 行；3）createSale.test.ts - 第 166-306 行；4）updateSale.test.ts - 第 308-361 行；5）deleteSale.test.ts - 第 363-382 行。每个文件保留对应的 describe 块和必要的 mock 设置（createMockCollection、createMockDoc 等）。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('getSales', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件拆分为 5 个测试文件，每个文件不超过 150 行",
+        "所有测试用例保持原有逻辑和覆盖率",
+        "运行 npm run test 通过所有测试"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-5-007",
+      "title": "拆分 stats-ranking.service.test.ts（196行 → 多文件）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/stats-ranking.service.test.ts（196行）按 describe 块拆分为 3 个文件：1）getTopSellingCards.test.ts - 第 41-97 行；2）getTopSellingSeries.test.ts - 第 99-144 行；3）getSlowMovingCards.test.ts - 第 146-196 行。每个文件保留对应的 describe 块和必要的 mock 设置。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts",
+            "text": "describe('getTopSellingCards', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件拆分为 3 个测试文件，每个文件不超过 150 行",
+        "所有测试用例保持原有逻辑和覆盖率",
+        "运行 npm run test 通过所有测试"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-5-008",
+      "title": "拆分 stock-in-transaction.test.ts（253行 → 多文件）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/stock-in-transaction.test.ts（253行）按测试场景拆分为 2 个文件：1）processStockInBatchTransaction.success.test.ts - 第 63-114 行（成功入库和加权平均逻辑）；2）processStockInBatchTransaction.validation.test.ts - 第 166-252 行（验证逻辑和错误处理）。每个文件保留对应的 it 测试用例和必要的 mock 设置。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "it('should process stock in transaction successfully', async () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件拆分为 2 个测试文件，每个文件不超过 150 行",
+        "所有测试用例保持原有逻辑和覆盖率",
+        "运行 npm run test 通过所有测试"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-5-009",
+      "title": "拆分 validators.test.ts（346行 → 多文件）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/validators.test.ts（346行）按 describe 块拆分为 3 个文件：1）validators.quantity.test.ts - 第 4-146 行（valid data + invalid quantity）；2）validators.cost-price.test.ts - 第 148-212 行（invalid cost price）；3）validators.card-number.test.ts - 第 214-346 行（invalid card number + edge cases）。每个文件保留对应的 describe 块。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/validators.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('invalid quantity', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件拆分为 3 个测试文件，每个文件不超过 150 行",
+        "所有测试用例保持原有逻辑和覆盖率",
+        "运行 npm run test 通过所有测试"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-10-002",
+      "title": "拆分 import-template-validation.test.ts（244行）",
+      "type": "bugfix",
+      "description": "src/services/__tests__/import-template-validation.test.ts 文件 244 行，超过 R9 规则 150 行限制，必须拆分。拆分方案：1. 创建 import-template-validation.valid.test.ts（有效数据测试）；2. 创建 import-template-validation.invalid.test.ts（必填字段、稀有度、分类验证失败测试）；3. 创建 import-template-validation.edge.test.ts（空数据、空可选字段、空字符串等边界测试）。保持原有测试逻辑不变，100% 原样复制测试代码，只按场景分离到不同文件",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/import-template-validation.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation.test.ts",
+            "text": "describe('validateImportData'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation.test.ts",
+            "text": "describe('validateImportData'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation.valid.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation.invalid.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation.edge.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件已删除或重构为空（仅保留导入语句）",
+        "import-template-validation.valid.test.ts 包含有效数据、空可选字段测试",
+        "import-template-validation.invalid.test.ts 包含必填字段缺失、稀有度无效、分类无效、空字符串测试",
+        "import-template-validation.edge.test.ts 包含空数据、空字符串等边界测试",
+        "所有新文件不超过 150 行",
+        "所有测试通过（vitest 运行无错误）"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-10-003",
+      "title": "拆分 inventory-mutation.test.ts（233行）",
+      "type": "bugfix",
+      "description": "src/services/__tests__/inventory-mutation.test.ts 文件 233 行，超过 R9 规则 150 行限制，必须拆分。拆分方案：1. 创建 inventory.delete.test.ts（测试 deleteInventory）；2. 创建 inventory.rollback.test.ts（测试 rollbackInventory）；3. 创建 inventory.create.test.ts（测试 createInventory）；4. 创建 inventory.update.test.ts（测试 updateInventory）。保持原有测试逻辑不变，100% 原样复制测试代码，只按测试方法分离到不同文件",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-mutation.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "text": "describe('inventoryMutation'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "text": "describe('inventoryMutation'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.delete.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.rollback.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.create.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.update.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件已删除或重构为空（仅保留导入语句）",
+        "inventory.delete.test.ts 包含 deleteInventory 的所有测试",
+        "inventory.rollback.test.ts 包含 rollbackInventory 的所有测试",
+        "inventory.create.test.ts 包含 createInventory 的所有测试",
+        "inventory.update.test.ts 包含 updateInventory 的所有测试",
+        "所有新文件不超过 150 行",
+        "所有测试通过（vitest 运行无错误）"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-10-004",
+      "title": "拆分 inventory-query.test.ts（194行）",
+      "type": "bugfix",
+      "description": "src/services/__tests__/inventory-query.test.ts 文件 194 行，超过 R9 规则 150 行限制，必须拆分。拆分方案：1. 创建 inventory.get.test.ts（测试 getInventory，包含默认选项、card_id 过滤、container_id 过滤）；2. 创建 inventory.getById.test.ts（测试 getInventoryById）；3. 创建 inventory.lowStock.test.ts（测试 getLowStockItems）。保持原有测试逻辑不变，100% 原样复制测试代码，只按测试方法分离到不同文件",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-query.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts",
+            "text": "describe('inventoryQuery'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts",
+            "text": "describe('inventoryQuery'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.get.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.getById.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.lowStock.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件已删除或重构为空（仅保留导入语句）",
+        "inventory.get.test.ts 包含 getInventory 的所有测试",
+        "inventory.getById.test.ts 包含 getInventoryById 的所有测试",
+        "inventory.lowStock.test.ts 包含 getLowStockItems 的所有测试",
+        "所有新文件不超过 150 行",
+        "所有测试通过（vitest 运行无错误）"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-10-005",
+      "title": "拆分 inventory.service.test.ts（273行）",
+      "type": "bugfix",
+      "description": "src/services/__tests__/inventory.service.test.ts 文件 273 行，超过 R9 规则 150 行限制，必须拆分。拆分方案：1. 创建 inventory.service.query.test.ts（第 49-152 行：getInventory、getInventoryById、getLowStockItems）；2. 创建 inventory.service.mutation.test.ts（第 154-273 行：createInventory、updateInventory、deleteInventory、rollbackInventory）。保持原有测试逻辑不变，100% 原样复制测试代码，只按查询/变更好分到不同文件",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('inventoryService'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('inventoryService'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.query.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.mutation.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件已删除或重构为空（仅保留导入语句）",
+        "inventory.service.query.test.ts 包含 getInventory、getInventoryById、getLowStockItems 测试",
+        "inventory.service.mutation.test.ts 包含 createInventory、updateInventory、deleteInventory、rollbackInventory 测试",
+        "所有新文件不超过 150 行",
+        "所有测试通过（vitest 运行无错误）"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-10-006",
+      "title": "拆分 sale.service.test.ts（382行）",
+      "type": "bugfix",
+      "description": "src/services/__tests__/sale.service.test.ts 文件 382 行，超过 R9 规则 150 行限制，必须拆分。拆分方案：1. 创建 sale.get.test.ts（getSales、getSaleById）；2. 创建 sale.create.test.ts（createSale 验证逻辑）；3. 创建 sale.update.test.ts（updateSale）；4. 创建 sale.delete.test.ts（deleteSale）。保持原有测试逻辑不变，100% 原样复制测试代码，只按测试方法分离到不同文件",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('saleService'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('saleService'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/sale.get.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/sale.create.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/sale.update.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/sale.delete.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件已删除或重构为空（仅保留导入语句）",
+        "sale.get.test.ts 包含 getSales、getSaleById 测试",
+        "sale.create.test.ts 包含 createSale 的所有验证和测试",
+        "sale.update.test.ts 包含 updateSale 测试",
+        "sale.delete.test.ts 包含 deleteSale 测试",
+        "所有新文件不超过 150 行",
+        "所有测试通过（vitest 运行无错误）"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-10-007",
+      "title": "拆分 stats-ranking.service.test.ts（196行）",
+      "type": "bugfix",
+      "description": "src/services/__tests__/stats-ranking.service.test.ts 文件 196 行，超过 R9 规则 150 行限制，必须拆分。拆分方案：1. 创建 stats.topCards.test.ts（getTopSellingCards 测试）；2. 创建 stats.topSeries.test.ts（getTopSellingSeries 测试）；3. 创建 stats.slowMoving.test.ts（getSlowMovingCards 测试）。保持原有测试逻辑不变，100% 原样复制测试代码，只按测试方法分离到不同文件",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts",
+            "text": "describe('statsRankingService'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts",
+            "text": "describe('statsRankingService'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stats.topCards.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stats.topSeries.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stats.slowMoving.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件已删除或重构为空（仅保留导入语句）",
+        "stats.topCards.test.ts 包含 getTopSellingCards 测试",
+        "stats.topSeries.test.ts 包含 getTopSellingSeries 测试",
+        "stats.slowMoving.test.ts 包含 getSlowMovingCards 测试",
+        "所有新文件不超过 150 行",
+        "所有测试通过（vitest 运行无错误）"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-10-008",
+      "title": "拆分 stock-in-transaction.test.ts（253行）",
+      "type": "bugfix",
+      "description": "src/services/__tests__/stock-in-transaction.test.ts 文件 253 行，超过 R9 规则 150 行限制，必须拆分。拆分方案：1. 创建 stock-in-transaction.success.test.ts（成功场景：新建库存、现有库存加权平均）；2. 创建 stock-in-transaction.validation.test.ts（验证失败：quantity<=0、costPrice<0、card_number 为空）；3. 创建 stock-in-transaction.error.test.ts（数据库错误处理）。保持原有测试逻辑不变，100% 原样复制测试代码，只按测试场景分离到不同文件",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "describe('stockInBatchTransactionService'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "describe('stockInBatchTransactionService'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.success.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.validation.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.error.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件已删除或重构为空（仅保留导入语句）",
+        "stock-in-transaction.success.test.ts 包含成功场景测试（新建库存、现有库存加权平均）",
+        "stock-in-transaction.validation.test.ts 包含验证失败测试（quantity、costPrice、card_number）",
+        "stock-in-transaction.error.test.ts 包含数据库错误处理测试",
+        "所有新文件不超过 150 行",
+        "所有测试通过（vitest 运行无错误）"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-10-009",
+      "title": "拆分 validators.test.ts（346行）",
+      "type": "bugfix",
+      "description": "src/services/__tests__/validators.test.ts 文件 346 行，超过 R9 规则 150 行限制，必须拆分。拆分方案：1. 创建 validators.quantity.test.ts（quantity 验证：有效值、<=0、负数、NaN、字符串转换）；2. 创建 validators.cost.test.ts（cost_price 验证：有效值、负数、NaN、字符串转换）；3. 创建 validators.card-number.test.ts（card_number 验证：非空字符串、空白字符串、undefined、null）。保持原有测试逻辑不变，100% 原样复制测试代码，只按验证字段分离到不同文件",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/validators.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('validateBatchStockInData'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('validateBatchStockInData'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/validators.quantity.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/validators.cost.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_exists",
+          "params": {
+            "file": "src/services/__tests__/validators.card-number.test.ts"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件已删除或重构为空（仅保留导入语句）",
+        "validators.quantity.test.ts 包含 quantity 验证的所有测试（有效值、无效值、边界）",
+        "validators.cost.test.ts 包含 cost_price 验证的所有测试（有效值、无效值、边界）",
+        "validators.card-number.test.ts 包含 card_number 验证的所有测试（空值、有效值、边界）",
+        "所有新文件不超过 150 行",
+        "所有测试通过（vitest 运行无错误）"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-3-002",
+      "title": "拆分 import-template-validation.test.ts（244行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/import-template-validation.test.ts（244行）按测试场景拆分为多个文件：1) import-template-validation-basic.test.ts（基础验证测试：有效数据、空数据、必填字段）2) import-template-validation-fields.test.ts（字段验证测试：rarity、category、limited_print）3) import-template-validation-edge-cases.test.ts（边界测试：空字符串、空白字符串等）每个新文件不超过 150 行，保留所有现有测试用例，确保测试覆盖率不变",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/import-template-validation.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation.test.ts",
+            "text": "describe('validateImportData'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation.test.ts",
+            "text": "describe('validateImportData'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation-basic.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation-fields.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/import-template-validation-edge-cases.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 import-template-validation.test.ts 删除",
+        "新增 3 个测试文件，每个不超过 150 行",
+        "所有原有测试用例完整迁移到新文件",
+        "运行 pnpm test 通过，测试覆盖率不下降",
+        "新增文件命名遵循 xxx-xxx-xxx-xxx-xxx.test.ts 格式（四段式分隔）"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-3-003",
+      "title": "拆分 inventory-mutation.test.ts（233行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory-mutation.test.ts（233行）按测试场景拆分为多个文件：1) inventory-mutation-delete.test.ts（deleteInventory 测试）2) inventory-mutation-rollback.test.ts（rollbackInventory 测试）3) inventory-mutation-create.test.ts（createInventory 测试）4) inventory-mutation-update.test.ts（updateInventory 测试）每个新文件不超过 150 行，保留所有现有测试用例",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-mutation.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "text": "describe('inventoryMutation'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation.test.ts",
+            "text": "describe('inventoryMutation'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation-delete.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation-rollback.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation-create.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-mutation-update.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 inventory-mutation.test.ts 删除",
+        "新增 4 个测试文件，每个不超过 150 行",
+        "所有原有测试用例完整迁移",
+        "运行 pnpm test 通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-3-004",
+      "title": "拆分 inventory-query.test.ts（194行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory-query.test.ts（194行）按测试场景拆分为多个文件：1) inventory-query-get.test.ts（getInventory 测试）2) inventory-query-by-id.test.ts（getInventoryById 测试）3) inventory-query-low-stock.test.ts（getLowStockItems 测试）每个新文件不超过 150 行，保留所有现有测试用例",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory-query.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts",
+            "text": "describe('inventoryQuery'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory-query.test.ts",
+            "text": "describe('inventoryQuery'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-query-get.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-query-by-id.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-query-low-stock.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 inventory-query.test.ts 删除",
+        "新增 3 个测试文件，每个不超过 150 行",
+        "所有原有测试用例完整迁移",
+        "运行 pnpm test 通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-3-005",
+      "title": "拆分 inventory.service.test.ts（273行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/inventory.service.test.ts（273行）按测试场景拆分为多个文件：1) inventory-service-query.test.ts（getInventory、getInventoryById、getLowStockItems 测试）2) inventory-service-create.test.ts（createInventory 测试）3) inventory-service-update.test.ts（updateInventory 测试）4) inventory-service-delete-rollback.test.ts（deleteInventory、rollbackInventory 测试）每个新文件不超过 150 行，保留所有现有测试用例",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/inventory.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('inventoryService'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/inventory.service.test.ts",
+            "text": "describe('inventoryService'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-service-query.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-service-create.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-service-update.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/inventory-service-delete-rollback.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 inventory.service.test.ts 删除",
+        "新增 4 个测试文件，每个不超过 150 行",
+        "所有原有测试用例完整迁移",
+        "运行 pnpm test 通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-3-006",
+      "title": "拆分 sale.service.test.ts（382行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/sale.service.test.ts（382行）按测试场景拆分为多个文件：1) sale-service-get.test.ts（getSales、getSaleById 测试）2) sale-service-create.test.ts（createSale 测试，包含所有验证逻辑）3) sale-service-update.test.ts（updateSale 测试）4) sale-service-delete.test.ts（deleteSale 测试）每个新文件不超过 150 行，保留所有现有测试用例",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('saleService'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "text": "describe('saleService'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/sale-service-get.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/sale-service-create.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/sale-service-update.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/sale-service-delete.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 sale.service.test.ts 删除",
+        "新增 4 个测试文件，每个不超过 150 行",
+        "所有原有测试用例完整迁移",
+        "运行 pnpm test 通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-3-007",
+      "title": "拆分 stats-ranking.service.test.ts（196行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/stats-ranking.service.test.ts（196行）按测试场景拆分为多个文件：1) stats-ranking-cards.test.ts（getTopSellingCards 测试）2) stats-ranking-series.test.ts（getTopSellingSeries 测试）3) stats-ranking-slow-moving.test.ts（getSlowMovingCards 测试）每个新文件不超过 150 行，保留所有现有测试用例",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts",
+            "text": "describe('statsRankingService'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking.service.test.ts",
+            "text": "describe('statsRankingService'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking-cards.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking-series.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stats-ranking-slow-moving.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 stats-ranking.service.test.ts 删除",
+        "新增 3 个测试文件，每个不超过 150 行",
+        "所有原有测试用例完整迁移",
+        "运行 pnpm test 通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-3-008",
+      "title": "拆分 stock-in-transaction.test.ts（253行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/stock-in-transaction.test.ts（253行）按测试场景拆分为多个文件：1) stock-in-transaction-success.test.ts（成功场景：新增库存、加权平均）2) stock-in-transaction-validation.test.ts（验证逻辑：quantity > 0、costPrice >= 0、card_number 非空）3) stock-in-transaction-errors.test.ts（错误处理：数据库错误）每个新文件不超过 150 行，保留所有现有测试用例",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "describe('stockInBatchTransactionService'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "describe('stockInBatchTransactionService'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction-success.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction-validation.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction-errors.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 stock-in-transaction.test.ts 删除",
+        "新增 3 个测试文件，每个不超过 150 行",
+        "所有原有测试用例完整迁移",
+        "运行 pnpm test 通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-3-009",
+      "title": "拆分 validators.test.ts（346行）",
+      "type": "bugfix",
+      "description": "将 src/services/__tests__/validators.test.ts（346行）按测试场景拆分为多个文件：1) validators-stockin-valid.test.ts（validateBatchStockInData 有效数据测试）2) validators-stockin-invalid-quantity.test.ts（validateBatchStockInData 数量验证测试）3) validators-stockin-invalid-cost.test.ts（validateBatchStockInData 成本价验证测试）4) validators-stockin-invalid-card.test.ts（validateBatchStockInData 卡片编号验证测试）5) validators-stockin-edge-cases.test.ts（validateBatchStockInData 边界测试）每个新文件不超过 150 行，保留所有现有测试用例",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/validators.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('validateBatchStockInData'"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('validateBatchStockInData'"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/validators-stockin-valid.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/validators-stockin-invalid-quantity.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/validators-stockin-invalid-cost.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-5",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/validators-stockin-invalid-card.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-6",
+          "type": "file_lines_max",
+          "params": {
+            "file": "src/services/__tests__/validators-stockin-edge-cases.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原文件 validators.test.ts 删除",
+        "新增 5 个测试文件，每个不超过 150 行",
+        "所有原有测试用例完整迁移",
+        "运行 pnpm test 通过"
+      ],
+      "status": "completed",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-4-009",
+      "title": "拆分 stock-in-transaction.test.ts（253行）",
+      "type": "refactor",
+      "description": "文件 253 行超过 150 行限制（R9 规则）。按场景拆分：1) stock-in-success.test.ts - 移动成功场景测试（第 63-114 行、116-164 行：成功处理新增库存、处理已有库存加权平均）；2) stock-in-validation.test.ts - 移动验证逻辑测试（第 166-227 行：quantity、costPrice、card_number 验证 + 错误处理测试）。每个新文件包含：imports、mocks、describe、it tests，行数均 < 150",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "describe('processStockInBatchTransaction', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/stock-in-transaction.test.ts",
+            "text": "describe('processStockInBatchTransaction', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "2 个新测试文件各自行数 < 150",
+        "原文件已删除",
+        "所有测试通过（npm test）"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    },
+    {
+      "id": "BUG-R-4-010",
+      "title": "拆分 validators.test.ts（346行）",
+      "type": "refactor",
+      "description": "文件 346 行超过 150 行限制（R9 规则）。按验证字段拆分：1) validateQuantity.test.ts - 移动 quantity 相关测试（第 58-146 行：valid data、invalid quantity）；2) validateCostPrice.test.ts - 移动 cost_price 相关测试（第 148-212 行：invalid cost price）；3) validateCardNumber.test.ts - 移动 card_number 相关测试（第 214-278 行：invalid card number）+ edge cases（第 280-345 行）。每个新文件包含：imports、describe、it tests，行数均 < 150",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/validators.test.ts"
+          }
+        ],
+        "allow_new_files": true,
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('invalid quantity', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/__tests__/validators.test.ts",
+            "text": "describe('invalid quantity', () => {"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "3 个新测试文件各自行数 < 150",
+        "原文件已删除",
+        "所有测试通过（npm test）"
+      ],
+      "status": "pending",
+      "priority": "P2"
+    }
+  ],
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "id": "PRD-20260508----------------16",
+  "project": {
+    "name": "SamKimTest",
+    "language": "typescript"
+  },
+  "generated_by": "other",
+  "base_commit": "fb5a8975"
+}

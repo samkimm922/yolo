@@ -1,0 +1,53 @@
+{
+  "version": "2.0",
+  "title": "修复 runner.mjs 的 current-run 和路径 bug",
+  "description": "runner.mjs 有 3 个 bug：1) writeCurrentRun 写入原始 CLI 参数到 prd 字段；2) generateRunId 生成末尾多余的点号；3) cleanupWorktree 中 git porcelain 路径解析不健壮",
+  "tasks": [
+    {
+      "id": "FIX-RUNNER-001",
+      "title": "修复 runner.mjs 的 current-run 和路径 bug",
+      "description": "scripts/yolo/runner.mjs 有 3 个 bug 需要修复：\n\nBug 1: writeCurrentRun() 的 prd 字段写入原始 CLI 参数。当前 run() 函数第 1426 行调用 writeCurrentRun(runId, prdPath) 时，prdPath 来自 prdArg（第 1950 行 process.argv[2]），如果用户传了 --help 或其他非 PRD 参数就会写入错误值。但实际查看代码流程：prdArg 在第 1950 行赋值后，第 1953-1957 行会校验 prdArg 是否有效，无效则退出。所以真正的问题是 prdArg 可能在 argv 中位置不对，或者传了 flag 类参数如 --mode=dev。修复方案：在 run() 入口增加 prdPath 解析逻辑，确保传给 writeCurrentRun 的是真实 PRD 文件路径。\n\nBug 2: generateRunId() 第 1361 行 d.toISOString().replace(/[-:T]/g, '').slice(0, 15) 生成的字符串末尾可能有非数字字符。toISOString 格式为 2026-05-05T01:53:53.565Z，replace 后为 20260505015353.565Z，slice(0,15) 为 20260505015353.（注意末尾的 .）。修复方案：改为 slice(0,14) 或在 replace 中也去掉 . 号。\n\nBug 3: cleanupWorktree 第 361 行 line.replace(/^[ ?A-Z!]{1,2} /, '') 已经用正则替代了原来的 line.slice(3)。但正则中的字符类 [ ?A-Z!] 不包含所有 porcelain 状态码（如 D 表示 deleted，R 表示 renamed，C 表示 copied，U 表示 unmerged）。修复方案：将正则改为 /^.{1,3}\\s+/ 或更精确的 /^[ MARC?ADU!]{1,2} / 来覆盖所有 git status --porcelain 的 XY 状态码。",
+      "type": "bugfix",
+      "priority": "P0",
+      "scope": {
+        "expected_zero_business_code": true,
+        "targets": [
+          {
+            "file": "scripts/yolo/runner.mjs"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "severity": "FAIL",
+          "id": "POST-1",
+          "type": "no_new_type_errors",
+          "params": {}
+        },
+        {
+          "severity": "FAIL",
+          "id": "POST-2",
+          "type": "no_new_lint_errors",
+          "params": {}
+        }
+      ],
+      "acceptance_criteria": [
+        "generateRunId() 生成的 run_id 不以 . 结尾",
+        "writeCurrentRun() 的 prd 字段写入的是解析后的 PRD 文件名（相对路径），不是原始 argv 参数",
+        "cleanupWorktree 中的 porcelain 状态码解析覆盖所有 git status XY 码（包括 D/R/C/U）",
+        "current-run.json 的 run_id 格式为 run-YYYYMMDDHHMMSS（14位时间戳，无多余字符）"
+      ],
+      "status": "completed"
+    }
+  ],
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "id": "PRD-20260508----------------------7",
+  "project": {
+    "name": "SamKimTest",
+    "language": "typescript"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-08T23:30:03.257Z",
+  "base_commit": "fb5a8975"
+}

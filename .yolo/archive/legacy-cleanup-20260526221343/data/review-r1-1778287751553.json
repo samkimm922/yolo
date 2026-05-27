@@ -1,0 +1,453 @@
+{
+  "version": "2.0",
+  "title": "Review R1 Bugfix",
+  "source": "review-r1",
+  "tasks": [
+    {
+      "id": "BUG-R-207-1778005541900",
+      "title": "cardService 导出空对象，缺少全部方法实现",
+      "type": "bugfix",
+      "description": "src/services/card.service.ts 第 19 行 `export const cardService = {};` 为空对象。需实现 getCards/getCardById/createCard/updateCard/deleteCard/searchCards/createProductCard/updateProductCard 共 8 个方法。每个方法内部调微信云数据库对应集合，返回正确处理后的数据。影响 7 文件 17 调用点（use-cards.ts、use-product-mutations.ts、use-ip-delete.ts、series-section/index.tsx、containers/detail.tsx 等），修复此 bug 后 #1926、#1927 自动解决。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/card.service.ts"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-METHODS",
+          "type": "methods_exist",
+          "params": {
+            "methods": [
+              "getCards",
+              "getCardById",
+              "createCard",
+              "updateCard",
+              "deleteCard",
+              "searchCards",
+              "createProductCard",
+              "updateProductCard"
+            ]
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "status": "skipped",
+      "pre_conditions": [],
+      "task_kind": "review_fix",
+      "phase": "done",
+      "updatedAt": "2026-05-09T00:49:11.558Z",
+      "phaseDetail": "post-precheck: 已修复"
+    },
+    {
+      "id": "BUG-R-207-1778005541901",
+      "title": "location-list.tsx 导入缺失的 LocationList 组件",
+      "type": "bugfix",
+      "description": "src/pages/config/location-list.tsx 导入 `./components/LocationList` 但 `src/pages/config/components/LocationList.tsx` 不存在，导致 TS2307。修复：创建该文件，实现 LocationList 组件（列表渲染、空状态、加载态），引用现有的 storage-location.service 和 hooks。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/config/components/LocationList.tsx"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541902",
+      "title": "entry.tsx 导入缺失的 QuickEntryHeader 组件",
+      "type": "bugfix",
+      "description": "src/pages/quick-entry/entry.tsx 导入 `./components/QuickEntryHeader` 但 `src/pages/quick-entry/components/QuickEntryHeader.tsx` 不存在，导致 TS2307。修复：创建该文件，实现快速录入页的头部组件（标题、统计信息）。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/quick-entry/components/QuickEntryHeader.tsx"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541903",
+      "title": "sales.tsx 导入缺失的 useSaleForm hook",
+      "type": "bugfix",
+      "description": "src/pages/sales/sales.tsx 导入 `./hooks/useSaleForm` 但 `src/pages/sales/hooks/useSaleForm.ts` 不存在，导致 TS2307。修复：创建该文件实现 useSaleForm hook（销售表单状态管理、验证逻辑），或删除该导入并将逻辑内联到 sales.tsx。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/sales/hooks/useSaleForm.ts"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541904",
+      "title": "SalesList 缺少 SaleItem 类型导出",
+      "type": "bugfix",
+      "description": "src/pages/sales/index.tsx 从 `./SalesList` 导入 `SaleItem` 但 SalesList.tsx 只导出了 `SalesList`、`SalesListProps`、`CardInfo`，没有 `SaleItem`，导致 TS2305。修复：在 src/pages/sales/SalesList.tsx 中添加 `export type SaleItem = { _id: string; card_id: string; platform: string; sale_date: number; sale_price: number; cost_price: number; };`",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/sales/SalesList.tsx"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541906",
+      "title": "use-location-list.ts showModal 返回值断言类型不兼容",
+      "type": "bugfix",
+      "description": "src/pages/config/use-location-list.ts Taro.showModal 返回值使用 `as { confirm: boolean; content?: string }` 断言，Option 类型与断言类型不兼容导致 TS2353。修复：改为双重断言 `as unknown as { confirm: boolean; content?: string }`。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/config/use-location-list.ts"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541909",
+      "title": "auth-helpers.ts 引用了不存在的 WechatMiniprogram 类型",
+      "type": "bugfix",
+      "description": "src/services/auth-helpers.ts 第 13 行使用 `WechatMiniprogram.CallFunctionSuccessCallbackResult` 但该类型在当前版本 miniprogram-api-typings 中不存在，导致 TS2694。修复：改用 `unknown` 声明 + 调用处类型断言，或在 global.d.ts 中补充该类型。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/auth-helpers.ts"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541910",
+      "title": "location.service.ts data 可能为 null 时直接访问属性",
+      "type": "bugfix",
+      "description": "src/services/config/location.service.ts 第 19 行 `res.data as Location | null` 后未做 null 检查，第 20 行直接 `data.deleted_at`，当 data 为 null 时抛出 TypeError。修复：在第 20 行前增加 `if (data == null) return null;`。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/config/location.service.ts"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541911",
+      "title": "ip.service.ts current 可能为 null 时直接访问属性",
+      "type": "bugfix",
+      "description": "src/services/config/ip.service.ts 第 65 行 `currentRes.data as (IP & { version?: number }) | null`，第 66 行 `current.version ?? 0` 中 current 可能为 null。修复：改为 `current?.version ?? 0`。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/config/ip.service.ts"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541912",
+      "title": "storage-container.service.ts current 可能为 null 时直接访问属性",
+      "type": "bugfix",
+      "description": "src/services/storage-container.service.ts 第 48 行 `currentRes.data as (StorageContainer & { version?: number }) | null`，第 49 行 `current.version ?? 0` 中 current 可能为 null。修复：改为 `current?.version ?? 0`。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/storage-container.service.ts"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541913",
+      "title": "BrandProfile 类型缺少 version 字段",
+      "type": "bugfix",
+      "description": "src/types/brand-profile.ts 中 BrandProfile 接口没有 `version` 字段，但 brand-profile.service.ts 第 50 行使用了 `current?.version`，TS2339。修复：在 BrandProfile 接口中补充 `version?: number;`。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/types/brand-profile.ts"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541914",
+      "title": "custom-tab-bar/index.js 使用 require 触发 ESLint",
+      "type": "bugfix",
+      "description": "src/custom-tab-bar/index.js 第 1 行使用 `require('@tarojs/taro')`，触发了通过 `@typescript-eslint/recommended` 继承激活的 `@typescript-eslint/no-require-imports` 规则警告。修复：改为 `import Taro from '@tarojs/taro'`，或将此文件加入 ESLint ignore 列表。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/custom-tab-bar/index.js"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-ESLINT",
+          "type": "no_lint_errors",
+          "params": {
+            "file": "src/custom-tab-bar/index.js"
+          },
+          "severity": "WARN"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541915",
+      "title": "useCardEditForm.ts 使用 any 类型参数",
+      "type": "bugfix",
+      "description": "src/pages/cards/hooks/useCardEditForm.ts 第 13-14 行 onSubmitEdit/onSubmitCreate 回调参数为 `any`，违反 R6（禁止 as any）。修复：改为具体 payload 类型，定义表单提交数据结构体替换 `(data: any) => Promise<any>`。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/cards/hooks/useCardEditForm.ts"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-ESLINT",
+          "type": "no_lint_errors",
+          "params": {
+            "file": "src/pages/cards/hooks/useCardEditForm.ts"
+          },
+          "severity": "WARN"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541916",
+      "title": "StockInForm.tsx props 使用 any 类型",
+      "type": "bugfix",
+      "description": "src/pages/stock-in/StockInForm.tsx 第 17-18 行 allContainers 和 stockInMutation 类型为 `any`，违反 R6。修复：allContainers 改为 `StorageContainer[] | undefined`，stockInMutation 改为 `UseMutationResult` 具体泛型。需要从对应类型文件导入 StorageContainer 和 UseMutationResult。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/stock-in/StockInForm.tsx"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-ESLINT",
+          "type": "no_lint_errors",
+          "params": {
+            "file": "src/pages/stock-in/StockInForm.tsx"
+          },
+          "severity": "WARN"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541917",
+      "title": "inventory-mutation.ts version 字段类型不明确",
+      "type": "bugfix",
+      "description": "src/services/inventory/inventory-mutation.ts 第 87 行使用 `_.inc(1)` 递增 version，但 `existing.version` 类型在 Inventory 类型中未定义，导致 TS2322。修复：在 src/types/inventory.ts 的 Inventory 接口中补充 `version?: number;`（与 #1913 相似）。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/types/inventory.ts"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541918",
+      "title": "saleMutations.ts 类型断言缺少双重转换",
+      "type": "bugfix",
+      "description": "src/services/saleMutations.ts 第 43 行 `existingData as Sale` 直接断言，但 existingData 类型为 unknown（来自事务内 docRef.get().data），Record<string, unknown> 与 Sale 不重叠导致 TS2352。修复：改为 `existingData as unknown as Sale`。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/saleMutations.ts"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-207-1778005541929",
+      "title": "inventory-query.ts N+1 分页循环需标注边界条件",
+      "type": "bugfix",
+      "description": "src/services/inventory/inventory-query.ts 第 31-41 行使用 for 循环实现全量分页（上限 500 次迭代，每批 20 条），每次迭代独立查询 + 50ms 节流。数据量大时最多 25000 次查询。修复：在代码中添加提前退出条件判断（例如：当返回数量 < BATCH_LIMIT 时已提前 break，但还需在注释中标注此设计决策的边界条件），或在循环开始前判断预估数据量。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/inventory/inventory-query.ts"
+          }
+        ]
+      },
+      "post_conditions": [
+        {
+          "id": "POST-TSC",
+          "type": "no_new_type_errors",
+          "params": {},
+          "severity": "FAIL"
+        }
+      ],
+      "status": "pending",
+      "pre_conditions": [],
+      "task_kind": "review_fix"
+    }
+  ]
+}

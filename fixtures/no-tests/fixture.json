@@ -1,0 +1,42 @@
+{
+  "id": "no-tests",
+  "type": "no-tests",
+  "label": "No tests fixture",
+  "description": "Minimal project without a test script to validate degraded dry-run policy.",
+  "files": [
+    "package.json",
+    "src/index.ts"
+  ],
+  "project": {
+    "language": "javascript",
+    "package_manager": "npm",
+    "test_framework": null
+  },
+  "requirement": {
+    "id": "REQ-NOTEST-001",
+    "text": "Expose a deterministic status function without relying on project tests."
+  },
+  "spec": {
+    "id": "SPEC-NOTEST-001",
+    "requirement_id": "REQ-NOTEST-001",
+    "design_id": "DES-NOTEST-001",
+    "task_id": "FIX-NOTEST-001"
+  },
+  "task": {
+    "id": "FIX-NOTEST-001",
+    "prd": "prd.json"
+  },
+  "run": {
+    "mode": "dry-run",
+    "supports_dry_run": true,
+    "commands": [
+      "node src/index.ts"
+    ],
+    "degraded_reason": "project_has_no_test_script"
+  },
+  "evidence": {
+    "expected": [
+      "state/evidence/FIX-NOTEST-001/degraded-run.json"
+    ]
+  }
+}

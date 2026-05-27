@@ -1,0 +1,2087 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.lifecycle.stage_report.v1",
+  "project": {
+    "name": "project"
+  },
+  "stage": {
+    "id": "run",
+    "sequence": 8,
+    "label": "Gated execution",
+    "writes_code": true
+  },
+  "status": "completed",
+  "created_at": "2026-05-26T13:12:14.793Z",
+  "updated_at": "2026-05-26T13:12:14.793Z",
+  "inputs": [],
+  "outputs": [],
+  "decisions": [],
+  "evidence": [
+    {
+      "path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json"
+    },
+    {
+      "path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/state/evidence/adapters/progress-dashboard-ui-latest.json"
+    }
+  ],
+  "blockers": [],
+  "next_actions": [],
+  "lifecycle_schema": "yolo.lifecycle.artifact.v1",
+  "report": {
+    "status": "success",
+    "summary": "runner completed",
+    "exit_code": 0,
+    "run_id": "run-20260526131112",
+    "artifacts": [
+      "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json",
+      "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/state/evidence/adapters/progress-dashboard-ui-latest.json"
+    ],
+    "completed": [],
+    "failed": [],
+    "skipped": [
+      "UI-PROGRESS-SERVER-001",
+      "TEST-PROGRESS-SERVER-002",
+      "ACCEPT-PROGRESS-SERVER-003"
+    ],
+    "blocked": [],
+    "remediation": [],
+    "next_actions": [],
+    "adapter_evidence": {
+      "schema_version": "1.0",
+      "schema": "yolo.adapter.evidence_collector.v1",
+      "status": "pass",
+      "code": "ADAPTER_EVIDENCE_COLLECTED",
+      "summary": "Adapter evidence commands executed and evidence was collected.",
+      "generated_at": "2026-05-26T13:11:14.360Z",
+      "project_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo",
+      "state_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo",
+      "adapter": {
+        "id": "progress-dashboard-ui",
+        "kind": "acceptance_adapter",
+        "source_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json",
+        "capabilities": [
+          "ui",
+          "browser",
+          "page_reachable",
+          "critical_path_passed",
+          "screenshot"
+        ],
+        "evidence": [
+          "screenshot",
+          "runtime_log",
+          "ui_contract"
+        ]
+      },
+      "commands": [
+        {
+          "id": "progress-dashboard-ui-evidence",
+          "command": "node bin/yolo.mjs progress-ui-evidence . --json",
+          "timeout_ms": 90000,
+          "evidence_path": ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json"
+        }
+      ],
+      "execution_policy": {
+        "default_mode": "dry_run",
+        "execute_requires": [
+          "execute=true",
+          "allowAdapterCommands=true"
+        ],
+        "cwd": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo",
+        "timeout_ms_default": 30000,
+        "artifact_overwrite": "latest-per-adapter"
+      },
+      "artifact_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/state/evidence/adapters/progress-dashboard-ui-latest.json",
+      "artifact_file": ".yolo/state/evidence/adapters/progress-dashboard-ui-latest.json",
+      "resolver": {
+        "schema_version": "1.0",
+        "schema": "yolo.pack.resolver.v1",
+        "status": "warning",
+        "project_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo",
+        "state_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo",
+        "manifest_roots": [
+          "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/packs",
+          "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters"
+        ],
+        "selected": {
+          "platform_adapter": {
+            "id": "unknown/custom",
+            "kind": "platform_adapter",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          "stack_adapter": {
+            "id": "unknown/custom",
+            "kind": "stack_adapter",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          "component_adapter": {
+            "id": "unknown/custom",
+            "kind": "component_adapter",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          "design_reference_pack": {
+            "id": "unknown/custom",
+            "kind": "design_reference_pack",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          "quality_rule_pack": {
+            "id": "unknown/custom",
+            "kind": "quality_rule_pack",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          "acceptance_adapter": {
+            "schema_version": "1.0",
+            "schema": "yolo.manifest.v1",
+            "id": "progress-dashboard-ui",
+            "kind": "acceptance_adapter",
+            "label": "",
+            "description": "Progress dashboard UI/UX evidence adapter for YOLO self-dogfood runs.",
+            "inputs": [
+              "projectRoot",
+              "stateRoot"
+            ],
+            "outputs": [
+              "ui_evidence"
+            ],
+            "commands": [
+              {
+                "id": "progress-dashboard-ui-evidence",
+                "command": "node bin/yolo.mjs progress-ui-evidence . --json",
+                "timeout_ms": 90000,
+                "evidence_path": ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json"
+              }
+            ],
+            "evidence": [
+              "screenshot",
+              "runtime_log",
+              "ui_contract"
+            ],
+            "capabilities": [
+              "ui",
+              "browser",
+              "page_reachable",
+              "critical_path_passed",
+              "screenshot"
+            ],
+            "applies_to": [
+              "ui",
+              "progress-dashboard"
+            ],
+            "source_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json"
+          }
+        },
+        "selected_packs": [
+          {
+            "id": "unknown/custom",
+            "kind": "design_reference_pack",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          {
+            "id": "unknown/custom",
+            "kind": "quality_rule_pack",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          }
+        ],
+        "selected_adapters": [
+          {
+            "id": "unknown/custom",
+            "kind": "platform_adapter",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          {
+            "id": "unknown/custom",
+            "kind": "stack_adapter",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          {
+            "id": "unknown/custom",
+            "kind": "component_adapter",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          {
+            "schema_version": "1.0",
+            "schema": "yolo.manifest.v1",
+            "id": "progress-dashboard-ui",
+            "kind": "acceptance_adapter",
+            "label": "",
+            "description": "Progress dashboard UI/UX evidence adapter for YOLO self-dogfood runs.",
+            "inputs": [
+              "projectRoot",
+              "stateRoot"
+            ],
+            "outputs": [
+              "ui_evidence"
+            ],
+            "commands": [
+              {
+                "id": "progress-dashboard-ui-evidence",
+                "command": "node bin/yolo.mjs progress-ui-evidence . --json",
+                "timeout_ms": 90000,
+                "evidence_path": ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json"
+              }
+            ],
+            "evidence": [
+              "screenshot",
+              "runtime_log",
+              "ui_contract"
+            ],
+            "capabilities": [
+              "ui",
+              "browser",
+              "page_reachable",
+              "critical_path_passed",
+              "screenshot"
+            ],
+            "applies_to": [
+              "ui",
+              "progress-dashboard"
+            ],
+            "source_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json"
+          }
+        ],
+        "blockers": [],
+        "warnings": [
+          {
+            "code": "RESOLVER_UNKNOWN_CONTEXT",
+            "kind": "platform_adapter",
+            "message": "platform_adapter resolved to unknown/custom."
+          },
+          {
+            "code": "RESOLVER_UNKNOWN_CONTEXT",
+            "kind": "stack_adapter",
+            "message": "stack_adapter resolved to unknown/custom."
+          },
+          {
+            "code": "RESOLVER_UNKNOWN_CONTEXT",
+            "kind": "component_adapter",
+            "message": "component_adapter resolved to unknown/custom."
+          },
+          {
+            "code": "RESOLVER_UNKNOWN_CONTEXT",
+            "kind": "design_reference_pack",
+            "message": "design_reference_pack resolved to unknown/custom."
+          },
+          {
+            "code": "RESOLVER_UNKNOWN_CONTEXT",
+            "kind": "quality_rule_pack",
+            "message": "quality_rule_pack resolved to unknown/custom."
+          }
+        ],
+        "manifests": [
+          {
+            "path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json",
+            "id": "progress-dashboard-ui",
+            "kind": "acceptance_adapter",
+            "status": "pass"
+          }
+        ],
+        "next_actions": [
+          "Continue with unknown/custom only if the user accepts missing project-specific packs."
+        ]
+      },
+      "mode": "execute",
+      "command_results": [
+        {
+          "id": "progress-dashboard-ui-evidence",
+          "command": "node bin/yolo.mjs progress-ui-evidence . --json",
+          "started_at": "2026-05-26T13:11:14.360Z",
+          "finished_at": "2026-05-26T13:12:14.791Z",
+          "status": "pass",
+          "exit_code": 0,
+          "signal": null,
+          "error": null,
+          "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.progress_dashboard.ui_evidence.v1\",\n  \"status\": \"pass\",\n  \"code\": \"PROGRESS_DASHBOARD_UI_EVIDENCE_PASS\",\n  \"summary\": \"Progress dashboard UI/UX evidence passed browser-rendered responsive, state, and escaping checks.\",\n  \"generated_at\": \"2026-05-26T13:12:14.780Z\",\n  \"project_root\": \"/Users/sippingroom/Developer/SamKimTest/scripts/yolo\",\n  \"state_root\": \"/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo\",\n  \"evidence_kind\": \"browser_rendered_html_snapshot\",\n  \"browser_execution\": true,\n  \"browser\": {\n    \"status\": \"pass\",\n    \"chrome_path\": \"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\",\n    \"reason\": null,\n    \"screenshots\": [\n      \".yolo/state/evidence/progress-dashboard-ui/screenshots/active-desktop.png\",\n      \".yolo/state/evidence/progress-dashboard-ui/screenshots/idle-mobile.png\"\n    ]\n  },\n  \"design_contract\": {\n    \"source_convention\": \"DESIGN.md + UI-SPEC.md\",\n    \"required_artifacts\": [\n      \"DESIGN.md or specs/design.md\",\n      \"UI-SPEC.md or task.ui.state_matrix\",\n      \"UI evidence artifact\"\n    ],\n    \"review_pillars\": [\n      \"copywriting\",\n      \"visuals\",\n      \"color\",\n      \"typography\",\n      \"spacing\",\n      \"experience_design\"\n    ],\n    \"quality_domains\": [\n      \"accessibility\",\n      \"touch_interaction\",\n      \"performance\",\n      \"style_selection\",\n      \"layout_responsive\",\n      \"typography_color\",\n      \"animation\",\n      \"forms_feedback\",\n      \"navigation\",\n      \"charts_data\"\n    ],\n    \"source_influences\": [\n      {\n        \"id\": \"nextlevelbuilder/ui-ux-pro-max-skill\",\n        \"role\": \"priority-ordered UI/UX quality rules\",\n        \"evidence_rule\": \"Accessibility, touch, performance, style, responsive layout, typography, animation, forms, navigation, and data must be inspectable.\"\n      },\n      {\n        \"id\": \"nexu-io/open-design\",\n        \"role\": \"local-first design system and sandboxed preview/evidence pattern\",\n        \"evidence_rule\": \"UI evidence should be generated from local project files and written back as artifacts.\"\n      },\n      {\n        \"id\": \"VoltAgent/awesome-design-md\",\n        \"role\": \"plain-text DESIGN.md design-system convention\",\n        \"evidence_rule\": \"Agents need a durable text design source, not only screenshots or chat memory.\"\n      },\n      {\n        \"id\": \"goabstract/Awesome-Design-Tools\",\n        \"role\": \"design resource taxonomy for colors, icons, information architecture, and user research\",\n        \"evidence_rule\": \"Design evidence should name the checked domains instead of relying on vague polish language.\"\n      },\n      {\n        \"id\": \"DovAmir/awesome-design-patterns\",\n        \"role\": \"architecture pattern catalog\",\n        \"evidence_rule\": \"UI evidence collectors should stay adapter-based and replaceable, not hardcoded to one tool.\"\n      }\n    ]\n  },\n  \"checks\": [\n    {\n      \"id\": \"viewport_meta\",\n      \"status\": \"pass\",\n      \"message\": \"Dashboard HTML must declare a mobile viewport.\"\n    },\n    {\n      \"id\": \"active_regions\",\n      \"status\": \"pass\",\n      \"message\": \"Active run UI must expose progress, stats, task list, review, and sidebar regions.\"\n    },\n    {\n      \"id\": \"idle_lifecycle\",\n      \"status\": \"pass\",\n      \"message\": \"Idle UI must still show lifecycle state and evidence count.\"\n    },\n    {\n      \"id\": \"responsive_css\",\n      \"status\": \"pass\",\n      \"message\": \"Dashboard must include mobile and desktop responsive rules.\"\n    },\n    {\n      \"id\": \"server_html_escapes_task_data\",\n      \"status\": \"pass\",\n      \"message\": \"Server-rendered task and gate text must be escaped before entering HTML.\"\n    },\n    {\n      \"id\": \"client_render_escapes_task_data\",\n      \"status\": \"pass\",\n      \"message\": \"Client-side SSE re-render must escape task text and avoid raw selector interpolation.\"\n    },\n    {\n      \"id\": \"design_contract_shape\",\n      \"status\": \"pass\",\n      \"message\": \"UI/UX evidence must carry design contract, 6-pillar review, and quality-domain metadata.\"\n    },\n\n[truncated 3973 chars]",
+          "stderr": "",
+          "evidence_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/state/evidence/progress-dashboard-ui/ui-evidence.json",
+          "evidence_file": ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json",
+          "evidence_found": true
+        }
+      ],
+      "collected_evidence": [
+        {
+          "schema_version": "1.0",
+          "schema": "yolo.progress_dashboard.ui_evidence.v1",
+          "status": "pass",
+          "code": "PROGRESS_DASHBOARD_UI_EVIDENCE_PASS",
+          "summary": "Progress dashboard UI/UX evidence passed browser-rendered responsive, state, and escaping checks.",
+          "generated_at": "2026-05-26T13:12:14.780Z",
+          "project_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo",
+          "state_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo",
+          "evidence_kind": "browser_rendered_html_snapshot",
+          "browser_execution": true,
+          "browser": {
+            "status": "pass",
+            "chrome_path": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "reason": null,
+            "screenshots": [
+              ".yolo/state/evidence/progress-dashboard-ui/screenshots/active-desktop.png",
+              ".yolo/state/evidence/progress-dashboard-ui/screenshots/idle-mobile.png"
+            ]
+          },
+          "design_contract": {
+            "source_convention": "DESIGN.md + UI-SPEC.md",
+            "required_artifacts": [
+              "DESIGN.md or specs/design.md",
+              "UI-SPEC.md or task.ui.state_matrix",
+              "UI evidence artifact"
+            ],
+            "review_pillars": [
+              "copywriting",
+              "visuals",
+              "color",
+              "typography",
+              "spacing",
+              "experience_design"
+            ],
+            "quality_domains": [
+              "accessibility",
+              "touch_interaction",
+              "performance",
+              "style_selection",
+              "layout_responsive",
+              "typography_color",
+              "animation",
+              "forms_feedback",
+              "navigation",
+              "charts_data"
+            ],
+            "source_influences": [
+              {
+                "id": "nextlevelbuilder/ui-ux-pro-max-skill",
+                "role": "priority-ordered UI/UX quality rules",
+                "evidence_rule": "Accessibility, touch, performance, style, responsive layout, typography, animation, forms, navigation, and data must be inspectable."
+              },
+              {
+                "id": "nexu-io/open-design",
+                "role": "local-first design system and sandboxed preview/evidence pattern",
+                "evidence_rule": "UI evidence should be generated from local project files and written back as artifacts."
+              },
+              {
+                "id": "VoltAgent/awesome-design-md",
+                "role": "plain-text DESIGN.md design-system convention",
+                "evidence_rule": "Agents need a durable text design source, not only screenshots or chat memory."
+              },
+              {
+                "id": "goabstract/Awesome-Design-Tools",
+                "role": "design resource taxonomy for colors, icons, information architecture, and user research",
+                "evidence_rule": "Design evidence should name the checked domains instead of relying on vague polish language."
+              },
+              {
+                "id": "DovAmir/awesome-design-patterns",
+                "role": "architecture pattern catalog",
+                "evidence_rule": "UI evidence collectors should stay adapter-based and replaceable, not hardcoded to one tool."
+              }
+            ]
+          },
+          "checks": [
+            {
+              "id": "viewport_meta",
+              "status": "pass",
+              "message": "Dashboard HTML must declare a mobile viewport."
+            },
+            {
+              "id": "active_regions",
+              "status": "pass",
+              "message": "Active run UI must expose progress, stats, task list, review, and sidebar regions."
+            },
+            {
+              "id": "idle_lifecycle",
+              "status": "pass",
+              "message": "Idle UI must still show lifecycle state and evidence count."
+            },
+            {
+              "id": "responsive_css",
+              "status": "pass",
+              "message": "Dashboard must include mobile and desktop responsive rules."
+            },
+            {
+              "id": "server_html_escapes_task_data",
+              "status": "pass",
+              "message": "Server-rendered task and gate text must be escaped before entering HTML."
+            },
+            {
+              "id": "client_render_escapes_task_data",
+              "status": "pass",
+              "message": "Client-side SSE re-render must escape task text and avoid raw selector interpolation."
+            },
+            {
+              "id": "design_contract_shape",
+              "status": "pass",
+              "message": "UI/UX evidence must carry design contract, 6-pillar review, and quality-domain metadata."
+            },
+            {
+              "id": "no_inline_task_event_handler",
+              "status": "pass",
+              "message": "Task data must not be able to create executable inline event handlers."
+            },
+            {
+              "id": "browser_render_desktop",
+              "status": "pass",
+              "message": "Chrome headless must render desktop dashboard evidence without crashing.",
+              "artifact": ".yolo/state/evidence/progress-dashboard-ui/screenshots/active-desktop.png",
+              "file_size": 82927,
+              "exit_code": 0,
+              "stderr": "[61088:37074991:0526/091115.291952:ERROR:net/cert/internal/trust_store_mac.cc:807] Error parsing certificate:\nERROR: Failed normalizing string\n  tag: 19\nERROR: Failed normalizing subject\n\n[61094:37075051:0526/091115.905241:ERROR:ui/display/mac/cv_display_link_mac.mm:184] CVDisplayLinkCreateWithCGDisplay failed. CVReturn: -6670\n[61094:37075051:0526/091115.906593:ERROR:ui/display/mac/cv_display_link_mac.mm:184] CVDisplayLinkCreateWithCGDisplay failed. CVReturn: -6670\n[61094:37075051:0526/091115.906891:ERROR:ui/display/mac/cv_display_link_mac.mm:184] CVDisplayLinkCreateWithCGDisplay failed. CVReturn: -6670\n[61094:37075051:0526/091115.907203:ERROR:ui/display/mac/cv_display_link_mac.mm:184] CVDisplayLinkCreateWithCGDisplay failed. CVReturn: -6670\n82927 bytes written to file /Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/state/evidence/progress-dashboard-ui/screenshots/active-desktop.png"
+            },
+            {
+              "id": "browser_render_mobile",
+              "status": "pass",
+              "message": "Chrome headless must render mobile dashboard evidence without crashing.",
+              "artifact": ".yolo/state/evidence/progress-dashboard-ui/screenshots/idle-mobile.png",
+              "file_size": 15348,
+              "exit_code": 0,
+              "stderr": "[61146:37075752:0526/091145.427530:ERROR:net/cert/internal/trust_store_mac.cc:807] Error parsing certificate:\nERROR: Failed normalizing string\n  tag: 19\nERROR: Failed normalizing subject\n\n[61152:37075799:0526/091145.978669:ERROR:ui/display/mac/cv_display_link_mac.mm:184] CVDisplayLinkCreateWithCGDisplay failed. CVReturn: -6670\n[61152:37075799:0526/091145.979514:ERROR:ui/display/mac/cv_display_link_mac.mm:184] CVDisplayLinkCreateWithCGDisplay failed. CVReturn: -6670\n[61152:37075799:0526/091145.979712:ERROR:ui/display/mac/cv_display_link_mac.mm:184] CVDisplayLinkCreateWithCGDisplay failed. CVReturn: -6670\n[61152:37075799:0526/091145.979954:ERROR:ui/display/mac/cv_display_link_mac.mm:184] CVDisplayLinkCreateWithCGDisplay failed. CVReturn: -6670\n[61152:37075799:0526/091147.859836:ERROR:gpu/command_buffer/service/shared_image/shared_image_manager.cc:386] SharedImageManager::ProduceMemory: Trying to Produce a Memory representation from a non-existent mailbox.\n[61152:37075799:0526/091147.8598"
+            }
+          ],
+          "blockers": [],
+          "artifacts": {
+            "idle_html": ".yolo/state/evidence/progress-dashboard-ui/idle.html",
+            "active_html": ".yolo/state/evidence/progress-dashboard-ui/active.html",
+            "evidence_json": ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json"
+          },
+          "ui_evidence": {
+            "page_reachable": true,
+            "critical_path_passed": true,
+            "required_state_present": true,
+            "content_overlap": false,
+            "text_overflow": false,
+            "runtime_errors": [],
+            "screenshots": [
+              ".yolo/state/evidence/progress-dashboard-ui/screenshots/active-desktop.png",
+              ".yolo/state/evidence/progress-dashboard-ui/screenshots/idle-mobile.png"
+            ],
+            "visual_artifacts": [
+              ".yolo/state/evidence/progress-dashboard-ui/active.html",
+              ".yolo/state/evidence/progress-dashboard-ui/idle.html",
+              ".yolo/state/evidence/progress-dashboard-ui/screenshots/active-desktop.png",
+              ".yolo/state/evidence/progress-dashboard-ui/screenshots/idle-mobile.png"
+            ],
+            "responsive_viewports": [
+              "mobile",
+              "desktop"
+            ],
+            "accessibility": {
+              "viewport_meta": true
+            }
+          },
+          "next_actions": [
+            "Use this evidence in /yolo-run, /yolo-check, /yolo-accept, or review."
+          ]
+        }
+      ],
+      "ui_evidence": {
+        "page_reachable": true,
+        "critical_path_passed": true,
+        "required_state_present": true,
+        "content_overlap": false,
+        "text_overflow": false,
+        "runtime_errors": [],
+        "screenshots": [
+          ".yolo/state/evidence/progress-dashboard-ui/screenshots/active-desktop.png",
+          ".yolo/state/evidence/progress-dashboard-ui/screenshots/idle-mobile.png"
+        ],
+        "visual_artifacts": [
+          ".yolo/state/evidence/progress-dashboard-ui/active.html",
+          ".yolo/state/evidence/progress-dashboard-ui/idle.html",
+          ".yolo/state/evidence/progress-dashboard-ui/screenshots/active-desktop.png",
+          ".yolo/state/evidence/progress-dashboard-ui/screenshots/idle-mobile.png"
+        ],
+        "responsive_viewports": [
+          "mobile",
+          "desktop"
+        ],
+        "accessibility": {
+          "viewport_meta": true
+        }
+      },
+      "artifacts": [
+        "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/state/evidence/adapters/progress-dashboard-ui-latest.json"
+      ]
+    },
+    "preflight": {
+      "status": "pass",
+      "ok": true,
+      "generated_at": "2026-05-26T13:11:12.324Z",
+      "file": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json",
+      "schema": {
+        "ok": true,
+        "warnings": []
+      },
+      "contract": {
+        "status": "pass",
+        "blocks_execution": false,
+        "failure_count": 0,
+        "warning_count": 0,
+        "failures": [],
+        "warnings": []
+      },
+      "spec_governance": {
+        "status": "pass",
+        "blocks_execution": false,
+        "policy": {
+          "requireRequirements": true,
+          "requireDesign": true,
+          "requireEvidenceForTerminal": true
+        },
+        "blockers": [],
+        "warnings": [],
+        "matrix": {
+          "prd_id": "PRD-20260526-PROGRESS-SERVER-UI-DOGFOOD",
+          "generated_at": "2026-05-26T00:00:00.000Z",
+          "requirements": [
+            "REQ-PROGRESS-UI-DOGFOOD-001",
+            "REQ-PROGRESS-UI-DOGFOOD-002",
+            "REQ-PROGRESS-UI-DOGFOOD-003"
+          ],
+          "designs": [
+            "DES-PROGRESS-UI-DOGFOOD-001",
+            "DES-PROGRESS-UI-DOGFOOD-002",
+            "DES-PROGRESS-UI-DOGFOOD-003"
+          ],
+          "tasks": [
+            {
+              "task_id": "UI-PROGRESS-SERVER-001",
+              "status": "done",
+              "requirement_ids": [
+                "REQ-PROGRESS-UI-DOGFOOD-001",
+                "REQ-PROGRESS-UI-DOGFOOD-002"
+              ],
+              "design_ids": [
+                "DES-PROGRESS-UI-DOGFOOD-001",
+                "DES-PROGRESS-UI-DOGFOOD-002"
+              ],
+              "evidence_files": [
+                ".yolo/state/runtime/task-logs/UI-PROGRESS-SERVER-001.jsonl",
+                ".yolo/state/yolo-output.log"
+              ],
+              "target_files": [
+                "src/runtime/progress/server.mjs"
+              ],
+              "missing": {
+                "requirements": false,
+                "design": false,
+                "evidence": false
+              }
+            },
+            {
+              "task_id": "TEST-PROGRESS-SERVER-002",
+              "status": "done",
+              "requirement_ids": [
+                "REQ-PROGRESS-UI-DOGFOOD-002",
+                "REQ-PROGRESS-UI-DOGFOOD-003"
+              ],
+              "design_ids": [
+                "DES-PROGRESS-UI-DOGFOOD-002",
+                "DES-PROGRESS-UI-DOGFOOD-003"
+              ],
+              "evidence_files": [
+                ".yolo/state/runtime/task-logs/TEST-PROGRESS-SERVER-002.jsonl",
+                ".yolo/state/yolo-output.log"
+              ],
+              "target_files": [
+                "__tests__/progress-dashboard.test.mjs",
+                "__tests__/progress-dashboard-ui-evidence.test.mjs"
+              ],
+              "missing": {
+                "requirements": false,
+                "design": false,
+                "evidence": false
+              }
+            },
+            {
+              "task_id": "ACCEPT-PROGRESS-SERVER-003",
+              "status": "done",
+              "requirement_ids": [
+                "REQ-PROGRESS-UI-DOGFOOD-003"
+              ],
+              "design_ids": [
+                "DES-PROGRESS-UI-DOGFOOD-003"
+              ],
+              "evidence_files": [
+                ".yolo/state/runtime/task-logs/ACCEPT-PROGRESS-SERVER-003.jsonl",
+                ".yolo/state/evidence/adapters/progress-dashboard-ui-latest.json",
+                ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json"
+              ],
+              "target_files": [
+                ".yolo/adapters/progress-dashboard-ui.manifest.json"
+              ],
+              "missing": {
+                "requirements": false,
+                "design": false,
+                "evidence": false
+              }
+            }
+          ],
+          "summary": {
+            "task_count": 3,
+            "tasks_with_requirements": 3,
+            "tasks_with_design": 3,
+            "terminal_tasks_with_evidence": 3,
+            "missing_requirements": [],
+            "missing_design": [],
+            "missing_evidence": []
+          }
+        }
+      },
+      "migration": {
+        "available": false,
+        "would_fix_contract": false,
+        "added_count": 0,
+        "blocked_count": 0,
+        "tasks_changed": [],
+        "issues": [],
+        "dry_run_command": "yolo-prd-migrate-gates /Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json --json",
+        "apply_command": "yolo-prd-migrate-gates /Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json --apply",
+        "contract_after_migration": null,
+        "next_actions": [
+          "Fix PRD contract failures manually; no safe target coverage migration was inferred."
+        ]
+      },
+      "runner_readiness": {
+        "can_execute": true,
+        "reason": "ready",
+        "execution_mode": "default",
+        "tasks": {
+          "total": 3,
+          "pending": 0,
+          "running": 0,
+          "completed": 3,
+          "failed": 0,
+          "blocked": 0,
+          "skipped": 0,
+          "by_status": {
+            "done": 3
+          }
+        },
+        "next_actions": [
+          "PRD preflight passed; runner can start."
+        ]
+      },
+      "blocked_count": 0,
+      "warning_count": 0,
+      "blocked_reasons": []
+    },
+    "check": {
+      "schema_version": "1.0",
+      "schema": "yolo.check.report.v1",
+      "status": "warning",
+      "code": "YOLO_CHECK_WARNING",
+      "summary": "YOLO check passed with warnings.",
+      "generated_at": "2026-05-26T13:11:12.362Z",
+      "prd_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json",
+      "project_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo",
+      "state_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo",
+      "resolver": {
+        "schema_version": "1.0",
+        "schema": "yolo.pack.resolver.v1",
+        "status": "warning",
+        "project_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo",
+        "state_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo",
+        "manifest_roots": [
+          "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/packs",
+          "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters"
+        ],
+        "selected": {
+          "platform_adapter": {
+            "id": "unknown/custom",
+            "kind": "platform_adapter",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          "stack_adapter": {
+            "id": "unknown/custom",
+            "kind": "stack_adapter",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          "component_adapter": {
+            "id": "unknown/custom",
+            "kind": "component_adapter",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          "design_reference_pack": {
+            "id": "unknown/custom",
+            "kind": "design_reference_pack",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          "quality_rule_pack": {
+            "id": "unknown/custom",
+            "kind": "quality_rule_pack",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          "acceptance_adapter": {
+            "schema_version": "1.0",
+            "schema": "yolo.manifest.v1",
+            "id": "progress-dashboard-ui",
+            "kind": "acceptance_adapter",
+            "label": "",
+            "description": "Progress dashboard UI/UX evidence adapter for YOLO self-dogfood runs.",
+            "inputs": [
+              "projectRoot",
+              "stateRoot"
+            ],
+            "outputs": [
+              "ui_evidence"
+            ],
+            "commands": [
+              {
+                "id": "progress-dashboard-ui-evidence",
+                "command": "node bin/yolo.mjs progress-ui-evidence . --json",
+                "timeout_ms": 90000,
+                "evidence_path": ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json"
+              }
+            ],
+            "evidence": [
+              "screenshot",
+              "runtime_log",
+              "ui_contract"
+            ],
+            "capabilities": [
+              "ui",
+              "browser",
+              "page_reachable",
+              "critical_path_passed",
+              "screenshot"
+            ],
+            "applies_to": [
+              "ui",
+              "progress-dashboard"
+            ],
+            "source_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json"
+          }
+        },
+        "selected_packs": [
+          {
+            "id": "unknown/custom",
+            "kind": "design_reference_pack",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          {
+            "id": "unknown/custom",
+            "kind": "quality_rule_pack",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          }
+        ],
+        "selected_adapters": [
+          {
+            "id": "unknown/custom",
+            "kind": "platform_adapter",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          {
+            "id": "unknown/custom",
+            "kind": "stack_adapter",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          {
+            "id": "unknown/custom",
+            "kind": "component_adapter",
+            "status": "warning",
+            "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+            "capabilities": [],
+            "source_path": ""
+          },
+          {
+            "schema_version": "1.0",
+            "schema": "yolo.manifest.v1",
+            "id": "progress-dashboard-ui",
+            "kind": "acceptance_adapter",
+            "label": "",
+            "description": "Progress dashboard UI/UX evidence adapter for YOLO self-dogfood runs.",
+            "inputs": [
+              "projectRoot",
+              "stateRoot"
+            ],
+            "outputs": [
+              "ui_evidence"
+            ],
+            "commands": [
+              {
+                "id": "progress-dashboard-ui-evidence",
+                "command": "node bin/yolo.mjs progress-ui-evidence . --json",
+                "timeout_ms": 90000,
+                "evidence_path": ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json"
+              }
+            ],
+            "evidence": [
+              "screenshot",
+              "runtime_log",
+              "ui_contract"
+            ],
+            "capabilities": [
+              "ui",
+              "browser",
+              "page_reachable",
+              "critical_path_passed",
+              "screenshot"
+            ],
+            "applies_to": [
+              "ui",
+              "progress-dashboard"
+            ],
+            "source_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json"
+          }
+        ],
+        "blockers": [],
+        "warnings": [
+          {
+            "code": "RESOLVER_UNKNOWN_CONTEXT",
+            "kind": "platform_adapter",
+            "message": "platform_adapter resolved to unknown/custom."
+          },
+          {
+            "code": "RESOLVER_UNKNOWN_CONTEXT",
+            "kind": "stack_adapter",
+            "message": "stack_adapter resolved to unknown/custom."
+          },
+          {
+            "code": "RESOLVER_UNKNOWN_CONTEXT",
+            "kind": "component_adapter",
+            "message": "component_adapter resolved to unknown/custom."
+          },
+          {
+            "code": "RESOLVER_UNKNOWN_CONTEXT",
+            "kind": "design_reference_pack",
+            "message": "design_reference_pack resolved to unknown/custom."
+          },
+          {
+            "code": "RESOLVER_UNKNOWN_CONTEXT",
+            "kind": "quality_rule_pack",
+            "message": "quality_rule_pack resolved to unknown/custom."
+          }
+        ],
+        "manifests": [
+          {
+            "path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json",
+            "id": "progress-dashboard-ui",
+            "kind": "acceptance_adapter",
+            "status": "pass"
+          }
+        ],
+        "next_actions": [
+          "Continue with unknown/custom only if the user accepts missing project-specific packs."
+        ]
+      },
+      "task_surface_summary": {
+        "task_count": 3,
+        "ui_task_count": 3,
+        "ui_task_ids": [
+          "UI-PROGRESS-SERVER-001",
+          "TEST-PROGRESS-SERVER-002",
+          "ACCEPT-PROGRESS-SERVER-003"
+        ]
+      },
+      "checks": [
+        {
+          "name": "atomicity",
+          "status": "warning",
+          "summary": "Atomic task scoring completed.",
+          "inspections": [
+            {
+              "status": "pass",
+              "mode": "direct_patch",
+              "task_id": "UI-PROGRESS-SERVER-001",
+              "score": 5,
+              "reasons": [
+                {
+                  "id": "CREATES_NEW_FILE",
+                  "points": 2,
+                  "detail": "任务包含新文件创建",
+                  "evidence": {
+                    "files": []
+                  }
+                },
+                {
+                  "id": "BEHAVIORAL_FAIL_POSTCONDITIONS",
+                  "points": 3,
+                  "detail": "行为后置条件 4 个",
+                  "evidence": {
+                    "behavioralFailPostconditions": 4,
+                    "totalFailPostconditions": 5
+                  }
+                }
+              ],
+              "evidence_file": "state/evidence/UI-PROGRESS-SERVER-001/investigation.json",
+              "split_suggestions": [],
+              "next_action": "allow_runner_execution"
+            },
+            {
+              "status": "pass",
+              "mode": "investigate_then_patch",
+              "task_id": "TEST-PROGRESS-SERVER-002",
+              "score": 6,
+              "reasons": [
+                {
+                  "id": "MULTI_FILE",
+                  "points": 2,
+                  "detail": "目标文件 2 个",
+                  "evidence": {
+                    "files": [
+                      "__tests__/progress-dashboard.test.mjs",
+                      "__tests__/progress-dashboard-ui-evidence.test.mjs"
+                    ]
+                  }
+                },
+                {
+                  "id": "BEHAVIORAL_FAIL_POSTCONDITIONS",
+                  "points": 3,
+                  "detail": "行为后置条件 4 个",
+                  "evidence": {
+                    "behavioralFailPostconditions": 4,
+                    "totalFailPostconditions": 4
+                  }
+                },
+                {
+                  "id": "AT_SCOPE_FILE_LIMIT",
+                  "points": 1,
+                  "detail": "目标文件数已经贴近/达到 scope.max_files，没有缓冲空间",
+                  "evidence": {
+                    "max_files": 2,
+                    "files": 2
+                  }
+                }
+              ],
+              "evidence_file": "state/evidence/TEST-PROGRESS-SERVER-002/investigation.json",
+              "split_suggestions": [],
+              "next_action": "force_prompt_to_read_and_report_evidence_before_patch"
+            },
+            {
+              "status": "pass",
+              "mode": "direct_patch",
+              "task_id": "ACCEPT-PROGRESS-SERVER-003",
+              "score": 1,
+              "reasons": [
+                {
+                  "id": "BEHAVIORAL_FAIL_POSTCONDITIONS",
+                  "points": 1,
+                  "detail": "行为后置条件 1 个",
+                  "evidence": {
+                    "behavioralFailPostconditions": 1,
+                    "totalFailPostconditions": 3
+                  }
+                }
+              ],
+              "evidence_file": "state/evidence/ACCEPT-PROGRESS-SERVER-003/investigation.json",
+              "split_suggestions": [],
+              "next_action": "allow_runner_execution"
+            }
+          ],
+          "blockers": [],
+          "warnings": [
+            {
+              "code": "ATOMICITY_INVESTIGATE_FIRST",
+              "task_id": "TEST-PROGRESS-SERVER-002",
+              "message": "Task should force investigation before patching.",
+              "score": 6
+            }
+          ]
+        },
+        {
+          "name": "prd_preflight",
+          "status": "pass",
+          "summary": "PRD preflight completed.",
+          "blockers": [],
+          "warnings": [],
+          "preflight": {
+            "status": "pass",
+            "ok": true,
+            "generated_at": "2026-05-26T13:11:12.357Z",
+            "file": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json",
+            "schema": {
+              "ok": true,
+              "warnings": []
+            },
+            "contract": {
+              "status": "pass",
+              "blocks_execution": false,
+              "failure_count": 0,
+              "warning_count": 0,
+              "failures": [],
+              "warnings": []
+            },
+            "spec_governance": {
+              "status": "pass",
+              "blocks_execution": false,
+              "policy": {
+                "requireRequirements": true,
+                "requireDesign": true,
+                "requireEvidenceForTerminal": true
+              },
+              "blockers": [],
+              "warnings": [],
+              "matrix": {
+                "prd_id": "PRD-20260526-PROGRESS-SERVER-UI-DOGFOOD",
+                "generated_at": "2026-05-26T00:00:00.000Z",
+                "requirements": [
+                  "REQ-PROGRESS-UI-DOGFOOD-001",
+                  "REQ-PROGRESS-UI-DOGFOOD-002",
+                  "REQ-PROGRESS-UI-DOGFOOD-003"
+                ],
+                "designs": [
+                  "DES-PROGRESS-UI-DOGFOOD-001",
+                  "DES-PROGRESS-UI-DOGFOOD-002",
+                  "DES-PROGRESS-UI-DOGFOOD-003"
+                ],
+                "tasks": [
+                  {
+                    "task_id": "UI-PROGRESS-SERVER-001",
+                    "status": "done",
+                    "requirement_ids": [
+                      "REQ-PROGRESS-UI-DOGFOOD-001",
+                      "REQ-PROGRESS-UI-DOGFOOD-002"
+                    ],
+                    "design_ids": [
+                      "DES-PROGRESS-UI-DOGFOOD-001",
+                      "DES-PROGRESS-UI-DOGFOOD-002"
+                    ],
+                    "evidence_files": [
+                      ".yolo/state/runtime/task-logs/UI-PROGRESS-SERVER-001.jsonl",
+                      ".yolo/state/yolo-output.log"
+                    ],
+                    "target_files": [
+                      "src/runtime/progress/server.mjs"
+                    ],
+                    "missing": {
+                      "requirements": false,
+                      "design": false,
+                      "evidence": false
+                    }
+                  },
+                  {
+                    "task_id": "TEST-PROGRESS-SERVER-002",
+                    "status": "done",
+                    "requirement_ids": [
+                      "REQ-PROGRESS-UI-DOGFOOD-002",
+                      "REQ-PROGRESS-UI-DOGFOOD-003"
+                    ],
+                    "design_ids": [
+                      "DES-PROGRESS-UI-DOGFOOD-002",
+                      "DES-PROGRESS-UI-DOGFOOD-003"
+                    ],
+                    "evidence_files": [
+                      ".yolo/state/runtime/task-logs/TEST-PROGRESS-SERVER-002.jsonl",
+                      ".yolo/state/yolo-output.log"
+                    ],
+                    "target_files": [
+                      "__tests__/progress-dashboard.test.mjs",
+                      "__tests__/progress-dashboard-ui-evidence.test.mjs"
+                    ],
+                    "missing": {
+                      "requirements": false,
+                      "design": false,
+                      "evidence": false
+                    }
+                  },
+                  {
+                    "task_id": "ACCEPT-PROGRESS-SERVER-003",
+                    "status": "done",
+                    "requirement_ids": [
+                      "REQ-PROGRESS-UI-DOGFOOD-003"
+                    ],
+                    "design_ids": [
+                      "DES-PROGRESS-UI-DOGFOOD-003"
+                    ],
+                    "evidence_files": [
+                      ".yolo/state/runtime/task-logs/ACCEPT-PROGRESS-SERVER-003.jsonl",
+                      ".yolo/state/evidence/adapters/progress-dashboard-ui-latest.json",
+                      ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json"
+                    ],
+                    "target_files": [
+                      ".yolo/adapters/progress-dashboard-ui.manifest.json"
+                    ],
+                    "missing": {
+                      "requirements": false,
+                      "design": false,
+                      "evidence": false
+                    }
+                  }
+                ],
+                "summary": {
+                  "task_count": 3,
+                  "tasks_with_requirements": 3,
+                  "tasks_with_design": 3,
+                  "terminal_tasks_with_evidence": 3,
+                  "missing_requirements": [],
+                  "missing_design": [],
+                  "missing_evidence": []
+                }
+              }
+            },
+            "migration": {
+              "available": false,
+              "would_fix_contract": false,
+              "added_count": 0,
+              "blocked_count": 0,
+              "tasks_changed": [],
+              "issues": [],
+              "dry_run_command": "yolo-prd-migrate-gates /Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json --json",
+              "apply_command": "yolo-prd-migrate-gates /Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json --apply",
+              "contract_after_migration": null,
+              "next_actions": [
+                "Fix PRD contract failures manually; no safe target coverage migration was inferred."
+              ]
+            },
+            "runner_readiness": {
+              "can_execute": true,
+              "reason": "ready",
+              "execution_mode": "default",
+              "tasks": {
+                "total": 3,
+                "pending": 0,
+                "running": 0,
+                "completed": 3,
+                "failed": 0,
+                "blocked": 0,
+                "skipped": 0,
+                "by_status": {
+                  "done": 3
+                }
+              },
+              "next_actions": [
+                "PRD preflight passed; runner can start."
+              ]
+            },
+            "blocked_count": 0,
+            "warning_count": 0,
+            "blocked_reasons": []
+          }
+        },
+        {
+          "name": "pm_readiness",
+          "status": "pass",
+          "summary": "Product readiness passed.",
+          "blockers": [],
+          "warnings": [],
+          "discovery_readiness": null
+        },
+        {
+          "name": "resolver_readiness",
+          "status": "pass",
+          "summary": "Resolver context passed.",
+          "blockers": [],
+          "warnings": [],
+          "advisories": [
+            {
+              "code": "RESOLVER_UNKNOWN_CONTEXT",
+              "message": "platform_adapter resolved to unknown/custom.",
+              "kind": "platform_adapter",
+              "manifest_id": null
+            },
+            {
+              "code": "RESOLVER_UNKNOWN_CONTEXT",
+              "message": "stack_adapter resolved to unknown/custom.",
+              "kind": "stack_adapter",
+              "manifest_id": null
+            },
+            {
+              "code": "RESOLVER_UNKNOWN_CONTEXT",
+              "message": "component_adapter resolved to unknown/custom.",
+              "kind": "component_adapter",
+              "manifest_id": null
+            },
+            {
+              "code": "RESOLVER_UNKNOWN_CONTEXT",
+              "message": "design_reference_pack resolved to unknown/custom.",
+              "kind": "design_reference_pack",
+              "manifest_id": null
+            },
+            {
+              "code": "RESOLVER_UNKNOWN_CONTEXT",
+              "message": "quality_rule_pack resolved to unknown/custom.",
+              "kind": "quality_rule_pack",
+              "manifest_id": null
+            }
+          ],
+          "selected_adapters": [
+            {
+              "id": "unknown/custom",
+              "kind": "platform_adapter",
+              "status": "warning",
+              "source_path": ""
+            },
+            {
+              "id": "unknown/custom",
+              "kind": "stack_adapter",
+              "status": "warning",
+              "source_path": ""
+            },
+            {
+              "id": "unknown/custom",
+              "kind": "component_adapter",
+              "status": "warning",
+              "source_path": ""
+            },
+            {
+              "id": "progress-dashboard-ui",
+              "kind": "acceptance_adapter",
+              "status": "pass",
+              "source_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json"
+            }
+          ]
+        },
+        {
+          "name": "ui_readiness",
+          "status": "pass",
+          "summary": "UI readiness inspected.",
+          "ui_task_count": 3,
+          "blockers": [],
+          "warnings": []
+        },
+        {
+          "name": "adapter_readiness",
+          "status": "pass",
+          "summary": "Adapter readiness passed.",
+          "blockers": [],
+          "warnings": [],
+          "ui_task_count": 3,
+          "adapter_present": true,
+          "adapter_id": "progress-dashboard-ui",
+          "adapter_source": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json",
+          "resolver_status": "warning"
+        },
+        {
+          "name": "evidence_plan",
+          "status": "pass",
+          "summary": "Evidence plan passed.",
+          "blockers": [],
+          "warnings": []
+        }
+      ],
+      "blockers": [],
+      "warnings": [
+        {
+          "code": "ATOMICITY_INVESTIGATE_FIRST",
+          "task_id": "TEST-PROGRESS-SERVER-002",
+          "message": "Task should force investigation before patching.",
+          "score": 6,
+          "gate": "atomicity"
+        }
+      ],
+      "execution_policy": {
+        "gate_strength": "strict",
+        "remediation_mode": "non_blocking_when_schedulable",
+        "ship_gate": "fail_closed",
+        "automation_can_continue": true
+      },
+      "remediation_plan": {
+        "schema_version": "1.0",
+        "schema": "yolo.gate.remediation_plan.v1",
+        "source": "yolo-check",
+        "gate_strength": "strict",
+        "policy": "strong_gate_non_blocking_remediation",
+        "status": "pass",
+        "action": "PASS",
+        "automation_can_continue": true,
+        "requires_human": false,
+        "unsafe_stop": false,
+        "blocks_ship": false,
+        "task_id": null,
+        "gate_exit_code": null,
+        "attempt": null,
+        "max_retry": null,
+        "issue_count": 0,
+        "warning_count": 1,
+        "summary": "Strict check passed with warnings; warnings are recorded but do not block automation.",
+        "items": [],
+        "next_actions": [
+          "Continue to the next lifecycle step."
+        ]
+      },
+      "artifacts": [
+        "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json",
+        "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/lifecycle/check-report.json"
+      ],
+      "next_actions": [
+        "Review warnings, then continue only if the scope is still safe."
+      ],
+      "lifecycle_write": {
+        "status": "ok",
+        "schema_version": "1.0",
+        "stage": "check",
+        "stage_status": "warning",
+        "artifact_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/lifecycle/check-report.json",
+        "status_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/lifecycle/status.json",
+        "validation": {
+          "status": "warning",
+          "valid": true,
+          "errors": [],
+          "warnings": [
+            {
+              "code": "LIFECYCLE_ACTIVE_STAGE_COUNT",
+              "active_stages": [],
+              "message": "lifecycle state should have exactly one active stage"
+            }
+          ]
+        },
+        "event": {
+          "schema_version": "1.0",
+          "schema": "yolo.ledger.event.v1",
+          "ts": "2026-05-26T13:11:12.362Z",
+          "ledger": "state",
+          "event": "lifecycle.check.report",
+          "source": "yolo-check",
+          "stage": "check",
+          "status": "warning",
+          "artifact": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/lifecycle/check-report.json",
+          "blocker_count": 0
+        },
+        "session_memory": {
+          "status": "ok",
+          "file": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/state/session-memory.jsonl",
+          "record": {
+            "ts": "2026-05-26T13:11:12.362Z",
+            "type": "lifecycle",
+            "source": "yolo-check",
+            "summary": "check:warning:YOLO check passed with warnings.",
+            "refs": [
+              "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/lifecycle/check-report.json",
+              "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json"
+            ]
+          }
+        },
+        "learning": null,
+        "report": {
+          "schema_version": "1.0",
+          "schema": "yolo.lifecycle.stage_report.v1",
+          "project": {
+            "name": "project"
+          },
+          "stage": {
+            "id": "check",
+            "sequence": 7,
+            "label": "Readiness check",
+            "writes_code": false
+          },
+          "status": "warning",
+          "created_at": "2026-05-26T13:11:12.362Z",
+          "updated_at": "2026-05-26T13:11:12.362Z",
+          "inputs": [],
+          "outputs": [],
+          "decisions": [],
+          "evidence": [
+            {
+              "path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json"
+            }
+          ],
+          "blockers": [],
+          "next_actions": [
+            "Review warnings, then continue only if the scope is still safe."
+          ],
+          "lifecycle_schema": "yolo.lifecycle.artifact.v1",
+          "report": {
+            "schema_version": "1.0",
+            "schema": "yolo.check.report.v1",
+            "status": "warning",
+            "code": "YOLO_CHECK_WARNING",
+            "summary": "YOLO check passed with warnings.",
+            "generated_at": "2026-05-26T13:11:12.362Z",
+            "prd_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json",
+            "project_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo",
+            "state_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo",
+            "resolver": {
+              "schema_version": "1.0",
+              "schema": "yolo.pack.resolver.v1",
+              "status": "warning",
+              "project_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo",
+              "state_root": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo",
+              "manifest_roots": [
+                "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/packs",
+                "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters"
+              ],
+              "selected": {
+                "platform_adapter": {
+                  "id": "unknown/custom",
+                  "kind": "platform_adapter",
+                  "status": "warning",
+                  "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+                  "capabilities": [],
+                  "source_path": ""
+                },
+                "stack_adapter": {
+                  "id": "unknown/custom",
+                  "kind": "stack_adapter",
+                  "status": "warning",
+                  "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+                  "capabilities": [],
+                  "source_path": ""
+                },
+                "component_adapter": {
+                  "id": "unknown/custom",
+                  "kind": "component_adapter",
+                  "status": "warning",
+                  "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+                  "capabilities": [],
+                  "source_path": ""
+                },
+                "design_reference_pack": {
+                  "id": "unknown/custom",
+                  "kind": "design_reference_pack",
+                  "status": "warning",
+                  "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+                  "capabilities": [],
+                  "source_path": ""
+                },
+                "quality_rule_pack": {
+                  "id": "unknown/custom",
+                  "kind": "quality_rule_pack",
+                  "status": "warning",
+                  "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+                  "capabilities": [],
+                  "source_path": ""
+                },
+                "acceptance_adapter": {
+                  "schema_version": "1.0",
+                  "schema": "yolo.manifest.v1",
+                  "id": "progress-dashboard-ui",
+                  "kind": "acceptance_adapter",
+                  "label": "",
+                  "description": "Progress dashboard UI/UX evidence adapter for YOLO self-dogfood runs.",
+                  "inputs": [
+                    "projectRoot",
+                    "stateRoot"
+                  ],
+                  "outputs": [
+                    "ui_evidence"
+                  ],
+                  "commands": [
+                    {
+                      "id": "progress-dashboard-ui-evidence",
+                      "command": "node bin/yolo.mjs progress-ui-evidence . --json",
+                      "timeout_ms": 90000,
+                      "evidence_path": ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json"
+                    }
+                  ],
+                  "evidence": [
+                    "screenshot",
+                    "runtime_log",
+                    "ui_contract"
+                  ],
+                  "capabilities": [
+                    "ui",
+                    "browser",
+                    "page_reachable",
+                    "critical_path_passed",
+                    "screenshot"
+                  ],
+                  "applies_to": [
+                    "ui",
+                    "progress-dashboard"
+                  ],
+                  "source_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json"
+                }
+              },
+              "selected_packs": [
+                {
+                  "id": "unknown/custom",
+                  "kind": "design_reference_pack",
+                  "status": "warning",
+                  "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+                  "capabilities": [],
+                  "source_path": ""
+                },
+                {
+                  "id": "unknown/custom",
+                  "kind": "quality_rule_pack",
+                  "status": "warning",
+                  "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+                  "capabilities": [],
+                  "source_path": ""
+                }
+              ],
+              "selected_adapters": [
+                {
+                  "id": "unknown/custom",
+                  "kind": "platform_adapter",
+                  "status": "warning",
+                  "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+                  "capabilities": [],
+                  "source_path": ""
+                },
+                {
+                  "id": "unknown/custom",
+                  "kind": "stack_adapter",
+                  "status": "warning",
+                  "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+                  "capabilities": [],
+                  "source_path": ""
+                },
+                {
+                  "id": "unknown/custom",
+                  "kind": "component_adapter",
+                  "status": "warning",
+                  "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+                  "capabilities": [],
+                  "source_path": ""
+                },
+                {
+                  "schema_version": "1.0",
+                  "schema": "yolo.manifest.v1",
+                  "id": "progress-dashboard-ui",
+                  "kind": "acceptance_adapter",
+                  "label": "",
+                  "description": "Progress dashboard UI/UX evidence adapter for YOLO self-dogfood runs.",
+                  "inputs": [
+                    "projectRoot",
+                    "stateRoot"
+                  ],
+                  "outputs": [
+                    "ui_evidence"
+                  ],
+                  "commands": [
+                    {
+                      "id": "progress-dashboard-ui-evidence",
+                      "command": "node bin/yolo.mjs progress-ui-evidence . --json",
+                      "timeout_ms": 90000,
+                      "evidence_path": ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json"
+                    }
+                  ],
+                  "evidence": [
+                    "screenshot",
+                    "runtime_log",
+                    "ui_contract"
+                  ],
+                  "capabilities": [
+                    "ui",
+                    "browser",
+                    "page_reachable",
+                    "critical_path_passed",
+                    "screenshot"
+                  ],
+                  "applies_to": [
+                    "ui",
+                    "progress-dashboard"
+                  ],
+                  "source_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json"
+                }
+              ],
+              "blockers": [],
+              "warnings": [
+                {
+                  "code": "RESOLVER_UNKNOWN_CONTEXT",
+                  "kind": "platform_adapter",
+                  "message": "platform_adapter resolved to unknown/custom."
+                },
+                {
+                  "code": "RESOLVER_UNKNOWN_CONTEXT",
+                  "kind": "stack_adapter",
+                  "message": "stack_adapter resolved to unknown/custom."
+                },
+                {
+                  "code": "RESOLVER_UNKNOWN_CONTEXT",
+                  "kind": "component_adapter",
+                  "message": "component_adapter resolved to unknown/custom."
+                },
+                {
+                  "code": "RESOLVER_UNKNOWN_CONTEXT",
+                  "kind": "design_reference_pack",
+                  "message": "design_reference_pack resolved to unknown/custom."
+                },
+                {
+                  "code": "RESOLVER_UNKNOWN_CONTEXT",
+                  "kind": "quality_rule_pack",
+                  "message": "quality_rule_pack resolved to unknown/custom."
+                }
+              ],
+              "manifests": [
+                {
+                  "path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json",
+                  "id": "progress-dashboard-ui",
+                  "kind": "acceptance_adapter",
+                  "status": "pass"
+                }
+              ],
+              "next_actions": [
+                "Continue with unknown/custom only if the user accepts missing project-specific packs."
+              ]
+            },
+            "task_surface_summary": {
+              "task_count": 3,
+              "ui_task_count": 3,
+              "ui_task_ids": [
+                "UI-PROGRESS-SERVER-001",
+                "TEST-PROGRESS-SERVER-002",
+                "ACCEPT-PROGRESS-SERVER-003"
+              ]
+            },
+            "checks": [
+              {
+                "name": "atomicity",
+                "status": "warning",
+                "summary": "Atomic task scoring completed.",
+                "inspections": [
+                  {
+                    "status": "pass",
+                    "mode": "direct_patch",
+                    "task_id": "UI-PROGRESS-SERVER-001",
+                    "score": 5,
+                    "reasons": [
+                      {
+                        "id": "CREATES_NEW_FILE",
+                        "points": 2,
+                        "detail": "任务包含新文件创建",
+                        "evidence": {
+                          "files": []
+                        }
+                      },
+                      {
+                        "id": "BEHAVIORAL_FAIL_POSTCONDITIONS",
+                        "points": 3,
+                        "detail": "行为后置条件 4 个",
+                        "evidence": {
+                          "behavioralFailPostconditions": 4,
+                          "totalFailPostconditions": 5
+                        }
+                      }
+                    ],
+                    "evidence_file": "state/evidence/UI-PROGRESS-SERVER-001/investigation.json",
+                    "split_suggestions": [],
+                    "next_action": "allow_runner_execution"
+                  },
+                  {
+                    "status": "pass",
+                    "mode": "investigate_then_patch",
+                    "task_id": "TEST-PROGRESS-SERVER-002",
+                    "score": 6,
+                    "reasons": [
+                      {
+                        "id": "MULTI_FILE",
+                        "points": 2,
+                        "detail": "目标文件 2 个",
+                        "evidence": {
+                          "files": [
+                            "__tests__/progress-dashboard.test.mjs",
+                            "__tests__/progress-dashboard-ui-evidence.test.mjs"
+                          ]
+                        }
+                      },
+                      {
+                        "id": "BEHAVIORAL_FAIL_POSTCONDITIONS",
+                        "points": 3,
+                        "detail": "行为后置条件 4 个",
+                        "evidence": {
+                          "behavioralFailPostconditions": 4,
+                          "totalFailPostconditions": 4
+                        }
+                      },
+                      {
+                        "id": "AT_SCOPE_FILE_LIMIT",
+                        "points": 1,
+                        "detail": "目标文件数已经贴近/达到 scope.max_files，没有缓冲空间",
+                        "evidence": {
+                          "max_files": 2,
+                          "files": 2
+                        }
+                      }
+                    ],
+                    "evidence_file": "state/evidence/TEST-PROGRESS-SERVER-002/investigation.json",
+                    "split_suggestions": [],
+                    "next_action": "force_prompt_to_read_and_report_evidence_before_patch"
+                  },
+                  {
+                    "status": "pass",
+                    "mode": "direct_patch",
+                    "task_id": "ACCEPT-PROGRESS-SERVER-003",
+                    "score": 1,
+                    "reasons": [
+                      {
+                        "id": "BEHAVIORAL_FAIL_POSTCONDITIONS",
+                        "points": 1,
+                        "detail": "行为后置条件 1 个",
+                        "evidence": {
+                          "behavioralFailPostconditions": 1,
+                          "totalFailPostconditions": 3
+                        }
+                      }
+                    ],
+                    "evidence_file": "state/evidence/ACCEPT-PROGRESS-SERVER-003/investigation.json",
+                    "split_suggestions": [],
+                    "next_action": "allow_runner_execution"
+                  }
+                ],
+                "blockers": [],
+                "warnings": [
+                  {
+                    "code": "ATOMICITY_INVESTIGATE_FIRST",
+                    "task_id": "TEST-PROGRESS-SERVER-002",
+                    "message": "Task should force investigation before patching.",
+                    "score": 6
+                  }
+                ]
+              },
+              {
+                "name": "prd_preflight",
+                "status": "pass",
+                "summary": "PRD preflight completed.",
+                "blockers": [],
+                "warnings": [],
+                "preflight": {
+                  "status": "pass",
+                  "ok": true,
+                  "generated_at": "2026-05-26T13:11:12.357Z",
+                  "file": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json",
+                  "schema": {
+                    "ok": true,
+                    "warnings": []
+                  },
+                  "contract": {
+                    "status": "pass",
+                    "blocks_execution": false,
+                    "failure_count": 0,
+                    "warning_count": 0,
+                    "failures": [],
+                    "warnings": []
+                  },
+                  "spec_governance": {
+                    "status": "pass",
+                    "blocks_execution": false,
+                    "policy": {
+                      "requireRequirements": true,
+                      "requireDesign": true,
+                      "requireEvidenceForTerminal": true
+                    },
+                    "blockers": [],
+                    "warnings": [],
+                    "matrix": {
+                      "prd_id": "PRD-20260526-PROGRESS-SERVER-UI-DOGFOOD",
+                      "generated_at": "2026-05-26T00:00:00.000Z",
+                      "requirements": [
+                        "REQ-PROGRESS-UI-DOGFOOD-001",
+                        "REQ-PROGRESS-UI-DOGFOOD-002",
+                        "REQ-PROGRESS-UI-DOGFOOD-003"
+                      ],
+                      "designs": [
+                        "DES-PROGRESS-UI-DOGFOOD-001",
+                        "DES-PROGRESS-UI-DOGFOOD-002",
+                        "DES-PROGRESS-UI-DOGFOOD-003"
+                      ],
+                      "tasks": [
+                        {
+                          "task_id": "UI-PROGRESS-SERVER-001",
+                          "status": "done",
+                          "requirement_ids": [
+                            "REQ-PROGRESS-UI-DOGFOOD-001",
+                            "REQ-PROGRESS-UI-DOGFOOD-002"
+                          ],
+                          "design_ids": [
+                            "DES-PROGRESS-UI-DOGFOOD-001",
+                            "DES-PROGRESS-UI-DOGFOOD-002"
+                          ],
+                          "evidence_files": [
+                            ".yolo/state/runtime/task-logs/UI-PROGRESS-SERVER-001.jsonl",
+                            ".yolo/state/yolo-output.log"
+                          ],
+                          "target_files": [
+                            "src/runtime/progress/server.mjs"
+                          ],
+                          "missing": {
+                            "requirements": false,
+                            "design": false,
+                            "evidence": false
+                          }
+                        },
+                        {
+                          "task_id": "TEST-PROGRESS-SERVER-002",
+                          "status": "done",
+                          "requirement_ids": [
+                            "REQ-PROGRESS-UI-DOGFOOD-002",
+                            "REQ-PROGRESS-UI-DOGFOOD-003"
+                          ],
+                          "design_ids": [
+                            "DES-PROGRESS-UI-DOGFOOD-002",
+                            "DES-PROGRESS-UI-DOGFOOD-003"
+                          ],
+                          "evidence_files": [
+                            ".yolo/state/runtime/task-logs/TEST-PROGRESS-SERVER-002.jsonl",
+                            ".yolo/state/yolo-output.log"
+                          ],
+                          "target_files": [
+                            "__tests__/progress-dashboard.test.mjs",
+                            "__tests__/progress-dashboard-ui-evidence.test.mjs"
+                          ],
+                          "missing": {
+                            "requirements": false,
+                            "design": false,
+                            "evidence": false
+                          }
+                        },
+                        {
+                          "task_id": "ACCEPT-PROGRESS-SERVER-003",
+                          "status": "done",
+                          "requirement_ids": [
+                            "REQ-PROGRESS-UI-DOGFOOD-003"
+                          ],
+                          "design_ids": [
+                            "DES-PROGRESS-UI-DOGFOOD-003"
+                          ],
+                          "evidence_files": [
+                            ".yolo/state/runtime/task-logs/ACCEPT-PROGRESS-SERVER-003.jsonl",
+                            ".yolo/state/evidence/adapters/progress-dashboard-ui-latest.json",
+                            ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json"
+                          ],
+                          "target_files": [
+                            ".yolo/adapters/progress-dashboard-ui.manifest.json"
+                          ],
+                          "missing": {
+                            "requirements": false,
+                            "design": false,
+                            "evidence": false
+                          }
+                        }
+                      ],
+                      "summary": {
+                        "task_count": 3,
+                        "tasks_with_requirements": 3,
+                        "tasks_with_design": 3,
+                        "terminal_tasks_with_evidence": 3,
+                        "missing_requirements": [],
+                        "missing_design": [],
+                        "missing_evidence": []
+                      }
+                    }
+                  },
+                  "migration": {
+                    "available": false,
+                    "would_fix_contract": false,
+                    "added_count": 0,
+                    "blocked_count": 0,
+                    "tasks_changed": [],
+                    "issues": [],
+                    "dry_run_command": "yolo-prd-migrate-gates /Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json --json",
+                    "apply_command": "yolo-prd-migrate-gates /Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json --apply",
+                    "contract_after_migration": null,
+                    "next_actions": [
+                      "Fix PRD contract failures manually; no safe target coverage migration was inferred."
+                    ]
+                  },
+                  "runner_readiness": {
+                    "can_execute": true,
+                    "reason": "ready",
+                    "execution_mode": "default",
+                    "tasks": {
+                      "total": 3,
+                      "pending": 0,
+                      "running": 0,
+                      "completed": 3,
+                      "failed": 0,
+                      "blocked": 0,
+                      "skipped": 0,
+                      "by_status": {
+                        "done": 3
+                      }
+                    },
+                    "next_actions": [
+                      "PRD preflight passed; runner can start."
+                    ]
+                  },
+                  "blocked_count": 0,
+                  "warning_count": 0,
+                  "blocked_reasons": []
+                }
+              },
+              {
+                "name": "pm_readiness",
+                "status": "pass",
+                "summary": "Product readiness passed.",
+                "blockers": [],
+                "warnings": [],
+                "discovery_readiness": null
+              },
+              {
+                "name": "resolver_readiness",
+                "status": "pass",
+                "summary": "Resolver context passed.",
+                "blockers": [],
+                "warnings": [],
+                "advisories": [
+                  {
+                    "code": "RESOLVER_UNKNOWN_CONTEXT",
+                    "message": "platform_adapter resolved to unknown/custom.",
+                    "kind": "platform_adapter",
+                    "manifest_id": null
+                  },
+                  {
+                    "code": "RESOLVER_UNKNOWN_CONTEXT",
+                    "message": "stack_adapter resolved to unknown/custom.",
+                    "kind": "stack_adapter",
+                    "manifest_id": null
+                  },
+                  {
+                    "code": "RESOLVER_UNKNOWN_CONTEXT",
+                    "message": "component_adapter resolved to unknown/custom.",
+                    "kind": "component_adapter",
+                    "manifest_id": null
+                  },
+                  {
+                    "code": "RESOLVER_UNKNOWN_CONTEXT",
+                    "message": "design_reference_pack resolved to unknown/custom.",
+                    "kind": "design_reference_pack",
+                    "manifest_id": null
+                  },
+                  {
+                    "code": "RESOLVER_UNKNOWN_CONTEXT",
+                    "message": "quality_rule_pack resolved to unknown/custom.",
+                    "kind": "quality_rule_pack",
+                    "manifest_id": null
+                  }
+                ],
+                "selected_adapters": [
+                  {
+                    "id": "unknown/custom",
+                    "kind": "platform_adapter",
+                    "status": "warning",
+                    "source_path": ""
+                  },
+                  {
+                    "id": "unknown/custom",
+                    "kind": "stack_adapter",
+                    "status": "warning",
+                    "source_path": ""
+                  },
+                  {
+                    "id": "unknown/custom",
+                    "kind": "component_adapter",
+                    "status": "warning",
+                    "source_path": ""
+                  },
+                  {
+                    "id": "progress-dashboard-ui",
+                    "kind": "acceptance_adapter",
+                    "status": "pass",
+                    "source_path": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json"
+                  }
+                ]
+              },
+              {
+                "name": "ui_readiness",
+                "status": "pass",
+                "summary": "UI readiness inspected.",
+                "ui_task_count": 3,
+                "blockers": [],
+                "warnings": []
+              },
+              {
+                "name": "adapter_readiness",
+                "status": "pass",
+                "summary": "Adapter readiness passed.",
+                "blockers": [],
+                "warnings": [],
+                "ui_task_count": 3,
+                "adapter_present": true,
+                "adapter_id": "progress-dashboard-ui",
+                "adapter_source": "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/.yolo/adapters/progress-dashboard-ui.manifest.json",
+                "resolver_status": "warning"
+              },
+              {
+                "name": "evidence_plan",
+                "status": "pass",
+                "summary": "Evidence plan passed.",
+                "blockers": [],
+                "warnings": []
+              }
+            ],
+            "blockers": [],
+            "warnings": [
+              {
+                "code": "ATOMICITY_INVESTIGATE_FIRST",
+                "task_id": "TEST-PROGRESS-SERVER-002",
+                "message": "Task should force investigation before patching.",
+                "score": 6,
+                "gate": "atomicity"
+              }
+            ],
+            "execution_policy": {
+              "gate_strength": "strict",
+              "remediation_mode": "non_blocking_when_schedulable",
+              "ship_gate": "fail_closed",
+              "automation_can_continue": true
+            },
+            "remediation_plan": {
+              "schema_version": "1.0",
+              "schema": "yolo.gate.remediation_plan.v1",
+              "source": "yolo-check",
+              "gate_strength": "strict",
+              "policy": "strong_gate_non_blocking_remediation",
+              "status": "pass",
+              "action": "PASS",
+              "automation_can_continue": true,
+              "requires_human": false,
+              "unsafe_stop": false,
+              "blocks_ship": false,
+              "task_id": null,
+              "gate_exit_code": null,
+              "attempt": null,
+              "max_retry": null,
+              "issue_count": 0,
+              "warning_count": 1,
+              "summary": "Strict check passed with warnings; warnings are recorded but do not block automation.",
+              "items": [],
+              "next_actions": [
+                "Continue to the next lifecycle step."
+              ]
+            },
+            "artifacts": [
+              "/Users/sippingroom/Developer/SamKimTest/scripts/yolo/data/prd/current/prd-yolo-progress-server-ui-provider-dogfood.json"
+            ],
+            "next_actions": [
+              "Review warnings, then continue only if the scope is still safe."
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,421 @@
+{
+  "version": "2.0",
+  "title": "Review R5 Bugfix",
+  "source": "review-r5",
+  "tasks": [
+    {
+      "id": "BUG-R-177",
+      "title": "updateCategory 缺少乐观锁保护",
+      "type": "bugfix",
+      "description": "修复 src/services/category.ts 的 updateCategory 函数（第 53-67 行）：先查询当前 version，在 where 条件中包含 { _id: id, version: currentVersion }，更新时递增 version 字段。参照 card.service.ts:78-95 和 series.service.ts:70-93 的实现模式。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/category.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/category.ts",
+            "text": ".doc(id).update({"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/category.ts",
+            "text": ".doc(id).update({"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/category.ts",
+            "text": ".where({ _id: id, version:"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "updateCategory 使用 where 条件包含 version 字段进行乐观锁检查",
+        "更新时 version 字段递增（使用 db.command.inc(1)）",
+        "当 res.stats.updated === 0 时抛出乐观锁冲突错误"
+      ],
+      "status": "done",
+      "task_kind": "review_fix",
+      "phase": "done",
+      "updatedAt": "2026-05-05T10:03:26.907Z"
+    },
+    {
+      "id": "BUG-R-178",
+      "title": "updateInventory 缺少乐观锁保护",
+      "type": "bugfix",
+      "description": "修复 src/services/inventory/inventory-mutation.ts 的 updateInventory 函数（第 65-88 行）：先查询当前 version，在 where 条件中包含 { _id: id, version: currentVersion }，更新时递增 version 字段。参照同文件中 updateInventoryInTransaction（第 111-140 行）的实现模式。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/inventory/inventory-mutation.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/inventory/inventory-mutation.ts",
+            "text": ".doc(id).update({"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/inventory/inventory-mutation.ts",
+            "text": ".doc(id).update({"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/inventory/inventory-mutation.ts",
+            "text": ".where({ _id: id, version:"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "updateInventory 使用 where 条件包含 version 字段进行乐观锁检查",
+        "更新时 version 字段递增（使用 _.inc(1)）",
+        "当 res.stats.updated === 0 时抛出乐观锁冲突错误"
+      ],
+      "status": "failed",
+      "task_kind": "review_fix",
+      "phase": "claude",
+      "updatedAt": "2026-05-05T10:06:00.908Z",
+      "failReason": "连续同因"
+    },
+    {
+      "id": "BUG-R-179",
+      "title": "card.service.ts 使用类型断言绕过类型检查",
+      "type": "refactor",
+      "description": "重构 src/services/card.service.ts 第 81 行的类型断言：将 `const current = currentRes.data as unknown as Card | undefined;` 改为更安全的类型守卫或使用类型转换。考虑使用类型守卫函数 `isCard` 或直接使用 `currentRes.data as Card | undefined`（单层断言更安全）。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/card.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/card.service.ts",
+            "text": "as unknown as"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/card.service.ts",
+            "text": "as unknown as"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "移除双重类型断言（as unknown as）",
+        "使用更安全的类型检查方式（类型守卫或单层断言）",
+        "通过 TypeScript 类型检查，无编译错误"
+      ],
+      "status": "done",
+      "task_kind": "review_fix",
+      "phase": "done",
+      "updatedAt": "2026-05-05T10:09:26.365Z"
+    },
+    {
+      "id": "BUG-R-180",
+      "title": "测试文件超长 - stock-in-batch-transaction.test.ts",
+      "type": "refactor",
+      "description": "将 src/services/__tests__/stock-in-batch-transaction.test.ts（459 行）拆分成多个测试文件：test-transaction-flow.test.ts（创建/更新逻辑）、test-validation.test.ts（输入验证）、test-data-integrity.test.ts（数据完整性测试）。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_line_count_exceeds",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/stock-in-batch-transaction.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_line_count_under",
+          "params": {
+            "file": "src/services/__tests__/test-transaction-flow.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_line_count_under",
+          "params": {
+            "file": "src/services/__tests__/test-validation.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_line_count_under",
+          "params": {
+            "file": "src/services/__tests__/test-data-integrity.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件删除，拆分为 3 个新测试文件",
+        "每个新测试文件不超过 150 行",
+        "所有测试用例保留并按功能分类",
+        "测试通过率不变"
+      ],
+      "status": "done",
+      "task_kind": "review_fix",
+      "phase": "done",
+      "updatedAt": "2026-05-05T10:10:27.503Z"
+    },
+    {
+      "id": "BUG-R-181",
+      "title": "测试文件超长 - sale.service.test.ts",
+      "type": "refactor",
+      "description": "将 src/services/__tests__/sale.service.test.ts（371 行）拆分成多个测试文件：test-sales-creation.test.ts（创建销售）、test-sales-query.test.ts（查询销售）、test-sales-validation.test.ts（输入验证）。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_line_count_exceeds",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/sale.service.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_line_count_under",
+          "params": {
+            "file": "src/services/__tests__/test-sales-creation.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_line_count_under",
+          "params": {
+            "file": "src/services/__tests__/test-sales-query.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_line_count_under",
+          "params": {
+            "file": "src/services/__tests__/test-sales-validation.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件删除，拆分为 3 个新测试文件",
+        "每个新测试文件不超过 150 行",
+        "所有测试用例保留并按功能分类",
+        "测试通过率不变"
+      ],
+      "status": "running",
+      "task_kind": "review_fix",
+      "phase": "claude",
+      "updatedAt": "2026-05-05T10:16:39.938Z"
+    },
+    {
+      "id": "BUG-R-182",
+      "title": "测试文件超长 - batch-import.service.test.ts",
+      "type": "refactor",
+      "description": "将 src/services/__tests__/batch-import.service.test.ts（345 行）拆分成多个测试文件：test-import-validation.test.ts（验证逻辑）、test-import-process.test.ts（导入流程）、test-import-error-handling.test.ts（错误处理）。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/__tests__/batch-import.service.test.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "file_line_count_exceeds",
+          "params": {
+            "file": "src/services/__tests__/batch-import.service.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "file_not_exists",
+          "params": {
+            "file": "src/services/__tests__/batch-import.service.test.ts"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "file_line_count_under",
+          "params": {
+            "file": "src/services/__tests__/test-import-validation.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-3",
+          "type": "file_line_count_under",
+          "params": {
+            "file": "src/services/__tests__/test-import-process.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-4",
+          "type": "file_line_count_under",
+          "params": {
+            "file": "src/services/__tests__/test-import-error-handling.test.ts",
+            "max_lines": 150
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "原测试文件删除，拆分为 3 个新测试文件",
+        "每个新测试文件不超过 150 行",
+        "所有测试用例保留并按功能分类",
+        "测试通过率不变"
+      ],
+      "status": "pending",
+      "task_kind": "review_fix"
+    },
+    {
+      "id": "BUG-R-183",
+      "title": "constants.ts 使用 console.error 而非 logger",
+      "type": "bugfix",
+      "description": "修复 src/services/constants.ts 第 46 行：将 `console.error('CLOUD_ENV 未定义：请在构建配置中设置 CLOUD_ENV 环境变量');` 替换为 `logger.error('CLOUD_ENV 未定义：请在构建配置中设置 CLOUD_ENV 环境变量');`，并在文件顶部添加 `import { logger } from '../services/logger';`。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/constants.ts"
+          }
+        ]
+      },
+      "pre_conditions": [
+        {
+          "id": "PRE-1",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/constants.ts",
+            "text": "console.error"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "post_conditions": [
+        {
+          "id": "POST-1",
+          "type": "code_not_contains",
+          "params": {
+            "file": "src/services/constants.ts",
+            "text": "console.error"
+          },
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-2",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/constants.ts",
+            "text": "logger.error"
+          },
+          "severity": "FAIL"
+        }
+      ],
+      "acceptance_criteria": [
+        "移除 console.error 调用",
+        "使用 logger.error 替代",
+        "文件顶部添加 logger 导入",
+        "通过 ESLint 检查"
+      ],
+      "status": "pending",
+      "task_kind": "review_fix"
+    }
+  ]
+}

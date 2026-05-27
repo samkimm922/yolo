@@ -1,0 +1,191 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { initProject, buildProjectBootstrapPlan } from "./bootstrap.js";
+import {
+  buildSpecLifecyclePackage,
+  inspectSpecLifecyclePackage,
+  specLifecycleToPrd,
+} from "../spec/lifecycle.js";
+import { preflightPrd } from "../prd/preflight.js";
+import { runRunnerRuntime } from "../runtime/runner-runtime.js";
+
+export const INIT_TO_FIRST_PRD_SMOKE_SCHEMA_VERSION = "1.0";
+
+function cleanString(value, fallback = "") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function stableJson(value) {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function projectRelative(projectRoot, filePath) {
+  const absolute = isAbsolute(filePath) ? filePath : join(projectRoot, filePath);
+  const rel = relative(projectRoot, absolute);
+  return rel && !rel.startsWith("..") && !isAbsolute(rel) ? rel.replaceAll("\\", "/") : absolute;
+}
+
+function defaultSmokeSpec(options = {}) {
+  const targetFile = cleanString(options.targetFile || options.target_file, "specs/tasks.md");
+  return buildSpecLifecyclePackage({
+    id: cleanString(options.specId || options.spec_id, "SPEC-FIRST-PRD-SMOKE"),
+    title: cleanString(options.title, "Init to first PRD smoke"),
+    requirements: [{
+      id: "REQ-SMOKE-001",
+      title: "Bootstrap a YOLO project",
+      text: "A new project can initialize YOLO files and produce its first executable PRD.",
+      success_criteria: [
+        "Project bootstrap files exist.",
+        "Spec lifecycle artifacts stay traceable.",
+        "The generated PRD passes preflight without invoking a provider.",
+      ],
+    }],
+    designs: [{
+      id: "DES-SMOKE-001",
+      requirement_ids: ["REQ-SMOKE-001"],
+      approach: "Use yolo init templates, spec lifecycle helpers, PRD preflight, and runner dry-run readiness.",
+      alternatives: ["Manual PRD creation without bootstrap"],
+      risks: ["Smoke must not mutate application source or call a model provider."],
+      rollback: "Delete generated .yolo/smoke artifacts and rerun init with force only when intended.",
+    }],
+    tasks: [{
+      id: "TASK-SMOKE-001",
+      title: "Verify first PRD execution path",
+      type: "feature",
+      priority: "P3",
+      status: "pending",
+      requirement_ids: ["REQ-SMOKE-001"],
+      design_ids: ["DES-SMOKE-001"],
+      scope: {
+        targets: [{ file: targetFile }],
+        allow_new_files: false,
+        max_files: 1,
+        max_lines_per_file: 200,
+      },
+      post_conditions: [{
+        id: "POST-SMOKE-TARGET",
+        type: "target_file_modified",
+        severity: "FAIL",
+        params: { file: targetFile },
+      }],
+      acceptance_criteria: [
+        "PRD schema validation passes.",
+        "PRD contract gate passes.",
+        "Spec governance gate passes.",
+        "Runner dry-run readiness passes without importing provider execution.",
+      ],
+    }],
+  });
+}
+
+export function buildInitToFirstPrdSmokePlan(options = {}) {
+  const projectRoot = resolve(options.projectRoot || options.cwd || process.cwd());
+  const projectName = cleanString(options.projectName || options.name, projectRoot.split(/[\\/]/).filter(Boolean).at(-1) || "project");
+  const prdPath = projectRelative(projectRoot, options.prdPath || options.prd_path || ".yolo/smoke/first-prd.json");
+  const targetFile = cleanString(options.targetFile || options.target_file, "specs/tasks.md");
+  const specPackage = options.specPackage || defaultSmokeSpec({ ...options, targetFile });
+  const specInspection = inspectSpecLifecyclePackage(specPackage);
+  const prd = {
+    ...specLifecycleToPrd(specPackage, {
+      id: cleanString(options.prdId || options.prd_id, "PRD-20260524-FIRST-SMOKE"),
+      title: cleanString(options.title, "Init to first PRD smoke"),
+      generated_at: options.generatedAt || options.generated_at || "2026-05-24T00:00:00.000Z",
+    }),
+    project: {
+      name: projectName,
+      language: cleanString(options.language, "other"),
+      framework: cleanString(options.framework, "generic"),
+      package_manager: cleanString(options.packageManager || options.package_manager, "other"),
+    },
+    generated_by: "yolo-review-agent",
+    base_commit: cleanString(options.baseCommit || options.base_commit, "0000000"),
+    execution_mode: "dry_run",
+    review_policy: { mode: "disabled" },
+  };
+
+  return {
+    schema_version: INIT_TO_FIRST_PRD_SMOKE_SCHEMA_VERSION,
+    schema: "yolo.project.init_to_first_prd_smoke_plan.v1",
+    project_root: projectRoot,
+    project_name: projectName,
+    prd_path: prdPath,
+    target_file: targetFile,
+    bootstrap_plan: buildProjectBootstrapPlan({ projectRoot, projectName }),
+    spec_package: specPackage,
+    spec_inspection: specInspection,
+    prd,
+    runner_dry_run: {
+      mode: cleanString(options.mode, "dev"),
+      dry_run: true,
+      expected_code: "RUNNER_DRY_RUN_READY",
+    },
+  };
+}
+
+export async function runInitToFirstPrdSmoke(options = {}) {
+  const plan = buildInitToFirstPrdSmokePlan(options);
+  const dryRun = options.dryRun === true || options.dry_run === true;
+  const prdAbsolutePath = isAbsolute(plan.prd_path) ? plan.prd_path : join(plan.project_root, plan.prd_path);
+  const bootstrap = initProject({
+    projectRoot: plan.project_root,
+    projectName: plan.project_name,
+    force: options.force === true,
+    dryRun,
+  });
+
+  if (plan.spec_inspection.blocks_execution) {
+    return {
+      status: "blocked",
+      summary: "init-to-first-PRD smoke blocked by invalid spec lifecycle",
+      exit_code: 1,
+      dry_run: dryRun,
+      plan,
+      bootstrap,
+      spec_inspection: plan.spec_inspection,
+      artifacts: bootstrap.artifacts,
+      next_actions: ["Fix spec lifecycle blockers before generating the first PRD."],
+    };
+  }
+
+  if (dryRun) {
+    return {
+      status: "success",
+      summary: "planned init-to-first-PRD smoke",
+      exit_code: 0,
+      dry_run: true,
+      plan,
+      bootstrap,
+      artifacts: [...bootstrap.artifacts, plan.prd_path],
+      next_actions: ["Run without dryRun to write the first PRD and execute preflight smoke."],
+    };
+  }
+
+  mkdirSync(dirname(prdAbsolutePath), { recursive: true });
+  writeFileSync(prdAbsolutePath, stableJson(plan.prd), "utf8");
+  const preflight = preflightPrd(prdAbsolutePath);
+  const runner = await runRunnerRuntime({
+    prdPath: prdAbsolutePath,
+    mode: plan.runner_dry_run.mode,
+    dryRun: true,
+  });
+  const status = preflight.runner_readiness?.can_execute && runner.status === "success" ? "success" : "blocked";
+
+  return {
+    status,
+    summary: status === "success"
+      ? "init-to-first-PRD smoke passed"
+      : "init-to-first-PRD smoke blocked before runner execution",
+    exit_code: status === "success" ? 0 : 1,
+    dry_run: false,
+    plan,
+    bootstrap,
+    prd_path: prdAbsolutePath,
+    preflight,
+    runner,
+    artifacts: [...bootstrap.artifacts, plan.prd_path],
+    next_actions: status === "success"
+      ? ["Use the generated PRD as the first executable project smoke artifact."]
+      : ["Fix preflight blockers before allowing runner execution."],
+  };
+}

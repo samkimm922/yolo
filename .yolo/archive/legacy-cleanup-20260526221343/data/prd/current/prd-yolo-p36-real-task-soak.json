@@ -1,0 +1,71 @@
+{
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "version": "2.0",
+  "id": "PRD-20260524-P36-SOAK",
+  "title": "P36 atomic task soak fixture",
+  "description": "Fixture for atomic-task-doctor split detection.",
+  "project": {
+    "name": "Yolo",
+    "language": "typescript",
+    "framework": "generic",
+    "package_manager": "pnpm",
+    "test_framework": "vitest",
+    "lint_tool": "eslint",
+    "type_checker": "tsc --noEmit"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-24T00:00:00.000Z",
+  "base_commit": "0000000",
+  "tasks": [
+    {
+      "id": "FIX-P36-003",
+      "title": "修复销售页选择项和库存扣减一致性",
+      "priority": "P0",
+      "type": "bugfix",
+      "status": "pending",
+      "description": "修复 page selectedItem onchange 数据流，同时保证 service createSale transaction 内 quantity 与 inventory stock deduct 一致。",
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/sales/index.tsx",
+            "description": "页面选择和回调状态流"
+          },
+          {
+            "file": "src/services/saleMutations.ts",
+            "description": "销售记录写入和库存事务扣减"
+          }
+        ],
+        "readonly_files": [
+          "src/services/inventory.ts",
+          "src/types/sale.ts"
+        ],
+        "allow_new_files": false,
+        "max_files": 2,
+        "max_lines_per_file": 120
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-P36-001",
+          "type": "code_contains",
+          "params": {
+            "file": "src/services/saleMutations.ts",
+            "text": "quantity"
+          },
+          "message": "service 层必须处理 quantity",
+          "severity": "FAIL"
+        },
+        {
+          "id": "POST-P36-002",
+          "type": "code_contains",
+          "params": {
+            "file": "src/pages/sales/index.tsx",
+            "text": "selectedItem"
+          },
+          "message": "页面层必须以 selectedItem 为单源真相",
+          "severity": "FAIL"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,281 @@
+#!/usr/bin/env node
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { writeLifecycleStageReport } from "../../lifecycle/progress.js";
+import { resolveProjectContext } from "../../packs/resolver.js";
+import {
+  asArray,
+  clean,
+  uiTasks,
+} from "../gates/readiness-policy.js";
+import { runAdapterEvidenceCollector } from "../adapters/evidence-collector.js";
+
+export const ACCEPTANCE_REPORT_SCHEMA_VERSION = "1.0";
+export const ACCEPTANCE_REPORT_SCHEMA = "yolo.acceptance.report.v1";
+
+const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function readJsonMaybe(path) {
+  if (!path) return null;
+  const resolved = resolve(path);
+  if (!existsSync(resolved)) return null;
+  return JSON.parse(readFileSync(resolved, "utf8"));
+}
+
+function defaultAdapterEvidencePath({ stateRoot, resolver }) {
+  const adapterId = resolver?.selected?.acceptance_adapter?.id;
+  if (!adapterId || adapterId === "unknown/custom") return "";
+  return join(stateRoot, "state", "evidence", "adapters", `${adapterId}-latest.json`);
+}
+
+function loadPrd(input = {}) {
+  if (input.prd) return input.prd;
+  return readJsonMaybe(input.prdPath || input.prd_path);
+}
+
+function pushIssue(issues, level, code, message, extra = {}) {
+  issues.push({
+    level,
+    code,
+    message,
+    ...extra,
+  });
+}
+
+function summarizeIssues(issues = []) {
+  return {
+    p0: issues.filter((issue) => issue.level === "P0").length,
+    p1: issues.filter((issue) => issue.level === "P1").length,
+    p2: issues.filter((issue) => issue.level === "P2").length,
+    human_review: issues.filter((issue) => issue.level === "human_review").length,
+    total: issues.length,
+  };
+}
+
+function acceptanceCriteriaIssues(prd, issues) {
+  const tasks = asArray(prd?.tasks);
+  if (tasks.length === 0) {
+    pushIssue(issues, "P1", "ACCEPTANCE_TASKS_MISSING", "Acceptance requires PRD tasks.");
+  }
+  for (const task of tasks) {
+    const criteria = asArray(task.acceptance_criteria);
+    const post = asArray(task.post_conditions);
+    if (criteria.length === 0 && post.length === 0) {
+      pushIssue(issues, "P1", "ACCEPTANCE_CRITERIA_MISSING", "Task is missing acceptance criteria and post conditions.", { task_id: task.id || null });
+    }
+  }
+}
+
+function runtimeEvidenceIssues(runReport, issues) {
+  if (!runReport) {
+    pushIssue(issues, "P1", "RUN_REPORT_MISSING", "Acceptance requires run evidence or an explicit degraded/manual record.");
+    return;
+  }
+  const status = clean(runReport.status).toLowerCase();
+  const failed = Number(runReport.summary?.failed || asArray(runReport.failed).length || 0);
+  const blocked = Number(runReport.summary?.blocked || asArray(runReport.blocked).length || 0);
+  if (["error", "failed", "blocked"].includes(status) || failed > 0 || blocked > 0) {
+    pushIssue(issues, "P1", "RUN_REPORT_NOT_CLEAN", "Run report has failed or blocked work.", { failed, blocked });
+  }
+}
+
+function reviewFindingsFromReports(...reports) {
+  return reports.flatMap((report) => [
+    ...asArray(report?.findings),
+    ...asArray(report?.review?.findings),
+    ...asArray(report?.review?.issues),
+  ]);
+}
+
+function reviewIssues(reviewReport, runReport, issues) {
+  const findings = reviewFindingsFromReports(reviewReport, runReport);
+  for (const finding of findings) {
+    if (["CRITICAL", "HIGH"].includes(clean(finding.severity).toUpperCase()) || finding.must_fix_before_ship === true) {
+      pushIssue(issues, "P1", "REVIEW_BLOCKER_OPEN", "Blocking review finding remains open.", {
+        finding_id: finding.finding_id || finding.id || null,
+        severity: finding.severity || null,
+      });
+    }
+  }
+}
+
+function normalizePathForCompare(value) {
+  return value ? resolve(String(value)) : "";
+}
+
+function evidenceLineageIssues({ prdPath, runReport, reviewReport }, issues) {
+  const expectedPrd = normalizePathForCompare(prdPath);
+  if (!expectedPrd) return;
+  const runPrd = normalizePathForCompare(runReport?.report?.prd || runReport?.prd || runReport?.prd_path);
+  const reviewPrd = normalizePathForCompare(reviewReport?.report?.prd_path || reviewReport?.prd_path || reviewReport?.prd);
+  if (runReport && runPrd && runPrd !== expectedPrd) {
+    pushIssue(issues, "P1", "RUN_REPORT_PRD_MISMATCH", "Run evidence belongs to a different PRD.", {
+      expected_prd: expectedPrd,
+      actual_prd: runPrd,
+    });
+  }
+  if (reviewReport && reviewPrd && reviewPrd !== expectedPrd) {
+    pushIssue(issues, "P1", "REVIEW_REPORT_PRD_MISMATCH", "Review evidence belongs to a different PRD.", {
+      expected_prd: expectedPrd,
+      actual_prd: reviewPrd,
+    });
+  }
+}
+
+function uiEvidenceIssues({ prd, uiEvidence, resolver }, issues) {
+  const tasks = uiTasks(prd, { resolver });
+  if (tasks.length === 0) return { ui_task_count: 0 };
+  if (!uiEvidence) {
+    pushIssue(issues, "P1", "UI_EVIDENCE_MISSING", "UI tasks require screenshot/log/runtime evidence.");
+    return { ui_task_count: tasks.length };
+  }
+  if (resolver?.selected?.acceptance_adapter?.id === "unknown/custom") {
+    pushIssue(issues, "P1", "UI_ACCEPTANCE_ADAPTER_MISSING", "UI acceptance requires an acceptance adapter manifest.");
+  }
+  if (uiEvidence.page_reachable === false) pushIssue(issues, "P0", "UI_PAGE_UNREACHABLE", "Target page or surface is unreachable.");
+  if (uiEvidence.critical_path_passed === false) pushIssue(issues, "P0", "UI_CRITICAL_PATH_FAILED", "Critical UI path failed.");
+  if (uiEvidence.required_state_present === false) pushIssue(issues, "P0", "UI_REQUIRED_STATE_MISSING", "Required UI state is missing.");
+  if (uiEvidence.content_overlap === true || uiEvidence.text_overflow === true) pushIssue(issues, "P0", "UI_LAYOUT_BLOCKER", "Main content overlaps or overflows.");
+  if (asArray(uiEvidence.runtime_errors).length > 0) {
+    pushIssue(issues, "P0", "UI_RUNTIME_ERRORS", "Runtime errors were reported by UI evidence.", { count: uiEvidence.runtime_errors.length });
+  }
+  if (asArray(uiEvidence.screenshots).length === 0) pushIssue(issues, "P1", "UI_SCREENSHOT_MISSING", "UI acceptance requires at least one screenshot or equivalent visual artifact.");
+  for (const note of asArray(uiEvidence.polish_notes)) {
+    pushIssue(issues, "P2", "UI_POLISH_NOTE", clean(note) || "Visual polish note requires human judgment.");
+  }
+  for (const note of asArray(uiEvidence.human_review_notes)) {
+    pushIssue(issues, "human_review", "UI_HUMAN_REVIEW_NOTE", clean(note) || "Human review note.");
+  }
+  return { ui_task_count: tasks.length };
+}
+
+export function buildAcceptanceReport(input = {}, options = {}) {
+  const prdPath = input.prdPath || input.prd_path || options.prdPath || options.prd_path || "";
+  const prd = loadPrd({ ...options, ...input });
+  const projectRoot = resolve(input.projectRoot || input.project_root || options.projectRoot || options.project_root || (prdPath ? dirname(resolve(prdPath)) : process.cwd()));
+  const stateRoot = resolve(input.stateRoot || input.state_root || options.stateRoot || options.state_root || `${projectRoot}/.yolo`);
+  const resolver = input.resolver || resolveProjectContext({
+    projectRoot,
+    stateRoot,
+    requiresAcceptanceAdapter: uiTasks(prd).length > 0,
+  });
+  const runReportPath = input.runReportPath || input.run_report_path || options.runReportPath || options.run_report_path || join(stateRoot, "lifecycle", "run-report.json");
+  const reviewReportPath = input.reviewReportPath || input.review_report_path || options.reviewReportPath || options.review_report_path || join(stateRoot, "lifecycle", "review-report.json");
+  const uiEvidencePath = input.uiEvidencePath || input.ui_evidence_path || options.uiEvidencePath || options.ui_evidence_path || "";
+  const adapterEvidencePath = input.adapterEvidencePath || input.adapter_evidence_path || options.adapterEvidencePath || options.adapter_evidence_path || defaultAdapterEvidencePath({ stateRoot, resolver });
+  const runReport = input.runReport || input.run_report || readJsonMaybe(runReportPath);
+  const reviewReport = input.reviewReport || input.review_report || readJsonMaybe(reviewReportPath);
+  let uiEvidence = input.uiEvidence || input.ui_evidence || readJsonMaybe(uiEvidencePath);
+  const adapterEvidence = input.adapterEvidence || input.adapter_evidence || (
+    (input.collectEvidence || input.collect_evidence || options.collectEvidence || options.collect_evidence)
+      ? runAdapterEvidenceCollector({
+        projectRoot,
+        stateRoot,
+        resolver,
+        execute: input.executeAdapter === true || input.execute_adapter === true || options.executeAdapter === true || options.execute_adapter === true,
+        allowAdapterCommands: input.allowAdapterCommands === true || input.allow_adapter_commands === true || options.allowAdapterCommands === true || options.allow_adapter_commands === true,
+      })
+      : readJsonMaybe(adapterEvidencePath)
+  );
+  if (!uiEvidence && adapterEvidence?.ui_evidence) {
+    uiEvidence = adapterEvidence.ui_evidence;
+  }
+  if (!uiEvidence && Array.isArray(adapterEvidence?.collected_evidence)) {
+    uiEvidence = adapterEvidence.collected_evidence.find((record) => record?.ui_evidence)?.ui_evidence || null;
+  }
+  const issues = [];
+  if (!prd) {
+    pushIssue(issues, "P1", "PRD_MISSING", "Acceptance requires a PRD.");
+  } else {
+    acceptanceCriteriaIssues(prd, issues);
+  }
+  runtimeEvidenceIssues(runReport, issues);
+  evidenceLineageIssues({ prdPath, runReport, reviewReport }, issues);
+  reviewIssues(reviewReport, runReport, issues);
+  const ui = prd ? uiEvidenceIssues({ prd, uiEvidence, resolver }, issues) : { ui_task_count: 0 };
+  for (const blocker of asArray(resolver.blockers)) {
+    pushIssue(issues, "P1", blocker.code || "RESOLVER_BLOCKED", blocker.message || "Resolver blocked acceptance.");
+  }
+
+  const summary = summarizeIssues(issues);
+  const status = summary.p0 > 0 || summary.p1 > 0 ? "blocked" : summary.p2 > 0 || summary.human_review > 0 ? "warning" : "pass";
+  const report = {
+    schema_version: ACCEPTANCE_REPORT_SCHEMA_VERSION,
+    schema: ACCEPTANCE_REPORT_SCHEMA,
+    status,
+    code: status === "blocked" ? "ACCEPTANCE_BLOCKED" : status === "warning" ? "ACCEPTANCE_WARNING" : "ACCEPTANCE_PASS",
+    summary: status === "pass" ? "Acceptance passed." : status === "warning" ? "Acceptance has warnings or human review notes." : "Acceptance blocked by missing or failing evidence.",
+    generated_at: nowIso(),
+    project_root: projectRoot,
+    state_root: stateRoot,
+    prd_path: prdPath ? resolve(prdPath) : "",
+    issue_summary: summary,
+    issues,
+    resolver,
+    adapter_evidence: adapterEvidence,
+    ui,
+    artifacts: [
+      prdPath ? resolve(prdPath) : null,
+      runReportPath && runReport ? resolve(runReportPath) : null,
+      reviewReportPath && reviewReport ? resolve(reviewReportPath) : null,
+      uiEvidencePath && uiEvidence ? resolve(uiEvidencePath) : null,
+      adapterEvidence?.artifact_path || (adapterEvidencePath && adapterEvidence ? resolve(adapterEvidencePath) : null),
+    ].filter(Boolean),
+    next_actions: status === "blocked"
+      ? ["Fix P0/P1 acceptance blockers, then rerun /yolo-accept.", "Do not ship until acceptance report is pass or approved with documented human review."]
+      : status === "warning"
+        ? ["Review P2/human review notes before delivery."]
+        : ["Continue to /yolo-ship."],
+  };
+  if (input.writeLifecycle || input.write_lifecycle || options.writeLifecycle || options.write_lifecycle) {
+    report.lifecycle_write = writeLifecycleStageReport("acceptance", report, {
+      projectRoot,
+      stateRoot,
+      source: "acceptance-report",
+      learnFailures: options.learnFailures === true || input.learnFailures === true,
+    });
+    report.artifacts.push(report.lifecycle_write.artifact_path);
+  }
+  return report;
+}
+
+export const inspectAcceptanceReport = buildAcceptanceReport;
+
+export function formatAcceptanceReportText(report = {}) {
+  const lines = [`[yolo accept] ${report.status}: ${report.summary}`];
+  if (report.issue_summary) {
+    lines.push(`issues: P0=${report.issue_summary.p0} P1=${report.issue_summary.p1} P2=${report.issue_summary.p2} human=${report.issue_summary.human_review}`);
+  }
+  for (const issue of asArray(report.issues).slice(0, 12)) {
+    lines.push(`- ${issue.level}:${issue.code}${issue.task_id ? ` task=${issue.task_id}` : ""} ${issue.message}`.trim());
+  }
+  if (report.next_actions?.length) {
+    lines.push("next:");
+    for (const action of report.next_actions) lines.push(`  - ${action}`);
+  }
+  return lines.join("\n");
+}
+
+export function runYoloAcceptCli(argv = process.argv.slice(2), io = {}) {
+  const stdout = io.stdout || process.stdout;
+  const json = argv.includes("--json");
+  const noWrite = argv.includes("--no-write");
+  const prdPath = argv.find((arg) => !arg.startsWith("--"));
+  const report = buildAcceptanceReport({
+    prdPath,
+    projectRoot: io.cwd || process.cwd(),
+    writeLifecycle: !noWrite,
+  }, { learnFailures: true });
+  if (json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  else stdout.write(`${formatAcceptanceReportText(report)}\n`);
+  return report.status === "blocked" ? 1 : 0;
+}
+
+if (isMain) {
+  process.exit(runYoloAcceptCli());
+}

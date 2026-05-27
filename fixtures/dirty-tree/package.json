@@ -1,0 +1,9 @@
+{
+  "name": "yolo-fixture-dirty-tree",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node scripts/check-dirty-marker.ts"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "id": "dirty-tree",
+  "type": "dirty-tree",
+  "label": "Dirty tree fixture",
+  "description": "Fixture that models existing user work which automation must preserve.",
+  "files": [
+    "package.json",
+    "prd.json",
+    "local/unsaved-note.txt",
+    "scripts/check-dirty-marker.ts",
+    "src/index.ts"
+  ],
+  "project": {
+    "language": "javascript",
+    "package_manager": "npm",
+    "scenario": "dirty-tree"
+  },
+  "requirement": {
+    "id": "REQ-DIRTY-001",
+    "text": "Preserve pre-existing local user work while validating a scoped file."
+  },
+  "spec": {
+    "id": "SPEC-DIRTY-001",
+    "requirement_id": "REQ-DIRTY-001",
+    "design_id": "DES-DIRTY-001",
+    "task_id": "FIX-DIRTY-001"
+  },
+  "task": {
+    "id": "FIX-DIRTY-001",
+    "prd": "prd.json"
+  },
+  "run": {
+    "mode": "dry-run",
+    "supports_dry_run": true,
+    "commands": [
+      "node scripts/check-dirty-marker.ts"
+    ],
+    "dirty_tree": true
+  },
+  "evidence": {
+    "expected": [
+      "state/evidence/FIX-DIRTY-001/run.json"
+    ]
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "version": "2.0",
+  "id": "PRD-20260524-PYTHON-BASIC",
+  "title": "Python basic fixture",
+  "project": {
+    "name": "yolo-fixture-python-basic",
+    "language": "python",
+    "test_framework": "unittest"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-24T00:00:00.000Z",
+  "base_commit": "abcdef0",
+  "requirements": [
+    {
+      "id": "REQ-PY-001",
+      "text": "Expose an add function that returns the sum of two numbers."
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-PY-001",
+      "text": "Keep calculator behavior as a pure Python function."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "FIX-PY-001",
+      "title": "Verify Python add function behavior",
+      "type": "feature",
+      "priority": "P3",
+      "status": "pending",
+      "requirement_ids": [
+        "REQ-PY-001"
+      ],
+      "design_ids": [
+        "DES-PY-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/calculator.py"
+          }
+        ],
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-TEST",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "python3 -m unittest discover -s tests -p 'test_*.py'",
+            "file": "tests/test_calculator.py"
+          }
+        }
+      ],
+      "acceptance_criteria": [
+        "python3 -m unittest discover passes"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "findings": [],
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "_error": "Command failed: claude -p '你是微信云数据库专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【云数据库】专项审查。\n\n## 审查范围\n全部 src/services/ 文件及任何涉及数据库操作的代码\n\n## 重点检查\n1. read-then-write 模式：先读取再写入的原子性问题（如库存扣减应该用 _.inc() 而非先 get 再 set）\n2. 连续 .where() 调用：第二个 .where() 会覆盖第一个条件而非叠加，应合并\n3. 缺少分页限制：查询未设置 .limit() 或 .skip()"
+}

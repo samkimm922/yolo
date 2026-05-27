@@ -1,0 +1,154 @@
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
+import { buildAcceptanceReport } from "../src/runtime/acceptance/report.js";
+import { buildProgressDashboardUiEvidence } from "../src/runtime/progress/ui-evidence.js";
+import { runRunnerRuntime } from "../src/runtime/runner-runtime.js";
+
+const YOLO_DIR = resolve(import.meta.dirname, "..");
+
+function tempProject() {
+  return mkdtempSync(join(tmpdir(), "yolo-progress-ui-evidence-"));
+}
+
+function writeJson(file, payload) {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+function writeText(file, text) {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, text, "utf8");
+}
+
+function progressUiPrd() {
+  return {
+    version: "2.0", id: "PRD-20260526-PROGRESS-UI", title: "Progress dashboard UI evidence",
+    project: { name: "progress-ui", language: "javascript" },
+    generated_by: "yolo-review-agent", generated_at: "2026-05-26T00:00:00.000Z", base_commit: "abcdef0",
+    requirements: [{ id: "REQ-UI-1", text: "Progress dashboard must provide usable UI evidence." }],
+    designs: [{ id: "DES-UI-1", text: "Use a DESIGN.md/UI-SPEC style UI contract." }],
+    state_matrix: { loading: "SSE connected.", empty: "Idle lifecycle visible.", success: "Active run progress visible.", mobile: "Responsive below 640px.", desktop: "Desktop from 640px." },
+    evidence_plan: { ui: ["progress dashboard HTML snapshot", "runtime error evidence", "responsive evidence"] },
+    tasks: [{
+      id: "UI-PROGRESS-001", title: "Validate progress dashboard UI", priority: "P1", type: "feature", status: "pending", ui: true, surface: "progress-dashboard",
+      requirement_ids: ["REQ-UI-1"], design_ids: ["DES-UI-1"],
+      scope: { targets: [{ file: "src/runtime/progress/server.ts" }], allow_new_files: true },
+      acceptance_criteria: ["Progress dashboard exposes active and idle state UI evidence.", "Task and gate data are escaped before entering HTML."],
+      post_conditions: [{ id: "POST-SERVER", type: "target_file_modified", severity: "FAIL", params: { file: "src/runtime/progress/server.ts" } }],
+    }],
+  };
+}
+
+function runReport() {
+  return {
+    status: "success",
+    summary: { failed: 0, blocked: 0 },
+  };
+}
+
+function adapterManifest() {
+  return {
+    schema: "yolo.manifest.v1", id: "progress-dashboard-ui", kind: "acceptance_adapter",
+    description: "Progress dashboard UI evidence adapter",
+    inputs: ["projectRoot", "stateRoot"], outputs: ["ui_evidence"],
+    commands: [{ command: "node tools/progress-ui-evidence.js", evidence_path: ".yolo/state/evidence/progress-dashboard-ui/ui-evidence.json" }],
+    evidence: ["screenshot", "runtime_log", "ui_contract"],
+    capabilities: ["ui", "browser", "page_reachable", "critical_path_passed", "screenshot"],
+    applies_to: ["ui", "progress-dashboard"],
+  };
+}
+
+function writeProgressEvidenceTool(root) {
+  writeText(join(root, "tools/progress-ui-evidence.js"), [
+    `import { buildProgressDashboardUiEvidence } from ${JSON.stringify(pathToFileURL(join(YOLO_DIR, "dist/src/runtime/progress/ui-evidence.js")).href)};`,
+    "buildProgressDashboardUiEvidence({",
+    "  projectRoot: process.cwd(),",
+    "  stateRoot: `${process.cwd()}/.yolo`,",
+    "  outputPath: '.yolo/state/evidence/progress-dashboard-ui/ui-evidence.json',",
+    "  browserSmoke: false,",
+    "});",
+    "",
+  ].join("\n"));
+}
+
+describe("progress dashboard UI evidence", () => {
+  test("writes UI evidence snapshots and escapes task data", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      const report = buildProgressDashboardUiEvidence({ projectRoot: root, stateRoot, browserSmoke: false });
+      const activeHtml = readFileSync(join(stateRoot, "state/evidence/progress-dashboard-ui/active.html"), "utf8");
+
+      assert.equal(report.status, "pass");
+      assert.ok(activeHtml.includes('id="uiEvidencePanel"'));
+      assert.ok(activeHtml.includes("color-scheme: light dark"));
+      assert.ok(activeHtml.includes("prefers-color-scheme: dark"));
+      assert.ok(activeHtml.includes("status-id-done"));
+      assert.ok(activeHtml.includes("review-status-box"));
+      assert.equal(activeHtml.includes("<img src=x onerror=alert(1)>"), false);
+      assert.equal(activeHtml.includes("TASK-&lt;img src=x onerror=alert(1)&gt;"), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("feeds progress UI evidence through adapter bridge into acceptance", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      writeJson(join(stateRoot, "adapters/progress-dashboard-ui.manifest.json"), adapterManifest());
+      writeProgressEvidenceTool(root);
+
+      const report = buildAcceptanceReport({
+        prd: progressUiPrd(),
+        runReport: runReport(),
+        reviewReport: { findings: [] },
+        projectRoot: root,
+        stateRoot,
+        collectEvidence: true,
+        executeAdapter: true,
+        allowAdapterCommands: true,
+      });
+
+      assert.equal(report.status, "pass");
+      assert.equal(report.adapter_evidence.status, "pass");
+      assert.equal(report.ui.ui_task_count, 1);
+      assert.ok(report.adapter_evidence.ui_evidence.visual_artifacts.some((item) => item.endsWith("active.html")));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("yolo run dry-run can execute UI evidence collection when explicitly authorized", async () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    const prdPath = join(root, ".yolo/data/prd/current/progress-ui.json");
+    try {
+      writeJson(join(stateRoot, "adapters/progress-dashboard-ui.manifest.json"), adapterManifest());
+      writeJson(prdPath, progressUiPrd());
+      writeProgressEvidenceTool(root);
+
+      const result = await runRunnerRuntime({
+        prdPath,
+        projectRoot: root,
+        stateRoot,
+        dryRun: true,
+        collectEvidence: true,
+        executeAdapter: true,
+        allowAdapterCommands: true,
+        writeLifecycle: false,
+      });
+
+      assert.equal(result.status, "success");
+      assert.equal(result.adapter_evidence.status, "pass");
+      assert.equal(result.adapter_evidence.ui_evidence.required_state_present, true);
+      assert.equal(existsSync(join(stateRoot, "state/events.jsonl")), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

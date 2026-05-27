@@ -1,0 +1,6 @@
+{
+  "name": "yolo-fixture-no-tests",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true
+}

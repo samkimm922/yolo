@@ -1,0 +1,66 @@
+{
+  "version": "2.0",
+  "id": "PRD-20260524-DIRTY-TREE",
+  "title": "Dirty tree fixture",
+  "project": {
+    "name": "yolo-fixture-dirty-tree",
+    "language": "javascript",
+    "package_manager": "npm",
+    "scenario": "dirty-tree"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-24T00:00:00.000Z",
+  "base_commit": "abcdef0",
+  "requirements": [
+    {
+      "id": "REQ-DIRTY-001",
+      "text": "Preserve pre-existing local user work while validating a scoped file."
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-DIRTY-001",
+      "text": "Keep unsaved local notes outside task scope and assert they remain present."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "FIX-DIRTY-001",
+      "title": "Verify dirty tree preservation marker",
+      "type": "feature",
+      "priority": "P2",
+      "status": "pending",
+      "requirement_ids": [
+        "REQ-DIRTY-001"
+      ],
+      "design_ids": [
+        "DES-DIRTY-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/index.ts"
+          }
+        ],
+        "readonly_files": [
+          "local/unsaved-note.txt"
+        ],
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-DIRTY-MARKER",
+          "type": "file_exists",
+          "severity": "FAIL",
+          "params": {
+            "file": "local/unsaved-note.txt"
+          }
+        }
+      ],
+      "acceptance_criteria": [
+        "dirty marker file still exists"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,194 @@
+{
+  "version": "2.0",
+  "title": "进销存模块修复 P0-P2",
+  "generated_at": "2026-05-01T10:33:57.472Z",
+  "tasks": [
+    {
+      "id": "BUGFIX-FIX-001",
+      "title": "修复: optimistic_lock",
+      "description": "- [CRITICAL] stock-in-transaction.ts 缺乐观锁: processStockInTransaction 第43-45行直接用 .doc().update() 写入，无 version 检查。对比 stock-in-batch-transaction.ts:54-56 有正确的 where({ _id, version }).update() → 在 processStockInTransaction 的 update 分支添加 version 乐观锁：读取 existing.version，使用 where({ _id, version }).update({ version: _.inc(1) })，检查 updated === 0 时抛出冲突异常",
+      "priority": "P0",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stock-in-transaction.ts:43-45"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "stock-in-transaction.ts 缺乐观锁: processStockInTransaction 第43-45行直接用 .doc().update() 写入，无 version 检查。对比 stock-in-batch-transaction.ts:54-56 有正确的 where({ _id, version }).update() 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-002",
+      "title": "修复: infinite_loop",
+      "description": "- [CRITICAL] dashboard-stats.ts fetchMonthlySales 死循环风险: while 循环用相同的 .where(filter).limit(20) 反复查，无游标推进（没传 skip 也没用排序+游标），数据超20条时无限循环 → 改为游标分页：第一次查询记录最后一个 _id，后续使用 .where({ ... }).gt(lastId).limit(DB_BATCH_SIZE)，或使用 .skip() 推进页码",
+      "priority": "P0",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard-stats.ts:36-45"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "dashboard-stats.ts fetchMonthlySales 死循环风险: while 循环用相同的 .where(filter).limit(20) 反复查，无游标推进（没传 skip 也没用排序+游标），数据超20条时无限循环 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-003",
+      "title": "修复: missing_field",
+      "description": "- [HIGH] stock-in.service.ts 丢弃 condition_grade 字段: stockIn 函数解构只取 { card_id, quantity, cost_price, batch_id, container_id, notes }，前端传的 condition_grade 被忽略。前端 stock-in/index.tsx 表单有品相选择器并传了 condition_grade → 在解构中补上 condition_grade，并将其写入 STOCK_IN ledger 记录和 inventory 记录中",
+      "priority": "P1",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/stock-in.service.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "stock-in.service.ts 丢弃 condition_grade 字段: stockIn 函数解构只取 { card_id, quantity, cost_price, batch_id, container_id, notes }，前端传的 condition_grade 被忽略。前端 stock-in/index.tsx 表单有品相选择器并传了 condition_grade 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-004",
+      "title": "修复: missing_inventory_deduction",
+      "description": "- [HIGH] sale.service.ts createSale 不扣库存: 只往 SALES 集合写记录，完全不碰 INVENTORY。正确的出库走 stockOutService.stockOut()（FIFO + 事务 + 乐观锁），createSale 绕过整个机制 → createSale 内部改为调用 stockOutService.stockOut()，或者标记为废弃并在所有调用方迁移到 stockOutService",
+      "priority": "P1",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/sale.service.ts:53-100"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "sale.service.ts createSale 不扣库存: 只往 SALES 集合写记录，完全不碰 INVENTORY。正确的出库走 stockOutService.stockOut()（FIFO + 事务 + 乐观锁），createSale 绕过整个机制 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-005",
+      "title": "修复: hardcoded_value",
+      "description": "- [MEDIUM] sales.tsx 写死 platform 和 buyer_note: 第69行 platform: '其他' 写死，第70行 buyer_note: '销售出库' 写死。对比 stock-out/index.tsx 有完整 SALE_PLATFORMS Picker 和 buyer note Input → 参照 stock-out/index.tsx 添加 SALE_PLATFORMS Picker 和 buyer_note Input，移除硬编码",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/sales/sales.tsx:69-70"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "sales.tsx 写死 platform 和 buyer_note: 第69行 platform: '其他' 写死，第70行 buyer_note: '销售出库' 写死。对比 stock-out/index.tsx 有完整 SALE_PLATFORMS Picker 和 buyer note Input 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-006",
+      "title": "修复: stale_query_key",
+      "description": "- [MEDIUM] use-inventory-mutation.ts 失效查询键错误: invalidateInventoryRelated 使用 ['recentRecords']，但实际查询键是 ['dashboardRecentRecords', 8]，前缀不匹配导致无效化无效 → 将 ['recentRecords'] 改为 ['dashboardRecentRecords']，确保 TanStack Query v5 前缀匹配生效",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/hooks/use-inventory-mutation.ts"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "use-inventory-mutation.ts 失效查询键错误: invalidateInventoryRelated 使用 ['recentRecords']，但实际查询键是 ['dashboardRecentRecords', 8]，前缀不匹配导致无效化无效 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-007",
+      "title": "修复: unsafe_time_parse",
+      "description": "- [MEDIUM] dashboard-recent.ts formatTime 时间解析风险: Date.parse() 对非标准格式可能返回 NaN，导致显示 NaN-NaN-NaN NaN:NaN。缺少 Invalid Date 防护 → 在 formatTime 中添加 Invalid Date 守卫，使用 Number.isNaN() 检查并返回空字符串或 '未知时间' 作为降级",
+      "priority": "P2",
+      "status": "completed",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/services/dashboard/dashboard-recent.ts:33-38"
+          },
+          {
+            "file": "src/services/dashboard/dashboard.types.ts:31-35"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "dashboard-recent.ts formatTime 时间解析风险: Date.parse() 对非标准格式可能返回 NaN，导致显示 NaN-NaN-NaN NaN:NaN。缺少 Invalid Date 防护 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    },
+    {
+      "id": "BUGFIX-FIX-008",
+      "title": "修复: discoverability",
+      "description": "- [LOW] 入库/出库页面不在 TabBar: app.config.ts TabBar 只有仪表盘/首页/商品/库存/销售，stock-in/stock-out/quick-entry 只能通过 Dashboard QuickActions 进入，可发现性弱 → 在库存页面添加入库入口按钮，在销售页面添加出库入口按钮，提升可发现性。微信 TabBar 最多5个，不能新增 tab",
+      "priority": "P2",
+      "status": "pending",
+      "depends_on": [],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/app.config.ts:44-72"
+          }
+        ]
+      },
+      "pre_conditions": [],
+      "post_conditions": [],
+      "acceptance_criteria": [
+        "入库/出库页面不在 TabBar: app.config.ts TabBar 只有仪表盘/首页/商品/库存/销售，stock-in/stock-out/quick-entry 只能通过 Dashboard QuickActions 进入，可发现性弱 已修复",
+        "tsc + vitest 通过"
+      ],
+      "type": "bugfix"
+    }
+  ],
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "id": "PRD-20260508---------------11",
+  "project": {
+    "name": "SamKimTest",
+    "language": "typescript"
+  },
+  "generated_by": "other",
+  "base_commit": "fb5a8975"
+}

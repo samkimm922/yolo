@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yolo.dev/schemas/evidence-ledger-v1.schema.json",
+  "title": "YOLO Evidence Ledger v1",
+  "oneOf": [
+    { "$ref": "#/$defs/ledgerEvent" },
+    { "$ref": "#/$defs/evidenceArtifact" }
+  ],
+  "$defs": {
+    "ledgerEvent": {
+      "type": "object",
+      "required": ["schema_version", "schema", "ts", "ledger", "event", "source"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "schema": { "const": "yolo.ledger.event.v1" },
+        "ts": { "type": "string", "minLength": 1 },
+        "ledger": { "enum": ["state", "run", "artifact", "custom"] },
+        "event": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "run_id": { "type": "string" },
+        "task_id": { "type": "string" },
+        "prd_id": { "type": "string" },
+        "status": { "type": "string" },
+        "evidence_file": { "type": "string" },
+        "artifact_type": { "type": "string" },
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "suggested_fix": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "evidenceArtifact": {
+      "type": "object",
+      "required": ["schema_version", "schema", "artifact_type", "generated_at", "source"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "schema": { "const": "yolo.evidence.artifact.v1" },
+        "artifact_type": { "type": "string", "minLength": 1 },
+        "generated_at": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "status": { "type": "string" },
+        "run_id": { "type": "string" },
+        "task_id": { "type": "string" },
+        "prd_id": { "type": "string" },
+        "evidence_file": { "type": "string" },
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "suggested_fix": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

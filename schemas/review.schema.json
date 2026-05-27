@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://yolo.dev/schemas/review.schema.json",
+  "title": "YOLO Review Output v1",
+  "description": "Unified review output and finding schema shared by review-scanner, review-to-prd, and evidence reports.",
+  "type": "object",
+  "required": ["schema_version", "schema", "source", "summary", "findings"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "schema": { "const": "yolo.review.output.v1" },
+    "generated_at": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "source": { "type": "string" },
+    "scanned_files": { "type": "number" },
+    "total_findings": { "type": "number" },
+    "by_dimension": { "type": "object" },
+    "by_severity": { "type": "object" },
+    "summary": {
+      "type": "object",
+      "required": ["critical", "high", "medium", "low", "info", "unknown", "total"],
+      "properties": {
+        "critical": { "type": "number" },
+        "high": { "type": "number" },
+        "medium": { "type": "number" },
+        "low": { "type": "number" },
+        "info": { "type": "number" },
+        "unknown": { "type": "number" },
+        "total": { "type": "number" }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["schema_version", "schema", "finding_id", "source", "code", "message", "severity", "fix_type"],
+        "properties": {
+          "schema_version": { "const": "1.0" },
+          "schema": { "const": "yolo.review.finding.v1" },
+          "finding_id": { "type": "string" },
+          "source": { "type": "string" },
+          "code": { "type": "string" },
+          "scanner_id": { "type": "string" },
+          "rule_id": { "type": "string" },
+          "dimension": { "type": "string" },
+          "severity": { "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "UNKNOWN"] },
+          "fix_type": { "enum": ["AUTO_FIX", "CLAUDE_FIX", "INFO", "MANUAL_REVIEW", "UNKNOWN"] },
+          "file": { "type": ["string", "null"] },
+          "line": { "type": ["number", "null"] },
+          "location": {
+            "type": "object",
+            "properties": {
+              "file": { "type": ["string", "null"] },
+              "line": { "type": ["number", "null"] }
+            }
+          },
+          "files": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "message": { "type": "string" },
+          "description": { "type": "string" },
+          "match": { "type": ["string", "null"] },
+          "context": { "type": ["string", "null"] },
+          "suggested_fix": { "type": ["string", "null"] },
+          "recommendation": { "type": ["string", "null"] },
+          "risk": { "type": ["string", "null"] },
+          "must_fix_before_ship": { "type": "boolean" },
+          "evidence": { "type": "array" }
+        }
+      }
+    },
+    "_error": { "type": "string" }
+  }
+}

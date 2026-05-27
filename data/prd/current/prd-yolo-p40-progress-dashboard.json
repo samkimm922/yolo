@@ -1,0 +1,299 @@
+{
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "version": "2.0",
+  "id": "PRD-20260526-P40-DASHBOARD",
+  "title": "P40 progress dashboard lifecycle integration",
+  "description": "Integrate the progress dashboard into the lifecycle-first YOLO flow so an operator can see active runner tasks and idle lifecycle state from one dashboard surface.",
+  "project": {
+    "name": "yolo",
+    "language": "javascript",
+    "framework": "node",
+    "package_manager": "npm",
+    "test_framework": "node:test",
+    "lint_tool": "node --check",
+    "type_checker": "node --check"
+  },
+  "generated_by": "human",
+  "generated_at": "2026-05-26T00:00:00.000Z",
+  "base_commit": "eab85531cbd602b6ebf8383d308f3b91c77e17",
+  "requirements": [
+    {
+      "id": "REQ-P40-DASHBOARD-001",
+      "text": "The progress dashboard must expose lifecycle state when no runner is active, instead of showing only an empty runner page."
+    },
+    {
+      "id": "REQ-P40-DASHBOARD-002",
+      "text": "The dashboard integration must stay non-blocking and read-only for lifecycle artifacts, runner logs, and memory ledgers."
+    },
+    {
+      "id": "REQ-P40-DASHBOARD-003",
+      "text": "The dashboard work must be covered by deterministic tests and documented in the active YOLO progress truth source."
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-P40-DASHBOARD-001",
+      "text": "Add a pure lifecycle dashboard adapter under src/runtime/progress/ so the HTTP server can render lifecycle status without embedding file discovery logic in the large server module.",
+      "requirement_ids": [
+        "REQ-P40-DASHBOARD-001",
+        "REQ-P40-DASHBOARD-002"
+      ]
+    },
+    {
+      "id": "DES-P40-DASHBOARD-002",
+      "text": "Expose lifecycle data through a small JSON endpoint and idle-state summary while preserving the existing active runner SSE/task-log behavior.",
+      "requirement_ids": [
+        "REQ-P40-DASHBOARD-001",
+        "REQ-P40-DASHBOARD-002"
+      ]
+    },
+    {
+      "id": "DES-P40-DASHBOARD-003",
+      "text": "Record the integration in the canonical public SDK progress document so the roadmap state does not drift from implementation.",
+      "requirement_ids": [
+        "REQ-P40-DASHBOARD-003"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "FEAT-DASHBOARD-001",
+      "title": "Add lifecycle dashboard data adapter",
+      "priority": "P1",
+      "type": "feature",
+      "task_kind": "atomic_fix",
+      "status": "done",
+      "phase": "done",
+      "phaseDetail": "yolo-run provider/gate PASS merged adapter; target tests pass",
+      "updatedAt": "2026-05-26T08:15:33.100Z",
+      "evidence_files": [
+        "state/runtime/task-logs/FEAT-DASHBOARD-001.jsonl",
+        "__tests__/progress-dashboard.test.ts"
+      ],
+      "description": "Create a pure read-only adapter that discovers lifecycle status, stage reports, recent state events, and summary counts for progress dashboard rendering.",
+      "requirement_ids": [
+        "REQ-P40-DASHBOARD-001",
+        "REQ-P40-DASHBOARD-002"
+      ],
+      "design_ids": [
+        "DES-P40-DASHBOARD-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/progress/lifecycle-dashboard.ts",
+            "description": "Pure lifecycle dashboard adapter"
+          },
+          {
+            "file": "__tests__/progress-dashboard.test.ts",
+            "description": "Deterministic adapter tests"
+          }
+        ],
+        "readonly_files": [
+          "src/lifecycle/state.ts",
+          "src/lifecycle/schema.ts",
+          "src/lifecycle/progress.ts"
+        ],
+        "allow_new_files": true,
+        "max_files": 2,
+        "max_lines_per_file": 220
+      },
+      "post_conditions": [
+        {
+          "id": "POST-DASHBOARD-ADAPTER-FILE",
+          "type": "file_exists",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/progress/lifecycle-dashboard.ts"
+          },
+          "message": "Lifecycle dashboard adapter file must exist."
+        },
+        {
+          "id": "POST-DASHBOARD-ADAPTER-EXPORT",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/progress/lifecycle-dashboard.ts",
+            "text": "readLifecycleDashboard"
+          },
+          "message": "Adapter must export readLifecycleDashboard."
+        },
+        {
+          "id": "POST-DASHBOARD-TEST-FILE",
+          "type": "file_exists",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/progress-dashboard.test.ts"
+          },
+          "message": "Progress dashboard test file must exist."
+        },
+        {
+          "id": "POST-DASHBOARD-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/progress-dashboard.test.ts"
+          },
+          "message": "Progress dashboard adapter tests must pass."
+        }
+      ],
+      "acceptance_criteria": [
+        "Adapter returns exists=false with a plain next action when lifecycle files are missing.",
+        "Adapter returns current_stage, stage counts, blocker count, evidence count, latest reports, and recent events when lifecycle files exist.",
+        "Adapter does not write to lifecycle, state, or memory files."
+      ],
+      "phase": "claude",
+      "updatedAt": "2026-05-26T08:05:25.071Z"
+    },
+    {
+      "id": "FEAT-DASHBOARD-002",
+      "title": "Expose lifecycle state in progress server",
+      "priority": "P1",
+      "type": "feature",
+      "task_kind": "atomic_fix",
+      "status": "done",
+      "phase": "done",
+      "phaseDetail": "lifecycle endpoint and idle summary implemented; target tests pass",
+      "updatedAt": "2026-05-26T08:15:33.100Z",
+      "evidence_files": [
+        "__tests__/progress-dashboard.test.ts",
+        ".yolo/lifecycle/check-report.json"
+      ],
+      "depends_on": [
+        "FEAT-DASHBOARD-001"
+      ],
+      "description": "Connect the progress server to the lifecycle adapter with a JSON endpoint and idle-state summary while preserving active runner behavior.",
+      "requirement_ids": [
+        "REQ-P40-DASHBOARD-001",
+        "REQ-P40-DASHBOARD-002"
+      ],
+      "design_ids": [
+        "DES-P40-DASHBOARD-002"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/progress/server.ts",
+            "description": "Progress server endpoint and idle summary"
+          },
+          {
+            "file": "__tests__/progress-dashboard.test.ts",
+            "description": "Server integration tests"
+          }
+        ],
+        "readonly_files": [
+          "src/runtime/progress/embedded-server.ts"
+        ],
+        "allow_new_files": false,
+        "max_files": 2,
+        "max_lines_per_file": 220
+      },
+      "post_conditions": [
+        {
+          "id": "POST-DASHBOARD-SERVER-IMPORT",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/progress/server.ts",
+            "text": "readLifecycleDashboard"
+          },
+          "message": "Progress server must use the lifecycle dashboard adapter."
+        },
+        {
+          "id": "POST-DASHBOARD-SERVER-ENDPOINT",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/progress/server.ts",
+            "text": "/lifecycle.json"
+          },
+          "message": "Progress server must expose lifecycle.json."
+        },
+        {
+          "id": "POST-DASHBOARD-SERVER-TEST-TARGET",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/progress-dashboard.test.ts"
+          },
+          "message": "Server integration behavior must be covered by the progress dashboard test file."
+        },
+        {
+          "id": "POST-DASHBOARD-SERVER-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/progress-dashboard.test.ts"
+          },
+          "message": "Progress server integration tests must pass."
+        }
+      ],
+      "acceptance_criteria": [
+        "GET /lifecycle.json returns lifecycle dashboard data.",
+        "Idle state shows lifecycle current stage and next action when no runner is active.",
+        "Active runner task dashboard and SSE behavior keep working."
+      ]
+    },
+    {
+      "id": "DOC-DASHBOARD-003",
+      "title": "Document progress dashboard lifecycle integration",
+      "priority": "P2",
+      "type": "cleanup",
+      "task_kind": "atomic_fix",
+      "status": "done",
+      "phase": "done",
+      "phaseDetail": "progress and gap docs updated with P40-10 lifecycle dashboard status",
+      "updatedAt": "2026-05-26T08:15:33.100Z",
+      "evidence_files": [
+        "docs/yolo-public-sdk-progress.md",
+        "docs/sdk-gap-matrix.md"
+      ],
+      "depends_on": [
+        "FEAT-DASHBOARD-002"
+      ],
+      "description": "Update the active public SDK progress document so the dashboard integration is tracked as an implemented P40 follow-up.",
+      "requirement_ids": [
+        "REQ-P40-DASHBOARD-003"
+      ],
+      "design_ids": [
+        "DES-P40-DASHBOARD-003"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "docs/yolo-public-sdk-progress.md",
+            "description": "Canonical progress truth source"
+          }
+        ],
+        "allow_new_files": false,
+        "expected_zero_business_code": true,
+        "max_files": 1,
+        "max_lines_per_file": 80
+      },
+      "post_conditions": [
+        {
+          "id": "POST-DASHBOARD-DOC-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "docs/yolo-public-sdk-progress.md"
+          },
+          "message": "Progress document must be updated."
+        },
+        {
+          "id": "POST-DASHBOARD-DOC-TEXT",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "docs/yolo-public-sdk-progress.md",
+            "text": "P40-10"
+          },
+          "message": "Progress document must mention P40-10 dashboard integration."
+        }
+      ],
+      "acceptance_criteria": [
+        "Canonical progress table includes the lifecycle-aware dashboard integration and verification evidence."
+      ]
+    }
+  ]
+}

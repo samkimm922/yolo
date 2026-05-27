@@ -1,0 +1,10 @@
+{
+  "findings": [],
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "_error": "Command failed: claude -p '你是 TanStack Query (React Query) 状态管理专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【状态管理】专项审查。\n\n## 审查范围\n全部 src/ 目录下使用 useQuery、useMutation、useInfiniteQuery 的文件\n\n## 重点检查\n1. staleTime / cacheTime (gcTime) 设置：\n   - 未设置 staleTime 导致过度 refetch\n   - staleTime 设置过长导致数据不一致\n "
+}

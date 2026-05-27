@@ -1,0 +1,46 @@
+{
+  "id": "failing-baseline",
+  "type": "failing-baseline",
+  "label": "Failing baseline fixture",
+  "description": "Fixture that models a pre-existing baseline failure which should not be blamed on the current task.",
+  "files": [
+    "package.json",
+    "prd.json",
+    "scripts/check-baseline.ts",
+    "src/index.ts",
+    "state/baseline/test-failures.txt",
+    "test/legacy-failure.test.ts"
+  ],
+  "project": {
+    "language": "javascript",
+    "package_manager": "npm",
+    "scenario": "failing-baseline"
+  },
+  "requirement": {
+    "id": "REQ-BASELINE-001",
+    "text": "Separate known baseline failures from the current task verification."
+  },
+  "spec": {
+    "id": "SPEC-BASELINE-001",
+    "requirement_id": "REQ-BASELINE-001",
+    "design_id": "DES-BASELINE-001",
+    "task_id": "FIX-BASELINE-001"
+  },
+  "task": {
+    "id": "FIX-BASELINE-001",
+    "prd": "prd.json"
+  },
+  "run": {
+    "mode": "dry-run",
+    "supports_dry_run": true,
+    "commands": [
+      "node scripts/check-baseline.ts"
+    ],
+    "has_failing_baseline": true
+  },
+  "evidence": {
+    "expected": [
+      "state/evidence/FIX-BASELINE-001/run.json"
+    ]
+  }
+}

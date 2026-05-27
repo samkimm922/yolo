@@ -1,0 +1,10 @@
+{
+  "findings": [],
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "_error": "Command failed: claude -p '你是高级代码审查专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【Service 层】专项审查。\n\n## 审查范围\nsrc/services/ 下所有文件，以及 pages/components 中是否存在绕过 service 层直接调用数据库的代码\n\n## 重点检查\n1. 分层违规：pages/ 或 components/ 中是否直接调用了 wx.cloud.database() 或 Taro.cloud，而非通过 service 层\n2. 空 catch 块：catch(e) {"
+}

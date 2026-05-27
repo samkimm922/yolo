@@ -1,0 +1,42 @@
+{
+  "id": "node-basic",
+  "type": "node-basic",
+  "label": "Node basic fixture",
+  "description": "Minimal JavaScript package with node:test coverage for SDK smoke validation.",
+  "files": [
+    "package.json",
+    "src/index.ts",
+    "test/index.test.ts"
+  ],
+  "project": {
+    "language": "javascript",
+    "package_manager": "npm",
+    "test_framework": "node:test"
+  },
+  "requirement": {
+    "id": "REQ-NODE-001",
+    "text": "Expose an add function that returns the sum of two numbers."
+  },
+  "spec": {
+    "id": "SPEC-NODE-001",
+    "requirement_id": "REQ-NODE-001",
+    "design_id": "DES-NODE-001",
+    "task_id": "FIX-NODE-001"
+  },
+  "task": {
+    "id": "FIX-NODE-001",
+    "prd": "prd.json"
+  },
+  "run": {
+    "mode": "dry-run",
+    "supports_dry_run": true,
+    "commands": [
+      "npm test"
+    ]
+  },
+  "evidence": {
+    "expected": [
+      "state/evidence/FIX-NODE-001/run.json"
+    ]
+  }
+}
