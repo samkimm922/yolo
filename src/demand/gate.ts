@@ -14,6 +14,15 @@ function hasItems(value) {
   return asArray(value).map(clean).filter(Boolean).length > 0;
 }
 
+function hasTraceItems(value) {
+  return asArray(value).some((item) => {
+    if (item && typeof item === "object") {
+      return clean(item.id || item.question || item.answer || item.text).length > 0;
+    }
+    return clean(item).length > 0;
+  });
+}
+
 function check(code, passed, severity, message, extra = {}) {
   return { code, passed: Boolean(passed), severity, message, ...extra };
 }
@@ -41,11 +50,40 @@ function scenarioMatrix(session = {}) {
 }
 
 function scenarioProofCount(session = {}) {
-  return scenarioMatrix(session).filter((scenario) => clean(scenario.proof || scenario.acceptance || scenario.desired_behavior).length > 0).length;
+  return scenarioMatrix(session).filter((scenario) => clean(scenario.proof || scenario.acceptance).length > 0).length;
 }
 
 function scenarioSurfaceCount(session = {}) {
+  return scenarioMatrix(session).filter((scenario) => asArray(scenario.surfaces).length > 0).length;
+}
+
+function scenarioSurfaceTotal(session = {}) {
   return scenarioMatrix(session).reduce((sum, scenario) => sum + asArray(scenario.surfaces).length, 0);
+}
+
+function surfaceBudgetFailures(session = {}) {
+  const failures = [];
+  for (const scenario of scenarioMatrix(session)) {
+    for (const surface of asArray(scenario.surfaces)) {
+      const budget = surface?.session_budget;
+      const maxFiles = Number(budget?.max_files);
+      if (!budget) {
+        failures.push({
+          scenario_id: scenario.id || null,
+          surface_id: surface?.id || null,
+          reason: "missing_session_budget",
+        });
+      } else if (!Number.isFinite(maxFiles) || maxFiles < 1 || maxFiles > 2) {
+        failures.push({
+          scenario_id: scenario.id || null,
+          surface_id: surface?.id || null,
+          reason: "max_files_over_budget",
+          max_files: budget.max_files,
+        });
+      }
+    }
+  }
+  return failures;
 }
 
 function targetFileCount(session = {}) {
@@ -60,9 +98,10 @@ function evidenceOrAssumptionPresent(session = {}) {
 }
 
 function completedQuestioning(session = {}) {
-  return hasItems(session.discussion?.rounds)
-    || hasItems(session.discussion?.questions)
-    || hasItems(session.discussion?.decisions);
+  return hasTraceItems(session.question_trace)
+    || scenarioMatrix(session).some((scenario) => hasTraceItems(scenario.question_trace || scenario.source_question_ids))
+    || hasTraceItems(session.discussion?.rounds)
+    || hasTraceItems(session.discussion?.questions);
 }
 
 function statusFromChecks(checks) {
@@ -96,6 +135,7 @@ export function inspectDemandReadiness(session = {}, options = {}) {
   const approval = session.approval || {};
   const requirements = asArray(session.requirements?.active || session.requirements);
   const scenarios = scenarioMatrix(session);
+  const surfaceBudgetIssues = surfaceBudgetFailures(session);
   const blockingQuestions = blockingOpenQuestions(session);
   const hasExecutionScope = targetFileCount(session) > 0;
   const deepMode = ["discuss", "prd", "executable_prd"].includes(phase);
@@ -136,7 +176,7 @@ export function inspectDemandReadiness(session = {}, options = {}) {
       "QUESTIONING_ROUNDS_COMPLETE",
       completedQuestioning(session),
       deepMode ? "error" : "warning",
-      "Questioning rounds must capture user answers, decisions, or unresolved gaps.",
+      "Question trace or discussion rounds must capture the non-technical answers before PRD.",
     ),
     check(
       "REQUIREMENTS_PRESENT",
@@ -160,13 +200,20 @@ export function inspectDemandReadiness(session = {}, options = {}) {
       "SCENARIO_PROOF_PRESENT",
       scenarioProofCount(session) >= Math.max(1, scenarios.length),
       prdMode ? "error" : "warning",
-      "Every scenario must describe how a non-technical user can tell it worked.",
+      "Every scenario must include explicit proof that a non-technical user can recognize.",
     ),
     check(
       "SCENARIO_SURFACES_PRESENT",
       scenarioSurfaceCount(session) >= Math.max(1, scenarios.length),
       prdMode ? "error" : "warning",
       "Every scenario must map to at least one implementation surface for atomic task slicing.",
+    ),
+    check(
+      "SURFACE_SESSION_BUDGET_EXECUTABLE",
+      scenarios.length > 0 && scenarioSurfaceTotal(session) > 0 && surfaceBudgetIssues.length === 0,
+      prdMode ? "error" : "warning",
+      "Every scenario surface must declare session_budget.max_files <= 2 before executable PRD generation.",
+      { surface_budget_issues: surfaceBudgetIssues },
     ),
     check(
       "OUT_OF_SCOPE_PRESENT",
@@ -191,7 +238,7 @@ export function inspectDemandReadiness(session = {}, options = {}) {
       "USER_APPROVAL_PRESENT",
       approval.approved === true,
       prdMode || deepMode ? "error" : "warning",
-      "Explicit user approval is required before executable PRD compilation.",
+      "Explicit user approval with approved=true is required before executable PRD compilation.",
     ),
     check(
       "EXECUTION_SCOPE_PRESENT",

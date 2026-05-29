@@ -70,6 +70,7 @@
       "code-review-agent",
       "security-review-agent",
       "yolo-review-agent",
+      "yolo-demand",
       "other"
     ],
     "retryStrategy": [
@@ -187,6 +188,7 @@
         "code-review-agent",
         "security-review-agent",
         "yolo-review-agent",
+        "yolo-demand",
         "other"
       ],
       "description": "What generated this PRD (traceability)"
@@ -200,6 +202,97 @@
       "type": "string",
       "pattern": "^[a-f0-9]{7,40}$",
       "description": "Git SHA at generation time. Runner warns if HEAD has diverged."
+    },
+    "source": {
+      "type": "string",
+      "description": "Source workflow that produced this PRD, e.g. approved_demand."
+    },
+    "demand_contract_required": {
+      "type": "boolean",
+      "description": "When true, demand.id, demand.approval, and execution_readiness are required by runtime gates."
+    },
+    "demand": {
+      "type": "object",
+      "description": "Approved demand-session contract. Kept intentionally extensible for backward-compatible demand metadata.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "approval": {
+          "type": "object",
+          "properties": {
+            "approved": {
+              "type": "boolean"
+            },
+            "approved_by": {
+              "type": "string"
+            },
+            "approved_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        },
+        "approval_reason": {
+          "type": "string"
+        },
+        "interview": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "question_trace": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "prd_intake": {
+          "type": "object"
+        },
+        "scenario_matrix": {
+          "type": "object"
+        },
+        "atomicity_contract": {
+          "type": "object"
+        },
+        "execution_readiness": {
+          "type": "object"
+        }
+      }
+    },
+    "execution_readiness": {
+      "type": "object",
+      "description": "Runtime readiness summary for approved-demand PRDs.",
+      "properties": {
+        "level": {
+          "type": "string"
+        },
+        "afk_ready": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string"
+        },
+        "atomic_tasks": {
+          "type": "boolean"
+        },
+        "expected_task_session": {
+          "type": "string"
+        }
+      }
     },
     "tasks": {
       "type": "array",
@@ -374,6 +467,27 @@
           "items": {
             "type": "string"
           }
+        },
+        "source_question_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Interview or discussion question IDs that produced this executable task."
+        },
+        "handoff": {
+          "type": "object",
+          "description": "Agent handoff payload for a fresh execution session."
+        },
+        "verification_hint": {
+          "type": "string",
+          "description": "Plain-language hint for verifying this task from the originating scenario proof."
+        },
+        "trace": {
+          "type": "object"
+        },
+        "atomicity": {
+          "type": "object"
         },
         "dedupe_key": {
           "type": "string"

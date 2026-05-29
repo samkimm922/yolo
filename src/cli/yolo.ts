@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { initProject } from "../core/bootstrap.js";
@@ -22,6 +22,12 @@ import {
   runDemandDiscussRuntime,
   runDemandPrdRuntime,
 } from "../demand/runtime.js";
+import {
+  answerDemandInterviewQuestion,
+  createDemandInterviewSession,
+  demandInterviewToDemandInput,
+  inspectDemandInterviewCoverage,
+} from "../demand/interview.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const defaultYoloRoot = resolve(__dirname, "../..");
@@ -31,6 +37,11 @@ export function usage() {
     "用法:",
     "  yolo init [path] [--name <name>] [--force] [--dry-run] [--json]",
     "  yolo brainstorm [idea] [--user <user>] [--status-quo <text>] [--evidence <text>] [--json]",
+    "  yolo interview start|answer|status|to-demand [options]",
+    "  yolo interview start [idea] [--cwd <dir>] [--id <id>] [--title <title>] [--json] [--no-write]",
+    "  yolo interview answer --session <path|dir> --question <id> --answer <text> [--json] [--no-write]",
+    "  yolo interview status --session <path|dir> [--json]",
+    "  yolo interview to-demand --session <path|dir> [--approve] [--json] [--no-write]",
     "  yolo discover [text-or-path] [--success <criteria>] [--target <file>] [--json]",
     "  yolo discuss [idea] [--decision <text>] [--approve] [--json]",
     "  yolo plan [--discovery <discovery.json>] [--json]",
@@ -51,6 +62,7 @@ export function usage() {
     "",
     "`yolo init` 会在目标项目生成 .yolo/、.yolo/memory/、.yolo/state/*.jsonl 和 specs/ 基础结构。",
     "`yolo brainstorm/discuss` 会生成需求端 VISION/REFLECTION/INVESTIGATION/REQUIREMENTS/CONTEXT/ROADMAP/APPROVAL 产物，不改业务代码。",
+    "`yolo interview` 会用一问一答收集非技术需求，默认状态写入 .yolo/demand-interviews/<id>/interview.json，可转换为 demand session 后继续 prd。",
     "`yolo discover/plan/prd` 会生成 discovery、plan、PRD 产物；discover/plan 不改业务代码，prd 只写 PRD JSON。",
     "`yolo doctor` 会只读检查 .yolo/lifecycle、命令注册表和 Codex/Claude agent 集成状态。",
     "`yolo check` 会在改代码前检查 PRD、产品准备度、UI 验收准备度、任务原子性、adapter 和 evidence plan。",
@@ -333,6 +345,55 @@ export function parseYoloAcceptArgs(argv = []) {
   return parseYoloCheckArgs(argv);
 }
 
+export function parseYoloInterviewArgs(argv = []) {
+  const command = argv[0] && !argv[0].startsWith("--") ? argv[0] : "";
+  const input = { command, ideaParts: [] };
+  const options = { json: false, help: false, writeArtifacts: true };
+  const args = command ? argv.slice(1) : argv;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--json") {
+      options.json = true;
+    } else if (arg === "--help" || arg === "-h") {
+      options.help = true;
+    } else if (arg === "--no-write") {
+      options.writeArtifacts = false;
+    } else if (arg === "--approve" || arg === "--approved") {
+      input.approve = true;
+    } else if (arg === "--cwd" || arg.startsWith("--cwd=")) {
+      const read = readArgValue(args, i, "--cwd");
+      input.cwd = read.value;
+      i += read.consumed;
+    } else if (arg === "--id" || arg.startsWith("--id=")) {
+      const read = readArgValue(args, i, "--id");
+      input.id = read.value;
+      i += read.consumed;
+    } else if (arg === "--title" || arg.startsWith("--title=")) {
+      const read = readArgValue(args, i, "--title");
+      input.title = read.value;
+      i += read.consumed;
+    } else if (arg === "--session" || arg.startsWith("--session=")) {
+      const read = readArgValue(args, i, "--session");
+      input.sessionPath = read.value;
+      i += read.consumed;
+    } else if (arg === "--question" || arg.startsWith("--question=")) {
+      const read = readArgValue(args, i, "--question");
+      input.questionId = read.value;
+      i += read.consumed;
+    } else if (arg === "--answer" || arg.startsWith("--answer=")) {
+      const read = readArgValue(args, i, "--answer");
+      input.answer = read.value;
+      i += read.consumed;
+    } else if (!arg.startsWith("--") && command === "start") {
+      input.ideaParts.push(arg);
+    }
+  }
+
+  input.idea = input.ideaParts.join(" ").trim();
+  return { input, options };
+}
+
 export function parseYoloWorkflowArgs(argv = []) {
   const input = { objectiveParts: [] };
   const options = { json: false, help: false, writeLifecycle: true };
@@ -575,6 +636,243 @@ export function formatDemandRuntimeText(label, result = {}) {
   return lines.join("\n");
 }
 
+function cleanCliText(value) {
+  return String(value ?? "").trim();
+}
+
+function slugForPath(value, fallback = "interview") {
+  const slug = cleanCliText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 56);
+  return slug || fallback;
+}
+
+function demandIdFromInterview(id) {
+  const cleanId = cleanCliText(id);
+  if (/^DEMAND-/i.test(cleanId)) return cleanId;
+  return `DEMAND-${slugForPath(cleanId, "interview").toUpperCase()}`;
+}
+
+function defaultInterviewPath(stateRoot, id) {
+  return join(stateRoot, "demand-interviews", id, "interview.json");
+}
+
+function stableJson(value) {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function writeJsonFile(path, value) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, stableJson(value), "utf8");
+  return path;
+}
+
+function appendJsonlFile(path, record) {
+  mkdirSync(dirname(path), { recursive: true });
+  appendFileSync(path, `${JSON.stringify(record)}\n`, "utf8");
+  return path;
+}
+
+function readJsonFile(path) {
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function resolveInterviewPath(pathOrDir, cwd = process.cwd()) {
+  const resolved = resolve(cwd, cleanCliText(pathOrDir));
+  if (existsSync(resolved)) {
+    try {
+      if (statSync(resolved).isDirectory()) return join(resolved, "interview.json");
+    } catch {
+      return join(resolved, "interview.json");
+    }
+  }
+  return resolved.endsWith(".json") ? resolved : join(resolved, "interview.json");
+}
+
+function decorateInterviewState(state = {}) {
+  const questions = Array.isArray(state.questions) ? state.questions : [];
+  const coverage = inspectDemandInterviewCoverage({ ...state, questions });
+  const missingIds = new Set((coverage.missing || []).map((item) => item.question_id));
+  const next = questions.find((question) => missingIds.has(question.id)) || null;
+  return {
+    ...state,
+    questions,
+    status: coverage.ready_for_prd_intake ? "complete" : "in_progress",
+    readiness: coverage.readiness,
+    next_question: next ? {
+      id: next.id,
+      text: next.plain_language_prompt || next.text || next.id,
+      category: next.category,
+      why_it_matters: next.why_it_matters,
+    } : null,
+    coverage,
+  };
+}
+
+function createInterviewState(input = {}, projectRoot, stateRoot) {
+  const session = createDemandInterviewSession({
+    projectRoot,
+    stateRoot,
+    id: input.id,
+    demand_id: input.id ? demandIdFromInterview(input.id) : undefined,
+    title: input.title,
+    idea: input.idea || input.title,
+    source: "yolo-interview",
+  });
+  return decorateInterviewState({
+    ...session,
+    interview_path: defaultInterviewPath(stateRoot, session.id),
+  });
+}
+
+function readInterviewState(pathOrDir, cwd = process.cwd()) {
+  const path = resolveInterviewPath(pathOrDir, cwd);
+  if (!existsSync(path)) {
+    return { ok: false, path, error: `Interview session not found: ${path}` };
+  }
+  try {
+    const state = decorateInterviewState({ ...readJsonFile(path), interview_path: path });
+    return { ok: true, path, dir: dirname(path), state };
+  } catch (error) {
+    return { ok: false, path, error: `Interview session JSON parse failed: ${error.message}` };
+  }
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function resolveInterviewQuestionId(state = {}, value) {
+  const questions = state.questions || [];
+  const clean = cleanCliText(value);
+  if (/^\d+$/.test(clean)) return questions[Number(clean) - 1]?.id || clean;
+  const qMatch = clean.toUpperCase().match(/^Q0*(\d+)$/);
+  if (qMatch) return questions[Number(qMatch[1]) - 1]?.id || clean;
+  return questions.find((question) => question.id === clean)?.id
+    || questions.find((question) => question.id?.toLowerCase() === clean.toLowerCase())?.id
+    || clean;
+}
+
+function coverageCounts(coverage = {}, state = {}) {
+  const answered = Array.isArray(coverage.answered) ? coverage.answered.length : Number(coverage.answered || 0);
+  const missing = Array.isArray(coverage.missing) ? coverage.missing.length : 0;
+  const total = Array.isArray(state.questions) && state.questions.length
+    ? state.questions.length
+    : answered + missing;
+  return {
+    answered,
+    total,
+    percent: total > 0 ? Math.round((answered / total) * 100) : 100,
+  };
+}
+
+function coverageForCli(coverage = {}, state = {}) {
+  const counts = coverageCounts(coverage, state);
+  return {
+    ...coverage,
+    answered_questions: coverage.answered || [],
+    missing: (coverage.missing || []).map((item) => ({
+      id: item.question_id || item.id,
+      slot: item.slot,
+      text: item.plain_language_prompt || item.text || item.slot,
+      category: item.category,
+    })),
+    answered: counts.answered,
+    total: counts.total,
+    percent: counts.percent,
+    complete: coverage.ready_for_prd_intake === true,
+  };
+}
+
+function writeInterviewAnswerLedger(state = {}, question = {}, answer = "") {
+  const stateRoot = state.stateRoot || state.state_root;
+  if (!stateRoot) return null;
+  return appendJsonlFile(join(stateRoot, "state", "questions.jsonl"), {
+    ts: new Date().toISOString(),
+    type: "demand_interview_answer",
+    source: "yolo-interview",
+    interview_id: state.id,
+    demand_id: state.demand_id,
+    question_id: question.id,
+    slot: question.slot,
+    category: question.category,
+    question: question.plain_language_prompt || question.text || question.id,
+    answer,
+  });
+}
+
+function writeInterviewDecisionLedger(state = {}, demandResult = {}) {
+  const stateRoot = state.stateRoot || state.state_root;
+  if (!stateRoot) return null;
+  return appendJsonlFile(join(stateRoot, "state", "decisions.jsonl"), {
+    ts: new Date().toISOString(),
+    type: "demand_interview_to_demand",
+    source: "yolo-interview",
+    interview_id: state.id,
+    demand_id: demandResult.demand_id || state.demand_id,
+    approved: state.coverage?.approval?.approved === true,
+    demand_dir: demandResult.demand_dir,
+    readiness_level: demandResult.readiness?.readiness_level,
+  });
+}
+
+function interviewNextActions(state = {}, extra = {}) {
+  const path = state.interview_path;
+  const actions = [];
+  if (state.next_question) {
+    actions.push(`Answer ${state.next_question.id}: yolo interview answer --session ${path} --question ${state.next_question.id} --answer "<answer>"`);
+    actions.push(`Check progress: yolo interview status --session ${path}`);
+    return actions;
+  }
+  if (!extra.demand_dir) actions.push(`Create demand artifacts: yolo interview to-demand --session ${path} --approve`);
+  if (extra.demand_dir) actions.push(`Continue to PRD when ready: yolo prd --demand ${extra.demand_dir}`);
+  for (const action of extra.runtime_next_actions || []) {
+    if (!actions.includes(action)) actions.push(action);
+  }
+  return actions;
+}
+
+function interviewResult(command, state = {}, extra = {}) {
+  const decorated = decorateInterviewState(state);
+  const result = {
+    status: extra.status || "success",
+    code: extra.code || "INTERVIEW_OK",
+    command,
+    summary: extra.summary || "Interview state updated.",
+    session_path: decorated.interview_path,
+    interview: decorated,
+    next_question: decorated.next_question,
+    coverage: coverageForCli(decorated.coverage, decorated),
+    coverage_detail: decorated.coverage,
+    artifacts: extra.artifacts || [],
+    outputs: extra.outputs || [],
+    demand_dir: extra.demand_dir,
+    demand_result: extra.demand_result,
+  };
+  result.next_actions = extra.next_actions || interviewNextActions(decorated, extra);
+  return result;
+}
+
+function formatInterviewText(label, result = {}) {
+  const lines = [`[yolo interview ${label}] ${result.status}: ${result.summary}`];
+  if (result.session_path) lines.push(`session: ${result.session_path}`);
+  if (result.demand_dir) lines.push(`demand_dir: ${result.demand_dir}`);
+  if (result.next_question) lines.push(`next_question: ${result.next_question.id} ${result.next_question.text}`);
+  else lines.push("next_question: none");
+  if (result.coverage) {
+    const counts = coverageCounts(result.coverage, result.interview);
+    lines.push(`coverage: ${counts.answered}/${counts.total} (${counts.percent}%)`);
+  }
+  if (result.artifacts?.length) lines.push(`artifacts: ${result.artifacts.join(", ")}`);
+  if (result.next_actions?.length) {
+    lines.push("next_actions:");
+    for (const action of result.next_actions) lines.push(`  - ${action}`);
+  }
+  return lines.join("\n");
+}
+
 function artifactList(artifacts) {
   if (Array.isArray(artifacts)) return artifacts.filter(Boolean);
   return Object.entries(artifacts || {})
@@ -757,6 +1055,151 @@ export async function runYoloProgressUiEvidenceCli(argv = [], io = {}) {
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else stdout.write(`[yolo progress-ui-evidence] ${report.status}: ${report.summary}\n`);
   return report.status === "pass" ? 0 : 1;
+}
+
+export async function runYoloInterviewCli(argv = [], io = {}) {
+  const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
+  const { input, options } = parseYoloInterviewArgs(argv);
+  const command = input.command;
+
+  if (options.help) {
+    stdout.write(`${usage()}\n`);
+    return 0;
+  }
+
+  function emit(label, result, exitCode = 0) {
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else (result.status === "error" ? stderr : stdout).write(`${formatInterviewText(label, result)}\n`);
+    return exitCode;
+  }
+
+  function error(label, code, summary, exitCode = 2) {
+    return emit(label || "unknown", {
+      status: "error",
+      code,
+      command: label,
+      summary,
+      next_question: null,
+      coverage: null,
+      artifacts: [],
+      next_actions: ["Run yolo interview --help for supported commands."],
+    }, exitCode);
+  }
+
+  try {
+    const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+    const stateRoot = join(projectRoot, ".yolo");
+    const writeArtifacts = options.writeArtifacts !== false;
+
+    if (command === "start") {
+      const state = createInterviewState(input, projectRoot, stateRoot);
+      const artifacts = writeArtifacts ? [writeJsonFile(state.interview_path, state)] : [];
+      return emit("start", interviewResult("start", state, {
+        summary: writeArtifacts ? "Interview session started." : "Interview session preview generated.",
+        artifacts,
+        outputs: artifacts.map((artifactPath) => ({ path: artifactPath, type: "interview_state" })),
+      }));
+    }
+
+    if (command === "answer") {
+      if (!input.sessionPath) return error("answer", "MISSING_INTERVIEW_SESSION", "Missing --session <path|dir>.");
+      if (!input.questionId) return error("answer", "MISSING_INTERVIEW_QUESTION", "Missing --question <id>.");
+      if (!cleanCliText(input.answer)) return error("answer", "MISSING_INTERVIEW_ANSWER", "Missing --answer <text>.");
+      const read = readInterviewState(input.sessionPath, projectRoot);
+      if (!read.ok) return error("answer", "INTERVIEW_SESSION_MISSING", read.error, 1);
+      const questionId = resolveInterviewQuestionId(read.state, input.questionId);
+      const question = (read.state.questions || []).find((item) => item.id === questionId);
+      if (!question) return error("answer", "INTERVIEW_QUESTION_UNKNOWN", `Question not found: ${input.questionId}`, 1);
+      const state = decorateInterviewState(answerDemandInterviewQuestion(cloneJson(read.state), {
+        questionId,
+        answer: cleanCliText(input.answer),
+      }));
+      const artifacts = writeArtifacts ? [
+        writeJsonFile(state.interview_path, state),
+        writeInterviewAnswerLedger(state, question, cleanCliText(input.answer)),
+      ].filter(Boolean) : [];
+      return emit("answer", interviewResult("answer", state, {
+        summary: writeArtifacts ? "Interview answer recorded." : "Interview answer preview generated.",
+        artifacts,
+        outputs: artifacts.map((artifactPath) => ({ path: artifactPath, type: artifactPath.endsWith(".jsonl") ? "interview_ledger" : "interview_state" })),
+      }));
+    }
+
+    if (command === "status") {
+      if (!input.sessionPath) return error("status", "MISSING_INTERVIEW_SESSION", "Missing --session <path|dir>.");
+      const read = readInterviewState(input.sessionPath, projectRoot);
+      if (!read.ok) return error("status", "INTERVIEW_SESSION_MISSING", read.error, 1);
+      return emit("status", interviewResult("status", read.state, {
+        summary: "Interview session loaded.",
+      }));
+    }
+
+    if (command === "to-demand") {
+      if (!input.sessionPath) return error("to-demand", "MISSING_INTERVIEW_SESSION", "Missing --session <path|dir>.");
+      const read = readInterviewState(input.sessionPath, projectRoot);
+      if (!read.ok) return error("to-demand", "INTERVIEW_SESSION_MISSING", read.error, 1);
+      const stateForDemand = cloneJson(read.state);
+      if (input.approve === true) {
+        answerDemandInterviewQuestion(stateForDemand, {
+          questionId: "execution_approval",
+          answer: "批准，按这个范围进入 PRD。",
+        });
+      }
+      const demandInput = demandInterviewToDemandInput(stateForDemand);
+      const demandResult = runDemandDiscussRuntime({
+        ...demandInput,
+        projectRoot: stateForDemand.projectRoot || stateForDemand.project_root || projectRoot,
+        stateRoot: stateForDemand.stateRoot || stateForDemand.state_root || stateRoot,
+        writeArtifacts,
+      });
+      const now = new Date().toISOString();
+      const state = decorateInterviewState({
+        ...stateForDemand,
+        approved: demandInput.approve === true,
+        updated_at: now,
+        demand: {
+          demand_id: demandResult.demand_id,
+          demand_dir: demandResult.demand_dir,
+          demand_path: demandResult.artifacts?.find((path) => path.endsWith("session.json")) || null,
+          status: demandResult.status,
+          readiness: demandResult.readiness,
+          artifacts: demandResult.artifacts || [],
+        },
+      });
+      const interviewArtifact = writeArtifacts ? writeJsonFile(state.interview_path, state) : null;
+      const decisionLedger = writeArtifacts ? writeInterviewDecisionLedger(state, demandResult) : null;
+      const artifacts = [
+        interviewArtifact,
+        decisionLedger,
+        ...(demandResult.artifacts || []),
+      ].filter(Boolean);
+      return emit("to-demand", interviewResult("to-demand", state, {
+        status: "success",
+        code: "INTERVIEW_DEMAND_CREATED",
+        summary: writeArtifacts ? "Demand artifacts generated from interview." : "Demand artifact preview generated from interview.",
+        artifacts,
+        outputs: demandResult.outputs || [],
+        demand_dir: demandResult.demand_dir,
+        demand_result: demandResult,
+        runtime_next_actions: demandResult.next_actions || [],
+      }));
+    }
+
+    return error(command, "UNKNOWN_INTERVIEW_COMMAND", `Unknown interview command: ${command || "(missing)"}`);
+  } catch (err) {
+    const label = command || "unknown";
+    return emit(label, {
+      status: "error",
+      code: "INTERVIEW_FAILED",
+      command: label,
+      summary: err.message,
+      next_question: null,
+      coverage: null,
+      artifacts: [],
+      next_actions: ["Inspect the interview session path and retry the command."],
+    }, 1);
+  }
 }
 
 export async function runYoloBrainstormCli(argv = [], io = {}) {
@@ -1023,6 +1466,7 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
     return runYoloDoctorCli(argv.slice(1), io);
   }
   if (argv[0] === "brainstorm" || argv[0] === "office-hours") return runYoloBrainstormCli(argv.slice(1), io);
+  if (argv[0] === "interview") return runYoloInterviewCli(argv.slice(1), io);
   if (argv[0] === "discover") return runYoloDiscoverCli(argv.slice(1), io);
   if (argv[0] === "discuss") return runYoloDiscussCli(argv.slice(1), io);
   if (argv[0] === "plan") return runYoloPlanCli(argv.slice(1), io);

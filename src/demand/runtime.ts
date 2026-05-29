@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { buildDemandSession, demandMarkdownArtifacts } from "./artifacts.js";
@@ -151,6 +152,26 @@ function targetFiles(session = {}) {
   return Array.isArray(files) ? files.filter(Boolean) : [files].filter(Boolean);
 }
 
+function normalizeBaseCommit(value) {
+  const text = clean(value).toLowerCase();
+  return /^[a-f0-9]{7,40}$/.test(text) ? text : "";
+}
+
+function readBaseCommit(input = {}, options = {}) {
+  const explicit = normalizeBaseCommit(options.base_commit || options.baseCommit || input.base_commit || input.baseCommit);
+  if (explicit) return explicit;
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
+  try {
+    return normalizeBaseCommit(execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    })) || "0000000";
+  } catch {
+    return "0000000";
+  }
+}
+
 function chunk(values = [], size = 2) {
   const items = values.filter(Boolean);
   const chunks = [];
@@ -169,6 +190,30 @@ function requirementById(session = {}) {
 
 function scenarioMatrix(session = {}) {
   return asArray(session.scenario_matrix?.scenarios);
+}
+
+function questionTraceIds(value) {
+  return [...new Set(asArray(value)
+    .map((item) => {
+      if (item && typeof item === "object") return clean(item.id || item.question_id || item.questionId);
+      return clean(item);
+    })
+    .filter(Boolean))];
+}
+
+function sourceQuestionIds(session = {}, scenario = {}, requirement = {}) {
+  return [...new Set([
+    ...questionTraceIds(scenario.source_question_ids),
+    ...questionTraceIds(scenario.question_trace),
+    ...questionTraceIds(requirement.trace?.question_ids),
+    ...questionTraceIds(session.question_trace),
+    ...questionTraceIds(session.discussion?.rounds),
+  ])];
+}
+
+function verificationHint({ scenario = {}, surface = {}, proof = "", files = [] } = {}) {
+  return clean(surface.verification_hint || scenario.verification_hint)
+    || `Verify "${proof || scenario.desired_behavior || "the requested behavior"}" through ${scenario.touchpoint || "the target workflow"} on ${surfaceTitle(surface)}${files.length ? ` (${files.join(", ")})` : ""}.`;
 }
 
 function fallbackScenarios(session = {}) {
@@ -251,6 +296,8 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
         const taskId = `DEMAND-${scenario.requirement_id || "REQ"}-${String(scenarioIndex + 1).padStart(3, "0")}${String(surfaceIndex + 1).padStart(2, "0")}${String(chunkIndex + 1).padStart(2, "0")}`;
         const proof = clean(surface.proof || scenario.proof || requirement.text || scenario.desired_behavior);
         const description = clean(scenario.desired_behavior || requirement.text || proof);
+        const sourceQuestions = sourceQuestionIds(session, scenario, requirement);
+        const taskVerificationHint = verificationHint({ scenario, surface, proof, files });
         tasks.push({
           id: taskId,
           title: `${surfaceTitle(surface)}: ${description}`.slice(0, 100),
@@ -262,29 +309,56 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
           requirement_ids: [scenario.requirement_id || requirement.id].filter(Boolean),
           design_ids: [`DES-${scenario.requirement_id || requirement.id || "DEMAND"}`],
           source_finding_ids: [scenario.requirement_id || requirement.id].filter(Boolean),
+          source_question_ids: sourceQuestions,
+          verification_hint: taskVerificationHint,
           depends_on: [],
           handoff: {
             type: "agent_brief",
             category: "enhancement",
             plain_language_goal: description,
             user_story: `As ${scenario.actor || "the target user"}, I want ${description}, so that ${proof}.`,
+            source_question_ids: sourceQuestions,
             current_behavior: clean(scenario.current_behavior) || (session.context?.current_state || session.vision?.status_quo || []).join("; ") || "Captured in demand CONTEXT.md.",
             desired_behavior: description,
             touchpoint: scenario.touchpoint || "primary user workflow",
             trigger: scenario.trigger || "the user reaches this scenario",
+            scenario: {
+              id: scenario.id,
+              actor: scenario.actor || "target user",
+              touchpoint: scenario.touchpoint || "primary user workflow",
+              trigger: scenario.trigger || "the user reaches this scenario",
+              current_behavior: clean(scenario.current_behavior) || "",
+              desired_behavior: description,
+              proof,
+            },
+            requirement: {
+              id: scenario.requirement_id || requirement.id || null,
+              text: requirement.text || description,
+            },
             surface: {
               id: surface.id,
               kind: surface.kind || "code",
               label: surfaceTitle(surface),
+              target_files: files,
+              readonly_files: asArray(surface.readonly_files),
+              session_budget: surface.session_budget || null,
             },
             key_interfaces: files,
             read_first: [...new Set([...files, ...asArray(surface.readonly_files)])],
             acceptance_criteria: [proof].filter(Boolean),
             proof,
+            verification_hint: taskVerificationHint,
             out_of_scope: scenario.out_of_scope || session.requirements?.out_of_scope || [],
             constraints: scenario.constraints || session.requirements?.constraints || [],
             exceptions: scenario.exceptions || [],
             question_trace: scenario.question_trace || [],
+            evidence_chain: {
+              intake_schema: session.prd_intake?.schema || session.nontechnical_intake?.schema || null,
+              demand_id: session.id,
+              scenario_id: scenario.id,
+              surface_id: surface.id,
+              approval_reason: session.approval_reason || session.approval?.reason || session.approval?.note || "",
+            },
           },
           scope: {
             targets: files.map((file) => ({ file, description })),
@@ -307,6 +381,7 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
             evidence: requirement.trace?.evidence || [],
             decisions: requirement.trace?.decisions || [],
             question_trace: scenario.question_trace || [],
+            source_question_ids: sourceQuestions,
           },
           atomicity: {
             expected_session: surface.session_budget?.expected || "single_session",
@@ -382,6 +457,7 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
   const files = targetFiles(session);
   const requirements = session.requirements?.active || [];
   const now = clean(options.now || input.now) || new Date().toISOString();
+  const baseCommit = readBaseCommit(input, options);
   const prdId = clean(input.prd_id || input.prdId) || `PRD-${now.slice(0, 10).replace(/-/g, "")}-${session.id.replace(/^DEMAND-/, "")}`;
   const tasks = buildAtomicDemandTasks(session, { ...input, projectRoot: input.projectRoot || input.project_root }, options);
   const atomicity = inspectAtomicity(tasks, input, options);
@@ -420,14 +496,51 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
       },
       generated_by: "yolo-demand",
       generated_at: now,
+      base_commit: baseCommit,
       source: "approved_demand",
       demand_contract_required: true,
       demand: {
         id: session.id,
+        source: session.source || "yolo-demand",
         approval: session.approval,
+        approval_reason: session.approval_reason || session.approval?.reason || session.approval?.note || "",
+        prd_intake: session.prd_intake || session.nontechnical_intake || null,
+        interview: session.interview || null,
+        question_trace: session.question_trace || [],
         readiness_level: readiness.readiness_level,
         quality_score: readiness.quality_score,
-        scenario_matrix: session.scenario_matrix?.schema || null,
+        scenario_matrix: {
+          schema: session.scenario_matrix?.schema || null,
+          scenario_count: asArray(session.scenario_matrix?.scenarios).length,
+          surface_count: asArray(session.scenario_matrix?.scenarios)
+            .reduce((sum, scenario) => sum + asArray(scenario.surfaces).length, 0),
+          scenarios: asArray(session.scenario_matrix?.scenarios).map((scenario) => ({
+            id: scenario.id,
+            requirement_id: scenario.requirement_id,
+            proof: scenario.proof || "",
+            source_question_ids: sourceQuestionIds(session, scenario, requirements.find((item) => item.id === scenario.requirement_id) || {}),
+            surfaces: asArray(scenario.surfaces).map((surface) => ({
+              id: surface.id,
+              kind: surface.kind || "code",
+              label: surfaceTitle(surface),
+              session_budget: surface.session_budget || null,
+            })),
+          })),
+        },
+        atomicity_contract: {
+          rule: session.scenario_matrix?.atomic_task_rule || "one scenario surface maps to one session-sized task",
+          session_budget_required: true,
+          max_files_per_surface: 2,
+          generated_task_count: tasks.length,
+          doctor_status: atomicity.status,
+        },
+        execution_readiness: {
+          level: readiness.readiness_level,
+          prd_ready: readiness.prd_ready,
+          executable_prd_ready: readiness.executable_prd_ready,
+          quality_score: readiness.quality_score,
+          checks: readiness.checks.map((item) => ({ code: item.code, passed: item.passed, severity: item.severity })),
+        },
       },
       execution_readiness: {
         level: "L3",
@@ -435,6 +548,9 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
         source: "approved_demand_report",
         atomic_tasks: true,
         expected_task_session: "single_session",
+        demand_id: session.id,
+        readiness_score: readiness.quality_score,
+        atomicity_status: atomicity.status,
       },
       requirements: requirements.map((requirement) => ({
         id: requirement.id,

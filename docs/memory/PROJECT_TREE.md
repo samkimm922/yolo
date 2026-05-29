@@ -1,6 +1,6 @@
 # YOLO Memory Project Tree
 
-> Generated: 2026-05-29T04:40:51.072Z
+> Generated: 2026-05-29T11:20:55.813Z
 > Canonical memory dir: `docs/memory`
 
 ## Snapshot
@@ -12,7 +12,7 @@
 - root .js files: 0 (none)
 - src .js files: 0
 - test files: 0
-- docs markdown files: 27
+- docs markdown files: 29
 
 ## Active Ledgers
 
@@ -41,6 +41,7 @@
   - __tests__/commit-flow.test.ts
   - __tests__/context-pack-outcome.test.ts
   - __tests__/controlled-parallel.test.ts
+  - __tests__/demand-interview.test.ts
   - __tests__/demand-runtime.test.ts
   - __tests__/deterministic-auto-fix.test.ts
   - __tests__/discovery-gate.test.ts
@@ -149,6 +150,7 @@
   - __tests__/workflow-skill-install.test.ts
   - __tests__/worktree-session.test.ts
   - __tests__/yolo-doctor.test.ts
+  - __tests__/yolo-interview-cli.test.ts
   - __tests__/yolo-wizard.test.ts
     - .yolo/adapters/progress-dashboard-ui.manifest.json
           - .yolo/archive/legacy-cleanup-20260526221343/.yolo/lifecycle/acceptance-report.json
@@ -310,6 +312,8 @@
     - dist/docs/sdk-gap-matrix.md
     - dist/docs/SYSTEM_STATE.md
     - dist/docs/yolo-deliverable-implementation-plan.md
+    - dist/docs/yolo-demand-doctrine.md
+    - dist/docs/yolo-demand-implementation-plan.md
     - dist/docs/yolo-discovery-ui-acceptance-plan.md
     - dist/docs/yolo-public-sdk-progress.md
     - dist/docs/yolo-typescript-mainline-execution-plan.md
@@ -492,6 +496,9 @@
       - dist/src/demand/graph.d.ts
       - dist/src/demand/graph.js
       - dist/src/demand/graph.js.map
+      - dist/src/demand/interview.d.ts
+      - dist/src/demand/interview.js
+      - dist/src/demand/interview.js.map
       - dist/src/demand/runtime.d.ts
       - dist/src/demand/runtime.js
       - dist/src/demand/runtime.js.map
@@ -822,12 +829,5 @@
       - dist/src/runtime/pi-runtimes.d.ts
       - dist/src/runtime/pi-runtimes.js
       - dist/src/runtime/pi-runtimes.js.map
-        - dist/src/runtime/progress/embedded-server.d.ts
-        - dist/src/runtime/progress/embedded-server.js
-        - dist/src/runtime/progress/embedded-server.js.map
-        - dist/src/runtime/progress/lifecycle-dashboard.d.ts
-        - dist/src/runtime/progress/lifecycle-dashboard.js
-        - dist/src/runtime/progress/lifecycle-dashboard.js.map
-        - dist/src/runtime/progress/server.d.ts
 ... output capped; rerun with a higher maxTreeFiles for a full tree.
 ```

@@ -26,6 +26,10 @@ function uniqueStrings(value) {
   return [...new Set(arrayOfStrings(value))];
 }
 
+function isPlainObject(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
 function nowIso(options = {}) {
   return clean(options.now) || new Date().toISOString();
 }
@@ -278,6 +282,135 @@ function buildNonTechnicalIntake({
   };
 }
 
+function readObjectField(source, keys = []) {
+  if (!isPlainObject(source)) return undefined;
+  for (const key of keys) {
+    if (source[key] != null) return source[key];
+  }
+  return undefined;
+}
+
+function questionId(value, index) {
+  const id = clean(value)
+    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return id || `Q${index + 1}`;
+}
+
+function questionTraceIds(value) {
+  return [...new Set(asArray(value)
+    .map((item) => {
+      if (isPlainObject(item)) return clean(item.id || item.question_id || item.questionId);
+      return clean(item);
+    })
+    .filter(Boolean))];
+}
+
+function traceEntries(value) {
+  if (Array.isArray(value)) return value;
+  if (isPlainObject(value)) {
+    return Object.entries(value).map(([key, item]) => (
+      isPlainObject(item)
+        ? { id: key, ...item }
+        : { id: key, question: key, answer: item }
+    ));
+  }
+  return clean(value) ? [value] : [];
+}
+
+function normalizeTraceItem(item, index, input = {}, source = "interview") {
+  const fallbackQuestion = asArray(input.questions || input.question)[index];
+  if (isPlainObject(item)) {
+    const answerValue = item.answer ?? item.response ?? item.value ?? item.result ?? item.content;
+    const answer = Array.isArray(answerValue) ? arrayOfStrings(answerValue).join("; ") : clean(answerValue);
+    const question = clean(item.question || item.prompt || item.label || item.text || fallbackQuestion);
+    const reason = clean(item.reason || item.why || item.intent);
+    if (!question && !answer && !reason) return null;
+    return {
+      id: questionId(item.id || item.question_id || item.questionId || item.key, index),
+      question,
+      answer,
+      source: clean(item.source || source),
+      ...(reason ? { reason } : {}),
+    };
+  }
+  const answer = clean(item);
+  const question = clean(fallbackQuestion || `Interview answer ${index + 1}`);
+  if (!question && !answer) return null;
+  return {
+    id: `Q${index + 1}`,
+    question,
+    answer,
+    source,
+  };
+}
+
+function normalizeInterviewContext(input = {}) {
+  const interview = input.interview;
+  const interviewObject = isPlainObject(interview) ? interview : {};
+  const answers = input.interview_answers
+    ?? input.interviewAnswers
+    ?? readObjectField(interviewObject, ["interview_answers", "interviewAnswers", "answers", "responses"]);
+  const explicitTrace = input.question_trace
+    ?? input.questionTrace
+    ?? readObjectField(interviewObject, ["question_trace", "questionTrace", "questions", "rounds"]);
+  const prdIntake = input.prd_intake
+    ?? input.prdIntake
+    ?? input.intake
+    ?? readObjectField(interviewObject, ["prd_intake", "prdIntake", "intake"]);
+  const approvalReason = clean(
+    input.approval_reason
+      || input.approvalReason
+      || readObjectField(interviewObject, ["approval_reason", "approvalReason", "approved_reason", "approvedReason"])
+      || readObjectField(prdIntake, ["approval_reason", "approvalReason", "approved_reason", "approvedReason"]),
+  );
+  const sources = [];
+  if (explicitTrace != null) sources.push({ source: "question_trace", items: traceEntries(explicitTrace) });
+  if (answers != null) sources.push({ source: "interview_answers", items: traceEntries(answers) });
+  if (Array.isArray(interview)) sources.push({ source: "interview", items: interview });
+  if (typeof interview === "string" && clean(interview)) sources.push({ source: "interview", items: [interview] });
+  if (!sources.length && (input.questions || input.question)) {
+    sources.push({ source: "questions", items: traceEntries(input.questions || input.question) });
+  }
+
+  const seen = new Set();
+  const questionTrace = [];
+  for (const source of sources) {
+    for (const item of source.items) {
+      const trace = normalizeTraceItem(item, questionTrace.length, input, source.source);
+      if (!trace || seen.has(trace.id)) continue;
+      seen.add(trace.id);
+      questionTrace.push(trace);
+    }
+  }
+
+  return {
+    present: interview != null || answers != null || prdIntake != null,
+    source: interview != null ? "input.interview" : answers != null ? "input.interview_answers" : prdIntake != null ? "input.intake" : "input.questions",
+    question_trace: questionTrace,
+    prd_intake_source: prdIntake,
+    approval_reason: approvalReason,
+  };
+}
+
+function buildPrdIntake({ nontechnicalIntake = {}, interviewContext = {} } = {}) {
+  const raw = interviewContext.prd_intake_source;
+  const rawObject = isPlainObject(raw) ? raw : {};
+  const rawText = typeof raw === "string" ? clean(raw) : "";
+  return {
+    schema: "yolo.demand.prd_intake.v1",
+    source: interviewContext.present ? interviewContext.source : "derived_nontechnical_intake",
+    question_ids: questionTraceIds(interviewContext.question_trace),
+    plain_language_problem: clean(rawObject.plain_language_problem || rawObject.problem || nontechnicalIntake.plain_language_problem),
+    audience: splitList(rawObject.audience || rawObject.target_users || nontechnicalIntake.audience),
+    desired_outcomes: splitList(rawObject.desired_outcomes || rawObject.success_criteria || nontechnicalIntake.desired_outcomes),
+    success_proof: splitList(rawObject.success_proof || rawObject.proof || nontechnicalIntake.success_proof),
+    boundaries: splitList(rawObject.boundaries || rawObject.constraints || nontechnicalIntake.boundaries),
+    exceptions: splitList(rawObject.exceptions || rawObject.edge_cases || nontechnicalIntake.exceptions),
+    ...(rawText ? { raw_text: rawText } : {}),
+  };
+}
+
 function groupFilesBySurface(files = []) {
   const groups = new Map();
   for (const file of uniqueStrings(files)) {
@@ -309,12 +442,14 @@ function buildScenarioMatrix({
   constraints = [],
   nonGoals = [],
   targetFiles = [],
+  questionTrace = [],
 } = {}) {
   const touchpoints = mergeField(input, "touchpoints", LABELS.touchpoint, objective);
   const triggers = mergeField(input, "triggers", LABELS.trigger, objective);
   const exceptions = mergeField(input, "exceptions", LABELS.exception, objective);
   const proof = mergeField(input, "proof", LABELS.proof, objective);
   const actor = targetUsers[0] || "target user";
+  const sourceQuestionIds = questionTraceIds(questionTrace);
   const baseSurfaces = groupFilesBySurface(targetFiles);
   const inferredKinds = inferSurfaceKinds(`${objective}\n${requirements.map((item) => item.text).join("\n")}`, targetFiles);
   const fallbackSurfaces = inferredKinds.map((kind, index) => ({
@@ -351,7 +486,8 @@ function buildScenarioMatrix({
         id: `SCN-${String(index + 1).padStart(3, "0")}-${surface.id || `SFC-${surfaceIndex + 1}`}`,
         proof: proof[index] || proof[0] || requirement.text,
       })),
-      question_trace: asArray(input.questions || input.question).map((_, questionIndex) => `Q${questionIndex + 1}`),
+      question_trace: sourceQuestionIds,
+      source_question_ids: sourceQuestionIds,
     };
   });
   return {
@@ -380,6 +516,7 @@ function firstField(input, keys, text, labels) {
 function requirementRecord(text, index, input = {}) {
   const id = `REQ-${String(index + 1).padStart(3, "0")}`;
   const scenarioText = clean(input.acceptance_scenario || input.acceptanceScenario || text);
+  const sourceQuestionIds = questionTraceIds(input.questionTrace || input.question_trace);
   return {
     id,
     text: clean(text),
@@ -395,17 +532,26 @@ function requirementRecord(text, index, input = {}) {
     trace: {
       evidence: uniqueStrings(input.evidence).map((_, evidenceIndex) => `EVID-${String(evidenceIndex + 1).padStart(3, "0")}`),
       decisions: uniqueStrings(input.decisions || input.decision).map((_, decisionIndex) => `DEC-${String(decisionIndex + 1).padStart(3, "0")}`),
+      question_ids: sourceQuestionIds,
     },
   };
 }
 
-function buildRounds(input = {}) {
+function buildRounds(input = {}, questionTrace = []) {
   const rounds = asArray(input.rounds || input.discussion_rounds || input.questions || input.question).filter(Boolean);
   if (rounds.length > 0) {
     return rounds.map((item, index) => {
       if (typeof item === "object") return { id: item.id || `Q${index + 1}`, ...item };
       return { id: `Q${index + 1}`, question: clean(item), answer: clean(asArray(input.answers || input.answer)[index]) };
     });
+  }
+  if (asArray(questionTrace).length > 0) {
+    return asArray(questionTrace).map((item, index) => ({
+      id: clean(item.id) || `Q${index + 1}`,
+      question: clean(item.question || "Interview question"),
+      answer: clean(item.answer || ""),
+      source: clean(item.source || "question_trace"),
+    }));
   }
   const decisions = uniqueStrings(input.decisions || input.decision);
   return decisions.length > 0 ? decisions.map((decision, index) => ({
@@ -432,6 +578,8 @@ function completedArtifacts(session = {}) {
 export function buildDemandSession(input = {}, options = {}) {
   const now = nowIso(options);
   const objective = clean(input.objective || input.idea || input.requirement || input.text || input.title);
+  const interviewContext = normalizeInterviewContext(input);
+  const questionTrace = interviewContext.question_trace;
   const id = demandId({ ...input, objective }, now);
   const problem = firstField(input, ["problem"], objective, LABELS.problem);
   const targetUsers = mergeField(input, "target_users", LABELS.target_users, objective);
@@ -445,7 +593,7 @@ export function buildDemandSession(input = {}, options = {}) {
   const alternatives = uniqueStrings(input.alternatives || input.alternative);
   const risks = uniqueStrings(input.risks || input.risk);
   const decisions = uniqueStrings(input.decisions || input.decision);
-  const openQuestions = uniqueStrings(input.open_questions || input.openQuestions || input.question);
+  const openQuestions = uniqueStrings(input.open_questions || input.openQuestions || ((input.answer || input.answers || questionTrace.length > 0) ? [] : input.question));
   const roadmapItems = uniqueStrings(input.roadmap || input.mvp || input.phase || input.phases);
   const scoutText = [
     objective,
@@ -460,7 +608,7 @@ export function buildDemandSession(input = {}, options = {}) {
     explicitFiles: explicitTargetFiles,
   });
   const requirements = (successCriteria.length > 0 ? successCriteria : uniqueStrings(input.requirements || input.requirement_text))
-    .map((text, index) => requirementRecord(text, index, { ...input, evidence, decisions }));
+    .map((text, index) => requirementRecord(text, index, { ...input, evidence, decisions, questionTrace }));
   const nontechnicalIntake = buildNonTechnicalIntake({
     input,
     objective,
@@ -474,6 +622,7 @@ export function buildDemandSession(input = {}, options = {}) {
     assumptions,
     targetFiles,
   });
+  const prdIntake = buildPrdIntake({ nontechnicalIntake, interviewContext });
   const scenarioMatrix = buildScenarioMatrix({
     input,
     objective,
@@ -483,7 +632,9 @@ export function buildDemandSession(input = {}, options = {}) {
     constraints,
     nonGoals,
     targetFiles,
+    questionTrace,
   });
+  const approvalReason = interviewContext.approval_reason || clean(input.approval_note || input.approvalNote);
 
   const session = {
     schema_version: DEMAND_SESSION_SCHEMA_VERSION,
@@ -498,6 +649,16 @@ export function buildDemandSession(input = {}, options = {}) {
       target_users: targetUsers,
       target_files: targetFiles,
     },
+    question_trace: questionTrace,
+    prd_intake: prdIntake,
+    approval_reason: approvalReason,
+    interview: interviewContext.present ? {
+      schema: "yolo.demand.interview.v1",
+      source: interviewContext.source,
+      question_trace: questionTrace,
+      prd_intake: prdIntake,
+      approval_reason: approvalReason || null,
+    } : null,
     nontechnical_intake: nontechnicalIntake,
     vision: {
       statement: clean(input.vision || objective),
@@ -524,7 +685,7 @@ export function buildDemandSession(input = {}, options = {}) {
       risks,
     },
     discussion: {
-      rounds: buildRounds(input),
+      rounds: buildRounds(input, questionTrace),
       decisions: decisions.map((text, index) => ({ id: `DEC-${String(index + 1).padStart(3, "0")}`, text })),
       open_questions: openQuestions.map((text, index) => ({ id: `OQ-${String(index + 1).padStart(3, "0")}`, text, blocking: true })),
       deferred: uniqueStrings(input.deferred || input.followups || input.follow_ups),
@@ -550,6 +711,7 @@ export function buildDemandSession(input = {}, options = {}) {
       approved: input.approved === true || input.approve === true || ["true", "yes", "approved", "confirm", "confirmed"].includes(clean(input.approval || input.approved || input.approve).toLowerCase()),
       approved_by: clean(input.approved_by || input.approvedBy || "user"),
       approved_at: clean(input.approved_at || input.approvedAt) || null,
+      reason: approvalReason,
       note: clean(input.approval_note || input.approvalNote),
     },
   };

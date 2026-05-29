@@ -59,6 +59,8 @@ describe("project bootstrap", () => {
         ".yolo/memory/CURRENT_HANDOFF.md",
         ".yolo/memory/PROJECT_BRIEF.md",
         ".yolo/memory/PROGRESS.md",
+        ".yolo/memory/PRD_PIPELINE.md",
+        ".yolo/memory/TASK_ATOMICITY.md",
         ".yolo/memory/OPEN_QUESTIONS.md",
         ".yolo/memory/DECISION_LOG.md",
         ".yolo/memory/DOCUMENT_GOVERNANCE.md",
@@ -66,6 +68,7 @@ describe("project bootstrap", () => {
         ".yolo/memory/LESSONS_PLAYBOOK.md",
         ".yolo/memory/PROJECT_TREE.md",
         ".yolo/memory/MEMORY_AUDIT.md",
+        ".yolo/context/README.md",
         ".yolo/context/domain/GLOSSARY.md",
         ".yolo/context/codebase/ARCHITECTURE.md",
         ".yolo/context/codebase/STRUCTURE.md",
@@ -86,6 +89,7 @@ describe("project bootstrap", () => {
         ".yolo/templates/design.md",
         ".yolo/templates/tasks.md",
         ".yolo/templates/UI-SPEC.md",
+        ".yolo/templates/prd-intake.md",
         "specs/README.md",
         "specs/requirements.md",
         "specs/design.md",
@@ -102,7 +106,7 @@ describe("project bootstrap", () => {
     try {
       const first = initProject({ projectRoot: root, projectName: "demo-app" });
       assert.equal(first.status, "success");
-      assert.equal(first.created.length, 52);
+      assert.equal(first.created.length, 56);
       assert.equal(first.memory_refresh.status, "ok");
       assert.equal(existsSync(join(root, ".yolo/config.json")), true);
       assert.equal(existsSync(join(root, ".yolo/constitution.md")), true);
@@ -111,11 +115,14 @@ describe("project bootstrap", () => {
       assert.equal(existsSync(join(root, ".yolo/memory/MEMORY_INDEX.md")), true);
       assert.equal(existsSync(join(root, ".yolo/memory/PROJECT_BRIEF.md")), true);
       assert.equal(existsSync(join(root, ".yolo/memory/PROGRESS.md")), true);
+      assert.equal(existsSync(join(root, ".yolo/memory/PRD_PIPELINE.md")), true);
+      assert.equal(existsSync(join(root, ".yolo/memory/TASK_ATOMICITY.md")), true);
       assert.equal(existsSync(join(root, ".yolo/memory/OPEN_QUESTIONS.md")), true);
       assert.equal(existsSync(join(root, ".yolo/memory/DECISION_LOG.md")), true);
       assert.equal(existsSync(join(root, ".yolo/memory/DOCUMENT_GOVERNANCE.md")), true);
       assert.equal(existsSync(join(root, ".yolo/memory/LEARNING_INDEX.md")), true);
       assert.equal(existsSync(join(root, ".yolo/context")), true);
+      assert.equal(existsSync(join(root, ".yolo/context/README.md")), true);
       assert.equal(existsSync(join(root, ".yolo/context/domain/GLOSSARY.md")), true);
       assert.equal(existsSync(join(root, ".yolo/context/codebase/ARCHITECTURE.md")), true);
       assert.equal(existsSync(join(root, ".yolo/context/codebase/SURFACES.md")), true);
@@ -128,6 +135,7 @@ describe("project bootstrap", () => {
       assert.equal(existsSync(join(root, ".yolo/state/artifacts.jsonl")), true);
       assert.equal(existsSync(join(root, ".yolo/templates/design.md")), true);
       assert.equal(existsSync(join(root, ".yolo/templates/UI-SPEC.md")), true);
+      assert.equal(existsSync(join(root, ".yolo/templates/prd-intake.md")), true);
       assert.equal(existsSync(join(root, "DESIGN.md")), true);
       assert.equal(existsSync(join(root, "specs/tasks.md")), true);
 
@@ -146,7 +154,7 @@ describe("project bootstrap", () => {
       const result = initProject({ projectRoot: root, dryRun: true });
 
       assert.equal(result.dry_run, true);
-      assert.equal(result.created.length, 52);
+      assert.equal(result.created.length, 56);
       assert.equal(result.memory_refresh, null);
       assert.equal(existsSync(join(root, ".yolo/config.json")), false);
       assert.equal(existsSync(join(root, ".yolo/lifecycle/status.json")), false);
@@ -201,8 +209,12 @@ describe("project bootstrap", () => {
       assert.equal(payload.created.includes(".yolo/config.json"), true);
       assert.equal(payload.created.includes(".yolo/lifecycle/status.json"), true);
       assert.equal(payload.created.includes(".yolo/memory/MEMORY_INDEX.md"), true);
+      assert.equal(payload.created.includes(".yolo/memory/PRD_PIPELINE.md"), true);
+      assert.equal(payload.created.includes(".yolo/memory/TASK_ATOMICITY.md"), true);
       assert.equal(payload.created.includes(".yolo/memory/DOCUMENT_GOVERNANCE.md"), true);
       assert.equal(payload.created.includes(".yolo/memory/LEARNING_INDEX.md"), true);
+      assert.equal(payload.created.includes(".yolo/context/README.md"), true);
+      assert.equal(payload.created.includes(".yolo/templates/prd-intake.md"), true);
       assert.equal(payload.created.includes("DESIGN.md"), true);
       assert.equal(existsSync(join(root, "specs/design.md")), true);
     } finally {

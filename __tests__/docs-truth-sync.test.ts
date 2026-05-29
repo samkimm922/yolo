@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
@@ -41,5 +41,49 @@ describe("docs truth sync", () => {
     assert.match(progress, new RegExp(`\\| package exports \\| ${exportCount} \\|`));
     assert.match(gap, new RegExp(`package\\.json\` 已有 ${exportCount} 个 package exports、${binCount} 个 bin`));
     assert.match(gap, new RegExp(`\`src/\\*\\*/\\*\\.ts\` ${srcModules} 个`));
+  });
+
+  test("demand doctrine documents the nontechnical-to-atomic-task flow", () => {
+    const doctrinePath = join(YOLO_DIR, "docs/yolo-demand-doctrine.md");
+    const planPath = join(YOLO_DIR, "docs/yolo-demand-implementation-plan.md");
+
+    assert.equal(existsSync(doctrinePath), true);
+    assert.equal(existsSync(planPath), true);
+
+    const doctrine = readFileSync(doctrinePath, "utf8");
+    const plan = readFileSync(planPath, "utf8");
+
+    for (const keyword of [
+      "一问一答",
+      "先问题后方案",
+      "现状",
+      "痛点",
+      "证明",
+      "边界",
+      "批准",
+      "gstack / superpowers",
+      "mattpocock skills",
+      "Spec Kit / OpenSpec",
+      "GSD / product-manager-skills",
+      "intake -> scenario matrix -> surfaces -> one-session task -> handoff -> gates",
+      "CURRENT_HANDOFF.md",
+      "CURRENT_STATUS.md",
+      "PROJECT_TREE.md",
+      "questions.jsonl",
+      "decisions.jsonl",
+      "session-memory.jsonl",
+    ]) {
+      assert.match(doctrine, new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+
+    const tasks = plan.match(/^- \[ \] Task \d{2}:/gm) || [];
+    assert.equal(tasks.length, 32);
+    assert.match(plan, /Intake 与一问一答/);
+    assert.match(plan, /Scenario Matrix/);
+    assert.match(plan, /Surfaces/);
+    assert.match(plan, /One-session Atomic Tasks/);
+    assert.match(plan, /Handoff/);
+    assert.match(plan, /Gates 与批准/);
+    assert.match(plan, /Memory 与文档验证/);
   });
 });

@@ -1,6 +1,6 @@
 # YOLO Lessons Playbook
 
-> Generated: 2026-05-29T04:40:50.785Z
+> Generated: 2026-05-29T11:20:55.609Z
 
 Use these lessons as advisory context first. Only promoted, machine-verifiable lessons should become blocking gates.
 

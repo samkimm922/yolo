@@ -1,10 +1,10 @@
 # YOLO Memory Audit
 
-> Generated: 2026-05-29T04:40:51.144Z
+> Generated: 2026-05-29T11:20:55.904Z
 
 ## Summary
 
-- Total memory-related `.md` / `.jsonl` files: 84.
+- Total memory-related `.md` / `.jsonl` files: 88.
 - Delete candidates: 0.
 - Stale compatibility mirrors: 0.
 - No file is deleted by this audit. Delete candidates require an explicit human cleanup step.
@@ -14,7 +14,7 @@
 - keep_active: 5
 - keep_as_pointer: 6
 - keep_local_only: 15
-- keep_reference: 46
+- keep_reference: 50
 - keep_refresh: 8
 - review_before_delete: 4
 
@@ -67,6 +67,8 @@
 | `dist/docs/sdk-gap-matrix.md` | reference_doc | keep_reference | no | Project reference document; not an append-only memory ledger. |
 | `dist/docs/SYSTEM_STATE.md` | reference_doc | keep_reference | no | Project reference document; not an append-only memory ledger. |
 | `dist/docs/yolo-deliverable-implementation-plan.md` | reference_doc | keep_reference | no | Project reference document; not an append-only memory ledger. |
+| `dist/docs/yolo-demand-doctrine.md` | reference_doc | keep_reference | no | Project reference document; not an append-only memory ledger. |
+| `dist/docs/yolo-demand-implementation-plan.md` | reference_doc | keep_reference | no | Project reference document; not an append-only memory ledger. |
 | `dist/docs/yolo-discovery-ui-acceptance-plan.md` | reference_doc | keep_reference | no | Project reference document; not an append-only memory ledger. |
 | `dist/docs/yolo-public-sdk-progress.md` | reference_doc | keep_reference | no | Project reference document; not an append-only memory ledger. |
 | `dist/docs/yolo-typescript-mainline-execution-plan.md` | reference_doc | keep_reference | no | Project reference document; not an append-only memory ledger. |
@@ -96,6 +98,8 @@
 | `docs/sdk-gap-matrix.md` | active_roadmap | keep_active | no | Current public SDK roadmap/progress truth. |
 | `docs/SYSTEM_STATE.md` | compatibility_memory_mirror | keep_as_pointer | no | Compatibility location; canonical truth lives in docs/memory. |
 | `docs/yolo-deliverable-implementation-plan.md` | reference_doc | keep_reference | no | Project reference document; not an append-only memory ledger. |
+| `docs/yolo-demand-doctrine.md` | reference_doc | keep_reference | no | Project reference document; not an append-only memory ledger. |
+| `docs/yolo-demand-implementation-plan.md` | reference_doc | keep_reference | no | Project reference document; not an append-only memory ledger. |
 | `docs/yolo-discovery-ui-acceptance-plan.md` | reference_doc | keep_reference | no | Project reference document; not an append-only memory ledger. |
 | `docs/yolo-public-sdk-progress.md` | active_roadmap | keep_active | no | Current public SDK roadmap/progress truth. |
 | `docs/yolo-typescript-mainline-execution-plan.md` | reference_doc | keep_reference | no | Project reference document; not an append-only memory ledger. |
