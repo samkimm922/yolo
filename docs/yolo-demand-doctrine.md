@@ -56,6 +56,16 @@ YOLO 不是把用户一句话立刻变成代码，而是把一句话需求先变
 
 最终的 `prd.json` 不应该只是任务列表，而应该带 trace：需求 id、场景 id、surface id、证据、决策、问题链路和批准记录。
 
+## 下一步增强层
+
+第一版固定问题库解决“必须问什么”，增强层解决“答得够不够好”：
+
+- 动态追问：每次回答都会被检查是否太短、模糊、只有技术词或缺少业务验收信息；不够清楚时，YOLO 用业务语言给出 slot-specific follow-up。
+- PRD 质量评分：可执行 PRD 生成前，YOLO 从需求清晰度、任务原子度、验收证据、session 可执行性、上下文接力棒完整度五个维度评分；关键维度低分直接阻断。
+- 一 task 一 session 接力：每个 demand atomic task 都带独立 session plan，声明 state、handoff、evidence、memory、progress 和 resume 目标；runtime 只生成计划，不提前写执行 session 文件。
+
+这三层不是替代 gate，而是把 gate 前移：用户回答阶段先追问，PRD 编译阶段再评分，执行阶段用 session plan 接力。
+
 ## 项目记忆体系
 
 YOLO 的记忆分为人读文档和机器 ledger，二者职责不同：

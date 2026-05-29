@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { buildDemandSession, demandMarkdownArtifacts } from "./artifacts.js";
-import { inspectDemandReadiness } from "./gate.js";
+import { inspectDemandQuality, inspectDemandReadiness } from "./gate.js";
 import { inspectAtomicTask } from "../runtime/execution/atomic-task-doctor.js";
 
 function clean(value) {
@@ -258,6 +259,115 @@ function surfaceTitle(surface = {}) {
   return clean(surface.label) || clean(surface.kind) || "Implementation surface";
 }
 
+function isUiSurface(surface = {}, files = []) {
+  const kind = clean(surface.kind).toLowerCase();
+  return kind === "ui" || files.some((file) => /(^|\/)(pages?|views?|screens?|components?|ui)\//i.test(clean(file)));
+}
+
+function uiStateMatrixForTask({ scenario = {}, surface = {}, proof = "" } = {}) {
+  return [
+    {
+      state: "ready",
+      surface_id: surface.id || null,
+      touchpoint: scenario.touchpoint || "primary user workflow",
+      trigger: scenario.trigger || "the user reaches this UI state",
+      expected_visible_result: proof || scenario.desired_behavior || "The requested UI behavior is visible.",
+    },
+  ];
+}
+
+function uiEvidencePlanForTask({ scenario = {}, surface = {}, proof = "", files = [] } = {}) {
+  return [
+    {
+      type: "screenshot",
+      surface_id: surface.id || null,
+      target_files: files,
+      description: `Capture the UI state for ${scenario.touchpoint || surfaceTitle(surface)} and verify: ${proof || scenario.desired_behavior || "requested UI behavior"}.`,
+    },
+    {
+      type: "runtime_log",
+      surface_id: surface.id || null,
+      description: "Confirm the UI path has no blocking runtime errors during acceptance.",
+    },
+  ];
+}
+
+function pathSafeId(value, fallback = "item") {
+  return (clean(value) || fallback)
+    .replace(/[^A-Za-z0-9._\-\u4e00-\u9fff]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    || fallback;
+}
+
+function asciiIdPart(value, fallback = "ITEM") {
+  const source = clean(value);
+  const base = source
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  if (!source) return fallback;
+  const hash = createHash("sha1").update(source).digest("hex").slice(0, 8).toUpperCase();
+  if (!base) return `${fallback}-${hash}`;
+  return base === source.toUpperCase() ? base : `${base}-${hash}`;
+}
+
+function uniqueStrings(values = []) {
+  return [...new Set(values.map(clean).filter(Boolean))];
+}
+
+function buildTaskSessionPlan({
+  demandId = "",
+  taskId = "",
+  requirementId = "",
+  scenarioId = "",
+  surfaceId = "",
+} = {}) {
+  const safeDemandId = pathSafeId(demandId, "DEMAND");
+  const safeTaskId = pathSafeId(taskId, "TASK");
+  const taskRoot = `.yolo/demand/${safeDemandId}/tasks/${safeTaskId}`;
+  const memoryUpdatePaths = [
+    ".yolo/memory/CURRENT_HANDOFF.md",
+    ".yolo/memory/PROGRESS.md",
+    ".yolo/state/session-memory.jsonl",
+  ];
+  return {
+    schema: "yolo.demand.task_session_plan.v1",
+    session_id: `${safeTaskId}-session`,
+    task_id: taskId,
+    demand_id: demandId,
+    requirement_id: requirementId || null,
+    scenario_id: scenarioId || null,
+    surface_id: surfaceId || null,
+    state_path: `${taskRoot}/session.json`,
+    handoff_path: `${taskRoot}/handoff.md`,
+    evidence_path: `${taskRoot}/evidence.jsonl`,
+    memory_update_paths: memoryUpdatePaths,
+    progress_update_path: ".yolo/memory/PROGRESS.md",
+    resume_instructions: [
+      `Start a fresh execution session for task ${taskId}.`,
+      `Use ${taskRoot}/session.json as the task session state plan and ${taskRoot}/handoff.md for the next handoff when the session closes.`,
+      "Record command results, changed files, blockers, and acceptance evidence in the evidence path.",
+      "Update the listed memory and progress targets before handing off.",
+    ].join(" "),
+  };
+}
+
+function summarizeTaskSessionPlans(tasks = []) {
+  const plans = tasks.map((task) => task?.handoff?.session).filter(Boolean);
+  return {
+    planned: tasks.length > 0 && plans.length === tasks.length,
+    task_count: tasks.length,
+    session_count: plans.length,
+    tasks_with_session_plan: plans.length,
+    state_paths: uniqueStrings(plans.map((plan) => plan.state_path)),
+    handoff_paths: uniqueStrings(plans.map((plan) => plan.handoff_path)),
+    evidence_paths: uniqueStrings(plans.map((plan) => plan.evidence_path)),
+    memory_update_paths: uniqueStrings(plans.flatMap((plan) => plan.memory_update_paths || [])),
+    progress_update_paths: uniqueStrings(plans.map((plan) => plan.progress_update_path)),
+  };
+}
+
 function modifiedFileCondition(taskId, index, file) {
   return {
     id: `POST-${taskId}-TARGET-${index + 1}`,
@@ -298,6 +408,14 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
         const description = clean(scenario.desired_behavior || requirement.text || proof);
         const sourceQuestions = sourceQuestionIds(session, scenario, requirement);
         const taskVerificationHint = verificationHint({ scenario, surface, proof, files });
+        const uiTask = isUiSurface(surface, files);
+        const sessionPlan = buildTaskSessionPlan({
+          demandId: session.id,
+          taskId,
+          requirementId: scenario.requirement_id || requirement.id,
+          scenarioId: scenario.id,
+          surfaceId: surface.id,
+        });
         tasks.push({
           id: taskId,
           title: `${surfaceTitle(surface)}: ${description}`.slice(0, 100),
@@ -311,10 +429,15 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
           source_finding_ids: [scenario.requirement_id || requirement.id].filter(Boolean),
           source_question_ids: sourceQuestions,
           verification_hint: taskVerificationHint,
+          ...(uiTask ? {
+            state_matrix: uiStateMatrixForTask({ scenario, surface, proof }),
+            evidence_plan: uiEvidencePlanForTask({ scenario, surface, proof, files }),
+          } : {}),
           depends_on: [],
           handoff: {
             type: "agent_brief",
             category: "enhancement",
+            session: sessionPlan,
             plain_language_goal: description,
             user_story: `As ${scenario.actor || "the target user"}, I want ${description}, so that ${proof}.`,
             source_question_ids: sourceQuestions,
@@ -348,6 +471,10 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
             acceptance_criteria: [proof].filter(Boolean),
             proof,
             verification_hint: taskVerificationHint,
+            ...(uiTask ? {
+              state_matrix: uiStateMatrixForTask({ scenario, surface, proof }),
+              evidence_plan: uiEvidencePlanForTask({ scenario, surface, proof, files }),
+            } : {}),
             out_of_scope: scenario.out_of_scope || session.requirements?.out_of_scope || [],
             constraints: scenario.constraints || session.requirements?.constraints || [],
             exceptions: scenario.exceptions || [],
@@ -442,13 +569,15 @@ function inspectAtomicity(tasks = [], input = {}, options = {}) {
 function buildDemandPrd(session = {}, input = {}, options = {}) {
   const readiness = inspectDemandReadiness(session, { phase: "prd" });
   if (!readiness.executable_prd_ready) {
+    const quality = inspectDemandQuality(session, { phase: "prd", readiness });
     return {
       status: "blocked",
       code: "DEMAND_NOT_EXECUTABLE",
       summary: "Demand artifacts are not approved or complete enough for executable PRD.",
       readiness,
+      quality_report: quality,
       blockers: readiness.blockers,
-      warnings: readiness.warnings,
+      warnings: [...readiness.warnings, ...quality.warnings],
       prd: null,
       next_actions: readiness.next_actions,
     };
@@ -458,9 +587,17 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
   const requirements = session.requirements?.active || [];
   const now = clean(options.now || input.now) || new Date().toISOString();
   const baseCommit = readBaseCommit(input, options);
-  const prdId = clean(input.prd_id || input.prdId) || `PRD-${now.slice(0, 10).replace(/-/g, "")}-${session.id.replace(/^DEMAND-/, "")}`;
+  const prdId = clean(input.prd_id || input.prdId) || `PRD-${now.slice(0, 10).replace(/-/g, "")}-${asciiIdPart(session.id.replace(/^DEMAND-/, ""), "DEMAND")}`;
   const tasks = buildAtomicDemandTasks(session, { ...input, projectRoot: input.projectRoot || input.project_root }, options);
   const atomicity = inspectAtomicity(tasks, input, options);
+  const sessionHandoff = summarizeTaskSessionPlans(tasks);
+  const quality = inspectDemandQuality(session, {
+    phase: "prd",
+    readiness,
+    tasks,
+    atomicity,
+    requireTasks: true,
+  });
   if (atomicity.blockers.length > 0) {
     return {
       status: "blocked",
@@ -468,21 +605,37 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
       summary: "Demand PRD contains tasks that are too coarse for one-session execution.",
       readiness,
       atomicity,
+      quality_report: quality,
       blockers: atomicity.blockers,
-      warnings: [...readiness.warnings, ...atomicity.warnings],
+      warnings: [...readiness.warnings, ...atomicity.warnings, ...quality.warnings],
       prd: null,
       next_actions: atomicity.blockers.map((blocker) => `${blocker.task_id}: split scenario surface before PRD generation.`),
     };
   }
+  if (quality.status === "blocked") {
+    return {
+      status: "blocked",
+      code: "DEMAND_QUALITY_BLOCKED",
+      summary: "Demand PRD quality is below the executable threshold.",
+      readiness,
+      atomicity,
+      quality_report: quality,
+      blockers: quality.blockers,
+      warnings: [...readiness.warnings, ...atomicity.warnings, ...quality.warnings],
+      prd: null,
+      next_actions: quality.next_actions,
+    };
+  }
 
   return {
-    status: "success",
+    status: quality.status === "warning" ? "warning" : "success",
     code: "DEMAND_PRD_READY",
     summary: "Executable PRD compiled from approved demand artifacts.",
     readiness,
     atomicity,
+    quality_report: quality,
     blockers: [],
-    warnings: [...readiness.warnings, ...atomicity.warnings],
+    warnings: [...readiness.warnings, ...atomicity.warnings, ...quality.warnings],
     prd: {
       $schema: "https://yolo.dev/schemas/prd-v2.schema.json",
       version: "2.0",
@@ -508,7 +661,9 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
         interview: session.interview || null,
         question_trace: session.question_trace || [],
         readiness_level: readiness.readiness_level,
-        quality_score: readiness.quality_score,
+        readiness_score: readiness.quality_score,
+        quality_score: quality.total_score,
+        quality_report: quality,
         scenario_matrix: {
           schema: session.scenario_matrix?.schema || null,
           scenario_count: asArray(session.scenario_matrix?.scenarios).length,
@@ -533,12 +688,15 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
           max_files_per_surface: 2,
           generated_task_count: tasks.length,
           doctor_status: atomicity.status,
+          session_handoff: sessionHandoff,
         },
         execution_readiness: {
           level: readiness.readiness_level,
           prd_ready: readiness.prd_ready,
           executable_prd_ready: readiness.executable_prd_ready,
-          quality_score: readiness.quality_score,
+          readiness_score: readiness.quality_score,
+          quality_score: quality.total_score,
+          quality_report: quality,
           checks: readiness.checks.map((item) => ({ code: item.code, passed: item.passed, severity: item.severity })),
         },
       },
@@ -550,7 +708,11 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
         expected_task_session: "single_session",
         demand_id: session.id,
         readiness_score: readiness.quality_score,
+        quality_score: quality.total_score,
+        quality_status: quality.status,
+        quality_report: quality,
         atomicity_status: atomicity.status,
+        session_handoff: sessionHandoff,
       },
       requirements: requirements.map((requirement) => ({
         id: requirement.id,
@@ -567,7 +729,9 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
         overlap_detection: "file_only",
       },
     },
-    next_actions: ["Run yolo check on the compiled PRD before yolo run."],
+    next_actions: quality.status === "warning"
+      ? quality.next_actions
+      : ["Run yolo check on the compiled PRD before yolo run."],
   };
 }
 
@@ -604,6 +768,7 @@ export function runDemandPrdRuntime(input = {}, options = {}) {
     compiled,
     prd: compiled.prd,
     readiness: compiled.readiness,
+    quality_report: compiled.quality_report,
     blockers: compiled.blockers || [],
     warnings: compiled.warnings || [],
     artifacts,

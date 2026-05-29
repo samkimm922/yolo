@@ -358,6 +358,9 @@ function normalizeInterviewContext(input = {}) {
     ?? input.prdIntake
     ?? input.intake
     ?? readObjectField(interviewObject, ["prd_intake", "prdIntake", "intake"]);
+  const coverage = input.interview_coverage
+    ?? input.interviewCoverage
+    ?? readObjectField(interviewObject, ["coverage", "interview_coverage", "interviewCoverage"]);
   const approvalReason = clean(
     input.approval_reason
       || input.approvalReason
@@ -389,6 +392,7 @@ function normalizeInterviewContext(input = {}) {
     source: interview != null ? "input.interview" : answers != null ? "input.interview_answers" : prdIntake != null ? "input.intake" : "input.questions",
     question_trace: questionTrace,
     prd_intake_source: prdIntake,
+    coverage: isPlainObject(coverage) ? coverage : null,
     approval_reason: approvalReason,
   };
 }
@@ -657,6 +661,7 @@ export function buildDemandSession(input = {}, options = {}) {
       source: interviewContext.source,
       question_trace: questionTrace,
       prd_intake: prdIntake,
+      coverage: interviewContext.coverage,
       approval_reason: approvalReason || null,
     } : null,
     nontechnical_intake: nontechnicalIntake,

@@ -102,6 +102,35 @@ describe("demand interview", () => {
     assert.equal(session.next_question.id, "success_criteria");
   }));
 
+  test("creates slot-specific follow-up questions for short or technical answers", () => withRoot((root) => {
+    const session = newSession(root);
+
+    answer(session, "target_users", "API");
+
+    assert.equal(session.next_question.id, "status_quo");
+    assert.equal(session.follow_up_plan.status, "needs_follow_up");
+    assert.equal(session.follow_up_questions.length, 1);
+    assert.equal(session.follow_up_questions[0].slot, "target_users");
+    assert.equal(session.follow_up_questions[0].reason, "technical_only");
+    assert.match(session.follow_up_questions[0].plain_language_prompt, /角色|频率|负责/);
+    assert.ok(session.readiness.warnings.some((warning) => warning.slot === "target_users"));
+
+    const chineseTechSession = newSession(root);
+    answer(chineseTechSession, "target_users", "接口 数据库");
+    assert.equal(chineseTechSession.follow_up_questions[0].reason, "technical_only");
+  }));
+
+  test("does not ask follow-up questions for sufficiently specific answers", () => withRoot((root) => {
+    const session = newSession(root);
+
+    answer(session, "target_users", "Store managers who review inventory every morning and are responsible for deciding which SKU to replenish first.");
+
+    const coverage = inspectDemandInterviewCoverage(session);
+    assert.equal(coverage.follow_up_questions.some((question) => question.slot === "target_users"), false);
+    assert.equal(coverage.follow_up_plan.status, "clear");
+    assert.equal(coverage.quality.level, "sufficient");
+  }));
+
   test("gates PRD intake on critical slots plus explicit approval", () => withRoot((root) => {
     const session = answerAllRequired(newSession(root));
 
@@ -141,11 +170,36 @@ describe("demand interview", () => {
     assert.equal(input.approve, true);
     assert.equal(input.questions.length, 10);
     assert.equal(input.open_questions.length, 0);
+    assert.equal(input.followups.length, 0);
+    assert.equal(input.interview.coverage.follow_up_plan.status, "clear");
 
     const demandSession = buildDemandSession(input, { now: "2026-05-29T13:00:00.000Z" });
     assert.equal(demandSession.id, session.demand_id);
     assert.deepEqual(demandSession.project.target_users, input.target_users);
     assert.equal(demandSession.approval.approved, true);
     assert.equal(demandSession.discussion.rounds.length, 10);
+    assert.equal(demandSession.interview.coverage.follow_up_plan.status, "clear");
+  }));
+
+  test("preserves follow-up warnings and quality metadata during PRD conversion", () => withRoot((root) => {
+    const session = answerAllRequired(newSession(root));
+    answer(session, "target_users", "API");
+    answer(session, "execution_approval", true);
+
+    const coverage = inspectDemandInterviewCoverage(session);
+    assert.equal(coverage.ready_for_prd_intake, true);
+    assert.ok(coverage.follow_up_questions.some((question) => question.slot === "target_users"));
+    assert.ok(coverage.readiness.warnings.some((warning) => warning.slot === "target_users"));
+
+    const input = demandInterviewToDemandInput(session);
+    assert.equal(input.open_questions.length, 0);
+    assert.ok(input.followups.some((question) => /角色|频率|负责/.test(question)));
+    assert.ok(input.interview.coverage.quality.low_quality_slots.includes("target_users"));
+    assert.ok(input.interview.coverage.follow_up_questions.some((question) => question.slot === "target_users"));
+    assert.ok(input.interview.coverage.warnings.some((warning) => warning.slot === "target_users"));
+
+    const demandSession = buildDemandSession(input, { now: "2026-05-29T13:00:00.000Z" });
+    assert.ok(demandSession.interview.coverage.follow_up_questions.some((question) => question.slot === "target_users"));
+    assert.ok(demandSession.interview.coverage.quality.low_quality_slots.includes("target_users"));
   }));
 });

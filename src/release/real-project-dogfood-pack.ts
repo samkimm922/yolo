@@ -254,6 +254,32 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now }) {
     prdTitle: "Dogfood lifecycle v2",
     generated_at: now,
   });
+  const demandQualityReport = {
+    schema_version: "1.0",
+    schema: "yolo.demand.quality.v1",
+    phase: "prd",
+    status: "pass",
+    total_score: 100,
+    pass_score: 85,
+    block_score: 70,
+    dimensions: [
+      "requirement_clarity",
+      "task_atomicity",
+      "acceptance_evidence",
+      "session_executability",
+      "handoff_completeness",
+    ].map((code) => ({
+      code,
+      label: code,
+      status: "pass",
+      score: 100,
+      checks: [],
+      failed_checks: [],
+    })),
+    blockers: [],
+    warnings: [],
+    next_actions: ["Synthetic dogfood demand quality is sufficient for release evidence."],
+  };
   const compiled = {
     ...compiledRaw,
     prd: compiledRaw.prd
@@ -275,11 +301,15 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now }) {
             },
             readiness_level: "L3",
             quality_score: 100,
+            quality_report: demandQualityReport,
           },
           execution_readiness: {
             level: "L3",
             afk_ready: true,
             source: "real_project_dogfood_pack",
+            quality_score: 100,
+            quality_status: "pass",
+            quality_report: demandQualityReport,
           },
           requirements: (compiledRaw.prd.requirements || []).map((requirement) => ({
             ...requirement,

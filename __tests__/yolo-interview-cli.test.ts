@@ -111,6 +111,30 @@ describe("yolo interview CLI", () => {
     }
   });
 
+  test("text output shows follow-up prompts for weak answers", async () => {
+    const root = tempProject();
+    try {
+      const started = await startInterview(root);
+      const out = capture();
+      const exitCode = await runYoloInterviewCli([
+        "answer",
+        "--session",
+        started.session_path,
+        "--question",
+        "target_users",
+        "--answer",
+        "API",
+      ], { cwd: root, stdout: out.stream });
+
+      assert.equal(exitCode, 0);
+      assert.match(out.text(), /answer_quality:/);
+      assert.match(out.text(), /follow_up:/);
+      assert.match(out.text(), /角色|频率|负责/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("status reads an existing session directory", async () => {
     const root = tempProject();
     try {

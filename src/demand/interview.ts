@@ -205,6 +205,252 @@ function splitList(value) {
   )];
 }
 
+function wordTokens(text) {
+  return clean(text).match(/[A-Za-z0-9]+|[\u4e00-\u9fff]/g) || [];
+}
+
+function hasPattern(text, patterns = []) {
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function compactReasons(reasons = []) {
+  return [...new Set(reasons.filter(Boolean))];
+}
+
+const VAGUE_PATTERNS = [
+  /^(users?|admins?|customers?|staff|operator|manager|system|平台|用户|客户|管理员|人员|业务|系统)$/i,
+  /(etc\.?|等等|之类|相关|一些|某些|各种|多种|优化|提升|改善|更好|方便|智能|自动化|看情况)/i,
+  /(better|improve|optimi[sz]e|nice|easy|fast|smart|automation|dashboard|tooling)/i,
+];
+
+const TECHNICAL_TERMS = [
+  "api",
+  "sdk",
+  "db",
+  "sql",
+  "redis",
+  "kafka",
+  "react",
+  "vue",
+  "node",
+  "typescript",
+  "python",
+  "java",
+  "endpoint",
+  "service",
+  "backend",
+  "frontend",
+  "database",
+  "schema",
+  "server",
+  "cache",
+  "queue",
+  "cron",
+  "webhook",
+  "token",
+  "jwt",
+  "oauth",
+  "微服务",
+  "接口",
+  "数据库",
+  "缓存",
+  "队列",
+  "前端",
+  "后端",
+  "服务",
+  "模型",
+  "算法",
+];
+
+function technicalOnly(text) {
+  const cleanText = clean(text).toLowerCase();
+  if (!cleanText) return false;
+  const chunks = cleanText.split(/[^a-z0-9\u4e00-\u9fff]+/).filter(Boolean);
+  if (chunks.length === 0) return false;
+  const technicalHits = TECHNICAL_TERMS.filter((term) => cleanText.includes(term)).length;
+  const hasBusinessSignal = hasPattern(cleanText, [
+    /manager|customer|support|sales|ops|operator|user|store|finance|legal|客服|店长|运营|销售|财务|法务|主管|用户|客户|门店|仓库|工单|订单|库存/,
+    /when|daily|weekly|每[天周月]|上线|验收|现场|负责|处理|查看|确认|投诉|缺货|违约|审批|交付/,
+  ]);
+  return technicalHits > 0 && technicalHits / Math.max(chunks.length, technicalHits) >= 0.5 && !hasBusinessSignal;
+}
+
+const SLOT_FOLLOW_UPS = {
+  target_users: {
+    missing_detail: "请补充具体业务角色、他们多久遇到一次这个场景，以及他们负责处理什么结果。",
+    technical_only: "先不用写技术组件，请换成真实使用或负责的人：是什么角色、在什么频率下用、要负责什么。",
+    vague: "“用户”还不够具体，请写出角色名称、使用频率和责任，比如谁每天/每周要靠它完成什么。",
+  },
+  status_quo: {
+    missing_detail: "请描述现在实际怎么处理：谁在做、用什么表格/系统/人工办法、卡在哪里。",
+    technical_only: "请先写业务现场流程，而不是技术实现：现在谁怎么处理这个问题？",
+    vague: "请把现状说成一个真实流程：从发现问题到处理完，中间现在怎么走。",
+  },
+  pain_points: {
+    missing_detail: "请补充最耽误时间、最容易出错或最影响业务的具体痛点，以及它造成的后果。",
+    technical_only: "请把技术问题翻译成业务痛点：它让谁多花时间、错过什么或承担什么风险？",
+    vague: "请写一个具体困扰，不要只写“效率低”或“体验不好”：哪里慢、哪里错、影响谁。",
+  },
+  desired_outcome: {
+    missing_detail: "请补充做好后用户能完成的动作，或业务状态会变成什么样。",
+    technical_only: "请先不写技术方案，改写成用户或业务结果：谁能做什么，结果怎么变好。",
+    vague: "目标需要更具体：用户看到什么、能做什么、业务上减少什么问题。",
+  },
+  success_criteria: {
+    missing_detail: "请补充可验收标准：用户看得到什么，或业务能用什么结果判断已经完成。",
+    technical_only: "请把技术交付物换成验收现象：页面、流程或数据上要看到什么才算成功。",
+    vague: "“更好/更快”还不能验收，请写成可观察的通过条件。",
+  },
+  success_proof: {
+    missing_detail: "请说明现场怎么证明：用什么样例、页面检查、指标或人工验收步骤来确认它真的有效。",
+    technical_only: "请把技术验证换成现场证明方式：验收时怎么操作、看什么结果。",
+    vague: "证明方式需要能执行：谁拿什么数据或样例，在哪里看到什么结果，才算通过。",
+  },
+  scope_boundaries: {
+    missing_detail: "请明确这次不做什么、不碰哪些流程/渠道/用户/数据，避免范围扩大。",
+    technical_only: "请把技术边界换成业务边界：哪些流程、数据、渠道或用户这次不要改。",
+    vague: "边界需要直接写“不做/不改/不覆盖”：这次哪些事情先排除。",
+  },
+  exceptions: {
+    missing_detail: "请补充至少一个特殊情况，或明确写“没有特殊情况”。",
+    technical_only: "请换成用户会遇到的异常场景：哪些情况如果没处理好会让结果不可信。",
+    vague: "异常需要具体一点：什么数据缺失、状态冲突或边界场景要特别处理。",
+  },
+  mvp_priority: {
+    missing_detail: "请拆成第一版必须有的内容，以及可以后做的内容。",
+    technical_only: "请用业务优先级表达：第一版必须支撑哪条流程，哪些技术或能力可以后做。",
+    vague: "MVP 需要有取舍：第一版保留什么、暂缓什么。",
+  },
+  execution_approval: {
+    missing_detail: "请明确回答“批准”或“暂不批准”，如果暂不批准请说明还缺什么。",
+    technical_only: "请直接确认是否批准进入 PRD intake。",
+    vague: "请明确批准状态：批准进入 PRD，还是暂不批准继续补信息。",
+  },
+};
+
+const SLOT_QUALITY_RULES = {
+  target_users: {
+    detail: [
+      /manager|customer|support|sales|ops|operator|user|store|admin|owner|analyst|店长|客服|主管|运营|销售|财务|法务|用户|客户|门店|仓库|负责人|审核/,
+      /daily|weekly|monthly|morning|每[天周月]|每天|每周|每月|早上|上线后|负责|处理|查看|审核|安排|确认/,
+    ],
+  },
+  status_quo: {
+    detail: [
+      /now|today|currently|manual|spreadsheet|export|email|system|后台|表格|导出|人工|现在|目前|临时|流程|系统/,
+      /use|check|scan|copy|send|处理|查看|筛选|复制|发送|登记|来回|靠/,
+    ],
+  },
+  pain_points: {
+    detail: [
+      /late|slow|error|miss|complain|risk|delay|duplicate|manual|too long|太晚|太慢|出错|遗漏|投诉|风险|耽误|重复|人工/,
+      /because|when|after|导致|因为|客户|损失|违约|返工|补救/,
+    ],
+  },
+  desired_outcome: {
+    detail: [
+      /can|able|before|without|reduce|see|know|finish|complete|能|可以|提前|减少|看到|完成|避免|优先/,
+      /manager|customer|user|业务|用户|客户|主管|店长|客服|运营|工单|库存|订单/,
+    ],
+  },
+  success_criteria: {
+    detail: [
+      /show|display|filter|sort|alert|badge|status|metric|count|rate|list|visible|显示|看到|筛选|提醒|标记|状态|指标|数量|比例/,
+      /when|if|below|above|less|more|before|after|当|如果|低于|高于|达到|之前|之后/,
+    ],
+  },
+  success_proof: {
+    detail: [
+      /test|create|verify|confirm|check|measure|compare|report|metric|验收|新建|验证|确认|检查|对比|指标|报表|现场|证明/,
+      /see|show|display|record|log|drop|increase|pass|看到|显示|记录|下降|提升|通过/,
+    ],
+  },
+  scope_boundaries: {
+    detail: [
+      /do not|don't|doesn't|not |only|exclude|out of scope|without|不做|不改|不碰|不包含|不要|只做|仅|排除|范围外/,
+      /supplier|mobile|import|channel|data|role|workflow|供应商|移动端|导入|渠道|数据|角色|流程|权限/,
+    ],
+  },
+  exceptions: {
+    detail: [
+      /none|no special|empty|missing|failed|offline|duplicate|edge|hidden|deleted|without|should not|default|history|没有|无|缺失|失败|离线|重复|特殊|异常|边界|隐藏|删除|默认|历史/,
+    ],
+  },
+  mvp_priority: {
+    detail: [
+      /mvp|first|later|phase|must|defer|next|第一版|先|后续|以后|暂缓|必须|优先|阶段/,
+      /include|only|support|包含|只做|支持|上线|版本/,
+    ],
+  },
+};
+
+function hasSlotDetail(slot, text) {
+  const rules = SLOT_QUALITY_RULES[slot]?.detail || [];
+  return rules.length === 0 || rules.some((pattern) => pattern.test(text));
+}
+
+function followUpFor(slot, reason) {
+  const slotPrompts = SLOT_FOLLOW_UPS[slot] || {};
+  return slotPrompts[reason] || slotPrompts.missing_detail || "请补充一个更具体、可被业务现场确认的回答。";
+}
+
+function answerQualityFor(question, answer) {
+  const text = textFromValue(answer);
+  const normalized = clean(text);
+  const lower = normalized.toLowerCase();
+  if (!normalized) {
+    return {
+      score: 0,
+      level: "missing",
+      reasons: ["missing"],
+      follow_up_questions: [],
+    };
+  }
+
+  const tokens = wordTokens(normalized);
+  const approvalClear = question.slot === "execution_approval"
+    && (parseApproval(answer) || /(暂不|不批准|否|no|false|not approved|do not|don't)/i.test(normalized));
+  const tooShort = !approvalClear && (normalized.length < 14 || tokens.length <= 2);
+  const vague = hasPattern(normalized, VAGUE_PATTERNS);
+  const techOnly = technicalOnly(normalized);
+  const missingDetail = question.slot !== "execution_approval" && !hasSlotDetail(question.slot, lower);
+  const approvalMissing = question.slot === "execution_approval" && !approvalClear;
+
+  const reasons = compactReasons([
+    tooShort ? "too_short" : null,
+    vague ? "vague" : null,
+    techOnly ? "technical_only" : null,
+    missingDetail || approvalMissing ? "missing_detail" : null,
+  ]);
+
+  const penalty = reasons.reduce((total, reason) => total + ({
+    too_short: 30,
+    vague: 20,
+    technical_only: 35,
+    missing_detail: 25,
+  }[reason] || 0), 0);
+  const score = Math.max(0, Math.min(100, 100 - penalty));
+  const followUpReason = techOnly ? "technical_only" : vague ? "vague" : missingDetail || approvalMissing || tooShort ? "missing_detail" : null;
+  const needsFollowUp = score < 75 || Boolean(followUpReason);
+  const followUps = needsFollowUp && followUpReason ? [{
+    id: `FU-${String(question.slot).toUpperCase()}-${String(followUpReason).toUpperCase()}`,
+    question_id: question.id,
+    slot: question.slot,
+    category: question.category,
+    severity: "warning",
+    code: `FOLLOW_UP_${String(question.slot).toUpperCase()}_${String(followUpReason).toUpperCase()}`,
+    reason: followUpReason,
+    plain_language_prompt: followUpFor(question.slot, followUpReason),
+  }] : [];
+
+  return {
+    score,
+    level: needsFollowUp ? "needs_follow_up" : "sufficient",
+    reasons,
+    follow_up_questions: followUps,
+  };
+}
+
 function nowIso(options = {}) {
   return clean(options.now) || new Date().toISOString();
 }
@@ -302,6 +548,78 @@ function missingSlots(session = {}, slots = []) {
   return slots.filter((slot) => !hasAnswer(answerRecordForSlot(session, slot)));
 }
 
+function qualityForAnsweredRecord(question, record) {
+  if (!question || !hasAnswer(record)) return null;
+  const stored = record.quality || record.answer_quality;
+  if (stored && typeof stored === "object" && Number.isFinite(Number(stored.score))) {
+    return {
+      score: Number(stored.score),
+      level: clean(stored.level || (Number(stored.score) >= 75 ? "sufficient" : "needs_follow_up")),
+      reasons: compactReasons(stored.reasons || []),
+      follow_up_questions: asArray(stored.follow_up_questions).filter(Boolean),
+    };
+  }
+  return answerQualityFor(question, record.answer);
+}
+
+function answeredQualityItems(session = {}, questions = DEMAND_INTERVIEW_QUESTION_BANK) {
+  return questions
+    .map((question) => {
+      const record = session.answers?.[question.id];
+      const quality = qualityForAnsweredRecord(question, record);
+      if (!quality) return null;
+      return {
+        question_id: question.id,
+        slot: question.slot,
+        category: question.category,
+        score: quality.score,
+        level: quality.level,
+        reasons: quality.reasons,
+        follow_up_questions: quality.follow_up_questions,
+      };
+    })
+    .filter(Boolean);
+}
+
+function followUpPlanForQuality(items = []) {
+  const followUpQuestions = items.flatMap((item) => item.follow_up_questions || []);
+  const bySlot = followUpQuestions.map((question) => ({
+    slot: question.slot,
+    question_id: question.question_id,
+    category: question.category,
+    severity: question.severity || "warning",
+    code: question.code,
+    reason: question.reason,
+    questions: [question.plain_language_prompt].filter(Boolean),
+  }));
+  return {
+    schema: "yolo.demand.interview.follow_up_plan.v1",
+    status: followUpQuestions.length ? "needs_follow_up" : "clear",
+    total: followUpQuestions.length,
+    follow_up_questions: followUpQuestions,
+    by_slot: bySlot,
+  };
+}
+
+function qualitySummary(items = []) {
+  if (items.length === 0) {
+    return {
+      score: 0,
+      level: "missing",
+      checked_slots: [],
+      low_quality_slots: [],
+    };
+  }
+  const score = Math.round(items.reduce((total, item) => total + Number(item.score || 0), 0) / items.length);
+  const lowQuality = items.filter((item) => Number(item.score || 0) < 75 || item.level === "needs_follow_up");
+  return {
+    score,
+    level: lowQuality.length ? "needs_follow_up" : "sufficient",
+    checked_slots: items.map((item) => item.slot),
+    low_quality_slots: lowQuality.map((item) => item.slot),
+  };
+}
+
 function approvalState(session = {}) {
   const record = answerRecordForSlot(session, "execution_approval");
   return {
@@ -356,6 +674,10 @@ export function inspectDemandInterviewCoverage(session = {}) {
       category: question.category,
       answered_at: record.answered_at || null,
     }));
+  const answerQuality = answeredQualityItems(session, questions);
+  const quality = qualitySummary(answerQuality);
+  const followUpPlan = followUpPlanForQuality(answerQuality);
+  const followUpQuestions = followUpPlan.follow_up_questions;
 
   const missingDiscuss = missingSlots(session, DISCUSS_REQUIRED_SLOTS);
   const missingPrd = missingSlots(session, PRD_REQUIRED_SLOTS);
@@ -389,6 +711,13 @@ export function inspectDemandInterviewCoverage(session = {}) {
       message: "Explicit user approval is required before PRD intake.",
     }]),
   ];
+  const warnings = followUpQuestions.map((question) => ({
+    code: question.code || `FOLLOW_UP_${String(question.slot).toUpperCase()}`,
+    slot: question.slot,
+    severity: question.severity || "warning",
+    message: question.plain_language_prompt,
+    reason: question.reason,
+  }));
   const totalRequired = PRD_REQUIRED_SLOTS.length + 1;
   const answeredRequired = PRD_REQUIRED_SLOTS.filter((slot) => !missingPrd.includes(slot)).length + (approval.approved ? 1 : 0);
 
@@ -397,6 +726,10 @@ export function inspectDemandInterviewCoverage(session = {}) {
     schema: "yolo.demand.interview.coverage.v1",
     answered,
     answered_slots: answered.map((item) => item.slot),
+    answer_quality: answerQuality,
+    quality,
+    follow_up_questions: followUpQuestions,
+    follow_up_plan: followUpPlan,
     missing,
     missing_slots: missing.map((item) => item.slot),
     approval,
@@ -407,7 +740,12 @@ export function inspectDemandInterviewCoverage(session = {}) {
       ready_for_discuss: readyForDiscuss,
       ready_for_prd_intake: readyForPrdIntake,
       quality_score: Math.round((answeredRequired / totalRequired) * 100),
+      answer_quality_score: quality.score,
+      answer_quality: quality,
       blockers,
+      warnings,
+      follow_up_questions: followUpQuestions,
+      follow_up_plan: followUpPlan,
       next_actions: readyForPrdIntake
         ? ["Convert interview answers to demand input and run demand discuss/PRD intake."]
         : missing.map((item) => item.plain_language_prompt).filter(Boolean),
@@ -419,6 +757,8 @@ function refreshSession(session) {
   session.questions = decorateQuestions(session.questions || DEMAND_INTERVIEW_QUESTION_BANK, session.answers || {});
   session.coverage = inspectDemandInterviewCoverage(session);
   session.readiness = session.coverage.readiness;
+  session.follow_up_questions = session.coverage.follow_up_questions;
+  session.follow_up_plan = session.coverage.follow_up_plan;
   session.next_question = nextQuestion(session, session.coverage);
   return session;
 }
@@ -465,6 +805,7 @@ export function answerDemandInterviewQuestion(session, { questionId, answer, now
       category: question.category,
       answer,
       normalized: normalizeAnswer(question, answer),
+      quality: answerQualityFor(question, answer),
       answered_at: answeredAt,
     },
   };
@@ -516,6 +857,9 @@ function decisionLines(session = {}) {
 
 export function demandInterviewToDemandInput(session = {}) {
   const coverage = inspectDemandInterviewCoverage(session);
+  const followUpPrompts = (coverage.follow_up_questions || [])
+    .map((item) => item.plain_language_prompt)
+    .filter(Boolean);
   const targetUsers = itemsForSlot(session, "target_users");
   const statusQuo = itemsForSlot(session, "status_quo");
   const painPoints = itemsForSlot(session, "pain_points");
@@ -559,6 +903,7 @@ export function demandInterviewToDemandInput(session = {}) {
     assumptions: [
       "Interview answers are user-provided and should be validated against product or operational evidence before implementation.",
     ],
+    followups: followUpPrompts,
     open_questions: coverage.ready_for_prd_intake
       ? []
       : coverage.missing.map((item) => item.plain_language_prompt).filter(Boolean),
@@ -571,6 +916,11 @@ export function demandInterviewToDemandInput(session = {}) {
         ready_for_prd_intake: coverage.ready_for_prd_intake,
         missing_slots: coverage.missing_slots,
         answered_slots: coverage.answered_slots,
+        quality: coverage.quality,
+        answer_quality: coverage.answer_quality,
+        follow_up_questions: coverage.follow_up_questions,
+        follow_up_plan: coverage.follow_up_plan,
+        warnings: coverage.readiness.warnings,
       },
     },
     ledgers: session.ledgers,

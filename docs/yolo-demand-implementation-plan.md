@@ -54,3 +54,11 @@
 - [ ] Task 30: `CURRENT_HANDOFF.md` 只写下一步 operator 最需要知道的行动、阻塞和上下文。
 - [ ] Task 31: `PROJECT_TREE.md` 保持项目结构和产物索引可读，帮助快速定位需求、PRD、evidence 和 memory。
 - [ ] Task 32: 文档测试锁住 doctrine、pipeline、memory 关键词和本 32 项清单，防止原则漂移。
+
+## 增强闭环
+
+本清单之上，下一步增强已收敛为三条闭环：
+
+- 动态追问：固定问题库负责覆盖面，answer quality 负责判断回答是否够具体，并生成 follow-up。
+- PRD 质量评分：readiness 负责是否齐全，quality report 负责是否足够清晰、可验收、可执行、可交接。
+- session 接力计划：每个 task 都必须能映射到一个 fresh session，并明确 state、handoff、evidence、memory、progress、resume 目标。

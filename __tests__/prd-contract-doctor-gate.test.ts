@@ -80,6 +80,76 @@ describe("prd contract doctor gate", () => {
     }
   });
 
+  test("blocks approved-demand PRDs when demand quality is blocked", () => {
+    const paths = makePaths();
+    try {
+      const prd = {
+        version: "2.0",
+        id: "PRD-DEMAND-QUALITY-BLOCKED",
+        source: "approved_demand",
+        demand_contract_required: true,
+        demand: {
+          id: "DEMAND-QUALITY",
+          approval: { approved: true },
+          quality_report: {
+            schema_version: "1.0",
+            schema: "yolo.demand.quality.v1",
+            status: "pass",
+            total_score: 100,
+            dimensions: [],
+          },
+          execution_readiness: {
+            quality_report: {
+              schema_version: "1.0",
+              schema: "yolo.demand.quality.v1",
+              status: "blocked",
+              total_score: 40,
+              dimensions: [],
+            },
+          },
+        },
+        execution_readiness: {
+          level: "L3",
+          afk_ready: true,
+          quality_status: "pass",
+          quality_report: {
+            schema_version: "1.0",
+            schema: "yolo.demand.quality.v1",
+            status: "pass",
+            total_score: 100,
+            dimensions: [],
+          },
+        },
+        tasks: [{
+          id: "FIX-GATE-003",
+          title: "Strict task",
+          priority: "P1",
+          type: "bugfix",
+          status: "pending",
+          scope: { targets: [{ file: "src/a.ts" }] },
+          post_conditions: [{
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "src/a.ts" },
+          }],
+        }],
+      };
+
+      const result = inspectPrdContractDoctorGate({
+        prd,
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+      });
+
+      assert.equal(result.status, "blocked");
+      assert.ok(result.doctor.failures.some((finding) => finding.code === "DEMAND_QUALITY_BLOCKED"));
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("passes strict PRDs and still records doctor evidence", () => {
     const paths = makePaths();
     try {

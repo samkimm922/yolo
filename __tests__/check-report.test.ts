@@ -86,6 +86,55 @@ describe("yolo check report", () => {
     }
   });
 
+  test("blocks approved-demand PRDs with blocked quality reports", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({}, {
+        generated_by: "yolo-demand",
+        source: "approved_demand",
+        demand_contract_required: true,
+        demand: {
+          id: "DEMAND-CHECK",
+          approval: { approved: true },
+          quality_report: {
+            schema_version: "1.0",
+            schema: "yolo.demand.quality.v1",
+            status: "blocked",
+            total_score: 40,
+            dimensions: [],
+          },
+        },
+        execution_readiness: {
+          level: "L3",
+          afk_ready: true,
+          quality_status: "pass",
+          quality_report: {
+            schema_version: "1.0",
+            schema: "yolo.demand.quality.v1",
+            status: "pass",
+            total_score: 100,
+            dimensions: [],
+          },
+        },
+        requirements: [{
+          id: "REQ-1",
+          text: "For operators, keep inventory counts clear.",
+          demand_trace: { evidence: ["EVID-1"] },
+        }],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root });
+      const demandContract = report.checks.find((check) => check.name === "demand_contract");
+
+      assert.equal(report.status, "blocked");
+      assert.equal(demandContract.status, "blocked");
+      assert.ok(report.blockers.some((blocker) => blocker.code === "DEMAND_QUALITY_BLOCKED"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("blocks UI tasks without state matrix and evidence plan", () => {
     const root = tempProject();
     try {

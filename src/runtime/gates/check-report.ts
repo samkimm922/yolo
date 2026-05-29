@@ -120,6 +120,24 @@ function demandContractReadiness({ prd }) {
     if (executionReadiness.level !== "L3" || executionReadiness.afk_ready !== true) {
       blockers.push({ code: "DEMAND_NOT_L3_EXECUTABLE", message: "Executable PRD must declare L3 AFK-ready demand readiness." });
     }
+    const qualityReports = [
+      executionReadiness.quality_report,
+      demand?.quality_report,
+      demand?.execution_readiness?.quality_report,
+    ].filter(Boolean);
+    const qualityStatuses = [
+      executionReadiness.quality_status,
+      demand?.execution_readiness?.quality_status,
+      ...qualityReports.map((report) => report.status),
+    ].filter(Boolean);
+    if (qualityStatuses.includes("blocked")) {
+      blockers.push({ code: "DEMAND_QUALITY_BLOCKED", message: "Executable PRD demand quality report must not be blocked." });
+    } else if (qualityStatuses.includes("warning")) {
+      warnings.push({ code: "DEMAND_QUALITY_WARNING", message: "Executable PRD demand quality report has warnings that should be reviewed." });
+    }
+    if (demandRequired && qualityReports.length === 0) {
+      warnings.push({ code: "DEMAND_QUALITY_REPORT_MISSING", message: "Executable demand PRD should include a demand quality report." });
+    }
     for (const requirement of asArray(prd.requirements)) {
       if (!requirement.demand_trace) {
         blockers.push({

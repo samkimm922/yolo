@@ -266,10 +266,23 @@
           "type": "object"
         },
         "atomicity_contract": {
-          "type": "object"
+          "type": "object",
+          "properties": {
+            "session_handoff": {
+              "$ref": "#/definitions/sessionHandoffStats"
+            }
+          }
+        },
+        "quality_report": {
+          "$ref": "#/definitions/demandQualityReport"
         },
         "execution_readiness": {
-          "type": "object"
+          "type": "object",
+          "properties": {
+            "quality_report": {
+              "$ref": "#/definitions/demandQualityReport"
+            }
+          }
         }
       }
     },
@@ -291,6 +304,25 @@
         },
         "expected_task_session": {
           "type": "string"
+        },
+        "quality_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "quality_status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "warning",
+            "blocked"
+          ]
+        },
+        "quality_report": {
+          "$ref": "#/definitions/demandQualityReport"
+        },
+        "session_handoff": {
+          "$ref": "#/definitions/sessionHandoffStats"
         }
       }
     },
@@ -342,6 +374,233 @@
     }
   },
   "definitions": {
+    "demandQualityReport": {
+      "type": "object",
+      "description": "Approved-demand PRD quality score across clarity, atomicity, evidence, executability, and handoff completeness.",
+      "required": [
+        "schema_version",
+        "schema",
+        "status",
+        "total_score",
+        "dimensions"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "warning",
+            "blocked"
+          ]
+        },
+        "total_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "pass_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "block_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "code",
+              "label",
+              "status",
+              "score",
+              "checks"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "warning",
+                  "blocked"
+                ]
+              },
+              "score": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "failed_checks": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "next_actions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "sessionHandoffStats": {
+      "type": "object",
+      "description": "Summary of planned one-task execution sessions and their handoff/update targets.",
+      "properties": {
+        "planned": {
+          "type": "boolean"
+        },
+        "task_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "session_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tasks_with_session_plan": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "state_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "handoff_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "memory_update_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "progress_update_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "sessionPlan": {
+      "type": "object",
+      "description": "Planned handoff/update targets for executing one atomic task in one fresh session.",
+      "required": [
+        "session_id",
+        "state_path",
+        "handoff_path",
+        "evidence_path",
+        "memory_update_paths",
+        "progress_update_path",
+        "resume_instructions"
+      ],
+      "properties": {
+        "schema": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "demand_id": {
+          "type": "string"
+        },
+        "requirement_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scenario_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "surface_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state_path": {
+          "type": "string"
+        },
+        "handoff_path": {
+          "type": "string"
+        },
+        "evidence_path": {
+          "type": "string"
+        },
+        "memory_update_paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "progress_update_path": {
+          "type": "string"
+        },
+        "resume_instructions": {
+          "type": "string"
+        }
+      }
+    },
     "task": {
       "type": "object",
       "required": [
@@ -477,7 +736,42 @@
         },
         "handoff": {
           "type": "object",
-          "description": "Agent handoff payload for a fresh execution session."
+          "description": "Agent handoff payload for a fresh execution session.",
+          "properties": {
+            "session": {
+              "$ref": "#/definitions/sessionPlan"
+            },
+            "state_matrix": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "evidence_plan": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "session_plan": {
+          "$ref": "#/definitions/sessionPlan",
+          "description": "Optional task-level alias for planned session handoff/update targets."
+        },
+        "state_matrix": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "UI state matrix required for UI acceptance readiness."
+        },
+        "evidence_plan": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "UI or acceptance evidence plan required before executable UI PRDs run."
         },
         "verification_hint": {
           "type": "string",

@@ -193,6 +193,44 @@ export function inspectPrdContract(prd) {
         detail: "approved-demand PRD must declare L3 AFK-ready execution readiness",
       });
     }
+    const qualityReports = [
+      prd?.execution_readiness?.quality_report,
+      prd?.demand?.quality_report,
+      prd?.demand?.execution_readiness?.quality_report,
+    ].filter(Boolean);
+    const qualityStatuses = [
+      prd?.execution_readiness?.quality_status,
+      prd?.demand?.execution_readiness?.quality_status,
+      ...qualityReports.map((report) => report.status),
+    ].filter(Boolean);
+    if (qualityStatuses.includes("blocked")) {
+      failures.push({
+        task_id: null,
+        condition_id: null,
+        condition_type: null,
+        severity: "FAIL",
+        code: "DEMAND_QUALITY_BLOCKED",
+        detail: "approved-demand PRD quality report must not be blocked",
+      });
+    } else if (qualityStatuses.includes("warning")) {
+      warnings.push({
+        task_id: null,
+        condition_id: null,
+        condition_type: null,
+        severity: "WARN",
+        code: "DEMAND_QUALITY_WARNING",
+        detail: "approved-demand PRD quality report has warnings",
+      });
+    } else if (qualityReports.length === 0) {
+      warnings.push({
+        task_id: null,
+        condition_id: null,
+        condition_type: null,
+        severity: "WARN",
+        code: "DEMAND_QUALITY_REPORT_MISSING",
+        detail: "approved-demand PRD should include demand quality report",
+      });
+    }
   }
 
   if (!tasks.length) {

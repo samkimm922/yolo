@@ -864,6 +864,20 @@ function formatInterviewText(label, result = {}) {
   if (result.coverage) {
     const counts = coverageCounts(result.coverage, result.interview);
     lines.push(`coverage: ${counts.answered}/${counts.total} (${counts.percent}%)`);
+    const answerQualityScore = result.coverage.answer_quality_score
+      ?? result.coverage.quality?.score
+      ?? result.coverage_detail?.quality?.score
+      ?? result.coverage_detail?.readiness?.answer_quality_score;
+    if (answerQualityScore != null) {
+      lines.push(`answer_quality: ${answerQualityScore}`);
+    }
+  }
+  const followUps = result.coverage_detail?.follow_up_questions || result.coverage?.follow_up_questions || [];
+  if (followUps.length) {
+    lines.push("follow_up:");
+    for (const followUp of followUps.slice(0, 3)) {
+      lines.push(`  - ${followUp.slot || followUp.question_id}: ${followUp.plain_language_prompt || followUp.text || followUp.message}`);
+    }
   }
   if (result.artifacts?.length) lines.push(`artifacts: ${result.artifacts.join(", ")}`);
   if (result.next_actions?.length) {
