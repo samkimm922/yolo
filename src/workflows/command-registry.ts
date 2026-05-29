@@ -16,6 +16,19 @@ export const YOLO_COMMANDS = [
     usage: "/yolo 增加低库存预警，先判断应该走发现、计划、检查还是执行",
   },
   {
+    name: "yolo-brainstorm",
+    lifecycle_stage: "idea",
+    workflow: "brainstorm",
+    description: "Explore a new idea before discovery by challenging demand reality, user, status quo, assumptions, and alternatives.",
+    argumentHint: "<plain-language idea>",
+    objective: "Create a demand artifact pack with VISION, REFLECTION, INVESTIGATION, initial REQUIREMENTS, CONTEXT, ROADMAP, and readiness gaps without writing business code.",
+    mode: "brainstorm",
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Brainstorm-only. Do not generate executable PRD or modify source files.",
+    usage: "/yolo-brainstorm 我想做一个库存预警产品，但还没确定用户和切入口",
+  },
+  {
     name: "yolo-discover",
     lifecycle_stage: "discovery",
     workflow: "discover",
@@ -27,6 +40,19 @@ export const YOLO_COMMANDS = [
     requires_confirmation: false,
     safety: "Discovery-only. Do not create executable tasks or modify source files.",
     usage: "/yolo-discover 我想给库存系统做一个预警能力，但细节还不清楚",
+  },
+  {
+    name: "yolo-discuss",
+    lifecycle_stage: "discovery",
+    workflow: "discuss",
+    description: "Run a gsd-style demand discussion loop before PRD.",
+    argumentHint: "<idea or demand session>",
+    objective: "Close vision, reflection, investigation, questioning rounds, depth verification, requirements confirmation, and approval into REQUIREMENTS.md, CONTEXT.md, ROADMAP.md, and APPROVAL.json.",
+    mode: "discuss",
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Discussion-only. Do not compile executable PRD until requirements are confirmed and approved.",
+    usage: "/yolo-discuss 库存预警需求，继续追问灰区并确认 REQUIREMENTS/CONTEXT/ROADMAP",
   },
   {
     name: "yolo-init",
@@ -214,7 +240,9 @@ export const YOLO_COMMANDS = [
 
 export const DEFAULT_YOLO_COMMAND_NAMES = YOLO_COMMANDS.map((command) => command.name);
 export const DEFAULT_YOLO_BRIDGE_WORKFLOW_IDS = [
+  "brainstorm",
   "discover",
+  "discuss",
   "plan",
   "prd",
   "check",

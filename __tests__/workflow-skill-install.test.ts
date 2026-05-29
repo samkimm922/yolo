@@ -74,7 +74,9 @@ describe("workflow skill install layer", () => {
     assert.equal(descriptor.schema, "yolo.workflow.skill_descriptor.v1");
     assert.equal(descriptor.agent, "claude");
     assert.equal(descriptor.entrypoints.skill, "yolo.fix");
-    assert.match(readFileSync(join(projectRoot, ".agents/skills/yolo.fix/SKILL.md"), "utf8"), /Fail closed/);
+    const skillMarkdown = readFileSync(join(projectRoot, ".agents/skills/yolo.fix/SKILL.md"), "utf8");
+    assert.match(skillMarkdown, /^---\nname: "yolo\.fix"\ndescription: /);
+    assert.match(skillMarkdown, /Fail closed/);
     const rules = readFileSync(join(projectRoot, ".agents/skills/RULES.md"), "utf8");
     assert.match(rules, /skill\.json/);
     assert.match(rules, /triggers\.json/);

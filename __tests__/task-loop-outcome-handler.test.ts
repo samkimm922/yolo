@@ -177,6 +177,44 @@ describe("task-loop outcome handler", () => {
       automation_can_continue: true,
     }]);
     assert.deepEqual(state.results.failed, ["FIX-P40-015"]);
+    assert.deepEqual(state.results.immediateRemediationQueue, [{
+      source_task_id: "FIX-P40-015",
+      routing: "before_next_feature_task",
+      reason: "harness_remediation_must_be_cleared_before_new_work",
+      action: "REROUTE_REVIEW_FIX",
+      status: "remediation_required",
+      next_actions: [],
+    }]);
+  });
+
+  test("handleTaskOutcome can stop new work when immediate remediation is required", () => {
+    const state = makeLoopState();
+    const callbacks = makeOutcomeCallbacks();
+
+    const result = handleTaskOutcome({
+      ...state,
+      task: { id: "FIX-HARNESS-001" },
+      outcome: {
+        status: "failed",
+        reason: "fixture evidence missing",
+        remediation: {
+          action: "AUTO_REMEDIATE",
+          status: "remediation_required",
+          automation_can_continue: true,
+          blocks_ship: true,
+          next_actions: ["Generate a bounded remediation task now."],
+        },
+      },
+      stopForImmediateRemediation: true,
+      ...callbacks,
+    });
+
+    assert.deepEqual(result, {
+      action: "stop",
+      reason: "immediate_remediation_required",
+      lastFailKey: "failed:fixture evidence missing",
+    });
+    assert.equal(state.results.immediateRemediationQueue[0].routing, "before_next_feature_task");
   });
 
   test("handleTaskOutcome stops the loop on repeated same failure", () => {

@@ -82,6 +82,7 @@ describe("session attempt helpers", () => {
   test("prepares prompt, baselines, worktree, and provider session", async () => {
     const bashLogs = [];
     const progressLogs = [];
+    const events = [];
     const commands = [];
     let baselineArgs = null;
     let createdWorktree = null;
@@ -126,6 +127,7 @@ describe("session attempt helpers", () => {
       }),
       logTaskBash: (...entry) => bashLogs.push(entry),
       logProgress: (...entry) => progressLogs.push(entry),
+      logEvent: (...entry) => events.push(entry),
       nowMs: () => nowValues.shift() ?? 3500,
     });
 
@@ -138,8 +140,13 @@ describe("session attempt helpers", () => {
     assert.equal(baselineArgs.rootDir, "/repo");
     assert.equal(baselineArgs.tscBaselinePath, "/repo/state/runtime/tsc-baseline.json");
     assert.ok(commands[1][1].includes("--cwd=/repo"));
-    assert.equal(commands[1][1][5], "--fix");
-    assert.match(commands[1][1][6], /^--learnings=previous lesson\n/);
+    assert.ok(commands[1][1].includes("--session-id=FIX-SESSION-ATTEMPT-attempt-3"));
+    assert.equal(commands[1][1][6], "--fix");
+    assert.match(commands[1][1][7], /^--learnings=previous lesson\n/);
+    assert.equal(result.sessionId, "FIX-SESSION-ATTEMPT-attempt-3");
+    assert.equal(result.contextContract.fresh_session, true);
+    assert.deepEqual(events[0][0], "task_session_start");
+    assert.equal(events[0][1].fresh_session, true);
     assert.deepEqual(progressLogs.at(-1), ["", "├─", "codex ok (3s)"]);
     assert.equal(bashLogs.at(-1)[1], "codex spawn");
   });

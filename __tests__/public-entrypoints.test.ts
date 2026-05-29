@@ -162,6 +162,56 @@ describe("public package entrypoints", () => {
     assert.equal(payload.discovery.ready_for_plan, false);
   });
 
+  test("yolo demand commands dispatch to brainstorm and discuss runtimes", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-cli-"));
+    const demandText = [
+      "Problem: stockouts are found too late",
+      "Target User: store managers",
+      "Success: manager sees a low stock alert before shelf-out",
+      "Status quo: managers scan spreadsheets manually",
+      "Evidence: support tickets mention missed replenishment",
+      "Assumption: existing inventory feed is available",
+      "Constraint: do not change billing",
+      "Non-goal: no purchasing automation",
+      "Scope: src/inventory/alerts.ts",
+    ].join(". ");
+    try {
+      const brainstorm = spawnSync(process.execPath, [
+        resolve(YOLO_DIR, packageJson.bin.yolo),
+        "brainstorm",
+        demandText,
+        `--cwd=${root}`,
+        "--json",
+        "--no-write",
+      ], { cwd: YOLO_DIR, encoding: "utf8" });
+      assert.equal(brainstorm.stderr, "");
+      assert.equal(brainstorm.status, 0, brainstorm.stdout);
+      const brainstormPayload = JSON.parse(brainstorm.stdout);
+      assert.equal(brainstormPayload.code, "DEMAND_READY");
+      assert.equal(brainstormPayload.session.schema, "yolo.demand.session.v1");
+      assert.equal(brainstormPayload.guarantees.writes_business_code, false);
+
+      const discuss = spawnSync(process.execPath, [
+        resolve(YOLO_DIR, packageJson.bin.yolo),
+        "discuss",
+        demandText,
+        "--decision=Low stock alert is the MVP wedge",
+        "--approve",
+        `--cwd=${root}`,
+        "--json",
+        "--no-write",
+      ], { cwd: YOLO_DIR, encoding: "utf8" });
+      assert.equal(discuss.stderr, "");
+      assert.equal(discuss.status, 0, discuss.stdout);
+      const discussPayload = JSON.parse(discuss.stdout);
+      assert.equal(discussPayload.code, "DEMAND_READY");
+      assert.equal(discussPayload.readiness.readiness_level, "L3");
+      assert.equal(discussPayload.session.approval.approved, true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("yolo-pi bin calls src CLI without changing output shape", () => {
     const output = execFileSync(process.execPath, [
       resolve(YOLO_DIR, packageJson.bin["yolo-pi"]),

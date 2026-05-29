@@ -81,6 +81,31 @@ import {
   runDiscoveryPrdRuntime,
   runDiscoveryRuntime,
 } from "./src/discovery/runtime.js";
+import {
+  buildDemandSession,
+  demandMarkdownArtifacts,
+  DEMAND_SESSION_SCHEMA_VERSION,
+} from "./src/demand/artifacts.js";
+import {
+  buildDemandArtifactGraph,
+  DEMAND_GRAPH_SCHEMA_VERSION,
+  demandBlockedArtifacts,
+  demandBuildOrder,
+  demandReadyArtifacts,
+} from "./src/demand/graph.js";
+import {
+  DEMAND_READINESS_SCHEMA_VERSION,
+  inspectDemandReadiness,
+} from "./src/demand/gate.js";
+import {
+  defaultDemandSessionPath,
+  demandStateDir,
+  readDemandSession,
+  runDemandBrainstormRuntime,
+  runDemandDiscussRuntime,
+  runDemandPrdRuntime,
+  writeDemandArtifacts,
+} from "./src/demand/runtime.js";
 import { discoverPackManifests, readPackManifest, validatePackManifest } from "./src/packs/manifest.js";
 import { resolveProjectContext } from "./src/packs/resolver.js";
 import { buildTraceabilityMatrix, inspectSpecGovernance } from "./src/spec/traceability.js";
@@ -400,6 +425,57 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...prdOptions,
       }),
+    },
+    demand: {
+      buildArtifactGraph: buildDemandArtifactGraph,
+      buildOrder: demandBuildOrder,
+      buildSession: (demandInput = {}, demandOptions = {}) => buildDemandSession({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      blockedArtifacts: demandBlockedArtifacts,
+      defaultSessionPath: (id = "") => defaultDemandSessionPath(stateRoot, id),
+      inspectReadiness: inspectDemandReadiness,
+      markdownArtifacts: demandMarkdownArtifacts,
+      readSession: readDemandSession,
+      readyArtifacts: demandReadyArtifacts,
+      runBrainstorm: (demandInput = {}, demandOptions = {}) => runDemandBrainstormRuntime({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      runDiscuss: (demandInput = {}, demandOptions = {}) => runDemandDiscussRuntime({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      runPrd: (demandInput = {}, demandOptions = {}) => runDemandPrdRuntime({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      schemaVersion: DEMAND_SESSION_SCHEMA_VERSION,
+      stateDir: (id = "") => demandStateDir(stateRoot, id),
+      graphSchemaVersion: DEMAND_GRAPH_SCHEMA_VERSION,
+      readinessSchemaVersion: DEMAND_READINESS_SCHEMA_VERSION,
+      writeArtifacts: writeDemandArtifacts,
     },
     packs: {
       discoverManifests: (packOptions = {}) => discoverPackManifests({ projectRoot, stateRoot, ...packOptions }),
@@ -768,6 +844,23 @@ export {
   runDiscoveryPlanRuntime,
   runDiscoveryPrdRuntime,
   runDiscoveryRuntime,
+  buildDemandArtifactGraph,
+  buildDemandSession,
+  demandBlockedArtifacts,
+  demandBuildOrder,
+  demandMarkdownArtifacts,
+  demandReadyArtifacts,
+  demandStateDir,
+  defaultDemandSessionPath,
+  DEMAND_GRAPH_SCHEMA_VERSION,
+  DEMAND_READINESS_SCHEMA_VERSION,
+  DEMAND_SESSION_SCHEMA_VERSION,
+  inspectDemandReadiness,
+  readDemandSession,
+  runDemandBrainstormRuntime,
+  runDemandDiscussRuntime,
+  runDemandPrdRuntime,
+  writeDemandArtifacts,
   discoverPackManifests,
   readPackManifest,
   resolveProjectContext,

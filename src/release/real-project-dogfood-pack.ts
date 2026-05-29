@@ -44,6 +44,7 @@ function expectedPlanPaths(plan = {}) {
     ...(plan.native_skill_files || []),
     ...(plan.command_files || []),
     ...(plan.source_command_files || []),
+    ...(plan.codex_slash_command_files || []),
   ];
   const workflowFiles = (plan.skill_plans || [])
     .flatMap((skillPlan) => (skillPlan.files || []).map((file) => ({
@@ -262,6 +263,32 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now }) {
           project: { name: "dogfood-target", language: "javascript" },
           generated_by: "yolo-review-agent",
           base_commit: "0000000",
+          source: "approved_demand",
+          demand_contract_required: true,
+          demand: {
+            id: "DEMAND-DOGFOOD-001",
+            approval: {
+              approved: true,
+              approved_by: "real-project-dogfood-pack",
+              approved_at: now,
+              note: "Synthetic no-code dogfood demand approved for release evidence.",
+            },
+            readiness_level: "L3",
+            quality_score: 100,
+          },
+          execution_readiness: {
+            level: "L3",
+            afk_ready: true,
+            source: "real_project_dogfood_pack",
+          },
+          requirements: (compiledRaw.prd.requirements || []).map((requirement) => ({
+            ...requirement,
+            demand_trace: requirement.demand_trace || {
+              demand_id: "DEMAND-DOGFOOD-001",
+              evidence: ["EVID-DOGFOOD-001"],
+              decisions: ["DEC-DOGFOOD-001"],
+            },
+          })),
         }
       : null,
   };

@@ -96,6 +96,50 @@ function productReadiness({ prd, discovery }) {
   });
 }
 
+function demandContractReadiness({ prd }) {
+  const blockers = [];
+  const warnings = [];
+  const demandRequired = prd?.demand_contract_required === true || prd?.source === "approved_demand";
+  const demand = prd?.demand || null;
+  const executionReadiness = prd?.execution_readiness || {};
+
+  if (!demandRequired && !demand) {
+    warnings.push({
+      code: "DEMAND_CONTRACT_MISSING",
+      message: "PRD has no approved demand source; legacy PRDs can continue, but new executable PRDs should be compiled from approved demand artifacts.",
+    });
+  }
+
+  if (demandRequired) {
+    if (!demand?.id) {
+      blockers.push({ code: "DEMAND_SOURCE_MISSING", message: "Executable PRD must reference its approved demand session." });
+    }
+    if (demand?.approval?.approved !== true) {
+      blockers.push({ code: "DEMAND_APPROVAL_MISSING", message: "Executable PRD must include explicit demand approval." });
+    }
+    if (executionReadiness.level !== "L3" || executionReadiness.afk_ready !== true) {
+      blockers.push({ code: "DEMAND_NOT_L3_EXECUTABLE", message: "Executable PRD must declare L3 AFK-ready demand readiness." });
+    }
+    for (const requirement of asArray(prd.requirements)) {
+      if (!requirement.demand_trace) {
+        blockers.push({
+          code: "REQUIREMENT_DEMAND_TRACE_MISSING",
+          requirement_id: requirement.id || null,
+          message: "Each requirement in an executable demand PRD must trace back to evidence or decisions.",
+        });
+      }
+    }
+  }
+
+  const status = blockers.length > 0 ? "blocked" : warnings.length > 0 ? "warning" : "pass";
+  return checkRecord("demand_contract", status, status === "pass" ? "Demand contract passed." : "Demand contract has gaps.", {
+    blockers,
+    warnings,
+    demand_required: demandRequired,
+    readiness_level: executionReadiness.level || null,
+  });
+}
+
 function resolverReadiness({ resolver }) {
   const blockers = asArray(resolver?.blockers).map((blocker) => ({
     code: blocker.code || "RESOLVER_BLOCKED",
@@ -272,6 +316,7 @@ export function inspectYoloCheck(input = {}, options = {}) {
   });
   const checks = [
     preflightReadiness(preflight),
+    demandContractReadiness({ prd }),
     productReadiness({ prd, discovery }),
     resolverReadiness({ resolver }),
     uiReadiness({ prd, acceptanceManifest, resolver }),

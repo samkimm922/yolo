@@ -19,6 +19,16 @@ describe("discovery readiness gate", () => {
     assert.deepEqual(brief.target_files, ["src/inventory/alerts.js"]);
   });
 
+  test("buildDiscoveryBrief extracts labeled demand fields from plain text", () => {
+    const brief = buildDiscoveryBrief("Add inventory alerts. Problem: stockouts are found too late. Target User: store manager. Success: alert appears below threshold. Scope: src/inventory/alerts.js. Constraint: keep imports unchanged.");
+
+    assert.equal(brief.problem, "stockouts are found too late");
+    assert.deepEqual(brief.target_users, ["store manager"]);
+    assert.deepEqual(brief.success_criteria, ["alert appears below threshold"]);
+    assert.deepEqual(brief.target_files, ["src/inventory/alerts.js"]);
+    assert.deepEqual(brief.constraints, ["keep imports unchanged."]);
+  });
+
   test("blocks vague ideas before PI creates PRD or runner actions", () => {
     const result = inspectDiscoveryReadiness("Build inventory alerts");
 

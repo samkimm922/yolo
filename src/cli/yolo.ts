@@ -17,6 +17,11 @@ import {
   runDiscoveryPrdRuntime,
   runDiscoveryRuntime,
 } from "../discovery/runtime.js";
+import {
+  runDemandBrainstormRuntime,
+  runDemandDiscussRuntime,
+  runDemandPrdRuntime,
+} from "../demand/runtime.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const defaultYoloRoot = resolve(__dirname, "../..");
@@ -25,9 +30,11 @@ export function usage() {
   return [
     "用法:",
     "  yolo init [path] [--name <name>] [--force] [--dry-run] [--json]",
+    "  yolo brainstorm [idea] [--user <user>] [--status-quo <text>] [--evidence <text>] [--json]",
     "  yolo discover [text-or-path] [--success <criteria>] [--target <file>] [--json]",
+    "  yolo discuss [idea] [--decision <text>] [--approve] [--json]",
     "  yolo plan [--discovery <discovery.json>] [--json]",
-    "  yolo prd [--discovery <discovery.json>] [--output <prd.json>] [--json]",
+    "  yolo prd [--discovery <discovery.json>|--demand <session.json|dir>] [--output <prd.json>] [--json]",
     "  yolo doctor [path] [--target codex|claude|both] [--scope project|user|both] [--json]",
     "  yolo check <prd.json> [--json] [--no-write]",
     "  yolo review [path] [--json]",
@@ -43,6 +50,7 @@ export function usage() {
     "  yolo --prd <prd.json> [--mode=dev|fix] [--json]",
     "",
     "`yolo init` 会在目标项目生成 .yolo/、.yolo/memory/、.yolo/state/*.jsonl 和 specs/ 基础结构。",
+    "`yolo brainstorm/discuss` 会生成需求端 VISION/REFLECTION/INVESTIGATION/REQUIREMENTS/CONTEXT/ROADMAP/APPROVAL 产物，不改业务代码。",
     "`yolo discover/plan/prd` 会生成 discovery、plan、PRD 产物；discover/plan 不改业务代码，prd 只写 PRD JSON。",
     "`yolo doctor` 会只读检查 .yolo/lifecycle、命令注册表和 Codex/Claude agent 集成状态。",
     "`yolo check` 会在改代码前检查 PRD、产品准备度、UI 验收准备度、任务原子性、adapter 和 evidence plan。",
@@ -53,9 +61,58 @@ export function usage() {
     "`yolo ship` 会基于 acceptance report 给出 ship/no-ship verdict；不会发布。",
     "`yolo learn` 会把一次交付或人工 lesson 写入有界学习账本。",
     "`yolo eval` 会用固定 benchmark fixture 和 rubric 评估 discovery/PRD/UI acceptance/agent command 质量；缺真实结果时 fail closed。",
-    "`yolo memory refresh` 会刷新记忆中心，迁移旧学习经验，并先把超限 ledger 归档到 state/archive/jsonl/YYYY-MM/。",
+    "`yolo memory refresh` 会刷新记忆中心，迁移旧学习经验，并先把超限 ledger 归档到 state/archive/jsonl/YYYY-MM/；关键生命周期命令成功写入时会自动刷新项目记忆体。",
     "未传 PRD 时，只会在当前 YOLO state root 的 data/prd/current、data/prd/archive 和 data 中寻找 PRD JSON。",
   ].join("\n");
+}
+
+function summarizeMemoryRefresh(result = {}) {
+  return {
+    status: result.status,
+    memory_dir: result.memory_dir,
+    written: Array.isArray(result.written) ? result.written.map((item) => item.path || item).filter(Boolean) : [],
+    audit_summary: result.audit_summary,
+    retention: result.retention ? {
+      archived_record_count: result.retention.archived_record_count,
+      pruned_generated_snapshots: result.retention.pruned_generated_archives?.deleted_count || 0,
+    } : null,
+  };
+}
+
+function withMemoryRefresh(result = {}, params = {}) {
+  const options = params.options || {};
+  const projectRoot = params.projectRoot ? resolve(params.projectRoot) : null;
+  const writeEnabled = params.write !== false && options.writeLifecycle !== false && options.writeArtifacts !== false;
+  const dryRun = options.dryRun === true || options.dry_run === true;
+  if (!projectRoot || !writeEnabled || dryRun) return result;
+  try {
+    const memory = refreshMemoryCenter({
+      projectRoot,
+      source: params.source || "yolo-cli",
+    });
+    return {
+      ...result,
+      memory_refresh: summarizeMemoryRefresh(memory),
+    };
+  } catch (error) {
+    return {
+      ...result,
+      memory_refresh: {
+        status: "warning",
+        code: "MEMORY_REFRESH_FAILED",
+        error: error.message,
+      },
+    };
+  }
+}
+
+function appendMemoryRefreshText(lines, result = {}) {
+  if (!result.memory_refresh) return;
+  if (result.memory_refresh.status === "ok") {
+    lines.push(`memory: refreshed ${result.memory_refresh.written?.length || 0} docs at ${result.memory_refresh.memory_dir}`);
+  } else {
+    lines.push(`memory: ${result.memory_refresh.status} ${result.memory_refresh.error || ""}`.trimEnd());
+  }
 }
 
 function readArgValue(argv, index, name) {
@@ -305,9 +362,19 @@ export function parseYoloWorkflowArgs(argv = []) {
       const read = readArgValue(argv, i, "--discovery");
       input.discoveryPath = read.value;
       i += read.consumed;
+    } else if (arg === "--demand" || arg.startsWith("--demand=")) {
+      const read = readArgValue(argv, i, "--demand");
+      input.demandPath = read.value;
+      i += read.consumed;
     } else if (arg === "--output" || arg.startsWith("--output=")) {
       const read = readArgValue(argv, i, "--output");
       input.outputFile = read.value;
+      i += read.consumed;
+    } else if (arg === "--approve" || arg === "--approved") {
+      input.approve = true;
+    } else if (arg === "--approval" || arg.startsWith("--approval=")) {
+      const read = readArgValue(argv, i, "--approval");
+      input.approval = read.value;
       i += read.consumed;
     } else if (arg === "--id" || arg.startsWith("--id=")) {
       const read = readArgValue(argv, i, "--id");
@@ -332,6 +399,30 @@ export function parseYoloWorkflowArgs(argv = []) {
     } else if (arg === "--constraint" || arg === "--constraints" || arg.startsWith("--constraint=") || arg.startsWith("--constraints=")) {
       const read = readArgValue(argv, i, arg.split("=")[0]);
       pushList("constraints", read.value);
+      i += read.consumed;
+    } else if (arg === "--status-quo" || arg === "--current" || arg.startsWith("--status-quo=") || arg.startsWith("--current=")) {
+      const read = readArgValue(argv, i, arg.split("=")[0]);
+      pushList("status_quo", read.value);
+      i += read.consumed;
+    } else if (arg === "--evidence" || arg.startsWith("--evidence=")) {
+      const read = readArgValue(argv, i, "--evidence");
+      pushList("evidence", read.value);
+      i += read.consumed;
+    } else if (arg === "--assumption" || arg === "--assumptions" || arg.startsWith("--assumption=") || arg.startsWith("--assumptions=")) {
+      const read = readArgValue(argv, i, arg.split("=")[0]);
+      pushList("assumptions", read.value);
+      i += read.consumed;
+    } else if (arg === "--alternative" || arg === "--alternatives" || arg.startsWith("--alternative=") || arg.startsWith("--alternatives=")) {
+      const read = readArgValue(argv, i, arg.split("=")[0]);
+      pushList("alternatives", read.value);
+      i += read.consumed;
+    } else if (arg === "--decision" || arg === "--decisions" || arg.startsWith("--decision=") || arg.startsWith("--decisions=")) {
+      const read = readArgValue(argv, i, arg.split("=")[0]);
+      pushList("decisions", read.value);
+      i += read.consumed;
+    } else if (arg === "--roadmap" || arg === "--mvp" || arg.startsWith("--roadmap=") || arg.startsWith("--mvp=")) {
+      const read = readArgValue(argv, i, arg.split("=")[0]);
+      pushList("roadmap", read.value);
       i += read.consumed;
     } else if (arg === "--non-goal" || arg === "--non-goals" || arg.startsWith("--non-goal=") || arg.startsWith("--non-goals=")) {
       const read = readArgValue(argv, i, arg.split("=")[0]);
@@ -414,6 +505,7 @@ export function formatRunnerText(result) {
     lines.push("next:");
     for (const action of result.next_actions) lines.push(`  - ${action}`);
   }
+  appendMemoryRefreshText(lines, result);
 
   return lines.join("\n");
 }
@@ -430,6 +522,7 @@ export function formatWorkflowPlanText(result = {}) {
     lines.push("next:");
     for (const action of result.next_actions) lines.push(`  - ${action}`);
   }
+  appendMemoryRefreshText(lines, result);
   return lines.join("\n");
 }
 
@@ -452,6 +545,33 @@ export function formatDiscoveryRuntimeText(label, result = {}) {
     lines.push("next:");
     for (const action of result.next_actions) lines.push(`  - ${action}`);
   }
+  appendMemoryRefreshText(lines, result);
+  return lines.join("\n");
+}
+
+export function formatDemandRuntimeText(label, result = {}) {
+  const lines = [`[yolo ${label}] ${result.status}: ${result.summary}`];
+  if (result.code) lines.push(`code: ${result.code}`);
+  if (result.demand_id) lines.push(`demand: ${result.demand_id}`);
+  if (result.demand_dir) lines.push(`demand_dir: ${result.demand_dir}`);
+  if (result.prd?.id) lines.push(`prd: ${result.prd.id}`);
+  if (result.readiness?.readiness_level) {
+    lines.push(`readiness: ${result.readiness.readiness_level} score=${result.readiness.quality_score}`);
+  }
+  if (result.artifacts?.length) lines.push(`artifacts: ${result.artifacts.join(", ")}`);
+  if (Array.isArray(result.blockers) && result.blockers.length) {
+    lines.push("blockers:");
+    for (const blocker of result.blockers) lines.push(`  - ${blocker.code || "BLOCKER"} ${blocker.message || blocker.detail || ""}`.trimEnd());
+  }
+  if (Array.isArray(result.warnings) && result.warnings.length) {
+    lines.push("warnings:");
+    for (const warning of result.warnings) lines.push(`  - ${warning.code || "WARNING"} ${warning.message || warning.detail || ""}`.trimEnd());
+  }
+  if (result.next_actions?.length) {
+    lines.push("next:");
+    for (const action of result.next_actions) lines.push(`  - ${action}`);
+  }
+  appendMemoryRefreshText(lines, result);
   return lines.join("\n");
 }
 
@@ -471,6 +591,7 @@ export function formatPiRuntimeText(label, result = {}) {
     lines.push("next:");
     for (const action of result.next_actions) lines.push(`  - ${action}`);
   }
+  appendMemoryRefreshText(lines, result);
   return lines.join("\n");
 }
 
@@ -490,6 +611,7 @@ export function formatInitText(result) {
     lines.push("next:");
     for (const action of result.next_actions) lines.push(`  - ${action}`);
   }
+  appendMemoryRefreshText(lines, result);
   return lines.join("\n");
 }
 
@@ -521,12 +643,14 @@ export async function runYoloInitCli(argv = [], io = {}) {
   }
 
   try {
-    const result = initProject({
-      projectRoot: input.cwd || io.cwd || process.cwd(),
+    const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+    let result = initProject({
+      projectRoot,
       projectName: input.projectName,
       force: options.force,
       dryRun: options.dryRun,
     });
+    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-init" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatInitText(result)}\n`);
     return result.exit_code;
@@ -601,11 +725,12 @@ export async function runYoloCheckCli(argv = [], io = {}) {
   const prdPath = input.prdPath
     ? resolvePrdPath(input.prdPath, io.yoloRoot || defaultYoloRoot, { cwd: projectRoot })
     : input.prdPath;
-  const report = inspectYoloCheck({
+  let report = inspectYoloCheck({
     prdPath,
     projectRoot,
     writeLifecycle: options.writeLifecycle,
   }, { learnFailures: true });
+  report = withMemoryRefresh(report, { projectRoot, options, source: "yolo-check" });
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else (report.status === "error" ? stderr : stdout).write(`${formatYoloCheckText(report)}\n`);
   return report.status === "blocked" || report.status === "error" ? 1 : 0;
@@ -622,15 +747,62 @@ export async function runYoloProgressUiEvidenceCli(argv = [], io = {}) {
 
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
   const stateRoot = join(projectRoot, ".yolo");
-  const report = buildProgressDashboardUiEvidence({
+  let report = buildProgressDashboardUiEvidence({
     projectRoot,
     stateRoot,
     outputPath: input.outputPath,
     writeArtifacts: options.writeArtifacts,
   });
+  report = withMemoryRefresh(report, { projectRoot, options, source: "yolo-progress-ui-evidence" });
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else stdout.write(`[yolo progress-ui-evidence] ${report.status}: ${report.summary}\n`);
   return report.status === "pass" ? 0 : 1;
+}
+
+export async function runYoloBrainstormCli(argv = [], io = {}) {
+  const stdout = io.stdout || process.stdout;
+  const { input, options } = parseYoloWorkflowArgs(argv);
+
+  if (options.help) {
+    stdout.write(`${usage()}\n`);
+    return 0;
+  }
+
+  const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+  let result = runDemandBrainstormRuntime({
+    ...input,
+    projectRoot,
+    stateRoot: join(projectRoot, ".yolo"),
+    objective: input.objective,
+    writeArtifacts: options.writeLifecycle,
+  });
+  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-brainstorm" });
+  if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  else stdout.write(`${formatDemandRuntimeText("brainstorm", result)}\n`);
+  return result.status === "blocked" ? 1 : 0;
+}
+
+export async function runYoloDiscussCli(argv = [], io = {}) {
+  const stdout = io.stdout || process.stdout;
+  const { input, options } = parseYoloWorkflowArgs(argv);
+
+  if (options.help) {
+    stdout.write(`${usage()}\n`);
+    return 0;
+  }
+
+  const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+  let result = runDemandDiscussRuntime({
+    ...input,
+    projectRoot,
+    stateRoot: join(projectRoot, ".yolo"),
+    objective: input.objective,
+    writeArtifacts: options.writeLifecycle,
+  });
+  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-discuss" });
+  if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  else stdout.write(`${formatDemandRuntimeText("discuss", result)}\n`);
+  return result.status === "blocked" ? 1 : 0;
 }
 
 export async function runYoloAcceptCli(argv = [], io = {}) {
@@ -646,7 +818,7 @@ export async function runYoloAcceptCli(argv = [], io = {}) {
   const prdPath = input.prdPath
     ? resolvePrdPath(input.prdPath, io.yoloRoot || defaultYoloRoot, { cwd: projectRoot })
     : input.prdPath;
-  const report = buildAcceptanceReport({
+  let report = buildAcceptanceReport({
     prdPath,
     projectRoot,
     writeLifecycle: options.writeLifecycle,
@@ -654,6 +826,7 @@ export async function runYoloAcceptCli(argv = [], io = {}) {
     executeAdapter: options.executeAdapter,
     allowAdapterCommands: options.allowAdapterCommands,
   }, { learnFailures: true });
+  report = withMemoryRefresh(report, { projectRoot, options, source: "yolo-accept" });
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else stdout.write(`${formatAcceptanceReportText(report)}\n`);
   return report.status === "blocked" ? 1 : 0;
@@ -669,7 +842,7 @@ export async function runYoloDiscoverCli(argv = [], io = {}) {
   }
 
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
-  const result = runDiscoveryRuntime({
+  let result = runDiscoveryRuntime({
     ...input,
     projectRoot,
     stateRoot: join(projectRoot, ".yolo"),
@@ -678,6 +851,7 @@ export async function runYoloDiscoverCli(argv = [], io = {}) {
     writeLifecycle: options.writeLifecycle,
     source: "yolo-discover",
   });
+  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-discover" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDiscoveryRuntimeText("discover", result)}\n`);
   return result.status === "blocked" ? 1 : 0;
@@ -693,7 +867,7 @@ export async function runYoloPlanCli(argv = [], io = {}) {
   }
 
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
-  const result = runDiscoveryPlanRuntime({
+  let result = runDiscoveryPlanRuntime({
     ...input,
     projectRoot,
     stateRoot: join(projectRoot, ".yolo"),
@@ -702,6 +876,7 @@ export async function runYoloPlanCli(argv = [], io = {}) {
     writeLifecycle: options.writeLifecycle,
     source: "yolo-plan",
   });
+  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-plan" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDiscoveryRuntimeText("plan", result)}\n`);
   return result.status === "blocked" ? 1 : 0;
@@ -717,7 +892,20 @@ export async function runYoloPrdCli(argv = [], io = {}) {
   }
 
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
-  const result = runDiscoveryPrdRuntime({
+  if (input.demandPath) {
+    let result = runDemandPrdRuntime({
+      ...input,
+      projectRoot,
+      stateRoot: join(projectRoot, ".yolo"),
+      writeArtifacts: options.writeLifecycle,
+    });
+    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-prd" });
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stdout.write(`${formatDemandRuntimeText("prd", result)}\n`);
+    return result.status === "blocked" ? 1 : 0;
+  }
+
+  let result = runDiscoveryPrdRuntime({
     ...input,
     projectRoot,
     stateRoot: join(projectRoot, ".yolo"),
@@ -726,13 +914,16 @@ export async function runYoloPrdCli(argv = [], io = {}) {
     writeLifecycle: options.writeLifecycle,
     source: "yolo-prd",
   });
+  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-prd" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDiscoveryRuntimeText("prd", result)}\n`);
   return result.status === "blocked" ? 1 : 0;
 }
 
 export async function runYoloWorkflowPlanCli(workflow, argv = [], io = {}) {
+  if (workflow === "brainstorm") return runYoloBrainstormCli(argv, io);
   if (workflow === "discover") return runYoloDiscoverCli(argv, io);
+  if (workflow === "discuss") return runYoloDiscussCli(argv, io);
   if (workflow === "plan") return runYoloPlanCli(argv, io);
   if (workflow === "prd") return runYoloPrdCli(argv, io);
   const stdout = io.stdout || process.stdout;
@@ -759,11 +950,12 @@ export async function runYoloReviewCli(argv = [], io = {}) {
   }
 
   const projectRoot = resolve(input.cwd || input.objective || io.cwd || process.cwd());
-  const result = await runPiRuntime("review.scan", {
+  let result = await runPiRuntime("review.scan", {
     projectRoot,
     stateRoot: join(projectRoot, ".yolo"),
     writeLifecycle: options.writeLifecycle,
   });
+  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-review" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatPiRuntimeText("review", result)}\n`);
   return result.status === "success" ? 0 : 1;
@@ -782,12 +974,13 @@ export async function runYoloShipCli(argv = [], io = {}) {
   const prdPath = input.prdPath
     ? resolvePrdPath(input.prdPath, io.yoloRoot || defaultYoloRoot, { cwd: projectRoot })
     : "";
-  const result = await runPiRuntime("ship", {
+  let result = await runPiRuntime("ship", {
     prdPath,
     projectRoot,
     stateRoot: join(projectRoot, ".yolo"),
     writeLifecycle: options.writeLifecycle,
   });
+  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-ship" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatPiRuntimeText("ship", result)}\n`);
   return result.status === "success" ? 0 : 1;
@@ -806,13 +999,14 @@ export async function runYoloLearnCli(argv = [], io = {}) {
   const prdPath = input.prdPath
     ? resolvePrdPath(input.prdPath, io.yoloRoot || defaultYoloRoot, { cwd: projectRoot })
     : "";
-  const result = await runPiRuntime("learn", {
+  let result = await runPiRuntime("learn", {
     prdPath,
     lesson: input.lesson || input.objective,
     projectRoot,
     stateRoot: join(projectRoot, ".yolo"),
     writeLifecycle: options.writeLifecycle,
   });
+  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-learn" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatPiRuntimeText("learn", result)}\n`);
   return result.status === "success" ? 0 : 1;
@@ -828,7 +1022,9 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
   if (argv[0] === "doctor") {
     return runYoloDoctorCli(argv.slice(1), io);
   }
+  if (argv[0] === "brainstorm" || argv[0] === "office-hours") return runYoloBrainstormCli(argv.slice(1), io);
   if (argv[0] === "discover") return runYoloDiscoverCli(argv.slice(1), io);
+  if (argv[0] === "discuss") return runYoloDiscussCli(argv.slice(1), io);
   if (argv[0] === "plan") return runYoloPlanCli(argv.slice(1), io);
   if (argv[0] === "prd") return runYoloPrdCli(argv.slice(1), io);
   if (argv[0] === "check") {
@@ -890,7 +1086,7 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
   if (!options.engineOnly) {
     const executor = input.executor || input.provider || (input.agentCommand ? "custom" : undefined);
     const provider = input.provider || input.executor || (input.agentCommand ? "custom" : undefined);
-    const result = await runPiAgent({
+    let result = await runPiAgent({
       prdPath,
       mode: input.mode,
       executor,
@@ -907,6 +1103,7 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
       stateRoot: join(cliProjectRoot, ".yolo"),
       execute: true,
     });
+    result = withMemoryRefresh(result, { projectRoot: cliProjectRoot, options, source: "yolo-run" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatPiRuntimeText("run", result)}\n`);
     return result.status === "success" ? 0 : 1;
@@ -914,7 +1111,7 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
 
   const executor = input.executor || input.provider || (input.agentCommand ? "custom" : undefined);
   const provider = input.provider || input.executor || (input.agentCommand ? "custom" : undefined);
-  const result = await runRunnerRuntime({
+  let result = await runRunnerRuntime({
     prdPath,
     mode: input.mode,
     projectRoot: cliProjectRoot,
@@ -929,6 +1126,7 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
     model: input.model,
     agentCommand: input.agentCommand,
   });
+  result = withMemoryRefresh(result, { projectRoot: cliProjectRoot, options, source: "yolo-runner" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatRunnerText(result)}\n`);
 

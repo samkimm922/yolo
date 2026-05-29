@@ -186,7 +186,8 @@ export function inspectAtomicTask(task, options = {}) {
   const failPostconditions = countFailPostconditions(task);
   const behavioralFailPostconditions = countBehavioralFailPostconditions(task);
   const structuralSingleFileTask = isStructuralSingleFileTask(task, files, behavioralFailPostconditions);
-  const dataTerms = DATA_TERMS.filter((term) => text.includes(term));
+  const uiOnlyTargets = files.length > 0 && files.every((file) => ["pages", "components", "hooks"].includes(fileLayer(file)));
+  const dataTerms = uiOnlyTargets ? [] : DATA_TERMS.filter((term) => text.includes(term));
   const uiTerms = UI_TERMS.filter((term) => text.includes(term));
   const hookTerms = HOOK_TERMS.filter((term) => text.includes(term));
   const crossesPagesServices = layers.includes("pages") && layers.includes("services");

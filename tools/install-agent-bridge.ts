@@ -252,7 +252,7 @@ export function buildYoloNativeSkill({ agent = "codex", yoloRoot = DEFAULT_YOLO_
     "## When To Use",
     "",
     "- The user says YOLO, yolo流程, PRD落地, 自动开发, 高质量迭代, review/fix, gate, or wants a requirement executed end-to-end.",
-    "- The user uses command-like text such as `/yolo`, `/yolo-discover`, `/yolo-plan`, `/yolo-prd`, `/yolo-check`, `/yolo-run`, `/yolo-review`, `/yolo-accept`, `/yolo-eval`, `/yolo-ship`, `/yolo-learn`, or `/yolo-doctor`.",
+    "- The user uses command-like text such as `/yolo`, `/yolo-brainstorm`, `/yolo-discuss`, `/yolo-discover`, `/yolo-plan`, `/yolo-prd`, `/yolo-check`, `/yolo-run`, `/yolo-review`, `/yolo-accept`, `/yolo-eval`, `/yolo-ship`, `/yolo-learn`, or `/yolo-doctor`.",
     "",
     "## Command Aliases",
     "",
@@ -356,6 +356,56 @@ export function buildCodexSourceCommandSkill(commandName, { yoloRoot = DEFAULT_Y
   ].join("\n");
 }
 
+export function buildCodexSlashCommandSkill(commandName, { yoloRoot = DEFAULT_YOLO_ROOT } = {}) {
+  const command = getYoloCommand(commandName);
+  return [
+    "---",
+    `name: ${commandName}`,
+    `description: "${command.description}"`,
+    `argument-hint: "${command.argumentHint}"`,
+    "allowed-tools:",
+    "  - Read",
+    "  - Bash",
+    "  - Glob",
+    "  - Grep",
+    "  - Write",
+    "  - Edit",
+    "---",
+    "",
+    `# /${commandName}`,
+    "",
+    `Use this skill when the user invokes \`/${commandName}\` in Codex.`,
+    "",
+    "## Command Template",
+    "",
+    `# /${commandName}`,
+    "",
+    `YOLO root: ${resolve(yoloRoot)}`,
+    `Mode: ${command.mode}`,
+    "",
+    "## Objective",
+    "",
+    command.objective,
+    "",
+    "## Rules",
+    "",
+    "- Treat Codex chat as the user interface; do not ask the user to memorize terminal commands.",
+    "- Use the YOLO CLI/SDK from the YOLO root when execution is needed.",
+    "- Keep requirement, PRD/spec, tasks, review findings, fixes, gates, and evidence traceable.",
+    "- Default to no-code demand discovery or planning when intent is ambiguous.",
+    `- Safety: ${command.safety}`,
+    "- Require explicit user confirmation before code edits, user-level installs, publishing, credentials, or billable provider execution.",
+    "- Stop and report blockers when PRD, scope, tests, provider, or gates are weak or unavailable.",
+    "",
+    "## Example",
+    "",
+    "```text",
+    renderCommandUsage({ name: commandName }),
+    "```",
+    "",
+  ].join("\n");
+}
+
 function nativeSkillFile({ projectRoot, homeDir, target, scope, yoloRoot }) {
   const baseDir = scope === "user" ? homeDir : projectRoot;
   const path = target === "claude"
@@ -425,6 +475,24 @@ function codexSourceCommandFilesFor({ projectRoot, homeDir, scope, yoloRoot }) {
   });
 }
 
+function codexSlashCommandFilesFor({ projectRoot, homeDir, scope, yoloRoot }) {
+  const baseDir = scope === "user" ? homeDir : projectRoot;
+  const targetDir = scope === "user" ? ".agents/skills" : ".codex/skills";
+  return DEFAULT_COMMANDS.map((command) => {
+    const path = join(baseDir, targetDir, command, "SKILL.md");
+    return {
+      target: "codex",
+      scope,
+      path,
+      relative_path: displayRelativePath(baseDir, path, scope),
+      role: "codex_slash_command_skill",
+      command,
+      host_support: "codex_direct_skill_slash_command",
+      content: buildCodexSlashCommandSkill(command, { yoloRoot }),
+    };
+  });
+}
+
 function workflowSkillPlanFor({ projectRoot, homeDir, target, scope }) {
   if (scope === "user") {
     const userRoot = resolve(homeDir);
@@ -483,6 +551,9 @@ export function buildAgentBridgeInstallPlan(options = {}) {
   const source_command_files = wantsCommands && targets.includes("codex")
     ? scopes.flatMap((scope) => codexSourceCommandFilesFor({ projectRoot, homeDir, scope, yoloRoot }))
     : [];
+  const codex_slash_command_files = wantsCommands && targets.includes("codex")
+    ? scopes.flatMap((scope) => codexSlashCommandFilesFor({ projectRoot, homeDir, scope, yoloRoot }))
+    : [];
   const skill_plans = scopes.flatMap((scope) =>
     targets.map((target) => workflowSkillPlanFor({ projectRoot, homeDir, target, scope }))
   );
@@ -499,6 +570,7 @@ export function buildAgentBridgeInstallPlan(options = {}) {
     native_skill_files,
     command_files,
     source_command_files,
+    codex_slash_command_files,
     skill_plans,
     writes_workspace: wantsProject,
     writes_user_home: scopes.includes("user"),
@@ -548,7 +620,7 @@ export function installAgentBridge(options = {}) {
     }
   }
 
-  for (const file of [...plan.native_skill_files, ...plan.command_files, ...plan.source_command_files]) {
+  for (const file of [...plan.native_skill_files, ...plan.command_files, ...plan.source_command_files, ...plan.codex_slash_command_files]) {
     writePlainArtifact({ file, dryRun, force, written, planned, overwritten, skipped });
   }
 
@@ -606,7 +678,7 @@ export function installAgentBridge(options = {}) {
     next_actions: [
       "Restart Codex or Claude Code if the host discovers skills only at startup.",
       "In Claude Code, run /yolo <你的需求>.",
-      "In Codex, start a new session, then try /yolo <你的需求>; if the slash UI does not route it, ask to use source-command-yolo or the yolo skill.",
+      "In Codex, start a new session, then try /yolo, /yolo-brainstorm, or /yolo-discuss; if the host has not refreshed, ask to use source-command-yolo or the yolo skill.",
     ],
   };
 }
@@ -618,7 +690,7 @@ function usage() {
     "  node tools/install-agent-bridge.js --project-root /path/to/project --target codex|claude|both",
     "  node tools/install-agent-bridge.js /path/to/project --scope project|user|both",
     "",
-    "作用：安装 AGENTS.md / CLAUDE.md、Codex/Claude skills、Claude slash commands，以及 Codex skill command aliases。",
+    "作用：安装 AGENTS.md / CLAUDE.md、Codex/Claude skills、Claude slash commands，以及 Codex direct slash skills / source-command aliases。",
   ].join("\n");
 }
 

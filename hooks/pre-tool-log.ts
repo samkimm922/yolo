@@ -3,12 +3,19 @@
 // Called by Claude Code before Write/Edit operations
 
 import { execFileSync, spawn } from 'node:child_process';
-import { dirname, resolve, join } from 'node:path';
+import { dirname, isAbsolute, normalize, relative, resolve, join } from 'node:path';
 import { readFileSync, writeFileSync, existsSync, openSync, mkdirSync } from 'node:fs';
 
 const YOLO_DIR = resolve(import.meta.dirname, '..');
 const LOG_CHANGE = join(YOLO_DIR, 'dist/src/runtime/evidence/log-change.js');
 const MEMORY_CENTER = join(YOLO_DIR, 'dist/src/runtime/devtools/memory-center.js');
+
+function isInsideYolo(filePath) {
+  if (!filePath) return false;
+  const absolutePath = isAbsolute(filePath) ? filePath : resolve(filePath);
+  const rel = relative(YOLO_DIR, normalize(absolutePath));
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+}
 
 // 不在 yolo 环境中时静默退出
 if (!existsSync(LOG_CHANGE) && !existsSync(MEMORY_CENTER)) process.exit(0);
@@ -20,8 +27,8 @@ process.stdin.on('end', () => {
     const data = JSON.parse(input);
     const filePath = data.tool_input?.file_path || data.tool_input?.path || '';
 
-    // Only log changes to yolo project files
-    if (filePath && filePath.includes('scripts/yolo/')) {
+    // Only log changes to the real YOLO project root.
+    if (isInsideYolo(filePath)) {
       const toolName = data.tool_name || 'unknown';
       if (existsSync(LOG_CHANGE)) {
         execFileSync('node', [LOG_CHANGE, 'auto', `--file=${filePath}`, `--tool=${toolName}`], {

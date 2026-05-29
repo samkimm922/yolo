@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { buildLifecycleStateFiles } from "../lifecycle/state.js";
+import { appendSessionMemory } from "../runtime/evidence/session-memory.js";
+import { refreshMemoryCenter } from "../runtime/memory/center.js";
 
 export const PROJECT_BOOTSTRAP_SCHEMA_VERSION = "1.0";
 
@@ -135,6 +137,82 @@ function memoryAuditTemplate(projectName) {
     "No project-specific memory audit has been generated yet.",
     "",
     "Run `yolo memory refresh` after the first YOLO task or major file-structure change.",
+    "",
+  ].join("\n");
+}
+
+function projectBriefTemplate(projectName) {
+  return [
+    `# ${projectName} Project Brief`,
+    "",
+    "## Plain-Language Purpose",
+    "- TBD: describe what this project helps users do.",
+    "",
+    "## Primary Users",
+    "- TBD",
+    "",
+    "## Current Product Surface",
+    "- TBD: list the main app, page, API, service, or workflow surfaces after the first memory refresh.",
+    "",
+    "## Operating Notes",
+    "- Non-technical ideas should first go through `/yolo-brainstorm` or `/yolo-discuss`.",
+    "- Executable PRDs should be generated only after scenario matrix and atomic task readiness pass.",
+    "",
+  ].join("\n");
+}
+
+function progressTemplate(projectName) {
+  return [
+    `# ${projectName} Progress`,
+    "",
+    "## Current Phase",
+    "- setup",
+    "",
+    "## Recently Completed",
+    "- YOLO project memory initialized.",
+    "",
+    "## Next",
+    "- Capture the first user problem in plain language.",
+    "- Convert it into a scenario matrix before generating PRD tasks.",
+    "",
+  ].join("\n");
+}
+
+function openQuestionsTemplate(projectName) {
+  return [
+    `# ${projectName} Open Questions`,
+    "",
+    "Use this file for product or execution questions that block PRD generation or implementation.",
+    "",
+    "## Blocking",
+    "- TBD",
+    "",
+    "## Deferred",
+    "- TBD",
+    "",
+  ].join("\n");
+}
+
+function decisionLogTemplate(projectName) {
+  return [
+    `# ${projectName} Decision Log`,
+    "",
+    "Durable decisions should be summarized here and, when hard to reverse, promoted into `.yolo/decisions/ADR-*.md`.",
+    "",
+    "## Decisions",
+    "- TBD",
+    "",
+  ].join("\n");
+}
+
+function contextDocTemplate(title, description, bullets = []) {
+  return [
+    `# ${title}`,
+    "",
+    description,
+    "",
+    "## Current Notes",
+    bullets.length ? bullets.map((item) => `- ${item}`).join("\n") : "- TBD",
     "",
   ].join("\n");
 }
@@ -347,6 +425,9 @@ export function buildProjectBootstrapPlan(options = {}) {
     ".yolo/lifecycle",
     ".yolo/memory",
     ".yolo/context",
+    ".yolo/context/domain",
+    ".yolo/context/codebase",
+    ".yolo/decisions",
     ".yolo/packs",
     ".yolo/adapters",
     ".yolo/state",
@@ -362,16 +443,31 @@ export function buildProjectBootstrapPlan(options = {}) {
     { path: ".yolo/memory/MEMORY_INDEX.md", role: "memory", content: memoryIndexTemplate(projectName) },
     { path: ".yolo/memory/CURRENT_STATUS.md", role: "memory", content: memoryStatusTemplate(projectName) },
     { path: ".yolo/memory/CURRENT_HANDOFF.md", role: "memory", content: memoryHandoffTemplate(projectName) },
+    { path: ".yolo/memory/PROJECT_BRIEF.md", role: "memory", content: projectBriefTemplate(projectName) },
+    { path: ".yolo/memory/PROGRESS.md", role: "memory", content: progressTemplate(projectName) },
+    { path: ".yolo/memory/OPEN_QUESTIONS.md", role: "memory", content: openQuestionsTemplate(projectName) },
+    { path: ".yolo/memory/DECISION_LOG.md", role: "memory", content: decisionLogTemplate(projectName) },
     { path: ".yolo/memory/DOCUMENT_GOVERNANCE.md", role: "memory", content: documentGovernanceTemplate(projectName) },
     { path: ".yolo/memory/LEARNING_INDEX.md", role: "memory", content: learningIndexTemplate(projectName) },
     { path: ".yolo/memory/LESSONS_PLAYBOOK.md", role: "memory", content: lessonsPlaybookTemplate(projectName) },
     { path: ".yolo/memory/PROJECT_TREE.md", role: "memory", content: memoryTreeTemplate(projectName) },
     { path: ".yolo/memory/MEMORY_AUDIT.md", role: "memory", content: memoryAuditTemplate(projectName) },
+    { path: ".yolo/context/domain/GLOSSARY.md", role: "context", content: contextDocTemplate(`${projectName} Domain Glossary`, "Canonical business terms for non-technical demand discussions.") },
+    { path: ".yolo/context/codebase/ARCHITECTURE.md", role: "context", content: contextDocTemplate(`${projectName} Architecture Map`, "High-level architecture notes discovered by YOLO memory refresh and code scouts.") },
+    { path: ".yolo/context/codebase/STRUCTURE.md", role: "context", content: contextDocTemplate(`${projectName} Structure Map`, "Important folders, entrypoints, and ownership boundaries.") },
+    { path: ".yolo/context/codebase/CONVENTIONS.md", role: "context", content: contextDocTemplate(`${projectName} Conventions`, "Local naming, layout, state, API, and test conventions.") },
+    { path: ".yolo/context/codebase/TESTING.md", role: "context", content: contextDocTemplate(`${projectName} Testing Map`, "Known test commands, test folders, and verification expectations.") },
+    { path: ".yolo/context/codebase/DEPENDENCIES.md", role: "context", content: contextDocTemplate(`${projectName} Dependencies`, "Frameworks, package managers, integrations, and external services.") },
+    { path: ".yolo/context/codebase/SURFACES.md", role: "context", content: contextDocTemplate(`${projectName} Product Surfaces`, "User-visible pages, APIs, services, jobs, and data surfaces that PRD tasks may target.") },
+    { path: ".yolo/context/codebase/RISK_AREAS.md", role: "context", content: contextDocTemplate(`${projectName} Risk Areas`, "Fragile, security-sensitive, data-sensitive, or high-churn areas.") },
     { path: ".yolo/state/changes.jsonl", role: "memory-ledger", content: "" },
     { path: ".yolo/state/events.jsonl", role: "memory-ledger", content: "" },
     { path: ".yolo/state/runs.jsonl", role: "memory-ledger", content: "" },
     { path: ".yolo/state/learning.jsonl", role: "memory-ledger", content: "" },
     { path: ".yolo/state/session-memory.jsonl", role: "memory-ledger", content: "" },
+    { path: ".yolo/state/questions.jsonl", role: "memory-ledger", content: "" },
+    { path: ".yolo/state/decisions.jsonl", role: "memory-ledger", content: "" },
+    { path: ".yolo/state/artifacts.jsonl", role: "memory-ledger", content: "" },
     { path: ".yolo/templates/requirements.md", role: "template", content: requirementsTemplate() },
     { path: ".yolo/templates/design.md", role: "template", content: designTemplate() },
     { path: ".yolo/templates/tasks.md", role: "template", content: tasksTemplate() },
@@ -426,6 +522,29 @@ export function initProject(options = {}) {
     else created.push(file.path);
   }
 
+  let session_memory = null;
+  let memory_refresh = null;
+  const freshMemory = created.includes(".yolo/memory/MEMORY_INDEX.md");
+  if (!dryRun && freshMemory) {
+    session_memory = appendSessionMemory({
+      argv: [
+        `--state-root=${join(plan.project_root, ".yolo")}`,
+        "--type=project_init",
+        "--source=yolo-init",
+        "--summary=YOLO project memory, lifecycle, specs, context map, and ledgers initialized.",
+        "--refs=.yolo/memory/CURRENT_HANDOFF.md,.yolo/memory/PROJECT_TREE.md,specs/requirements.md",
+      ],
+      now: options.now ? new Date(options.now) : new Date(),
+    });
+    memory_refresh = refreshMemoryCenter({
+      projectRoot: plan.project_root,
+      stateRoot: join(plan.project_root, ".yolo"),
+      legacyPointers: true,
+      applyRetention: false,
+      migrateLearning: false,
+    });
+  }
+
   return {
     status: "success",
     summary: dryRun ? "planned YOLO project bootstrap" : "initialized YOLO project",
@@ -439,12 +558,14 @@ export function initProject(options = {}) {
     created,
     overwritten,
     skipped,
+    session_memory,
+    memory_refresh,
     artifacts: plan.files.map((file) => file.path),
     next_actions: [
-      "Edit specs/requirements.md with the first project requirement.",
-      "Use /yolo-discover for unclear ideas before writing executable PRDs.",
-      "Add design notes in specs/design.md before creating executable PRD tasks.",
-      "Keep verification evidence linked from specs/tasks.md.",
+      "Capture the first user problem in plain language with /yolo-brainstorm or /yolo-discuss.",
+      "Let YOLO convert the conversation into a scenario matrix before executable PRD generation.",
+      "Review .yolo/memory/CURRENT_HANDOFF.md before each new session.",
+      "Keep verification evidence linked from specs/tasks.md and .yolo/state/session-memory.jsonl.",
       "Use yolo memory refresh after structural or task-state changes.",
     ],
   };

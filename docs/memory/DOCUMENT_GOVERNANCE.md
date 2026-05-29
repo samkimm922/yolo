@@ -1,6 +1,6 @@
 # YOLO Document Governance
 
-> Generated: 2026-05-26T11:19:47.622Z
+> Generated: 2026-05-29T04:40:50.784Z
 
 ## Decision
 

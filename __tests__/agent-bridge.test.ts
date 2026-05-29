@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import {
   buildAgentBridgeBlock,
   buildAgentBridgeInstallPlan,
+  buildCodexSlashCommandSkill,
   buildCodexSourceCommandSkill,
   buildClaudeSlashCommand,
   buildYoloNativeSkill,
@@ -91,6 +92,15 @@ describe("agent bridge installer", () => {
     assert.match(skill, /Default to plan-only/);
   });
 
+  test("buildCodexSlashCommandSkill follows direct Codex slash skill convention", () => {
+    const skill = buildCodexSlashCommandSkill("yolo-brainstorm", { yoloRoot: "/tmp/yolo" });
+
+    assert.match(skill, /^---\nname: yolo-brainstorm/m);
+    assert.match(skill, /# \/yolo-brainstorm/);
+    assert.match(skill, /YOLO root: \/tmp\/yolo/);
+    assert.match(skill, /Brainstorm-only/);
+  });
+
   test("buildAgentBridgeInstallPlan plans AGENTS, CLAUDE, and workflow skill targets without writing", () => {
     const projectRoot = tempProject();
     const plan = buildAgentBridgeInstallPlan({ projectRoot, yoloRoot: "/tmp/yolo", targets: "both" });
@@ -109,6 +119,8 @@ describe("agent bridge installer", () => {
     assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-prd.md"), true);
     assert.equal(plan.source_command_files.some((file) => file.relative_path === ".codex/skills/source-command-yolo-plan/SKILL.md"), true);
     assert.equal(plan.source_command_files.some((file) => file.relative_path === ".codex/skills/source-command-yolo-doctor/SKILL.md"), true);
+    assert.equal(plan.codex_slash_command_files.some((file) => file.relative_path === ".codex/skills/yolo-brainstorm/SKILL.md"), true);
+    assert.equal(plan.codex_slash_command_files.some((file) => file.relative_path === ".codex/skills/yolo-discuss/SKILL.md"), true);
     assert.deepEqual(plan.skill_plans.map((item) => item.target_dir), [".codex/skills", ".claude/skills"]);
     assert.equal(existsSync(join(projectRoot, "AGENTS.md")), false);
   });
@@ -127,6 +139,8 @@ describe("agent bridge installer", () => {
     assert.equal(result.written.includes(".codex/skills/source-command-yolo/SKILL.md"), true);
     assert.equal(result.written.includes(".codex/skills/source-command-yolo-plan/SKILL.md"), true);
     assert.equal(result.written.includes(".codex/skills/source-command-yolo-prd/SKILL.md"), true);
+    assert.equal(result.written.includes(".codex/skills/yolo-brainstorm/SKILL.md"), true);
+    assert.equal(result.written.includes(".codex/skills/yolo-discuss/SKILL.md"), true);
     assert.match(readFileSync(join(projectRoot, "AGENTS.md"), "utf8"), /# Existing Agent Rules/);
     assert.match(readFileSync(join(projectRoot, "AGENTS.md"), "utf8"), /YOLO Agent Bridge for Codex/);
     assert.match(readFileSync(join(projectRoot, "CLAUDE.md"), "utf8"), /YOLO Agent Bridge for Claude Code/);
@@ -150,6 +164,8 @@ describe("agent bridge installer", () => {
     assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-doctor.md"), true);
     assert.equal(result.planned.includes(".codex/skills/source-command-yolo-check/SKILL.md"), true);
     assert.equal(result.planned.includes(".codex/skills/source-command-yolo-discover/SKILL.md"), true);
+    assert.equal(result.planned.includes(".codex/skills/yolo-brainstorm/SKILL.md"), true);
+    assert.equal(result.planned.includes(".codex/skills/yolo-discuss/SKILL.md"), true);
     assert.deepEqual(result.written, []);
     assert.equal(existsSync(join(projectRoot, "AGENTS.md")), false);
     assert.equal(existsSync(join(projectRoot, ".codex")), false);
@@ -176,6 +192,8 @@ describe("agent bridge installer", () => {
     assert.equal(existsSync(join(homeDir, ".agents/skills/source-command-yolo/SKILL.md")), true);
     assert.equal(existsSync(join(homeDir, ".agents/skills/source-command-yolo-run/SKILL.md")), true);
     assert.equal(existsSync(join(homeDir, ".agents/skills/source-command-yolo-prd/SKILL.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo-brainstorm/SKILL.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo-discuss/SKILL.md")), true);
     assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/workflows/RULES.md")), true);
     assert.equal(existsSync(join(homeDir, ".claude/skills/yolo/SKILL.md")), true);
     assert.equal(existsSync(join(homeDir, ".claude/commands/yolo.md")), true);

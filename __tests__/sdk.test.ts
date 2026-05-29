@@ -17,13 +17,20 @@ import {
   planControlledParallelWaves,
 } from "../sdk.js";
 import {
+  buildDemandArtifactGraph,
+  buildDemandSession,
   buildDiscoveryArtifact,
   buildYoloCommandRegistry,
   buildYoloDoctorReport,
+  DEMAND_SESSION_SCHEMA_VERSION,
   formatYoloDoctorText,
   getYoloCommand,
+  inspectDemandReadiness,
   listYoloCommandNames,
   renderYoloCommandUsage,
+  runDemandBrainstormRuntime,
+  runDemandDiscussRuntime,
+  runDemandPrdRuntime,
   runDiscoveryRuntime,
   YOLO_COMMAND_REGISTRY_SCHEMA_VERSION,
   YOLO_DOCTOR_SCHEMA_VERSION,
@@ -65,6 +72,12 @@ describe("yolo sdk", () => {
     assert.equal(typeof sdk.discovery.run, "function");
     assert.equal(typeof sdk.discovery.runPlan, "function");
     assert.equal(typeof sdk.discovery.runPrd, "function");
+    assert.equal(typeof sdk.demand.buildSession, "function");
+    assert.equal(typeof sdk.demand.inspectReadiness, "function");
+    assert.equal(typeof sdk.demand.runBrainstorm, "function");
+    assert.equal(typeof sdk.demand.runDiscuss, "function");
+    assert.equal(typeof sdk.demand.runPrd, "function");
+    assert.equal(sdk.demand.schemaVersion, "1.0");
     assert.equal(typeof sdk.packs.resolveProjectContext, "function");
     assert.equal(typeof sdk.packs.validateManifest, "function");
     assert.equal(typeof sdk.acceptance.buildReport, "function");
@@ -174,6 +187,13 @@ describe("yolo sdk", () => {
     assert.equal(YOLO_DOCTOR_SCHEMA_VERSION, "1.0");
     assert.equal(typeof buildDiscoveryArtifact, "function");
     assert.equal(typeof runDiscoveryRuntime, "function");
+    assert.equal(typeof buildDemandArtifactGraph, "function");
+    assert.equal(typeof buildDemandSession, "function");
+    assert.equal(typeof inspectDemandReadiness, "function");
+    assert.equal(typeof runDemandBrainstormRuntime, "function");
+    assert.equal(typeof runDemandDiscussRuntime, "function");
+    assert.equal(typeof runDemandPrdRuntime, "function");
+    assert.equal(DEMAND_SESSION_SCHEMA_VERSION, "1.0");
     assert.equal(typeof buildControlledParallelExecutionPlan, "function");
     assert.equal(typeof buildTaskDependencyGraph, "function");
     assert.equal(CONTROLLED_PARALLEL_SCHEMA_VERSION, "1.0");

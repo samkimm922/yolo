@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import {
   buildAgentBridgeBlock,
   buildClaudeSlashCommand,
+  buildCodexSlashCommandSkill,
   buildCodexSourceCommandSkill,
   buildYoloNativeSkill,
 } from "../../tools/install-agent-bridge.js";
@@ -55,7 +56,7 @@ export function buildNonTechnicalUxDoctorPlan(options = {}) {
     required_evidence: [
       "public docs expose one memorable Codex/Claude Code entry sentence",
       "native YOLO skill exposes the same one-sentence usage",
-      "Claude slash command and Codex source-command artifacts tell agents not to ask users to memorize terminal commands",
+      "Claude slash command, Codex direct slash skill, and Codex source-command artifacts tell agents not to ask users to memorize terminal commands",
       "doctor report returns plain-language next actions",
     ],
   };
@@ -67,6 +68,7 @@ export function runNonTechnicalUxDoctor(options = {}) {
   const docs = Object.fromEntries(plan.docs.map((doc) => [doc, fileContains(yoloRoot, doc, plan.one_sentence_entry)]));
   const nativeSkill = buildYoloNativeSkill({ agent: "codex", yoloRoot });
   const claudeCommand = buildClaudeSlashCommand("yolo", { yoloRoot });
+  const codexSlashCommand = buildCodexSlashCommandSkill("yolo", { yoloRoot });
   const codexCommand = buildCodexSourceCommandSkill("yolo", { yoloRoot });
   const bridgeBlock = buildAgentBridgeBlock({ agent: "codex", yoloRoot });
 
@@ -94,6 +96,7 @@ export function runNonTechnicalUxDoctor(options = {}) {
     check(
       "NONTECH_UX_COMMANDS_CHAT_FIRST",
       claudeCommand.includes("do not ask the user to memorize terminal commands")
+        && codexSlashCommand.includes("do not ask the user to memorize terminal commands")
         && codexCommand.includes("do not ask the user to memorize terminal commands")
         && bridgeBlock.includes("Treat this chat as the user interface"),
       "Claude/Codex command artifacts must keep chat as the UI",
@@ -117,6 +120,7 @@ export function runNonTechnicalUxDoctor(options = {}) {
     artifacts_sample: {
       native_skill_contains_entry: nativeSkill.includes(plan.one_sentence_entry),
       claude_command_chat_first: claudeCommand.includes("do not ask the user to memorize terminal commands"),
+      codex_slash_command_chat_first: codexSlashCommand.includes("do not ask the user to memorize terminal commands"),
       codex_source_command_chat_first: codexCommand.includes("do not ask the user to memorize terminal commands"),
     },
     guarantees: {

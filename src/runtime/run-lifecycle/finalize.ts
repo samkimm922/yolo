@@ -184,6 +184,7 @@ export function buildRunReturnResult({
     skipped: taskResults.skipped,
     blocked: taskResults.blocked || [],
     remediation: taskResults.remediation || [],
+    immediate_remediation_queue: taskResults.immediateRemediationQueue || [],
     report_file: normalizeRepoPath(runReportResult.json_path),
     report_markdown: normalizeRepoPath(runReportResult.markdown_path),
     ...(runReportResult.final_answer_json_path ? { final_answer_file: normalizeRepoPath(runReportResult.final_answer_json_path) } : {}),

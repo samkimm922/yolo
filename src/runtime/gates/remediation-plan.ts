@@ -20,9 +20,16 @@ const HUMAN_CODES = new Set([
   "PRD_PREFLIGHT_BLOCKED",
   "PRD_CONTRACT_BLOCKED",
   "PRD_SPEC_GOVERNANCE_BLOCKED",
+  "BROWSER_RENDER_UNAVAILABLE_RELEASE",
+  "PUBLIC_DOGFOOD_MISSING",
 ]);
 
 const AUTO_REMEDIATE_CODES = new Set([
+  "FIXTURE_EVIDENCE_MISSING",
+  "FIXTURE_EXPECTED_ARTIFACT_MISSING",
+  "HARNESS_EVIDENCE_SCHEMA_INVALID",
+  "ADAPTER_EVIDENCE_MISSING",
+  "UI_SCREENSHOT_MISSING",
   "PM_TASK_ACCEPTANCE_MISSING",
   "UI_STATE_MATRIX_MISSING",
   "UI_EVIDENCE_PLAN_MISSING",
@@ -84,7 +91,7 @@ function issueText(issue = {}) {
 
 function isUnsafeIssue(issue = {}) {
   const text = issueText(issue);
-  return /credential|secret|api[_ -]?key|password|token|publish|release|permission|sandbox|delete|destructive|unsafe|dangerous|innerhtml/.test(text);
+  return /credential|secret|api[_ -]?key|password|token|publish|release|permission|sandbox|delete|destructive|unsafe|dangerous|innerhtml|billable|npm publish|curl|wget/.test(text);
 }
 
 function isHumanRequiredIssue(issue = {}) {
@@ -236,10 +243,10 @@ function nextActionsFor(summary) {
     return ["Ask for the missing product, scope, adapter, or contract decision before executing code."];
   }
   if (summary.action === GATE_REMEDIATION_ACTIONS.REROUTE_REVIEW_FIX) {
-    return ["Create a scoped review/fix task from this gate failure, then run the same strict gate again."];
+    return ["Create an immediate scoped review/fix task from this gate failure before starting unrelated feature work, then run the same strict gate again."];
   }
   if (summary.action === GATE_REMEDIATION_ACTIONS.AUTO_REMEDIATE) {
-    return ["Generate a bounded remediation task, apply it, then rerun the strict gate."];
+    return ["Generate a bounded remediation task now, apply it before new feature work, then rerun the strict gate."];
   }
   return ["Retry with the gate failure context injected, then rerun the strict gate."];
 }

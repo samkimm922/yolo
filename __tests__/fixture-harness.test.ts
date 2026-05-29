@@ -40,6 +40,9 @@ describe("fixture execution harness", () => {
       assert.equal(result.evidence.artifact_type, "fixture.run");
       assert.equal(result.evidence.source, "fixture-harness");
       assert.equal(result.evidence.fixture.fixture_id, "node-basic");
+      assert.equal(result.evidence.schema_check.ok, true);
+      assert.deepEqual(result.evidence.missing_expected_artifacts, []);
+      assert.ok(result.evidence.expected_artifacts.includes("state/evidence/FIX-NODE-001/run.json"));
     } finally {
       rmSync(result.workspace, { recursive: true, force: true });
     }
@@ -55,6 +58,26 @@ describe("fixture execution harness", () => {
       assert.equal(result.commands[0].command, "node src/index.ts");
       assert.match(result.commands[0].stdout_tail, /ok/);
       assert.equal(result.evidence.fixture.fixture_type, "no-tests");
+    } finally {
+      rmSync(result.workspace, { recursive: true, force: true });
+    }
+  });
+
+  test("runFixtureHarness fails when additional expected evidence is missing", () => {
+    const fixture = {
+      ...getFixtureDefinition("node-basic", { yoloRoot: YOLO_DIR }),
+      evidence: {
+        expected: [
+          "state/evidence/FIX-NODE-001/run.json",
+          "state/evidence/FIX-NODE-001/extra-required.json",
+        ],
+      },
+    };
+    const result = runFixtureHarness(fixture, { keepWorkspace: true });
+    try {
+      assert.equal(result.status, "fail");
+      assert.deepEqual(result.evidence.missing_expected_artifacts, ["state/evidence/FIX-NODE-001/extra-required.json"]);
+      assert.equal(result.evidence.schema_check.ok, true);
     } finally {
       rmSync(result.workspace, { recursive: true, force: true });
     }

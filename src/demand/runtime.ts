@@ -1,0 +1,497 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { buildDemandSession, demandMarkdownArtifacts } from "./artifacts.js";
+import { inspectDemandReadiness } from "./gate.js";
+import { inspectAtomicTask } from "../runtime/execution/atomic-task-doctor.js";
+
+function clean(value) {
+  return String(value ?? "").trim();
+}
+
+function asArray(value) {
+  if (value == null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function stableJson(value) {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function resolveRoot(value, fallback = process.cwd()) {
+  return resolve(clean(value) || fallback);
+}
+
+function resolvePath(root, path) {
+  if (!path) return path;
+  return isAbsolute(path) ? path : resolve(root, path);
+}
+
+function writeText(path, value) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${String(value).trimEnd()}\n`, "utf8");
+  return path;
+}
+
+function writeJson(path, value) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, stableJson(value), "utf8");
+  return path;
+}
+
+function readJson(path) {
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function stateRootFor(input = {}, options = {}) {
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
+  return resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
+}
+
+export function demandStateDir(stateRoot, id = "") {
+  return id ? join(resolveRoot(stateRoot), "demand", id) : join(resolveRoot(stateRoot), "demand");
+}
+
+export function defaultDemandSessionPath(stateRoot, id) {
+  return join(demandStateDir(stateRoot, id), "session.json");
+}
+
+function outputDirFor(session, input = {}, options = {}) {
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
+  const stateRoot = stateRootFor(input, options);
+  const explicit = input.outputDir || input.output_dir || options.outputDir || options.output_dir;
+  return explicit ? resolvePath(projectRoot, explicit) : demandStateDir(stateRoot, session.id);
+}
+
+export function writeDemandArtifacts(session = {}, outputDir) {
+  const artifacts = [];
+  const markdown = demandMarkdownArtifacts(session);
+  mkdirSync(outputDir, { recursive: true });
+  artifacts.push(writeJson(join(outputDir, "session.json"), session));
+  for (const [name, content] of Object.entries(markdown)) {
+    artifacts.push(writeText(join(outputDir, name), content));
+  }
+  artifacts.push(writeJson(join(outputDir, "APPROVAL.json"), session.approval || {}));
+  artifacts.push(writeJson(join(outputDir, "READINESS.json"), session.readiness || inspectDemandReadiness(session)));
+  return artifacts;
+}
+
+export function readDemandSession(pathOrDir) {
+  const resolved = resolve(pathOrDir);
+  const sessionPath = existsSync(resolved) && !resolved.endsWith(".json")
+    ? join(resolved, "session.json")
+    : resolved;
+  if (!existsSync(sessionPath)) {
+    return { ok: false, path: sessionPath, error: `Demand session not found: ${sessionPath}` };
+  }
+  try {
+    return { ok: true, path: sessionPath, dir: dirname(sessionPath), session: readJson(sessionPath) };
+  } catch (error) {
+    return { ok: false, path: sessionPath, error: `Demand session JSON parse failed: ${error.message}` };
+  }
+}
+
+function runtimeResult(label, session, outputDir, artifacts, options = {}) {
+  const readiness = session.readiness || inspectDemandReadiness(session, { phase: session.phase });
+  const blocked = readiness.status === "blocked";
+  return {
+    status: blocked ? "blocked" : readiness.status === "warning" ? "warning" : "success",
+    code: blocked ? "DEMAND_BLOCKED" : "DEMAND_READY",
+    summary: blocked
+      ? `${label} demand artifacts need more information before PRD.`
+      : `${label} demand artifacts created.`,
+    demand_id: session.id,
+    demand_dir: outputDir,
+    session,
+    readiness,
+    graph: session.graph,
+    blockers: readiness.blockers || [],
+    warnings: readiness.warnings || [],
+    artifacts,
+    outputs: artifacts.map((path) => ({ path, type: path.endsWith(".json") ? "demand_json" : "demand_markdown" })),
+    next_actions: readiness.next_actions,
+    guarantees: {
+      writes_business_code: false,
+      prd_execution: false,
+      provider_execution: false,
+      source: options.source || session.source,
+    },
+  };
+}
+
+export function runDemandBrainstormRuntime(input = {}, options = {}) {
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
+  const stateRoot = stateRootFor({ ...input, projectRoot }, options);
+  const session = buildDemandSession({ ...input, projectRoot, stateRoot, phase: "brainstorm", source: "yolo-brainstorm" }, {
+    ...options,
+    phase: "brainstorm",
+    source: "yolo-brainstorm",
+  });
+  const outputDir = outputDirFor(session, { ...input, projectRoot, stateRoot }, options);
+  const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
+  const artifacts = shouldWrite ? writeDemandArtifacts(session, outputDir) : [];
+  return runtimeResult("Brainstorm", session, outputDir, artifacts, { source: "yolo-brainstorm" });
+}
+
+export function runDemandDiscussRuntime(input = {}, options = {}) {
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
+  const stateRoot = stateRootFor({ ...input, projectRoot }, options);
+  const session = buildDemandSession({ ...input, projectRoot, stateRoot, phase: "discuss", source: "yolo-discuss" }, {
+    ...options,
+    phase: "discuss",
+    source: "yolo-discuss",
+  });
+  const outputDir = outputDirFor(session, { ...input, projectRoot, stateRoot }, options);
+  const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
+  const artifacts = shouldWrite ? writeDemandArtifacts(session, outputDir) : [];
+  return runtimeResult("Discuss", session, outputDir, artifacts, { source: "yolo-discuss" });
+}
+
+function targetFiles(session = {}) {
+  const files = session.project?.target_files || session.target_files || [];
+  return Array.isArray(files) ? files.filter(Boolean) : [files].filter(Boolean);
+}
+
+function chunk(values = [], size = 2) {
+  const items = values.filter(Boolean);
+  const chunks = [];
+  const chunkSize = Math.max(1, Number(size) || 1);
+  for (let i = 0; i < items.length; i += chunkSize) chunks.push(items.slice(i, i + chunkSize));
+  return chunks.length ? chunks : [[]];
+}
+
+function requirementById(session = {}) {
+  const map = new Map();
+  for (const requirement of asArray(session.requirements?.active || session.requirements)) {
+    if (requirement?.id) map.set(requirement.id, requirement);
+  }
+  return map;
+}
+
+function scenarioMatrix(session = {}) {
+  return asArray(session.scenario_matrix?.scenarios);
+}
+
+function fallbackScenarios(session = {}) {
+  const files = targetFiles(session);
+  return asArray(session.requirements?.active || session.requirements).map((requirement, index) => {
+    const scenarios = asArray(requirement.acceptance_scenarios || requirement.scenarios);
+    const firstScenario = scenarios[0] || {};
+    return {
+      id: `SCN-${String(index + 1).padStart(3, "0")}`,
+      requirement_id: requirement.id,
+      actor: asArray(session.project?.target_users || session.vision?.target_users)[0] || "target user",
+      touchpoint: "primary user workflow",
+      trigger: firstScenario.when || "the user reaches this scenario",
+      current_behavior: asArray(session.context?.current_state || session.vision?.status_quo)[0] || "Captured in demand context.",
+      desired_behavior: requirement.text,
+      proof: firstScenario.then || firstScenario.text || requirement.text,
+      out_of_scope: session.requirements?.out_of_scope || [],
+      constraints: session.requirements?.constraints || [],
+      exceptions: [],
+      surfaces: [{
+        id: `SCN-${String(index + 1).padStart(3, "0")}-SFC-001`,
+        kind: "code",
+        label: "代码实现",
+        target_files: files,
+        readonly_files: [],
+        session_budget: {
+          expected: "single_session",
+          max_files: Math.max(1, Math.min(2, files.length || 1)),
+          max_lines_per_file: 120,
+        },
+      }],
+      question_trace: [],
+    };
+  });
+}
+
+function taskTypeForSurface(surface = {}) {
+  return surface.kind === "test" || surface.kind === "doc" ? "cleanup" : "feature";
+}
+
+function surfaceTitle(surface = {}) {
+  return clean(surface.label) || clean(surface.kind) || "Implementation surface";
+}
+
+function modifiedFileCondition(taskId, index, file) {
+  return {
+    id: `POST-${taskId}-TARGET-${index + 1}`,
+    type: "target_file_modified",
+    severity: "FAIL",
+    params: { file },
+    message: `Target file must be modified: ${file}`,
+  };
+}
+
+function acceptanceCondition(taskId, index, scenario) {
+  return {
+    id: `POST-${taskId}-SCENARIO-${index + 1}`,
+    type: "acceptance_criteria",
+    severity: "WARN",
+    params: { text: scenario.then || scenario.text || scenario },
+    message: scenario.then || scenario.text || scenario,
+  };
+}
+
+function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
+  const requirements = requirementById(session);
+  const scenarios = scenarioMatrix(session).length ? scenarioMatrix(session) : fallbackScenarios(session);
+  const allFiles = targetFiles(session);
+  const tasks = [];
+  for (const [scenarioIndex, scenario] of scenarios.entries()) {
+    const requirement = requirements.get(scenario.requirement_id) || {};
+    const surfaces = asArray(scenario.surfaces).length
+      ? asArray(scenario.surfaces)
+      : [{ id: `${scenario.id}-SFC-001`, kind: "code", label: "代码实现", target_files: allFiles }];
+    for (const [surfaceIndex, surface] of surfaces.entries()) {
+      const maxFiles = Math.max(1, Number(surface.session_budget?.max_files || input.max_files_per_task || input.maxFilesPerTask || 2));
+      const surfaceFiles = asArray(surface.target_files).length ? asArray(surface.target_files) : allFiles;
+      const fileChunks = chunk(surfaceFiles, maxFiles);
+      for (const [chunkIndex, files] of fileChunks.entries()) {
+        const taskId = `DEMAND-${scenario.requirement_id || "REQ"}-${String(scenarioIndex + 1).padStart(3, "0")}${String(surfaceIndex + 1).padStart(2, "0")}${String(chunkIndex + 1).padStart(2, "0")}`;
+        const proof = clean(surface.proof || scenario.proof || requirement.text || scenario.desired_behavior);
+        const description = clean(scenario.desired_behavior || requirement.text || proof);
+        tasks.push({
+          id: taskId,
+          title: `${surfaceTitle(surface)}: ${description}`.slice(0, 100),
+          description,
+          priority: input.priority || "P1",
+          type: taskTypeForSurface(surface),
+          status: "pending",
+          task_kind: "demand_atomic_task",
+          requirement_ids: [scenario.requirement_id || requirement.id].filter(Boolean),
+          design_ids: [`DES-${scenario.requirement_id || requirement.id || "DEMAND"}`],
+          source_finding_ids: [scenario.requirement_id || requirement.id].filter(Boolean),
+          depends_on: [],
+          handoff: {
+            type: "agent_brief",
+            category: "enhancement",
+            plain_language_goal: description,
+            user_story: `As ${scenario.actor || "the target user"}, I want ${description}, so that ${proof}.`,
+            current_behavior: clean(scenario.current_behavior) || (session.context?.current_state || session.vision?.status_quo || []).join("; ") || "Captured in demand CONTEXT.md.",
+            desired_behavior: description,
+            touchpoint: scenario.touchpoint || "primary user workflow",
+            trigger: scenario.trigger || "the user reaches this scenario",
+            surface: {
+              id: surface.id,
+              kind: surface.kind || "code",
+              label: surfaceTitle(surface),
+            },
+            key_interfaces: files,
+            read_first: [...new Set([...files, ...asArray(surface.readonly_files)])],
+            acceptance_criteria: [proof].filter(Boolean),
+            proof,
+            out_of_scope: scenario.out_of_scope || session.requirements?.out_of_scope || [],
+            constraints: scenario.constraints || session.requirements?.constraints || [],
+            exceptions: scenario.exceptions || [],
+            question_trace: scenario.question_trace || [],
+          },
+          scope: {
+            targets: files.map((file) => ({ file, description })),
+            readonly_files: asArray(surface.readonly_files),
+            allow_new_files: surface.allow_new_files === true || input.allow_new_files !== false,
+            allow_delete_files: false,
+            max_files: Math.max(1, files.length || maxFiles),
+            max_lines_per_file: Number(surface.session_budget?.max_lines_per_file || input.max_lines_per_file || input.maxLinesPerFile || 120),
+          },
+          pre_conditions: [],
+          post_conditions: [
+            ...files.map((file, fileIndex) => modifiedFileCondition(taskId, fileIndex, file)),
+            acceptanceCondition(taskId, 0, { then: proof || description }),
+          ],
+          trace: {
+            demand_id: session.id,
+            requirement_id: scenario.requirement_id || requirement.id,
+            scenario_id: scenario.id,
+            surface_id: surface.id,
+            evidence: requirement.trace?.evidence || [],
+            decisions: requirement.trace?.decisions || [],
+            question_trace: scenario.question_trace || [],
+          },
+          atomicity: {
+            expected_session: surface.session_budget?.expected || "single_session",
+            source: "scenario_surface",
+          },
+          must_fix_before_ship: true,
+        });
+      }
+    }
+  }
+  return tasks;
+}
+
+function inspectAtomicity(tasks = [], input = {}, options = {}) {
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
+  const results = [];
+  const blockers = [];
+  const warnings = [];
+  for (const task of tasks) {
+    try {
+      const result = inspectAtomicTask(task, {
+        projectRoot,
+        root: options.yoloRoot || options.yolo_root || projectRoot,
+        writeEvidence: false,
+      });
+      results.push(result);
+      if (result.status === "fail" || result.mode === "must_split") {
+        blockers.push({
+          code: "ATOMIC_TASK_TOO_COARSE",
+          task_id: task.id,
+          message: "Atomic task doctor requires this task to be split before PRD execution.",
+          result,
+        });
+      } else if (result.mode === "investigate_then_patch") {
+        warnings.push({
+          code: "ATOMIC_TASK_NEEDS_INVESTIGATION",
+          task_id: task.id,
+          message: "Task is session-sized but should force read/report evidence before patching.",
+          result,
+        });
+      }
+    } catch (error) {
+      warnings.push({
+        code: "ATOMIC_TASK_DOCTOR_UNAVAILABLE",
+        task_id: task.id,
+        message: error.message,
+      });
+    }
+  }
+  return {
+    status: blockers.length ? "blocked" : warnings.length ? "warning" : "pass",
+    results,
+    blockers,
+    warnings,
+  };
+}
+
+function buildDemandPrd(session = {}, input = {}, options = {}) {
+  const readiness = inspectDemandReadiness(session, { phase: "prd" });
+  if (!readiness.executable_prd_ready) {
+    return {
+      status: "blocked",
+      code: "DEMAND_NOT_EXECUTABLE",
+      summary: "Demand artifacts are not approved or complete enough for executable PRD.",
+      readiness,
+      blockers: readiness.blockers,
+      warnings: readiness.warnings,
+      prd: null,
+      next_actions: readiness.next_actions,
+    };
+  }
+
+  const files = targetFiles(session);
+  const requirements = session.requirements?.active || [];
+  const now = clean(options.now || input.now) || new Date().toISOString();
+  const prdId = clean(input.prd_id || input.prdId) || `PRD-${now.slice(0, 10).replace(/-/g, "")}-${session.id.replace(/^DEMAND-/, "")}`;
+  const tasks = buildAtomicDemandTasks(session, { ...input, projectRoot: input.projectRoot || input.project_root }, options);
+  const atomicity = inspectAtomicity(tasks, input, options);
+  if (atomicity.blockers.length > 0) {
+    return {
+      status: "blocked",
+      code: "DEMAND_ATOMICITY_BLOCKED",
+      summary: "Demand PRD contains tasks that are too coarse for one-session execution.",
+      readiness,
+      atomicity,
+      blockers: atomicity.blockers,
+      warnings: [...readiness.warnings, ...atomicity.warnings],
+      prd: null,
+      next_actions: atomicity.blockers.map((blocker) => `${blocker.task_id}: split scenario surface before PRD generation.`),
+    };
+  }
+
+  return {
+    status: "success",
+    code: "DEMAND_PRD_READY",
+    summary: "Executable PRD compiled from approved demand artifacts.",
+    readiness,
+    atomicity,
+    blockers: [],
+    warnings: [...readiness.warnings, ...atomicity.warnings],
+    prd: {
+      $schema: "https://yolo.dev/schemas/prd-v2.schema.json",
+      version: "2.0",
+      id: prdId,
+      title: clean(input.title || session.project?.title || session.vision?.statement).slice(0, 120),
+      description: `Compiled from approved demand session ${session.id}.`,
+      project: {
+        name: clean(input.project_name || input.projectName || session.project?.title || "project"),
+        language: clean(input.language || "other"),
+        framework: clean(input.framework || "generic"),
+      },
+      generated_by: "yolo-demand",
+      generated_at: now,
+      source: "approved_demand",
+      demand_contract_required: true,
+      demand: {
+        id: session.id,
+        approval: session.approval,
+        readiness_level: readiness.readiness_level,
+        quality_score: readiness.quality_score,
+        scenario_matrix: session.scenario_matrix?.schema || null,
+      },
+      execution_readiness: {
+        level: "L3",
+        afk_ready: true,
+        source: "approved_demand_report",
+        atomic_tasks: true,
+        expected_task_session: "single_session",
+      },
+      requirements: requirements.map((requirement) => ({
+        id: requirement.id,
+        text: requirement.text,
+        demand_trace: requirement.trace || {},
+      })),
+      designs: requirements.map((requirement) => ({
+        id: `DES-${requirement.id}`,
+        text: `Implement ${requirement.id} according to approved demand CONTEXT.md and ROADMAP.md.`,
+      })),
+      tasks,
+      conflict_policy: {
+        on_overlap: "sequential",
+        overlap_detection: "file_only",
+      },
+    },
+    next_actions: ["Run yolo check on the compiled PRD before yolo run."],
+  };
+}
+
+export function runDemandPrdRuntime(input = {}, options = {}) {
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
+  const stateRoot = stateRootFor({ ...input, projectRoot }, options);
+  const demandPath = resolvePath(projectRoot, input.demandPath || input.demand_path || input.demand || defaultDemandSessionPath(stateRoot, input.id || ""));
+  const read = readDemandSession(demandPath);
+  if (!read.ok) {
+    return {
+      status: "blocked",
+      code: "DEMAND_SESSION_MISSING",
+      summary: read.error,
+      blockers: [{ code: "DEMAND_SESSION_MISSING", message: read.error }],
+      warnings: [],
+      artifacts: [],
+      outputs: [],
+      next_actions: ["Run yolo brainstorm/discuss first, or pass --demand <session.json|dir>."],
+    };
+  }
+
+  const compiled = buildDemandPrd(read.session, input, options);
+  const outputFile = resolvePath(projectRoot, input.outputFile || input.output_file || input.prdPath || input.prd_path || join(read.dir, "prd.json"));
+  const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
+  const artifacts = [];
+  if (shouldWrite && compiled.prd) artifacts.push(writeJson(outputFile, compiled.prd));
+
+  return {
+    status: compiled.status,
+    code: compiled.code,
+    summary: compiled.summary,
+    demand_path: read.path,
+    demand_id: read.session.id,
+    compiled,
+    prd: compiled.prd,
+    readiness: compiled.readiness,
+    blockers: compiled.blockers || [],
+    warnings: compiled.warnings || [],
+    artifacts,
+    outputs: artifacts.map((path) => ({ path, type: "prd" })),
+    next_actions: compiled.next_actions || [],
+  };
+}

@@ -210,6 +210,7 @@ describe("run lifecycle finalization helpers", () => {
       skipped: ["C"],
       blocked: ["D"],
       remediation: [],
+      immediate_remediation_queue: [],
       report_file: "state/report.json",
       report_markdown: "state/report.md",
       final_answer_file: "state/final-answer.json",

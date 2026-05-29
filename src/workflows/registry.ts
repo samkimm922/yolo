@@ -2,6 +2,23 @@ export const WORKFLOW_SKILL_DESCRIPTOR_SCHEMA_VERSION = "1.0";
 export const WORKFLOW_SKILL_DESCRIPTOR_SCHEMA = "yolo.workflow.skill_descriptor.v1";
 
 const WORKFLOWS = {
+  brainstorm: {
+    id: "brainstorm",
+    label: "Demand brainstorm workflow",
+    purpose: "Explore a new product idea before discovery by challenging demand reality, target user, status quo, assumptions, and alternatives.",
+    preset: "planner",
+    triggers: ["idea.received", "new_project.started", "cli.yolo-brainstorm"],
+    inputs: ["idea", "targetUsers?", "statusQuo?", "evidence?", "assumptions?", "alternatives?"],
+    outputs: ["VISION.md", "REFLECTION.md", "INVESTIGATION.md", "REQUIREMENTS.md", "CONTEXT.md", "ROADMAP.md", "READINESS.json"],
+    sdk_namespaces: ["demand", "discovery", "evidence"],
+    phases: ["vision", "reflection", "investigation", "initial_requirements", "readiness_verdict"],
+    verification: ["target_user.present", "status_quo.present", "evidence_or_assumption.present", "no_code_change", "demand.artifact_graph"],
+    entrypoints: {
+      sdk: "sdk.workflows.createWorkflowPlan({ workflow: 'brainstorm' })",
+      cli: "yolo brainstorm",
+      skill: "yolo.brainstorm",
+    },
+  },
   discover: {
     id: "discover",
     label: "Discovery workflow",
@@ -17,6 +34,23 @@ const WORKFLOWS = {
       sdk: "sdk.workflows.createWorkflowPlan({ workflow: 'discover' })",
       cli: "yolo discover",
       skill: "yolo.discover",
+    },
+  },
+  discuss: {
+    id: "discuss",
+    label: "Demand discussion workflow",
+    purpose: "Close the front-end demand loop through vision, reflection, investigation, questioning rounds, depth verification, and requirements confirmation.",
+    preset: "planner",
+    triggers: ["demand.needs_discussion", "requirement.gray_area", "cli.yolo-discuss"],
+    inputs: ["idea", "evidence?", "decisions?", "targetFiles?", "approval?"],
+    outputs: ["VISION.md", "REFLECTION.md", "INVESTIGATION.md", "DISCUSSION-LOG.md", "REQUIREMENTS.md", "CONTEXT.md", "ROADMAP.md", "APPROVAL.json", "READINESS.json"],
+    sdk_namespaces: ["demand", "discovery", "spec", "evidence"],
+    phases: ["vision", "reflection", "investigation", "questioning_rounds", "depth_verification", "requirements_confirmation", "approval_gate"],
+    verification: ["vision.present", "questioning_rounds.complete", "depth_verification.pass", "requirements.confirmed", "human.approval", "no_code_change"],
+    entrypoints: {
+      sdk: "sdk.workflows.createWorkflowPlan({ workflow: 'discuss' })",
+      cli: "yolo discuss",
+      skill: "yolo.discuss",
     },
   },
   plan: {

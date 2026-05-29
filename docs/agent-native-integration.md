@@ -7,7 +7,7 @@
 让 Codex 或 Claude Code 先替你安装 YOLO 集成：
 
 ```text
-请把 YOLO 安装到当前项目和我的 Agent 工具里。我要能直接用 /yolo、/yolo-discover、/yolo-plan、/yolo-check、/yolo-accept、/yolo-eval、/yolo-run、/yolo-doctor。执行前先告诉我会写哪些文件。
+请把 YOLO 安装到当前项目和我的 Agent 工具里。我要能直接用 /yolo、/yolo-brainstorm、/yolo-discuss、/yolo-discover、/yolo-plan、/yolo-check、/yolo-accept、/yolo-eval、/yolo-run、/yolo-doctor。执行前先告诉我会写哪些文件。
 YOLO 路径是：/Users/sippingroom/Developer/SamKimTest/scripts/yolo
 ```
 
@@ -31,6 +31,7 @@ YOLO 路径是：/Users/sippingroom/Developer/SamKimTest/scripts/yolo
 |---|---|---|
 | Codex | `AGENTS.md` | 告诉 Codex 如何把聊天请求路由到 YOLO |
 | Codex | `.codex/skills/yolo/SKILL.md` | YOLO 总入口 skill |
+| Codex | `.codex/skills/yolo-*/SKILL.md` | Codex 直接 skill slash command，例如 `/yolo-brainstorm`、`/yolo-discuss` |
 | Codex | `.codex/skills/yolo.*` | discover / plan / PRD / check / PI / review / fix / accept / eval / ship / learn / doctor 工作流 skills |
 | Claude Code | `CLAUDE.md` | 告诉 Claude Code 如何把聊天请求路由到 YOLO |
 | Claude Code | `.claude/skills/yolo/SKILL.md` | YOLO 总入口 skill |
@@ -42,6 +43,7 @@ YOLO 路径是：/Users/sippingroom/Developer/SamKimTest/scripts/yolo
 | 宿主 | 文件 | 作用 |
 |---|---|---|
 | Codex | `~/.agents/skills/yolo/SKILL.md` | Codex 原生 skill discovery 可发现的 YOLO skill |
+| Codex | `~/.agents/skills/yolo-*/SKILL.md` | 和 GSD/GStack 类似的直接 `/yolo-*` skill slash command |
 | Codex | `~/.agents/skills/yolo/workflows/*` | YOLO 工作流 skill descriptors |
 | Codex | `~/.agents/skills/source-command-yolo*/SKILL.md` | 对齐本机 Codex `/plan` 这类 source-command 命令约定 |
 | Claude Code | `~/.claude/skills/yolo/SKILL.md` | Claude Code 用户级 YOLO skill |
@@ -70,11 +72,11 @@ YOLO 路径是：/Users/sippingroom/Developer/SamKimTest/scripts/yolo
 
 ## Codex 和 Claude Code 的差异
 
-Claude Code 本地已有明确的 `.claude/commands/*.md` 约定，所以 YOLO 会生成真实的 `/yolo-discover`、`/yolo-plan`、`/yolo-prd`、`/yolo-check`、`/yolo-accept`、`/yolo-eval`、`/yolo-run`、`/yolo-doctor` 等 slash command 文件。
+Claude Code 本地已有明确的 `.claude/commands/*.md` 约定，所以 YOLO 会生成真实的 `/yolo-brainstorm`、`/yolo-discuss`、`/yolo-discover`、`/yolo-plan`、`/yolo-prd`、`/yolo-check`、`/yolo-accept`、`/yolo-eval`、`/yolo-run`、`/yolo-doctor` 等 slash command 文件。
 
-Codex 当前更稳定的集成方式是原生 skill discovery，也就是 `~/.agents/skills/yolo/SKILL.md`、`~/.agents/skills/source-command-yolo*/SKILL.md` 和项目内 `.codex/skills/yolo/SKILL.md`。安装后需要新开 Codex 会话或重启 Codex，让它重新发现 skills。
+Codex 的入口和 GSD/GStack 一样走 skill discovery：安装器会同时生成 `~/.agents/skills/yolo-*/SKILL.md` 这种直接 slash skill，以及 `~/.agents/skills/source-command-yolo*/SKILL.md` 这种 source-command 兼容入口。项目内也会生成 `.codex/skills/yolo-*/SKILL.md`。安装后需要新开 Codex 会话或重启 Codex，让它重新发现 skills。
 
-如果你的 Codex 版本支持 source-command 路由，它可以直接识别 `/yolo`、`/yolo-plan` 或 `/yolo plan`；如果当前会话还没有刷新，就这样说：
+刷新后 Codex 应该能直接识别 `/yolo`、`/yolo-brainstorm`、`/yolo-discuss`、`/yolo-plan`；如果当前会话还没有刷新，就这样说：
 
 ```text
 使用 source-command-yolo：我要给库存系统增加低库存预警，先只生成计划，不要改代码。

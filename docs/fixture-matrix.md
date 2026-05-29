@@ -1,6 +1,6 @@
 # YOLO Fixture Matrix
 
-日期：2026-05-25
+日期：2026-05-27
 
 Fixture registry and harness prove YOLO is not tied to one SamKimTest application shape. Every fixture has a requirement, spec trace, PRD task, smoke command, and evidence contract.
 
@@ -18,9 +18,9 @@ Fixture registry and harness prove YOLO is not tied to one SamKimTest applicatio
 
 ## Harness Contract
 
-`sdk.fixtures.runFixtureHarness(id)` copies the fixture to an isolated temporary workspace, runs its local smoke command, writes a `fixture.run` evidence artifact, and returns command output tails.
+`sdk.fixtures.runFixtureHarness(id)` copies the fixture to an isolated temporary workspace, runs its local smoke command, writes a `fixture.run` evidence artifact, verifies every declared expected evidence artifact exists, validates the primary evidence schema, and returns command output tails.
 
-The harness must not need network access. Fixtures should use built-in runtimes or local scripts unless a future fixture explicitly tests dependency installation.
+The harness must not need network access. Fixtures should use built-in runtimes or local scripts unless a future fixture explicitly opts into network or dependency-install behavior. Unsafe commands such as publish/token access, shell-downloaded installers, remote copy, or unapproved dependency installation are blocked by fixture inspection before they become accepted harness contracts.
 
 ## Remaining Matrix Gaps
 

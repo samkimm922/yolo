@@ -162,6 +162,39 @@ export function inspectPrdContract(prd) {
     });
   }
 
+  if (prd?.demand_contract_required === true || prd?.source === "approved_demand") {
+    if (!prd?.demand?.id) {
+      failures.push({
+        task_id: null,
+        condition_id: null,
+        condition_type: null,
+        severity: "FAIL",
+        code: "DEMAND_SOURCE_MISSING",
+        detail: "approved-demand PRD must reference demand.id",
+      });
+    }
+    if (prd?.demand?.approval?.approved !== true) {
+      failures.push({
+        task_id: null,
+        condition_id: null,
+        condition_type: null,
+        severity: "FAIL",
+        code: "DEMAND_APPROVAL_MISSING",
+        detail: "approved-demand PRD must include approved demand approval",
+      });
+    }
+    if (prd?.execution_readiness?.level !== "L3" || prd?.execution_readiness?.afk_ready !== true) {
+      failures.push({
+        task_id: null,
+        condition_id: null,
+        condition_type: null,
+        severity: "FAIL",
+        code: "DEMAND_EXECUTION_READINESS_MISSING",
+        detail: "approved-demand PRD must declare L3 AFK-ready execution readiness",
+      });
+    }
+  }
+
   if (!tasks.length) {
     failures.push({
       task_id: null,

@@ -1,0 +1,724 @@
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+import { buildDemandArtifactGraph } from "./graph.js";
+import { inspectDemandReadiness } from "./gate.js";
+
+export const DEMAND_SESSION_SCHEMA_VERSION = "1.0";
+export const DEMAND_SESSION_SCHEMA = "yolo.demand.session.v1";
+
+function asArray(value) {
+  if (value == null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function clean(value) {
+  return String(value ?? "").trim();
+}
+
+function arrayOfStrings(value) {
+  return asArray(value)
+    .flatMap((item) => String(item ?? "").split(/\r?\n/))
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function uniqueStrings(value) {
+  return [...new Set(arrayOfStrings(value))];
+}
+
+function nowIso(options = {}) {
+  return clean(options.now) || new Date().toISOString();
+}
+
+function slug(value, fallback = "DEMAND") {
+  const text = clean(value)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return text || fallback;
+}
+
+function idDate(now) {
+  return clean(now).slice(0, 10).replace(/-/g, "") || "00000000";
+}
+
+function demandId(input = {}, now) {
+  return clean(input.id || input.demand_id || input.demandId)
+    || `DEMAND-${idDate(now)}-${slug(input.title || input.idea || input.objective || input.requirement || "PROJECT")}`;
+}
+
+const LABELS = {
+  problem: ["Problem", "问题"],
+  target_users: ["Target User", "Target Users", "User", "Users", "用户", "对象"],
+  success_criteria: ["Success", "Success Criteria", "Acceptance", "验收", "成功标准"],
+  constraints: ["Constraint", "Constraints", "限制", "约束"],
+  non_goals: ["Non-goal", "Non-goals", "Out of scope", "不做", "非目标"],
+  status_quo: ["Status quo", "Current", "Workaround", "现状", "替代方案"],
+  evidence: ["Evidence", "证据"],
+  assumptions: ["Assumption", "Assumptions", "假设"],
+  target_files: ["Scope", "Target", "Targets", "Files", "范围", "文件"],
+  touchpoint: ["Touchpoint", "Entry", "Flow", "Page", "入口", "流程", "页面", "位置"],
+  trigger: ["Trigger", "When", "触发", "什么时候", "条件"],
+  exception: ["Exception", "Edge case", "异常", "边界情况"],
+  proof: ["Proof", "Verify", "Evidence plan", "证明", "如何证明"],
+};
+
+const ALL_LABELS = Object.values(LABELS).flat().sort((a, b) => b.length - a.length);
+
+function labelPattern(labels) {
+  return labels.map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+}
+
+function extractLabel(text, labels) {
+  const source = clean(text);
+  if (!source) return "";
+  const current = labelPattern(labels);
+  const all = labelPattern(ALL_LABELS);
+  const pattern = new RegExp(`(?:^|[\\n.;])\\s*(?:${current})\\s*[:：]\\s*([\\s\\S]*?)(?=(?:[\\n.;]\\s*(?:${all})\\s*[:：])|$)`, "i");
+  return clean(source.match(pattern)?.[1] || "");
+}
+
+function splitList(value) {
+  return uniqueStrings(
+    arrayOfStrings(value)
+      .flatMap((item) => item.split(/\s*(?:;|；|\||、)\s*/))
+      .map(clean)
+      .filter(Boolean),
+  );
+}
+
+const SCOUT_EXCLUDED_DIRS = new Set([
+  ".git",
+  ".yolo",
+  "dist",
+  "node_modules",
+  "coverage",
+  ".next",
+  ".nuxt",
+  "build",
+]);
+
+const SCOUT_EXTENSIONS = new Set([
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".go",
+  ".rs",
+  ".java",
+  ".kt",
+  ".swift",
+  ".vue",
+  ".svelte",
+  ".css",
+  ".scss",
+  ".json",
+  ".md",
+]);
+
+function extname(path) {
+  const match = String(path || "").match(/(\.[^.\/]+)$/);
+  return match ? match[1].toLowerCase() : "";
+}
+
+function collectProjectFiles(projectRoot, options = {}) {
+  const root = resolve(clean(projectRoot) || process.cwd());
+  const maxFiles = Number(options.maxFiles || 600);
+  if (!existsSync(root)) return [];
+  const files = [];
+  function visit(dir) {
+    if (files.length >= maxFiles) return;
+    let entries = [];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (files.length >= maxFiles) return;
+      if (SCOUT_EXCLUDED_DIRS.has(entry.name)) continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        visit(full);
+      } else if (entry.isFile() && SCOUT_EXTENSIONS.has(extname(entry.name))) {
+        try {
+          if (statSync(full).size <= 250_000) files.push(relative(root, full));
+        } catch {
+          // Ignore transient files during a lightweight scout.
+        }
+      }
+    }
+  }
+  visit(root);
+  return files.sort();
+}
+
+function tokens(value) {
+  return clean(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, " ")
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 2);
+}
+
+function surfaceKindFromFile(file) {
+  const path = clean(file).toLowerCase();
+  if (/(^|\/)(__tests__|tests?|specs?)\//.test(path) || /\.(test|spec)\./.test(path)) return "test";
+  if (/(^|\/)(pages?|views?|screens?|components?|ui)\//.test(path)) return "ui";
+  if (/(^|\/)(routes?|api|controllers?|server)\//.test(path)) return "api";
+  if (/(^|\/)(models?|repositories|migrations?|database|db)\//.test(path)) return "data";
+  if (/(^|\/)(services?|hooks?|stores?|lib|utils|domain)\//.test(path)) return "service";
+  if (/(^|\/)(docs?|specs?)\//.test(path) || path.endsWith(".md")) return "doc";
+  return "code";
+}
+
+function inferSurfaceKinds(text, files = []) {
+  const source = clean(text).toLowerCase();
+  const kinds = new Set(files.map(surfaceKindFromFile));
+  if (/页面|列表|按钮|展示|显示|筛选|弹窗|ui|page|screen|component|button|display|show|render/.test(source)) kinds.add("ui");
+  if (/接口|api|route|endpoint|server|controller|请求/.test(source)) kinds.add("api");
+  if (/规则|计算|阈值|库存|数量|状态|service|domain|logic|calculate|threshold|status|rule/.test(source)) kinds.add("service");
+  if (/保存|数据库|表|记录|持久|迁移|data|database|db|model|repository/.test(source)) kinds.add("data");
+  if (/测试|验证|证明|test|spec|verify/.test(source)) kinds.add("test");
+  if (kinds.size === 0) kinds.add("service");
+  return [...kinds];
+}
+
+function surfaceLabel(kind) {
+  return {
+    ui: "用户可见界面",
+    api: "接口/服务入口",
+    service: "业务规则/服务逻辑",
+    data: "数据/持久化",
+    test: "测试/验证",
+    doc: "文档/说明",
+    code: "代码实现",
+  }[kind] || "代码实现";
+}
+
+function scoreCandidateFile(file, tokenList, kind) {
+  const lower = file.toLowerCase();
+  let score = 0;
+  if (surfaceKindFromFile(file) === kind) score += 6;
+  for (const token of tokenList) {
+    if (token.length >= 2 && lower.includes(token)) score += token.length >= 5 ? 3 : 1;
+  }
+  if (lower.includes("inventory") || lower.includes("库存")) score += tokenList.includes("inventory") || tokenList.includes("库存") ? 3 : 0;
+  if (/(readme|changelog|package-lock|pnpm-lock|yarn.lock)/.test(lower)) score -= 8;
+  return score;
+}
+
+function inferTargetFiles({ projectRoot, text, explicitFiles = [], maxPerKind = 2 } = {}) {
+  const explicit = uniqueStrings(explicitFiles);
+  if (explicit.length > 0) return explicit;
+  const files = collectProjectFiles(projectRoot);
+  if (files.length === 0) return [];
+  const tokenList = tokens(text);
+  const kinds = inferSurfaceKinds(text);
+  const selected = [];
+  for (const kind of kinds) {
+    const ranked = files
+      .map((file) => ({ file, score: scoreCandidateFile(file, tokenList, kind) }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score || a.file.localeCompare(b.file))
+      .slice(0, maxPerKind)
+      .map((item) => item.file);
+    selected.push(...ranked);
+  }
+  return [...new Set(selected)].slice(0, 8);
+}
+
+function buildNonTechnicalIntake({
+  input = {},
+  objective = "",
+  problem = "",
+  targetUsers = [],
+  statusQuo = [],
+  successCriteria = [],
+  constraints = [],
+  nonGoals = [],
+  evidence = [],
+  assumptions = [],
+  targetFiles = [],
+} = {}) {
+  const touchpoints = mergeField(input, "touchpoints", LABELS.touchpoint, objective);
+  const triggers = mergeField(input, "triggers", LABELS.trigger, objective);
+  const exceptions = mergeField(input, "exceptions", LABELS.exception, objective);
+  const proof = mergeField(input, "proof", LABELS.proof, objective);
+  return {
+    schema: "yolo.demand.nontechnical_intake.v1",
+    actor: targetUsers[0] || "target user",
+    audience: targetUsers,
+    plain_language_problem: problem || objective,
+    touchpoints,
+    current_workarounds: statusQuo,
+    desired_outcomes: successCriteria,
+    success_proof: proof.length ? proof : successCriteria,
+    boundaries: [...constraints, ...nonGoals],
+    exceptions,
+    evidence,
+    assumptions,
+    technical_terms_required_from_user: false,
+    user_should_not_need_to_name_files: true,
+    inferred_target_files: targetFiles,
+    question_model: [
+      "Who has the problem?",
+      "Where in the workflow does it happen?",
+      "What happens today?",
+      "What should happen instead?",
+      "How will you know it worked?",
+      "What is explicitly out of scope?",
+      "What edge cases would make this feel wrong?",
+    ],
+  };
+}
+
+function groupFilesBySurface(files = []) {
+  const groups = new Map();
+  for (const file of uniqueStrings(files)) {
+    const kind = surfaceKindFromFile(file);
+    if (!groups.has(kind)) groups.set(kind, []);
+    groups.get(kind).push(file);
+  }
+  return [...groups.entries()].map(([kind, targetFiles], index) => ({
+    id: `SFC-${String(index + 1).padStart(3, "0")}`,
+    kind,
+    label: surfaceLabel(kind),
+    user_visible: kind === "ui",
+    target_files: targetFiles,
+    readonly_files: [],
+    session_budget: {
+      expected: "single_session",
+      max_files: Math.max(1, Math.min(2, targetFiles.length || 1)),
+      max_lines_per_file: 120,
+    },
+  }));
+}
+
+function buildScenarioMatrix({
+  input = {},
+  objective = "",
+  requirements = [],
+  targetUsers = [],
+  statusQuo = [],
+  constraints = [],
+  nonGoals = [],
+  targetFiles = [],
+} = {}) {
+  const touchpoints = mergeField(input, "touchpoints", LABELS.touchpoint, objective);
+  const triggers = mergeField(input, "triggers", LABELS.trigger, objective);
+  const exceptions = mergeField(input, "exceptions", LABELS.exception, objective);
+  const proof = mergeField(input, "proof", LABELS.proof, objective);
+  const actor = targetUsers[0] || "target user";
+  const baseSurfaces = groupFilesBySurface(targetFiles);
+  const inferredKinds = inferSurfaceKinds(`${objective}\n${requirements.map((item) => item.text).join("\n")}`, targetFiles);
+  const fallbackSurfaces = inferredKinds.map((kind, index) => ({
+    id: `SFC-${String(index + 1).padStart(3, "0")}`,
+    kind,
+    label: surfaceLabel(kind),
+    user_visible: kind === "ui",
+    target_files: [],
+    readonly_files: [],
+    session_budget: {
+      expected: "single_session",
+      max_files: 1,
+      max_lines_per_file: 120,
+    },
+  }));
+  const surfaces = baseSurfaces.length ? baseSurfaces : fallbackSurfaces;
+  const scenarios = requirements.map((requirement, index) => {
+    const requirementScenarios = asArray(requirement.acceptance_scenarios || requirement.scenarios);
+    const firstScenario = requirementScenarios[0] || {};
+    return {
+      id: `SCN-${String(index + 1).padStart(3, "0")}`,
+      requirement_id: requirement.id,
+      actor,
+      touchpoint: touchpoints[index] || touchpoints[0] || "primary user workflow",
+      trigger: clean(firstScenario.when) || triggers[index] || triggers[0] || "the user reaches this scenario",
+      current_behavior: statusQuo[index] || statusQuo[0] || "Captured in demand context.",
+      desired_behavior: requirement.text,
+      proof: proof[index] || proof[0] || clean(firstScenario.then || firstScenario.text) || requirement.text,
+      out_of_scope: nonGoals,
+      constraints,
+      exceptions,
+      surfaces: surfaces.map((surface, surfaceIndex) => ({
+        ...surface,
+        id: `SCN-${String(index + 1).padStart(3, "0")}-${surface.id || `SFC-${surfaceIndex + 1}`}`,
+        proof: proof[index] || proof[0] || requirement.text,
+      })),
+      question_trace: asArray(input.questions || input.question).map((_, questionIndex) => `Q${questionIndex + 1}`),
+    };
+  });
+  return {
+    schema: "yolo.demand.scenario_matrix.v1",
+    generated_from: "nontechnical_interview",
+    nontechnical_user_safe: true,
+    scenarios,
+    atomic_task_rule: "one scenario surface becomes one session-sized task unless atomicity gate requires more splitting",
+  };
+}
+
+function mergeField(input, key, labels, text) {
+  const explicit = input[key] ?? input[key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())];
+  const extracted = extractLabel(text, labels);
+  return splitList([...arrayOfStrings(explicit), extracted]);
+}
+
+function firstField(input, keys, text, labels) {
+  for (const key of keys) {
+    const value = clean(input[key]);
+    if (value) return value;
+  }
+  return clean(extractLabel(text, labels));
+}
+
+function requirementRecord(text, index, input = {}) {
+  const id = `REQ-${String(index + 1).padStart(3, "0")}`;
+  const scenarioText = clean(input.acceptance_scenario || input.acceptanceScenario || text);
+  return {
+    id,
+    text: clean(text),
+    source: "demand",
+    status: "confirmed",
+    acceptance_scenarios: [
+      {
+        id: `SCN-${String(index + 1).padStart(3, "0")}`,
+        when: clean(input.scenario_when || input.scenarioWhen || "the user exercises this requirement"),
+        then: scenarioText,
+      },
+    ],
+    trace: {
+      evidence: uniqueStrings(input.evidence).map((_, evidenceIndex) => `EVID-${String(evidenceIndex + 1).padStart(3, "0")}`),
+      decisions: uniqueStrings(input.decisions || input.decision).map((_, decisionIndex) => `DEC-${String(decisionIndex + 1).padStart(3, "0")}`),
+    },
+  };
+}
+
+function buildRounds(input = {}) {
+  const rounds = asArray(input.rounds || input.discussion_rounds || input.questions || input.question).filter(Boolean);
+  if (rounds.length > 0) {
+    return rounds.map((item, index) => {
+      if (typeof item === "object") return { id: item.id || `Q${index + 1}`, ...item };
+      return { id: `Q${index + 1}`, question: clean(item), answer: clean(asArray(input.answers || input.answer)[index]) };
+    });
+  }
+  const decisions = uniqueStrings(input.decisions || input.decision);
+  return decisions.length > 0 ? decisions.map((decision, index) => ({
+    id: `Q${index + 1}`,
+    question: "Decision confirmed during demand discussion.",
+    answer: decision,
+  })) : [];
+}
+
+function completedArtifacts(session = {}) {
+  const completed = [];
+  if (clean(session.vision?.statement || session.vision?.idea).length >= 10) completed.push("vision");
+  if (session.reflection?.assumptions?.length || session.reflection?.alternatives?.length || clean(session.reflection?.summary)) completed.push("reflection");
+  if (session.investigation?.evidence?.length || session.reflection?.assumptions?.length) completed.push("investigation");
+  if (session.discussion?.rounds?.length || session.discussion?.decisions?.length) completed.push("questioning_rounds");
+  if (session.readiness) completed.push("depth_verification");
+  if (session.requirements?.active?.length) completed.push("requirements_confirmation");
+  if (session.context?.summary || session.context?.domain_terms?.length) completed.push("context");
+  if (session.roadmap?.mvp?.length || session.roadmap?.phases?.length) completed.push("roadmap");
+  if (session.approval?.approved) completed.push("approval");
+  return completed;
+}
+
+export function buildDemandSession(input = {}, options = {}) {
+  const now = nowIso(options);
+  const objective = clean(input.objective || input.idea || input.requirement || input.text || input.title);
+  const id = demandId({ ...input, objective }, now);
+  const problem = firstField(input, ["problem"], objective, LABELS.problem);
+  const targetUsers = mergeField(input, "target_users", LABELS.target_users, objective);
+  const successCriteria = mergeField(input, "success_criteria", LABELS.success_criteria, objective);
+  const constraints = mergeField(input, "constraints", LABELS.constraints, objective);
+  const nonGoals = mergeField(input, "non_goals", LABELS.non_goals, objective);
+  const statusQuo = mergeField(input, "status_quo", LABELS.status_quo, objective);
+  const evidence = mergeField(input, "evidence", LABELS.evidence, objective);
+  const assumptions = mergeField(input, "assumptions", LABELS.assumptions, objective);
+  const explicitTargetFiles = mergeField(input, "target_files", LABELS.target_files, objective);
+  const alternatives = uniqueStrings(input.alternatives || input.alternative);
+  const risks = uniqueStrings(input.risks || input.risk);
+  const decisions = uniqueStrings(input.decisions || input.decision);
+  const openQuestions = uniqueStrings(input.open_questions || input.openQuestions || input.question);
+  const roadmapItems = uniqueStrings(input.roadmap || input.mvp || input.phase || input.phases);
+  const scoutText = [
+    objective,
+    problem,
+    targetUsers.join(" "),
+    successCriteria.join(" "),
+    statusQuo.join(" "),
+  ].join("\n");
+  const targetFiles = inferTargetFiles({
+    projectRoot: input.projectRoot || input.project_root || options.projectRoot || options.project_root,
+    text: scoutText,
+    explicitFiles: explicitTargetFiles,
+  });
+  const requirements = (successCriteria.length > 0 ? successCriteria : uniqueStrings(input.requirements || input.requirement_text))
+    .map((text, index) => requirementRecord(text, index, { ...input, evidence, decisions }));
+  const nontechnicalIntake = buildNonTechnicalIntake({
+    input,
+    objective,
+    problem,
+    targetUsers,
+    statusQuo,
+    successCriteria,
+    constraints,
+    nonGoals,
+    evidence,
+    assumptions,
+    targetFiles,
+  });
+  const scenarioMatrix = buildScenarioMatrix({
+    input,
+    objective,
+    requirements,
+    targetUsers,
+    statusQuo,
+    constraints,
+    nonGoals,
+    targetFiles,
+  });
+
+  const session = {
+    schema_version: DEMAND_SESSION_SCHEMA_VERSION,
+    schema: DEMAND_SESSION_SCHEMA,
+    id,
+    generated_at: now,
+    phase: clean(input.phase || options.phase || "discuss"),
+    mode: clean(input.mode || options.mode || "standard"),
+    source: clean(input.source || options.source || "yolo-demand"),
+    project: {
+      title: clean(input.title || objective).slice(0, 160) || "Demand session",
+      target_users: targetUsers,
+      target_files: targetFiles,
+    },
+    nontechnical_intake: nontechnicalIntake,
+    vision: {
+      statement: clean(input.vision || objective),
+      idea: objective,
+      problem,
+      target_users: targetUsers,
+      status_quo: statusQuo,
+      narrow_wedge: clean(input.narrow_wedge || input.wedge),
+    },
+    reflection: {
+      summary: clean(input.reflection || ""),
+      assumptions,
+      alternatives,
+      premise_challenges: uniqueStrings(input.premise_challenges || input.premise || input.challenge),
+    },
+    investigation: {
+      evidence: evidence.map((text, index) => ({ id: `EVID-${String(index + 1).padStart(3, "0")}`, text })),
+      assumptions: assumptions.map((text, index) => ({ id: `ASM-${String(index + 1).padStart(3, "0")}`, text, status: "TBD-needs-validation" })),
+      codebase_scouts: targetFiles.map((file) => ({
+        file,
+        surface: surfaceKindFromFile(file),
+        reason: explicitTargetFiles.includes(file) ? "target_scope_candidate" : "auto_scout_candidate",
+      })),
+      risks,
+    },
+    discussion: {
+      rounds: buildRounds(input),
+      decisions: decisions.map((text, index) => ({ id: `DEC-${String(index + 1).padStart(3, "0")}`, text })),
+      open_questions: openQuestions.map((text, index) => ({ id: `OQ-${String(index + 1).padStart(3, "0")}`, text, blocking: true })),
+      deferred: uniqueStrings(input.deferred || input.followups || input.follow_ups),
+    },
+    requirements: {
+      active: requirements,
+      constraints,
+      out_of_scope: nonGoals,
+    },
+    context: {
+      summary: clean(input.context || problem || objective),
+      domain_terms: uniqueStrings(input.domain_terms || input.terms),
+      current_state: statusQuo,
+      constraints,
+    },
+    roadmap: {
+      mvp: roadmapItems.length > 0 ? roadmapItems : successCriteria.slice(0, 3),
+      phases: roadmapItems.map((text, index) => ({ id: `P${index + 1}`, text })),
+      later: uniqueStrings(input.later || input.future),
+    },
+    scenario_matrix: scenarioMatrix,
+    approval: {
+      approved: input.approved === true || input.approve === true || ["true", "yes", "approved", "confirm", "confirmed"].includes(clean(input.approval || input.approved || input.approve).toLowerCase()),
+      approved_by: clean(input.approved_by || input.approvedBy || "user"),
+      approved_at: clean(input.approved_at || input.approvedAt) || null,
+      note: clean(input.approval_note || input.approvalNote),
+    },
+  };
+  session.readiness = inspectDemandReadiness(session, { phase: session.phase });
+  session.graph = buildDemandArtifactGraph(completedArtifacts(session));
+  return session;
+}
+
+function linesList(values, fallback = "- TBD") {
+  const lines = arrayOfStrings(values);
+  return lines.length ? lines.map((item) => `- ${item}`).join("\n") : fallback;
+}
+
+function scenarioLines(requirement) {
+  const scenarios = asArray(requirement.acceptance_scenarios || requirement.scenarios);
+  if (scenarios.length === 0) return "- TBD";
+  return scenarios.map((scenario) => [
+    `#### Scenario: ${scenario.id || "Acceptance"}`,
+    `- **WHEN** ${clean(scenario.when || "the user exercises this requirement")}`,
+    `- **THEN** ${clean(scenario.then || scenario.text || requirement.text)}`,
+  ].join("\n")).join("\n\n");
+}
+
+export function demandMarkdownArtifacts(session = {}) {
+  const reqs = asArray(session.requirements?.active);
+  const decisions = asArray(session.discussion?.decisions).map((item) => item.text || item);
+  const rounds = asArray(session.discussion?.rounds);
+  return {
+    "VISION.md": [
+      `# ${session.project?.title || session.id} Vision`,
+      "",
+      "## Vision",
+      session.vision?.statement || "TBD",
+      "",
+      "## Problem",
+      session.vision?.problem || "TBD",
+      "",
+      "## Target Users",
+      linesList(session.vision?.target_users),
+      "",
+      "## Status Quo",
+      linesList(session.vision?.status_quo),
+      "",
+      "## Narrow Wedge",
+      session.vision?.narrow_wedge || "TBD",
+    ].join("\n"),
+    "REFLECTION.md": [
+      `# ${session.id} Reflection`,
+      "",
+      "## Premise Challenge",
+      linesList(session.reflection?.premise_challenges),
+      "",
+      "## Assumptions",
+      linesList(session.reflection?.assumptions),
+      "",
+      "## Alternatives",
+      linesList(session.reflection?.alternatives),
+    ].join("\n"),
+    "INVESTIGATION.md": [
+      `# ${session.id} Investigation`,
+      "",
+      "## Evidence",
+      linesList(asArray(session.investigation?.evidence).map((item) => `${item.id}: ${item.text}`)),
+      "",
+      "## Assumptions / TBD",
+      linesList(asArray(session.investigation?.assumptions).map((item) => `${item.id}: ${item.text}`)),
+      "",
+      "## Codebase Scouts",
+      linesList(asArray(session.investigation?.codebase_scouts).map((item) => item.file)),
+      "",
+      "## Risks",
+      linesList(session.investigation?.risks),
+    ].join("\n"),
+    "SCENARIO_MATRIX.md": [
+      `# ${session.id} Scenario Matrix`,
+      "",
+      "This artifact translates non-technical answers into engineering-facing slices.",
+      "",
+      "## Scenarios",
+      asArray(session.scenario_matrix?.scenarios).length
+        ? asArray(session.scenario_matrix.scenarios).map((scenario) => [
+          `### ${scenario.id}: ${scenario.desired_behavior}`,
+          `- Actor: ${scenario.actor}`,
+          `- Touchpoint: ${scenario.touchpoint}`,
+          `- Trigger: ${scenario.trigger}`,
+          `- Current: ${scenario.current_behavior}`,
+          `- Desired: ${scenario.desired_behavior}`,
+          `- Proof: ${scenario.proof}`,
+          `- Out of scope: ${arrayOfStrings(scenario.out_of_scope).join("; ") || "TBD"}`,
+          "",
+          "#### Surfaces",
+          asArray(scenario.surfaces).map((surface) => [
+            `- ${surface.id}: ${surface.label} (${surface.kind})`,
+            `  - targets: ${arrayOfStrings(surface.target_files).join(", ") || "TBD from code scout"}`,
+            `  - budget: ${surface.session_budget?.expected || "single_session"}, max_files=${surface.session_budget?.max_files || 1}`,
+          ].join("\n")).join("\n"),
+        ].join("\n")).join("\n\n")
+        : "- TBD",
+      "",
+      "## Atomic Task Rule",
+      session.scenario_matrix?.atomic_task_rule || "TBD",
+    ].join("\n"),
+    "DISCUSSION-LOG.md": [
+      `# ${session.id} Discussion Log`,
+      "",
+      "## Questioning Rounds",
+      rounds.length ? rounds.map((round) => [
+        `### ${round.id}`,
+        `- Question: ${round.question || "TBD"}`,
+        `- Answer: ${round.answer || "TBD"}`,
+      ].join("\n")).join("\n\n") : "- TBD",
+      "",
+      "## Decisions",
+      linesList(decisions),
+      "",
+      "## Open Questions",
+      linesList(asArray(session.discussion?.open_questions).map((item) => item.text || item)),
+      "",
+      "## Deferred",
+      linesList(session.discussion?.deferred),
+    ].join("\n"),
+    "REQUIREMENTS.md": [
+      `# ${session.id} Requirements`,
+      "",
+      "## Requirements",
+      reqs.length ? reqs.map((requirement) => [
+        `### Requirement: ${requirement.id}`,
+        `${requirement.text}`,
+        "",
+        scenarioLines(requirement),
+      ].join("\n")).join("\n\n") : "- TBD",
+      "",
+      "## Constraints",
+      linesList(session.requirements?.constraints),
+      "",
+      "## Out of Scope",
+      linesList(session.requirements?.out_of_scope),
+    ].join("\n"),
+    "CONTEXT.md": [
+      `# ${session.id} Context`,
+      "",
+      "## Summary",
+      session.context?.summary || "TBD",
+      "",
+      "## Domain Terms",
+      linesList(session.context?.domain_terms),
+      "",
+      "## Current State",
+      linesList(session.context?.current_state),
+      "",
+      "## Decisions",
+      linesList(decisions),
+      "",
+      "## Constraints",
+      linesList(session.context?.constraints),
+    ].join("\n"),
+    "ROADMAP.md": [
+      `# ${session.id} Roadmap`,
+      "",
+      "## MVP",
+      linesList(session.roadmap?.mvp),
+      "",
+      "## Phases",
+      asArray(session.roadmap?.phases).length
+        ? asArray(session.roadmap.phases).map((phase) => `- ${phase.id}: ${phase.text}`).join("\n")
+        : "- TBD",
+      "",
+      "## Later",
+      linesList(session.roadmap?.later),
+    ].join("\n"),
+  };
+}

@@ -13,7 +13,9 @@ describe("YOLO command registry", () => {
   test("lists the full lifecycle command set from one source of truth", () => {
     assert.deepEqual(listYoloCommandNames(), [
       "yolo",
+      "yolo-brainstorm",
       "yolo-discover",
+      "yolo-discuss",
       "yolo-init",
       "yolo-plan",
       "yolo-prd",
@@ -46,7 +48,9 @@ describe("YOLO command registry", () => {
 
     assert.equal(registry.schema, "yolo.workflow.command_registry.v1");
     assert.deepEqual(listYoloBridgeWorkflowIds(), [
+      "brainstorm",
       "discover",
+      "discuss",
       "plan",
       "prd",
       "check",

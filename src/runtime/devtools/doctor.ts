@@ -75,6 +75,7 @@ function expectedBridgeArtifacts(bridgePlan = {}) {
     ...(bridgePlan.native_skill_files || []),
     ...(bridgePlan.command_files || []),
     ...(bridgePlan.source_command_files || []),
+    ...(bridgePlan.codex_slash_command_files || []),
     ...skillPlanFiles(bridgePlan.skill_plans || []),
   ];
 }

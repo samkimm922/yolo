@@ -37,7 +37,7 @@ export async function runMainLoopWithRuntime({
   log = noop,
 } = {}) {
   const prd = loadPRD(prdPath);
-  const results = { completed: [], failed: [], skipped: [], blocked: [], contractReview: [], remediation: [] };
+  const results = { completed: [], failed: [], skipped: [], blocked: [], contractReview: [], remediation: [], immediateRemediationQueue: [] };
   const completedIds = new Set(preCompleted);
   const { expanded, beforeMerge, mergedCount } = expandTasksForMainLoop({
     tasks: prd.tasks || [],
@@ -112,6 +112,7 @@ export async function runMainLoopWithRuntime({
       }),
       recordTaskTransition,
       log,
+      stopForImmediateRemediation: true,
     });
     lastFailKey = outcomeResult.lastFailKey;
     if (outcomeResult.action === "stop") {

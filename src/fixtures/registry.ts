@@ -1,11 +1,33 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_YOLO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
+}
+
+function isSafeRelativePath(value) {
+  const path = String(value || "").trim();
+  if (!path || isAbsolute(path)) return false;
+  const normalized = normalize(path).replace(/\\/g, "/");
+  return normalized !== ".." && !normalized.startsWith("../");
+}
+
+function commandPolicy(command, fixture = {}) {
+  const text = String(command || "").trim();
+  if (!text) return { safe: false, code: "EMPTY_COMMAND" };
+  if (/\b(npm|pnpm|yarn)\s+publish\b|\bnpm\s+token\b|NODE_AUTH_TOKEN|NPM_TOKEN/i.test(text)) {
+    return { safe: false, code: "PUBLISH_OR_TOKEN_COMMAND" };
+  }
+  if (/\b(curl|wget|scp|rsync|ssh)\b/i.test(text) && fixture.run?.allow_network !== true) {
+    return { safe: false, code: "NETWORK_COMMAND_REQUIRES_EXPLICIT_ALLOW" };
+  }
+  if (/\b(npm|pnpm|yarn)\s+(install|add|ci)\b|\bnpx\b/i.test(text) && fixture.run?.allow_dependency_install !== true) {
+    return { safe: false, code: "DEPENDENCY_INSTALL_REQUIRES_EXPLICIT_ALLOW" };
+  }
+  return { safe: true, code: "SAFE_COMMAND" };
 }
 
 function fixtureRoot(options = {}) {
@@ -36,14 +58,25 @@ export function getFixtureDefinition(id, options = {}) {
 }
 
 export function inspectFixtureDefinition(fixture = {}) {
+  const commandPolicies = (fixture.run?.commands || []).map((command) => ({
+    command,
+    ...commandPolicy(command, fixture),
+  }));
   const checks = [
     ["HAS_REQUIREMENT", Boolean(fixture.requirement?.id && fixture.requirement?.text)],
     ["HAS_SPEC_TRACE", Boolean(fixture.spec?.requirement_id && fixture.spec?.design_id && fixture.spec?.task_id)],
     ["HAS_TASK", Boolean(fixture.task?.id && fixture.task?.prd)],
     ["HAS_RUN_MODE", Boolean(fixture.run?.mode)],
+    ["HAS_RUN_COMMANDS", Array.isArray(fixture.run?.commands) && fixture.run.commands.length > 0],
+    ["SAFE_RUN_COMMANDS", commandPolicies.every((policy) => policy.safe)],
     ["SUPPORTS_DRY_RUN", fixture.run?.supports_dry_run === true],
     ["HAS_EVIDENCE_CONTRACT", Array.isArray(fixture.evidence?.expected) && fixture.evidence.expected.length > 0],
+    ["SAFE_EVIDENCE_PATHS", (fixture.evidence?.expected || []).every(isSafeRelativePath)],
   ].map(([code, passed]) => ({ code, passed }));
+  const unsafeCommands = commandPolicies.filter((policy) => !policy.safe);
+  if (unsafeCommands.length > 0) {
+    checks.find((check) => check.code === "SAFE_RUN_COMMANDS").commands = unsafeCommands;
+  }
 
   const missingFiles = [];
   for (const relativePath of fixture.files || []) {

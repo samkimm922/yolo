@@ -51,6 +51,7 @@
 - YOLO workflow skills 放在 `.codex/skills` 和 `.claude/skills`
 - Claude Code slash commands 放在 `.claude/commands/yolo*.md`
 - Codex 用户级 skill 放在 `~/.agents/skills/yolo`
+- Codex 直接 slash skills 放在 `~/.agents/skills/yolo-*`
 - Codex source-command 入口放在 `~/.agents/skills/source-command-yolo*`
 
 安装后，Codex / Claude Code 才知道“YOLO”不是普通聊天词，而是一套流程。
@@ -60,11 +61,11 @@
 让当前 agent 帮你装。你在 Codex 或 Claude Code 里说：
 
 ```text
-请把 YOLO 安装到当前项目和我的 Agent 工具里。我要能直接用 /yolo、/yolo-discover、/yolo-plan、/yolo-check、/yolo-accept、/yolo-eval、/yolo-run、/yolo-doctor。执行前先告诉我会写哪些文件。
+请把 YOLO 安装到当前项目和我的 Agent 工具里。我要能直接用 /yolo、/yolo-brainstorm、/yolo-discuss、/yolo-discover、/yolo-plan、/yolo-check、/yolo-accept、/yolo-eval、/yolo-run、/yolo-doctor。执行前先告诉我会写哪些文件。
 YOLO 路径是 /Users/sippingroom/Developer/SamKimTest/scripts/yolo。
 ```
 
-agent 会负责安装 `AGENTS.md`、`CLAUDE.md`、`.codex/skills`、`.claude/skills`、`.claude/commands`，以及 Codex 用户级 `~/.agents/skills/yolo` 和 `~/.agents/skills/source-command-yolo*`。
+agent 会负责安装 `AGENTS.md`、`CLAUDE.md`、`.codex/skills`、`.claude/skills`、`.claude/commands`，以及 Codex 用户级 `~/.agents/skills/yolo`、`~/.agents/skills/yolo-*` 和 `~/.agents/skills/source-command-yolo*`。
 
 更完整的安装说明见：
 

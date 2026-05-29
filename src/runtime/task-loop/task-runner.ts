@@ -125,6 +125,7 @@ export async function runTaskWithRuntime({
         spawnProviderInWorktree,
         logTaskBash,
         logProgress,
+        logEvent,
         onWorktreeCreated: (wt) => {
           currentWorktreePath = wt.path;
           currentWorktreeBranch = wt.branch;

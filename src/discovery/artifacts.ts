@@ -87,9 +87,11 @@ function openQuestionForCheck(check = {}) {
   const prompts = {
     DISCOVERY_IDEA_SPECIFIC: "What concrete outcome should this work deliver?",
     DISCOVERY_PROBLEM_PRESENT: "What user or project problem does this solve?",
+    DISCOVERY_TARGET_USER_PRESENT: "Who is the specific target user or operator for this demand?",
     DISCOVERY_SUCCESS_CRITERIA_PRESENT: "What observable success criteria prove this is done?",
     DISCOVERY_SCOPE_SIGNAL_PRESENT: "Which files, modules, or bounded area are in scope?",
     DISCOVERY_CONSTRAINTS_CAPTURED: "What constraints, non-goals, risks, or existing behavior must be preserved?",
+    DISCOVERY_REQUIREMENTS_ACTIVE: "Which confirmed requirement should become the first active requirement?",
   };
   return prompts[code] || check.message || check.summary || "";
 }

@@ -100,6 +100,10 @@ function skillFolderName(id) {
   return cleanString(id).toLowerCase().replace(/[^a-z0-9_.-]/g, "-");
 }
 
+function yamlString(value) {
+  return JSON.stringify(cleanString(value));
+}
+
 function expectedSkillPaths(targetDir, descriptors) {
   const paths = [
     `${targetDir}/${WORKFLOW_SKILL_AGENT_RULES_FILE}`,
@@ -185,6 +189,11 @@ export function validateWorkflowSkillDescriptor(descriptor = {}) {
 
 function renderSkillMarkdown(descriptor) {
   const lines = [
+    "---",
+    `name: ${yamlString(descriptor.id)}`,
+    `description: ${yamlString(descriptor.purpose)}`,
+    "---",
+    "",
     `# ${descriptor.name}`,
     "",
     `Schema: ${descriptor.schema}`,

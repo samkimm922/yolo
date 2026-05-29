@@ -16,11 +16,11 @@ docs/agent-native-integration.md
 最像 GSD / Superpowers 的方式，是先让 agent 帮你安装 YOLO skill/command：
 
 ```text
-请把 YOLO 安装到当前项目和我的 Agent 工具里。我要能直接用 /yolo、/yolo-discover、/yolo-plan、/yolo-check、/yolo-accept、/yolo-eval、/yolo-run、/yolo-doctor。执行前先告诉我会写哪些文件。
+请把 YOLO 安装到当前项目和我的 Agent 工具里。我要能直接用 /yolo、/yolo-brainstorm、/yolo-discuss、/yolo-discover、/yolo-plan、/yolo-check、/yolo-accept、/yolo-eval、/yolo-run、/yolo-doctor。执行前先告诉我会写哪些文件。
 YOLO 路径是：/Users/sippingroom/Developer/SamKimTest/scripts/yolo
 ```
 
-安装后，Claude Code 可以直接用 `/yolo`。Codex 如果当前会话不支持 slash command，就新开一个 Codex 会话；还是不触发时，说“使用 source-command-yolo”或“使用 yolo skill 执行 /yolo”。
+安装后，Claude Code 可以直接用 `/yolo`。Codex 也会获得和 GSD/GStack 类似的 `~/.agents/skills/yolo-*` 直接 slash skill；新开一个 Codex 会话后试 `/yolo`、`/yolo-brainstorm`、`/yolo-discuss`。还是不触发时，说“使用 source-command-yolo”或“使用 yolo skill 执行 /yolo”。
 
 如果你是在 Finder 里用，再双击下面这个入口。
 

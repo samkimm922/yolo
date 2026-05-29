@@ -1,8 +1,8 @@
-import { cpSync, mkdtempSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { relative, resolve, join } from "node:path";
+import { isAbsolute, relative, resolve, join, normalize } from "node:path";
 import { spawnSync } from "node:child_process";
-import { buildEvidenceArtifact, createEvidenceLedger } from "../evidence/ledger.js";
+import { buildEvidenceArtifact, createEvidenceLedger, validateEvidenceArtifact } from "../evidence/ledger.js";
 import {
   fixtureEvidenceRecord,
   getFixtureDefinition,
@@ -33,6 +33,20 @@ function runCommand(command, cwd, timeout_ms) {
   };
 }
 
+function asArray(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (value == null || value === "") return [];
+  return [value];
+}
+
+function safeRelativeEvidencePath(value) {
+  const path = String(value || "").trim();
+  if (!path || isAbsolute(path)) return null;
+  const normalized = normalize(path).replace(/\\/g, "/");
+  if (normalized === ".." || normalized.startsWith("../")) return null;
+  return normalized;
+}
+
 export function copyFixtureToWorkspace(fixture, options = {}) {
   const workspace = resolve(options.workspace || fixtureWorkspace(fixture.id, options));
   cpSync(fixture.fixture_dir, workspace, { recursive: true });
@@ -59,21 +73,40 @@ export function runFixtureHarness(id, options = {}) {
     runCommand(command, workspace, options.timeout_ms || fixture.run?.timeout_ms || 120000)
   );
   const passed = commandResults.every((result) => result.status === "pass");
-  const expectedEvidence = fixture.evidence?.expected?.[0] || `state/evidence/${fixture.task?.id || fixture.id}/fixture-run.json`;
-  const evidencePath = resolve(workspace, expectedEvidence);
+  const expectedArtifacts = asArray(fixture.evidence?.expected?.length ? fixture.evidence.expected : [`state/evidence/${fixture.task?.id || fixture.id}/fixture-run.json`])
+    .map(safeRelativeEvidencePath);
+  const invalidExpectedArtifacts = expectedArtifacts.some((item) => !item);
+  const validExpectedArtifacts = expectedArtifacts.filter(Boolean);
+  const primaryEvidence = validExpectedArtifacts[0] || `state/evidence/${fixture.task?.id || fixture.id}/fixture-run.json`;
+  const evidencePath = resolve(workspace, primaryEvidence);
   const ledger = createEvidenceLedger({ stateDir: resolve(workspace, "state") });
   const evidence = buildEvidenceArtifact("fixture.run", {
     fixture: fixtureEvidenceRecord(fixture, inspection),
     status: passed ? "pass" : "fail",
     workspace,
     commands: commandResults,
+    expected_artifacts: validExpectedArtifacts,
+    invalid_expected_artifacts: invalidExpectedArtifacts,
   }, { source: "fixture-harness" });
+  const schemaCheck = validateEvidenceArtifact(evidence);
+  ledger.writeJsonArtifact(evidencePath, evidence);
+  const missingExpectedArtifacts = validExpectedArtifacts.filter((item) => {
+    const resolved = resolve(workspace, item);
+    const insideWorkspace = resolved === workspace || resolved.startsWith(`${workspace}/`);
+    return !insideWorkspace || !existsSync(resolved);
+  });
+  const finalStatus = passed && !invalidExpectedArtifacts && missingExpectedArtifacts.length === 0 && schemaCheck.ok ? "pass" : "fail";
+  evidence.status = finalStatus;
+  evidence.missing_expected_artifacts = missingExpectedArtifacts;
+  evidence.schema_check = schemaCheck;
   ledger.writeJsonArtifact(evidencePath, evidence);
   ledger.appendStateEvent("fixture.run", {
     fixture_id: fixture.id,
     status: evidence.status,
     artifact_type: evidence.artifact_type,
     evidence_file: relative(workspace, evidencePath),
+    missing_expected_artifacts: missingExpectedArtifacts,
+    schema_ok: schemaCheck.ok,
   }, { source: "fixture-harness" });
 
   if (options.keepWorkspace !== true) {
