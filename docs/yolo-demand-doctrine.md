@@ -14,6 +14,8 @@ YOLO 不是把用户一句话立刻变成代码，而是把一句话需求先变
 - 非技术友好：用户不需要知道文件名、类名、接口名；YOLO 可以推断，但必须把推断变成可确认的边界。
 - 完成靠证据：写出代码不算完成，能通过 gate、能留下 evidence、能给下一位 operator 接手，才算完成。
 
+`/yolo-demand` 的默认身份是需求访谈主持人，不是建议机器人。只要 `missing_slots` 还有缺口，用户对话层只能返回一个 `next_question`，不能输出大段建议、不能进入 PRD、不能改代码。批准最后：只有问题、现状、痛点、证据、边界都具像化后，才请求用户批准进入下一阶段；这仍然不是执行授权。
+
 ## 分层来源
 
 这些参考不是重复角色，而是分层补强：
@@ -40,6 +42,34 @@ YOLO 不是把用户一句话立刻变成代码，而是把一句话需求先变
 | 批准 | 用户是否明确批准从需求产物编译可执行 PRD？ | `approval.approved !== true` 时阻断。 |
 
 这个门禁和现有 readiness 语义对齐：L0 是模糊想法，L1 有愿景和证据/假设，L2 需求和阻塞问题已收敛，L3 才能生成可执行 PRD。
+
+## Demand Router
+
+统一只读入口是 `yolo demand status`。它不写 `.yolo` 状态、不生成 PRD、不改业务代码，只回答当前需求阶段应该怎么走：
+
+- `context_type`: `greenfield | brownfield | hybrid | unknown`。
+- `route`: 默认 `fast`；只有硬触发才进入 `careful`。
+- `evidence_policy`: `none | single_agent | cross_check`。
+- `reason_codes`: 为什么这样路由。
+- `missing_slots`、`blockers`、`assumptions`、`needed_evidence_agents`、`prd_ready`、`next_action`。
+
+硬触发包括字段、schema、API、auth、state、data flow、migration、已有项目事实、高代价错误和明确 PRD/执行意图下的验收/批准不清。新项目想法和低风险文案默认保持 fast，不要求代码审计。
+
+PRD readiness contract 至少需要这些 slots：`problem`、`target_user`、`status_quo`、`desired_outcome`、`scope_in`、`scope_out`、`constraints`、`acceptance_criteria`、`risks`、`approval`。任何 blocker、未确认 assumption 或 required evidence 缺失，都不得标记 `prd_ready=true`。
+
+证据 agent 协议分三类：
+
+- `explorer`: 只读查找项目事实，返回 claim、confidence、evidence、assumptions、risks、missing、recommendation。
+- `cross-checker`: 对高风险事实独立交叉验证；`cross_check` policy 必须使用。
+- `verifier`: 检查证据是否足够支撑 PRD readiness，确认假设没有伪装成事实。
+
+如果 agent 结论冲突，Demand Router 必须把冲突保留为 blocker，而不是取平均或选择性采信。
+
+`yolo demand dispatch` 是 evidence agent 的显式执行入口。它默认只做 dry-run 计划；只有同时传 `--execute-agents --allow-agent-dispatch` 才会调用配置的 agent provider。dispatch 不靠阉割 tools 做安全边界：agent 可以拥有审计、检索、fetch、命令和子任务等能力，但必须遵守 harness 边界，目标项目文件不得被修改；只允许写入本次 `.yolo/demand/evidence/<dispatch-id>/` artifact。dispatch 会在运行前后审计项目文件边界，任何越界改动都会变成 readiness blocker。dispatch 返回的 explorer / cross-checker / verifier 结果会重新喂给 PRD readiness contract；如果缺任一 required role、证据不足、agent 冲突或边界违规，仍然保持 blocked。
+
+Claude provider 的 demand dispatch 不传 `--allowedTools` / `--disallowedTools` / `--tools` 限制作为安全措施；`agent_tool_profile` 只表达语义模式（boundary / research / full），真实安全由 prompt contract、artifact root、运行前后边界快照和 readiness blocker 承担。
+
+证据记录必须声明 `scope`: `project | external | user | unknown`。`project` 证据来自目标项目的 code、tests、docs、config、logs 或 artifacts，并且必须带 repo-relative path 或 file locator；`external` 证据可以来自 WebFetch/WebSearch、MCP web reader、browser fetch 或外部文档，但只能作为背景研究，不能单独证明目标项目已有字段、API、状态机或数据流。任何 existing-project factual claim 如果只有 external/user/unknown evidence，或 project evidence 没有具体项目定位符，都必须被 readiness blocker 拦住。
 
 ## 从大白话到 prd.json
 

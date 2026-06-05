@@ -85,14 +85,14 @@ describe("demand interview", () => {
   test("answers questions in order and advances coverage", () => withRoot((root) => {
     const session = newSession(root);
 
-    answer(session, "target_users", "Store managers.");
-    assert.equal(session.answers.target_users.normalized.items[0], "Store managers.");
+    answer(session, "target_users", "Store managers who review inventory every morning and decide which SKU to replenish first.");
+    assert.equal(session.answers.target_users.normalized.items[0], "Store managers who review inventory every morning and decide which SKU to replenish first.");
     assert.equal(session.questions.find((question) => question.id === "target_users").answered, true);
     assert.equal(session.next_question.id, "status_quo");
 
-    answer(session, "status_quo", "They use a spreadsheet export.");
-    answer(session, "pain_points", "They learn about stockouts too late.");
-    answer(session, "desired_outcome", "They see a warning before stockout.");
+    answer(session, "status_quo", "They export inventory counts each morning and manually scan rows for risky SKUs.");
+    answer(session, "pain_points", "Stockouts are discovered after customers complain, which causes rush replenishment work.");
+    answer(session, "desired_outcome", "Store managers can see low-stock risks before the item sells out and prioritize replenishment.");
 
     const coverage = inspectDemandInterviewCoverage(session);
     assert.equal(coverage.ready_for_discuss, true);
@@ -107,7 +107,8 @@ describe("demand interview", () => {
 
     answer(session, "target_users", "API");
 
-    assert.equal(session.next_question.id, "status_quo");
+    assert.equal(session.next_question.id, "target_users");
+    assert.equal(session.next_question.follow_up, true);
     assert.equal(session.follow_up_plan.status, "needs_follow_up");
     assert.equal(session.follow_up_questions.length, 1);
     assert.equal(session.follow_up_questions[0].slot, "target_users");
@@ -187,12 +188,12 @@ describe("demand interview", () => {
     answer(session, "execution_approval", true);
 
     const coverage = inspectDemandInterviewCoverage(session);
-    assert.equal(coverage.ready_for_prd_intake, true);
+    assert.equal(coverage.ready_for_prd_intake, false);
     assert.ok(coverage.follow_up_questions.some((question) => question.slot === "target_users"));
     assert.ok(coverage.readiness.warnings.some((warning) => warning.slot === "target_users"));
 
     const input = demandInterviewToDemandInput(session);
-    assert.equal(input.open_questions.length, 0);
+    assert.ok(input.open_questions.some((question) => /角色|频率|负责/.test(question)));
     assert.ok(input.followups.some((question) => /角色|频率|负责/.test(question)));
     assert.ok(input.interview.coverage.quality.low_quality_slots.includes("target_users"));
     assert.ok(input.interview.coverage.follow_up_questions.some((question) => question.slot === "target_users"));

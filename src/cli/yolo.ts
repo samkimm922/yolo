@@ -1,7 +1,8 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { initProject } from "../core/bootstrap.js";
+import { formatProjectSetupText, runProjectSetup } from "../core/setup.js";
 import { prdSearchDirs, resolvePrdPath } from "../core/paths.js";
 import { runYoloDoctorCli } from "../runtime/devtools/doctor.js";
 import { buildAcceptanceReport, formatAcceptanceReportText } from "../runtime/acceptance/report.js";
@@ -12,6 +13,7 @@ import { buildProgressDashboardUiEvidence } from "../runtime/progress/ui-evidenc
 import { runRunnerRuntime } from "../runtime/runner-runtime.js";
 import { runPiRuntime } from "../runtime/pi-runtimes.js";
 import { runPiAgent } from "../agents/pi.js";
+import { scanProject } from "../review/scanner.js";
 import {
   runDiscoveryPlanRuntime,
   runDiscoveryPrdRuntime,
@@ -21,13 +23,23 @@ import {
   runDemandBrainstormRuntime,
   runDemandDiscussRuntime,
   runDemandPrdRuntime,
+  runDemandStatusRuntime,
 } from "../demand/runtime.js";
+import { runDemandEvidenceDispatchRuntime } from "../demand/evidence-dispatch.js";
 import {
   answerDemandInterviewQuestion,
   createDemandInterviewSession,
   demandInterviewToDemandInput,
   inspectDemandInterviewCoverage,
+  selectDemandInterviewNextQuestion,
 } from "../demand/interview.js";
+import {
+  formatLifecycleGuardText,
+  inspectLifecycleGuard,
+  nextLifecycleAction,
+} from "../lifecycle/guard.js";
+import { writeLifecycleStageReport } from "../lifecycle/progress.js";
+import { installAgentBridge } from "../../tools/install-agent-bridge.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const defaultYoloRoot = resolve(__dirname, "../..");
@@ -36,7 +48,11 @@ export function usage() {
   return [
     "用法:",
     "  yolo init [path] [--name <name>] [--force] [--dry-run] [--json]",
+    "  yolo setup [path] [--name <name>] [--target codex|claude|both] [--scope project|user|both] [--dry-run] [--force] [--json]",
+    "  yolo install [path] [--target codex|claude|both] [--scope project|user|both] [--dry-run] [--force] [--json]",
     "  yolo brainstorm [idea] [--user <user>] [--status-quo <text>] [--evidence <text>] [--json]",
+    "  yolo demand status [idea|--demand <session.json|dir>] [--json]",
+    "  yolo demand dispatch [idea|--demand <session.json|dir>] [--execute-agents --allow-agent-dispatch] [--agent-tool-profile boundary|research|full --allow-full-agent-tools] [--max-budget-usd <amount>] [--json]",
     "  yolo interview start|answer|status|to-demand [options]",
     "  yolo interview start [idea] [--cwd <dir>] [--id <id>] [--title <title>] [--json] [--no-write]",
     "  yolo interview answer --session <path|dir> --question <id> --answer <text> [--json] [--no-write]",
@@ -46,6 +62,7 @@ export function usage() {
     "  yolo discuss [idea] [--decision <text>] [--approve] [--json]",
     "  yolo plan [--discovery <discovery.json>] [--json]",
     "  yolo prd [--discovery <discovery.json>|--demand <session.json|dir>] [--output <prd.json>] [--json]",
+    "  yolo next [--cwd <dir>] [--json]",
     "  yolo doctor [path] [--target codex|claude|both] [--scope project|user|both] [--json]",
     "  yolo check <prd.json> [--json] [--no-write]",
     "  yolo review [path] [--json]",
@@ -61,9 +78,13 @@ export function usage() {
     "  yolo --prd <prd.json> [--mode=dev|fix] [--json]",
     "",
     "`yolo init` 会在目标项目生成 .yolo/、.yolo/memory/、.yolo/state/*.jsonl 和 specs/ 基础结构。",
+    "`yolo setup` 会自动判断 new/partial/initialized/risky，安全组合 init、project-scope agent bridge install 和 doctor；不会自动补录业务现状。",
+    "`yolo demand status` 是需求阶段只读入口，会输出 context_type、route、evidence_policy、missing_slots、blockers、assumptions、needed_evidence_agents、prd_ready 和 next_action。",
+    "`yolo demand dispatch` 会把 evidence agent 协议接到实际 agent provider；默认 dry-run，只有同时传 --execute-agents 和 --allow-agent-dispatch 才执行。",
     "`yolo brainstorm/discuss` 会生成需求端 VISION/REFLECTION/INVESTIGATION/REQUIREMENTS/CONTEXT/ROADMAP/APPROVAL 产物，不改业务代码。",
     "`yolo interview` 会用一问一答收集非技术需求，默认状态写入 .yolo/demand-interviews/<id>/interview.json，可转换为 demand session 后继续 prd。",
     "`yolo discover/plan/prd` 会生成 discovery、plan、PRD 产物；discover/plan 不改业务代码，prd 只写 PRD JSON。",
+    "`yolo next` 会读取 .yolo/lifecycle/status.json，告诉 agent 当前唯一安全的下一步。",
     "`yolo doctor` 会只读检查 .yolo/lifecycle、命令注册表和 Codex/Claude agent 集成状态。",
     "`yolo check` 会在改代码前检查 PRD、产品准备度、UI 验收准备度、任务原子性、adapter 和 evidence plan。",
     "`yolo run` 会走 PI 主线执行 PRD，并在 runner 阶段用 --executor 选择 claude -p、codex exec 或 custom shell agent。",
@@ -74,7 +95,7 @@ export function usage() {
     "`yolo learn` 会把一次交付或人工 lesson 写入有界学习账本。",
     "`yolo eval` 会用固定 benchmark fixture 和 rubric 评估 discovery/PRD/UI acceptance/agent command 质量；缺真实结果时 fail closed。",
     "`yolo memory refresh` 会刷新记忆中心，迁移旧学习经验，并先把超限 ledger 归档到 state/archive/jsonl/YYYY-MM/；关键生命周期命令成功写入时会自动刷新项目记忆体。",
-    "未传 PRD 时，只会在当前 YOLO state root 的 data/prd/current、data/prd/archive 和 data 中寻找 PRD JSON。",
+    "未传 PRD 时，只会在目标项目 .yolo/data/prd/current、.yolo/data/prd/archive 和 .yolo/data 中寻找 PRD JSON。",
   ].join("\n");
 }
 
@@ -219,6 +240,63 @@ export function parseYoloInitArgs(argv = []) {
     } else if (arg === "--cwd" || arg.startsWith("--cwd=")) {
       const read = readArgValue(argv, i, "--cwd");
       input.cwd = read.value;
+      i += read.consumed;
+    } else if (arg === "--home-dir" || arg.startsWith("--home-dir=")) {
+      const read = readArgValue(argv, i, "--home-dir");
+      input.homeDir = read.value;
+      i += read.consumed;
+    } else if (arg === "--name" || arg.startsWith("--name=")) {
+      const read = readArgValue(argv, i, "--name");
+      input.projectName = read.value;
+      i += read.consumed;
+    } else if (!arg.startsWith("--") && !input.cwd) {
+      input.cwd = arg;
+    }
+  }
+
+  return { input, options };
+}
+
+export function parseYoloSetupArgs(argv = []) {
+  const input = {};
+  const options = {
+    json: false,
+    help: false,
+    force: false,
+    dryRun: false,
+    target: "both",
+    scope: "project",
+  };
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--json") {
+      options.json = true;
+    } else if (arg === "--help" || arg === "-h") {
+      options.help = true;
+    } else if (arg === "--force") {
+      options.force = true;
+    } else if (arg === "--dry-run") {
+      options.dryRun = true;
+    } else if (arg === "--target" || arg.startsWith("--target=")) {
+      const read = readArgValue(argv, i, "--target");
+      options.target = read.value;
+      i += read.consumed;
+    } else if (arg === "--scope" || arg.startsWith("--scope=")) {
+      const read = readArgValue(argv, i, "--scope");
+      options.scope = read.value;
+      i += read.consumed;
+    } else if (arg === "--install-scope" || arg.startsWith("--install-scope=")) {
+      const read = readArgValue(argv, i, "--install-scope");
+      options.scope = read.value;
+      i += read.consumed;
+    } else if (arg === "--cwd" || arg.startsWith("--cwd=")) {
+      const read = readArgValue(argv, i, "--cwd");
+      input.cwd = read.value;
+      i += read.consumed;
+    } else if (arg === "--home-dir" || arg.startsWith("--home-dir=")) {
+      const read = readArgValue(argv, i, "--home-dir");
+      input.homeDir = read.value;
       i += read.consumed;
     } else if (arg === "--name" || arg.startsWith("--name=")) {
       const read = readArgValue(argv, i, "--name");
@@ -396,7 +474,13 @@ export function parseYoloInterviewArgs(argv = []) {
 
 export function parseYoloWorkflowArgs(argv = []) {
   const input = { objectiveParts: [] };
-  const options = { json: false, help: false, writeLifecycle: true };
+  const options = {
+    json: false,
+    help: false,
+    writeLifecycle: true,
+    executeAgents: false,
+    allowAgentDispatch: false,
+  };
 
   function pushList(key, value) {
     if (!input[key]) input[key] = [];
@@ -411,9 +495,47 @@ export function parseYoloWorkflowArgs(argv = []) {
       options.help = true;
     } else if (arg === "--no-write") {
       options.writeLifecycle = false;
+    } else if (arg === "--execute-agents" || arg === "--execute-agent-dispatch") {
+      options.executeAgents = true;
+    } else if (arg === "--allow-agent-dispatch") {
+      options.allowAgentDispatch = true;
     } else if (arg === "--cwd" || arg.startsWith("--cwd=")) {
       const read = readArgValue(argv, i, "--cwd");
       input.cwd = read.value;
+      i += read.consumed;
+    } else if (arg === "--provider" || arg === "--executor" || arg.startsWith("--provider=") || arg.startsWith("--executor=")) {
+      const read = readArgValue(argv, i, arg.split("=")[0]);
+      input.provider = read.value;
+      i += read.consumed;
+    } else if (arg === "--model" || arg.startsWith("--model=")) {
+      const read = readArgValue(argv, i, "--model");
+      input.model = read.value;
+      i += read.consumed;
+    } else if (arg === "--agent-command" || arg === "--custom-command" || arg.startsWith("--agent-command=") || arg.startsWith("--custom-command=")) {
+      const read = readArgValue(argv, i, arg.split("=")[0]);
+      input.agentCommand = read.value;
+      i += read.consumed;
+    } else if (arg === "--timeout-ms" || arg.startsWith("--timeout-ms=")) {
+      const read = readArgValue(argv, i, "--timeout-ms");
+      input.timeout_ms = read.value;
+      i += read.consumed;
+    } else if (arg === "--max-budget-usd" || arg.startsWith("--max-budget-usd=")) {
+      const read = readArgValue(argv, i, "--max-budget-usd");
+      input.max_budget_usd = read.value;
+      i += read.consumed;
+    } else if (arg === "--agent-tool-profile" || arg === "--tool-profile" || arg.startsWith("--agent-tool-profile=") || arg.startsWith("--tool-profile=")) {
+      const read = readArgValue(argv, i, arg.split("=")[0]);
+      input.agent_tool_profile = read.value;
+      i += read.consumed;
+    } else if (arg === "--allow-full-agent-tools") {
+      input.allowFullAgentTools = true;
+    } else if (arg === "--stage" || arg.startsWith("--stage=")) {
+      const read = readArgValue(argv, i, "--stage");
+      input.stage = read.value;
+      i += read.consumed;
+    } else if (arg === "--boundary-mutation-probe" || arg.startsWith("--boundary-mutation-probe=")) {
+      const read = readArgValue(argv, i, "--boundary-mutation-probe");
+      input.boundary_mutation_probe = read.value;
       i += read.consumed;
     } else if (arg === "--prd" || arg.startsWith("--prd=")) {
       const read = readArgValue(argv, i, "--prd");
@@ -636,6 +758,72 @@ export function formatDemandRuntimeText(label, result = {}) {
   return lines.join("\n");
 }
 
+export function formatDemandStatusText(result = {}) {
+  const state = result.state || {};
+  const nextQuestion = result.next_question || state.next_question;
+  const lines = [`[yolo demand status] ${result.status}: ${result.summary}`];
+  if (result.code) lines.push(`code: ${result.code}`);
+  if (state.stage) lines.push(`stage: ${state.stage}`);
+  lines.push(`context_type: ${state.context_type || result.triage?.context_type || "unknown"}`);
+  lines.push(`route: ${state.route || result.triage?.route || "fast"}`);
+  lines.push(`evidence_policy: ${state.evidence_policy || result.triage?.evidence_policy || "none"}`);
+  lines.push(`reason_codes: ${(state.reason_codes || result.triage?.reason_codes || []).join(", ") || "none"}`);
+  lines.push(`prd_ready: ${state.prd_ready === true}`);
+  let printedQuestion = false;
+  if (nextQuestion) {
+    const label = nextQuestion.slot || nextQuestion.id || nextQuestion.question_id || "next";
+    const text = nextQuestion.text || nextQuestion.plain_language_prompt || nextQuestion.message || nextQuestion.question;
+    if (text) {
+      printedQuestion = true;
+      lines.push(`next_question: ${label} ${text}`);
+    }
+  }
+  if (printedQuestion && Array.isArray(state.missing_slots) && state.missing_slots.length) {
+    lines.push(`remaining_slots: ${state.missing_slots.length}`);
+  } else if (Array.isArray(state.missing_slots) && state.missing_slots.length) {
+    lines.push(`missing_slots: ${state.missing_slots.join(", ")}`);
+  }
+  if (Array.isArray(state.assumptions) && state.assumptions.length) {
+    lines.push("assumptions:");
+    for (const assumption of state.assumptions) lines.push(`  - ${assumption}`);
+  }
+  if (!printedQuestion && Array.isArray(state.blockers) && state.blockers.length) {
+    lines.push("blockers:");
+    for (const blocker of state.blockers) lines.push(`  - ${blocker.code || "BLOCKER"} ${blocker.message || blocker.slot || ""}`.trimEnd());
+  }
+  if (!printedQuestion && Array.isArray(state.needed_evidence_agents) && state.needed_evidence_agents.length) {
+    lines.push(`needed_evidence_agents: ${state.needed_evidence_agents.join(", ")}`);
+  }
+  if (state.next_action) lines.push(`next_action: ${state.next_action}`);
+  return lines.join("\n");
+}
+
+export function formatDemandDispatchText(result = {}) {
+  const lines = [`[yolo demand dispatch] ${result.status}: ${result.summary}`];
+  lines.push(`mode: ${result.mode || "dry_run"}`);
+  lines.push(`actions: ${(result.actions || []).map((action) => action.role).join(", ") || "none"}`);
+  if (result.code) lines.push(`code: ${result.code}`);
+  if (Array.isArray(result.agent_results) && result.agent_results.length) {
+    lines.push("agent_results:");
+    for (const item of result.agent_results) {
+      lines.push(`  - ${item.role || "agent"} ${item.status || "unknown"} ${item.recommendation || ""}`.trimEnd());
+    }
+  }
+  if (result.readiness) {
+    lines.push(`prd_ready: ${result.readiness.prd_ready === true}`);
+    if (Array.isArray(result.readiness.blockers) && result.readiness.blockers.length) {
+      lines.push("blockers:");
+      for (const blocker of result.readiness.blockers) {
+        lines.push(`  - ${blocker.code || "BLOCKER"} ${blocker.message || blocker.slot || ""}`.trimEnd());
+      }
+    }
+  }
+  if (Array.isArray(result.artifacts) && result.artifacts.length) {
+    lines.push(`artifacts: ${result.artifacts.join(", ")}`);
+  }
+  return lines.join("\n");
+}
+
 function cleanCliText(value) {
   return String(value ?? "").trim();
 }
@@ -694,8 +882,7 @@ function resolveInterviewPath(pathOrDir, cwd = process.cwd()) {
 function decorateInterviewState(state = {}) {
   const questions = Array.isArray(state.questions) ? state.questions : [];
   const coverage = inspectDemandInterviewCoverage({ ...state, questions });
-  const missingIds = new Set((coverage.missing || []).map((item) => item.question_id));
-  const next = questions.find((question) => missingIds.has(question.id)) || null;
+  const next = selectDemandInterviewNextQuestion({ ...state, questions }, coverage);
   return {
     ...state,
     questions,
@@ -703,9 +890,16 @@ function decorateInterviewState(state = {}) {
     readiness: coverage.readiness,
     next_question: next ? {
       id: next.id,
+      question_id: next.question_id || next.id,
+      slot: next.slot,
       text: next.plain_language_prompt || next.text || next.id,
       category: next.category,
       why_it_matters: next.why_it_matters,
+      follow_up: next.follow_up === true,
+      follow_up_id: next.follow_up_id,
+      follow_up_code: next.follow_up_code,
+      follow_up_reason: next.follow_up_reason,
+      original_prompt: next.original_prompt,
     } : null,
     coverage,
   };
@@ -829,6 +1023,7 @@ function interviewNextActions(state = {}, extra = {}) {
   if (!extra.demand_dir) actions.push(`Create demand artifacts: yolo interview to-demand --session ${path} --approve`);
   if (extra.demand_dir) actions.push(`Continue to PRD when ready: yolo prd --demand ${extra.demand_dir}`);
   for (const action of extra.runtime_next_actions || []) {
+    if (actions.length >= 3) break;
     if (!actions.includes(action)) actions.push(action);
   }
   return actions;
@@ -907,6 +1102,41 @@ export function formatPiRuntimeText(label, result = {}) {
   return lines.join("\n");
 }
 
+function emitLifecycleGuard(result = {}, options = {}, io = {}) {
+  const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
+  if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  else (result.status === "blocked" || result.status === "error" ? stderr : stdout).write(`${formatLifecycleGuardText(result)}\n`);
+  return result.status === "blocked" || result.status === "error" ? 2 : 0;
+}
+
+function inspectCliGuard(command, input = {}, options = {}, projectRoot) {
+  return inspectLifecycleGuard({
+    ...input,
+    command,
+    projectRoot,
+    stateRoot: join(projectRoot, ".yolo"),
+  }, options);
+}
+
+function guardBlocked(command, input = {}, options = {}, projectRoot, io = {}) {
+  const guard = inspectCliGuard(command, input, options, projectRoot);
+  if (guard.status !== "pass") return emitLifecycleGuard(guard, options, io);
+  return 0;
+}
+
+export function formatYoloNextText(result = {}) {
+  const lines = [`[yolo next] ${result.status}: ${result.summary}`];
+  if (result.current_stage) lines.push(`current_stage: ${result.current_stage}`);
+  if (result.recommended_command) lines.push(`recommended: ${result.recommended_command}`);
+  if (result.reason) lines.push(`reason: ${result.reason}`);
+  if (result.next_actions?.length) {
+    lines.push("next:");
+    for (const action of result.next_actions) lines.push(`  - ${action}`);
+  }
+  return lines.join("\n");
+}
+
 export function formatInitText(result) {
   const lines = [`[yolo init] ${result.status}: ${result.summary}`, `root: ${result.project_root}`];
   for (const [label, values] of [
@@ -924,6 +1154,30 @@ export function formatInitText(result) {
     for (const action of result.next_actions) lines.push(`  - ${action}`);
   }
   appendMemoryRefreshText(lines, result);
+  return lines.join("\n");
+}
+
+export function formatSetupText(result = {}) {
+  return formatProjectSetupText(result);
+}
+
+export function formatInstallText(result = {}) {
+  const changed = (result.written?.length || 0) + (result.overwritten?.length || 0);
+  const lines = [
+    `[yolo install] ${result.status}: ${result.dry_run ? "planned YOLO agent bridge install" : "installed YOLO agent bridge"}`,
+    `root: ${result.project_root}`,
+    `targets: ${(result.targets || []).join(",") || "none"}`,
+    `scopes: ${(result.scopes || []).join(",") || "none"}`,
+    `changed: ${changed}`,
+    `planned: ${result.planned?.length || 0}`,
+    `skipped: ${result.skipped?.length || 0}`,
+  ];
+  if (result.legacy_cleanup_planned?.length) lines.push(`legacy cleanup planned: ${result.legacy_cleanup_planned.length}`);
+  if (result.legacy_archived?.length) lines.push(`legacy archived: ${result.legacy_archived.length}`);
+  if (result.next_actions?.length) {
+    lines.push("next:");
+    for (const action of result.next_actions) lines.push(`  - ${action}`);
+  }
   return lines.join("\n");
 }
 
@@ -976,6 +1230,83 @@ export async function runYoloInitCli(argv = [], io = {}) {
     };
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stderr.write(`[yolo init] error: ${error.message}\n`);
+    return result.exit_code;
+  }
+}
+
+export async function runYoloSetupCli(argv = [], io = {}) {
+  const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
+  const { input, options } = parseYoloSetupArgs(argv);
+
+  if (options.help) {
+    stdout.write(`${usage()}\n`);
+    return 0;
+  }
+
+  try {
+    const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+    const result = runProjectSetup({
+      projectRoot,
+      projectName: input.projectName,
+      yoloRoot: io.yoloRoot || defaultYoloRoot,
+      homeDir: input.homeDir,
+      target: options.target,
+      scope: options.scope,
+      force: options.force,
+      dryRun: options.dryRun,
+    });
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else (result.status === "blocked" ? stderr : stdout).write(`${formatSetupText(result)}\n`);
+    return result.exit_code;
+  } catch (error) {
+    const result = {
+      status: "error",
+      summary: "failed to run YOLO project setup",
+      exit_code: 1,
+      code: "SETUP_FAILED",
+      error: error.message,
+    };
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stderr.write(`[yolo setup] error: ${error.message}\n`);
+    return result.exit_code;
+  }
+}
+
+export async function runYoloInstallCli(argv = [], io = {}) {
+  const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
+  const { input, options } = parseYoloSetupArgs(argv);
+
+  if (options.help) {
+    stdout.write(`${usage()}\n`);
+    return 0;
+  }
+
+  try {
+    const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+    const result = installAgentBridge({
+      projectRoot,
+      yoloRoot: io.yoloRoot || defaultYoloRoot,
+      homeDir: input.homeDir,
+      targets: options.target,
+      scope: options.scope,
+      force: options.force,
+      dryRun: options.dryRun,
+    });
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stdout.write(`${formatInstallText(result)}\n`);
+    return 0;
+  } catch (error) {
+    const result = {
+      status: "error",
+      summary: "failed to install YOLO agent bridge",
+      exit_code: 1,
+      code: "INSTALL_FAILED",
+      error: error.message,
+    };
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stderr.write(`[yolo install] error: ${error.message}\n`);
     return result.exit_code;
   }
 }
@@ -1037,6 +1368,8 @@ export async function runYoloCheckCli(argv = [], io = {}) {
   const prdPath = input.prdPath
     ? resolvePrdPath(input.prdPath, io.yoloRoot || defaultYoloRoot, { cwd: projectRoot })
     : input.prdPath;
+  const guarded = guardBlocked("yolo-check", { ...input, prdPath }, options, projectRoot, { stdout, stderr });
+  if (guarded !== 0) return guarded;
   let report = inspectYoloCheck({
     prdPath,
     projectRoot,
@@ -1046,6 +1379,36 @@ export async function runYoloCheckCli(argv = [], io = {}) {
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else (report.status === "error" ? stderr : stdout).write(`${formatYoloCheckText(report)}\n`);
   return report.status === "blocked" || report.status === "error" ? 1 : 0;
+}
+
+export async function runYoloNextCli(argv = [], io = {}) {
+  const stdout = io.stdout || process.stdout;
+  const { input, options } = parseYoloWorkflowArgs(argv);
+
+  if (options.help) {
+    stdout.write(`${usage()}\n`);
+    return 0;
+  }
+
+  const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+  const guard = inspectCliGuard("yolo-next", input, options, projectRoot);
+  const next = nextLifecycleAction({ projectRoot, stateRoot: join(projectRoot, ".yolo") });
+  const result = {
+    status: "success",
+    code: "YOLO_NEXT_READY",
+    summary: `Next safe YOLO stage is ${next.command}.`,
+    project_root: projectRoot,
+    current_stage: guard.current_stage,
+    recommended_command: next.command,
+    target_stage: next.stage,
+    reason: next.reason,
+    description: next.description,
+    guard,
+    next_actions: [`Run ${next.command}: ${next.description}.`],
+  };
+  if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  else stdout.write(`${formatYoloNextText(result)}\n`);
+  return 0;
 }
 
 export async function runYoloProgressUiEvidenceCli(argv = [], io = {}) {
@@ -1239,6 +1602,161 @@ export async function runYoloBrainstormCli(argv = [], io = {}) {
   return result.status === "blocked" ? 1 : 0;
 }
 
+function normalizeDemandStage(value = "") {
+  const stage = cleanCliText(value).toLowerCase();
+  if (!stage) return "";
+  if (stage === "discovery") return "discover";
+  if (stage === "discussion") return "discuss";
+  if (stage === "evidence-dispatch") return "dispatch";
+  return stage;
+}
+
+async function runYoloDemandStageCli(stage, input = {}, options = {}, io = {}) {
+  const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
+  const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+  const stateRoot = join(projectRoot, ".yolo");
+  const stageLabel = normalizeDemandStage(stage);
+
+  if (stageLabel === "brainstorm") {
+    let result = runDemandBrainstormRuntime({
+      ...input,
+      projectRoot,
+      stateRoot,
+      objective: input.objective,
+      writeArtifacts: options.writeLifecycle,
+    });
+    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-demand:brainstorm" });
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stdout.write(`${formatDemandRuntimeText("brainstorm", result)}\n`);
+    return result.status === "blocked" ? 1 : 0;
+  }
+
+  if (stageLabel === "interview") {
+    const interviewArgs = ["start"];
+    if (input.objective) interviewArgs.push(input.objective);
+    if (input.cwd) interviewArgs.push(`--cwd=${input.cwd}`);
+    if (options.json) interviewArgs.push("--json");
+    if (options.writeLifecycle === false) interviewArgs.push("--no-write");
+    return runYoloInterviewCli(interviewArgs, io);
+  }
+
+  if (stageLabel === "discover") {
+    let result = runDiscoveryRuntime({
+      ...input,
+      projectRoot,
+      stateRoot,
+      objective: input.objective,
+      writeArtifacts: options.writeLifecycle,
+      writeLifecycle: options.writeLifecycle,
+      source: "yolo-demand:discover",
+    });
+    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-demand:discover" });
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stdout.write(`${formatDiscoveryRuntimeText("discover", result)}\n`);
+    return result.status === "blocked" ? 1 : 0;
+  }
+
+  if (stageLabel === "discuss") {
+    let result = runDemandDiscussRuntime({
+      ...input,
+      projectRoot,
+      stateRoot,
+      objective: input.objective,
+      writeArtifacts: options.writeLifecycle,
+    });
+    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-demand:discuss" });
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stdout.write(`${formatDemandRuntimeText("discuss", result)}\n`);
+    return result.status === "blocked" ? 1 : 0;
+  }
+
+  if (stageLabel === "prd") {
+    const guarded = guardBlocked("yolo-prd", input, options, projectRoot, { stdout, stderr });
+    if (guarded !== 0) return guarded;
+    let result = input.demandPath
+      ? runDemandPrdRuntime({
+        ...input,
+        projectRoot,
+        stateRoot,
+        writeArtifacts: options.writeLifecycle,
+      })
+      : runDiscoveryPrdRuntime({
+        ...input,
+        projectRoot,
+        stateRoot,
+        objective: input.objective,
+        writeArtifacts: options.writeLifecycle,
+        writeLifecycle: options.writeLifecycle,
+        source: "yolo-demand:prd",
+      });
+    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-demand:prd" });
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else {
+      const text = input.demandPath ? formatDemandRuntimeText("prd", result) : formatDiscoveryRuntimeText("prd", result);
+      stdout.write(`${text}\n`);
+    }
+    return result.status === "blocked" ? 1 : 0;
+  }
+
+  const result = {
+    status: "error",
+    code: "UNKNOWN_DEMAND_STAGE",
+    summary: `Unknown demand stage: ${stage}`,
+    next_actions: ["Use --stage brainstorm, interview, discover, discuss, prd, status, or dispatch."],
+  };
+  if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  else stdout.write(`${formatDemandStatusText(result)}\n`);
+  return 2;
+}
+
+export async function runYoloDemandCli(argv = [], io = {}) {
+  const stdout = io.stdout || process.stdout;
+  const commandNames = new Set(["status", "dispatch", "evidence"]);
+  const stageNames = new Set(["brainstorm", "interview", "discover", "discovery", "discuss", "discussion", "prd"]);
+  const first = argv[0] && !argv[0].startsWith("--") ? normalizeDemandStage(argv[0]) : "";
+  let command = commandNames.has(first) ? first : "status";
+  let args = commandNames.has(first) ? argv.slice(1) : argv;
+  if (stageNames.has(first)) args = ["--stage", first, ...argv.slice(1)];
+  const { input, options } = parseYoloWorkflowArgs(args);
+
+  if (options.help) {
+    stdout.write(`${usage()}\n`);
+    return 0;
+  }
+
+  const stage = normalizeDemandStage(input.stage);
+  if (commandNames.has(stage)) {
+    command = stage;
+  } else if (stage) {
+    return runYoloDemandStageCli(stage, input, options, io);
+  }
+
+  const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+  if (command === "dispatch" || command === "evidence") {
+    const result = await runDemandEvidenceDispatchRuntime({
+      ...input,
+      executeAgents: options.executeAgents,
+      allowAgentDispatch: options.allowAgentDispatch,
+      projectRoot,
+      stateRoot: join(projectRoot, ".yolo"),
+      objective: input.objective,
+    });
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stdout.write(`${formatDemandDispatchText(result)}\n`);
+    return result.status === "blocked" ? 1 : 0;
+  }
+  const result = runDemandStatusRuntime({
+    ...input,
+    projectRoot,
+    stateRoot: join(projectRoot, ".yolo"),
+    objective: input.objective,
+  });
+  if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  else stdout.write(`${formatDemandStatusText(result)}\n`);
+  return 0;
+}
+
 export async function runYoloDiscussCli(argv = [], io = {}) {
   const stdout = io.stdout || process.stdout;
   const { input, options } = parseYoloWorkflowArgs(argv);
@@ -1264,6 +1782,7 @@ export async function runYoloDiscussCli(argv = [], io = {}) {
 
 export async function runYoloAcceptCli(argv = [], io = {}) {
   const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloAcceptArgs(argv);
 
   if (options.help) {
@@ -1275,6 +1794,8 @@ export async function runYoloAcceptCli(argv = [], io = {}) {
   const prdPath = input.prdPath
     ? resolvePrdPath(input.prdPath, io.yoloRoot || defaultYoloRoot, { cwd: projectRoot })
     : input.prdPath;
+  const guarded = guardBlocked("yolo-accept", { ...input, prdPath }, options, projectRoot, { stdout, stderr });
+  if (guarded !== 0) return guarded;
   let report = buildAcceptanceReport({
     prdPath,
     projectRoot,
@@ -1316,6 +1837,7 @@ export async function runYoloDiscoverCli(argv = [], io = {}) {
 
 export async function runYoloPlanCli(argv = [], io = {}) {
   const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloWorkflowArgs(argv);
 
   if (options.help) {
@@ -1324,6 +1846,8 @@ export async function runYoloPlanCli(argv = [], io = {}) {
   }
 
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+  const guarded = guardBlocked("yolo-plan", input, options, projectRoot, { stdout, stderr });
+  if (guarded !== 0) return guarded;
   let result = runDiscoveryPlanRuntime({
     ...input,
     projectRoot,
@@ -1341,6 +1865,7 @@ export async function runYoloPlanCli(argv = [], io = {}) {
 
 export async function runYoloPrdCli(argv = [], io = {}) {
   const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloWorkflowArgs(argv);
 
   if (options.help) {
@@ -1349,6 +1874,8 @@ export async function runYoloPrdCli(argv = [], io = {}) {
   }
 
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+  const guarded = guardBlocked("yolo-prd", input, options, projectRoot, { stdout, stderr });
+  if (guarded !== 0) return guarded;
   if (input.demandPath) {
     let result = runDemandPrdRuntime({
       ...input,
@@ -1397,8 +1924,92 @@ export async function runYoloWorkflowPlanCli(workflow, argv = [], io = {}) {
   return 2;
 }
 
+const REVIEW_SCOPE_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"]);
+
+function splitCliListValues(values = []) {
+  return values
+    .flatMap((value) => String(value || "").split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function projectRelativePath(projectRoot, path) {
+  const rel = relative(projectRoot, path);
+  return rel && !rel.startsWith("..") && !isAbsolute(rel) ? rel.replaceAll("\\", "/") : path;
+}
+
+function looksLikeReviewScope(value, projectRoot) {
+  const clean = cleanCliText(value);
+  if (!clean) return false;
+  if (existsSync(resolve(projectRoot, clean))) return true;
+  return /(^\.{1,2}[\\/]|[\\/]|\.([cm]?[jt]sx?|json|md|css|scss|html)$)/i.test(clean);
+}
+
+function collectReviewScopeFiles(projectRoot, path) {
+  const absolutePath = isAbsolute(path) ? resolve(path) : resolve(projectRoot, path);
+  if (!existsSync(absolutePath)) return [projectRelativePath(projectRoot, absolutePath)];
+
+  const stat = statSync(absolutePath);
+  if (stat.isFile()) return [projectRelativePath(projectRoot, absolutePath)];
+  if (!stat.isDirectory()) return [];
+
+  const files = [];
+  for (const entry of readdirSync(absolutePath, { withFileTypes: true })) {
+    if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git") continue;
+    const child = join(absolutePath, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectReviewScopeFiles(projectRoot, child));
+    } else if (REVIEW_SCOPE_EXTENSIONS.has(entry.name.match(/\.[^.]+$/)?.[0] || "")) {
+      files.push(projectRelativePath(projectRoot, child));
+    }
+  }
+  return files;
+}
+
+function reviewScopeFilesFromInput(input = {}, projectRoot) {
+  const explicit = splitCliListValues(input.target_files || []);
+  const positional = (input.objectiveParts || []).filter((part) => looksLikeReviewScope(part, projectRoot));
+  const seen = new Set();
+  const files = [];
+  for (const item of [...explicit, ...positional]) {
+    for (const file of collectReviewScopeFiles(projectRoot, item)) {
+      if (seen.has(file)) continue;
+      seen.add(file);
+      files.push(file);
+    }
+  }
+  return files;
+}
+
+function buildScopedReviewScanReport({ scan, projectRoot, stateRoot, reviewScopeFiles, writeLifecycle }) {
+  const hasHigh = scan.findings.some((finding) =>
+    finding.severity === "HIGH" || finding.severity === "CRITICAL" || finding.must_fix_before_ship === true
+  );
+  const report = {
+    status: hasHigh ? "warning" : "success",
+    summary: `Review scan found ${scan.total_findings} finding(s).`,
+    project_root: projectRoot,
+    review_scope: reviewScopeFiles,
+    artifacts: [],
+    next_actions: hasHigh ? ["Review HIGH/CRITICAL findings before shipping."] : [],
+    scan,
+    findings: scan.findings,
+  };
+  if (writeLifecycle !== false && stateRoot) {
+    report.lifecycle_write = writeLifecycleStageReport("review-fix", report, {
+      projectRoot,
+      stateRoot,
+      source: "yolo-review",
+      learnFailures: true,
+    });
+    report.artifacts.push(report.lifecycle_write.artifact_path);
+  }
+  return report;
+}
+
 export async function runYoloReviewCli(argv = [], io = {}) {
   const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloWorkflowArgs(argv);
 
   if (options.help) {
@@ -1406,12 +2017,24 @@ export async function runYoloReviewCli(argv = [], io = {}) {
     return 0;
   }
 
-  const projectRoot = resolve(input.cwd || input.objective || io.cwd || process.cwd());
-  let result = await runPiRuntime("review.scan", {
-    projectRoot,
-    stateRoot: join(projectRoot, ".yolo"),
-    writeLifecycle: options.writeLifecycle,
-  });
+  const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+  const reviewScopeFiles = reviewScopeFilesFromInput(input, projectRoot);
+  const guarded = guardBlocked("yolo-review", input, options, projectRoot, { stdout, stderr });
+  if (guarded !== 0) return guarded;
+  const stateRoot = join(projectRoot, ".yolo");
+  let result = reviewScopeFiles.length > 0
+    ? buildScopedReviewScanReport({
+      scan: scanProject({ root: projectRoot, files: reviewScopeFiles }),
+      projectRoot,
+      stateRoot,
+      reviewScopeFiles,
+      writeLifecycle: options.writeLifecycle,
+    })
+    : await runPiRuntime("review.scan", {
+      projectRoot,
+      stateRoot,
+      writeLifecycle: options.writeLifecycle,
+    });
   result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-review" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatPiRuntimeText("review", result)}\n`);
@@ -1420,6 +2043,7 @@ export async function runYoloReviewCli(argv = [], io = {}) {
 
 export async function runYoloShipCli(argv = [], io = {}) {
   const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloWorkflowArgs(argv);
 
   if (options.help) {
@@ -1431,6 +2055,8 @@ export async function runYoloShipCli(argv = [], io = {}) {
   const prdPath = input.prdPath
     ? resolvePrdPath(input.prdPath, io.yoloRoot || defaultYoloRoot, { cwd: projectRoot })
     : "";
+  const guarded = guardBlocked("yolo-ship", { ...input, prdPath }, options, projectRoot, { stdout, stderr });
+  if (guarded !== 0) return guarded;
   let result = await runPiRuntime("ship", {
     prdPath,
     projectRoot,
@@ -1476,10 +2102,17 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
   if (argv[0] === "init") {
     return runYoloInitCli(argv.slice(1), io);
   }
+  if (argv[0] === "setup") {
+    return runYoloSetupCli(argv.slice(1), io);
+  }
+  if (argv[0] === "install") {
+    return runYoloInstallCli(argv.slice(1), io);
+  }
   if (argv[0] === "doctor") {
     return runYoloDoctorCli(argv.slice(1), io);
   }
   if (argv[0] === "brainstorm" || argv[0] === "office-hours") return runYoloBrainstormCli(argv.slice(1), io);
+  if (argv[0] === "demand") return runYoloDemandCli(argv.slice(1), io);
   if (argv[0] === "interview") return runYoloInterviewCli(argv.slice(1), io);
   if (argv[0] === "discover") return runYoloDiscoverCli(argv.slice(1), io);
   if (argv[0] === "discuss") return runYoloDiscussCli(argv.slice(1), io);
@@ -1503,6 +2136,9 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
   if (argv[0] === "memory") {
     return runYoloMemoryCli(argv.slice(1), io);
   }
+  if (argv[0] === "next") {
+    return runYoloNextCli(argv.slice(1), io);
+  }
   if (argv[0] === "ship") {
     return runYoloShipCli(argv.slice(1), io);
   }
@@ -1525,7 +2161,7 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
   const cliProjectRoot = resolve(input.cwd || io.cwd || process.cwd());
   const prdPath = input.prdPath
     ? resolvePrdPath(input.prdPath, yoloRoot, { cwd: cliProjectRoot })
-    : findLatestPrd(yoloRoot);
+    : findLatestPrd(join(cliProjectRoot, ".yolo"));
 
   if (!prdPath) {
     const result = {
@@ -1534,12 +2170,15 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
       exit_code: 2,
       code: "MISSING_PRD_PATH",
       artifacts: [],
-      next_actions: ["Pass a PRD path with --prd or create a runnable PRD under data/prd/current."],
+      next_actions: ["Pass a PRD path with --prd or create a runnable PRD under the target project's .yolo/data/prd/current."],
     };
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stderr.write(`${usage()}\n`);
     return result.exit_code;
   }
+
+  const guarded = guardBlocked("yolo-run", { ...input, prdPath }, options, cliProjectRoot, { stdout, stderr });
+  if (guarded !== 0) return guarded;
 
   if (!options.engineOnly) {
     const executor = input.executor || input.provider || (input.agentCommand ? "custom" : undefined);

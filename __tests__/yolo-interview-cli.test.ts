@@ -81,8 +81,10 @@ describe("yolo interview CLI", () => {
       assert.equal(result.session_path, statePath);
       assert.equal(existsSync(statePath), true);
       assert.equal(result.next_question.id, "target_users");
+      assert.equal(Array.isArray(result.next_question), false);
       assert.equal(result.coverage.answered, 0);
       assert.equal(result.coverage.missing.length >= 1, true);
+      assert.equal(result.next_actions.length <= 2, true);
       assert.match(result.next_actions[0], /yolo interview answer/);
 
       const saved = JSON.parse(readFileSync(statePath, "utf8"));
@@ -97,15 +99,75 @@ describe("yolo interview CLI", () => {
     const root = tempProject();
     try {
       const started = await startInterview(root);
-      const result = await answer(root, started.session_path, "target_users", "Store managers");
+      const result = await answer(
+        root,
+        started.session_path,
+        "target_users",
+        "Store managers check inventory every morning and are responsible for reordering before shelves run out.",
+      );
 
       assert.equal(result.coverage.answered, 1);
       assert.equal(result.next_question.id, "status_quo");
 
       const saved = JSON.parse(readFileSync(started.session_path, "utf8"));
-      assert.equal(saved.answers.target_users.answer, "Store managers");
+      assert.equal(saved.answers.target_users.answer, "Store managers check inventory every morning and are responsible for reordering before shelves run out.");
       assert.equal(saved.next_question.id, "status_quo");
       assert.equal(existsSync(join(root, ".yolo", "state", "questions.jsonl")), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("weak answers keep next question on the same slot follow-up", async () => {
+    const root = tempProject();
+    try {
+      const started = await startInterview(root);
+      const result = await answer(root, started.session_path, "target_users", "用户");
+
+      assert.equal(result.coverage.answered, 1);
+      assert.equal(result.coverage.ready_for_prd_intake, false);
+      assert.equal(result.coverage_detail.readiness.status, "needs_follow_up");
+      assert.equal(result.next_question.id, "target_users");
+      assert.equal(result.next_question.follow_up, true);
+      assert.match(result.next_question.text, /角色|频率|负责/);
+      assert.equal(result.coverage_detail.follow_up_questions[0].slot, "target_users");
+      assert.equal(result.next_actions.length <= 2, true);
+      assert.match(result.next_actions[0], /--question target_users/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("vague outcome words require a business follow-up", async () => {
+    const root = tempProject();
+    try {
+      const started = await startInterview(root);
+      await answer(
+        root,
+        started.session_path,
+        "target_users",
+        "Store managers check inventory every morning and are responsible for reordering before shelves run out.",
+      );
+      await answer(
+        root,
+        started.session_path,
+        "status_quo",
+        "Currently managers export an inventory spreadsheet each morning and manually check low quantities.",
+      );
+      await answer(
+        root,
+        started.session_path,
+        "pain_points",
+        "Manual checks are too slow because managers discover stockouts after customers complain.",
+      );
+
+      const result = await answer(root, started.session_path, "desired_outcome", "优化体验，更智能");
+
+      assert.equal(result.coverage_detail.readiness.status, "needs_follow_up");
+      assert.equal(result.next_question.id, "desired_outcome");
+      assert.equal(result.next_question.follow_up, true);
+      assert.match(result.next_question.text, /用户|业务|能做什么/);
+      assert.equal(result.coverage_detail.follow_up_questions[0].slot, "desired_outcome");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -139,7 +201,12 @@ describe("yolo interview CLI", () => {
     const root = tempProject();
     try {
       const started = await startInterview(root);
-      await answer(root, started.session_path, "target_users", "Store managers");
+      await answer(
+        root,
+        started.session_path,
+        "target_users",
+        "Store managers check inventory every morning and are responsible for reordering before shelves run out.",
+      );
 
       const out = capture();
       const exitCode = await runYoloInterviewCli([
@@ -166,8 +233,8 @@ describe("yolo interview CLI", () => {
       writeFileSync(join(root, "src", "services", "inventory-alerts.ts"), "export const threshold = 3;\n", "utf8");
       const started = await startInterview(root);
       const answers = [
-        ["target_users", "Store managers"],
-        ["status_quo", "They find stockouts after customers complain."],
+        ["target_users", "Store managers check inventory every morning and are responsible for reordering before shelves run out."],
+        ["status_quo", "Currently managers export an inventory spreadsheet each morning and manually check low quantities."],
         ["pain_points", "Stockouts are discovered too late."],
         ["desired_outcome", "Managers see low-stock risks before the item sells out."],
         ["success_criteria", "Show a low-stock badge before quantity reaches zero."],
@@ -200,6 +267,52 @@ describe("yolo interview CLI", () => {
       assert.equal(saved.answers.execution_approval.normalized.approved, true);
       assert.equal(saved.demand.artifacts.some((path) => path.endsWith("session.json")), true);
       assert.equal(existsSync(join(root, ".yolo", "state", "decisions.jsonl")), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("to-demand does not mark PRD intake ready while follow-up is unresolved", async () => {
+    const root = tempProject();
+    try {
+      mkdirSync(join(root, "src", "services"), { recursive: true });
+      writeFileSync(join(root, "src", "services", "inventory-alerts.ts"), "export const threshold = 3;\n", "utf8");
+      const started = await startInterview(root);
+      const answers = [
+        ["target_users", "用户"],
+        ["status_quo", "Currently managers export an inventory spreadsheet each morning and manually check low quantities."],
+        ["pain_points", "Stockouts are discovered too late and cause customer complaints after shelves are empty."],
+        ["desired_outcome", "Managers see low-stock risks before the item sells out."],
+        ["success_criteria", "Show a low-stock badge before quantity reaches zero."],
+        ["success_proof", "During acceptance, create a low quantity SKU and verify the manager sees the badge."],
+        ["scope_boundaries", "Do not build supplier ordering."],
+        ["exceptions", "Hidden or discontinued SKUs should not show noisy alerts."],
+        ["mvp_priority", "MVP is threshold alert plus inventory badge; forecasting can come later."],
+      ];
+      for (const [question, value] of answers) await answer(root, started.session_path, question, value);
+
+      const out = capture();
+      const exitCode = await runYoloCli([
+        "interview",
+        "to-demand",
+        "--session",
+        dirname(started.session_path),
+        "--approve",
+        "--json",
+      ], { cwd: root, stdout: out.stream });
+
+      const result = out.json();
+      assert.equal(exitCode, 0);
+      assert.equal(result.coverage.ready_for_prd_intake, false);
+      assert.equal(result.coverage_detail.readiness.status, "needs_follow_up");
+      assert.equal(result.next_question.id, "target_users");
+      assert.equal(result.next_question.follow_up, true);
+      assert.match(result.next_question.text, /角色|频率|负责/);
+
+      const saved = JSON.parse(readFileSync(started.session_path, "utf8"));
+      assert.equal(saved.coverage.ready_for_prd_intake, false);
+      assert.equal(saved.next_question.id, "target_users");
+      assert.equal(saved.next_question.follow_up, true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

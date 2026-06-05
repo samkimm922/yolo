@@ -630,8 +630,33 @@ function approvalState(session = {}) {
   };
 }
 
-function nextQuestion(session = {}, coverage = inspectDemandInterviewCoverage(session)) {
+function nextQuestionFromFollowUp(followUp, questions = DEMAND_INTERVIEW_QUESTION_BANK) {
+  if (!followUp) return null;
+  const original = questionById(followUp.question_id, questions) || questionBySlot(followUp.slot, questions);
+  const prompt = clean(followUp.plain_language_prompt || followUp.text || followUp.message || original?.plain_language_prompt);
+  const questionId = clean(followUp.question_id || original?.id || followUp.slot);
+  return {
+    ...(original || {}),
+    id: questionId,
+    question_id: questionId,
+    slot: clean(followUp.slot || original?.slot || questionId),
+    category: clean(followUp.category || original?.category || followUp.slot),
+    plain_language_prompt: prompt,
+    text: prompt,
+    why_it_matters: original?.why_it_matters,
+    follow_up: true,
+    follow_up_id: followUp.id,
+    follow_up_code: followUp.code,
+    follow_up_reason: followUp.reason,
+    follow_up_severity: followUp.severity || "warning",
+    original_prompt: original?.plain_language_prompt,
+  };
+}
+
+export function selectDemandInterviewNextQuestion(session = {}, coverage = inspectDemandInterviewCoverage(session)) {
   const questions = session.questions || DEMAND_INTERVIEW_QUESTION_BANK;
+  const followUp = (coverage.follow_up_questions || [])[0];
+  if (followUp) return nextQuestionFromFollowUp(followUp, questions);
   const missing = new Set(coverage.missing.map((item) => item.question_id));
   return questions.find((question) => missing.has(question.id)) || null;
 }
@@ -678,6 +703,8 @@ export function inspectDemandInterviewCoverage(session = {}) {
   const quality = qualitySummary(answerQuality);
   const followUpPlan = followUpPlanForQuality(answerQuality);
   const followUpQuestions = followUpPlan.follow_up_questions;
+  const hasFollowUps = followUpQuestions.length > 0;
+  const discussFollowUps = followUpQuestions.filter((question) => DISCUSS_REQUIRED_SLOTS.includes(question.slot));
 
   const missingDiscuss = missingSlots(session, DISCUSS_REQUIRED_SLOTS);
   const missingPrd = missingSlots(session, PRD_REQUIRED_SLOTS);
@@ -697,13 +724,19 @@ export function inspectDemandInterviewCoverage(session = {}) {
       required_for: question?.required_for || ["prd_intake"],
     };
   });
-  const readyForDiscuss = missingDiscuss.length === 0;
-  const readyForPrdIntake = missingPrd.length === 0 && approval.approved === true;
+  const readyForDiscuss = missingDiscuss.length === 0 && discussFollowUps.length === 0;
+  const readyForPrdIntake = missingPrd.length === 0 && approval.approved === true && !hasFollowUps;
   const blockers = [
     ...missingPrd.map((slot) => ({
       code: `MISSING_${slot.toUpperCase()}`,
       slot,
       message: `${questionBySlot(slot, questions)?.category || slot} is required before PRD intake.`,
+    })),
+    ...followUpQuestions.map((question) => ({
+      code: question.code || `FOLLOW_UP_${String(question.slot).toUpperCase()}`,
+      slot: question.slot,
+      message: question.plain_language_prompt,
+      reason: question.reason,
     })),
     ...(approval.approved ? [] : [{
       code: "APPROVAL_REQUIRED",
@@ -720,6 +753,9 @@ export function inspectDemandInterviewCoverage(session = {}) {
   }));
   const totalRequired = PRD_REQUIRED_SLOTS.length + 1;
   const answeredRequired = PRD_REQUIRED_SLOTS.filter((slot) => !missingPrd.includes(slot)).length + (approval.approved ? 1 : 0);
+  const nextActionPrompt = followUpQuestions[0]?.plain_language_prompt
+    || missing[0]?.plain_language_prompt
+    || (readyForPrdIntake ? "Convert interview answers to demand input and run demand discuss/PRD intake." : "Review interview status before continuing.");
 
   return {
     schema_version: DEMAND_INTERVIEW_SCHEMA_VERSION,
@@ -736,7 +772,7 @@ export function inspectDemandInterviewCoverage(session = {}) {
     ready_for_discuss: readyForDiscuss,
     ready_for_prd_intake: readyForPrdIntake,
     readiness: {
-      status: readyForPrdIntake ? "ready" : readyForDiscuss ? "discuss_ready" : "collecting",
+      status: readyForPrdIntake ? "ready" : hasFollowUps ? "needs_follow_up" : readyForDiscuss ? "discuss_ready" : "collecting",
       ready_for_discuss: readyForDiscuss,
       ready_for_prd_intake: readyForPrdIntake,
       quality_score: Math.round((answeredRequired / totalRequired) * 100),
@@ -746,9 +782,7 @@ export function inspectDemandInterviewCoverage(session = {}) {
       warnings,
       follow_up_questions: followUpQuestions,
       follow_up_plan: followUpPlan,
-      next_actions: readyForPrdIntake
-        ? ["Convert interview answers to demand input and run demand discuss/PRD intake."]
-        : missing.map((item) => item.plain_language_prompt).filter(Boolean),
+      next_actions: [nextActionPrompt].filter(Boolean),
     },
   };
 }
@@ -759,7 +793,7 @@ function refreshSession(session) {
   session.readiness = session.coverage.readiness;
   session.follow_up_questions = session.coverage.follow_up_questions;
   session.follow_up_plan = session.coverage.follow_up_plan;
-  session.next_question = nextQuestion(session, session.coverage);
+  session.next_question = selectDemandInterviewNextQuestion(session, session.coverage);
   return session;
 }
 
@@ -906,7 +940,10 @@ export function demandInterviewToDemandInput(session = {}) {
     followups: followUpPrompts,
     open_questions: coverage.ready_for_prd_intake
       ? []
-      : coverage.missing.map((item) => item.plain_language_prompt).filter(Boolean),
+      : [...new Set([
+        ...followUpPrompts,
+        ...coverage.missing.map((item) => item.plain_language_prompt).filter(Boolean),
+      ])],
     interview: {
       id: session.id,
       schema: session.schema,
