@@ -9,8 +9,9 @@ import {
   runDemandDiscussRuntime,
   runDemandPrdRuntime,
 } from "../src/demand/runtime.js";
-import { inspectDemandQuality } from "../src/demand/gate.js";
+import { inspectDemandQuality, inspectDemandReadiness } from "../src/demand/gate.js";
 import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
+import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
 
 function assertTaskSessionPlan(task, demandId) {
   const session = task.handoff?.session;
@@ -34,6 +35,34 @@ function assertTaskSessionPlan(task, demandId) {
 function writeJson(file, value) {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function defaultDemandTargetFileContent(file) {
+  if (file.endsWith("inventory-list.tsx")) {
+    return [
+      "export function InventoryList({ items }) {",
+      "  return <ul>{items.map((item) => <li key={item.sku}>{item.sku}{item.quantity <= item.lowStockThreshold ? <span>Low stock</span> : null}</li>)}</ul>;",
+      "}",
+      "",
+    ].join("\n");
+  }
+  if (file.endsWith("inventory-alerts.ts")) {
+    return "export function isLowStock(item) { return item.quantity <= item.lowStockThreshold; }\n";
+  }
+  if (file.endsWith("inventory-alerts.test.ts")) {
+    return "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { isLowStock } from './inventory-alerts';\ntest('low stock threshold', () => assert.equal(isLowStock({ quantity: 1, lowStockThreshold: 2 }), true));\n";
+  }
+  return "export const yoloDemandTarget = true;\n";
+}
+
+function writeProjectFile(root, file, content = defaultDemandTargetFileContent(file)) {
+  const path = join(root, file);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content, "utf8");
+}
+
+function seedDemandTargetFiles(root, files) {
+  for (const file of files) writeProjectFile(root, file);
 }
 
 function acceptanceAdapterManifest() {
@@ -84,19 +113,20 @@ describe("demand runtime", () => {
   test("discuss requires approval and compiles approved demand to L3 PRD", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-discuss-"));
     try {
+      seedDemandTargetFiles(root, ["src/services/inventory-alerts.ts"]);
       const discuss = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Build inventory stockout prevention for store managers.",
         target_users: ["store manager"],
         status_quo: ["Managers discover stockouts after customers complain."],
-        evidence: ["Support tickets mention stockout surprises weekly."],
-        assumptions: ["Thresholds are configurable per SKU."],
+        evidence: ["Support tickets mention stockout surprises weekly.", "MVP inventory rows use the existing lowStockThreshold field."],
+        assumptions: ["Thresholds are configurable per SKU through lowStockThreshold."],
         success_criteria: ["Managers can see a low-stock alert before stockout."],
         constraints: ["Do not change order import behavior."],
         non_goals: ["Do not build supplier ordering."],
         target_files: ["src/services/inventory-alerts.ts"],
-        decisions: ["Start with one configurable threshold per SKU."],
+        decisions: ["Start with one configurable threshold per SKU: item.quantity <= item.lowStockThreshold means low stock."],
         roadmap: ["MVP alert generation before stockout."],
         approve: true,
         writeArtifacts: true,
@@ -107,6 +137,7 @@ describe("demand runtime", () => {
       const read = readDemandSession(join(discuss.demand_dir, "session.json"));
       assert.equal(read.ok, true);
       assert.equal(read.session.approval.approved, true);
+      assert.equal(read.session.approval.effective_for_prd, true);
 
       const prd = runDemandPrdRuntime({
         projectRoot: root,
@@ -119,10 +150,13 @@ describe("demand runtime", () => {
       assert.equal(prd.status, "success");
       assert.equal(prd.prd.base_commit, "abcdef0");
       assert.equal(prd.prd.demand_contract_required, true);
+      assert.equal(prd.prd.demand.approval.effective_for_prd, true);
       assert.equal(prd.prd.execution_readiness.level, "L3");
       assert.equal(prd.prd.execution_readiness.atomic_tasks, true);
       assert.equal(prd.prd.demand.quality_report.status, "pass");
-      assert.equal(prd.prd.demand.quality_report.dimensions.length, 5);
+      assert.equal(prd.prd.demand.project_facts.target_files.every((fact) => fact.status === "verified"), true);
+      assert.equal(prd.prd.demand.project_facts.assumptions.every((fact) => fact.status !== "needs_verification" && fact.status !== "contradicted"), true);
+      assert.equal(prd.prd.demand.quality_report.dimensions.length, 6);
       assert.equal(prd.prd.execution_readiness.quality_report.total_score, prd.prd.demand.quality_report.total_score);
       assert.equal(prd.prd.tasks[0].handoff.type, "agent_brief");
       assert.equal(prd.prd.tasks[0].handoff.plain_language_goal.length > 0, true);
@@ -134,8 +168,20 @@ describe("demand runtime", () => {
       assert.equal(prd.prd.execution_readiness.session_handoff.task_count, prd.prd.tasks.length);
       assert.equal(prd.prd.demand.atomicity_contract.session_handoff.session_count, prd.prd.tasks.length);
 
-      const check = inspectYoloCheck({ prdPath: prd.artifacts[0], projectRoot: root, writeLifecycle: false });
+      const check = inspectYoloCheck({
+        prdPath: prd.artifacts[0],
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        writeLifecycle: true,
+      });
       assert.notEqual(check.checks.find((item) => item.name === "demand_contract").status, "blocked");
+      const guard = inspectLifecycleGuard({
+        command: "yolo-run",
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        prdPath: prd.artifacts[0],
+      });
+      assert.equal(guard.status, "pass", JSON.stringify(guard.blockers, null, 2));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -144,6 +190,7 @@ describe("demand runtime", () => {
   test("approved-demand PRD quality gate blocks vague proof despite readiness passing", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-quality-proof-"));
     try {
+      seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
       const discuss = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -151,13 +198,14 @@ describe("demand runtime", () => {
         target_users: ["store manager"],
         status_quo: ["Managers only see raw inventory counts."],
         evidence: ["Support tickets mention surprise stockouts weekly."],
-        assumptions: ["Inventory counts are already available."],
+        assumptions: ["Inventory rows expose item.quantity and item.lowStockThreshold."],
         success_criteria: ["Inventory list displays a visible low-stock badge before stockout."],
         proof: ["ok"],
+        visual_style: ["Use an inline text label with the current list typography and no new color system."],
         constraints: ["Do not change order import behavior."],
         non_goals: ["Do not build supplier ordering."],
         target_files: ["src/pages/inventory-list.tsx"],
-        decisions: ["Start with a list badge before adding supplier ordering."],
+        decisions: ["Start with an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
         roadmap: ["MVP badge in inventory list."],
         approve: true,
         writeArtifacts: true,
@@ -181,9 +229,11 @@ describe("demand runtime", () => {
     }
   });
 
-  test("inspectDemandQuality flags missing proof handoff and atomicity gaps", () => {
-    const root = mkdtempSync(join(tmpdir(), "yolo-demand-quality-pure-"));
+  test("approved-demand PRD blocks unverified project field assumptions", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-field-grounding-"));
     try {
+      mkdirSync(join(root, "src/pages"), { recursive: true });
+      writeFileSync(join(root, "src/pages/inventory-list.tsx"), "export function InventoryList({ items }) { return items.map((item) => item.quantity).join(','); }\n", "utf8");
       const discuss = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -191,13 +241,250 @@ describe("demand runtime", () => {
         target_users: ["store manager"],
         status_quo: ["Managers only see raw inventory counts."],
         evidence: ["Support tickets mention surprise stockouts weekly."],
-        assumptions: ["Inventory counts are already available."],
-        success_criteria: ["Inventory list displays a visible low-stock badge before stockout."],
+        assumptions: ["Inventory list already receives quantity and threshold fields."],
+        success_criteria: ["Inventory list displays a visible low-stock badge on affected SKUs."],
         proof: ["A store manager can point to the low-stock badge on an affected SKU."],
+        visual_style: ["Use an inline text label with the current list typography and no new color system."],
         constraints: ["Do not change order import behavior."],
         non_goals: ["Do not build supplier ordering."],
         target_files: ["src/pages/inventory-list.tsx"],
-        decisions: ["Start with a list badge before adding supplier ordering."],
+        decisions: ["Start with an inline badge labelled 'Low stock' after the SKU."],
+        roadmap: ["MVP badge in inventory list."],
+        approve: true,
+        writeArtifacts: true,
+      });
+
+      assert.equal(discuss.readiness.status, "blocked");
+      assert.equal(discuss.session.approval.approved, true);
+      assert.equal(discuss.session.approval.effective_for_prd, false);
+      assert.ok(discuss.session.approval.blocked_by.some((blocker) => blocker.code === "PROJECT_FACTS_GROUNDED"));
+      assert.ok(discuss.readiness.blockers.some((blocker) => blocker.code === "PROJECT_FACTS_GROUNDED"));
+      assert.ok(discuss.readiness.blockers.some((blocker) => (
+        blocker.fact_grounding_issues?.some((issue) => issue.code === "QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED")
+        || blocker.fact_grounding_issues?.some((issue) => issue.code === "QUALITY_FIELD_ASSUMPTION_VERIFIED")
+      )));
+
+      const prd = runDemandPrdRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demandPath: discuss.demand_dir,
+        writeArtifacts: false,
+      });
+
+      assert.equal(prd.status, "blocked");
+      assert.ok(prd.blockers.some((blocker) => (
+        blocker.code === "PROJECT_FACTS_GROUNDED"
+        || blocker.code === "QUALITY_FIELD_ASSUMPTION_VERIFIED"
+        || blocker.fact_grounding_issues?.some((issue) => issue.code === "QUALITY_FIELD_ASSUMPTION_VERIFIED")
+        || blocker.fact_grounding_issues?.some((issue) => issue.code === "QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED")
+      )));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("approved-demand PRD blocks unresolved conditional UI style source", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-conditional-style-"));
+    try {
+      seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
+      const discuss = runDemandDiscussRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        idea: "Show store managers low-stock alerts in the inventory list.",
+        target_users: ["store manager"],
+        status_quo: ["Managers only see raw inventory counts."],
+        evidence: ["Agent read src/pages/inventory-list.tsx and confirmed inventory rows expose item.quantity and item.lowStockThreshold."],
+        assumptions: ["Inventory rows expose item.quantity and item.lowStockThreshold."],
+        success_criteria: ["Inventory list displays an inline 'Low stock' badge after the SKU when item.quantity <= item.lowStockThreshold."],
+        proof: ["A screenshot or component test shows an inline 'Low stock' badge after the SKU when item.quantity <= item.lowStockThreshold."],
+        visual_style: ["Use an existing project badge component if one is present; otherwise use an inline text label with the current list typography and no new color system."],
+        constraints: ["Do not change order import behavior."],
+        non_goals: ["Do not build supplier ordering."],
+        target_files: ["src/pages/inventory-list.tsx"],
+        decisions: ["Show an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
+        roadmap: ["MVP badge in inventory list."],
+        approve: true,
+        writeArtifacts: true,
+      });
+
+      const grounding = discuss.readiness.blockers.find((blocker) => blocker.code === "PROJECT_FACTS_GROUNDED");
+      assert.equal(discuss.readiness.status, "blocked");
+      assert.equal(discuss.session.approval.effective_for_prd, false);
+      assert.ok(grounding?.fact_grounding_issues?.some((issue) => issue.code === "QUALITY_UI_STYLE_SOURCE_RESOLVED"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("auto-scouted files stay candidates until user or evidence verifies scope", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-candidate-scope-"));
+    try {
+      seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
+      const discuss = runDemandDiscussRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        idea: "Show store managers low-stock alerts in the inventory list.",
+        target_users: ["store manager"],
+        status_quo: ["Managers only see raw inventory counts."],
+        evidence: ["Support tickets mention surprise stockouts weekly."],
+        success_criteria: ["Inventory list displays a visible low-stock badge on affected SKUs."],
+        proof: ["A store manager can point to the low-stock badge on an affected SKU."],
+        visual_style: ["Use an inline text label with the current list typography and no new color system."],
+        constraints: ["Do not change order import behavior."],
+        non_goals: ["Do not build supplier ordering."],
+        decisions: ["Start with an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
+        roadmap: ["MVP badge in inventory list."],
+        approve: true,
+        writeArtifacts: true,
+      });
+
+      assert.deepEqual(discuss.session.project.target_files, []);
+      assert.ok(discuss.session.project.candidate_target_files.includes("src/pages/inventory-list.tsx"));
+      assert.equal(discuss.readiness.executable_prd_ready, false);
+
+      const prd = runDemandPrdRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demandPath: discuss.demand_dir,
+        writeArtifacts: false,
+      });
+
+      assert.equal(prd.status, "blocked");
+      assert.ok(prd.blockers.some((blocker) => blocker.code === "EXECUTION_SCOPE_PRESENT"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("approved-demand blocks target files outside the project root", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-target-boundary-"));
+    const outsideFile = `${root}-outside.js`;
+    try {
+      writeFileSync(outsideFile, "export const lowStockThreshold = 3;\n", "utf8");
+      const discuss = runDemandDiscussRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        idea: "Show store managers a low-stock signal.",
+        target_users: ["store manager"],
+        status_quo: ["Managers only see raw inventory counts."],
+        evidence: [`Agent read ${outsideFile} and claims it is the target file.`],
+        assumptions: [
+          "The implementation file must remain inside the target project root.",
+          "The selected implementation file exposes lowStockThreshold.",
+        ],
+        success_criteria: ["Inventory list displays a visible low-stock signal."],
+        proof: ["A test verifies the low-stock signal is visible."],
+        visual_style: ["Use current project styling."],
+        constraints: ["Do not read or modify files outside this project."],
+        non_goals: ["Do not change order import behavior."],
+        target_files: [outsideFile],
+        decisions: ["Keep execution scope confined to the project root."],
+        roadmap: ["MVP low-stock signal."],
+        approve: true,
+        writeArtifacts: true,
+      });
+
+      const targetFact = discuss.session.project_facts.target_files.find((fact) => fact.file === outsideFile);
+      assert.equal(discuss.status, "blocked");
+      assert.deepEqual(discuss.session.project.target_files, []);
+      assert.equal(targetFact.status, "invalid_scope");
+      const outsideAssumption = discuss.session.project_facts.assumptions.find((fact) => /lowStockThreshold/.test(fact.text));
+      assert.notEqual(outsideAssumption.status, "verified");
+      assert.equal(outsideAssumption.verified_by?.includes("project_read"), false);
+      assert.equal(discuss.readiness.blockers.some((blocker) => (
+        blocker.code === "PROJECT_FACTS_GROUNDED"
+        && blocker.fact_grounding_issues?.some((issue) => issue.code === "QUALITY_TARGET_FILE_WITHIN_PROJECT")
+      )), true);
+
+      const prd = runDemandPrdRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demandPath: discuss.demand_dir,
+        writeArtifacts: false,
+      });
+      assert.equal(prd.status, "blocked");
+      assert.equal(prd.blockers.some((blocker) => (
+        blocker.code === "PROJECT_FACTS_GROUNDED"
+        || blocker.fact_grounding_issues?.some((issue) => issue.code === "QUALITY_TARGET_FILE_WITHIN_PROJECT")
+      )), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outsideFile, { force: true });
+    }
+  });
+
+  test("legacy demand readiness blocks raw target files outside the project root", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-legacy-target-boundary-"));
+    const outsideFile = `${root}-outside.js`;
+    try {
+      writeFileSync(outsideFile, "export const outsideProject = true;\n", "utf8");
+      const readiness = inspectDemandReadiness({
+        phase: "prd",
+        vision: {
+          statement: "Show store managers a clear low-stock signal.",
+          target_users: ["store manager"],
+          status_quo: ["Managers only see raw counts."],
+        },
+        reflection: {
+          assumptions: ["Scope must stay inside the project root."],
+        },
+        investigation: {
+          evidence: ["Existing project files were reviewed."],
+        },
+        requirements: {
+          active: [{
+            id: "REQ-1",
+            text: "Inventory list displays a visible low-stock signal.",
+            acceptance_scenarios: [{ then: "The low-stock signal is visible." }],
+          }],
+          out_of_scope: ["No backend changes."],
+        },
+        scenario_matrix: {
+          scenarios: [{
+            id: "SCN-1",
+            proof: "A test verifies the low-stock signal.",
+            surfaces: [{
+              id: "SFC-1",
+              target_files: [outsideFile],
+              session_budget: { max_files: 1 },
+            }],
+          }],
+        },
+        approval: { approved: true },
+        project: { target_files: [outsideFile] },
+        roadmap: { mvp: ["MVP low-stock signal."] },
+      }, { phase: "prd", projectRoot: root });
+
+      assert.equal(readiness.status, "blocked");
+      assert.equal(readiness.blockers.some((blocker) => (
+        blocker.code === "PROJECT_FACTS_GROUNDED"
+        && blocker.fact_grounding_issues?.some((issue) => issue.code === "QUALITY_TARGET_FILE_WITHIN_PROJECT")
+      )), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outsideFile, { force: true });
+    }
+  });
+
+  test("inspectDemandQuality flags missing proof handoff and atomicity gaps", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-quality-pure-"));
+    try {
+      seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
+      const discuss = runDemandDiscussRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        idea: "Show store managers low-stock alerts in the inventory list.",
+        target_users: ["store manager"],
+        status_quo: ["Managers only see raw inventory counts."],
+        evidence: ["Support tickets mention surprise stockouts weekly."],
+        assumptions: ["Inventory rows expose item.quantity and item.lowStockThreshold."],
+        success_criteria: ["Inventory list displays a visible low-stock badge before stockout."],
+        proof: ["A store manager can point to the low-stock badge on an affected SKU."],
+        visual_style: ["Use an inline text label with the current list typography and no new color system."],
+        constraints: ["Do not change order import behavior."],
+        non_goals: ["Do not build supplier ordering."],
+        target_files: ["src/pages/inventory-list.tsx"],
+        decisions: ["Start with an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
         roadmap: ["MVP badge in inventory list."],
         approve: true,
         writeArtifacts: true,
@@ -267,6 +554,7 @@ describe("demand runtime", () => {
   test("interview trace is preserved into approved-demand PRD tasks", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-interview-"));
     try {
+      seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
       const discuss = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -274,12 +562,14 @@ describe("demand runtime", () => {
         target_users: ["store manager"],
         status_quo: ["Managers only see raw inventory counts."],
         evidence: ["Support tickets mention surprise stockouts weekly."],
-        assumptions: ["Inventory counts are already available."],
+        assumptions: ["Inventory rows expose item.quantity and item.lowStockThreshold."],
         success_criteria: ["Inventory list displays a visible low-stock badge before stockout."],
         proof: ["A store manager can point to the badge on a low-stock SKU."],
+        visual_style: ["Use an inline text label with the current list typography and no new color system."],
         constraints: ["Do not change order import behavior."],
         non_goals: ["Do not build supplier ordering."],
         target_files: ["src/pages/inventory-list.tsx"],
+        decisions: ["Show an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
         roadmap: ["MVP badge in inventory list."],
         interview: {
           question_trace: [
@@ -329,6 +619,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-ui-check-"));
     try {
       writeJson(join(root, ".yolo", "adapters", "local-browser.manifest.json"), acceptanceAdapterManifest());
+      seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
       const discuss = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -336,13 +627,14 @@ describe("demand runtime", () => {
         target_users: ["store manager"],
         status_quo: ["Managers only see raw inventory counts in the inventory list."],
         evidence: ["Support tickets mention surprise stockouts weekly."],
-        assumptions: ["Inventory counts are already available."],
+        assumptions: ["Inventory rows expose item.quantity and item.lowStockThreshold."],
         success_criteria: ["Inventory list displays a visible low-stock badge before stockout."],
         proof: ["A store manager can point to the low-stock badge on an affected SKU."],
+        visual_style: ["Use an inline text label with the current list typography and no new color system."],
         constraints: ["Do not change order import behavior."],
         non_goals: ["Do not build supplier ordering."],
         target_files: ["src/pages/inventory-list.tsx"],
-        decisions: ["Start with a list badge before adding supplier ordering."],
+        decisions: ["Start with an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
         roadmap: ["MVP badge in inventory list."],
         approve: true,
         writeArtifacts: true,
@@ -370,7 +662,7 @@ describe("demand runtime", () => {
         writeLifecycle: false,
       });
 
-      assert.equal(check.status, "pass", JSON.stringify(check.blockers, null, 2));
+      assert.notEqual(check.status, "blocked", JSON.stringify(check.blockers, null, 2));
       assert.equal(check.checks.find((item) => item.name === "ui_readiness").status, "pass");
       assert.equal(check.blockers.some((blocker) => blocker.code === "UI_STATE_MATRIX_MISSING"), false);
       assert.equal(check.blockers.some((blocker) => blocker.code === "UI_EVIDENCE_PLAN_MISSING"), false);
@@ -408,6 +700,7 @@ describe("demand runtime", () => {
   test("approved-demand PRD blocks surfaces with oversized session budget", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-budget-"));
     try {
+      seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx", "src/services/inventory-alerts.ts"]);
       const discuss = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -415,12 +708,13 @@ describe("demand runtime", () => {
         target_users: ["store manager"],
         status_quo: ["Managers only see raw inventory counts."],
         evidence: ["Support tickets mention surprise stockouts weekly."],
-        assumptions: ["Inventory counts are already available."],
+        assumptions: ["Inventory rows expose item.quantity and item.lowStockThreshold."],
         success_criteria: ["Inventory list displays a visible low-stock badge before stockout."],
+        visual_style: ["Use an inline text label with the current list typography and no new color system."],
         constraints: ["Do not change order import behavior."],
         non_goals: ["Do not build supplier ordering."],
         target_files: ["src/pages/inventory-list.tsx", "src/services/inventory-alerts.ts"],
-        decisions: ["Start with one threshold rule and one list badge."],
+        decisions: ["Start with one threshold rule item.quantity <= item.lowStockThreshold and one inline badge labelled 'Low stock'."],
         roadmap: ["MVP service rule and list badge."],
         approve: true,
         writeArtifacts: true,
@@ -447,6 +741,7 @@ describe("demand runtime", () => {
   test("approved demand compiles scenario surfaces into session-sized atomic tasks", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-atomic-"));
     try {
+      seedDemandTargetFiles(root, ["src/services/inventory-alerts.ts", "src/pages/inventory-list.tsx", "src/services/inventory-alerts.test.ts"]);
       const discuss = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -454,12 +749,15 @@ describe("demand runtime", () => {
         target_users: ["store manager"],
         status_quo: ["Managers only see raw inventory counts in a spreadsheet-like list."],
         evidence: ["Weekly support tickets mention surprise stockouts."],
-        assumptions: ["Existing inventory service already returns quantity."],
+        assumptions: ["Existing inventory service already returns item.quantity and item.lowStockThreshold."],
         success_criteria: ["Inventory service marks low-stock SKUs.", "Inventory list displays a visible low-stock badge."],
+        visual_style: ["Use an inline text label with the current list typography and no new color system."],
         constraints: ["Do not change order import behavior."],
         non_goals: ["Do not build supplier ordering."],
         target_files: ["src/services/inventory-alerts.ts", "src/pages/inventory-list.tsx", "src/services/inventory-alerts.test.ts"],
-        decisions: ["Start with one threshold rule and one list badge."],
+        decisions: ["Start with one threshold rule item.quantity <= item.lowStockThreshold and one inline badge labelled 'Low stock'."],
+        deferred: ["Forecasting and supplier ordering remain later demands."],
+        deferred_scope_confirmed: true,
         roadmap: ["MVP service rule and list badge."],
         approve: true,
         writeArtifacts: true,
@@ -477,9 +775,23 @@ describe("demand runtime", () => {
       assert.equal(prd.prd.tasks.every((task) => task.task_kind === "demand_atomic_task"), true);
       assert.equal(prd.prd.tasks.every((task) => task.scope.max_files <= 2), true);
       assert.equal(prd.prd.tasks.every((task) => Boolean(task.handoff.proof)), true);
+      assert.equal(prd.prd.demand.approval.approved_at !== null, true);
+      assert.ok(prd.prd.demand.deferred_scope.includes("Forecasting and supplier ordering remain later demands."));
+      assert.equal(prd.prd.demand.deferred_scope_confirmation.confirmed, true);
+      assert.equal(prd.prd.demand.deferred_follow_up.required, true);
+      assert.ok(prd.prd.demand.deferred_follow_up.next_session_prompt.includes("Forecasting and supplier ordering"));
+      assert.ok(prd.prd.tasks.every((task) => task.handoff.deferred_scope.includes("Forecasting and supplier ordering remain later demands.")));
+      assert.ok(prd.prd.tasks.every((task) => task.handoff.deferred_scope_confirmation.confirmed === true));
+      assert.ok(prd.prd.tasks.every((task) => task.handoff.deferred_follow_up.required === true));
       assert.equal(prd.prd.tasks.some((task) => task.handoff.surface.kind === "ui"), true);
       assert.equal(prd.prd.tasks.some((task) => task.handoff.surface.kind === "service"), true);
       assert.equal(prd.prd.tasks.some((task) => task.handoff.surface.kind === "test"), true);
+      const serviceTask = prd.prd.tasks.find((task) => task.handoff.surface.kind === "service");
+      const testTask = prd.prd.tasks.find((task) => task.handoff.surface.kind === "test");
+      assert.ok(testTask.depends_on.includes(serviceTask.id));
+      assert.ok(testTask.handoff.read_first.includes("src/services/inventory-alerts.ts"));
+      assert.ok(testTask.post_conditions.some((condition) => condition.type === "tests_pass" && condition.severity === "FAIL"));
+      assert.equal(prd.prd.tasks.every((task) => task.post_conditions.some((condition) => condition.severity === "FAIL" && condition.type !== "acceptance_criteria")), true);
       for (const task of prd.prd.tasks) {
         assertTaskSessionPlan(task, prd.prd.demand.id);
       }
@@ -500,9 +812,124 @@ describe("demand runtime", () => {
     }
   });
 
+  test("approved demand splits compound Trello-style user stories before task generation", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-story-split-"));
+    try {
+      seedDemandTargetFiles(root, ["package.json", "index.html", "src/styles.css", "tests/board.e2e.cjs"]);
+      writeProjectFile(root, "src/app.js", [
+        "const STORAGE_KEY = 'yolo-board-state';",
+        "export function loadBoard() { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }",
+        "export function saveBoard(board) { localStorage.setItem(STORAGE_KEY, JSON.stringify(board)); }",
+        "",
+      ].join("\n"));
+      const discuss = runDemandDiscussRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        idea: "Build a local Trello-style board MVP.",
+        target_users: ["small team lead"],
+        status_quo: ["Tasks are tracked in notes and chat messages."],
+        evidence: [
+          "Agent read src/app.js and verified it already uses localStorage through loadBoard and saveBoard.",
+          "Agent read src/styles.css and tests/board.e2e.cjs as the board layout and Playwright coverage entry points.",
+        ],
+        assumptions: ["The local MVP can stay single-user and does not need collaboration, auth, comments, or labels."],
+        success_criteria: [
+          "当用户输入 Review 并提交时, 新列表 Review 出现在看板末尾, 当用户在 Todo 输入 Prepare demo 并提交时, 卡片显示在 Todo 列表。",
+          "当用户把 Prepare demo 编辑为 Prepare customer demo 并移动到 Doing 时, Todo 列表不再显示该卡片, Doing 列表显示 Prepare customer demo。",
+          "当用户归档 Prepare customer demo 并刷新页面时, 普通列表不显示该归档卡片, 未归档列表和卡片仍从 localStorage 恢复。",
+        ],
+        proof: [
+          "Playwright verifies Review appears as the final board list after submitting the list form.",
+          "Playwright verifies Prepare demo appears inside the Todo list after submitting the card form.",
+          "Playwright verifies Prepare demo changes to Prepare customer demo after editing the card title.",
+          "Playwright verifies Prepare customer demo appears in Doing and no longer appears in Todo after moving it.",
+          "Playwright verifies the archived Prepare customer demo card is hidden from normal lists.",
+          "Playwright reloads the page and verifies unarchived lists and cards restore from localStorage.",
+        ],
+        visual_style: ["Use the existing compact board layout from src/styles.css without introducing a new visual system."],
+        constraints: ["Local single-page MVP only."],
+        non_goals: ["No Trello API or login."],
+        target_files: ["package.json", "index.html", "src/app.js", "src/styles.css", "tests/board.e2e.cjs"],
+        decisions: ["Keep every task to one visible board behavior."],
+        roadmap: ["MVP board behavior slices."],
+        approve: true,
+        writeArtifacts: true,
+      });
+
+      assert.equal(discuss.status, "success");
+      const scenarios = discuss.session.scenario_matrix.scenarios;
+      assert.equal(scenarios.length, 6);
+      assert.equal(scenarios.some((scenario) => scenario.requirement_id === "REQ-001-S01"), true);
+      assert.equal(scenarios.some((scenario) => scenario.requirement_id === "REQ-002-S02"), true);
+      assert.equal(scenarios.every((scenario) => !(/新增列表/.test(scenario.desired_behavior) && /新增卡片|卡片显示/.test(scenario.desired_behavior))), true);
+      assert.equal(scenarios.every((scenario) => !(/编辑/.test(scenario.desired_behavior) && /移动/.test(scenario.desired_behavior))), true);
+      assert.equal(scenarios.every((scenario) => !(/(?<!未)归档/u.test(scenario.desired_behavior) && /刷新|重新加载|恢复/.test(scenario.desired_behavior))), true);
+      assert.match(discuss.session.scenario_matrix.atomic_task_rule, /one user-visible story/);
+
+      const prd = runDemandPrdRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demandPath: discuss.demand_dir,
+        writeArtifacts: false,
+      });
+
+      assert.equal(prd.status, "success");
+      assert.equal(prd.prd.tasks.some((task) => task.requirement_ids.includes("REQ-003-S02")), true);
+      assert.equal(prd.prd.tasks.every((task) => !(/编辑/.test(task.description) && /移动/.test(task.description))), true);
+      assert.match(prd.prd.demand.atomicity_contract.rule, /one user-visible story/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("approved-demand PRD blocks deferred scope without explicit confirmation", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-deferred-confirm-"));
+    try {
+      seedDemandTargetFiles(root, ["src/api/orders.ts", "src/api/orders.test.ts"]);
+      const discuss = runDemandDiscussRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        idea: "Reject negative order line quantities for operations admins.",
+        target_users: ["operations admin"],
+        status_quo: ["Order validation checks customer but not invalid line quantities."],
+        evidence: ["src/api/orders.ts reads input.lines as the order line payload and declares ORDER_LINE_QUANTITY_FIELD = 'quantity'."],
+        assumptions: ["Order line quantities are present as input.lines[].quantity."],
+        success_criteria: ["validateOrder returns ok:false with error code NEGATIVE_QUANTITY when any input.lines[].quantity < 0."],
+        proof: ["A regression test calls validateOrder with input.lines[].quantity < 0 and observes ok:false plus error code NEGATIVE_QUANTITY."],
+        constraints: ["Do not change fulfillment integration."],
+        non_goals: ["Do not redesign order creation UI."],
+        target_files: ["src/api/orders.ts", "src/api/orders.test.ts"],
+        decisions: ["Add negative quantity validation only."],
+        deferred: ["Zero quantity validation is deferred.", "Inventory availability checks are deferred."],
+        roadmap: ["MVP negative quantity validation."],
+        approve: true,
+        writeArtifacts: true,
+      });
+
+      assert.equal(discuss.session.discussion.deferred_scope_confirmation.required, true);
+      assert.equal(discuss.session.discussion.deferred_scope_confirmation.confirmed, false);
+      assert.equal(discuss.session.approval.approved, true);
+      assert.equal(discuss.session.approval.effective_for_prd, false);
+      assert.ok(discuss.readiness.blockers.some((blocker) => blocker.code === "DEFERRED_SCOPE_CONFIRMED"));
+
+      const prd = runDemandPrdRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demandPath: discuss.demand_dir,
+        writeArtifacts: false,
+      });
+
+      assert.equal(prd.status, "blocked");
+      assert.ok(prd.blockers.some((blocker) => blocker.code === "DEFERRED_SCOPE_CONFIRMED"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("task session handoff paths preserve non-ASCII demand ids", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-cjk-"));
     try {
+      seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
       const discuss = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -511,13 +938,14 @@ describe("demand runtime", () => {
         target_users: ["store manager"],
         status_quo: ["Managers only see raw inventory counts."],
         evidence: ["Support tickets mention surprise stockouts weekly."],
-        assumptions: ["Inventory counts are already available."],
+        assumptions: ["Inventory rows expose item.quantity and item.lowStockThreshold."],
         success_criteria: ["Inventory list displays a visible low-stock badge before stockout."],
         proof: ["A store manager can point to the low-stock badge on an affected SKU."],
+        visual_style: ["Use an inline text label with the current list typography and no new color system."],
         constraints: ["Do not change order import behavior."],
         non_goals: ["Do not build supplier ordering."],
         target_files: ["src/pages/inventory-list.tsx"],
-        decisions: ["Start with a list badge before adding supplier ordering."],
+        decisions: ["Start with an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
         roadmap: ["MVP badge in inventory list."],
         approve: true,
         writeArtifacts: true,

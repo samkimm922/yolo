@@ -4,7 +4,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { buildDemandSession, demandMarkdownArtifacts } from "./artifacts.js";
 import { inspectDemandQuality, inspectDemandReadiness } from "./gate.js";
+import { buildDemandSessionState } from "./router.js";
 import { inspectAtomicTask } from "../runtime/execution/atomic-task-doctor.js";
+import { writeLifecycleStageReport } from "../lifecycle/progress.js";
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -47,6 +49,29 @@ function readJson(path) {
 function stateRootFor(input = {}, options = {}) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   return resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
+}
+
+function shouldWriteLifecycle(input = {}, options = {}) {
+  return input.writeLifecycle !== false
+    && input.write_lifecycle !== false
+    && options.writeLifecycle !== false
+    && options.write_lifecycle !== false;
+}
+
+function attachLifecycle(result = {}, stageId, context = {}, source = "demand-runtime") {
+  const lifecycle = writeLifecycleStageReport(stageId, result, {
+    projectRoot: context.projectRoot,
+    stateRoot: context.stateRoot,
+    source,
+    writeSessionMemory: context.writeSessionMemory,
+  });
+  result.lifecycle_writes = [...(result.lifecycle_writes || []), lifecycle];
+  result.artifacts = [...(result.artifacts || []), lifecycle.artifact_path];
+  result.outputs = [
+    ...(result.outputs || []),
+    { path: lifecycle.artifact_path, type: "lifecycle_report", stage: stageId },
+  ];
+  return lifecycle;
 }
 
 export function demandStateDir(stateRoot, id = "") {
@@ -131,7 +156,11 @@ export function runDemandBrainstormRuntime(input = {}, options = {}) {
   const outputDir = outputDirFor(session, { ...input, projectRoot, stateRoot }, options);
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
   const artifacts = shouldWrite ? writeDemandArtifacts(session, outputDir) : [];
-  return runtimeResult("Brainstorm", session, outputDir, artifacts, { source: "yolo-brainstorm" });
+  const result = runtimeResult("Brainstorm", session, outputDir, artifacts, { source: "yolo-brainstorm" });
+  if (shouldWrite && shouldWriteLifecycle(input, options)) {
+    attachLifecycle(result, "discovery", { projectRoot, stateRoot }, "yolo-brainstorm");
+  }
+  return result;
 }
 
 export function runDemandDiscussRuntime(input = {}, options = {}) {
@@ -145,12 +174,84 @@ export function runDemandDiscussRuntime(input = {}, options = {}) {
   const outputDir = outputDirFor(session, { ...input, projectRoot, stateRoot }, options);
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
   const artifacts = shouldWrite ? writeDemandArtifacts(session, outputDir) : [];
-  return runtimeResult("Discuss", session, outputDir, artifacts, { source: "yolo-discuss" });
+  const result = runtimeResult("Discuss", session, outputDir, artifacts, { source: "yolo-discuss" });
+  if (shouldWrite && shouldWriteLifecycle(input, options)) {
+    attachLifecycle(result, "discovery", { projectRoot, stateRoot }, "yolo-discuss");
+    if (result.status !== "blocked") {
+      attachLifecycle(result, "roadmap", { projectRoot, stateRoot }, "yolo-discuss");
+    }
+  }
+  return result;
+}
+
+export function runDemandStatusRuntime(input = {}, options = {}) {
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd);
+  const stateRoot = stateRootFor({ ...input, projectRoot }, options);
+  const explicitDemandPath = input.demandPath || input.demand_path || input.demand || input.sessionPath || input.session_path;
+  if (explicitDemandPath) {
+    const demandPath = resolvePath(projectRoot, explicitDemandPath);
+    const read = readDemandSession(demandPath);
+    if (!read.ok) {
+      const blocker = { code: "DEMAND_SESSION_MISSING", message: read.error, path: read.path };
+      return {
+        status: "blocked",
+        code: "DEMAND_SESSION_MISSING",
+        summary: read.error,
+        demand_path: read.path,
+        blockers: [blocker],
+        warnings: [],
+        triage: null,
+        readiness: {
+          status: "blocked",
+          prd_ready: false,
+          blockers: [blocker],
+          warnings: [],
+        },
+        state: {
+          schema: "yolo.demand.session_state.v1",
+          stage: "blocked",
+          blockers: [blocker],
+          prd_ready: false,
+          next_action: "Run yolo brainstorm/discuss first, or pass --demand <session.json|dir>.",
+        },
+        guarantees: {
+          writes_business_code: false,
+          writes_project_state: false,
+          prd_execution: false,
+          provider_execution: false,
+          source: "yolo-demand-status",
+        },
+      };
+    }
+  }
+  const result = buildDemandSessionState({
+    ...input,
+    projectRoot,
+    stateRoot,
+  }, {
+    ...options,
+    projectRoot,
+    stateRoot,
+  });
+  return {
+    ...result,
+    guarantees: {
+      writes_business_code: false,
+      writes_project_state: false,
+      prd_execution: false,
+      provider_execution: false,
+      source: "yolo-demand-status",
+    },
+  };
 }
 
 function targetFiles(session = {}) {
   const files = session.project?.target_files || session.target_files || [];
   return Array.isArray(files) ? files.filter(Boolean) : [files].filter(Boolean);
+}
+
+function structuredProjectFacts(session = {}) {
+  return session.project_facts && typeof session.project_facts === "object" ? session.project_facts : null;
 }
 
 function normalizeBaseCommit(value) {
@@ -253,6 +354,17 @@ function fallbackScenarios(session = {}) {
 
 function taskTypeForSurface(surface = {}) {
   return surface.kind === "test" || surface.kind === "doc" ? "cleanup" : "feature";
+}
+
+function fileKind(file = "") {
+  const path = clean(file).toLowerCase();
+  if (/(^|\/)(__tests__|tests?|specs?)\//.test(path) || /\.(test|spec)\./.test(path)) return "test";
+  if (/(^|\/)(pages?|views?|screens?|components?|ui)\//.test(path)) return "ui";
+  if (/(^|\/)(routes?|api|controllers?|server)\//.test(path)) return "api";
+  if (/(^|\/)(models?|repositories|migrations?|database|db)\//.test(path)) return "data";
+  if (/(^|\/)(services?|hooks?|stores?|lib|utils|domain)\//.test(path)) return "service";
+  if (/(^|\/)(docs?|specs?)\//.test(path) || path.endsWith(".md")) return "doc";
+  return "code";
 }
 
 function surfaceTitle(surface = {}) {
@@ -368,6 +480,34 @@ function summarizeTaskSessionPlans(tasks = []) {
   };
 }
 
+function deferredFollowUp(deferred = []) {
+  const items = asArray(deferred).map((text, index) => ({
+    id: `DEF-${String(index + 1).padStart(3, "0")}`,
+    text,
+    status: "deferred",
+  }));
+  return {
+    required: items.length > 0,
+    items,
+    next_session_prompt: items.length
+      ? `Before expanding this demand, ask the user whether to reopen deferred scope: ${items.map((item) => item.text).join("; ")}.`
+      : "",
+  };
+}
+
+function deferredScopeConfirmation(session = {}) {
+  const confirmation = session.discussion?.deferred_scope_confirmation || {};
+  return {
+    required: confirmation.required === true,
+    confirmed: confirmation.confirmed === true,
+    status: confirmation.status || (confirmation.required ? "needs_confirmation" : "not_required"),
+    items: asArray(confirmation.items || session.discussion?.deferred),
+    prompt: confirmation.prompt || "",
+    confirmed_by: confirmation.confirmed_by || null,
+    confirmed_at: confirmation.confirmed_at || null,
+  };
+}
+
 function modifiedFileCondition(taskId, index, file) {
   return {
     id: `POST-${taskId}-TARGET-${index + 1}`,
@@ -388,6 +528,85 @@ function acceptanceCondition(taskId, index, scenario) {
   };
 }
 
+function testsPassCondition(taskId) {
+  return {
+    id: `POST-${taskId}-TESTS`,
+    type: "tests_pass",
+    severity: "FAIL",
+    params: { command: "npm test", timeout_ms: 120000 },
+    message: "Project tests must pass after this task.",
+  };
+}
+
+function behaviorCodeConditions(taskId, files = [], text = "", uiTask = false) {
+  const sourceFiles = files.filter((file) => fileKind(file) !== "test");
+  const primary = sourceFiles[0] || files[0];
+  if (!primary) return [];
+  const conditions = [];
+  const add = (suffix, file, pattern, message) => {
+    const value = clean(pattern);
+    if (!value || value.length <= 1) return;
+    if (conditions.some((condition) => condition.params?.file === file && condition.params?.text === value)) return;
+    conditions.push({
+      id: `POST-${taskId}-${suffix}`,
+      type: "code_contains",
+      severity: "FAIL",
+      params: { file, text: value },
+      message,
+    });
+  };
+  const quoted = clean(text).match(/['"`]([^'"`]{2,40})['"`]/);
+  if (uiTask && quoted?.[1]) {
+    add("UI-LABEL", primary, quoted[1], `Target UI must contain visible label text: ${quoted[1]}`);
+  }
+  const identifiers = [...new Set((clean(text).match(/\b[A-Za-z_$][A-Za-z0-9_$]*(?:Threshold|Stock|Quantity|Qty|Signal|Badge)[A-Za-z0-9_$]*\b/g) || [])
+    .filter((value) => !["Inventory", "Stock", "Quantity"].includes(value)))];
+  for (const identifier of identifiers.slice(0, 2)) {
+    add(`IDENT-${conditions.length + 1}`, primary, identifier, `Target code must contain behavior identifier: ${identifier}`);
+  }
+  if (/(<=|less than or equal|at or below)/i.test(text)) add("COMPARE-LTE", primary, "<=", "Target code must implement the stated <= comparison.");
+  else if (/(<\s*0|below zero|negative)/i.test(text)) add("COMPARE-LT-ZERO", primary, "< 0", "Target code must implement the stated negative-value comparison.");
+  return conditions.slice(0, 3);
+}
+
+function relatedReadFirst(files = [], scenarioFiles = [], surface = {}) {
+  const own = asArray(files);
+  const readonly = asArray(surface.readonly_files);
+  const kind = clean(surface.kind);
+  const related = [];
+  if (kind === "test") {
+    related.push(...scenarioFiles.filter((file) => fileKind(file) !== "test"));
+  } else if (kind === "ui") {
+    related.push(...scenarioFiles.filter((file) => ["service", "api", "data", "code"].includes(fileKind(file))));
+  } else {
+    related.push(...scenarioFiles.filter((file) => fileKind(file) === "test"));
+  }
+  return [...new Set([...own, ...readonly, ...related].filter(Boolean))];
+}
+
+function addTaskDependencies(tasks = []) {
+  const byScenario = new Map();
+  for (const task of tasks) {
+    const scenarioId = task.trace?.scenario_id || task.handoff?.scenario?.id || "";
+    if (!scenarioId) continue;
+    if (!byScenario.has(scenarioId)) byScenario.set(scenarioId, []);
+    byScenario.get(scenarioId).push(task);
+  }
+  for (const scenarioTasks of byScenario.values()) {
+    const implementationTasks = scenarioTasks.filter((task) => !asArray(task.scope?.targets).some((target) => fileKind(target.file || target) === "test"));
+    const testTasks = scenarioTasks.filter((task) => asArray(task.scope?.targets).some((target) => fileKind(target.file || target) === "test"));
+    for (const task of testTasks) {
+      task.depends_on = [...new Set([...(task.depends_on || []), ...implementationTasks.map((item) => item.id).filter(Boolean)])];
+    }
+    const uiTasksInScenario = scenarioTasks.filter((task) => asArray(task.scope?.targets).some((target) => fileKind(target.file || target) === "ui"));
+    const serviceTasks = implementationTasks.filter((task) => asArray(task.scope?.targets).some((target) => ["service", "api", "data", "code"].includes(fileKind(target.file || target))));
+    for (const task of uiTasksInScenario) {
+      task.depends_on = [...new Set([...(task.depends_on || []), ...serviceTasks.map((item) => item.id).filter((id) => id && id !== task.id)])];
+    }
+  }
+  return tasks;
+}
+
 function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
   const requirements = requirementById(session);
   const scenarios = scenarioMatrix(session).length ? scenarioMatrix(session) : fallbackScenarios(session);
@@ -401,6 +620,7 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
     for (const [surfaceIndex, surface] of surfaces.entries()) {
       const maxFiles = Math.max(1, Number(surface.session_budget?.max_files || input.max_files_per_task || input.maxFilesPerTask || 2));
       const surfaceFiles = asArray(surface.target_files).length ? asArray(surface.target_files) : allFiles;
+      const scenarioFiles = [...new Set(surfaces.flatMap((item) => asArray(item.target_files)).concat(allFiles).filter(Boolean))];
       const fileChunks = chunk(surfaceFiles, maxFiles);
       for (const [chunkIndex, files] of fileChunks.entries()) {
         const taskId = `DEMAND-${scenario.requirement_id || "REQ"}-${String(scenarioIndex + 1).padStart(3, "0")}${String(surfaceIndex + 1).padStart(2, "0")}${String(chunkIndex + 1).padStart(2, "0")}`;
@@ -409,6 +629,44 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
         const sourceQuestions = sourceQuestionIds(session, scenario, requirement);
         const taskVerificationHint = verificationHint({ scenario, surface, proof, files });
         const uiTask = isUiSurface(surface, files);
+        const readFirst = relatedReadFirst(files, scenarioFiles, surface);
+        const behaviorText = [
+          description,
+          proof,
+          taskVerificationHint,
+          ...asArray(scenario.constraints || session.requirements?.constraints),
+          ...asArray(surface.visual_style_source || scenario.visual_style_source || session.context?.visual_style_source),
+          ...asArray(session.discussion?.decisions).map((item) => item.text || item),
+        ].join("\n");
+        const projectFacts = {
+          schema: "yolo.demand.task_project_facts.v1",
+          structured: structuredProjectFacts(session),
+          target_files: asArray(session.project_facts?.target_files),
+          candidate_target_files: asArray(session.project_facts?.candidate_target_files || session.project?.candidate_target_files),
+          current_state: asArray(session.context?.current_state || session.vision?.status_quo),
+          evidence: asArray(session.investigation?.evidence).map((item) => item.text || item).filter(Boolean),
+          assumptions: asArray(session.project_facts?.assumptions || session.reflection?.assumption_records || session.reflection?.assumptions || session.assumptions),
+          decisions: asArray(session.discussion?.decisions).map((item) => item.text || item).filter(Boolean),
+          constraints: asArray(scenario.constraints || session.requirements?.constraints),
+          out_of_scope: asArray(scenario.out_of_scope || session.requirements?.out_of_scope),
+          deferred_scope: asArray(session.discussion?.deferred),
+          deferred_scope_confirmation: deferredScopeConfirmation(session),
+        };
+        const followUp = deferredFollowUp(session.discussion?.deferred);
+        const currentBehavior = clean(scenario.current_behavior) || (session.context?.current_state || session.vision?.status_quo || []).join("; ") || "Captured in demand CONTEXT.md.";
+        const currentBehaviorWithEvidence = [
+          currentBehavior,
+          projectFacts.evidence.length ? `Evidence: ${projectFacts.evidence.slice(0, 3).join("; ")}` : "",
+        ].filter(Boolean).join(" ");
+        const desiredOutcomes = asArray(session.prd_intake?.desired_outcomes || session.nontechnical_intake?.desired_outcomes)
+          .map(clean)
+          .filter(Boolean);
+        const evidenceLikeProof = /\b(screenshot|test|assert|verify|observe|component|regression)\b|截图|测试|验证/i.test(proof);
+        const outcomeValue = desiredOutcomes.find((item) => item !== description && item !== proof);
+        const userValue = outcomeValue
+          || (currentBehavior ? `they no longer rely on the current behavior: ${currentBehavior}` : "")
+          || (proof && proof !== description && !evidenceLikeProof ? proof : "")
+          || "the workflow has a clear, user-visible outcome";
         const sessionPlan = buildTaskSessionPlan({
           demandId: session.id,
           taskId,
@@ -418,7 +676,7 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
         });
         tasks.push({
           id: taskId,
-          title: `${surfaceTitle(surface)}: ${description}`.slice(0, 100),
+          title: `${surfaceTitle(surface)}: ${scenario.requirement_id || requirement.id || scenario.id || taskId}`,
           description,
           priority: input.priority || "P1",
           type: taskTypeForSurface(surface),
@@ -439,9 +697,9 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
             category: "enhancement",
             session: sessionPlan,
             plain_language_goal: description,
-            user_story: `As ${scenario.actor || "the target user"}, I want ${description}, so that ${proof}.`,
+            user_story: `As ${scenario.actor || "the target user"}, I want ${description}, so that ${userValue}.`,
             source_question_ids: sourceQuestions,
-            current_behavior: clean(scenario.current_behavior) || (session.context?.current_state || session.vision?.status_quo || []).join("; ") || "Captured in demand CONTEXT.md.",
+            current_behavior: currentBehaviorWithEvidence,
             desired_behavior: description,
             touchpoint: scenario.touchpoint || "primary user workflow",
             trigger: scenario.trigger || "the user reaches this scenario",
@@ -464,13 +722,18 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
               label: surfaceTitle(surface),
               target_files: files,
               readonly_files: asArray(surface.readonly_files),
+              visual_style_source: asArray(surface.visual_style_source || scenario.visual_style_source || session.context?.visual_style_source),
               session_budget: surface.session_budget || null,
             },
             key_interfaces: files,
-            read_first: [...new Set([...files, ...asArray(surface.readonly_files)])],
+            read_first: readFirst,
             acceptance_criteria: [proof].filter(Boolean),
             proof,
             verification_hint: taskVerificationHint,
+            project_facts: projectFacts,
+            deferred_scope: asArray(session.discussion?.deferred),
+            deferred_scope_confirmation: deferredScopeConfirmation(session),
+            deferred_follow_up: followUp,
             ...(uiTask ? {
               state_matrix: uiStateMatrixForTask({ scenario, surface, proof }),
               evidence_plan: uiEvidencePlanForTask({ scenario, surface, proof, files }),
@@ -498,7 +761,9 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
           pre_conditions: [],
           post_conditions: [
             ...files.map((file, fileIndex) => modifiedFileCondition(taskId, fileIndex, file)),
+            ...behaviorCodeConditions(taskId, files, behaviorText, uiTask),
             acceptanceCondition(taskId, 0, { then: proof || description }),
+            ...(files.some((file) => fileKind(file) === "test") ? [testsPassCondition(taskId)] : []),
           ],
           trace: {
             demand_id: session.id,
@@ -510,6 +775,9 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
             question_trace: scenario.question_trace || [],
             source_question_ids: sourceQuestions,
           },
+          deferred_scope: asArray(session.discussion?.deferred),
+          deferred_scope_confirmation: deferredScopeConfirmation(session),
+          deferred_follow_up: followUp,
           atomicity: {
             expected_session: surface.session_budget?.expected || "single_session",
             source: "scenario_surface",
@@ -519,7 +787,7 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
       }
     }
   }
-  return tasks;
+  return addTaskDependencies(tasks);
 }
 
 function inspectAtomicity(tasks = [], input = {}, options = {}) {
@@ -567,9 +835,14 @@ function inspectAtomicity(tasks = [], input = {}, options = {}) {
 }
 
 function buildDemandPrd(session = {}, input = {}, options = {}) {
-  const readiness = inspectDemandReadiness(session, { phase: "prd" });
+  const projectRoot = input.projectRoot || input.project_root || options.projectRoot || options.project_root;
+  const readiness = inspectDemandReadiness(session, { phase: "prd", projectRoot });
   if (!readiness.executable_prd_ready) {
-    const quality = inspectDemandQuality(session, { phase: "prd", readiness });
+    const quality = inspectDemandQuality(session, {
+      phase: "prd",
+      readiness,
+      projectRoot,
+    });
     return {
       status: "blocked",
       code: "DEMAND_NOT_EXECUTABLE",
@@ -597,6 +870,7 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
     tasks,
     atomicity,
     requireTasks: true,
+    projectRoot,
   });
   if (atomicity.blockers.length > 0) {
     return {
@@ -657,6 +931,10 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
         source: session.source || "yolo-demand",
         approval: session.approval,
         approval_reason: session.approval_reason || session.approval?.reason || session.approval?.note || "",
+        deferred_scope: asArray(session.discussion?.deferred),
+        deferred_scope_confirmation: deferredScopeConfirmation(session),
+        deferred_follow_up: deferredFollowUp(session.discussion?.deferred),
+        out_of_scope: asArray(session.requirements?.out_of_scope),
         prd_intake: session.prd_intake || session.nontechnical_intake || null,
         interview: session.interview || null,
         question_trace: session.question_trace || [],
@@ -664,6 +942,7 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
         readiness_score: readiness.quality_score,
         quality_score: quality.total_score,
         quality_report: quality,
+        project_facts: structuredProjectFacts(session),
         scenario_matrix: {
           schema: session.scenario_matrix?.schema || null,
           scenario_count: asArray(session.scenario_matrix?.scenarios).length,
@@ -678,12 +957,13 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
               id: surface.id,
               kind: surface.kind || "code",
               label: surfaceTitle(surface),
+              visual_style_source: asArray(surface.visual_style_source || scenario.visual_style_source),
               session_budget: surface.session_budget || null,
             })),
           })),
         },
         atomicity_contract: {
-          rule: session.scenario_matrix?.atomic_task_rule || "one scenario surface maps to one session-sized task",
+          rule: session.scenario_matrix?.atomic_task_rule || "one user-visible story with one proof maps to one task",
           session_budget_required: true,
           max_files_per_surface: 2,
           generated_task_count: tasks.length,
@@ -721,7 +1001,12 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
       })),
       designs: requirements.map((requirement) => ({
         id: `DES-${requirement.id}`,
-        text: `Implement ${requirement.id} according to approved demand CONTEXT.md and ROADMAP.md.`,
+        text: [
+          `Implement ${requirement.id}: ${requirement.text}`,
+          `Proof: ${asArray(requirement.acceptance_scenarios).map((scenario) => scenario.then || scenario.text).filter(Boolean).join("; ") || "Use task-level proof and post_conditions."}`,
+          `Constraints: ${asArray(session.requirements?.constraints).join("; ") || "None recorded."}`,
+          `Out of scope: ${asArray(session.requirements?.out_of_scope).join("; ") || "None recorded."}`,
+        ].join("\n"),
       })),
       tasks,
       conflict_policy: {
@@ -759,7 +1044,7 @@ export function runDemandPrdRuntime(input = {}, options = {}) {
   const artifacts = [];
   if (shouldWrite && compiled.prd) artifacts.push(writeJson(outputFile, compiled.prd));
 
-  return {
+  const result = {
     status: compiled.status,
     code: compiled.code,
     summary: compiled.summary,
@@ -775,4 +1060,8 @@ export function runDemandPrdRuntime(input = {}, options = {}) {
     outputs: artifacts.map((path) => ({ path, type: "prd" })),
     next_actions: compiled.next_actions || [],
   };
+  if (shouldWrite && compiled.prd && shouldWriteLifecycle(input, options)) {
+    attachLifecycle(result, "prd", { projectRoot, stateRoot }, "yolo-prd");
+  }
+  return result;
 }

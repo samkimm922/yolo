@@ -39,11 +39,21 @@ function extractLabel(text, labels) {
   return clean(source.match(pattern)?.[1] || "");
 }
 
+const LIST_ITEM_PREFIX = /^(?:[-*•]\s+|\d{1,3}[.)、](?!\d)\s*|[（(]\d{1,3}[）)]\s*|[一二三四五六七八九十]{1,4}[.)、]\s*)/u;
+const INLINE_NUMBERED_ITEM = /\s+(?=(?:\d{1,3}[.)、](?!\d)\s*|[（(]\d{1,3}[）)]\s*|[一二三四五六七八九十]{1,4}[.)、]\s*))/u;
+
+function splitStructuredListItem(value) {
+  return clean(value)
+    .split(INLINE_NUMBERED_ITEM)
+    .flatMap((item) => item.split(/;\s+|\s+\|\s+/))
+    .map((item) => clean(item).replace(LIST_ITEM_PREFIX, "").trim())
+    .filter(Boolean);
+}
+
 function splitList(value) {
   return uniqueStrings(asArray(value)
-    .flatMap((item) => String(item ?? "").split(/\r?\n|;|；|\||、/))
-    .map(clean)
-    .filter(Boolean));
+    .flatMap((item) => String(item ?? "").split(/\r?\n/))
+    .flatMap(splitStructuredListItem));
 }
 
 function mergeLabeled(inputValue, idea, labels) {

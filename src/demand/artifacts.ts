@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { buildDemandArtifactGraph } from "./graph.js";
 import { inspectDemandReadiness } from "./gate.js";
 
@@ -66,6 +66,7 @@ const LABELS = {
   trigger: ["Trigger", "When", "触发", "什么时候", "条件"],
   exception: ["Exception", "Edge case", "异常", "边界情况"],
   proof: ["Proof", "Verify", "Evidence plan", "证明", "如何证明"],
+  visual_style: ["Visual style", "Style source", "UI style", "样式", "视觉样式", "样式来源"],
 };
 
 const ALL_LABELS = Object.values(LABELS).flat().sort((a, b) => b.length - a.length);
@@ -83,12 +84,21 @@ function extractLabel(text, labels) {
   return clean(source.match(pattern)?.[1] || "");
 }
 
+const LIST_ITEM_PREFIX = /^(?:[-*•]\s+|\d{1,3}[.)、](?!\d)\s*|[（(]\d{1,3}[）)]\s*|[一二三四五六七八九十]{1,4}[.)、]\s*)/u;
+const INLINE_NUMBERED_ITEM = /\s+(?=(?:\d{1,3}[.)、](?!\d)\s*|[（(]\d{1,3}[）)]\s*|[一二三四五六七八九十]{1,4}[.)、]\s*))/u;
+
+function splitStructuredListItem(value) {
+  return clean(value)
+    .split(INLINE_NUMBERED_ITEM)
+    .flatMap((item) => item.split(/;\s+|\s+\|\s+/))
+    .map((item) => clean(item).replace(LIST_ITEM_PREFIX, "").trim())
+    .filter(Boolean);
+}
+
 function splitList(value) {
   return uniqueStrings(
     arrayOfStrings(value)
-      .flatMap((item) => item.split(/\s*(?:;|；|\||、)\s*/))
-      .map(clean)
-      .filter(Boolean),
+      .flatMap(splitStructuredListItem),
   );
 }
 
@@ -237,6 +247,162 @@ function inferTargetFiles({ projectRoot, text, explicitFiles = [], maxPerKind = 
   return [...new Set(selected)].slice(0, 8);
 }
 
+function resolveProjectFile(projectRoot, file) {
+  const root = resolve(clean(projectRoot) || process.cwd());
+  const path = clean(file);
+  return isAbsolute(path) ? path : resolve(root, path);
+}
+
+function scopedProjectFile(projectRoot, file) {
+  const root = resolve(clean(projectRoot) || process.cwd());
+  const declared = clean(file);
+  const absolute = isAbsolute(declared) ? resolve(declared) : resolve(root, declared);
+  const relativePath = relative(root, absolute);
+  const insideRoot = relativePath && !relativePath.startsWith("..") && !isAbsolute(relativePath);
+  return {
+    declared,
+    absolute,
+    relative: relativePath,
+    insideRoot,
+  };
+}
+
+function evidenceText(evidence = []) {
+  return uniqueStrings(evidence).join("\n");
+}
+
+function evidenceMentionsFile(evidence = [], file = "") {
+  const target = clean(file);
+  return target && evidenceText(evidence).includes(target);
+}
+
+function targetFileFacts({ projectRoot, explicitFiles = [], inferredFiles = [], evidence = [], verifiedFiles = [] } = {}) {
+  const verifiedSet = new Set(uniqueStrings(verifiedFiles));
+  const explicit = uniqueStrings(explicitFiles);
+  const inferred = uniqueStrings(inferredFiles).filter((file) => !explicit.includes(file));
+  const facts = [];
+  for (const file of explicit) {
+    const scoped = scopedProjectFile(projectRoot, file);
+    if (!scoped.insideRoot) {
+      facts.push({
+        file,
+        status: "invalid_scope",
+        source: "outside_project_root",
+        evidence: [],
+        message: "Target file is outside the project root and cannot enter execution scope.",
+      });
+      continue;
+    }
+    const normalizedFile = scoped.relative;
+    const exists = existsSync(scoped.absolute);
+    const evidenceVerified = evidenceMentionsFile(evidence, normalizedFile) || evidenceMentionsFile(evidence, file);
+    const verifiedInput = verifiedSet.has(normalizedFile) || verifiedSet.has(file);
+    const verified = exists || evidenceVerified || verifiedInput;
+    facts.push({
+      file: normalizedFile,
+      ...(normalizedFile !== file ? { declared_file: file } : {}),
+      status: verified ? "verified" : "needs_verification",
+      source: exists ? "project_read" : evidenceVerified ? "evidence_record" : verifiedInput ? "verified_input" : "user_or_agent_declared",
+      evidence: exists ? [`${normalizedFile} exists in project root.`] : evidenceVerified ? [`Evidence mentions ${normalizedFile}.`] : [],
+      message: verified
+        ? "Target file is verified enough to enter execution scope."
+        : "Target file is declared but not verified by project read or evidence; keep blocked before executable PRD.",
+    });
+  }
+  for (const file of inferred) {
+    const scoped = scopedProjectFile(projectRoot, file);
+    if (!scoped.insideRoot) continue;
+    facts.push({
+      file: scoped.relative,
+      status: "candidate",
+      source: "auto_scout_candidate",
+      evidence: existsSync(scoped.absolute) ? [`${scoped.relative} exists, but relevance is only inferred.`] : [],
+      message: "Auto-scouted file is only a candidate and must not enter execution scope until verified.",
+    });
+  }
+  return facts;
+}
+
+function targetFilesFromFacts(facts = []) {
+  return facts
+    .filter((fact) => ["verified", "needs_verification"].includes(fact.status))
+    .map((fact) => fact.file);
+}
+
+function candidateFilesFromFacts(facts = []) {
+  return facts
+    .filter((fact) => fact.status === "candidate")
+    .map((fact) => fact.file);
+}
+
+function projectFactIdentifiers(text = "") {
+  const source = clean(text);
+  const camelOrSnake = source.match(/\b[A-Za-z_$][A-Za-z0-9_$]*(?:Threshold|Quantity|Qty|Units|Available|Stock|Floor|Replenishment)[A-Za-z0-9_$]*\b|[a-z]+_[a-z0-9_]*(?:threshold|quantity|qty|units|available|stock|floor|replenishment)[a-z0-9_]*/g) || [];
+  const dotted = source.match(/\b[A-Za-z_$][A-Za-z0-9_$]*\[\]\.[A-Za-z_$][A-Za-z0-9_$]*|\b[A-Za-z_$][A-Za-z0-9_$]*\.[A-Za-z_$][A-Za-z0-9_$]*/g) || [];
+  const simple = source.match(/\b(threshold|quantity|qty|stock|floor|replenishment)\b/gi) || [];
+  return uniqueStrings([...camelOrSnake, ...dotted.flatMap((item) => item.split(".")).filter((part) => !part.endsWith("[]")), ...simple]);
+}
+
+function assumptionRecords({ assumptions = [], evidence = [], targetFacts = [], projectRoot = "" } = {}) {
+  const evidenceSource = evidenceText(evidence).toLowerCase();
+  const targetText = targetFacts
+    .filter((fact) => ["verified", "needs_verification"].includes(fact.status))
+    .flatMap((fact) => {
+      try {
+        const scoped = scopedProjectFile(projectRoot, fact.file);
+        if (!scoped.insideRoot) return [];
+        return existsSync(scoped.absolute) ? [String(readFileSync(scoped.absolute, "utf8")).slice(0, 64000)] : [];
+      } catch {
+        return [];
+      }
+    })
+    .join("\n")
+    .toLowerCase();
+  return uniqueStrings(assumptions).map((text, index) => {
+    const thresholdClaim = /threshold|replenishment|floor|lowstock|low_stock/i.test(text);
+    const contradictedByEvidence = thresholdClaim && /\b(no|not|does not|without|missing)\b[^\n.]{0,100}\b(threshold|replenishment|floor|lowstock|low_stock)\b/i.test(evidenceSource);
+    const contradictedByProject = thresholdClaim
+      && targetText
+      && !/threshold|replenishment|floor|lowstock|low_stock/i.test(targetText);
+    const identifiers = projectFactIdentifiers(text);
+    const concrete = identifiers.length > 0;
+    const identifiersVerified = concrete && identifiers.every((identifier) => {
+      const lowerIdentifier = identifier.toLowerCase();
+      return evidenceSource.includes(lowerIdentifier) || targetText.includes(lowerIdentifier);
+    });
+    const status = contradictedByEvidence || contradictedByProject
+      ? "contradicted"
+      : identifiersVerified
+        ? "verified"
+      : concrete
+        ? "needs_verification"
+        : "assumption";
+    return {
+      id: `ASM-${String(index + 1).padStart(3, "0")}`,
+      text,
+      status,
+      source: "user_or_dialogue",
+      contradicted_by: contradictedByEvidence
+        ? ["evidence"]
+        : contradictedByProject
+          ? ["project_read"]
+          : [],
+      identifiers,
+      verified_by: identifiersVerified ? [
+        ...(targetText ? ["project_read"] : []),
+        ...(evidenceSource ? ["evidence"] : []),
+      ] : [],
+      message: status === "contradicted"
+        ? "Assumption conflicts with available evidence or project files and must not be promoted to fact."
+        : status === "verified"
+          ? "Assumption is grounded by evidence or target project files."
+        : status === "needs_verification"
+          ? "Assumption names project facts and needs verification before executable PRD."
+          : "Business assumption not yet verified.",
+    };
+  });
+}
+
 function buildNonTechnicalIntake({
   input = {},
   objective = "",
@@ -249,6 +415,8 @@ function buildNonTechnicalIntake({
   evidence = [],
   assumptions = [],
   targetFiles = [],
+  candidateTargetFiles = [],
+  visualStyleSource = [],
 } = {}) {
   const touchpoints = mergeField(input, "touchpoints", LABELS.touchpoint, objective);
   const triggers = mergeField(input, "triggers", LABELS.trigger, objective);
@@ -263,6 +431,7 @@ function buildNonTechnicalIntake({
     current_workarounds: statusQuo,
     desired_outcomes: successCriteria,
     success_proof: proof.length ? proof : successCriteria,
+    visual_style_source: visualStyleSource,
     boundaries: [...constraints, ...nonGoals],
     exceptions,
     evidence,
@@ -270,11 +439,14 @@ function buildNonTechnicalIntake({
     technical_terms_required_from_user: false,
     user_should_not_need_to_name_files: true,
     inferred_target_files: targetFiles,
+    candidate_target_files: candidateTargetFiles,
     question_model: [
       "Who has the problem?",
       "Where in the workflow does it happen?",
       "What happens today?",
       "What should happen instead?",
+      "For visible UI, what exact copy, position, style source/component, and proof are acceptable?",
+      "For API/service failures, what error shape, message, or code should be observable?",
       "How will you know it worked?",
       "What is explicitly out of scope?",
       "What edge cases would make this feel wrong?",
@@ -446,6 +618,7 @@ function buildScenarioMatrix({
   constraints = [],
   nonGoals = [],
   targetFiles = [],
+  visualStyleSource = [],
   questionTrace = [],
 } = {}) {
   const touchpoints = mergeField(input, "touchpoints", LABELS.touchpoint, objective);
@@ -489,6 +662,7 @@ function buildScenarioMatrix({
         ...surface,
         id: `SCN-${String(index + 1).padStart(3, "0")}-${surface.id || `SFC-${surfaceIndex + 1}`}`,
         proof: proof[index] || proof[0] || requirement.text,
+        visual_style_source: surface.user_visible ? visualStyleSource : [],
       })),
       question_trace: sourceQuestionIds,
       source_question_ids: sourceQuestionIds,
@@ -499,7 +673,7 @@ function buildScenarioMatrix({
     generated_from: "nontechnical_interview",
     nontechnical_user_safe: true,
     scenarios,
-    atomic_task_rule: "one scenario surface becomes one session-sized task unless atomicity gate requires more splitting",
+    atomic_task_rule: "one user-visible story with one proof becomes one task; file and surface budgets only bound implementation scope",
   };
 }
 
@@ -541,6 +715,114 @@ function requirementRecord(text, index, input = {}) {
   };
 }
 
+function normalizeStoryText(value) {
+  return clean(value)
+    .replace(/\s+/g, " ")
+    .replace(/^[,，;；\s]+|[,，;；\s]+$/g, "");
+}
+
+function splitRepeatedUserStories(text) {
+  const matches = [...clean(text).matchAll(/当用户/g)];
+  if (matches.length <= 1) return [];
+  const parts = matches.map((match, index) => {
+    const start = match.index || 0;
+    const end = index + 1 < matches.length ? matches[index + 1].index : text.length;
+    return normalizeStoryText(text.slice(start, end));
+  }).filter((part) => part.length >= 8);
+  return parts.length > 1 ? parts : [];
+}
+
+function splitEditMoveStory(text) {
+  const match = clean(text).match(/^当用户把(.+?)编辑为(.+?)并移动到(.+?)时[，,](.+)$/);
+  if (!match) return [];
+  const [, before, after, destination, consequence] = match;
+  return [
+    `当用户把${clean(before)}编辑为${clean(after)}时，旧标题不可见，新标题可见。`,
+    `当用户将${clean(after)}移动到${clean(destination)}时，${normalizeStoryText(consequence)}`,
+  ].map(normalizeStoryText);
+}
+
+function splitCreateListCardStory(text) {
+  const match = clean(text).match(/^当用户(.+?(?:新增|新建|创建|添加|增加).+?(?:列表|清单|看板列|列).+?)并(.+?(?:新增|新建|创建|添加|增加).+?(?:卡片|任务卡|卡).+?)时[，,](.+)$/u);
+  if (!match) return [];
+  const [, listAction, cardAction, consequence] = match;
+  const clauses = normalizeStoryText(consequence)
+    .split(/\s*[，,]\s*/)
+    .map(normalizeStoryText)
+    .filter(Boolean);
+  const listClause = clauses.find((clause) => /列表|清单|看板列|列/.test(clause)) || "列表创建结果可见。";
+  const cardClause = clauses.find((clause) => /卡片|任务卡|卡/.test(clause)) || "卡片创建结果可见。";
+  return [
+    `当用户${normalizeStoryText(listAction)}时，${listClause}`,
+    `当用户${normalizeStoryText(cardAction)}时，${cardClause}`,
+  ].map(normalizeStoryText);
+}
+
+function splitArchivePersistenceStory(text) {
+  const match = clean(text).match(/^当用户归档(.+?)并(刷新|重新加载)页面时[，,](.+)$/);
+  if (!match) return [];
+  const [, item, refreshVerb, consequence] = match;
+  const clauses = normalizeStoryText(consequence)
+    .split(/\s*[，,]\s*/)
+    .map(normalizeStoryText)
+    .filter(Boolean);
+  const hiddenClause = clauses.find((clause) => /不显示|隐藏/.test(clause)) || clauses[0] || "普通列表不显示该归档项。";
+  const restoreClause = clauses.find((clause) => /恢复|保留|localStorage|持久/.test(clause)) || clauses.slice(1).join("，") || "未归档数据仍可恢复。";
+  return [
+    `当用户归档${clean(item)}时，${hiddenClause}`,
+    `当用户${refreshVerb}页面时，${restoreClause}`,
+  ].map(normalizeStoryText);
+}
+
+function storySlicesForRequirement(text) {
+  const source = clean(text);
+  const repeated = splitRepeatedUserStories(source);
+  if (repeated.length > 1) return repeated.flatMap(storySlicesForRequirement);
+  const createListCard = splitCreateListCardStory(source);
+  if (createListCard.length > 1) return createListCard.flatMap(storySlicesForRequirement);
+  const editMove = splitEditMoveStory(source);
+  if (editMove.length > 1) return editMove.flatMap(storySlicesForRequirement);
+  const archivePersistence = splitArchivePersistenceStory(source);
+  if (archivePersistence.length > 1) return archivePersistence.flatMap(storySlicesForRequirement);
+  return [source].filter(Boolean);
+}
+
+function expandRequirementStories(requirements = []) {
+  const expanded = [];
+  for (const requirement of requirements) {
+    const stories = storySlicesForRequirement(requirement.text);
+    if (stories.length <= 1) {
+      expanded.push(requirement);
+      continue;
+    }
+    stories.forEach((story, storyIndex) => {
+      const id = `${requirement.id}-S${String(storyIndex + 1).padStart(2, "0")}`;
+      expanded.push({
+        ...requirement,
+        id,
+        text: story,
+        source_requirement_id: requirement.id,
+        story_index: storyIndex + 1,
+        story_count: stories.length,
+        story_atomicity: {
+          schema: "yolo.demand.story_atomicity.v1",
+          source_requirement_id: requirement.id,
+          source_text: requirement.text,
+          split: true,
+          reason: "compound_user_story",
+        },
+        acceptance_scenarios: asArray(requirement.acceptance_scenarios || requirement.scenarios).map((scenario, scenarioIndex) => ({
+          ...scenario,
+          id: `SCN-${String(expanded.length + 1).padStart(3, "0")}-${String(scenarioIndex + 1).padStart(2, "0")}`,
+          then: story,
+          text: story,
+        })),
+      });
+    });
+  }
+  return expanded;
+}
+
 function buildRounds(input = {}, questionTrace = []) {
   const rounds = asArray(input.rounds || input.discussion_rounds || input.questions || input.question).filter(Boolean);
   if (rounds.length > 0) {
@@ -565,6 +847,42 @@ function buildRounds(input = {}, questionTrace = []) {
   })) : [];
 }
 
+function truthyConfirmation(value) {
+  if (value === true) return true;
+  const text = clean(value).toLowerCase();
+  return ["true", "yes", "approved", "confirm", "confirmed", "ok", "确认", "批准", "同意"].includes(text);
+}
+
+function deferredScopeConfirmation(input = {}, deferredItems = [], now = "") {
+  const items = uniqueStrings(deferredItems);
+  const raw = input.deferred_scope_confirmed
+    ?? input.deferredScopeConfirmed
+    ?? input.confirm_deferred_scope
+    ?? input.confirmDeferredScope
+    ?? input.deferred_confirmation
+    ?? input.deferredConfirmation
+    ?? input.deferred_confirmed
+    ?? input.deferredConfirmed;
+  const confirmed = items.length === 0 || truthyConfirmation(raw);
+  return {
+    schema: "yolo.demand.deferred_scope_confirmation.v1",
+    required: items.length > 0,
+    confirmed,
+    status: items.length === 0 ? "not_required" : confirmed ? "confirmed" : "needs_confirmation",
+    items,
+    confirmed_by: confirmed && items.length > 0 ? clean(input.approved_by || input.approvedBy || "user") : null,
+    confirmed_at: confirmed && items.length > 0 ? clean(input.deferred_confirmed_at || input.deferredConfirmedAt || now) : null,
+    prompt: items.length > 0
+      ? [
+        "本次不做，未来重新询问：",
+        ...items.map((item) => `- ${item}`),
+        "",
+        "请确认这个延期范围。",
+      ].join("\n")
+      : "",
+  };
+}
+
 function completedArtifacts(session = {}) {
   const completed = [];
   if (clean(session.vision?.statement || session.vision?.idea).length >= 10) completed.push("vision");
@@ -582,6 +900,7 @@ function completedArtifacts(session = {}) {
 export function buildDemandSession(input = {}, options = {}) {
   const now = nowIso(options);
   const objective = clean(input.objective || input.idea || input.requirement || input.text || input.title);
+  const projectRoot = input.projectRoot || input.project_root || options.projectRoot || options.project_root;
   const interviewContext = normalizeInterviewContext(input);
   const questionTrace = interviewContext.question_trace;
   const id = demandId({ ...input, objective }, now);
@@ -594,11 +913,14 @@ export function buildDemandSession(input = {}, options = {}) {
   const evidence = mergeField(input, "evidence", LABELS.evidence, objective);
   const assumptions = mergeField(input, "assumptions", LABELS.assumptions, objective);
   const explicitTargetFiles = mergeField(input, "target_files", LABELS.target_files, objective);
+  const visualStyleSource = mergeField(input, "visual_style", LABELS.visual_style, objective);
   const alternatives = uniqueStrings(input.alternatives || input.alternative);
   const risks = uniqueStrings(input.risks || input.risk);
   const decisions = uniqueStrings(input.decisions || input.decision);
   const openQuestions = uniqueStrings(input.open_questions || input.openQuestions || ((input.answer || input.answers || questionTrace.length > 0) ? [] : input.question));
   const roadmapItems = uniqueStrings(input.roadmap || input.mvp || input.phase || input.phases);
+  const deferredItems = uniqueStrings(input.deferred || input.followups || input.follow_ups);
+  const deferredConfirmation = deferredScopeConfirmation(input, deferredItems, now);
   const scoutText = [
     objective,
     problem,
@@ -606,13 +928,43 @@ export function buildDemandSession(input = {}, options = {}) {
     successCriteria.join(" "),
     statusQuo.join(" "),
   ].join("\n");
-  const targetFiles = inferTargetFiles({
-    projectRoot: input.projectRoot || input.project_root || options.projectRoot || options.project_root,
+  const inferredTargetFiles = explicitTargetFiles.length > 0 ? [] : inferTargetFiles({
+    projectRoot,
     text: scoutText,
-    explicitFiles: explicitTargetFiles,
+    explicitFiles: [],
   });
-  const requirements = (successCriteria.length > 0 ? successCriteria : uniqueStrings(input.requirements || input.requirement_text))
+  const targetFileFactRecords = targetFileFacts({
+    projectRoot,
+    explicitFiles: explicitTargetFiles,
+    inferredFiles: inferredTargetFiles,
+    evidence,
+    verifiedFiles: input.verified_target_files || input.verifiedTargetFiles,
+  });
+  const targetFiles = targetFilesFromFacts(targetFileFactRecords);
+  const candidateTargetFiles = candidateFilesFromFacts(targetFileFactRecords);
+  const assumptionFactRecords = assumptionRecords({
+    assumptions,
+    evidence,
+    targetFacts: targetFileFactRecords,
+    projectRoot,
+  });
+  const projectFactNextActions = [
+    ...targetFileFactRecords
+      .filter((fact) => fact.status === "needs_verification")
+      .map((fact) => `Read or cite ${fact.file} before executable PRD generation.`),
+    ...targetFileFactRecords
+      .filter((fact) => fact.status === "candidate")
+      .map((fact) => `Confirm whether ${fact.file} is in execution scope before promoting it from candidate.`),
+    ...assumptionFactRecords
+      .filter((fact) => fact.status === "contradicted")
+      .map((fact) => `Resolve contradicted assumption ${fact.id}: ${fact.text}`),
+    ...assumptionFactRecords
+      .filter((fact) => fact.status === "needs_verification")
+      .map((fact) => `Verify assumption ${fact.id} against project evidence before PRD execution.`),
+  ];
+  const rawRequirements = (successCriteria.length > 0 ? successCriteria : uniqueStrings(input.requirements || input.requirement_text))
     .map((text, index) => requirementRecord(text, index, { ...input, evidence, decisions, questionTrace }));
+  const requirements = expandRequirementStories(rawRequirements);
   const nontechnicalIntake = buildNonTechnicalIntake({
     input,
     objective,
@@ -625,6 +977,8 @@ export function buildDemandSession(input = {}, options = {}) {
     evidence,
     assumptions,
     targetFiles,
+    candidateTargetFiles,
+    visualStyleSource,
   });
   const prdIntake = buildPrdIntake({ nontechnicalIntake, interviewContext });
   const scenarioMatrix = buildScenarioMatrix({
@@ -636,6 +990,7 @@ export function buildDemandSession(input = {}, options = {}) {
     constraints,
     nonGoals,
     targetFiles,
+    visualStyleSource,
     questionTrace,
   });
   const approvalReason = interviewContext.approval_reason || clean(input.approval_note || input.approvalNote);
@@ -652,6 +1007,19 @@ export function buildDemandSession(input = {}, options = {}) {
       title: clean(input.title || objective).slice(0, 160) || "Demand session",
       target_users: targetUsers,
       target_files: targetFiles,
+      candidate_target_files: candidateTargetFiles,
+    },
+    project_facts: {
+      schema: "yolo.demand.project_facts.v1",
+      target_files: targetFileFactRecords,
+      candidate_target_files: candidateTargetFiles,
+      assumptions: assumptionFactRecords,
+      policy: {
+        inferred_files_are_execution_scope: false,
+        unverified_project_facts_block_prd: true,
+        user_approval_cannot_override_fact_conflicts: true,
+      },
+      next_actions: projectFactNextActions,
     },
     question_trace: questionTrace,
     prd_intake: prdIntake,
@@ -676,16 +1044,19 @@ export function buildDemandSession(input = {}, options = {}) {
     reflection: {
       summary: clean(input.reflection || ""),
       assumptions,
+      assumption_records: assumptionFactRecords,
       alternatives,
       premise_challenges: uniqueStrings(input.premise_challenges || input.premise || input.challenge),
     },
     investigation: {
       evidence: evidence.map((text, index) => ({ id: `EVID-${String(index + 1).padStart(3, "0")}`, text })),
-      assumptions: assumptions.map((text, index) => ({ id: `ASM-${String(index + 1).padStart(3, "0")}`, text, status: "TBD-needs-validation" })),
-      codebase_scouts: targetFiles.map((file) => ({
-        file,
-        surface: surfaceKindFromFile(file),
-        reason: explicitTargetFiles.includes(file) ? "target_scope_candidate" : "auto_scout_candidate",
+      assumptions: assumptionFactRecords,
+      codebase_scouts: targetFileFactRecords.map((fact) => ({
+        file: fact.file,
+        surface: surfaceKindFromFile(fact.file),
+        reason: fact.source,
+        status: fact.status,
+        message: fact.message,
       })),
       risks,
     },
@@ -693,7 +1064,8 @@ export function buildDemandSession(input = {}, options = {}) {
       rounds: buildRounds(input, questionTrace),
       decisions: decisions.map((text, index) => ({ id: `DEC-${String(index + 1).padStart(3, "0")}`, text })),
       open_questions: openQuestions.map((text, index) => ({ id: `OQ-${String(index + 1).padStart(3, "0")}`, text, blocking: true })),
-      deferred: uniqueStrings(input.deferred || input.followups || input.follow_ups),
+      deferred: deferredItems,
+      deferred_scope_confirmation: deferredConfirmation,
     },
     requirements: {
       active: requirements,
@@ -705,6 +1077,7 @@ export function buildDemandSession(input = {}, options = {}) {
       domain_terms: uniqueStrings(input.domain_terms || input.terms),
       current_state: statusQuo,
       constraints,
+      visual_style_source: visualStyleSource,
     },
     roadmap: {
       mvp: roadmapItems.length > 0 ? roadmapItems : successCriteria.slice(0, 3),
@@ -715,12 +1088,22 @@ export function buildDemandSession(input = {}, options = {}) {
     approval: {
       approved: input.approved === true || input.approve === true || ["true", "yes", "approved", "confirm", "confirmed"].includes(clean(input.approval || input.approved || input.approve).toLowerCase()),
       approved_by: clean(input.approved_by || input.approvedBy || "user"),
-      approved_at: clean(input.approved_at || input.approvedAt) || null,
+      approved_at: clean(input.approved_at || input.approvedAt) || ((input.approved === true || input.approve === true || ["true", "yes", "approved", "confirm", "confirmed"].includes(clean(input.approval || input.approved || input.approve).toLowerCase())) ? now : null),
       reason: approvalReason,
       note: clean(input.approval_note || input.approvalNote),
     },
   };
-  session.readiness = inspectDemandReadiness(session, { phase: session.phase });
+  session.readiness = inspectDemandReadiness(session, {
+    phase: session.phase,
+    projectRoot,
+  });
+  session.approval.effective_for_prd = session.approval.approved === true && session.readiness.executable_prd_ready === true;
+  session.approval.blocked_by = session.approval.approved === true && !session.approval.effective_for_prd
+    ? asArray(session.readiness.blockers).map((blocker) => ({
+      code: blocker.code,
+      message: blocker.message,
+    }))
+    : [];
   session.graph = buildDemandArtifactGraph(completedArtifacts(session));
   return session;
 }
@@ -782,10 +1165,10 @@ export function demandMarkdownArtifacts(session = {}) {
       linesList(asArray(session.investigation?.evidence).map((item) => `${item.id}: ${item.text}`)),
       "",
       "## Assumptions / TBD",
-      linesList(asArray(session.investigation?.assumptions).map((item) => `${item.id}: ${item.text}`)),
+      linesList(asArray(session.investigation?.assumptions).map((item) => `${item.id} [${item.status || "unknown"}]: ${item.text}${asArray(item.contradicted_by).length ? ` (contradicted by: ${asArray(item.contradicted_by).join(", ")})` : ""}`)),
       "",
       "## Codebase Scouts",
-      linesList(asArray(session.investigation?.codebase_scouts).map((item) => item.file)),
+      linesList(asArray(session.investigation?.codebase_scouts).map((item) => `${item.file} [${item.status || "unknown"}] ${item.reason || ""}`)),
       "",
       "## Risks",
       linesList(session.investigation?.risks),
@@ -811,6 +1194,7 @@ export function demandMarkdownArtifacts(session = {}) {
           asArray(scenario.surfaces).map((surface) => [
             `- ${surface.id}: ${surface.label} (${surface.kind})`,
             `  - targets: ${arrayOfStrings(surface.target_files).join(", ") || "TBD from code scout"}`,
+            `  - visual style: ${arrayOfStrings(surface.visual_style_source).join("; ") || "TBD"}`,
             `  - budget: ${surface.session_budget?.expected || "single_session"}, max_files=${surface.session_budget?.max_files || 1}`,
           ].join("\n")).join("\n"),
         ].join("\n")).join("\n\n")
@@ -872,6 +1256,15 @@ export function demandMarkdownArtifacts(session = {}) {
       "",
       "## Constraints",
       linesList(session.context?.constraints),
+      "",
+      "## Visual Style Source",
+      linesList(session.context?.visual_style_source),
+      "",
+      "## Verified Target Files",
+      linesList(asArray(session.project_facts?.target_files).filter((item) => item.status === "verified").map((item) => item.file)),
+      "",
+      "## Candidate Target Files",
+      linesList(session.project_facts?.candidate_target_files),
     ].join("\n"),
     "ROADMAP.md": [
       `# ${session.id} Roadmap`,

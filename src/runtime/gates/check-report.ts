@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { inspectStoryAtomicityFromPrd } from "../../demand/story-atomicity.js";
 import { inspectDiscoveryReadiness } from "../../discovery/gate.js";
 import { writeLifecycleStageReport } from "../../lifecycle/progress.js";
 import { resolveProjectContext } from "../../packs/resolver.js";
@@ -57,6 +58,19 @@ function checkRecord(name, status, summary, details = {}) {
   };
 }
 
+function cleanString(value) {
+  return String(value ?? "").trim();
+}
+
+function pathInsideProject(projectRoot, file) {
+  const root = resolve(projectRoot);
+  const target = cleanString(file);
+  if (!target) return false;
+  const path = isAbsolute(target) ? resolve(target) : resolve(root, target);
+  const rel = relative(root, path);
+  return Boolean(rel && !rel.startsWith("..") && !isAbsolute(rel));
+}
+
 function productReadiness({ prd, discovery }) {
   const blockers = [];
   const warnings = [];
@@ -96,12 +110,13 @@ function productReadiness({ prd, discovery }) {
   });
 }
 
-function demandContractReadiness({ prd }) {
+function demandContractReadiness({ prd, projectRoot }) {
   const blockers = [];
   const warnings = [];
   const demandRequired = prd?.demand_contract_required === true || prd?.source === "approved_demand";
   const demand = prd?.demand || null;
   const executionReadiness = prd?.execution_readiness || {};
+  const projectFacts = demand?.project_facts || null;
 
   if (!demandRequired && !demand) {
     warnings.push({
@@ -137,6 +152,29 @@ function demandContractReadiness({ prd }) {
     }
     if (demandRequired && qualityReports.length === 0) {
       warnings.push({ code: "DEMAND_QUALITY_REPORT_MISSING", message: "Executable demand PRD should include a demand quality report." });
+    }
+    if (!projectFacts) {
+      warnings.push({ code: "DEMAND_PROJECT_FACTS_MISSING", message: "Executable demand PRD should include structured project facts." });
+    } else {
+      const unresolvedTargetFacts = asArray(projectFacts.target_files)
+        .filter((fact) => ["candidate", "needs_verification", "contradicted", "invalid_scope"].includes(fact?.status)
+          || !pathInsideProject(projectRoot, fact?.file));
+      const unresolvedAssumptions = asArray(projectFacts.assumptions)
+        .filter((fact) => ["needs_verification", "contradicted"].includes(fact?.status));
+      if (unresolvedTargetFacts.length > 0) {
+        blockers.push({
+          code: "DEMAND_PROJECT_TARGET_FACTS_UNRESOLVED",
+          message: "Executable PRD must not carry candidate, unverified, contradicted, or out-of-project target-file facts.",
+          facts: unresolvedTargetFacts.map((fact) => ({ file: fact.file || null, status: fact.status || null })),
+        });
+      }
+      if (unresolvedAssumptions.length > 0) {
+        blockers.push({
+          code: "DEMAND_PROJECT_ASSUMPTIONS_UNRESOLVED",
+          message: "Executable PRD must not carry unverified or contradicted project assumptions.",
+          assumptions: unresolvedAssumptions.map((fact) => ({ id: fact.id || null, status: fact.status || null })),
+        });
+      }
     }
     for (const requirement of asArray(prd.requirements)) {
       if (!requirement.demand_trace) {
@@ -223,6 +261,28 @@ function atomicityReadiness({ prd, projectRoot }) {
     inspections,
     blockers,
     warnings,
+  });
+}
+
+function storyAtomicityReadiness({ prd }) {
+  const inspection = inspectStoryAtomicityFromPrd(prd);
+  const blockers = asArray(inspection.blockers).map((blocker) => ({
+    code: blocker.code || "STORY_ATOMICITY_MULTI_STORY",
+    task_id: blocker.task_id || null,
+    requirement_id: blocker.requirement_id || null,
+    scenario_id: blocker.scenario_id || null,
+    item_id: blocker.item_id || null,
+    kind: blocker.kind || "story",
+    message: blocker.message || "Requirement, scenario, or task mixes multiple independent user stories.",
+    story_count: blocker.story_count || null,
+    story_signatures: blocker.story_signatures || [],
+    split_suggestions: blocker.split_suggestions || [],
+  }));
+  const status = blockers.length > 0 ? "blocked" : "pass";
+  return checkRecord("story_atomicity", status, status === "pass" ? "Story atomicity passed." : "Story atomicity found multi-story slices.", {
+    inspection,
+    blockers,
+    warnings: [],
   });
 }
 
@@ -334,10 +394,11 @@ export function inspectYoloCheck(input = {}, options = {}) {
   });
   const checks = [
     preflightReadiness(preflight),
-    demandContractReadiness({ prd }),
+    demandContractReadiness({ prd, projectRoot }),
     productReadiness({ prd, discovery }),
     resolverReadiness({ resolver }),
     uiReadiness({ prd, acceptanceManifest, resolver }),
+    storyAtomicityReadiness({ prd }),
     atomicityReadiness({ prd, projectRoot }),
     adapterReadiness({ prd, acceptanceManifest, options: { ...options, ...input }, resolver }),
     evidencePlanReadiness({ prd }),

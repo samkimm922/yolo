@@ -1,7 +1,14 @@
 import { existsSync as defaultExistsSync, readFileSync as defaultReadFileSync } from "node:fs";
 import { spawn as defaultSpawn } from "node:child_process";
-import { join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { normalizeAgentProvider } from "../adapters/agent-contract.js";
+
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+export const YOLO_PACKAGE_ROOT = resolve(MODULE_DIR, "../../..");
+export const DEFAULT_CLAUDE_SETTINGS_FILE = "settings-minimal.json";
+export const LEGACY_DEFAULT_CLAUDE_SETTINGS_FILE = "scripts/yolo/settings-minimal.json";
+export const DEFAULT_CLAUDE_SETTINGS_PATH = resolve(YOLO_PACKAGE_ROOT, DEFAULT_CLAUDE_SETTINGS_FILE);
 
 function selectedProvider(value) {
   const provider = typeof value === "string" ? value : value?.selected;
@@ -22,6 +29,63 @@ function renderCustomCommand(command, ai = {}) {
   return cleanString(command).replaceAll("${model}", model);
 }
 
+function inlineSettings(settings) {
+  return settings.startsWith("{") || settings.startsWith("[");
+}
+
+export function resolveClaudeSettings(rootDir, value, { packageRoot = YOLO_PACKAGE_ROOT } = {}) {
+  const settings = cleanString(value);
+  if (!settings) return {
+    raw: "",
+    value: "",
+    type: "none",
+    path: null,
+    default_settings: false,
+  };
+  if (inlineSettings(settings)) return {
+    raw: settings,
+    value: settings,
+    type: "inline",
+    path: null,
+    default_settings: false,
+  };
+  const isDefaultSettings = settings === DEFAULT_CLAUDE_SETTINGS_FILE || settings === LEGACY_DEFAULT_CLAUDE_SETTINGS_FILE;
+  const settingsPath = isDefaultSettings
+    ? resolve(packageRoot, DEFAULT_CLAUDE_SETTINGS_FILE)
+    : isAbsolute(settings) ? settings : resolve(rootDir, settings);
+  return {
+    raw: settings,
+    value: settingsPath,
+    type: "file",
+    path: settingsPath,
+    default_settings: isDefaultSettings,
+  };
+}
+
+function settingsValue(rootDir, value, options = {}) {
+  return resolveClaudeSettings(rootDir, value, options).value;
+}
+
+export function inspectProviderInvocationPreflight(invocation = {}, { existsSync = defaultExistsSync } = {}) {
+  const blockers = [];
+  if (invocation.provider === "claude" && invocation.settingsFile) {
+    if (!existsSync(invocation.settingsFile)) {
+      blockers.push({
+        code: "CLAUDE_SETTINGS_FILE_MISSING",
+        provider: "claude",
+        settings_file: invocation.settingsFile,
+        message: `Claude settings file not found: ${invocation.settingsFile}`,
+      });
+    }
+  }
+  return {
+    status: blockers.length > 0 ? "blocked" : "pass",
+    blocks_execution: blockers.length > 0,
+    blockers,
+    warnings: [],
+  };
+}
+
 export function buildProviderInvocation({
   provider,
   config,
@@ -30,6 +94,7 @@ export function buildProviderInvocation({
   runtimeDir,
   now = Date.now,
   random = Math.random,
+  packageRoot = YOLO_PACKAGE_ROOT,
 } = {}) {
   if (!config?.ai) throw new Error("buildProviderInvocation requires config.ai");
   const selected = selectedProvider(provider);
@@ -72,8 +137,24 @@ export function buildProviderInvocation({
   const claudeModel = modelValue(ai);
   if (claudeModel) args.push("--model", claudeModel);
   args.push("--permission-mode", ai.claude_permission_mode || "default");
+  const claudeSettings = resolveClaudeSettings(rootDir, ai.settings, { packageRoot });
   if (cleanString(ai.settings)) {
-    args.push("--settings", resolve(rootDir, ai.settings));
+    args.push("--settings", settingsValue(rootDir, ai.settings, { packageRoot }));
+  }
+  if (cleanString(ai.claude_tools)) {
+    args.push("--tools", cleanString(ai.claude_tools));
+  }
+  if (cleanString(ai.claude_allowed_tools)) {
+    args.push("--allowedTools", cleanString(ai.claude_allowed_tools));
+  }
+  if (cleanString(ai.claude_disallowed_tools)) {
+    args.push("--disallowedTools", cleanString(ai.claude_disallowed_tools));
+  }
+  if (ai.claude_disable_slash_commands === true) {
+    args.push("--disable-slash-commands");
+  }
+  if (ai.claude_no_session_persistence === true) {
+    args.push("--no-session-persistence");
   }
   const maxBudgetUsd = Number(ai.max_budget_usd);
   if (Number.isFinite(maxBudgetUsd) && maxBudgetUsd > 0) {
@@ -83,6 +164,8 @@ export function buildProviderInvocation({
     provider: "claude",
     command: "claude",
     args,
+    settingsFile: claudeSettings.type === "file" ? claudeSettings.path : null,
+    settings: claudeSettings,
     outputFile: null,
   };
 }
@@ -98,13 +181,31 @@ export function spawnProviderPrompt(prompt, {
   spawnImpl = defaultSpawn,
   existsSync = defaultExistsSync,
   readFileSync = defaultReadFileSync,
+  packageRoot = YOLO_PACKAGE_ROOT,
 } = {}) {
   if (!config?.ai) throw new Error("spawnProviderPrompt requires config.ai");
   if (!rootDir) throw new Error("spawnProviderPrompt requires rootDir");
   if (!runtimeDir) throw new Error("spawnProviderPrompt requires runtimeDir");
   const workDir = cwd || rootDir;
   const provider = selectedProvider(detectModelProvider ? detectModelProvider() : "claude");
-  const invocation = buildProviderInvocation({ provider, config, workDir, rootDir, runtimeDir });
+  const invocation = buildProviderInvocation({ provider, config, workDir, rootDir, runtimeDir, packageRoot });
+  const preflight = inspectProviderInvocationPreflight(invocation, { existsSync });
+  if (preflight.blocks_execution) {
+    const detail = preflight.blockers.map((blocker) => blocker.message).join("\n");
+    return Promise.resolve({
+      success: false,
+      provider,
+      command: invocation.command,
+      exitCode: null,
+      signal: null,
+      stdout: "",
+      stderr: detail,
+      timedOut: false,
+      blocked: true,
+      reason: "claude_settings_missing",
+      preflight,
+    });
+  }
 
   return new Promise((resolveRun) => {
     let done = false;
@@ -183,6 +284,22 @@ export function spawnProviderPrompt(prompt, {
 
 export function classifyProviderFailure(providerRun = {}) {
   const combined = `${providerRun.stdout || ""}\n${providerRun.stderr || ""}`;
+  if (providerRun.blocked === true && providerRun.reason) {
+    return {
+      terminal: true,
+      status: "blocked",
+      reason: providerRun.reason,
+      detail: combined.trim().slice(0, 500),
+    };
+  }
+  if (/CLAUDE_SETTINGS_FILE_MISSING|Claude settings file not found/i.test(combined)) {
+    return {
+      terminal: true,
+      status: "blocked",
+      reason: "claude_settings_missing",
+      detail: combined.trim().slice(0, 500),
+    };
+  }
   if (/Exceeded USD budget|exceeded .*budget|max[- ]budget|budget exceeded/i.test(combined)) {
     return {
       terminal: true,

@@ -1,8 +1,12 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import {
   buildProviderInvocation,
   classifyProviderFailure,
+  DEFAULT_CLAUDE_SETTINGS_PATH,
+  spawnProviderPrompt,
 } from "../src/runtime/execution/provider-adapter.js";
 
 const baseConfig = {
@@ -63,6 +67,116 @@ describe("provider execution adapter", () => {
     ]);
   });
 
+  test("default claude settings resolve to the YOLO package root instead of the target project", () => {
+    const targetRoot = "/tmp/yolo-consumer-project";
+    const invocation = buildProviderInvocation({
+      provider: "claude",
+      config: {
+        ai: {
+          model: "claude-sonnet-4",
+          settings: "settings-minimal.json",
+        },
+      },
+      workDir: targetRoot,
+      rootDir: targetRoot,
+      runtimeDir: join(targetRoot, ".yolo/state/runtime"),
+    });
+
+    const settingsIndex = invocation.args.indexOf("--settings");
+    assert.notEqual(settingsIndex, -1);
+    assert.equal(invocation.args[settingsIndex + 1], DEFAULT_CLAUDE_SETTINGS_PATH);
+    assert.equal(invocation.settingsFile, DEFAULT_CLAUDE_SETTINGS_PATH);
+    assert.notEqual(invocation.settingsFile, join(targetRoot, "settings-minimal.json"));
+    assert.equal(existsSync(invocation.settingsFile), true);
+  });
+
+  test("legacy default claude settings path also resolves to the YOLO package root", () => {
+    const targetRoot = "/tmp/yolo-consumer-project";
+    const invocation = buildProviderInvocation({
+      provider: "claude",
+      config: {
+        ai: {
+          model: "claude-sonnet-4",
+          settings: "scripts/yolo/settings-minimal.json",
+        },
+      },
+      workDir: targetRoot,
+      rootDir: targetRoot,
+      runtimeDir: join(targetRoot, ".yolo/state/runtime"),
+    });
+
+    const settingsIndex = invocation.args.indexOf("--settings");
+    assert.notEqual(settingsIndex, -1);
+    assert.equal(invocation.args[settingsIndex + 1], DEFAULT_CLAUDE_SETTINGS_PATH);
+    assert.equal(invocation.settingsFile, DEFAULT_CLAUDE_SETTINGS_PATH);
+    assert.notEqual(invocation.settingsFile, join(targetRoot, "scripts/yolo/settings-minimal.json"));
+  });
+
+  test("spawnProviderPrompt fails closed before spawning when claude settings are missing", async () => {
+    let spawned = false;
+    const run = await spawnProviderPrompt("prompt", {
+      config: {
+        ai: {
+          model: "claude-sonnet-4",
+          settings: "missing-settings.json",
+        },
+      },
+      rootDir: "/repo",
+      runtimeDir: "/repo/.yolo/state/runtime",
+      existsSync: () => false,
+      spawnImpl: () => {
+        spawned = true;
+        throw new Error("spawn should not be called");
+      },
+    });
+
+    assert.equal(spawned, false);
+    assert.equal(run.success, false);
+    assert.equal(run.blocked, true);
+    assert.equal(run.reason, "claude_settings_missing");
+    assert.equal(run.exitCode, null);
+    assert.match(run.stderr, /Claude settings file not found: \/repo\/missing-settings\.json/);
+    assert.equal(run.preflight.status, "blocked");
+  });
+
+  test("claude invocation supports read-only tool hardening flags", () => {
+    const settings = JSON.stringify({
+      permissions: {
+        allow: ["Read", "Glob", "Grep"],
+        deny: ["Write", "Edit", "Bash"],
+      },
+    });
+    const invocation = buildProviderInvocation({
+      provider: "claude",
+      config: {
+        ai: {
+          model: "claude-sonnet-4-6",
+          settings,
+          claude_tools: "Read,Glob,Grep",
+          claude_allowed_tools: "Read,Glob,Grep",
+          claude_disallowed_tools: "Write,Edit,Bash",
+          claude_disable_slash_commands: true,
+          claude_no_session_persistence: true,
+        },
+      },
+      workDir: "/repo",
+      rootDir: "/repo",
+      runtimeDir: "/repo/state/runtime",
+    });
+
+    assert.deepEqual(invocation.args, [
+      "-p",
+      "--model", "claude-sonnet-4-6",
+      "--permission-mode", "default",
+      "--settings", settings,
+      "--tools", "Read,Glob,Grep",
+      "--allowedTools", "Read,Glob,Grep",
+      "--disallowedTools", "Write,Edit,Bash",
+      "--disable-slash-commands",
+      "--no-session-persistence",
+    ]);
+  });
+
   test("buildProviderInvocation creates a codex exec invocation with output capture", () => {
     const invocation = buildProviderInvocation({
       provider: "codex",
@@ -116,6 +230,17 @@ describe("provider execution adapter", () => {
       status: "blocked",
       reason: "provider_budget_exceeded",
       detail: "Exceeded USD budget for this session",
+    });
+
+    assert.deepEqual(classifyProviderFailure({
+      blocked: true,
+      reason: "claude_settings_missing",
+      stderr: "Claude settings file not found: /repo/missing-settings.json",
+    }), {
+      terminal: true,
+      status: "blocked",
+      reason: "claude_settings_missing",
+      detail: "Claude settings file not found: /repo/missing-settings.json",
     });
 
     assert.deepEqual(classifyProviderFailure({ stderr: "network error" }), {

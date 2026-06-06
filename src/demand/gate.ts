@@ -1,3 +1,7 @@
+import { existsSync, readFileSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
+import { inspectStoryAtomicityFromDemand } from "./story-atomicity.js";
+
 export const DEMAND_READINESS_SCHEMA_VERSION = "1.0";
 export const DEMAND_READINESS_SCHEMA = "yolo.demand.readiness.v1";
 export const DEMAND_QUALITY_SCHEMA_VERSION = "1.0";
@@ -94,6 +98,278 @@ function surfaceBudgetFailures(session = {}) {
 
 function targetFileCount(session = {}) {
   return asArray(session.project?.target_files || session.target_files).length;
+}
+
+function targetFiles(session = {}) {
+  return asArray(session.project?.target_files || session.target_files).map(clean).filter(Boolean);
+}
+
+function targetFileFactRecords(session = {}) {
+  return asArray(session.project_facts?.target_files || session.project?.target_file_facts)
+    .map((fact) => {
+      if (typeof fact === "string") return { file: clean(fact), status: "needs_verification", source: "legacy_string" };
+      return {
+        ...fact,
+        file: clean(fact?.file || fact?.path),
+        status: clean(fact?.status || "needs_verification"),
+        source: clean(fact?.source || fact?.reason),
+      };
+    })
+    .filter((fact) => fact.file);
+}
+
+function scopedProjectPath(projectRoot, file) {
+  const root = resolve(clean(projectRoot) || process.cwd());
+  const target = clean(file);
+  if (!target) return null;
+  const path = isAbsolute(target) ? resolve(target) : resolve(root, target);
+  const relativePath = relative(root, path);
+  if (!relativePath || relativePath.startsWith("..") || isAbsolute(relativePath)) return null;
+  return path;
+}
+
+function assumptionFactRecords(session = {}) {
+  return asArray(session.project_facts?.assumptions || session.reflection?.assumption_records || session.investigation?.assumptions)
+    .map((fact) => {
+      if (typeof fact === "string") return { text: clean(fact), status: "assumption" };
+      return {
+        ...fact,
+        id: clean(fact?.id),
+        text: clean(fact?.text || fact?.summary || fact?.claim),
+        status: clean(fact?.status || "assumption"),
+      };
+    })
+    .filter((fact) => fact.text || fact.id);
+}
+
+function combinedDemandText(session = {}) {
+  const requirements = requirementItems(session);
+  const scenarios = scenarioMatrix(session);
+  const values = [
+    session.vision?.statement,
+    session.vision?.idea,
+    session.idea,
+    session.objective,
+    session.vision?.status_quo,
+    session.status_quo,
+    session.investigation?.evidence?.map?.((item) => item?.text || item),
+    session.evidence,
+    session.reflection?.assumptions,
+    session.assumptions,
+    session.discussion?.decisions?.map?.((item) => item?.text || item),
+    session.decisions,
+    session.requirements?.constraints,
+    session.constraints,
+    session.context?.visual_style_source,
+    session.requirements?.out_of_scope,
+    session.out_of_scope,
+    requirements.map((requirement) => [
+      requirement.title,
+      requirement.text,
+      requirement.acceptance_scenarios,
+      requirement.scenarios,
+    ]),
+    scenarios.map((scenario) => [
+      scenario.current_behavior,
+      scenario.desired_behavior,
+      scenario.proof,
+      scenario.acceptance,
+      scenario.trigger,
+      scenario.visual_style_source,
+      scenario.surfaces?.map?.((surface) => [
+        surface.proof,
+        surface.verification_hint,
+        surface.label,
+        surface.visual_style_source,
+      ]),
+    ]),
+  ];
+  return values.flat(Infinity).map(clean).filter(Boolean).join("\n");
+}
+
+function visualStyleSourceItems(session = {}) {
+  const scenarios = scenarioMatrix(session);
+  return [
+    session.context?.visual_style_source,
+    session.visual_style,
+    session.visual_style_source,
+    scenarios.map((scenario) => [
+      scenario.visual_style,
+      scenario.visual_style_source,
+      asArray(scenario.surfaces).map((surface) => [
+        surface?.visual_style,
+        surface?.visual_style_source,
+      ]),
+    ]),
+  ].flat(Infinity).map(clean).filter(Boolean);
+}
+
+function conditionalStyleSourceIssue(session = {}) {
+  const items = visualStyleSourceItems(session);
+  for (const item of [...items, items.join("; ")]) {
+    if (!item) continue;
+    const lower = item.toLowerCase();
+    const englishConditional = /\b(if|when)\b[\s\S]{0,160}\b(present|exists|available|found)\b[\s\S]{0,160}\b(otherwise|else|fallback)\b/.test(lower)
+      || /\b(existing|project)\b[\s\S]{0,160}\b(if|when)\b[\s\S]{0,160}\b(otherwise|else|fallback)\b/.test(lower);
+    const chineseConditional = /(如果|若|如)[^。；\n]{0,120}(存在|有|找到|可用)[^。；\n]{0,120}(否则|不然|反之)/.test(item);
+    if (englishConditional || chineseConditional) return item;
+  }
+  return "";
+}
+
+function readProjectTargetText(session = {}, options = {}) {
+  const projectRoot = clean(options.projectRoot || options.project_root || options.cwd);
+  if (!projectRoot) return "";
+  const chunks = [];
+  for (const file of targetFiles(session)) {
+    const path = scopedProjectPath(projectRoot, file);
+    if (!path) continue;
+    try {
+      if (existsSync(path)) chunks.push(readFileSync(path, "utf8").slice(0, 64000));
+    } catch {}
+  }
+  return chunks.join("\n");
+}
+
+function hasUiTarget(session = {}) {
+  return targetFiles(session).some((file) => /(^|\/)(pages?|views?|screens?|components?|ui)\//i.test(file) || /\.(tsx|jsx|vue|svelte)$/i.test(file));
+}
+
+function hasApiOrServiceTarget(session = {}) {
+  return targetFiles(session).some((file) => /(^|\/)(routes?|api|controllers?|server|services?|domain|lib)\//i.test(file));
+}
+
+function projectFactGrounding(session = {}, options = {}) {
+  const projectRoot = clean(options.projectRoot || options.project_root || options.cwd);
+  const text = combinedDemandText(session);
+  const lower = text.toLowerCase();
+  const projectText = readProjectTargetText(session, options);
+  const projectLower = projectText.toLowerCase();
+  const issues = [];
+  const stockOrThreshold = /\b(low[-_\s]?stock|threshold|replenishment|floor|stockout)\b/i.test(text);
+  const concreteRule = /(<=|>=|<|>|less than|greater than|below|above|equal|equals|at or below|at or above|per sku|configurable)/i.test(text);
+  const concreteField = /\b([a-z]+[A-Za-z0-9]*_(?:threshold|floor|quantity|qty|units|available|stock)[A-Za-z0-9_]*|[a-z]+(?:Threshold|Quantity|Qty|Units|Available|Stock)[A-Za-z0-9]*)\b/.test(text);
+  const fieldPassthrough = /\b(expose|return|include|map|copy|pass(?:ed)? through|preserve|透传|返回|包含|保留)\b/i.test(text);
+  const genericFieldAssumption = /(already|existing|receives?|contains?|present|available)[^\n.]{0,80}\b(field|payload|row|request|data|threshold|quantity|qty)\b/i.test(text)
+    || /\b(field|payload|row|request|data|threshold|quantity|qty)\b[^\n.]{0,80}(already|existing|receives?|contains?|present|available)/i.test(text);
+  const projectMentionsCriticalField = /\b(threshold|replenishment|floor|lowstock|low_stock|quantity|qty_available|qty)\b/i.test(projectText);
+  const executionTargets = new Set(targetFiles(session));
+  const targetFacts = targetFileFactRecords(session);
+  for (const file of executionTargets) {
+    if (projectRoot && !scopedProjectPath(projectRoot, file)) {
+      issues.push({
+        code: "QUALITY_TARGET_FILE_WITHIN_PROJECT",
+        file,
+        message: "Target files must stay inside the project root before executable PRD generation.",
+      });
+    }
+  }
+  for (const fact of targetFacts) {
+    if (fact.status === "invalid_scope" || (projectRoot && !scopedProjectPath(projectRoot, fact.file))) {
+      issues.push({
+        code: "QUALITY_TARGET_FILE_WITHIN_PROJECT",
+        file: fact.file,
+        message: "Target files must stay inside the project root before executable PRD generation.",
+      });
+    }
+    if (executionTargets.has(fact.file) && fact.status === "candidate") {
+      issues.push({
+        code: "QUALITY_TARGET_FILE_NOT_INFERRED",
+        file: fact.file,
+        message: "Auto-scouted candidate files must not enter execution scope until a read/evidence step verifies relevance.",
+      });
+    }
+    if (executionTargets.has(fact.file) && fact.status === "needs_verification") {
+      issues.push({
+        code: "QUALITY_TARGET_FILE_VERIFIED",
+        file: fact.file,
+        message: "Target files in execution scope must be verified by project read, evidence, or explicit verified_target_files before PRD execution.",
+      });
+    }
+    if (fact.status === "contradicted") {
+      issues.push({
+        code: "QUALITY_TARGET_FILE_VERIFIED",
+        file: fact.file,
+        message: "Contradicted target-file facts must be resolved before PRD execution.",
+      });
+    }
+  }
+  for (const fact of assumptionFactRecords(session)) {
+    if (fact.status === "contradicted") {
+      issues.push({
+        code: "QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED",
+        assumption_id: fact.id || null,
+        message: "Contradicted assumptions must not be promoted to executable PRD facts, even with user approval.",
+      });
+    } else if (fact.status === "needs_verification") {
+      issues.push({
+        code: "QUALITY_ASSUMPTION_VERIFIED",
+        assumption_id: fact.id || null,
+        message: "Project-field assumptions must be verified by evidence or target project files before executable PRD generation.",
+      });
+    }
+  }
+
+  if (stockOrThreshold && !concreteRule && !(fieldPassthrough && concreteField)) {
+    issues.push({
+      code: "QUALITY_BUSINESS_RULE_CONCRETE",
+      message: "Stock/threshold behavior must state a concrete comparison, field source, or configurable rule before PRD execution.",
+    });
+  }
+  if ((stockOrThreshold || genericFieldAssumption) && !concreteField && !projectMentionsCriticalField) {
+    issues.push({
+      code: "QUALITY_FIELD_SOURCE_CONCRETE",
+      message: "Field-dependent behavior needs a concrete field/source name from evidence or existing project files.",
+    });
+  }
+  if (genericFieldAssumption && projectText && /threshold/i.test(text) && !/threshold|replenishment|floor|lowstock|low_stock/i.test(projectLower)) {
+    issues.push({
+      code: "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+      message: "Demand assumes threshold-like fields exist, but target project files do not show a matching field/source.",
+    });
+  }
+
+  const visualUi = hasUiTarget(session) && /\b(badge|label|banner|visible|display|show)\b/i.test(text);
+  const visualSpec = /(['"`][^'"`]{2,40}['"`]|text\s*[:=]|label\s*[:=]|color|position|before|after|inline|component|class|aria|icon|variant)/i.test(text);
+  const visualStyleSource = /\b(style|visual|variant|color|class|component|design token|reuse|existing|current)\b|样式|视觉|颜色|组件|沿用|现有/i.test(text);
+  const unresolvedConditionalStyleSource = conditionalStyleSourceIssue(session);
+  const unresolvedProjectFactFirst = issues.some((issue) => [
+    "QUALITY_TARGET_FILE_WITHIN_PROJECT",
+    "QUALITY_TARGET_FILE_VERIFIED",
+    "QUALITY_TARGET_FILE_NOT_INFERRED",
+    "QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED",
+    "QUALITY_ASSUMPTION_VERIFIED",
+    "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+  ].includes(issue.code));
+  if (visualUi && !visualSpec) {
+    issues.push({
+      code: "QUALITY_UI_VISUAL_SPEC_CONCRETE",
+      message: "Visible UI behavior must include at least one concrete visual/text/position/component specification before PRD execution.",
+    });
+  }
+  if (visualUi && !visualStyleSource && !unresolvedProjectFactFirst) {
+    issues.push({
+      code: "QUALITY_UI_STYLE_SOURCE_CONCRETE",
+      message: "Visible UI behavior must state a style source or explicit visual styling so the execution agent does not invent it.",
+    });
+  }
+  if (visualUi && unresolvedConditionalStyleSource && !unresolvedProjectFactFirst) {
+    issues.push({
+      code: "QUALITY_UI_STYLE_SOURCE_RESOLVED",
+      style_source: unresolvedConditionalStyleSource,
+      message: "Visible UI style source must be resolved before PRD; conditional choices like 'use existing component if present, otherwise fallback' require an investigation result or a single approved styling path.",
+    });
+  }
+  const serviceErrorBehavior = hasApiOrServiceTarget(session) && /\b(error|fail|invalid|reject|negative|below zero)\b|错误|报错|失败|非法/i.test(text);
+  const errorContract = /\b(error[_-]?code|error code|message|status|NEGATIVE_[A-Z_]+|[A-Z0-9_]{4,}|ok:\s*false|code\s*[:=])\b|错误码|错误信息|状态码/i.test(text);
+  if (serviceErrorBehavior && !errorContract && !unresolvedProjectFactFirst) {
+    issues.push({
+      code: "QUALITY_ERROR_CONTRACT_CONCRETE",
+      message: "API/service error behavior must state an observable error shape, message, or code before PRD execution.",
+    });
+  }
+
+  return issues;
 }
 
 function qualityCheck(code, passed, points, severity, message, extra = {}) {
@@ -205,6 +481,20 @@ function completedQuestioning(session = {}) {
     || hasTraceItems(session.discussion?.questions);
 }
 
+function deferredScopeConfirmation(session = {}) {
+  const deferred = asArray(session.discussion?.deferred || session.deferred_scope)
+    .map(clean)
+    .filter(Boolean);
+  const confirmation = session.discussion?.deferred_scope_confirmation || session.deferred_scope_confirmation || {};
+  const required = deferred.length > 0 || confirmation.required === true;
+  return {
+    required,
+    confirmed: !required || confirmation.confirmed === true,
+    items: deferred.length ? deferred : asArray(confirmation.items).map(clean).filter(Boolean),
+    status: clean(confirmation.status || (required ? "needs_confirmation" : "not_required")),
+  };
+}
+
 function statusFromChecks(checks) {
   if (checks.some((item) => item.severity === "error" && !item.passed)) return "blocked";
   if (checks.some((item) => item.severity === "warning" && !item.passed)) return "warning";
@@ -238,9 +528,13 @@ export function inspectDemandReadiness(session = {}, options = {}) {
   const scenarios = scenarioMatrix(session);
   const surfaceBudgetIssues = surfaceBudgetFailures(session);
   const blockingQuestions = blockingOpenQuestions(session);
+  const deferredConfirmation = deferredScopeConfirmation(session);
   const hasExecutionScope = targetFileCount(session) > 0;
+  const hasDeclaredTargetFacts = targetFileFactRecords(session).length > 0;
   const deepMode = ["discuss", "prd", "executable_prd"].includes(phase);
   const prdMode = ["prd", "executable_prd"].includes(phase);
+  const factGroundingRequired = prdMode || (deepMode && approval.approved === true && (hasExecutionScope || hasDeclaredTargetFacts));
+  const factGroundingIssues = factGroundingRequired ? projectFactGrounding(session, options) : [];
 
   const checks = [
     check(
@@ -323,6 +617,13 @@ export function inspectDemandReadiness(session = {}, options = {}) {
       "Out-of-scope boundaries must be explicit.",
     ),
     check(
+      "DEFERRED_SCOPE_CONFIRMED",
+      !deferredConfirmation.required || deferredConfirmation.confirmed === true,
+      (prdMode || (deepMode && approval.approved === true)) ? "error" : "warning",
+      "Deferred scope must be explicitly confirmed before executable PRD approval.",
+      { deferred_scope_confirmation: deferredConfirmation },
+    ),
+    check(
       "ROADMAP_PRESENT",
       hasItems(session.roadmap?.mvp) || hasItems(session.roadmap?.phases),
       deepMode ? "error" : "warning",
@@ -346,6 +647,13 @@ export function inspectDemandReadiness(session = {}, options = {}) {
       hasExecutionScope,
       prdMode ? "error" : "warning",
       "Executable PRD requires target files/modules or a bounded execution scope.",
+    ),
+    check(
+      "PROJECT_FACTS_GROUNDED",
+      factGroundingIssues.length === 0,
+      factGroundingRequired ? "error" : "warning",
+      "Executable PRD requires project facts, field assumptions, and UI specs to be grounded before approval can proceed.",
+      { fact_grounding_issues: factGroundingIssues },
     ),
   ];
 
@@ -380,6 +688,10 @@ export function inspectDemandQuality(session = {}, options = {}) {
   const tasks = asArray(options.tasks);
   const requireTasks = options.requireTasks === true || tasks.length > 0;
   const atomicity = options.atomicity || null;
+  const storyAtomicity = options.storyAtomicity || options.story_atomicity || inspectStoryAtomicityFromDemand(session, {
+    tasks,
+    includeRequirements: false,
+  });
   const requirements = requirementItems(session);
   const scenarios = scenarioMatrix(session);
   const surfaces = scenarioSurfaces(session);
@@ -422,6 +734,9 @@ export function inspectDemandQuality(session = {}, options = {}) {
       && asArray(handoff.acceptance_criteria).length > 0;
   }));
   const atomicityBlocked = atomicity?.status === "blocked" || asArray(atomicity?.blockers).length > 0;
+  const storyAtomicityBlocked = storyAtomicity?.status === "blocked" || asArray(storyAtomicity?.blockers).length > 0;
+  const factGroundingIssues = projectFactGrounding(session, options);
+  const hasFactIssue = (code) => factGroundingIssues.some((issue) => issue.code === code);
 
   const dimensions = [
     qualityDimension({
@@ -476,6 +791,121 @@ export function inspectDemandQuality(session = {}, options = {}) {
       ],
     }),
     qualityDimension({
+      code: "project_fact_grounding",
+      label: "项目事实落地",
+      critical: true,
+      checks: [
+        qualityCheck(
+          "QUALITY_TARGET_FILE_WITHIN_PROJECT",
+          !hasFactIssue("QUALITY_TARGET_FILE_WITHIN_PROJECT"),
+          20,
+          "error",
+          factGroundingIssues.find((issue) => issue.code === "QUALITY_TARGET_FILE_WITHIN_PROJECT")?.message
+            || "Execution-scope target files must stay inside the project root.",
+          { issues: factGroundingIssues },
+        ),
+        qualityCheck(
+          "QUALITY_TARGET_FILE_VERIFIED",
+          !hasFactIssue("QUALITY_TARGET_FILE_VERIFIED"),
+          20,
+          "error",
+          factGroundingIssues.find((issue) => issue.code === "QUALITY_TARGET_FILE_VERIFIED")?.message
+            || "Execution-scope target files should be verified before PRD execution.",
+          { issues: factGroundingIssues },
+        ),
+        qualityCheck(
+          "QUALITY_TARGET_FILE_NOT_INFERRED",
+          !hasFactIssue("QUALITY_TARGET_FILE_NOT_INFERRED"),
+          15,
+          "error",
+          factGroundingIssues.find((issue) => issue.code === "QUALITY_TARGET_FILE_NOT_INFERRED")?.message
+            || "Auto-scouted files should remain candidates until verified by evidence.",
+          { issues: factGroundingIssues },
+        ),
+        qualityCheck(
+          "QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED",
+          !hasFactIssue("QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED"),
+          20,
+          "error",
+          factGroundingIssues.find((issue) => issue.code === "QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED")?.message
+            || "Contradicted assumptions must block executable PRD generation.",
+          { issues: factGroundingIssues },
+        ),
+        qualityCheck(
+          "QUALITY_ASSUMPTION_VERIFIED",
+          !hasFactIssue("QUALITY_ASSUMPTION_VERIFIED"),
+          15,
+          "error",
+          factGroundingIssues.find((issue) => issue.code === "QUALITY_ASSUMPTION_VERIFIED")?.message
+            || "Project-field assumptions should be verified by evidence or target files.",
+          { issues: factGroundingIssues },
+        ),
+        qualityCheck(
+          "QUALITY_BUSINESS_RULE_CONCRETE",
+          !hasFactIssue("QUALITY_BUSINESS_RULE_CONCRETE"),
+          30,
+          "error",
+          factGroundingIssues.find((issue) => issue.code === "QUALITY_BUSINESS_RULE_CONCRETE")?.message
+            || "Business behavior should not require the execution agent to invent a rule.",
+          { issues: factGroundingIssues },
+        ),
+        qualityCheck(
+          "QUALITY_FIELD_SOURCE_CONCRETE",
+          !hasFactIssue("QUALITY_FIELD_SOURCE_CONCRETE"),
+          30,
+          "error",
+          factGroundingIssues.find((issue) => issue.code === "QUALITY_FIELD_SOURCE_CONCRETE")?.message
+            || "Field-dependent behavior should cite concrete field/source names.",
+          { issues: factGroundingIssues },
+        ),
+        qualityCheck(
+          "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+          !hasFactIssue("QUALITY_FIELD_ASSUMPTION_VERIFIED"),
+          20,
+          "error",
+          factGroundingIssues.find((issue) => issue.code === "QUALITY_FIELD_ASSUMPTION_VERIFIED")?.message
+            || "Field assumptions should not contradict target project files.",
+          { issues: factGroundingIssues },
+        ),
+        qualityCheck(
+          "QUALITY_UI_VISUAL_SPEC_CONCRETE",
+          !hasFactIssue("QUALITY_UI_VISUAL_SPEC_CONCRETE"),
+          20,
+          "error",
+          factGroundingIssues.find((issue) => issue.code === "QUALITY_UI_VISUAL_SPEC_CONCRETE")?.message
+            || "Visible UI behavior should include concrete visual/text/position/component specs.",
+          { issues: factGroundingIssues },
+        ),
+        qualityCheck(
+          "QUALITY_UI_STYLE_SOURCE_CONCRETE",
+          !hasFactIssue("QUALITY_UI_STYLE_SOURCE_CONCRETE"),
+          15,
+          "error",
+          factGroundingIssues.find((issue) => issue.code === "QUALITY_UI_STYLE_SOURCE_CONCRETE")?.message
+            || "Visible UI behavior should state a style source or explicit styling.",
+          { issues: factGroundingIssues },
+        ),
+        qualityCheck(
+          "QUALITY_UI_STYLE_SOURCE_RESOLVED",
+          !hasFactIssue("QUALITY_UI_STYLE_SOURCE_RESOLVED"),
+          15,
+          "error",
+          factGroundingIssues.find((issue) => issue.code === "QUALITY_UI_STYLE_SOURCE_RESOLVED")?.message
+            || "Conditional UI styling choices should be resolved before executable PRD generation.",
+          { issues: factGroundingIssues },
+        ),
+        qualityCheck(
+          "QUALITY_ERROR_CONTRACT_CONCRETE",
+          !hasFactIssue("QUALITY_ERROR_CONTRACT_CONCRETE"),
+          15,
+          "error",
+          factGroundingIssues.find((issue) => issue.code === "QUALITY_ERROR_CONTRACT_CONCRETE")?.message
+            || "API/service error behavior should state an observable error shape, message, or code.",
+          { issues: factGroundingIssues },
+        ),
+      ],
+    }),
+    qualityDimension({
       code: "task_atomicity",
       label: "任务原子度",
       critical: true,
@@ -518,6 +948,14 @@ export function inspectDemandQuality(session = {}, options = {}) {
           "error",
           "Atomicity doctor must not require a split before PRD execution.",
           { atomicity_status: atomicity?.status || null, blockers: asArray(atomicity?.blockers) },
+        ),
+        qualityCheck(
+          "QUALITY_STORY_ATOMICITY_PASSED",
+          !storyAtomicityBlocked,
+          20,
+          "error",
+          "Requirement, scenario, and task narratives must each carry only one independent user story.",
+          { story_atomicity_status: storyAtomicity?.status || null, blockers: asArray(storyAtomicity?.blockers) },
         ),
       ],
     }),
@@ -686,11 +1124,15 @@ export function inspectDemandQuality(session = {}, options = {}) {
   for (const dimension of dimensions) {
     if (dimension.status === "blocked") {
       blockers.push({
-        code: `DEMAND_QUALITY_${dimension.code.toUpperCase()}_LOW`,
+        code: dimension.score < dimension.block_threshold
+          ? `DEMAND_QUALITY_${dimension.code.toUpperCase()}_LOW`
+          : `DEMAND_QUALITY_${dimension.code.toUpperCase()}_BLOCKED`,
         dimension: dimension.code,
         score: dimension.score,
         threshold: dimension.block_threshold,
-        message: `${dimension.label} quality is below executable PRD threshold.`,
+        message: dimension.score < dimension.block_threshold
+          ? `${dimension.label} quality is below executable PRD threshold.`
+          : `${dimension.label} has blocking failed checks before executable PRD generation.`,
       });
     } else if (dimension.status === "warning") {
       warnings.push({
@@ -744,6 +1186,7 @@ export function inspectDemandQuality(session = {}, options = {}) {
     readiness_status: readiness?.status || null,
     readiness_level: readiness?.readiness_level || null,
     atomicity_status: atomicity?.status || null,
+    story_atomicity_status: storyAtomicity?.status || null,
     next_actions: blockers.length > 0
       ? blockers.map((item) => item.message)
       : warnings.length > 0

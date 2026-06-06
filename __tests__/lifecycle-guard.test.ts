@@ -1,0 +1,465 @@
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
+import { initLifecycleState } from "../src/lifecycle/state.js";
+import { inspectLifecycleGuard, nextLifecycleAction } from "../src/lifecycle/guard.js";
+import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+import { runYoloCli } from "../src/cli/yolo.js";
+import { runPiCli } from "../src/cli/pi.js";
+import { runRunnerRuntime } from "../src/runtime/runner-runtime.js";
+import { runPiRuntime } from "../src/runtime/pi-runtimes.js";
+import { runPiAgent } from "../src/agents/pi.js";
+
+function tempProject() {
+  return mkdtempSync(join(tmpdir(), "yolo-lifecycle-guard-"));
+}
+
+function writeJson(path, value) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function capture() {
+  let text = "";
+  return {
+    stream: { write: (chunk) => { text += chunk; } },
+    json: () => JSON.parse(text),
+    text: () => text,
+  };
+}
+
+function lifecycleWriteOptions(root) {
+  return {
+    projectRoot: root,
+    stateRoot: join(root, ".yolo"),
+    source: "unit",
+    writeSessionMemory: false,
+  };
+}
+
+function writeRunPass(root) {
+  return writeLifecycleStageReport("run", {
+    status: "success",
+    summary: "run passed",
+    evidence: [{ path: "state/reports/run/run-report.json" }],
+  }, lifecycleWriteOptions(root));
+}
+
+function writeReviewPass(root, report = {}) {
+  return writeLifecycleStageReport("review-fix", {
+    status: "success",
+    summary: "review passed",
+    findings: [],
+    evidence: [{ path: "state/review/review-report.json" }],
+    ...report,
+  }, lifecycleWriteOptions(root));
+}
+
+function writeAcceptancePass(root, report = {}) {
+  return writeLifecycleStageReport("acceptance", {
+    status: "pass",
+    summary: "acceptance passed",
+    evidence: [{ path: "state/acceptance/evidence.json" }],
+    ...report,
+  }, lifecycleWriteOptions(root));
+}
+
+describe("lifecycle guard", () => {
+  test("blocks downstream commands before lifecycle initialization", () => {
+    const root = tempProject();
+    try {
+      const result = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root });
+
+      assert.equal(result.status, "blocked");
+      assert.equal(result.code, "LIFECYCLE_NOT_INITIALIZED");
+      assert.equal(result.recommended_command, "/yolo-init");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks plan until discovery artifact or completed discovery exists", () => {
+    const root = tempProject();
+    try {
+      initLifecycleState({ projectRoot: root });
+
+      const blocked = inspectLifecycleGuard({ command: "yolo-plan", projectRoot: root });
+      assert.equal(blocked.status, "blocked");
+      assert.deepEqual(blocked.missing_required_stages, ["discovery"]);
+
+      const discoveryDir = join(root, ".yolo", "discovery");
+      mkdirSync(discoveryDir, { recursive: true });
+      writeJson(join(discoveryDir, "discovery.json"), { status: "success" });
+
+      const allowed = inspectLifecycleGuard({ command: "yolo-plan", projectRoot: root });
+      assert.equal(allowed.status, "pass");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks run until check stage completed", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    const prdPath = join(root, "specs", "prd.json");
+    try {
+      writeJson(prdPath, { schema: "test.prd" });
+      initLifecycleState({ projectRoot: root });
+      const blocked = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, prdPath });
+      assert.equal(blocked.status, "blocked");
+      assert.deepEqual(blocked.missing_required_stages, ["discovery", "roadmap", "check"]);
+
+      writeLifecycleStageReport("check", {
+        status: "pass",
+        summary: "check passed",
+        prd_path: prdPath,
+      }, {
+        projectRoot: root,
+        stateRoot,
+        source: "unit",
+        writeSessionMemory: false,
+      });
+
+      const outOfOrder = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, prdPath });
+      assert.equal(outOfOrder.status, "blocked");
+      assert.deepEqual(outOfOrder.missing_required_stages, ["discovery", "roadmap"]);
+
+      writeLifecycleStageReport("discovery", { status: "success" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+      });
+      writeLifecycleStageReport("roadmap", { status: "success" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+      });
+
+      const allowed = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, prdPath });
+      assert.equal(allowed.status, "pass");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks run when check lifecycle artifact wraps a blocked report", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    const prdPath = join(root, "specs", "prd.json");
+    try {
+      writeJson(prdPath, { schema: "test.prd" });
+      initLifecycleState({ projectRoot: root });
+      writeLifecycleStageReport("discovery", { status: "success" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+      });
+      writeLifecycleStageReport("roadmap", { status: "success" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+      });
+      const checkWrite = writeLifecycleStageReport("check", {
+        status: "success",
+        summary: "check wrapper completed",
+        prd_path: prdPath,
+      }, {
+        projectRoot: root,
+        stateRoot,
+        source: "unit",
+        writeSessionMemory: false,
+      });
+      writeJson(checkWrite.artifact_path, {
+        ...checkWrite.report,
+        status: "completed",
+        prd_path: prdPath,
+        report: {
+          status: "blocked",
+          prd_path: prdPath,
+          blockers: [{ code: "STORY_ATOMICITY_MULTI_STORY" }],
+        },
+      });
+
+      const guard = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, stateRoot, prdPath });
+      assert.equal(guard.status, "blocked");
+      assert.deepEqual(guard.missing_required_stages, ["check"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks acceptance until review-fix evidence exists", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      initLifecycleState({ projectRoot: root });
+      writeLifecycleStageReport("run", { status: "success" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+      });
+
+      const blocked = inspectLifecycleGuard({ command: "yolo-accept", projectRoot: root });
+      assert.equal(blocked.status, "blocked");
+      assert.deepEqual(blocked.missing_required_stages, ["review-fix"]);
+
+      writeLifecycleStageReport("review-fix", { status: "success" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+      });
+
+      const allowed = inspectLifecycleGuard({ command: "yolo-accept", projectRoot: root });
+      assert.equal(allowed.status, "pass");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("next action follows the first incomplete main stage", () => {
+    const root = tempProject();
+    try {
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-init");
+      initLifecycleState({ projectRoot: root });
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-discover");
+
+      writeLifecycleStageReport("discovery", { status: "success" }, {
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        writeSessionMemory: false,
+      });
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-plan");
+
+      writeLifecycleStageReport("roadmap", { status: "warning", summary: "plan has nonblocking warnings" }, {
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        writeSessionMemory: false,
+      });
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-prd");
+
+      for (const stage of ["prd", "check", "run", "review-fix"]) {
+        writeLifecycleStageReport(stage, { status: "success" }, {
+          projectRoot: root,
+          stateRoot: join(root, ".yolo"),
+          writeSessionMemory: false,
+        });
+      }
+      writeLifecycleStageReport("acceptance", { status: "warning" }, {
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        writeSessionMemory: false,
+      });
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-accept");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("yolo next handles unreadable lifecycle status without throwing", async () => {
+    const root = tempProject();
+    try {
+      initLifecycleState({ projectRoot: root });
+      writeFileSync(join(root, ".yolo", "lifecycle", "status.json"), "{", "utf8");
+
+      const out = capture();
+      const exitCode = await runYoloCli(["next", `--cwd=${root}`, "--json"], {
+        cwd: root,
+        stdout: out.stream,
+      });
+      const result = out.json();
+
+      assert.equal(exitCode, 0);
+      assert.equal(result.recommended_command, "/yolo-doctor");
+      assert.equal(result.guard.current_stage, null);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("CLI blocks run before check and reports yolo next", async () => {
+    const root = tempProject();
+    try {
+      initLifecycleState({ projectRoot: root });
+
+      const blockedOut = capture();
+      const blockedErr = capture();
+      const exitCode = await runYoloCli([
+        "run",
+        "specs/prd.json",
+        `--cwd=${root}`,
+        "--json",
+      ], { cwd: root, stdout: blockedOut.stream, stderr: blockedErr.stream });
+      const blocked = blockedOut.json();
+
+      assert.equal(exitCode, 2);
+      assert.equal(blocked.code, "LIFECYCLE_GUARD_BLOCKED");
+      assert.deepEqual(blocked.missing_required_stages, ["discovery", "roadmap", "prd", "check"]);
+
+      const nextOut = capture();
+      const nextExit = await runYoloCli(["next", `--cwd=${root}`, "--json"], {
+        cwd: root,
+        stdout: nextOut.stream,
+      });
+      const next = nextOut.json();
+
+      assert.equal(nextExit, 0);
+      assert.equal(next.recommended_command, "/yolo-discover");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("legacy yolo PRD and yolo-pi execute entrypoints fail closed behind guard", async () => {
+    const root = tempProject();
+    try {
+      initLifecycleState({ projectRoot: root });
+
+      const yoloOut = capture();
+      const yoloExit = await runYoloCli([
+        "--prd",
+        "specs/prd.json",
+        `--cwd=${root}`,
+        "--json",
+      ], { cwd: root, stdout: yoloOut.stream });
+      assert.equal(yoloExit, 2);
+      assert.equal(yoloOut.json().code, "LIFECYCLE_GUARD_BLOCKED");
+
+      const piOut = capture();
+      const piExit = await runPiCli([
+        "--execute",
+        "--prd",
+        "specs/prd.json",
+        `--cwd=${root}`,
+        "--json",
+      ], { cwd: root, stdout: piOut.stream });
+      assert.equal(piExit, 2);
+      assert.equal(piOut.json().code, "LIFECYCLE_GUARD_BLOCKED");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("direct runner and PI runtime APIs fail closed behind lifecycle guard", async () => {
+    const root = tempProject();
+    const prdPath = join(root, "prd.json");
+    try {
+      writeJson(prdPath, { version: "2.0", tasks: [] });
+
+      const runner = await runRunnerRuntime({ prdPath, projectRoot: root });
+      assert.equal(runner.status, "error");
+      assert.equal(runner.code, "LIFECYCLE_NOT_INITIALIZED");
+      assert.equal(runner.exit_code, 2);
+
+      initLifecycleState({ projectRoot: root });
+      const seen = [];
+      const pi = await runPiAgent({
+        prdPath,
+      }, {
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        execute: true,
+        executor: async (action) => {
+          seen.push(action.id);
+          return { status: "success", summary: action.id };
+        },
+      });
+
+      assert.equal(pi.status, "error");
+      assert.equal(pi.stop_condition, "lifecycle_guard");
+      assert.deepEqual(pi.lifecycle_guard.missing_required_stages, ["discovery", "roadmap", "check"]);
+      assert.deepEqual(seen, ["pi.prd.preflight"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks ship when run report is blocked even if acceptance evidence passes", async () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    const prdPath = join(root, "prd.json");
+    try {
+      writeJson(prdPath, { version: "2.0", tasks: [] });
+      initLifecycleState({ projectRoot: root });
+      const runWrite = writeRunPass(root);
+      writeJson(runWrite.artifact_path, {
+        ...runWrite.report,
+        status: "completed",
+        evidence: [{ path: "external-e2e-pass.json" }],
+        report: {
+          status: "blocked",
+          summary: "YOLO lifecycle run is blocked.",
+        },
+      });
+      writeReviewPass(root);
+      writeAcceptancePass(root);
+
+      const guard = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot, prdPath });
+      assert.equal(guard.status, "blocked");
+      assert.ok(guard.blockers.some((blocker) => blocker.code === "RUN_REPORT_BLOCKED"));
+
+      const ship = await runPiRuntime("ship", { prdPath, projectRoot: root, stateRoot });
+      assert.equal(ship.status, "error");
+      assert.equal(ship.code, "LIFECYCLE_GUARD_BLOCKED");
+      assert.ok(ship.blockers.some((blocker) => blocker.code === "RUN_REPORT_BLOCKED"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks ship when acceptance report is pending or has no evidence", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      initLifecycleState({ projectRoot: root });
+      writeRunPass(root);
+      writeReviewPass(root);
+      writeLifecycleStageReport("acceptance", {
+        status: "pending",
+        summary: "acceptance is still waiting for evidence",
+      }, lifecycleWriteOptions(root));
+
+      const guard = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
+      assert.equal(guard.status, "blocked");
+      assert.ok(guard.blockers.some((blocker) => blocker.code === "ACCEPTANCE_REPORT_PENDING"));
+      assert.ok(guard.blockers.some((blocker) => blocker.code === "ACCEPTANCE_EVIDENCE_EMPTY"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks ship when review-fix is pending or must-fix work remains", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      initLifecycleState({ projectRoot: root });
+      writeRunPass(root);
+      writeLifecycleStageReport("review-fix", {
+        status: "pending",
+        summary: "review fixes are still open",
+      }, lifecycleWriteOptions(root));
+      writeAcceptancePass(root);
+
+      const pending = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
+      assert.equal(pending.status, "blocked");
+      assert.ok(pending.blockers.some((blocker) => blocker.code === "REVIEW_FIX_PENDING"));
+
+      writeReviewPass(root, {
+        findings: [{
+          finding_id: "REV-001",
+          severity: "HIGH",
+          must_fix_before_ship: true,
+          message: "Fix before ship.",
+        }],
+      });
+      writeAcceptancePass(root);
+
+      const mustFix = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
+      assert.equal(mustFix.status, "blocked");
+      assert.ok(mustFix.blockers.some((blocker) => blocker.code === "REVIEW_FIX_MUST_FIX_BEFORE_SHIP"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

@@ -46,7 +46,7 @@ const DEFAULTS = {
     executor: 'claude',
     model: 'claude-sonnet-4-6',
     timeout_ms: 480000,
-    settings: 'scripts/yolo/settings-minimal.json',
+    settings: 'settings-minimal.json',
   },
 
   gate: {

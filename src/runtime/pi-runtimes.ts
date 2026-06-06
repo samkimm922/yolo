@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { convertAuditToPrd } from "../prd/audit-to-prd.js";
 import { inspectPrdContract } from "./gates/prd-contract-doctor.js";
 import { scanProject } from "../review/scanner.js";
@@ -12,6 +12,8 @@ import { buildAcceptanceReport } from "./acceptance/report.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
 import { appendLearningRecord } from "./learning/center.js";
 import { runDiscoveryRuntime } from "../discovery/runtime.js";
+import { inspectYoloCheck } from "./gates/check-report.js";
+import { inspectLifecycleGuard } from "../lifecycle/guard.js";
 
 function ok(summary, extra = {}) {
   return { status: "success", summary, artifacts: [], next_actions: [], ...extra };
@@ -24,6 +26,47 @@ function fail(summary, extra = {}) {
     artifacts: [],
     next_actions: ["Fix the failed PI runtime step, then resume from the generated artifact."],
     ...extra,
+  };
+}
+
+function lifecycleWrite(stageId, report = {}, params = {}, source = "pi-runtime") {
+  if (params.writeLifecycle === false || params.write_lifecycle === false || !params.stateRoot) return null;
+  return writeLifecycleStageReport(stageId, report, {
+    projectRoot: params.projectRoot,
+    stateRoot: params.stateRoot,
+    source,
+    learnFailures: true,
+  });
+}
+
+function summarizeCheckReport(report) {
+  if (!report) return null;
+  return {
+    schema_version: report.schema_version,
+    schema: report.schema,
+    status: report.status,
+    code: report.code,
+    summary: report.summary,
+    prd_path: report.prd_path,
+    blocker_count: report.blockers?.length || 0,
+    warning_count: report.warnings?.length || 0,
+    checks: (report.checks || []).map((check) => ({
+      name: check.name,
+      status: check.status,
+      summary: check.summary,
+    })),
+    blockers: (report.blockers || []).slice(0, 20),
+    warnings: (report.warnings || []).slice(0, 20),
+    artifacts: report.artifacts || [],
+    lifecycle_write: report.lifecycle_write
+      ? {
+        stage: report.lifecycle_write.stage,
+        stage_status: report.lifecycle_write.stage_status,
+        artifact_path: report.lifecycle_write.artifact_path,
+        status_path: report.lifecycle_write.status_path,
+      }
+      : null,
+    next_actions: report.next_actions || [],
   };
 }
 
@@ -47,10 +90,16 @@ async function runFindingsRuntime(params = {}) {
     });
   }
 
-  return ok(`Generated ${result.data.findings.length} finding(s).`, {
+  const report = ok(`Generated ${result.data.findings.length} finding(s).`, {
     artifacts: [result.output_file].filter(Boolean),
     findings_count: result.data.findings.length,
   });
+  const lifecycle = lifecycleWrite("roadmap", report, params, "pi-findings");
+  if (lifecycle) {
+    report.lifecycle_write = lifecycle;
+    report.artifacts.push(lifecycle.artifact_path);
+  }
+  return report;
 }
 
 function runPrdGenerateRuntime(params = {}) {
@@ -66,10 +115,17 @@ function runPrdGenerateRuntime(params = {}) {
     return fail(`PRD generation failed: ${result.error}`, { code: "PI_PRD_GENERATION_FAILED" });
   }
 
-  return ok(`Generated PRD with ${result.counts.tasks} task(s).`, {
+  const report = ok(`Generated PRD with ${result.counts.tasks} task(s).`, {
     artifacts: [output],
     counts: result.counts,
+    prd_path: output,
   });
+  const lifecycle = lifecycleWrite("prd", report, params, "pi-prd-generate");
+  if (lifecycle) {
+    report.lifecycle_write = lifecycle;
+    report.artifacts.push(lifecycle.artifact_path);
+  }
+  return report;
 }
 
 function runSchemaGateRuntime(params = {}) {
@@ -89,23 +145,43 @@ function runSchemaGateRuntime(params = {}) {
 
 function runPrdPreflightRuntime(params = {}) {
   const result = preflightPrd(params.prdPath);
+  const check = params.stateRoot
+    ? inspectYoloCheck({
+      prdPath: params.prdPath,
+      projectRoot: params.projectRoot,
+      stateRoot: params.stateRoot,
+      writeLifecycle: params.writeLifecycle !== false,
+    }, { learnFailures: true })
+    : null;
   if (!result.runner_readiness.can_execute) {
     return fail(`PRD preflight blocked execution with ${result.blocked_count} blocker(s).`, {
       code: "PI_PRD_PREFLIGHT_BLOCKED",
       preflight: result,
+      check: summarizeCheckReport(check),
       contract: result.contract,
       migration: result.migration,
       artifacts: [params.prdPath].filter(Boolean),
       next_actions: result.runner_readiness.next_actions,
     });
   }
+  if (check && (check.status === "blocked" || check.status === "error")) {
+    return fail(check.summary, {
+      code: check.code || "PI_YOLO_CHECK_BLOCKED",
+      preflight: result,
+      check: summarizeCheckReport(check),
+      artifacts: check.artifacts || [params.prdPath].filter(Boolean),
+      next_actions: check.next_actions,
+    });
+  }
   return ok(`PRD preflight ${result.status}.`, {
     artifacts: [params.prdPath].filter(Boolean),
     preflight: result,
+    check: summarizeCheckReport(check),
     warnings: [
       ...(result.schema?.warnings || []),
       ...(result.contract?.warnings || []),
       ...(result.spec_governance?.warnings || []),
+      ...(check?.warnings || []),
     ],
   });
 }
@@ -193,10 +269,29 @@ function readJsonMaybe(path) {
 }
 
 function runShipRuntime(params = {}) {
-  const stateRoot = params.stateRoot ? resolve(params.stateRoot) : undefined;
+  const expectedPrd = params.prdPath ? resolve(params.prdPath) : "";
+  const projectRoot = resolve(params.projectRoot || params.project_root || (expectedPrd ? dirname(expectedPrd) : process.cwd()));
+  const stateRoot = resolve(params.stateRoot || params.state_root || join(projectRoot, ".yolo"));
   const acceptancePath = params.acceptanceReportPath
     || params.acceptance_report_path
-    || (stateRoot ? resolve(stateRoot, "lifecycle", "acceptance-report.json") : "");
+    || resolve(stateRoot, "lifecycle", "acceptance-report.json");
+  const guard = inspectLifecycleGuard({
+    ...params,
+    command: "yolo-ship",
+    projectRoot,
+    stateRoot,
+    prdPath: expectedPrd,
+  });
+  if (guard.status !== "pass") {
+    return fail(guard.summary || "Ship gate blocked by YOLO lifecycle guard.", {
+      code: guard.code || "LIFECYCLE_GUARD_BLOCKED",
+      exit_code: 2,
+      artifacts: [acceptancePath].filter(Boolean),
+      blockers: guard.blockers || [],
+      lifecycle_guard: guard,
+      next_actions: guard.next_actions || ["Run /yolo-next before delivery."],
+    });
+  }
   const acceptanceReport = params.acceptanceReport || params.acceptance_report || readJsonMaybe(acceptancePath);
   const acceptanceStatus = acceptanceReport?.report?.status || acceptanceReport?.status;
   const blockers = [];
@@ -208,7 +303,6 @@ function runShipRuntime(params = {}) {
       message: `Acceptance status is ${acceptanceStatus || "unknown"}.`,
     });
   }
-  const expectedPrd = params.prdPath ? resolve(params.prdPath) : "";
   const acceptancePrd = acceptanceReport?.report?.prd_path || acceptanceReport?.prd_path || "";
   if (expectedPrd && acceptancePrd && resolve(acceptancePrd) !== expectedPrd) {
     blockers.push({

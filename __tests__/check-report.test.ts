@@ -135,6 +135,59 @@ describe("yolo check report", () => {
     }
   });
 
+  test("blocks approved-demand PRDs with project facts outside the project root", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({}, {
+        generated_by: "yolo-demand",
+        source: "approved_demand",
+        demand_contract_required: true,
+        demand: {
+          id: "DEMAND-CHECK",
+          approval: { approved: true, effective_for_prd: false },
+          project_facts: {
+            target_files: [{ file: "/tmp/outside-project.js", status: "verified" }],
+            assumptions: [],
+          },
+          quality_report: {
+            schema_version: "1.0",
+            schema: "yolo.demand.quality.v1",
+            status: "pass",
+            total_score: 100,
+            dimensions: [],
+          },
+        },
+        execution_readiness: {
+          level: "L3",
+          afk_ready: true,
+          quality_status: "pass",
+          quality_report: {
+            schema_version: "1.0",
+            schema: "yolo.demand.quality.v1",
+            status: "pass",
+            total_score: 100,
+            dimensions: [],
+          },
+        },
+        requirements: [{
+          id: "REQ-1",
+          text: "For operators, keep inventory counts clear.",
+          demand_trace: { evidence: ["EVID-1"] },
+        }],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root });
+      const demandContract = report.checks.find((check) => check.name === "demand_contract");
+
+      assert.equal(report.status, "blocked");
+      assert.equal(demandContract.status, "blocked");
+      assert.ok(report.blockers.some((blocker) => blocker.code === "DEMAND_PROJECT_TARGET_FACTS_UNRESOLVED"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("blocks UI tasks without state matrix and evidence plan", () => {
     const root = tempProject();
     try {
@@ -161,6 +214,33 @@ describe("yolo check report", () => {
       assert.equal(report.remediation_plan.gate_strength, "strict");
       assert.equal(report.remediation_plan.blocks_ship, true);
       assert.equal(report.remediation_plan.action, "ASK_HUMAN");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks PRD slices that mix independent user stories", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({
+        title: "Edit and move Trello cards",
+        description: "编辑卡片标题，并移动卡片到另一个列表。",
+        acceptance_criteria: ["编辑后的卡片标题可见；卡片移动到目标列表。"],
+      }, {
+        requirements: [{
+          id: "REQ-1",
+          text: "Trello 用户可以编辑卡片标题，并移动卡片到另一个列表。",
+        }],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root });
+      const storyAtomicity = report.checks.find((check) => check.name === "story_atomicity");
+
+      assert.equal(report.status, "blocked");
+      assert.equal(storyAtomicity.status, "blocked");
+      assert.ok(report.blockers.some((blocker) => blocker.gate === "story_atomicity" && blocker.code === "STORY_ATOMICITY_MULTI_STORY"));
+      assert.ok(report.blockers.some((blocker) => blocker.gate === "story_atomicity" && blocker.task_id === "FIX-CHECK-001"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
