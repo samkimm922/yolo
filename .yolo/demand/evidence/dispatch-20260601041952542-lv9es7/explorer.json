@@ -1,0 +1,150 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch API implements multi-layered boundary audit with snapshot-based mutation detection, scoped evidence validation, and PRD readiness gating.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() and diffBoundarySnapshots() provide hash-based file mutation detection",
+      "why": "Core boundary audit mechanism that detects any project file changes during agent execution"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516, 566-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshots taken before/after agent execution with violation detection",
+      "why": "Runtime implementation of boundary audit that gates PRD readiness on clean execution"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "585-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations create BOUNDARY_PROJECT_MUTATION blockers that prevent PRD readiness",
+      "why": "Proof that mutation detection directly gates demand readiness status"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "238-248",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy defines project_mutation as forbidden with allowed_write_roots",
+      "why": "Policy-level boundary declaration that controls agent tool access"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "258-328",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt() includes explicit boundary rules in agent instructions",
+      "why": "Agent-level boundary enforcement through prompt engineering"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION requires scope field on all evidence records",
+      "why": "Schema-level requirement that prevents evidence without scope declaration"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-419, 438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues() validates scope field and creates blockers when missing",
+      "why": "Validation layer that rejects evidence without proper scope classification"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() requires file locators for project-scoped evidence",
+      "why": "Prevents project facts without concrete file paths from being accepted"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross-checker, and verifier roles",
+      "why": "Three-agent architecture that provides cross-check validation for high-risk demands"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation() constructs full Claude agent invocations with tool allowlists",
+      "why": "Provider adapter that enables full-tool Claude execution with configurable tool access"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "84-92",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude agent configuration includes allowedTools and disallowedTools parameters",
+      "why": "Tool-level boundary controls that can restrict agent write access"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "407-420",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult() adds EVIDENCE_SCOPE_REQUIRED blockers for missing scope declarations",
+      "why": "Post-processing validation that enforces schema requirements"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "473-617",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime() orchestrates full dispatch pipeline with boundary checks",
+      "why": "Main entry point that ties together snapshotting, execution, validation, and readiness gating"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "710-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() checks evidence agent results and adds blockers for incomplete agents",
+      "why": "Readiness validation that requires all evidence agents to complete before PRD"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "574-604",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Final readiness check incorporates boundary blockers and updates demand status",
+      "why": "Integration point where boundary audit results affect demand PRD readiness"
+    }
+  ],
+  "assumptions": [
+    "Full-tool Claude agents respect tool allowlist/disallowlist configuration at runtime",
+    "File hash comparison in buildBoundarySnapshot() reliably detects content changes",
+    "Git files list from spawnSync() accurately reflects tracked project files",
+    "Agent providers (Claude, Codex, custom) execute commands in the specified working directory",
+    "JSON parsing and repair logic handles malformed agent output correctly"
+  ],
+  "risks": [
+    "If file hash comparison fails to detect certain mutations (e.g., permission changes, timestamp-only changes), boundary violations could go undetected",
+    "If agent providers ignore tool allowlists, agents could write to project files despite boundary configuration",
+    "If boundary audit does not check symlinks or special files, mutations could bypass detection",
+    "If evidence scope validation only checks field presence and not field values, invalid scopes could be accepted"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence dispatch implements comprehensive boundary audit with snapshot-based mutation detection, multi-layered scope validation, and PRD readiness gating. Architecture includes explorer/cross-checker/verifier roles for high-risk demands. Requires cross-checker and verifier verification to confirm detection efficacy and validation completeness."
+  }
+}

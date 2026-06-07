@@ -1,0 +1,13 @@
+# DEMAND-DIALOGUE-0001-real-ui-field-clarification Investigation
+
+## Evidence
+- EVID-001: src/pages/inventory-list.tsx renders qty_available_units and replenishment_floor_units in inventory rows.
+
+## Assumptions / TBD
+- ASM-001: Inventory list rows expose qty_available_units and replenishment_floor_units.
+
+## Codebase Scouts
+- src/pages/inventory-list.tsx
+
+## Risks
+- TBD

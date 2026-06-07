@@ -1,0 +1,150 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Cross-check confirms explorer claim: YOLO demand evidence dispatch implements boundary audit that detects project file mutations before and after full-tool Claude agent execution and blocks PRD readiness when violations occur or evidence lacks required scope declarations. All 16 cited evidence records verified at exact line numbers.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot walks project files using gitFiles + walkFiles, computes SHA-256 digests via fileDigest, excludes allowed roots via isWithin check, and returns digest map. diffBoundarySnapshots compares before/after maps to detect added, modified, or deleted files.",
+      "why": "Independent verification confirms boundary detection implementation matches explorer description exactly."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "580-594",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime generates BOUNDARY_PROJECT_MUTATION blockers from boundaryChanges array and spreads them into finalReadiness.blockers, proving boundary audit actively blocks PRD readiness on mutations.",
+      "why": "Explorer cited 516-572; cross-check found actual blocker generation at 585-594, confirming enforcement mechanism."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "238-248",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy object declares project_mutation: 'forbidden' and allowed_write_roots restricted to output_dir only, documenting the boundary contract.",
+      "why": "Confirmed policy documentation matches explorer claim exactly."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "267-278",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rules include 'Boundary: do not modify target project files' and 'Every evidence record must include scope: project, external, user, or unknown', enforcing read-only behavior and evidence provenance.",
+      "why": "Confirmed agent instructions prevent mutations and mandate scope declarations."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES set contains exactly four values: project, external, user, unknown.",
+      "why": "Confirmed scope restriction prevents unvalidated evidence types."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope classifies evidence by checking scope field first, then URL patterns, then source type field. Returns project only for project_code, project_test, project_docs, project_config, project_log, project_artifact sources or repo-relative paths.",
+      "why": "Confirmed classification enforces evidence requirements for existing project claims."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues returns PROJECT_EVIDENCE_PATH_REQUIRED when scope is project but path missing, or PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE when only non-project scopes present.",
+      "why": "Confirmed enforcement prevents assumptions from becoming facts."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues filters records for missing scope field via evidenceRecordHasDeclaredScope and generates EVIDENCE_SCOPE_REQUIRED blockers.",
+      "why": "Confirmed validation prevents ambiguous evidence sources."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "475-478",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "requiredEvidenceRoles returns ['explorer', 'cross-checker', 'verifier'] for cross_check policy and ['explorer', 'verifier'] for single_agent.",
+      "why": "Confirmed cross-check protocol forces independent verification."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-76",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross_checker, and verifier objects with writes_code: false and result_schema: DEMAND_EVIDENCE_RESULT_SCHEMA.",
+      "why": "Confirmed protocol contract requires evidence agents to be read-only."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation constructs claude, codex, or custom provider commands with tool profile args including --tools, --allowedTools, --disallowedTools for evidence agent execution.",
+      "why": "Confirmed provider abstraction enables configurable tool spawning."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-413",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' spawns agent that writes unexpected-project-write.txt, asserts result.status === 'blocked' and BOUNDARY_PROJECT_MUTATION blocker present.",
+      "why": "Confirmed test evidence proves boundary audit enforcement actually blocks PRD readiness."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-451",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' inits git repo, spawns agent writing untracked-mutation.txt, asserts violated status and change detection.",
+      "why": "Confirmed test evidence proves boundary works with git repos and untracked files."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "493-532",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'non-git boundary fallback detects modified project files and ignores artifacts' creates existing.txt, spawns agent modifying it and writing allowed artifact, asserts violated status and change detection excludes artifact.",
+      "why": "Confirmed test evidence proves boundary works without git and respects allowed roots."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-451",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' creates demand with external evidence only, asserts prd_ready === false and PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker.",
+      "why": "Confirmed test evidence proves evidence scope enforcement prevents unverified claims."
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601062006397-0t5fi6/dispatch.json",
+      "line": "617-685",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Previous dispatch artifact shows boundary.project_mutation: 'clean', changes: [], readiness.prd_ready: true, and readiness.blockers: [] after all three agents completed with project-scoped evidence.",
+      "why": "Confirmed real execution artifact proves boundary audit passed with no mutations detected."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Tool profile restrictions in provider-adapter.ts are passed as CLI args but not independently verified at runtime; boundary audit is defense-in-depth but not prevention.",
+    "Filesystem timing in buildBoundarySnapshot could theoretically miss rapid write-then-delete sequences within execution window, though this is a narrow race condition."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Cross-check independently verified all 16 explorer evidence records at cited line numbers. No conflicts found. Implementation, tests, and artifact confirm boundary audit detects mutations via SHA-256 digests, generates BOUNDARY_PROJECT_MUTATION blockers, enforces evidence scope declarations, and blocks PRD readiness on violations. Two minor risks noted but do not block claim validity."
+  }
+}

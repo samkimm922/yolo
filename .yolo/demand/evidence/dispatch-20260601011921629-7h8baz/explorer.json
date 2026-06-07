@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch API/schema already implements research/fetch style evidence support with external/project scope separation. External evidence cannot satisfy existing-project fact requirements.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16-17",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "CLAUDE_BOUNDARY_TOOLS includes WebFetch and WebSearch; VALID_EVIDENCE_SCOPES defines project, external, user, unknown.",
+      "why": "Core implementation shows WebFetch/WebSearch are available boundary tools and scope system is built-in."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "279",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt instructs: 'WebFetch/WebSearch are allowed for external research; mark those records as scope=external and do not use them as project facts.'",
+      "why": "Explicit instruction shows the system is designed for research-style evidence with scope labeling."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "452-453",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Research profile normalization includes 'research', 'fetch', 'web', 'web-research', 'external-research' aliases.",
+      "why": "Shows multiple research tool profiles are supported and normalized."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() function infers scope from path, url, and source fields with explicit external detection.",
+      "why": "Core scope inference logic shows external evidence is detected and handled separately."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() function returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE when evidence is external-only.",
+      "why": "Readiness enforcement explicitly blocks external-only evidence from satisfying project facts."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope() validates that evidence records declare valid scope explicitly.",
+      "why": "Shows mandatory scope declaration is enforced during evidence validation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "103-114",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() captures project file state before agent execution, excluding allowed artifact roots.",
+      "why": "Boundary enforcement system prevents project mutation during evidence gathering."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "567-598",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-execution boundary diff generates BOUNDARY_PROJECT_MUTATION blockers for any project changes outside artifact roots.",
+      "why": "Violations are detected and converted to readiness blockers automatically."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves external-only evidence cannot satisfy existing project facts and triggers PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker.",
+      "why": "Test coverage validates the external/project separation requirement."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "335-376",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test confirms claude research profile allows WebFetch/WebSearch while keeping other tools available.",
+      "why": "Integration test validates research tool support with boundary enforcement."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "68-69",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'external evidence can come from WebFetch/WebSearch but only as background research, cannot alone prove target project fields.'",
+      "why": "Product documentation confirms external evidence is intentionally limited to research context."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "44",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION states: 'scope is project | external | user | unknown; project facts require project-scoped evidence.'",
+      "why": "Schema definition documents the contract that project facts require project-scoped evidence."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If this claim is wrong, agents might mix external research with project facts, leading to incorrect PRD readiness decisions."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The YOLO demand evidence dispatch system already implements the required behavior: WebFetch/WebSearch are available for external research, evidence must declare scope (project/external/user/unknown), and external-only evidence cannot satisfy existing-project fact requirements. The separation is enforced at multiple validation layers and confirmed by comprehensive tests."
+  }
+}

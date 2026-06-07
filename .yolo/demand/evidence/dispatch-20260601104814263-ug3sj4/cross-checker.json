@@ -1,0 +1,134 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements provider-aware tool configuration and boundary mutation detection to prevent cross-provider model leakage and target project mutations.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES is defined as Set containing project, external, user, unknown - confirming scope validation constants exist.",
+      "why": "Confirms evidence scope validation uses the four declared scopes without drift."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "98-122",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot walks git files and filesystem, excluding allowed roots; diffBoundarySnapshots detects added, modified, deleted entries - confirming mutation detection logic.",
+      "why": "Independent verification that boundary detection implementation matches explorer summary."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "152-159",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates each evidence record has a declared scope in VALID_EVIDENCE_SCOPES, returning specific errors for missing or invalid scopes.",
+      "why": "Confirms scope enforcement prevents unverified assumptions from becoming facts."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "521-541",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig implements provider-specific normalization: Codex (clears model if claude detected), Claude (normalizes tool profiles to research/full/boundary, sets bypassPermissions), Custom (sets custom_sandbox=boundary).",
+      "why": "Independent verification that provider isolation logic prevents cross-provider leakage."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "641-647",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-execution boundary diff builds after snapshot, compares with before snapshot, and sets project_mutation to violated when changes exist - confirming runtime enforcement.",
+      "why": "Verifies boundary violation detection is executed after all agents complete."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "43-74",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation constructs distinct command structures per provider: Codex (sandbox, approval, output-file), Custom (command interpolation), Claude (permission-mode, tools, settings, budget).",
+      "why": "Independent verification that provider-specific command isolation is implemented."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "177-181",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "spawnProviderPrompt reads Codex output-last-message file and overrides stdout with lastMessage content - confirming provider-specific output handling.",
+      "why": "Verifies cross-provider output normalization prevents format confusion."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "214-217",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test asserts codex dispatch receives provider=codex, codex_sandbox is undefined, and model does not contain claude - confirming provider isolation.",
+      "why": "Independent verification that Codex provider does not inherit Claude defaults."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "251-259",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test asserts claude dispatch receives claude_tools=default, bypassPermissions, no_session_persistence=true, and all allowed/disallowed tool fields empty - confirming tool preservation.",
+      "why": "Independent verification that Claude dispatch preserves full tool capability."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "293-324",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies agent_tool_profile=full is downgraded to boundary without allowFullAgentTools, but normalized to full with explicit authorization - confirming tool profile gating.",
+      "why": "Independent verification that tool profile system enforces authorization gates."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "522-524",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test asserts status=blocked, project_mutation=violated, and BOUNDARY_PROJECT_MUTATION blocker exists when agent writes unexpected-project-write.txt - confirming boundary enforcement.",
+      "why": "Independent verification that boundary blocks mutations even when agents return success."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "607-609",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test asserts git-backed boundary detects untracked-mutation.txt as added change and emits BOUNDARY_PROJECT_MUTATION blocker - confirming git integration.",
+      "why": "Independent verification that boundary detection works with git repositories."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "839-841",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test asserts status=blocked and EVIDENCE_SCOPE_REQUIRED blocker when agent returns evidence records without scope field - confirming scope validation enforcement.",
+      "why": "Independent verification that evidence scope requirement is enforced at runtime."
+    }
+  ],
+  "assumptions": [
+    "Provider-specific implementations (Codex sandbox modes, Claude permission_mode behavior, custom provider command interpolation) are assumed to work as documented without external validation."
+  ],
+  "risks": [
+    "Cross-provider model leakage could occur if a provider-specific implementation detail is misunderstood or changes (e.g., Claude permission_mode semantics, Codex model inheritance).",
+    "Boundary mutation detection relies on consistent git state; concurrent mutations during evidence execution could produce false negatives.",
+    "Tool profile normalization (boundary vs research vs full) assumes providers respect configured permission_mode and tool restrictions without fallback behavior."
+  ],
+  "missing": [
+    "External research tool availability verification with live web/fetch/search capabilities.",
+    "Custom provider command interpolation security validation (e.g., shell injection risks).",
+    "Real-world stress test evidence against dirty working tree with actual Claude -p agents.",
+    "Provider-specific option compatibility validation (e.g., whether all Claude versions honor bypassPermissions with default tools)."
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "All high-risk factual claims from the explorer are independently confirmed by source code and test coverage. Provider-aware configuration, tool capability preservation, boundary mutation detection, and evidence scope validation are implemented as claimed. No conflicts found between explorer evidence and independent verification. Remaining gaps are in external validation (stress testing, security auditing) rather than core implementation claims."
+  }
+}

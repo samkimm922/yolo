@@ -1,0 +1,12 @@
+{
+  "name": "dialogue-prd-contradicted-field-blocks",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "tsc --noEmit",
+    "accept": "node scripts/acceptance-smoke.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

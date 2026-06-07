@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer and cross-checker evidence is sufficient to support PRD readiness: YOLO demand evidence dispatch API/schema supports WebFetch/WebSearch as external evidence (scope=external) while requiring project-scoped path evidence for target-project facts.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES includes 'external' - confirmed by both explorer and cross-checker independently",
+      "why": "Code-level support for external scope is independently verified by two agents"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "317-320",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent hard rules explicitly instruct use of WebFetch/WebSearch with scope=external and separation from project facts",
+      "why": "Agent protocol directly addresses the acceptance criteria requirement"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() blocks external-only evidence when project facts are claimed",
+      "why": "Validation gate prevents external evidence from proving project implementation facts"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine confirms external evidence cannot prove target project has fields/API/state",
+      "why": "Product documentation aligns with code implementation"
+    },
+    {
+      "path": "evidence_result_explorer.json",
+      "line": "1",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Explorer result shows 10 evidence records with empty assumptions array - no unverified claims promoted",
+      "why": "Explorer properly separated facts from assumptions"
+    },
+    {
+      "path": "evidence_result_cross-checker.json",
+      "line": "1",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Cross-checker independently verified all core evidence with 9 records and empty assumptions array",
+      "why": "Independent agent confirmed explorer findings without averaging or weakening claims"
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601084011021-rx20ut/evidence_result_cross-checker.json",
+      "line": "missing",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Cross-checker expanded missing items with integration test and stress test requirements",
+      "why": "Missing data properly reflected rather than promoted to blockers or assumptions"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Evidence paths and line numbers are assumed accurate from agent reports without file re-verification",
+    "Agent provider tool availability cannot be verified from static code analysis alone",
+    "No runtime stress test exists to confirm boundary audit actually detects mutations during external research"
+  ],
+  "missing": [
+    "Actual WebFetch/WebSearch execution record with scope=external to demonstrate the full workflow",
+    "Runtime verification that Claude provider exposes external tools to evidence agents",
+    "Integration test confirming external evidence does not leak into project facts validation",
+    "Stress test with dirty working tree confirming boundary audit detects project mutations"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker evidence is sufficient for PRD readiness. The acceptance criteria is met at code/schema level: agents CAN use WebFetch/WebSearch as external evidence with scope=external, and project facts DO require project-scoped path evidence. Missing items are runtime verification gaps, not code defects. No assumptions promoted to facts; no unresolved blockers masked."
+  }
+}

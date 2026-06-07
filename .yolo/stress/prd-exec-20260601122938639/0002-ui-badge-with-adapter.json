@@ -1,0 +1,116 @@
+{
+  "iteration": 2,
+  "scenario": "ui-badge-with-adapter",
+  "expected": "executable",
+  "status": "fail",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601122938639/fixtures/0002-ui-badge-with-adapter",
+  "demand_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601122938639/fixtures/0002-ui-badge-with-adapter/.yolo/demand/DEMAND-0002-ui-badge-with-adapter",
+  "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601122938639/fixtures/0002-ui-badge-with-adapter/.yolo/prd-executability/ui-badge-with-adapter.prd.json",
+  "check_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601122938639/fixtures/0002-ui-badge-with-adapter/.yolo/prd-executability/ui-badge-with-adapter.check.json",
+  "blocked_path": null,
+  "yolo": {
+    "discuss_status": "success",
+    "prd_status": "success",
+    "prd_code": "DEMAND_PRD_READY",
+    "check_status": "warning",
+    "check_code": "YOLO_CHECK_WARNING",
+    "blocker_codes": [],
+    "task_count": 1
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "fail",
+      "executable": true,
+      "correctly_blocked": false,
+      "score": 55,
+      "hard_failures": [
+        {
+          "code": "NON_EXECUTABLE_FAIL_GATE",
+          "task_id": "DEMAND-REQ-001-0010101",
+          "path": ".yolo/prd-executability/ui-badge-with-adapter.prd.json#/tasks/0/post_conditions/1",
+          "message": "Task DEMAND-REQ-001-0010101 post_condition POST-DEMAND-REQ-001-0010101-SCENARIO-1 (acceptance_criteria, severity FAIL) is flagged MANUAL_FAIL_CONDITION — it requires human judgment ('screenshot or component test can show"
+        },
+        {
+          "code": "UNDEFINED_BUSINESS_THRESHOLD",
+          "task_id": "DEMAND-REQ-001-0010101",
+          "path": ".yolo/prd-executability/ui-badge-with-adapter.prd.json#/tasks/0/handoff/project_facts/assumptions",
+          "message": "The core behavior ('low-stock badge on affected SKUs') depends on what quantity triggers the badge, but no threshold value, field source, or business rule is specified. The item data model in src/pages/inventory-list.tsx"
+        }
+      ],
+      "warnings": [
+        {
+          "code": "UNVERIFIED_ASSUMPTION_CONTRADICTED",
+          "task_id": "DEMAND-REQ-001-0010101",
+          "path": "src/pages/inventory-list.tsx",
+          "message": "Assumption 'Inventory list already receives quantity and threshold fields' is contradicted by the actual source file: InventoryList({ items }) only destructures item.sku and item.quantity — no threshold field exists. An "
+        },
+        {
+          "code": "MISSING_BADGE_SPECIFICATION",
+          "task_id": "DEMAND-REQ-001-0010101",
+          "path": null,
+          "message": "Badge visual properties (color, text label, icon, CSS approach, position in row) are completely undefined. All design/component adapters resolved to unknown/custom. The agent has no design system reference and must inven"
+        },
+        {
+          "code": "NO_TEST_SPECIFICATION",
+          "task_id": "DEMAND-REQ-001-0010101",
+          "path": ".yolo/prd-executability/ui-badge-with-adapter.prd.json#/tasks/0/evidence_plan",
+          "message": "No test file path, test framework, or concrete test assertion is specified. The verification hint references 'component test' abstractly but provides no test target. Acceptance relies entirely on manual screenshot review"
+        },
+        {
+          "code": "RESOLVER_NO_PROJECT_CONTEXT",
+          "task_id": null,
+          "path": ".yolo/prd-executability/ui-badge-with-adapter.check.json#/checks/3/resolver_readiness",
+          "message": "5 of 6 adapters (platform, stack, component, design_reference, quality_rule) resolved to unknown/custom with no capabilities. Only the acceptance_adapter (local-browser) is present. The agent receives no project-specific"
+        }
+      ],
+      "dimensions": {
+        "intent_convergence": 90,
+        "project_fact_grounding": 35,
+        "behavior_gate_hardness": 30,
+        "task_dependency": 95,
+        "testability": 35,
+        "no_guessing_context": 30,
+        "runner_readiness": 85,
+        "rework_risk": 25
+      }
+    },
+    "strict_risks": [
+      {
+        "code": "UNDEFINED_BUSINESS_THRESHOLD",
+        "task_id": "DEMAND-REQ-001-0010101",
+        "path": ".yolo/prd-executability/ui-badge-with-adapter.prd.json#/tasks/0/handoff/project_facts/assumptions",
+        "message": "The core behavior ('low-stock badge on affected SKUs') depends on what quantity triggers the badge, but no threshold value, field source, or business rule is specified. The item data model in src/pages/inventory-list.tsx only exposes `item."
+      },
+      {
+        "code": "UNVERIFIED_ASSUMPTION_CONTRADICTED",
+        "task_id": "DEMAND-REQ-001-0010101",
+        "path": "src/pages/inventory-list.tsx",
+        "message": "Assumption 'Inventory list already receives quantity and threshold fields' is contradicted by the actual source file: InventoryList({ items }) only destructures item.sku and item.quantity — no threshold field exists. An agent will discover "
+      },
+      {
+        "code": "MISSING_BADGE_SPECIFICATION",
+        "task_id": "DEMAND-REQ-001-0010101",
+        "path": null,
+        "message": "Badge visual properties (color, text label, icon, CSS approach, position in row) are completely undefined. All design/component adapters resolved to unknown/custom. The agent has no design system reference and must invent the badge appearan"
+      },
+      {
+        "code": "RESOLVER_NO_PROJECT_CONTEXT",
+        "task_id": null,
+        "path": ".yolo/prd-executability/ui-badge-with-adapter.check.json#/checks/3/resolver_readiness",
+        "message": "5 of 6 adapters (platform, stack, component, design_reference, quality_rule) resolved to unknown/custom with no capabilities. Only the acceptance_adapter (local-browser) is present. The agent receives no project-specific stack, component li"
+      }
+    ]
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T12:31:06.724Z",
+  "ended_at": "2026-06-01T12:32:51.932Z",
+  "duration_ms": 105208
+}

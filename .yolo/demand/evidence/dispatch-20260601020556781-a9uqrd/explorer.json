@@ -1,0 +1,111 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "The demand evidence dispatch boundary snapshot system correctly covers tracked, cached, and other git files while excluding only the dispatch artifact root.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() runs 'git ls-files -co --exclude-standard -z' which covers tracked (-c cached) and untracked (-o others) files",
+      "why": "This is the primary boundary coverage mechanism for git-backed projects"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles() provides recursive directory fallback with exclusions for .git, node_modules, dist, coverage, .next, .cache",
+      "why": "This ensures non-git projects also have boundary coverage"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() uses gitFiles() || walkFiles() and filters out allowedRoots (artifact directories)",
+      "why": "This is the core boundary detection logic that combines coverage with artifact exclusion"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "110-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after and reports added, modified, or deleted files",
+      "why": "This provides detection of mutations that occurred during agent execution"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "402-438",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' creates untracked file and verifies detection",
+      "why": "This is evidence that git untracked file detection is tested and working"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "440-480",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'non-git boundary fallback detects modified project files and ignores artifacts' covers walkFiles() behavior",
+      "why": "This is evidence that the non-git fallback path is tested and correctly excludes artifacts"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "367-400",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' enforces boundary violations as blockers",
+      "why": "This is evidence that boundary violations correctly block PRD readiness"
+    },
+    {
+      "path": ".git/worktree",
+      "line": "working_tree",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Current working tree is dirty with unstaged modifications (visible via 'git status --short' showing ' M' prefixes)",
+      "why": "This confirms the status_quo claim that evidence dispatch exists in a dirty working tree"
+    },
+    {
+      "path": ".yolo/demand/evidence/",
+      "line": "directory_listing",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Multiple evidence dispatch directories exist (dispatch-20260531*, dispatch-20260601*)",
+      "why": "This is evidence that evidence dispatch has been run multiple times in this project"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "58-59",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "excludedDir() blocks .git, node_modules, dist, coverage, .next, .cache from walkFiles() traversal",
+      "why": "This shows the exclusion list is hardcoded and does not exclude all possible artifact directories"
+    }
+  ],
+  "assumptions": [
+    "The git ls-files -co command covers all three categories mentioned (tracked, cached, other) but 'cached' in the claim may refer to git's staged state rather than the -c flag",
+    "Full-tool agent stress tests have not been run against the current implementation (only simulated via test mocks)",
+    "The hardcoded exclusion list in excludedDir() may not cover all project-specific artifact directories that should be excluded"
+  ],
+  "risks": [
+    "If git ls-files behavior differs across git versions, boundary coverage may be inconsistent",
+    "A sophisticated full-tool agent could create and delete files within a single execution session without detection if timing allows deletion before boundary snapshot",
+    "Projects with custom artifact directories not in the hardcoded exclusion list may have false positive boundary violations"
+  ],
+  "missing": [
+    "Stress test evidence with real Claude -p agents in full-tool mode",
+    "Test coverage for dirty working tree scenarios with staged but unstaged changes",
+    "Test coverage for boundary detection when agent creates and deletes files within the same execution session"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Boundary snapshot implementation correctly uses git ls-files -co for tracked/untracked coverage with walkFiles() fallback. Artifact exclusion works via allowedRoots filter. Test coverage exists for git-backed and non-git paths. Missing: real agent stress tests and edge cases like create-then-delete within session."
+  }
+}

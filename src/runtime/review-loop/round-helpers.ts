@@ -127,6 +127,8 @@ export function mergeReviewResults({ taskResults, reviewResults }) {
   appendUnique(taskResults.completed, reviewResults.completed || []);
   appendUnique(taskResults.failed, reviewResults.failed || []);
   appendUnique(taskResults.skipped, reviewResults.skipped || []);
+  if (!Array.isArray(taskResults.blocked)) taskResults.blocked = [];
+  appendUnique(taskResults.blocked, reviewResults.blocked || []);
   return taskResults;
 }
 

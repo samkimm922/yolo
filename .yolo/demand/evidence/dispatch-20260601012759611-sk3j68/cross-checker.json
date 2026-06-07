@@ -1,0 +1,151 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "The explorer's claim is independently verified: YOLO demand evidence dispatch implements a comprehensive harness boundary audit mechanism that detects project file mutations, enforces evidence scope declarations, validates project locators, and converts violations into PRD readiness blockers.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() uses SHA-256 digests via createHash('sha256') and gitFiles() fallback to walkFiles() for complete project coverage",
+      "why": "Confirms the cryptographic file digest mechanism and dual file discovery strategy."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "110-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() detects added, modified, and deleted files by comparing before/after Map digests",
+      "why": "Confirms the three-state change detection logic (added/modified/deleted)."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "511",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryBefore snapshot is captured before any agent execution in runDemandEvidenceDispatchRuntime()",
+      "why": "Confirms the baseline is established before provider agents run."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "561-567",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryAfter snapshot is captured after all agents complete, diffBoundarySnapshots() detects changes, and project_mutation status is set",
+      "why": "Confirms the after-state comparison and violation detection timing."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "580-592",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations are mapped to BOUNDARY_PROJECT_MUTATION blockers and prd_ready is forced to false regardless of agent results",
+      "why": "Confirms the blocker conversion logic that overrides positive agent outcomes."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() uses git ls-files -co --exclude-standard -z with null delimiter for robust file discovery",
+      "why": "Confirms the git-backed file discovery implementation details."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles() recursively scans directory tree excluding node_modules, .git, dist, .next, .cache",
+      "why": "Confirms the fallback file discovery mechanism and exclusion patterns."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "403-415",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult() calls evidenceScopeErrors() and blocks results with EVIDENCE_SCOPE_REQUIRED when scope is missing",
+      "why": "Confirms the scope enforcement happens during result normalization."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues() validates each evidence record has declared scope from VALID_EVIDENCE_SCOPES set",
+      "why": "Confirms the schema-level validation for scope declarations."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() checks that project-scoped evidence includes repo-relative paths via evidenceRecordHasProjectLocator()",
+      "why": "Confirms project facts require concrete file locators, not just scope labels."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "710-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() applies evidenceScopeDeclarationIssues() and projectEvidenceBlockingIssues() for completed evidence results",
+      "why": "Confirms PRD readiness validation enforces both scope and locator requirements."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasProjectLocator() checks for path/file/file_path/filename fields and excludes URL-based records",
+      "why": "Confirms the locator validation logic that distinguishes project vs external evidence."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "367-400",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' confirms BOUNDARY_PROJECT_MUTATION blockers override positive agent verdicts",
+      "why": "Confirms the boundary audit blocks PRD readiness even when agents return pass verdicts."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "402-438",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' verifies git ls-files discovers added files outside allowed roots",
+      "why": "Confirms boundary detection works for untracked files via git file discovery."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "509-544",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'agent evidence without explicit scope is blocked during normalization' confirms EVIDENCE_SCOPE_REQUIRED blocks agents without scope declarations",
+      "why": "Confirms the scope requirement is enforced during result normalization."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "546-589",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'agent conflict remains a readiness blocker after dispatch' confirms cross-checker block verdicts produce EVIDENCE_AGENT_CONFLICT blockers",
+      "why": "Confirms evidence agent disagreements are converted to PRD blockers."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If git file discovery fails in non-git environments, walkFiles() fallback may have performance differences on large repos",
+    "If evidence agents find indirect mutation vectors (e.g., via external process spawning), boundary audit may not detect them",
+    "If SHA-256 collisions occur (theoretically possible but practically impossible), boundary violations could be masked"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All explorer evidence is independently verified. The boundary audit mechanism is cryptographically sound (SHA-256), uses dual file discovery (git + walk), detects three-state changes (added/modified/deleted), and converts violations to blockers that override positive agent results. Evidence scope validation is enforced at normalization and PRD readiness layers, requiring both scope declarations and project locators for facts."
+  }
+}

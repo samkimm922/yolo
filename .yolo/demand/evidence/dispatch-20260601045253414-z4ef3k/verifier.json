@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verification confirms: The gathered evidence from explorer and cross-checker is sufficient and valid to support PRD readiness. No assumptions are presented as facts, all evidence paths are usable with project-scoped sources, and there is no unresolved missing data. Both agents independently verified the same 16 evidence records with zero conflicts, achieving high-confidence confirmation that the acceptance criteria are satisfied.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "explorer evidence result",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Explorer produced 16 evidence records with explicit scope declarations, concrete paths, and appropriate sources (project_code, project_test, project_docs, project_artifact).",
+      "why": "Explorer output demonstrates all evidence properly scoped and sourced without mixing assumptions with facts."
+    },
+    {
+      "path": "cross-checker evidence result",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Cross-checker independently verified all 16 explorer records at identical paths with matching scope and source classifications. Zero conflicts found.",
+      "why": "Independent verification confirms evidence accuracy and eliminates single-agent bias risk."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50, 52, 382-406, 408-412, 513-530, 708-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "All cited router.ts paths are valid line ranges covering schema definition, scope constants, validation functions, and readiness contract.",
+      "why": "Path verification confirms all evidence locators are usable and correctly reference existing code."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385, 387-431, 433-478, 480-524",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "All cited test paths and line ranges are valid and cover the four critical test cases for scope validation.",
+      "why": "Test evidence confirms comprehensive coverage of scope contract edge cases."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "258-327, 407-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cited dispatch paths correctly reference agent prompt instructions and normalization logic.",
+      "why": "Prompt and normalization evidence confirms runtime enforcement of scope requirements."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "605-640",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Cited dispatch test path validates scope enforcement during normalization.",
+      "why": "Test evidence confirms runtime scope validation is covered by tests."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine documentation correctly explains scope requirements as background context.",
+      "why": "Documentation evidence confirms intent and design rationale are documented."
+    },
+    {
+      "path": "tools/demand-claude-stress.mjs",
+      "line": "45-56",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Stress test code correctly validates evidence scope contract.",
+      "why": "Stress test evidence confirms empirical validation under real agent execution."
+    },
+    {
+      "path": ".yolo/stress",
+      "line": "evidence-scope-contract.json artifacts",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Stress test artifacts exist and show repeated validation across multiple dispatch runs.",
+      "why": "Artifact evidence provides empirical validation results from actual Claude agent executions."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If verification is wrong, PRD readiness could proceed despite missing evidence or invalid scope declarations.",
+    "If verification is wrong, conflicts between explorer and cross-checker could have been missed."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verification confirms both agents produced high-quality evidence with zero conflicts. All 16 evidence records have explicit scope declarations, concrete paths, and appropriate sources. No assumptions are presented as facts. No missing data remains. Acceptance criteria are satisfied: evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes. The evidence agreement between explorer and cross-checker is valid, and PRD readiness blockers should be cleared."
+  }
+}

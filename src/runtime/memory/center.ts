@@ -38,8 +38,8 @@ const MEMORY_DOCS = [
 ];
 
 const STAGE_COMMANDS = {
-  idea: "/yolo-brainstorm or /yolo-discuss",
-  discovery: "/yolo-discover or /yolo-discuss",
+  idea: "/yolo-brainstorm, /yolo-interview, or /yolo-discuss",
+  discovery: "/yolo-interview, /yolo-discuss, or /yolo-discover",
   setup: "/yolo-init or /yolo-doctor",
   roadmap: "/yolo-plan",
   "task-graph": "/yolo-plan",

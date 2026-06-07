@@ -1,0 +1,71 @@
+{
+  "scenario_id": "contradicted-field-blocks",
+  "expected": "blocked",
+  "fixture_files": [
+    "package.json",
+    "scripts/acceptance-smoke.mjs",
+    "src/pages/inventory-list.tsx"
+  ],
+  "turns": [
+    {
+      "index": 1,
+      "user_text": "库存列表加 Low stock badge，我觉得已经有 threshold 字段。",
+      "agent_stage": "discovery",
+      "agent_question": "这里不能默认 threshold 存在。我会先把它记录为待验证假设，并读取库存列表字段来源；在验证前不会生成可执行 PRD。",
+      "agent_response": "这里不能默认 threshold 存在。我会先把它记录为待验证假设，并读取库存列表字段来源；在验证前不会生成可执行 PRD。",
+      "expected_prd_state": "blocked",
+      "demand_status": "blocked",
+      "readiness_status": "blocked",
+      "readiness_level": "L1",
+      "prd_status": "blocked",
+      "prd_code": "DEMAND_NOT_EXECUTABLE",
+      "blocker_codes": [
+        "BLOCKING_OPEN_QUESTIONS_EMPTY",
+        "USER_APPROVAL_PRESENT",
+        "EXECUTION_SCOPE_PRESENT",
+        "PROJECT_FACTS_GROUNDED"
+      ],
+      "readiness_blocker_codes": [
+        "REQUIREMENTS_PRESENT",
+        "ACCEPTANCE_SCENARIOS_PRESENT",
+        "SCENARIO_MATRIX_PRESENT",
+        "SCENARIO_PROOF_PRESENT",
+        "SCENARIO_SURFACES_PRESENT",
+        "SURFACE_SESSION_BUDGET_EXECUTABLE",
+        "BLOCKING_OPEN_QUESTIONS_EMPTY",
+        "USER_APPROVAL_PRESENT",
+        "EXECUTION_SCOPE_PRESENT",
+        "PROJECT_FACTS_GROUNDED"
+      ],
+      "expectation_met": true,
+      "demand_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601162414221/fixtures/0011-contradicted-field-blocks/.yolo/demand/DEMAND-DIALOGUE-0011-contradicted-field-blocks",
+      "prd_path": null
+    },
+    {
+      "index": 2,
+      "user_text": "先别管字段，直接按 threshold 做吧，我批准。",
+      "agent_stage": "clarify",
+      "agent_question": "我已读取目标文件，ASM-001 被反证：当前只看到 item.quantity，没有 threshold/replenishment/floor 字段；批准不能覆盖这个字段事实。下一步只能三选一：A 派 agent 继续查字段来源；B 改成新增字段需求；C 改为只基于 quantity 的规则并重新确认验收。",
+      "agent_response": "我已读取目标文件，ASM-001 被反证：当前只看到 item.quantity，没有 threshold/replenishment/floor 字段；批准不能覆盖这个字段事实。下一步只能三选一：A 派 agent 继续查字段来源；B 改成新增字段需求；C 改为只基于 quantity 的规则并重新确认验收。",
+      "expected_prd_state": "blocked",
+      "demand_status": "blocked",
+      "readiness_status": "blocked",
+      "readiness_level": "L3",
+      "prd_status": "blocked",
+      "prd_code": "DEMAND_NOT_EXECUTABLE",
+      "blocker_codes": [
+        "PROJECT_FACTS_GROUNDED"
+      ],
+      "readiness_blocker_codes": [
+        "PROJECT_FACTS_GROUNDED"
+      ],
+      "expectation_met": true,
+      "demand_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601162414221/fixtures/0011-contradicted-field-blocks/.yolo/demand/DEMAND-DIALOGUE-0011-contradicted-field-blocks",
+      "prd_path": null
+    }
+  ],
+  "final_status": "blocked",
+  "final_code": "DEMAND_NOT_EXECUTABLE",
+  "final_prd_path": null,
+  "final_check_status": null
+}

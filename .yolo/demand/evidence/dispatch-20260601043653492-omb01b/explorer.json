@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand router correctly blocks PRD readiness when evidence agents report missing evidence, clarify, or block recommendations.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "481-510",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues function converts missing array items, clarify/block recommendations, failed verdicts/status, and error codes into blockers.",
+      "why": "Primary implementation of evidence-to-blocker conversion logic."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "496-501",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "When evidence result has actionable missing items, returns EVIDENCE_AGENT_MISSING blocker.",
+      "why": "Missing evidence blocker generation mechanism."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "503-508",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "When recommendation is 'clarify', returns EVIDENCE_AGENT_CLARIFICATION_REQUIRED; when recommendation is 'block', 'blocked', verdict is blocked/fail, or status is failed/error, returns EVIDENCE_AGENT_BLOCKED.",
+      "why": "Clarify and block recommendation handling logic."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "709-726",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness iterates over evidence agent results and calls evidenceResultBlockingIssues for each complete result, accumulating all blockers.",
+      "why": "Integration of evidence issue checking into PRD readiness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "750",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "prd_ready is true only when blockers.length === 0.",
+      "why": "Final readiness decision logic."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "246-286",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'evidence agent missing data and clarify recommendations block PRD readiness' verifies missing array and clarify recommendation create EVIDENCE_AGENT_MISSING and EVIDENCE_AGENT_CLARIFICATION_REQUIRED blockers, preventing prd_ready.",
+      "why": "Behavioral specification for missing/clarify blocker requirement."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "144-202",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'cross-check PRD readiness requires every evidence agent result' verifies incomplete evidence agent results (missing cross-checker, verifier) create EVIDENCE_AGENT_RESULT_REQUIRED blockers.",
+      "why": "Complete evidence chain requirement specification."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "204-244",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'evidence conflicts and existing blockers prevent PRD readiness' verifies block recommendation from cross-checker creates EVIDENCE_AGENT_CONFLICT blocker.",
+      "why": "Block/conflict blocker handling specification."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If evidenceResultBlockingIssues logic is bypassed or modified incorrectly, PRD readiness could pass with unresolved blockers.",
+    "If agents return invalid recommendation values not in [clarify, blocked, block], they might not generate blockers as expected."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The router correctly implements blocker generation for missing evidence, clarify recommendations, and block recommendations. All blockers prevent prd_ready = true. Test coverage confirms the behavior."
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verified: YOLO demand evidence dispatch exists with JSON repair for minor Claude drift, explicit EVIDENCE_AGENT_INVALID_JSON blocking for unrecoverable JSON, comprehensive test coverage including dirty working tree scenarios, and boundary violation detection that blocks PRD readiness on mutations.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate repairs minor Claude JSON drift: quoted line ranges, escaped backslashes, double-quoted keys, trailing commas",
+      "why": "Core JSON repair handles common Claude output variations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "348-368",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "extractJsonObject attempts multiple extraction strategies: direct parse, fenced code blocks, JSON object slicing",
+      "why": "Robust extraction handles markdown-fenced JSON and partial output"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-397",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON for parse failures with explicit error code and recommendation",
+      "why": "Fail-closed behavior on unrecoverable JSON"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test repairs Claude JSON drift patterns and records json_repaired flag",
+      "why": "Validates real drift pattern handling"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test returns EVIDENCE_AGENT_INVALID_JSON for non-JSON output and blocks PRD readiness",
+      "why": "Verifies fail-closed blocking behavior"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Tests boundary violation detection via file digest and git-backed dirty working tree scenarios",
+      "why": "Validates mutation detection in dirty trees"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot uses git ls-files or filesystem walk with allowed artifact roots",
+      "why": "Boundary detection works in git and non-git contexts"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-execution boundary snapshot diff detects mutations and sets BOUNDARY_PROJECT_MUTATION blocker",
+      "why": "Explicit blocking on project mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "408-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Scope validation requires evidence scope declaration, returns EVIDENCE_SCOPE_REQUIRED error",
+      "why": "Prevents malformed evidence acceptance"
+    }
+  ],
+  "assumptions": [
+    "Real Claude -p agent stress testing with actual provider output is deferred; implementation exists but runtime validation is out of scope for evidence gathering"
+  ],
+  "risks": [
+    "JSON repair patterns may not cover all Claude provider variations",
+    "Boundary detection uses file digest snapshots which may miss mutations within same execution window",
+    "Provider-specific edge cases (codex, claude, custom) may emerge in production"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All evidence is project-scoped with specific file paths and line numbers. No assumptions promoted to facts. Explorer claim is supported by implementation and tests. Missing slot is empty. Assumptions are clearly stated and not presented as facts."
+  }
+}

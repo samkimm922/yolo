@@ -1,0 +1,110 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch API implements multi-layered boundary audit with snapshot-based mutation detection, scoped evidence validation, and PRD readiness gating.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() computes SHA-256 hashes for all tracked files excluding allowed_write_roots; diffBoundarySnapshots() detects added/modified/deleted files by comparing hash maps",
+      "why": "Snapshot-based mutation detection mechanism that can detect any unauthorized project file changes"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516, 566-567",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshots taken before and after agent execution loop; diff changes computed and stored in result.boundary.changes",
+      "why": "Runtime implementation showing actual execution-time boundary audit"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "585-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations create BOUNDARY_PROJECT_MUTATION blockers with path and change details; finalReadiness.prd_ready set to false when blockers exist",
+      "why": "Direct proof that mutation detection gates PRD readiness status"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52, 37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES = Set([project, external, user, unknown]); DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION requires scope field in evidence records",
+      "why": "Schema-level enforcement of scope declaration requirement"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-419, 438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues() checks VALID_EVIDENCE_SCOPES.has() and creates EVIDENCE_SCOPE_REQUIRED blockers for missing/invalid scope values",
+      "why": "Validation layer that rejects evidence without proper scope classification"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() requires file path/locator when evidence has project scope; creates PROJECT_EVIDENCE_PATH_REQUIRED or PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blockers",
+      "why": "Prevents project facts from being accepted without concrete file evidence"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "710-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() checks evidenceResultComplete() for required roles and adds blockers for incomplete agents; calls evidenceScopeDeclarationIssues() and projectEvidenceBlockingIssues() on complete results",
+      "why": "Readiness validation that requires all evidence agents to complete with valid scoped evidence"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "574-604",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() called with agent_results; boundary blockers merged into readiness.blockers; result.status set to blocked when prd_ready is false",
+      "why": "Integration point where boundary audit and evidence validation jointly determine PRD readiness"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross_checker (cross-checker), and verifier roles with objectives, prompts, and result_schema",
+      "why": "Three-agent architecture definition that provides cross-check validation for high-risk demands"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "84-92",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude args include --allowedTools and --disallowedTools parameters from config.ai; tool allowlist/disallowlist passed to agent CLI",
+      "why": "Tool access controls that can restrict agent write capabilities"
+    }
+  ],
+  "assumptions": [
+    "SHA-256 file hashing in buildBoundarySnapshot() reliably detects content changes and is not vulnerable to collision attacks",
+    "Git ls-files command accurately reflects all tracked project files excluding excluded directories",
+    "Agent providers (Claude CLI, Codex, custom) execute in the specified working directory and respect tool allowlist/disallowlist parameters",
+    "File system operations in buildBoundarySnapshot() handle all file types correctly including symlinks and special files"
+  ],
+  "risks": [
+    "If SHA-256 hashing has collision vulnerabilities, different file contents could produce same hash and bypass mutation detection",
+    "If git ls-files misses certain tracked files or includes untracked files, boundary snapshot may be incomplete or include non-project files",
+    "If agent providers ignore --allowedTools/--disallowedTools parameters, agents could write to project files despite boundary configuration",
+    "If boundary audit does not check symlinks or special files, mutations to these paths could bypass detection",
+    "If evidence scope validation only checks field presence and not field values against VALID_EVIDENCE_SCOPES, invalid scopes could bypass validation"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All explorer claims verified independently. Evidence dispatch implements comprehensive boundary audit with snapshot-based mutation detection, multi-layered scope validation, and PRD readiness gating. Three-agent architecture (explorer/cross-checker/verifier) exists for high-risk demands. Tool access controls available at provider level. Verifier should confirm detection efficacy for edge cases like symlinks and validation completeness for all evidence paths."
+  }
+}

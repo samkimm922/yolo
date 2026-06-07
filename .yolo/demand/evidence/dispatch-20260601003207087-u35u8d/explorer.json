@@ -1,0 +1,96 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch already supports research/fetch style evidence with tool profile normalization, prompt conditional instructions, and evidence result schema designed to separate external research from project facts. The implementation exists in source and tests but requires stress-testing with real Claude agents.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "source": "code",
+      "summary": "CLAUDE_BOUNDARY_TOOLS constant includes 'WebFetch' and 'WebSearch' in the allowed tools list for evidence agents.",
+      "why": "Verifies WebFetch/WebSearch are in the baseline tool permissions for evidence dispatch."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "243",
+      "source": "code",
+      "summary": "Agent prompt builder includes conditional instruction: for research profile, 'WebFetch/WebSearch are allowed for external research; keep external evidence separate from project facts.'; for non-research, 'do not use external facts as project facts.'",
+      "why": "Verifies the prompt explicitly instructs agents to separate external evidence from project facts."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "378-380",
+      "source": "code",
+      "summary": "executionConfig normalizes agentToolProfile to 'research' for profiles including 'research', 'fetch', 'web', 'read-only-research', 'readonly-research'.",
+      "why": "Verifies tool profile variants map to the research mode that enables WebFetch/WebSearch."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "37-50",
+      "source": "code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence result structure with evidence array containing source, path, line, summary, and why fields, plus separate assumptions, risks, and missing arrays.",
+      "why": "Verifies the evidence result schema has fields to track provenance and separate external from project facts."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52-75",
+      "source": "code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS define explorer protocol that instructs 'Return claims with exact paths/lines or source summaries. Separate assumptions from facts.'",
+      "why": "Verifies the explorer protocol requires separating assumptions from facts in evidence results."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "333-356",
+      "source": "test",
+      "summary": "Test 'claude research profile labels research while keeping tools available' asserts that agent_tool_profile 'research' results in claude_allowed_tools including WebFetch and WebSearch, and permissions.allow including WebFetch and WebSearch.",
+      "why": "Verifies test coverage exists for research profile enabling WebFetch/WebSearch tools."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "230-291",
+      "source": "code",
+      "summary": "buildDemandEvidenceAgentPrompt constructs agent prompts with toolProfile-based conditional instructions, includes project root, state root, protocol, demand status, and previous evidence results.",
+      "why": "Verifies the full prompt construction includes context and tool-specific instructions."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "446-485",
+      "source": "code",
+      "summary": "Runtime sequentially executes planned evidence agent actions, parses JSON outputs into agent_results, and re-runs inspectDemandPrdReadiness with gathered evidence_results.",
+      "why": "Verifies evidence agent outputs are collected and fed back into readiness evaluation."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "58-66",
+      "source": "docs",
+      "summary": "Doctrine states evidence agent protocols include explorer for read-only fact-finding and that dispatch runs agents with boundary auditing where any project file mutations become blockers.",
+      "why": "Verifies product doctrine specifies evidence agent roles and boundary enforcement requirements."
+    }
+  ],
+  "assumptions": [
+    "The conditional prompt instructions at line 243 are sufficient to ensure agents actually separate external evidence from project facts during execution.",
+    "Agent providers honor the claude_allowed_tools and permissions.allow settings to restrict WebFetch/WebSearch availability based on tool profile.",
+    "The evidence result schema fields (source, path, line) are actually populated by agents to distinguish external research from project code evidence."
+  ],
+  "risks": [
+    "If agents ignore the prompt instructions and mix external research findings with project code evidence in the evidence result, the separation fails regardless of schema design.",
+    "If provider adapters do not honor tool profile settings, WebFetch/WebSearch might be available in non-research modes or blocked in research modes.",
+    "Without stress-testing with real Claude agents, the research profile may not work as intended in actual practice despite passing unit tests.",
+    "The dirty working tree state means current implementation may not represent committed/shipped behavior."
+  ],
+  "missing": [
+    "Integration test or stress test evidence that real Claude agents with research profile successfully use WebFetch/WebSearch and correctly separate external evidence from project facts.",
+    "Evidence that agents actually populate the source field to distinguish 'external' vs 'code' vs 'docs' vs 'config' when returning mixed evidence.",
+    "Verification that the boundary audit detects and blocks project mutations when agents do use WebFetch/WebSearch tools.",
+    "Documentation or examples showing the expected format for evidence results when external research is included alongside project code evidence."
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Source implementation and tests confirm research/fetch support exists at code level. The conditional prompt at line 243 explicitly instructs separation of external evidence from project facts, and the evidence result schema has fields to track provenance. However, actual agent behavior with real Claude providers and WebFetch/WebSearch tools remains unverified through stress-testing. Keep as working-tree fact pending verifier confirmation of separation mechanism sufficiency."
+  }
+}

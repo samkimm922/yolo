@@ -130,7 +130,7 @@ describe("gate pass flow", () => {
     assert.equal(record.transitions[0].result.status, "FAILED_NO_CODE");
   });
 
-  test("nonblocking commit warnings reuse pre-merge postconditions and complete", async () => {
+  test("YB-005 legacy nonblocking git_add_failed fails closed in gate pass flow", async () => {
     const record = logs();
     let postChecks = 0;
     const result = await handleGatePassFlow(baseOptions(record, {
@@ -151,11 +151,15 @@ describe("gate pass flow", () => {
 
     assert.deepEqual(result, {
       action: "return",
-      result: { status: "completed", reason: "commit warning: git_add_failed" },
+      result: { status: "failed", reason: "commit 失败: git_add_failed" },
     });
     assert.equal(postChecks, 1);
-    assert.equal(record.transitions[0].result.status, "PASS");
-    assert.equal(record.transitions[0].result.commit_warning, "git_add_failed");
-    assert.deepEqual(record.done[0], ["FIX-PASS", "completed", 75, "commit warning: git_add_failed"]);
+    assert.equal(record.transitions[0].result.status, "FAIL");
+    assert.equal(record.transitions[0].result.commit_failure, "git_add_failed");
+    assert.deepEqual(record.transitions[0].prd_update, {
+      status: "failed",
+      failReason: "commit 失败: git_add_failed",
+    });
+    assert.deepEqual(record.done[0], ["FIX-PASS", "failed", 75, "commit 失败: git_add_failed"]);
   });
 });

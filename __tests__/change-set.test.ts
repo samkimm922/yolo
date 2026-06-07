@@ -136,6 +136,28 @@ describe("execution change-set helpers", () => {
     assert.deepEqual(context.outOfScope, ["README.md", "docs/spec.md", "src/out.ts"]);
   });
 
+  test("buildCommitChangeContext preserves out-of-scope files skipped during worktree cleanup", () => {
+    const worktreeFiles = ["src/a.ts"];
+    Object.defineProperty(worktreeFiles, "outOfScopeSkipped", {
+      value: ["src/out.ts"],
+      enumerable: false,
+    });
+
+    const context = buildCommitChangeContext({
+      rootDir: "/repo",
+      task: {
+        scope: {
+          targets: [{ file: "src/a.ts" }],
+        },
+      },
+      worktreeFiles,
+      isFileAllowedByScope: (file, scope) => scope.targets.some((target) => target.file === file),
+    });
+
+    assert.deepEqual(context.code, ["src/a.ts"]);
+    assert.deepEqual(context.outOfScope, ["src/out.ts"]);
+  });
+
   test("buildCommitChangeContext treats metadata-only changes as no real code without zero-biz override", () => {
     const context = buildCommitChangeContext({
       rootDir: "/repo",

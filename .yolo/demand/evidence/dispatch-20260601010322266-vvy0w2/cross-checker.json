@@ -1,0 +1,135 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent cross-check confirms the explorer claim: YOLO demand evidence dispatch correctly implements research/fetch support with WebFetch/WebSearch in CLAUDE_BOUNDARY_TOOLS, agent prompt conditional instructions for external scope marking, evidence scope classification logic preventing external evidence from satisfying project facts, boundary audit enforcement blocking PRD readiness on violations, and real Claude agent stress test validation.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "CLAUDE_BOUNDARY_TOOLS includes WebFetch and WebSearch - independent read confirms research/fetch capability is available to evidence agents.",
+      "why": "Verifies the explorer's evidence item 1 with direct source confirmation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "269",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt conditional instruction: toolProfile.includes('research') branch explicitly marks WebFetch/WebSearch records as scope=external and forbids using them as project facts.",
+      "why": "Verifies explorer's evidence item 2 - agent protocol separates external research from project facts."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "380-402",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function independently verified: classifies evidence by scope field, path/url patterns, and source types into project/external/user/unknown.",
+      "why": "Verifies explorer's evidence item 3 - core scope classification logic exists and works."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "480-490",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues independently verified: checks evidenceScopeSummary.has_project and generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker when only non-project scopes exist.",
+      "why": "Verifies explorer's evidence item 4 - enforcement logic prevents external-only evidence for project facts."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "102-113",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot independently verified: git ls-files or walkFiles fallback, excludes allowedRoots via isWithin, captures SHA-256 digests.",
+      "why": "Verifies explorer's evidence item 5 - boundary audit mechanism implementation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "564-576",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violation injection independently verified: constructs BOUNDARY_PROJECT_MUTATION blockers for each boundary change, forces prd_ready=false, spreads blockers into final readiness.",
+      "why": "Verifies explorer's evidence item 6 - violations actually block PRD readiness."
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601010123669-6lzyiq/dispatch.json",
+      "line": "680-686",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Boundary audit result independently verified: project_mutation='clean', changes=[], confirming real Claude agent execution did not modify target project files.",
+      "why": "Verifies explorer's evidence item 8 - stress test boundary enforcement works."
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601010123669-6lzyiq/dispatch.json",
+      "line": "252-633",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Agent results independently verified: explorer (14 evidence), cross-checker (17 evidence), verifier (6 evidence) all completed with project-scoped evidence and no conflicts.",
+      "why": "Verifies explorer's evidence item 7 - stress test shows real agents work correctly."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' independently verified: creates external-only evidence, confirms PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker is generated.",
+      "why": "Verifies explorer's evidence item 9 - test validates evidence scope enforcement."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "378-449",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Boundary tests independently verified: 'boundary blocks project file mutation' and 'git-backed boundary detects untracked mutations' both generate BOUNDARY_PROJECT_MUTATION blockers.",
+      "why": "Verifies explorer's evidence item 10 - boundary audit behavior is tested."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66-68",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine independently verified: documents boundary enforcement - 'dispatch 会在运行前后审计项目文件边界，任何越界改动都会变成 readiness blocker.'",
+      "why": "Verifies explorer's evidence item 11 - implementation matches documented design."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "336-359",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "extractJsonObject independently verified: handles line ranges like '42-88', repairs spacing, extracts from fenced code blocks, handles common Claude output formatting issues.",
+      "why": "Verifies explorer's evidence item 12 - dispatch handles real-world agent output robustly."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "735-760",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectEvidenceAgreement independently verified: groups results by claim, checks for conflicting recommendations (proceed vs block/clarify), converts conflicts to blockers.",
+      "why": "Verifies explorer's evidence item 13 - agent disagreement handling prevents false consensus."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "404-414",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeSummary independently verified: maps evidence records to scopes, returns has_project/has_external/has_unknown flags used by validation logic.",
+      "why": "Cross-check: confirms scope classification feeds into project evidence validation."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If gitFiles function fails silently in non-git repositories without logging, operators may not know boundary detection fell back to walkFiles.",
+    "If CLAUDE_BOUNDARY_TOOLS list becomes outdated when new Claude tools are added, boundary audit may not cover new tools.",
+    "If allowedRoots path resolution returns paths that don't match isWithin comparison logic, legitimate writes could be incorrectly flagged as violations."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms all 13 explorer evidence items with accurate line numbers and verified implementation. CLAUDE_BOUNDARY_TOOLS includes WebFetch/WebSearch, agent prompts explicitly separate external evidence, router scope classification prevents external-only evidence from satisfying project facts, boundary audit enforcement blocks PRD readiness on violations, and real Claude agent stress test (.yolo/demand/evidence/dispatch-20260601010123669-6lzyiq/) validates the complete flow with clean boundary audit. No contradictions found. Implementation matches specification."
+  }
+}

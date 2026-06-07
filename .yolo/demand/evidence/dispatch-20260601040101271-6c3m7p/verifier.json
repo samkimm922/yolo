@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence properly supports the claim that YOLO demand evidence dispatch implements JSON repair for documented drift patterns and fails closed with EVIDENCE_AGENT_INVALID_JSON for unrecoverable output, with a validated gap around stress testing against real Claude agents.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate implements staged JSON repair with json_repaired flag tracking modifications",
+      "why": "Confirms recoverable drift is recorded as required by acceptance criteria."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-421",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON when parsed is null",
+      "why": "Confirms unrecoverable JSON receives explicit error code per acceptance criteria."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates invalid JSON produces blocked status and EVIDENCE_AGENT_INVALID_JSON error code",
+      "why": "Test evidence confirms fail-closed behavior produces explicit blockers, keeping PRD readiness blocked."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test documents four specific drift patterns currently repaired: line ranges, backslashes, empty keys, trailing commas",
+      "why": "Defines the boundary of 'minor recoverable drift' with concrete evidence."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Real Claude agents may produce drift patterns beyond the four currently handled, which would incorrectly trigger EVIDENCE_AGENT_INVALID_JSON blocker"
+  ],
+  "missing": [
+    "Stress test results against real Claude -p agents to validate current repair patterns cover production drift"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer evidence properly separates facts from assumptions, provides specific file paths and line numbers, and explicitly documents the missing stress test validation as a gap rather than promoting it to a fact. The acceptance criteria are met by current implementation: drift is recorded via json_repaired flag, unrecoverable JSON receives EVIDENCE_AGENT_INVALID_JSON, and blocked status prevents PRD readiness. The missing stress testing is a validation gap, not a blocker to treating the current implementation as fact."
+  }
+}

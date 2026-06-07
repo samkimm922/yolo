@@ -1,0 +1,139 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements provider-specific invocation isolation with tool profile controls and boundary enforcement to prevent cross-provider model leakage and project mutation.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshot and diff implementation uses git or filesystem walk to detect project mutations before and after agent execution.",
+      "why": "This is the core mechanism preventing evidence agents from modifying target project files."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "188-190",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "agentToolProfile normalizes tool profile input to boundary, research, or full modes.",
+      "why": "Tool profiles determine what capabilities are available to evidence agents."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "422-470",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig prepares provider-specific AI configuration with profile-based tool settings.",
+      "why": "This function bridges demand options with provider adapter configuration."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "449-462",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider configuration clears tool restriction flags and sets agent_tool_profile based on normalized input.",
+      "why": "Claude evidence mode relies on tool profile boundary instead of command-line restrictions."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "515-571",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshot before execution and diff after execution detect mutations; violations become readiness blockers.",
+      "why": "Runtime enforcement of the boundary contract with explicit blocker propagation."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "41-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation has separate code paths for Codex, custom, and Claude providers with distinct argument structures.",
+      "why": "Provider isolation prevents assumptions from one provider leaking to another."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "43-61",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider uses --cd, --sandbox, -c, and --output-last-message with optional --model.",
+      "why": "Codex-specific invocation arguments differ from Claude provider."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider uses -p flag with optional --model, --permission-mode, --settings, --tools, --allowedTools, --disallowedTools, --disable-slash-commands, --no-session-persistence, and --max-budget-usd.",
+      "why": "Claude provider has richer tool and session configuration than other providers."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies Codex dispatch does not inherit Claude default model or force read-only sandbox.",
+      "why": "Explicit test coverage for provider isolation preventing cross-provider assumptions."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies Claude dispatch clears tool restrictions and sets session persistence false.",
+      "why": "Test evidence for Claude boundary configuration behavior."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "275-341",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies Claude full tool profile requires explicit allowFullAgentTools authorization.",
+      "why": "Full semantic mode is a safety-critical escalation requiring explicit opt-in."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies boundary blocks project file mutation even when agent results pass.",
+      "why": "Boundary enforcement is independent of evidence quality."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS define explorer, cross-checker, and verifier roles with writes_code: false.",
+      "why": "Agent protocols explicitly forbid code writing in evidence mode."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES defines allowed evidence scopes as project, external, user, or unknown.",
+      "why": "Scope validation prevents evidence from being misclassified."
+    }
+  ],
+  "assumptions": [
+    "Provider CLI argument contracts (Claude -p, Codex exec) remain stable across versions.",
+    "Git ls-files and filesystem walk cover all project files that should be protected.",
+    "Tool profile names (boundary, research, full) map correctly to harness boundary expectations."
+  ],
+  "risks": [
+    "Provider CLI breaking changes could break invocation isolation.",
+    "Non-git projects might have race conditions in boundary detection if file system changes between snapshots.",
+    "If tool profile naming drifts between provider and harness, boundary could be silently weakened."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence dispatch implements provider-specific isolation with boundary enforcement. Provider adapter has separate code paths per provider with distinct invocation arguments. Tool profiles control capabilities. Tests verify provider isolation and boundary blocking."
+  }
+}

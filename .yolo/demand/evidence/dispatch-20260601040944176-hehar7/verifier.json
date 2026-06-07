@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "blocked",
+  "completed": true,
+  "claim": "Explorer evidence is sufficient and well-supported, but cross-checker failed with invalid JSON, blocking PRD readiness.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "File exists and contains VALID_EVIDENCE_SCOPES, buildDemandEvidenceAgentPrompt, and evidenceScopeErrors as referenced by explorer.",
+      "why": "Verifies explorer evidence paths are valid."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "File exists and contains evidenceRecordScope, projectEvidenceBlockingIssues, and inspectDemandPrdReadiness as referenced by explorer.",
+      "why": "Verifies explorer evidence paths are valid."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "File exists and documents scope separation doctrine as referenced by explorer.",
+      "why": "Verifies explorer evidence paths are valid."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Cross-checker failure means explorer claims were not independently verified.",
+    "JSON parsing error in cross-checker output indicates a tooling or prompt issue that may recur."
+  ],
+  "missing": [
+    "Cross-checker did not produce a valid JSON result due to unescaped double quotes inside JSON strings."
+  ],
+  "recommendation": "block",
+  "result": {
+    "verdict": "blocked",
+    "notes": "Explorer provided 11 solid evidence points with code references. Cross-checker failed with invalid JSON (unescaped quotes in strings). Per demand status, all three agents must complete successfully before PRD readiness. Cross-checker must be re-run with corrected JSON output."
+  }
+}

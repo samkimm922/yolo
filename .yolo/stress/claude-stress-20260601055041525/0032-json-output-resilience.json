@@ -1,0 +1,624 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_dispatch.v1",
+  "status": "pass",
+  "code": "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD",
+  "summary": "Demand evidence agents completed and PRD readiness passed.",
+  "generated_at": "2026-06-01T07:14:26.657Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "state_root": "/Users/sippingroom/Developer/yolo/.yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601071426655-8n4a7m",
+  "output_file": ".yolo/demand/evidence/dispatch-20260601071426655-8n4a7m",
+  "execution_policy": {
+    "default_mode": "dry_run",
+    "execute_requires": [
+      "executeAgents=true",
+      "allowAgentDispatch=true"
+    ],
+    "writes_business_code": false,
+    "agent_instruction": "boundary_controlled",
+    "agent_tool_profile": "full",
+    "boundary": {
+      "project_mutation": "forbidden",
+      "allowed_write_roots": [
+        ".yolo/demand/evidence/dispatch-20260601071426655-8n4a7m"
+      ]
+    }
+  },
+  "demand_status": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "fast",
+      "evidence_policy": "single_agent",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS"
+      ],
+      "blocking": false,
+      "explanation": "Fast route by default; no hard factual risk trigger was found."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand evidence dispatch must handle minor Claude JSON key drift and fail closed with explicit blockers on invalid agent JSON."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Minor recoverable JSON drift is recorded, unrecoverable JSON receives EVIDENCE_AGENT_INVALID_JSON, and PRD readiness stays blocked."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "__tests__/demand-evidence-dispatch.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Minor recoverable JSON drift is recorded, unrecoverable JSON receives EVIDENCE_AGENT_INVALID_JSON, and PRD readiness stays blocked."
+        ],
+        "risks": [
+          "Malformed provider output could be silently accepted or produce unclear blockers that hide readiness failure."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "fast",
+      "evidence_policy": "single_agent",
+      "stage": "evidence",
+      "submode": "fast_intake",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + verifier before treating project claims as facts."
+    }
+  },
+  "actions": [
+    {
+      "id": "demand.evidence.explorer",
+      "role": "explorer",
+      "status": "pending",
+      "reason": "Factual project claims need primary evidence.",
+      "protocol": {
+        "role": "explorer",
+        "objective": "Find primary project facts for the requested demand without editing files.",
+        "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "explorer.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601071426655-8n4a7m/explorer.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601071426655-8n4a7m/explorer.json"
+    },
+    {
+      "id": "demand.evidence.verifier",
+      "role": "verifier",
+      "status": "pending",
+      "reason": "Verify blockers and assumptions are not promoted to facts.",
+      "protocol": {
+        "role": "verifier",
+        "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+        "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "verifier.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601071426655-8n4a7m/verifier.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601071426655-8n4a7m/verifier.json"
+    }
+  ],
+  "mode": "execute",
+  "agent_results": [
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "explorer",
+      "status": "completed",
+      "completed": true,
+      "claim": "YOLO demand evidence dispatch already implements JSON drift repair (parseJsonCandidate), JSON extraction with fallback (extractJsonObject), invalid JSON handling with EVIDENCE_AGENT_INVALID_JSON error code (normalizeAgentResult), and records repairs in provider_runs.json_repaired. Invalid JSON fails closed and blocks PRD readiness.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "330-346",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "parseJsonCandidate repairs minor Claude JSON drift: line ranges, backslash escapes, empty-quoted keys, trailing commas",
+          "why": "Implements the repair strategy for recoverable JSON formatting issues"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "348-368",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "extractJsonObject tries direct parse, markdown code block extraction, and object slice extraction",
+          "why": "Provides fallback strategies for extracting JSON from various output formats"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "370-421",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON error code for unparsable JSON and sets completed=false",
+          "why": "Implements fail-closed behavior for unrecoverable JSON errors"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "558-559",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Provider run records json_repaired boolean and parse_error string in provider_runs array",
+          "why": "Tracks which agent outputs required repair and why parsing failed"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "574-598",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Readiness inspection uses evidence results and boundary violations to determine final PRD readiness",
+          "why": "Invalid JSON results propagate to readiness blockers"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "599-604",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Final result.status and result.code are set based on readiness.prd_ready",
+          "why": "Invalid JSON blocks readiness and sets final dispatch status to blocked"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "535-571",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test repairs minor Claude JSON key drift and records the repair via json_repaired field",
+          "why": "Verifies repair behavior and repair tracking work as intended"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "573-603",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test invalid agent JSON fails closed with explicit EVIDENCE_AGENT_INVALID_JSON blocker code",
+          "why": "Verifies fail-closed behavior for unrecoverable JSON errors"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "605-640",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test agent evidence without explicit scope is blocked during normalization",
+          "why": "Verifies validation blocks invalid agent results"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "642-685",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test agent conflict remains a readiness blocker after dispatch",
+          "why": "Verifies blockers propagate correctly to readiness status"
+        }
+      ],
+      "assumptions": [],
+      "risks": [],
+      "missing": [],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "All acceptance criteria are already implemented and tested: minor drift is repaired and recorded, invalid JSON returns EVIDENCE_AGENT_INVALID_JSON, and PRD readiness is blocked on errors."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "verifier",
+      "status": "completed",
+      "completed": true,
+      "claim": "Verified explorer evidence: all acceptance criteria facts are supported by project code and tests with specific line references. No assumptions presented as facts. Evidence paths are valid and usable. PRD readiness blockers correctly reflect current state.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "330-346",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "parseJsonCandidate function implements repair logic for recoverable JSON drift (line ranges, backslash escapes, empty-quoted keys, trailing commas)",
+          "why": "Verifies acceptance criterion: minor recoverable JSON drift is handled and can be recorded"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "348-368",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "extractJsonObject provides three-tier fallback: direct parse, markdown code block extraction, object slice extraction",
+          "why": "Supports claim that JSON extraction has robust fallback mechanisms"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "370-421",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON error code for unparsable JSON and sets completed=false",
+          "why": "Verifies acceptance criterion: unrecoverable JSON receives EVIDENCE_AGENT_INVALID_JSON"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "558-559",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Provider run schema includes json_repaired boolean and parse_error string for tracking repairs",
+          "why": "Verifies acceptance criterion: drift repairs are recorded in structured output"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "574-598",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "calculateReadiness checks evidence results and boundary violations to determine prd_ready boolean",
+          "why": "Shows how invalid JSON propagates to readiness status"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "599-604",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Final dispatch status (result.status, result.code) derives from readiness.prd_ready",
+          "why": "Verifies acceptance criterion: PRD readiness stays blocked on invalid JSON"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "535-571",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test 'repairs minor Claude JSON key drift and records the repair' verifies parseJsonCandidate behavior and json_repaired field tracking",
+          "why": "Test evidence confirms repair implementation works as specified"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "573-603",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test 'invalid agent JSON fails closed with explicit EVIDENCE_AGENT_INVALID_JSON blocker code' verifies fail-closed behavior",
+          "why": "Test evidence confirms unrecoverable JSON returns correct error code and blocks readiness"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "605-685",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Additional tests verify validation blocks invalid agent results and blockers propagate to readiness status",
+          "why": "Test evidence confirms end-to-end readiness blocking behavior"
+        }
+      ],
+      "assumptions": [],
+      "risks": [],
+      "missing": [],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "Explorer evidence is complete and factual: 10 evidence records from project code and tests with specific line ranges, all three acceptance criteria verified, no assumptions promoted to facts, no missing data, and PRD readiness accurately reflects current blocked state pending explorer and verifier completion."
+      }
+    }
+  ],
+  "provider_runs": [
+    {
+      "role": "explorer",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"explorer\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"YOLO demand evidence dispatch already implements JSON drift repair (parseJsonCandidate), JSON extraction with fallback (extractJsonObject), invalid JSON handling with EVIDENCE_AGENT_INVALID_JSON error code (normalizeAgentResult), and records repairs in provider_runs.json_repaired. Invalid JSON fails closed and blocks PRD readiness.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"330-346\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"parseJsonCandidate repairs minor Claude JSON drift: line ranges, backslash escapes, empty-quoted keys, trailing commas\",\n      \"why\": \"Implements the repair strategy for recoverable JSON formatting issues\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"348-368\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"extractJsonObject tries direct parse, markdown code block extraction, and object slice extraction\",\n      \"why\": \"Provides fallback strategies for extracting JSON from various output formats\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"370-421\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON error code for unparsable JSON and sets completed=false\",\n      \"why\": \"Implements fail-closed behavior for unrecoverable JSON errors\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"558-559\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Provider run records json_repaired boolean and parse_error string in provider_runs array\",\n      \"why\": \"Tracks which agent outputs required repair and why parsing failed\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispat\n[truncated 2259 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "verifier",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"verifier\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"Verified explorer evidence: all acceptance criteria facts are supported by project code and tests with specific line references. No assumptions presented as facts. Evidence paths are valid and usable. PRD readiness blockers correctly reflect current state.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"330-346\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"parseJsonCandidate function implements repair logic for recoverable JSON drift (line ranges, backslash escapes, empty-quoted keys, trailing commas)\",\n      \"why\": \"Verifies acceptance criterion: minor recoverable JSON drift is handled and can be recorded\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"348-368\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"extractJsonObject provides three-tier fallback: direct parse, markdown code block extraction, object slice extraction\",\n      \"why\": \"Supports claim that JSON extraction has robust fallback mechanisms\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"370-421\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON error code for unparsable JSON and sets completed=false\",\n      \"why\": \"Verifies acceptance criterion: unrecoverable JSON receives EVIDENCE_AGENT_INVALID_JSON\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"558-559\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Provider run schema includes json_repaired boolean and parse_error string for tracking repairs\",\n      \"why\": \"Verifies acceptance criterion: drift repairs are recorded in structured output\"\n    },\n    {\n      \"path\": \"src/dem\n[truncated 2255 chars]",
+      "stderr": ""
+    }
+  ],
+  "artifacts": [
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601071426655-8n4a7m/explorer.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601071426655-8n4a7m/verifier.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601071426655-8n4a7m/dispatch.json"
+  ],
+  "boundary": {
+    "project_mutation": "clean",
+    "allowed_write_roots": [
+      ".yolo/demand/evidence/dispatch-20260601071426655-8n4a7m"
+    ],
+    "changes": []
+  },
+  "readiness": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.prd_readiness.v1",
+    "required_slots": [
+      "problem",
+      "target_user",
+      "status_quo",
+      "desired_outcome",
+      "scope_in",
+      "scope_out",
+      "constraints",
+      "acceptance_criteria",
+      "risks",
+      "approval"
+    ],
+    "slot_values": {
+      "problem": [
+        "Existing YOLO demand evidence dispatch must handle minor Claude JSON key drift and fail closed with explicit blockers on invalid agent JSON."
+      ],
+      "target_user": [
+        "YOLO maintainer"
+      ],
+      "status_quo": [
+        "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+      ],
+      "desired_outcome": [
+        "Minor recoverable JSON drift is recorded, unrecoverable JSON receives EVIDENCE_AGENT_INVALID_JSON, and PRD readiness stays blocked."
+      ],
+      "scope_in": [
+        "src/demand/evidence-dispatch.ts",
+        "__tests__/demand-evidence-dispatch.test.ts"
+      ],
+      "scope_out": [
+        "Do not intentionally modify target project files during evidence gathering."
+      ],
+      "constraints": [
+        "Full tools may be available; harness boundary audit must detect any target-project mutation."
+      ],
+      "acceptance_criteria": [
+        "Minor recoverable JSON drift is recorded, unrecoverable JSON receives EVIDENCE_AGENT_INVALID_JSON, and PRD readiness stays blocked."
+      ],
+      "risks": [
+        "Malformed provider output could be silently accepted or produce unclear blockers that hide readiness failure."
+      ],
+      "approval": [
+        "approved"
+      ]
+    },
+    "missing_slots": [],
+    "blockers": [],
+    "assumptions": [],
+    "required_evidence_agents": [
+      "explorer",
+      "verifier"
+    ],
+    "evidence_agreement": {
+      "status": "pass",
+      "conflicts": []
+    },
+    "prd_ready": true
+  },
+  "demand_status_after_dispatch": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "fast",
+      "evidence_policy": "single_agent",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS"
+      ],
+      "blocking": false,
+      "explanation": "Fast route by default; no hard factual risk trigger was found."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand evidence dispatch must handle minor Claude JSON key drift and fail closed with explicit blockers on invalid agent JSON."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Minor recoverable JSON drift is recorded, unrecoverable JSON receives EVIDENCE_AGENT_INVALID_JSON, and PRD readiness stays blocked."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "__tests__/demand-evidence-dispatch.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Minor recoverable JSON drift is recorded, unrecoverable JSON receives EVIDENCE_AGENT_INVALID_JSON, and PRD readiness stays blocked."
+        ],
+        "risks": [
+          "Malformed provider output could be silently accepted or produce unclear blockers that hide readiness failure."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": true
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "fast",
+      "evidence_policy": "single_agent",
+      "stage": "evidence",
+      "submode": "fast_intake",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS"
+      ],
+      "missing_slots": [],
+      "blockers": [],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "verifier"
+      ],
+      "prd_ready": true,
+      "next_action": "Run explorer + verifier before treating project claims as facts."
+    }
+  }
+}

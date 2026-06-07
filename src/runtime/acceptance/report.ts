@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeLifecycleStageReport } from "../../lifecycle/progress.js";
+import { formatLifecycleGuardText, inspectLifecycleGuard } from "../../lifecycle/guard.js";
 import { resolveProjectContext } from "../../packs/resolver.js";
 import {
   asArray,
@@ -15,6 +17,7 @@ export const ACCEPTANCE_REPORT_SCHEMA_VERSION = "1.0";
 export const ACCEPTANCE_REPORT_SCHEMA = "yolo.acceptance.report.v1";
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+const RELEASE_ACCEPTANCE_MODES = new Set(["ship", "release"]);
 
 function nowIso() {
   return new Date().toISOString();
@@ -36,6 +39,118 @@ function defaultAdapterEvidencePath({ stateRoot, resolver }) {
 function loadPrd(input = {}) {
   if (input.prd) return input.prd;
   return readJsonMaybe(input.prdPath || input.prd_path);
+}
+
+function acceptanceMode(input = {}, options = {}) {
+  return clean(input.mode || input.acceptanceMode || input.acceptance_mode || options.mode || options.acceptanceMode || options.acceptance_mode || "accept").toLowerCase();
+}
+
+function approvalArtifactPath({ input = {}, options = {}, stateRoot }) {
+  return input.approvalArtifact ||
+    input.approval_artifact ||
+    input.acceptanceApprovalArtifact ||
+    input.acceptance_approval_artifact ||
+    options.approvalArtifact ||
+    options.approval_artifact ||
+    options.acceptanceApprovalArtifact ||
+    options.acceptance_approval_artifact ||
+    join(stateRoot, "lifecycle", "acceptance-approval.json");
+}
+
+function readApprovalArtifact(path) {
+  if (!path) {
+    return { artifact_path: "", artifact: null, error: null };
+  }
+  const resolved = resolve(path);
+  if (!existsSync(resolved)) {
+    return { artifact_path: "", artifact: null, error: null };
+  }
+  try {
+    return { artifact_path: resolved, artifact: JSON.parse(readFileSync(resolved, "utf8")), error: null };
+  } catch (error) {
+    return {
+      artifact_path: resolved,
+      artifact: null,
+      error: {
+        code: "ACCEPTANCE_WARNING_APPROVAL_MALFORMED",
+        message: error?.message || "Approval artifact is not valid JSON.",
+      },
+    };
+  }
+}
+
+function warningApprovalDigest({ prdPath, mode, warnings = [] } = {}) {
+  const normalized = {
+    prd_path: prdPath ? resolve(prdPath) : "",
+    mode,
+    warnings: warnings.map((issue) => ({
+      level: issue.level,
+      code: issue.code,
+      task_id: issue.task_id || null,
+      finding_id: issue.finding_id || issue.id || null,
+      message: issue.message || "",
+    })).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+  };
+  return createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+}
+
+function approvalValueMatches(value, expected) {
+  if (!expected) return true;
+  return clean(value) === clean(expected);
+}
+
+function hasApprovalAuditFields(approval = {}) {
+  return Boolean(clean(approval.approved_at || approval.approvedAt || approval.executed_at || approval.executedAt)) &&
+    Boolean(clean(approval.approver || approval.approved_by || approval.approvedBy || approval.reviewer));
+}
+
+function approvalWarningsMatch(approval = {}, expected = {}) {
+  const expectedCount = expected.warning_count || 0;
+  const digest = approval.warning_digest || approval.warnings_digest || approval.issue_digest || approval.issues_digest;
+  if (digest) return clean(digest) === clean(expected.warning_digest);
+  const count = approval.warning_count ?? approval.warnings_count ?? approval.issue_count ?? approval.issues_count;
+  if (count != null) return Number(count) === expectedCount;
+  return expectedCount === 0;
+}
+
+function approvalFromArtifact(path, expected = {}) {
+  const read = readApprovalArtifact(path);
+  const artifact = read.artifact;
+  const payload = artifact?.report || artifact;
+  const approval = payload?.approval || payload?.acceptance_approval || payload;
+  const approved = approval?.approved === true || clean(approval?.status).toLowerCase() === "approved";
+  const reasons = [];
+  if (read.error) reasons.push(read.error);
+  if (artifact && !approved) {
+    reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_NOT_APPROVED", message: "Approval artifact is present but not approved." });
+  }
+  if (artifact && approved) {
+    if (!hasApprovalAuditFields(approval)) {
+      reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_AUDIT_FIELDS_MISSING", message: "Approval artifact must include approver and approved_at fields." });
+    }
+    if (!approvalValueMatches(approval?.prd_path || approval?.prdPath, expected.prd_path)) {
+      reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_PRD_MISMATCH", message: "Approval artifact does not match the current PRD." });
+    }
+    if (!approvalValueMatches(approval?.mode || approval?.acceptance_mode || approval?.acceptanceMode, expected.mode)) {
+      reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_MODE_MISMATCH", message: "Approval artifact does not match the current acceptance mode." });
+    }
+    if (!approvalWarningsMatch(approval, expected)) {
+      reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_WARNING_MISMATCH", message: "Approval artifact does not match the current warning set." });
+    }
+  }
+  return {
+    artifact_path: read.artifact_path,
+    artifact: artifact || null,
+    approved: approved && reasons.length === 0,
+    invalid_reasons: reasons,
+    expected,
+  };
+}
+
+function readArgValue(argv, index) {
+  const arg = argv[index];
+  if (arg.includes("=")) return { value: arg.split("=").slice(1).join("="), consumed: 0 };
+  return { value: argv[index + 1], consumed: 1 };
 }
 
 function pushIssue(issues, level, code, message, extra = {}) {
@@ -79,8 +194,47 @@ function runtimeEvidenceIssues(runReport, issues) {
   const status = clean(runReport.status).toLowerCase();
   const failed = Number(runReport.summary?.failed || asArray(runReport.failed).length || 0);
   const blocked = Number(runReport.summary?.blocked || asArray(runReport.blocked).length || 0);
-  if (["error", "failed", "blocked"].includes(status) || failed > 0 || blocked > 0) {
-    pushIssue(issues, "P1", "RUN_REPORT_NOT_CLEAN", "Run report has failed or blocked work.", { failed, blocked });
+  const evidenceFailures = Number(runReport.summary?.evidence_failures || 0);
+  const gateFailures = Number(runReport.gates?.failed_count || 0);
+  const reviewIssues = Number(runReport.review?.issue_count || 0);
+  const reviewErrors = Number(runReport.review?.error_count || 0);
+  const fixtureFailures = Number(runReport.fixtures?.fail_count || 0);
+  const specBlocked = Number(runReport.spec_governance?.blocked_count || 0);
+  if (
+    ["error", "failed", "blocked"].includes(status) ||
+    failed > 0 ||
+    blocked > 0 ||
+    evidenceFailures > 0 ||
+    gateFailures > 0 ||
+    reviewIssues > 0 ||
+    reviewErrors > 0 ||
+    fixtureFailures > 0 ||
+    specBlocked > 0
+  ) {
+    pushIssue(issues, "P1", "RUN_REPORT_NOT_CLEAN", "Run report has failed, blocked, or failing evidence.", {
+      failed,
+      blocked,
+      evidence_failures: evidenceFailures,
+      gate_failures: gateFailures,
+      review_issues: reviewIssues,
+      review_errors: reviewErrors,
+      fixture_failures: fixtureFailures,
+      spec_blocked: specBlocked,
+    });
+  }
+}
+
+function adapterEvidenceIssues(adapterEvidence, issues) {
+  if (!adapterEvidence) return;
+  const status = clean(adapterEvidence.status).toLowerCase();
+  if (["blocked", "failed", "error"].includes(status)) {
+    pushIssue(issues, "P1", "ADAPTER_EVIDENCE_BLOCKED", "Adapter evidence is blocked or failed.", {
+      adapter_code: adapterEvidence.code || null,
+      adapter_id: adapterEvidence.adapter?.id || null,
+      required_platform: adapterEvidence.required_platform || null,
+      missing_adapter_platforms: asArray(adapterEvidence.platform_coverage?.missing_adapter_platforms),
+      missing_evidence_platforms: asArray(adapterEvidence.platform_coverage?.missing_evidence_platforms),
+    });
   }
 }
 
@@ -159,6 +313,7 @@ export function buildAcceptanceReport(input = {}, options = {}) {
   const prd = loadPrd({ ...options, ...input });
   const projectRoot = resolve(input.projectRoot || input.project_root || options.projectRoot || options.project_root || (prdPath ? dirname(resolve(prdPath)) : process.cwd()));
   const stateRoot = resolve(input.stateRoot || input.state_root || options.stateRoot || options.state_root || `${projectRoot}/.yolo`);
+  const mode = acceptanceMode(input, options);
   const resolver = input.resolver || resolveProjectContext({
     projectRoot,
     stateRoot,
@@ -177,6 +332,9 @@ export function buildAcceptanceReport(input = {}, options = {}) {
         projectRoot,
         stateRoot,
         resolver,
+        prd,
+        requiredPlatform: input.requiredPlatform || input.required_platform || options.requiredPlatform || options.required_platform,
+        platform: input.platform || options.platform,
         execute: input.executeAdapter === true || input.execute_adapter === true || options.executeAdapter === true || options.execute_adapter === true,
         allowAdapterCommands: input.allowAdapterCommands === true || input.allow_adapter_commands === true || options.allowAdapterCommands === true || options.allow_adapter_commands === true,
       })
@@ -195,6 +353,7 @@ export function buildAcceptanceReport(input = {}, options = {}) {
     acceptanceCriteriaIssues(prd, issues);
   }
   runtimeEvidenceIssues(runReport, issues);
+  adapterEvidenceIssues(adapterEvidence, issues);
   evidenceLineageIssues({ prdPath, runReport, reviewReport }, issues);
   reviewIssues(reviewReport, runReport, issues);
   const ui = prd ? uiEvidenceIssues({ prd, uiEvidence, resolver }, issues) : { ui_task_count: 0 };
@@ -202,7 +361,34 @@ export function buildAcceptanceReport(input = {}, options = {}) {
     pushIssue(issues, "P1", blocker.code || "RESOLVER_BLOCKED", blocker.message || "Resolver blocked acceptance.");
   }
 
-  const summary = summarizeIssues(issues);
+  let summary = summarizeIssues(issues);
+  const approvalPath = approvalArtifactPath({ input, options, stateRoot });
+  const releaseMode = RELEASE_ACCEPTANCE_MODES.has(mode);
+  const releaseWarnings = issues.filter((issue) => issue.level === "P2" || issue.level === "human_review");
+  const warningApproval = approvalFromArtifact(approvalPath, {
+    prd_path: prdPath ? resolve(prdPath) : "",
+    mode,
+    warning_count: releaseWarnings.length,
+    warning_digest: warningApprovalDigest({ prdPath, mode, warnings: releaseWarnings }),
+  });
+  if (releaseMode && summary.p1 === 0 && summary.p0 === 0 && releaseWarnings.length > 0 && !warningApproval.approved) {
+    const invalidReasons = warningApproval.invalid_reasons || [];
+    for (const reason of invalidReasons) {
+      pushIssue(issues, "P1", reason.code || "ACCEPTANCE_WARNING_APPROVAL_INVALID", reason.message || "Ship/release approval artifact is invalid.", {
+        approval_artifact: warningApproval.artifact_path || resolve(approvalPath),
+        mode,
+        human_needed: true,
+      });
+    }
+    pushIssue(issues, "P1", "ACCEPTANCE_WARNING_APPROVAL_MISSING", "Ship/release acceptance warnings require an approved human-review artifact.", {
+      approval_artifact: warningApproval.artifact_path || resolve(approvalPath),
+      warning_count: releaseWarnings.length,
+      warning_digest: warningApproval.expected.warning_digest,
+      mode,
+      human_needed: true,
+    });
+    summary = summarizeIssues(issues);
+  }
   const status = summary.p0 > 0 || summary.p1 > 0 ? "blocked" : summary.p2 > 0 || summary.human_review > 0 ? "warning" : "pass";
   const report = {
     schema_version: ACCEPTANCE_REPORT_SCHEMA_VERSION,
@@ -214,8 +400,16 @@ export function buildAcceptanceReport(input = {}, options = {}) {
     project_root: projectRoot,
     state_root: stateRoot,
     prd_path: prdPath ? resolve(prdPath) : "",
+    mode,
     issue_summary: summary,
     issues,
+    warning_approval: {
+      required: releaseMode && releaseWarnings.length > 0,
+      approved: warningApproval.approved,
+      artifact_path: warningApproval.artifact_path || (releaseMode ? resolve(approvalPath) : ""),
+      expected: warningApproval.expected,
+      invalid_reasons: warningApproval.invalid_reasons || [],
+    },
     resolver,
     adapter_evidence: adapterEvidence,
     ui,
@@ -263,12 +457,36 @@ export function formatAcceptanceReportText(report = {}) {
 
 export function runYoloAcceptCli(argv = process.argv.slice(2), io = {}) {
   const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
   const json = argv.includes("--json");
   const noWrite = argv.includes("--no-write");
-  const prdPath = argv.find((arg) => !arg.startsWith("--"));
+  const mode = argv.includes("--ship") ? "ship" : argv.includes("--release") ? "release" : "accept";
+  const approvalIndex = argv.findIndex((arg) => arg === "--approval-artifact" || arg === "--approval" || arg.startsWith("--approval-artifact=") || arg.startsWith("--approval="));
+  const approvalArg = approvalIndex >= 0 ? readArgValue(argv, approvalIndex).value : undefined;
+  const cwdArg = argv.find((arg) => arg.startsWith("--cwd="));
+  const cwdIndex = argv.indexOf("--cwd");
+  const projectRoot = resolve(
+    cwdArg ? cwdArg.split("=").slice(1).join("=") : cwdIndex >= 0 && argv[cwdIndex + 1] ? argv[cwdIndex + 1] : io.cwd || process.cwd(),
+  );
+  const valueFlags = new Set(["--cwd", "--approval", "--approval-artifact"]);
+  const prdPath = argv.find((arg, index) => !arg.startsWith("--") && !valueFlags.has(argv[index - 1]));
+  const resolvedPrdPath = prdPath ? resolve(projectRoot, prdPath) : prdPath;
+  const guard = inspectLifecycleGuard({
+    command: "yolo-accept",
+    projectRoot,
+    stateRoot: join(projectRoot, ".yolo"),
+    prdPath: resolvedPrdPath,
+  });
+  if (guard.status !== "pass") {
+    if (json) stdout.write(`${JSON.stringify(guard, null, 2)}\n`);
+    else stderr.write(`${formatLifecycleGuardText(guard)}\n`);
+    return 2;
+  }
   const report = buildAcceptanceReport({
-    prdPath,
-    projectRoot: io.cwd || process.cwd(),
+    prdPath: resolvedPrdPath,
+    projectRoot,
+    mode,
+    approvalArtifact: approvalArg,
     writeLifecycle: !noWrite,
   }, { learnFailures: true });
   if (json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);

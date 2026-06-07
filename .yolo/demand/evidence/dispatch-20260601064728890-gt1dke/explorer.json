@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "The YOLO demand evidence dispatch system supports WebFetch/WebSearch for external research and enforces scope separation between external and project evidence through schema validation and readiness blocking.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES set defines the four allowed evidence scopes: project, external, user, unknown",
+      "why": "Establishes the core schema contract for evidence scope classification."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors() validates that every evidence record declares a valid scope; returns errors for invalid or missing scopes.",
+      "why": "Enforces scope declaration requirement at the evidence dispatch layer."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "275-276",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt instructions explicitly tell agents to use WebFetch/WebSearch for external research and mark those records as scope=external.",
+      "why": "Documents the intended usage pattern for external research tools within the evidence protocol."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() infers evidence scope from record fields; classifies records with http URLs as external and records with project_code, project_test, project_docs, project_config, project_log, or project_artifact source types as project.",
+      "why": "Provides automatic scope inference and normalization for evidence records."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() creates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker when evidence is only external/user/unknown for existing-project facts.",
+      "why": "Enforces the critical boundary that project facts cannot be proven by external evidence alone."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine explicitly states: 'external evidence can only serve as background research and cannot independently prove existing project fields, APIs, state machines, or data flows.'",
+      "why": "Product-level documentation of the scope separation requirement."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "678-758",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() integrates projectEvidenceBlockingIssues() and evidenceScopeDeclarationIssues() into the PRD readiness check.",
+      "why": "Shows how scope enforcement blocks PRD readiness when evidence requirements are not met."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If scope validation is bypassed or weakened, external research could be mistakenly accepted as project implementation facts.",
+    "If WebFetch/WebSearch tools are unavailable but external research is requested, agents may put external requests in missing instead of attempting with available tools."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The evidence dispatch implementation has robust scope separation: VALID_EVIDENCE_SCOPES enforces the schema, agent prompts instruct proper tool usage, and projectEvidenceBlockingIssues() creates readiness blockers when external evidence is used for project facts. The doctrine and code are aligned on the requirement that external evidence cannot prove project implementation details."
+  }
+}

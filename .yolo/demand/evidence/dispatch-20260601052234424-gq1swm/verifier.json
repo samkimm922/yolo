@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "blocked",
+  "completed": true,
+  "claim": "Cross-check verification failed due to invalid JSON output from cross-checker agent, preventing independent confirmation of explorer claims. Explorer evidence appears thorough but cannot be independently verified without cross-check.",
+  "confidence": "medium",
+  "evidence": [
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601052234424-gq1swm",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Cross-checker agent output file contains invalid JSON wrapped in markdown code blocks (```json...```)",
+      "why": "This confirms the cross-checker failure is due to output format error, not content disagreement."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Explorer evidence cites VALID_EVIDENCE_SCOPES definition at line 16",
+      "why": "Evidence record is specific and verifiable with line number."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Explorer evidence cites doctrine stating external evidence cannot prove target-project facts alone",
+      "why": "Documentation evidence supports the core claim about scope separation."
+    }
+  ],
+  "assumptions": [
+    "Explorer line number citations are accurate despite inability to independently verify all claims due to cross-checker failure",
+    "WebFetch/WebSearch tools function as documented in agent prompts when available"
+  ],
+  "risks": [
+    "Without successful cross-check, there is no independent verification of the explorer claim that acceptance criteria are already implemented",
+    "If any explorer evidence has incorrect line numbers or misinterpreted code, the claim may be weaker than stated",
+    "Cross-check JSON format error may recur if root cause in prompt or agent setup is not addressed"
+  ],
+  "missing": [
+    "Independent cross-check verification of explorer evidence due to cross-checker JSON output format failure",
+    "Verification that line numbers cited (16, 151-158, 273-276, 382-406, 408-412, 421-436, 513-530, 566-597) accurately correspond to claimed code elements",
+    "Verification that docs/yolo-demand-doctrine.md line 70 contains the cited doctrine text"
+  ],
+  "recommendation": "clarify",
+  "result": {
+    "verdict": "blocked",
+    "notes": "Cross-checker agent failed with EVIDENCE_AGENT_INVALID_JSON error (output wrapped in markdown code blocks instead of pure JSON). Evidence policy requires cross_check for high-risk facts. Explorer evidence is thorough with 10 records, specific paths, and line numbers, but independent verification did not complete. Blocker should remain until cross-check succeeds or evidence policy is reconsidered. Root cause of JSON format error needs investigation before retry."
+  }
+}

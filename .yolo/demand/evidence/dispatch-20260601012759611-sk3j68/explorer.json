@@ -1,0 +1,191 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements a harness boundary audit mechanism that detects project file mutations by evidence agents and converts violations into PRD readiness blockers.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() captures SHA-256 digests of all project files, excluding allowed write roots",
+      "why": "This is the core boundary enforcement mechanism that records the before-state of project files."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "110-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after snapshots to detect added, modified, or deleted files",
+      "why": "This function detects any mutations that occurred during agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "468-512",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime() builds boundary snapshots before agent execution (line 511)",
+      "why": "Establishes the baseline for detecting mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "561-567",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "After agent execution, buildBoundarySnapshot() creates the after-state and diffBoundarySnapshots() detects changes",
+      "why": "This is where mutations are actually detected and recorded."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "563-567",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations set project_mutation to 'violated' and record all changes with paths and change types",
+      "why": "The boundary audit results are structured into the dispatch result."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "580-592",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations are converted to blockers with code BOUNDARY_PROJECT_MUTATION, and readiness.prd_ready is forced to false",
+      "why": "This is how boundary violations block PRD readiness even if agents return positive results."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "238-247",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceDispatchPlan() declares execution_policy with project_mutation: 'forbidden' and lists allowed_write_roots",
+      "why": "The dispatch plan declares the boundary contract upfront before any agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "17",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES enforces that evidence records declare scope as project, external, user, or unknown",
+      "why": "This prevents evidence agents from omitting scope declarations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-156",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors() validates that every evidence record has a valid scope declaration",
+      "why": "This validation ensures agents cannot skip scope requirements."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "403-415",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult() applies evidence scope validation and blocks results with missing scope via EVIDENCE_SCOPE_REQUIRED",
+      "why": "Agents that return evidence without scope are blocked during result normalization."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines required fields including evidence with scope property",
+      "why": "The schema enforces scope as a required part of the evidence contract."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues() detects evidence records without declared scope and returns EVIDENCE_SCOPE_REQUIRED blockers",
+      "why": "This is the validation layer that checks agent outputs for compliance."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() checks that project-scoped evidence includes repo-relative paths, and returns blockers if not",
+      "why": "Project facts must have concrete file locators, not just scope declarations."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "710-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() validates that evidence agents completed with proper scope declarations and project locators",
+      "why": "PRD readiness requires evidence agents to pass all scope and locator checks."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS define explorer, cross-checker, and verifier protocols with writes_code: false",
+      "why": "Evidence agents are declared as non-mutating by protocol contract."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation() constructs provider CLI invocations for codex, custom, and claude providers",
+      "why": "This shows how providers are invoked with configurable tool profiles."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "111-203",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "spawnProviderPrompt() spawns provider processes, feeds prompts via stdin, and captures stdout/stderr with timeout support",
+      "why": "This is the core provider spawning mechanism that evidence agents use."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "257-324",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt() generates agent prompts that declare allowed artifact roots and forbid target project file modification",
+      "why": "Agents are explicitly instructed in their prompts about boundary constraints."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "367-400",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test: 'boundary blocks project file mutation even when agent results pass' verifies that unexpected writes produce BOUNDARY_PROJECT_MUTATION blockers",
+      "why": "This test confirms the boundary audit blocks mutations even when agents return positive results."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "402-438",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test: 'git-backed boundary detects untracked project mutations' verifies that git ls-files detects added files outside allowed roots",
+      "why": "This test confirms boundary detection works with git-backed file discovery."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "509-544",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test: 'agent evidence without explicit scope is blocked during normalization' verifies EVIDENCE_SCOPE_REQUIRED blocks agents",
+      "why": "This test confirms the scope requirement is enforced during result normalization."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If the boundary audit has false positives (e.g., generated files in excluded dirs), valid evidence dispatches could be blocked",
+    "If agents find a way to bypass the boundary audit (e.g., through indirect side effects), project mutations could go undetected",
+    "If git file discovery is not available in all environments, fallback to walkFiles() may behave differently"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The boundary audit mechanism is fully implemented with before/after snapshots, git-backed file discovery, violation detection, blocker conversion, and artifact persistence. Evidence scope validation is enforced at multiple layers. PRD readiness is blocked on boundary violations regardless of agent results."
+  }
+}

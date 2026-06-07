@@ -1,0 +1,99 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch already implements JSON drift repair (parseJsonCandidate), JSON extraction with fallback (extractJsonObject), invalid JSON handling with EVIDENCE_AGENT_INVALID_JSON error code (normalizeAgentResult), and records repairs in provider_runs.json_repaired. Invalid JSON fails closed and blocks PRD readiness.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate repairs minor Claude JSON drift: line ranges, backslash escapes, empty-quoted keys, trailing commas",
+      "why": "Implements the repair strategy for recoverable JSON formatting issues"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "348-368",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "extractJsonObject tries direct parse, markdown code block extraction, and object slice extraction",
+      "why": "Provides fallback strategies for extracting JSON from various output formats"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-421",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON error code for unparsable JSON and sets completed=false",
+      "why": "Implements fail-closed behavior for unrecoverable JSON errors"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "558-559",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Provider run records json_repaired boolean and parse_error string in provider_runs array",
+      "why": "Tracks which agent outputs required repair and why parsing failed"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "574-598",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Readiness inspection uses evidence results and boundary violations to determine final PRD readiness",
+      "why": "Invalid JSON results propagate to readiness blockers"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "599-604",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Final result.status and result.code are set based on readiness.prd_ready",
+      "why": "Invalid JSON blocks readiness and sets final dispatch status to blocked"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test repairs minor Claude JSON key drift and records the repair via json_repaired field",
+      "why": "Verifies repair behavior and repair tracking work as intended"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test invalid agent JSON fails closed with explicit EVIDENCE_AGENT_INVALID_JSON blocker code",
+      "why": "Verifies fail-closed behavior for unrecoverable JSON errors"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "605-640",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test agent evidence without explicit scope is blocked during normalization",
+      "why": "Verifies validation blocks invalid agent results"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "642-685",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test agent conflict remains a readiness blocker after dispatch",
+      "why": "Verifies blockers propagate correctly to readiness status"
+    }
+  ],
+  "assumptions": [],
+  "risks": [],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All acceptance criteria are already implemented and tested: minor drift is repaired and recorded, invalid JSON returns EVIDENCE_AGENT_INVALID_JSON, and PRD readiness is blocked on errors."
+  }
+}

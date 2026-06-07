@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence from explorer and cross-checker is sufficient to support PRD readiness. No assumptions are presented as facts, all evidence paths are usable with exact file locations, and scope separation between project facts and external research is enforced at schema, prompt, validation, and readiness gate layers.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES Set enforces four valid scopes",
+      "why": "Schema-level constraint prevents invalid scope values."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "340-344",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard-wires project facts require project-scoped paths and external research must be scope=external",
+      "why": "Prompt-level instruction prevents agents from mixing scopes."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues blocks PRD readiness when project facts lack project-scoped path evidence",
+      "why": "Runtime readiness gate prevents invalid claims from passing."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70-71",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine explicitly forbids external evidence proving project facts",
+      "why": "Product-level contract documents intended behavior."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "479-490",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates scope field and blocks invalid/missing scopes",
+      "why": "Runtime validation catches malformed agent results."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots detect project mutations",
+      "why": "Boundary audit prevents target project modification."
+    },
+    {
+      "url": "https://example.com",
+      "scope": "external",
+      "source": "external_web",
+      "summary": "External web fetch confirmed working with scope=external",
+      "why": "Verifies external research tools work as designed."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope infers scope from structure to separate external from project evidence",
+      "why": "Scope inference logic supports enforcement."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "663-668",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "externalResearchBlockers enforces external research requests produce external evidence",
+      "why": "Ensures demand requirements are met."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If agent providers systematically ignore scope field instructions, external evidence could be misclassified as project facts"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker agree on all claims with no conflicts. Both agents returned empty assumptions arrays, meaning no assumptions are masquerading as facts. All 25 evidence records across both agents have usable paths with exact line numbers. Scope separation is enforced at five layers: schema definition, prompt instructions, runtime validation, readiness gates, and product doctrine. External research tools work and produce external-scoped evidence. Acceptance criteria are met: agents use web tools as external evidence, mark them scope=external, and require project-scoped paths for target-project facts."
+  }
+}

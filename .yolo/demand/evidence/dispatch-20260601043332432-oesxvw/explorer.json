@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence schema, readiness contract, and tests currently implement scope separation between project, external, user, and unknown evidence, with validation requiring project-scoped evidence for existing-project facts.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION explicitly defines scope field as project | external | user | unknown with requirement that project facts need project-scoped evidence.",
+      "why": "Primary schema definition for evidence results shows scope field is required and documented."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES set explicitly validates only four scope values: project, external, user, unknown.",
+      "why": "Shows valid scope values are enforced and checked."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function implements scope inference logic with explicit checks for project vs external vs user vs unknown scope classification.",
+      "why": "Core implementation of scope classification logic shows detailed scope separation."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function enforces that existing-project facts require project-scoped evidence with concrete file locators, generating PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker if only external/unknown evidence is present.",
+      "why": "Critical validation logic preventing external evidence from satisfying project facts."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope and evidenceRecordHasProjectLocator functions validate that project-scoped evidence must have concrete repo-relative paths, not external URLs.",
+      "why": "Shows project evidence requires concrete locators, not URLs."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test external-only evidence cannot satisfy existing project facts verifies that external evidence correctly generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker.",
+      "why": "Test proves external evidence is rejected for project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "433-478",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test external URLs cannot be relabeled as project evidence verifies that external URLs marked as project scope correctly generate PROJECT_EVIDENCE_PATH_REQUIRED blocker.",
+      "why": "Test prevents mislabeling external URLs as project evidence."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "480-524",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test evidence records must declare valid scope explicitly verifies that missing scope declaration generates EVIDENCE_SCOPE_REQUIRED blocker.",
+      "why": "Test enforces explicit scope declaration requirement."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "387-431",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test project evidence requires a concrete project locator verifies that project-scoped evidence without paths generates PROJECT_EVIDENCE_PATH_REQUIRED blocker.",
+      "why": "Test enforces project evidence must have concrete locators."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "144-202",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test cross-check PRD readiness requires every evidence agent result verifies that all three agents (explorer, cross-checker, verifier) must complete with evidence before PRD is ready.",
+      "why": "Test verifies evidence agent completeness requirement."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If claim is wrong, agents could cite web research or user claims as proof of target project implementation, leading to incorrect PRD specifications.",
+    "If scope validation is bypassed or schema is not enforced, evidence dispatch could allow external research to satisfy project-fact requirements."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence schema, prompt, readiness contract, and tests all implement scope separation with validation. Project facts require project-scoped evidence with concrete locators; external evidence is explicitly blocked from satisfying project facts via multiple validation functions and tests."
+  }
+}

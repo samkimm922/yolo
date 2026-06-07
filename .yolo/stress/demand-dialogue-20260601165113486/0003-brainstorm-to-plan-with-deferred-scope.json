@@ -1,0 +1,59 @@
+{
+  "iteration": 3,
+  "scenario": "brainstorm-to-plan-with-deferred-scope",
+  "expected": "executable",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601165113486/fixtures/0003-brainstorm-to-plan-with-deferred-scope",
+  "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601165113486/fixtures/0003-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md",
+  "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601165113486/fixtures/0003-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.chain.json",
+  "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601165113486/fixtures/0003-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope-turn-3.prd.json",
+  "blocked_path": null,
+  "yolo": {
+    "no_premature_prd": true,
+    "final_class_ok": true,
+    "check_status": "pass",
+    "turn_count": 3,
+    "turn_expectations_met": 3,
+    "blocker_codes": [
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "EXECUTION_SCOPE_PRESENT",
+      "USER_APPROVAL_PRESENT"
+    ]
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "correct_final_class": true,
+      "conversation_realistic": true,
+      "no_premature_prd": true,
+      "executable": true,
+      "score": 98,
+      "hard_failures": [],
+      "warnings": [],
+      "dimensions": {
+        "clarification_quality": 10,
+        "project_fact_grounding": 10,
+        "stage_transition": 10,
+        "plan_convergence": 10,
+        "prd_executability": 10,
+        "deadlock_avoidance": 10,
+        "rework_risk": 9
+      }
+    },
+    "stdout": "",
+    "stderr": ""
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T16:53:17.091Z",
+  "ended_at": "2026-06-01T16:54:20.288Z",
+  "duration_ms": 63197
+}

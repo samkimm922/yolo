@@ -1,0 +1,143 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer, cross-checker, and verifier cite project paths and boundary audit keeps PRD readiness blocked on missing evidence or target-project mutation.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "98-122",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() captures full project filesystem state as SHA-256 digests before agent execution, excluding allowed write roots.",
+      "why": "Boundary audit requires pre-execution baseline to detect any target-project mutation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "112-122",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares pre/post digests to detect added, modified, or deleted files.",
+      "why": "Change detection identifies violations that must block PRD readiness."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "591-647",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime captures boundary snapshots before/after each agent, then builds diff blocking result.",
+      "why": "Execution loop ensures boundary audit happens for every dispatched agent."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "660-671",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary mutations become BOUNDARY_PROJECT_MUTATION blockers; external research requests without external evidence become EXTERNAL_RESEARCH_EVIDENCE_REQUIRED blockers.",
+      "why": "Blockers prevent PRD readiness when boundary audit detects violations or missing evidence."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() classifies evidence records as project/external/user/unknown based on path, url, and source fields.",
+      "why": "Scope validation ensures agents declare evidence sources correctly."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope() and evidenceRecordHasProjectLocator() validate that project-scope evidence includes repo-relative paths.",
+      "why": "Project facts require concrete path locators; URL-only evidence is treated as external."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE or PROJECT_EVIDENCE_PATH_REQUIRED blockers when evidence lacks project scope or path.",
+      "why": "Blockers prevent PRD readiness when agents fail to cite project paths for project facts."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "134-150",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "sanitizeMissing() filters out non-missing status text but keeps actionable items; isNonMissingStatusItem() prevents status notes from masking gaps.",
+      "why": "Missing field validation keeps PRD blocked on unresolved evidence gaps."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "298-307",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy boundary block forbids project_mutation and allows writes only to output_dir; agent_instruction is boundary_controlled.",
+      "why": "Execution policy enforces non-editing boundary for evidence agents by default."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "336-338",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rule: boundary forbids modifying target project files; allowed artifact root is output_dir.",
+      "why": "Hard rules explicitly instruct agents to avoid project mutations."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "717-725",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() generates EVIDENCE_AGENT_RESULT_REQUIRED blockers when required evidence agents have not completed.",
+      "why": "Blockers prevent PRD readiness until explorer/cross-checker/verifier complete."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "550-585",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime() requires executeAgents and allowAgentDispatch flags before running agents; otherwise returns dry_run or blocked status.",
+      "why": "Explicit authorization prevents accidental execution during evidence gathering."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "673-680",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime blockers are merged into readiness.blockers[] and set prd_ready=false, resulting in blocked status and DEMAND_EVIDENCE_DISPATCH_BLOCKED code.",
+      "why": "Blockers from boundary audit and missing evidence directly prevent PRD readiness."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation() constructs Claude CLI args with -p, --permission-mode=bypassPermissions, --no-session-persistence for agent dispatch.",
+      "why": "Provider invocation configures full Claude agent execution with bypassed permissions for evidence tasks."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "728-732",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence scope declaration issues generate EVIDENCE_SCOPE_REQUIRED blockers when records lack valid scope field.",
+      "why": "Blockers prevent agents from presenting evidence without declaring its source scope."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Boundary snapshot may miss filesystem changes if git ls-files is incomplete or excluded directories have moved files.",
+    "Evidence agents might still mutate project files via external tooling if provider tool permissions are misconfigured.",
+    "sanitizeMissing() regex patterns might misclassify complex status text as missing when it is actually informational."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence dispatch and router implementation comprehensively support boundary audit, evidence scope validation, and blocker generation for missing evidence and project mutations. All three agent roles (explorer, cross-checker, verifier) require path citations for project facts, and boundary violations directly block PRD readiness via BOUNDARY_PROJECT_MUTATION and PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE error codes."
+  }
+}

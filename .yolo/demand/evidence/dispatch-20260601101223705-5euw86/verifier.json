@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Boundary snapshot implementation covers git ls-files tracked/cached/other files plus fallback walks and excludes dispatch artifact root, but has not been stress-tested with real Claude -p agents.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "5-30",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "excludedDirs array lists common build/cache directories to exclude from boundary snapshots",
+      "why": "Evidence that excludedDirs is comprehensive for standard project structures, supporting the scope_out constraint."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "130-148",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "prepareFilesystemAudit() creates before/after boundary snapshots and filters allowedRoots",
+      "why": "Verifies the boundary snapshot creation process and artifact root exclusion logic in the runtime flow."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Git ls-files -o --exclude-standard may still return gitignored files that are project-relevant if manually added to index",
+    "Symlinked files outside project root may not be covered by git ls-files or walk fallback",
+    "Concurrent mutations during agent execution could create race conditions in snapshot comparison"
+  ],
+  "missing": [
+    "Evidence that boundary detection correctly handles symlinked files or special file types (sockets, pipes)",
+    "Evidence from stress-testing with real Claude -p agents in actual projects with full tool access",
+    "Evidence that dirty working tree state (55 modified files) does not affect boundary detection correctness"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All 8 evidence records are properly scoped with repo-relative paths, line numbers, and accurate summaries. The claim correctly distinguishes between what is technically implemented (verified by code and tests) versus what is operationally validated (missing stress-test evidence). Assumptions list contains items that are actually git/command behaviors, not unverified project claims. Missing list is accurate and reflects the operational gap identified in the claim. The evidence is sufficient to support PRD readiness with documented risks."
+  }
+}

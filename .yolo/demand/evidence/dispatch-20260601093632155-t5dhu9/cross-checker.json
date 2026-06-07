@@ -1,0 +1,135 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent cross-check confirms YOLO demand evidence dispatch implements provider-specific configuration with boundary enforcement and tool profile controls. Explorer claim is substantially correct with one clarification needed on evidence scope enforcement timing.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "523-537",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider normalization in executionConfig: sets claude_tools=default, claude_permission_mode=bypassPermissions, claude_no_session_persistence=true, and normalizes agent_tool_profile to research/full/boundary.",
+      "why": "Directly confirms provider-specific configuration that prevents cross-provider contamination."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "520-521",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider checks if model contains 'claude' string and clears it to prevent model contamination from config inheritance.",
+      "why": "Confirms cross-provider model leakage protection mechanism."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "538-540",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Custom provider receives custom_sandbox=boundary to enforce write restrictions under harness boundary.",
+      "why": "Verifies custom provider boundary enforcement."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "43-60",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider invocation uses isolated command structure: codex exec --cd --sandbox -c approval_policy --output-last-message, separate from Claude flags.",
+      "why": "Confirms provider invocation isolation prevents command flag cross-contamination."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider invocation uses -p flag with Claude-specific arguments: --model, --permission-mode, --settings, --tools, --allowedTools, --no-session-persistence.",
+      "why": "Confirms Claude provider receives only Claude-specific configuration."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot creates SHA256 digests of all project files excluding allowed write roots; diffBoundarySnapshots compares before/after to detect mutations.",
+      "why": "Verifies boundary detection mechanism is implemented as claimed."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "317-400",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt generates role-specific prompts with explicit boundary rules: 'do not modify target project files', 'allowed artifact/scratch root', evidence scope requirements.",
+      "why": "Confirms agent prompt engineering is the first line of boundary defense."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "640-696",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-execution boundary diff generates BOUNDARY_PROJECT_MUTATION blockers for any changes outside allowed_write_roots; external research demand without external evidence generates EXTERNAL_RESEARCH_EVIDENCE_REQUIRED blockers.",
+      "why": "Confirms post-execution validation is the enforcement layer, not pre-execution restriction."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "200-234",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'codex dispatch does not inherit a claude default model' asserts provider=codex, undefined codex_sandbox/codex_approval, and no Claude model contamination in runOptions.config.ai.",
+      "why": "Test evidence confirms provider isolation is verified behavior."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "495-528",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' simulates agent write, verifies blocked status, violated boundary, and BOUNDARY_PROJECT_MUTATION blocker.",
+      "why": "Confirms boundary enforcement catches mutations regardless of agent success."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "443-493",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult sets status=blocked, recommendation=block, and error_code=EVIDENCE_SCOPE_REQUIRED when evidenceScopeErrors finds missing scope declarations.",
+      "why": "Clarifies that evidence scope validation happens during result normalization, not before recording results."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope normalizes evidence scope declarations with fallback inference from path/url/source, handling project/repo/codebase→project, external/web/internet→external, user/human→operator.",
+      "why": "Confirms evidence scope classification logic is more nuanced than simple validation."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS define explorer, cross-checker, and verifier roles with writes_code=false as protocol requirement.",
+      "why": "Verifies protocol-level write prohibition exists as claimed."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "767-802",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'agent evidence without explicit scope is blocked during normalization' verifies agent results are recorded with status=blocked and error_code=EVIDENCE_SCOPE_REQUIRED.",
+      "why": "Test evidence confirms scope validation timing: records are normalized and blocked, not rejected outright."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If git ls-files misses untracked files or walkFiles fails to enumerate all project files, boundary snapshot may not detect mutations outside git tracking.",
+    "If allowed_write_roots configuration is incorrect or output_dir resolves outside expected bounds, mutations could be incorrectly allowed.",
+    "If agentToolProfile normalization allows 'full' without verifying allowFullAgentTools, tool capability could escalate beyond boundary intent."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Cross-check independently confirms provider-specific configuration, boundary enforcement, and tool profile controls. All 13 evidence points from explorer are verified. One clarification: evidence scope validation happens during normalizeAgentResult (post-processing), not as a pre-recording gate, but the practical effect (blocked results with EVIDENCE_SCOPE_REQUIRED) is the same. Architecture is sound with defense-in-depth: provider isolation, boundary snapshots, post-execution validation, and comprehensive test coverage."
+  }
+}

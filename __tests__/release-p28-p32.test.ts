@@ -14,6 +14,7 @@ import {
 import { runPiExecutionDrillGate } from "../src/release/pi-execution-drill.js";
 import { runPublicBetaEvidenceGate as runPublicBetaEvidenceGateDirect } from "../src/release/public-beta-evidence.js";
 import { runRealProjectDogfoodGate } from "../src/release/real-project-dogfood.js";
+import { buildDogfoodMatrixEvidence } from "../src/release/dogfood-matrix.js";
 import { runRuntimeBoundaryDecisionGate } from "../src/release/runtime-boundary-decision.js";
 
 const tmpRoots = [];
@@ -203,6 +204,7 @@ describe("P28-P32 release evidence gates", () => {
       planEvidence: dogfoodEvidence("plan"),
       checkEvidence: dogfoodEvidence("check"),
       reviewEvidence: dogfoodEvidence("review"),
+      dogfoodMatrixEvidence: buildDogfoodMatrixEvidence(),
     });
     assert.equal(passed.status, "pass", JSON.stringify(passed.blockers, null, 2));
     assert.equal(passed.guarantees.code_edited, false);

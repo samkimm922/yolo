@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer and cross-checker evidence is sufficient to support PRD readiness; no assumptions are presented as facts and all missing data is properly reflected.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "previous_evidence_results",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Explorer evidence contains 12 records with explicit paths, line numbers, and source declarations; assumptions array is empty.",
+      "why": "Confirms explorer did not present assumptions as facts."
+    },
+    {
+      "path": "previous_evidence_results",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Cross-checker evidence contains 13 records independently verifying explorer claims; all 25 combined evidence records include scope, path/line, source, summary, and why fields.",
+      "why": "Confirms evidence structure compliance and usability."
+    },
+    {
+      "path": "previous_evidence_results",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Cross-checker assumptions array contains 1 item about provider-specific implementation behavior, properly categorized as unverified assumption rather than fact.",
+      "why": "Confirms cross-checker isolated assumption instead of presenting it as evidence."
+    },
+    {
+      "path": "previous_evidence_results",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Explorer missing array contains 3 items; cross-checker missing array contains 4 items including external research, security validation, and stress testing gaps.",
+      "why": "Confirms unresolved missing data is explicitly tracked."
+    },
+    {
+      "path": "current_demand_state",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Demand readiness blockers list contains 3 evidence agent result requirements matching explorer, cross-checker, and verifier roles.",
+      "why": "Confirms PRD readiness gate requires all three evidence agents to complete."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "98-122",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots implementation match both evidence summaries, confirming path accuracy.",
+      "why": "Spot verification of evidence path usability."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "43-74",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation provider-specific command construction matches both evidence summaries.",
+      "why": "Spot verification of evidence source accuracy."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "214-217, 251-259, 522-524",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test assertions at cited line numbers confirm provider isolation and boundary enforcement claims.",
+      "why": "Spot verification of test evidence usability."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "External research tool availability and custom provider command security remain unverified; these gaps are properly tracked in missing arrays rather than silently ignored.",
+    "Real-world stress testing against dirty working tree is still pending; this risk is explicitly documented in missing data."
+  ],
+  "missing": [
+    "External research tool availability verification with live web/fetch/search capabilities (tracked in both explorer and cross-checker missing arrays).",
+    "Custom provider command interpolation security validation (tracked in cross-checker missing).",
+    "Real-world stress test evidence against dirty working tree with actual Claude -p agents (tracked in both missing arrays).",
+    "Provider-specific option compatibility validation (tracked in cross-checker missing)."
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker evidence is properly structured with no assumptions presented as facts. All 25 evidence records include required fields (scope, path/line, source, summary, why). Missing data gaps are explicitly reflected in missing arrays rather than promoted to facts. PRD readiness blockers are limited to evidence agent completion requirements, which are satisfied by this verification. Remaining gaps (external research, security validation, stress testing) are properly documented as missing rather than silently assumed."
+  }
+}

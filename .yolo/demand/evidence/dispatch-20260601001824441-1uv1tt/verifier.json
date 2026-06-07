@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Meta-verification confirms: explorer and cross-checker evidence is sufficient for PRD readiness with documented assumptions; no assumptions are presented as facts; all evidence has valid source paths; missing data and risks are clearly documented; blockers remain for runtime verification integration tests but these are documented as missing rather than hidden.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "14-19",
+      "source": "code",
+      "summary": "DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS verified by both explorer and cross-checker with identical line references.",
+      "why": "Confirms primary source is accessible and correctly identified by multiple agents."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-98",
+      "source": "code",
+      "summary": "buildProviderInvocation Claude argument construction verified by both agents with consistent line ranges.",
+      "why": "Confirms provider adapter implementation is cross-checked and path-verified."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52-75",
+      "source": "code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS verified with writes_code:false constraint.",
+      "why": "Confirms protocol-level read-only contract is documented in code."
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260531234442068-lun22q/dispatch.json",
+      "line": "1-961",
+      "source": "config",
+      "summary": "Previous dispatch execution result shows read-only policy was enforced in practice.",
+      "why": "Confirms evidence dispatch has executed with read-only policy historically."
+    },
+    {
+      "path": "explorer_evidence_result",
+      "line": "assumptions,risks,missing,recommendation",
+      "source": "evidence",
+      "summary": "Explorer result contains empty assumptions array, 3 documented risks, 3 documented missing items, cross_check recommendation.",
+      "why": "Confirms explorer separated assumptions from facts and documented gaps."
+    },
+    {
+      "path": "cross-checker_evidence_result",
+      "line": "assumptions,risks,missing,recommendation",
+      "source": "evidence",
+      "summary": "Cross-checker result contains 4 documented assumptions, 4 documented risks, 4 documented missing items, cross_check recommendation.",
+      "why": "Confirms cross-checker explicitly separated assumptions from evidence and identified additional gaps."
+    },
+    {
+      "path": "explorer_evidence_result",
+      "line": "result.verdict",
+      "source": "evidence",
+      "summary": "Explorer verdict: pass with notes requiring cross-checker confirmation.",
+      "why": "Confirms explorer correctly deferred to cross-check for independent verification."
+    },
+    {
+      "path": "cross-checker_evidence_result",
+      "line": "result.verdict",
+      "source": "evidence",
+      "summary": "Cross-checker verdict: pass with notes about runtime verification needed.",
+      "why": "Confirms cross-checker confirmed source verification while flagging runtime gap."
+    }
+  ],
+  "assumptions": [
+    "The evidence paths and line numbers in explorer and cross-checker results are correct and files have not changed since evidence collection.",
+    "The provider-adapter buildProviderInvocation function is the only code path from evidence-dispatch to Claude CLI invocation.",
+    "The previous dispatch result in .yolo/demand/evidence/ is representative of current evidence dispatch behavior."
+  ],
+  "risks": [
+    "If provider-adapter has additional undiscovered code paths that bypass Claude CLI argument construction, read-only enforcement may fail despite configuration evidence.",
+    "If evidence-dispatch.ts or provider-adapter.ts files have changed since explorer/cross-checker read them, the evidence may no longer match current code state.",
+    "If the DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS constant or executionConfig function is modified in the future, this verification becomes stale."
+  ],
+  "missing": [
+    "Integration tests that execute provider-adapter with real Claude CLI to verify --allowedTools and --disallowedTools prevent denied tool usage.",
+    "Runtime tests that spawn evidence agents and verify they cannot use Write, Edit, Bash, or other denied tools.",
+    "Documentation on Claude CLI --allowedTools and --disallowedTools enforcement semantics and error modes.",
+    "Comparison tests between codex provider --sandbox read-only and Claude provider read-only tool restrictions.",
+    "Tests that verify executionConfig cannot be bypassed or config.ai cannot be mutated after calling executionConfig.",
+    "Agent provider dispatch path verification to ensure provider-adapter is always used for evidence agent spawning."
+  ],
+  "recommendation": "clarify",
+  "result": {
+    "verdict": "pass",
+    "notes": "Meta-verification confirms: explorer and cross-checker properly separated assumptions from facts, provided valid source paths with line numbers, documented all missing items and risks transparently, and reached appropriate pass verdicts with cross_check recommendations. No assumptions are presented as facts. The evidence is sufficient for PRD readiness with the documented assumptions and missing items clearly acknowledged. The remaining blockers are integration tests for runtime verification, which are documented as missing rather than hidden."
+  }
+}

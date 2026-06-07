@@ -43,7 +43,17 @@ export function isFileAllowedByScope(filePath, scopeOrTargets = []) {
 }
 
 export function isBusinessLikeFile(filePath) {
-  return filePath.startsWith("src/") || filePath.startsWith("cloudfunctions/") || filePath.startsWith("config/");
+  return [
+    "src/",
+    "cloudfunctions/",
+    "config/",
+    "packages/",
+    "app/",
+    "lib/",
+    "prisma/",
+    "migrations/",
+    "public/",
+  ].some((prefix) => filePath.startsWith(prefix));
 }
 
 export function parseGitStatusEntries(output = "") {
@@ -64,14 +74,23 @@ export function parseGitNameStatusEntries(output = "") {
   }).filter((entry) => entry.path);
 }
 
-export function gitLines(cwd, args, { execFileSync = defaultExecFileSync } = {}) {
+function describeCommandFailure(error) {
+  const stderr = String(error?.stderr || "").trim();
+  const stdout = String(error?.stdout || "").trim();
+  return stderr || stdout || error?.message || String(error);
+}
+
+export function gitLines(cwd, args, { execFileSync = defaultExecFileSync, strict = true } = {}) {
   try {
     const output = execFileSync("git", ["-C", cwd, ...args], {
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
     }).replace(/\n+$/, "");
     return output ? output.split("\n").filter(Boolean) : [];
-  } catch {
+  } catch (error) {
+    if (strict) {
+      throw new Error(`git ${args.join(" ")} failed: ${describeCommandFailure(error)}`);
+    }
     return [];
   }
 }
@@ -369,6 +388,7 @@ export function cleanupTaskWorktree({
   log = () => {},
 } = {}) {
   const copiedFiles = [];
+  const outOfScopeSkipped = [];
   const allowedTargets = Array.isArray(allowedScope) ? allowedScope : (allowedScope?.targets || []);
   const insideGitWorkTree = isInsideGitWorkTree(wtPath, { execSync });
   const rootInsideGitWorkTree = isInsideGitWorkTree(rootDir, { execSync });
@@ -378,11 +398,11 @@ export function cleanupTaskWorktree({
     let allFilePaths = [];
 
     if (insideGitWorkTree) {
-      const dirtyEntries = parseGitStatusEntries(gitLines(wtPath, ["status", "--porcelain"], { execFileSync }).join("\n"));
+      const dirtyEntries = parseGitStatusEntries(gitLines(wtPath, ["status", "--porcelain"], { execFileSync, strict: true }).join("\n"));
       const committedEntries = baseRef
-        ? parseGitNameStatusEntries(gitLines(wtPath, ["diff", "--name-status", baseRef, "HEAD"], { execFileSync }).join("\n"))
+        ? parseGitNameStatusEntries(gitLines(wtPath, ["diff", "--name-status", baseRef, "HEAD"], { execFileSync, strict: true }).join("\n"))
         : [];
-      const untrackedEntries = gitLines(wtPath, ["ls-files", "--others", "--exclude-standard"], { execFileSync })
+      const untrackedEntries = gitLines(wtPath, ["ls-files", "--others", "--exclude-standard"], { execFileSync, strict: true })
         .map((path) => ({ path, isDeleted: false }));
 
       for (const { path, isDeleted } of [...dirtyEntries, ...committedEntries, ...untrackedEntries]) {
@@ -426,6 +446,7 @@ export function cleanupTaskWorktree({
         }
         if (isBusinessLikeFile(filePath) && !isFileAllowedByScope(filePath, allowedScope)) {
           outOfScopeSkippedCount++;
+          outOfScopeSkipped.push(filePath);
           log("BLOCK", `跳过越界文件: ${filePath}`);
           continue;
         }
@@ -473,8 +494,7 @@ export function cleanupTaskWorktree({
           }
           log("VERIFY", `合并验证通过: ${changedCopied.size}/${copiedFiles.length} 个本次复制文件有改动`);
         } catch (error) {
-          if (error.message.includes("worktree merge produced no diff")) throw error;
-          log("WARN", `合并验证: git diff 命令执行异常 (${error.message})`);
+          throw new Error(`worktree merge verification failed: ${describeCommandFailure(error)}`);
         }
       }
     }
@@ -494,5 +514,9 @@ export function cleanupTaskWorktree({
   }
   removePath(wtPath, { existsSync, rmSync, execSync });
 
+  Object.defineProperty(copiedFiles, "outOfScopeSkipped", {
+    value: outOfScopeSkipped,
+    enumerable: false,
+  });
   return copiedFiles;
 }

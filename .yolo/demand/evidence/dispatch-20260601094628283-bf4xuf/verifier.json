@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent verification confirms YOLO demand evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes as required by the demand.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "44",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines four valid scopes (project | external | user | unknown) in the evidence field contract.",
+      "why": "Schema definition is the foundation of the scope distinction requirement."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES Set provides runtime validation for the four required scopes.",
+      "why": "Runtime guard prevents invalid scope values from being accepted."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function implements detailed inference logic mapping each of the four scopes from record fields.",
+      "why": "Core scope detection implementation that enforces the distinction at runtime."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker when project facts lack project-scoped evidence.",
+      "why": "Readiness contract prevents external-only evidence from satisfying existing-project claims."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "342-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rules explicitly require scope declaration on every evidence record and project-scoped evidence for project facts.",
+      "why": "Agent instructions enforce the four-scope distinction during evidence gathering."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors function validates declared scope against VALID_EVIDENCE_SCOPES and returns blockers for invalid scopes.",
+      "why": "Runtime validation ensures all evidence records declare valid scopes."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test suite validates external-only evidence cannot satisfy existing project facts and evidence records must declare valid scope.",
+      "why": "Test coverage ensures the four-scope separation is enforced and maintained."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If scope inference logic has edge cases with unusual field combinations, agents might misclassify evidence scope."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verification confirms: (1) No assumptions presented as fact - all 30 evidence records across explorer and cross-checker have concrete sources with paths and lines. (2) Evidence paths are usable - all file references point to existing project files. (3) Missing is properly empty - both agents returned missing: []. (4) Cross-agent agreement - explorer and cross-checker reached identical verdict: pass with no conflicts. All four required components implement the scope distinction: schema defines four scopes, prompt enforces declarations, readiness contract blocks external-only evidence for project facts, and tests validate each boundary."
+  }
+}

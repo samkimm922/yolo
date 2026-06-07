@@ -1,0 +1,537 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.check.report.v1",
+  "status": "warning",
+  "code": "YOLO_CHECK_WARNING",
+  "summary": "YOLO check passed with warnings.",
+  "generated_at": "2026-06-01T12:05:17.535Z",
+  "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0016-service-field-existing/.yolo/prd-executability/service-field-existing.prd.json",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0016-service-field-existing",
+  "state_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0016-service-field-existing/.yolo",
+  "resolver": {
+    "schema_version": "1.0",
+    "schema": "yolo.pack.resolver.v1",
+    "status": "warning",
+    "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0016-service-field-existing",
+    "state_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0016-service-field-existing/.yolo",
+    "manifest_roots": [
+      "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0016-service-field-existing/.yolo/packs",
+      "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0016-service-field-existing/.yolo/adapters"
+    ],
+    "selected": {
+      "platform_adapter": {
+        "id": "unknown/custom",
+        "kind": "platform_adapter",
+        "status": "warning",
+        "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+        "capabilities": [],
+        "source_path": ""
+      },
+      "stack_adapter": {
+        "id": "unknown/custom",
+        "kind": "stack_adapter",
+        "status": "warning",
+        "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+        "capabilities": [],
+        "source_path": ""
+      },
+      "component_adapter": {
+        "id": "unknown/custom",
+        "kind": "component_adapter",
+        "status": "warning",
+        "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+        "capabilities": [],
+        "source_path": ""
+      },
+      "design_reference_pack": {
+        "id": "unknown/custom",
+        "kind": "design_reference_pack",
+        "status": "warning",
+        "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+        "capabilities": [],
+        "source_path": ""
+      },
+      "quality_rule_pack": {
+        "id": "unknown/custom",
+        "kind": "quality_rule_pack",
+        "status": "warning",
+        "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+        "capabilities": [],
+        "source_path": ""
+      },
+      "acceptance_adapter": {
+        "id": "unknown/custom",
+        "kind": "acceptance_adapter",
+        "status": "warning",
+        "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+        "capabilities": [],
+        "source_path": ""
+      }
+    },
+    "selected_packs": [
+      {
+        "id": "unknown/custom",
+        "kind": "design_reference_pack",
+        "status": "warning",
+        "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+        "capabilities": [],
+        "source_path": ""
+      },
+      {
+        "id": "unknown/custom",
+        "kind": "quality_rule_pack",
+        "status": "warning",
+        "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+        "capabilities": [],
+        "source_path": ""
+      }
+    ],
+    "selected_adapters": [
+      {
+        "id": "unknown/custom",
+        "kind": "platform_adapter",
+        "status": "warning",
+        "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+        "capabilities": [],
+        "source_path": ""
+      },
+      {
+        "id": "unknown/custom",
+        "kind": "stack_adapter",
+        "status": "warning",
+        "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+        "capabilities": [],
+        "source_path": ""
+      },
+      {
+        "id": "unknown/custom",
+        "kind": "component_adapter",
+        "status": "warning",
+        "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+        "capabilities": [],
+        "source_path": ""
+      },
+      {
+        "id": "unknown/custom",
+        "kind": "acceptance_adapter",
+        "status": "warning",
+        "reason": "No valid manifest was found; YOLO will not guess this project-specific context.",
+        "capabilities": [],
+        "source_path": ""
+      }
+    ],
+    "blockers": [],
+    "warnings": [
+      {
+        "code": "RESOLVER_UNKNOWN_CONTEXT",
+        "kind": "platform_adapter",
+        "message": "platform_adapter resolved to unknown/custom."
+      },
+      {
+        "code": "RESOLVER_UNKNOWN_CONTEXT",
+        "kind": "stack_adapter",
+        "message": "stack_adapter resolved to unknown/custom."
+      },
+      {
+        "code": "RESOLVER_UNKNOWN_CONTEXT",
+        "kind": "component_adapter",
+        "message": "component_adapter resolved to unknown/custom."
+      },
+      {
+        "code": "RESOLVER_UNKNOWN_CONTEXT",
+        "kind": "design_reference_pack",
+        "message": "design_reference_pack resolved to unknown/custom."
+      },
+      {
+        "code": "RESOLVER_UNKNOWN_CONTEXT",
+        "kind": "quality_rule_pack",
+        "message": "quality_rule_pack resolved to unknown/custom."
+      },
+      {
+        "code": "RESOLVER_UNKNOWN_CONTEXT",
+        "kind": "acceptance_adapter",
+        "message": "acceptance_adapter resolved to unknown/custom."
+      }
+    ],
+    "manifests": [],
+    "next_actions": [
+      "Continue with unknown/custom only if the user accepts missing project-specific packs."
+    ]
+  },
+  "task_surface_summary": {
+    "task_count": 2,
+    "ui_task_count": 0,
+    "ui_task_ids": []
+  },
+  "checks": [
+    {
+      "name": "adapter_readiness",
+      "status": "warning",
+      "summary": "No adapter manifest found; continuing for non-UI tasks.",
+      "blockers": [],
+      "warnings": [
+        {
+          "code": "ADAPTER_MANIFEST_MISSING",
+          "message": "Adapter manifest is missing; non-UI tasks may continue with a warning."
+        }
+      ],
+      "ui_task_count": 0,
+      "adapter_present": false,
+      "resolver_status": "warning"
+    },
+    {
+      "name": "prd_preflight",
+      "status": "pass",
+      "summary": "PRD preflight completed.",
+      "blockers": [],
+      "warnings": [],
+      "preflight": {
+        "status": "pass",
+        "ok": true,
+        "generated_at": "2026-06-01T12:05:17.534Z",
+        "file": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0016-service-field-existing/.yolo/prd-executability/service-field-existing.prd.json",
+        "schema": {
+          "ok": true,
+          "warnings": []
+        },
+        "contract": {
+          "status": "pass",
+          "blocks_execution": false,
+          "failure_count": 0,
+          "warning_count": 0,
+          "failures": [],
+          "warnings": []
+        },
+        "spec_governance": {
+          "status": "pass",
+          "blocks_execution": false,
+          "policy": {
+            "requireRequirements": true,
+            "requireDesign": true,
+            "requireEvidenceForTerminal": true
+          },
+          "blockers": [],
+          "warnings": [],
+          "matrix": {
+            "prd_id": "PRD-20260601-0016-SERVICE-FIELD-EXISTING",
+            "generated_at": "2026-06-01T12:05:17.477Z",
+            "requirements": [
+              "REQ-001"
+            ],
+            "designs": [
+              "DES-REQ-001"
+            ],
+            "tasks": [
+              {
+                "task_id": "DEMAND-REQ-001-0010101",
+                "status": "pending",
+                "requirement_ids": [
+                  "REQ-001"
+                ],
+                "design_ids": [
+                  "DES-REQ-001"
+                ],
+                "evidence_files": [
+                  "EVID-001"
+                ],
+                "target_files": [
+                  "src/services/inventory.ts"
+                ],
+                "missing": {
+                  "requirements": false,
+                  "design": false,
+                  "evidence": false
+                }
+              },
+              {
+                "task_id": "DEMAND-REQ-001-0010201",
+                "status": "pending",
+                "requirement_ids": [
+                  "REQ-001"
+                ],
+                "design_ids": [
+                  "DES-REQ-001"
+                ],
+                "evidence_files": [
+                  "EVID-001"
+                ],
+                "target_files": [
+                  "src/services/inventory.test.ts"
+                ],
+                "missing": {
+                  "requirements": false,
+                  "design": false,
+                  "evidence": false
+                }
+              }
+            ],
+            "summary": {
+              "task_count": 2,
+              "tasks_with_requirements": 2,
+              "tasks_with_design": 2,
+              "terminal_tasks_with_evidence": 0,
+              "missing_requirements": [],
+              "missing_design": [],
+              "missing_evidence": []
+            }
+          }
+        },
+        "migration": {
+          "available": false,
+          "would_fix_contract": false,
+          "added_count": 0,
+          "blocked_count": 0,
+          "tasks_changed": [],
+          "issues": [],
+          "dry_run_command": "yolo-prd-migrate-gates /Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0016-service-field-existing/.yolo/prd-executability/service-field-existing.prd.json --json",
+          "apply_command": "yolo-prd-migrate-gates /Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0016-service-field-existing/.yolo/prd-executability/service-field-existing.prd.json --apply",
+          "contract_after_migration": null,
+          "next_actions": [
+            "Fix PRD contract failures manually; no safe target coverage migration was inferred."
+          ]
+        },
+        "runner_readiness": {
+          "can_execute": true,
+          "reason": "ready",
+          "execution_mode": "default",
+          "tasks": {
+            "total": 2,
+            "pending": 2,
+            "running": 0,
+            "completed": 0,
+            "failed": 0,
+            "blocked": 0,
+            "skipped": 0,
+            "by_status": {
+              "pending": 2
+            }
+          },
+          "next_actions": [
+            "PRD preflight passed; runner can start."
+          ]
+        },
+        "blocked_count": 0,
+        "warning_count": 0,
+        "blocked_reasons": []
+      }
+    },
+    {
+      "name": "demand_contract",
+      "status": "pass",
+      "summary": "Demand contract passed.",
+      "blockers": [],
+      "warnings": [],
+      "demand_required": true,
+      "readiness_level": "L3"
+    },
+    {
+      "name": "pm_readiness",
+      "status": "pass",
+      "summary": "Product readiness passed.",
+      "blockers": [],
+      "warnings": [],
+      "discovery_readiness": null
+    },
+    {
+      "name": "resolver_readiness",
+      "status": "pass",
+      "summary": "Resolver context passed.",
+      "blockers": [],
+      "warnings": [],
+      "advisories": [
+        {
+          "code": "RESOLVER_UNKNOWN_CONTEXT",
+          "message": "platform_adapter resolved to unknown/custom.",
+          "kind": "platform_adapter",
+          "manifest_id": null
+        },
+        {
+          "code": "RESOLVER_UNKNOWN_CONTEXT",
+          "message": "stack_adapter resolved to unknown/custom.",
+          "kind": "stack_adapter",
+          "manifest_id": null
+        },
+        {
+          "code": "RESOLVER_UNKNOWN_CONTEXT",
+          "message": "component_adapter resolved to unknown/custom.",
+          "kind": "component_adapter",
+          "manifest_id": null
+        },
+        {
+          "code": "RESOLVER_UNKNOWN_CONTEXT",
+          "message": "design_reference_pack resolved to unknown/custom.",
+          "kind": "design_reference_pack",
+          "manifest_id": null
+        },
+        {
+          "code": "RESOLVER_UNKNOWN_CONTEXT",
+          "message": "quality_rule_pack resolved to unknown/custom.",
+          "kind": "quality_rule_pack",
+          "manifest_id": null
+        },
+        {
+          "code": "RESOLVER_UNKNOWN_CONTEXT",
+          "message": "acceptance_adapter resolved to unknown/custom.",
+          "kind": "acceptance_adapter",
+          "manifest_id": null
+        }
+      ],
+      "selected_adapters": [
+        {
+          "id": "unknown/custom",
+          "kind": "platform_adapter",
+          "status": "warning",
+          "source_path": ""
+        },
+        {
+          "id": "unknown/custom",
+          "kind": "stack_adapter",
+          "status": "warning",
+          "source_path": ""
+        },
+        {
+          "id": "unknown/custom",
+          "kind": "component_adapter",
+          "status": "warning",
+          "source_path": ""
+        },
+        {
+          "id": "unknown/custom",
+          "kind": "acceptance_adapter",
+          "status": "warning",
+          "source_path": ""
+        }
+      ]
+    },
+    {
+      "name": "ui_readiness",
+      "status": "pass",
+      "summary": "No UI task detected.",
+      "ui_task_count": 0,
+      "blockers": [],
+      "warnings": []
+    },
+    {
+      "name": "atomicity",
+      "status": "pass",
+      "summary": "Atomic task scoring completed.",
+      "inspections": [
+        {
+          "status": "pass",
+          "mode": "direct_patch",
+          "task_id": "DEMAND-REQ-001-0010101",
+          "score": 4,
+          "reasons": [
+            {
+              "id": "DATA_CONSISTENCY_TERMS",
+              "points": 3,
+              "detail": "任务涉及库存/数量/事务/数据库等数据一致性词",
+              "evidence": {
+                "terms": [
+                  "inventory",
+                  "stock"
+                ]
+              }
+            },
+            {
+              "id": "BEHAVIORAL_FAIL_POSTCONDITIONS",
+              "points": 1,
+              "detail": "行为后置条件 1 个",
+              "evidence": {
+                "behavioralFailPostconditions": 1,
+                "totalFailPostconditions": 1
+              }
+            }
+          ],
+          "evidence_file": "state/evidence/DEMAND-REQ-001-0010101/investigation.json",
+          "split_suggestions": [],
+          "next_action": "allow_runner_execution"
+        },
+        {
+          "status": "pass",
+          "mode": "direct_patch",
+          "task_id": "DEMAND-REQ-001-0010201",
+          "score": 4,
+          "reasons": [
+            {
+              "id": "DATA_CONSISTENCY_TERMS",
+              "points": 3,
+              "detail": "任务涉及库存/数量/事务/数据库等数据一致性词",
+              "evidence": {
+                "terms": [
+                  "inventory",
+                  "stock"
+                ]
+              }
+            },
+            {
+              "id": "BEHAVIORAL_FAIL_POSTCONDITIONS",
+              "points": 1,
+              "detail": "行为后置条件 1 个",
+              "evidence": {
+                "behavioralFailPostconditions": 1,
+                "totalFailPostconditions": 1
+              }
+            }
+          ],
+          "evidence_file": "state/evidence/DEMAND-REQ-001-0010201/investigation.json",
+          "split_suggestions": [],
+          "next_action": "allow_runner_execution"
+        }
+      ],
+      "blockers": [],
+      "warnings": []
+    },
+    {
+      "name": "evidence_plan",
+      "status": "pass",
+      "summary": "Evidence plan passed.",
+      "blockers": [],
+      "warnings": []
+    }
+  ],
+  "blockers": [],
+  "warnings": [
+    {
+      "code": "ADAPTER_MANIFEST_MISSING",
+      "message": "Adapter manifest is missing; non-UI tasks may continue with a warning.",
+      "gate": "adapter_readiness"
+    }
+  ],
+  "execution_policy": {
+    "gate_strength": "strict",
+    "remediation_mode": "non_blocking_when_schedulable",
+    "ship_gate": "fail_closed",
+    "automation_can_continue": true
+  },
+  "remediation_plan": {
+    "schema_version": "1.0",
+    "schema": "yolo.gate.remediation_plan.v1",
+    "source": "yolo-check",
+    "gate_strength": "strict",
+    "policy": "strong_gate_non_blocking_remediation",
+    "status": "pass",
+    "action": "PASS",
+    "automation_can_continue": true,
+    "requires_human": false,
+    "unsafe_stop": false,
+    "blocks_ship": false,
+    "task_id": null,
+    "gate_exit_code": null,
+    "attempt": null,
+    "max_retry": null,
+    "issue_count": 0,
+    "warning_count": 1,
+    "summary": "Strict check passed with warnings; warnings are recorded but do not block automation.",
+    "items": [],
+    "next_actions": [
+      "Continue to the next lifecycle step."
+    ]
+  },
+  "artifacts": [
+    "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0016-service-field-existing/.yolo/prd-executability/service-field-existing.prd.json"
+  ],
+  "next_actions": [
+    "Review warnings, then continue only if the scope is still safe."
+  ]
+}

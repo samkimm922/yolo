@@ -1,7 +1,9 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import {
   buildProviderInvocation,
   classifyProviderFailure,
@@ -20,6 +22,33 @@ const baseConfig = {
     codex_approval: "never",
   },
 };
+
+function fakeProviderSpawn({ stdout = "", stderr = "", code = 0, signal = null, close = true } = {}) {
+  return () => {
+    const child = new EventEmitter();
+    child.pid = 4242;
+    child.stdin = new PassThrough();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    if (close) {
+      setImmediate(() => {
+        if (stdout) child.stdout.write(stdout);
+        if (stderr) child.stderr.write(stderr);
+        child.emit("close", code, signal);
+      });
+    }
+    return child;
+  };
+}
+
+function spawnOptions(overrides = {}) {
+  return {
+    config: { ai: { model: "claude-sonnet-4" } },
+    rootDir: "/repo",
+    runtimeDir: "/repo/.yolo/state/runtime",
+    ...overrides,
+  };
+}
 
 describe("provider execution adapter", () => {
   test("buildProviderInvocation creates a claude stdin invocation with budget guard", () => {
@@ -132,11 +161,87 @@ describe("provider execution adapter", () => {
 
     assert.equal(spawned, false);
     assert.equal(run.success, false);
+    assert.equal(run.status, "blocked");
     assert.equal(run.blocked, true);
     assert.equal(run.reason, "claude_settings_missing");
     assert.equal(run.exitCode, null);
     assert.match(run.stderr, /Claude settings file not found: \/repo\/missing-settings\.json/);
     assert.equal(run.preflight.status, "blocked");
+    assert.equal(run.attempt_ledger[0].status, "blocked");
+  });
+
+  test("spawnProviderPrompt marks completed provider output explicitly", async () => {
+    const run = await spawnProviderPrompt("prompt", spawnOptions({
+      spawnImpl: fakeProviderSpawn({ stdout: "done\n", code: 0 }),
+    }));
+
+    assert.equal(run.success, true);
+    assert.equal(run.status, "completed");
+    assert.equal(run.reason, null);
+    assert.equal(run.stdout, "done");
+    assert.equal(run.attempt_ledger[0].status, "completed");
+  });
+
+  test("spawnProviderPrompt fails closed on empty successful output", async () => {
+    const run = await spawnProviderPrompt("prompt", spawnOptions({
+      spawnImpl: fakeProviderSpawn({ stdout: " \n", code: 0 }),
+    }));
+
+    assert.equal(run.success, false);
+    assert.equal(run.status, "no_output");
+    assert.equal(run.reason, "provider_no_output");
+    assert.equal(run.exitCode, 0);
+    assert.equal(run.attempt_ledger[0].status, "no_output");
+  });
+
+  test("spawnProviderPrompt fails closed on timeout with an attempt ledger", async () => {
+    let child;
+    let killedPid = null;
+    const run = await spawnProviderPrompt("prompt", spawnOptions({
+      timeout: 1,
+      spawnImpl: () => {
+        child = fakeProviderSpawn({ close: false })();
+        return child;
+      },
+      killTree: (pid) => {
+        killedPid = pid;
+        setImmediate(() => child.emit("close", null, "SIGTERM"));
+      },
+    }));
+
+    assert.equal(killedPid, 4242);
+    assert.equal(run.success, false);
+    assert.equal(run.status, "timed_out");
+    assert.equal(run.reason, "provider_timed_out");
+    assert.equal(run.timedOut, true);
+    assert.equal(run.attempt_ledger[0].status, "timed_out");
+    assert.equal(run.attempt_ledger[0].timed_out, true);
+  });
+
+  test("spawnProviderPrompt distinguishes killed provider processes", async () => {
+    const run = await spawnProviderPrompt("prompt", spawnOptions({
+      spawnImpl: fakeProviderSpawn({ stdout: "partial", code: null, signal: "SIGTERM" }),
+    }));
+
+    assert.equal(run.success, false);
+    assert.equal(run.status, "killed");
+    assert.equal(run.reason, "provider_killed");
+    assert.equal(run.signal, "SIGTERM");
+  });
+
+  test("spawnProviderPrompt fails closed when codex reports success without its output artifact", async () => {
+    const run = await spawnProviderPrompt("prompt", spawnOptions({
+      detectModelProvider: () => "codex",
+      existsSync: () => false,
+      spawnImpl: fakeProviderSpawn({ stdout: "looks done", code: 0 }),
+    }));
+
+    assert.equal(run.success, false);
+    assert.equal(run.status, "verification_failed");
+    assert.equal(run.reason, "codex_output_missing");
+    assert.equal(run.output_verification.status, "failed");
+    assert.equal(run.output_verification.reason, "codex_output_missing");
+    assert.equal(run.attempt_ledger[0].status, "verification_failed");
   });
 
   test("claude invocation supports read-only tool hardening flags", () => {
@@ -224,6 +329,16 @@ describe("provider execution adapter", () => {
   test("classifyProviderFailure turns budget exhaustion into a terminal blocker", () => {
     assert.deepEqual(classifyProviderFailure({
       stdout: "",
+      stderr: "Exceeded USD budget for this session",
+    }), {
+      terminal: true,
+      status: "blocked",
+      reason: "provider_budget_exceeded",
+      detail: "Exceeded USD budget for this session",
+    });
+
+    assert.deepEqual(classifyProviderFailure({
+      status: "failed",
       stderr: "Exceeded USD budget for this session",
     }), {
       terminal: true,

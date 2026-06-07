@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements boundary audit that detects project file mutations and blocks PRD readiness when violations occur, regardless of agent tool profile.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot uses git ls-files or directory walk to capture file digests excluding allowed_write_roots",
+      "why": "Core boundary snapshot logic that enables mutation detection before/after agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after snapshots to detect added, modified, or deleted files",
+      "why": "Change detection logic that identifies project mutations outside allowed roots."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-616",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime takes boundary snapshots before and after agent execution, computes changes, and adds BOUNDARY_PROJECT_MUTATION blockers for violations",
+      "why": "Main runtime that enforces boundary audit and blocks PRD readiness on mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "585-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations inject blockers into readiness and override prd_ready to false",
+      "why": "Critical enforcement logic that ensures boundary violations block PRD readiness."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles uses git ls-files -co --exclude-standard -z to capture all tracked and untracked non-excluded files",
+      "why": "Git-backed boundary detection that catches untracked mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles provides non-git fallback that recursively scans directory excluding standard ignore directories",
+      "why": "Fallback boundary detection for non-git repositories."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "243-248",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy defines boundary.project_mutation forbidden and allowed_write_roots as the output directory",
+      "why": "Policy configuration that declares boundary rules and allowed artifact locations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates that evidence records declare valid scope (project, external, user, unknown)",
+      "why": "Evidence validation that prevents scope-less records from passing."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues blocks when project facts lack project-scoped evidence or file locators",
+      "why": "Router-level validation that ensures project claims require project evidence."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "boundary blocks project file mutation even when agent results pass",
+      "why": "Test evidence that confirms boundary audit blocks mutations regardless of agent output."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "git-backed boundary detects untracked and gitignored project mutations",
+      "why": "Test coverage for git-based boundary detection including untracked files."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "non-git boundary fallback detects modified project files and ignores artifacts",
+      "why": "Test coverage for non-git repositories and allowed root exclusion."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If boundary snapshot logic has false positives or misses edge cases, PRD readiness could be incorrectly blocked or allowed."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Boundary audit implementation is complete with git and non-git fallbacks, scope validation, and blocker injection. Test coverage confirms mutation detection blocks PRD readiness. Tool profile affects available tools but boundary enforcement applies regardless."
+  }
+}

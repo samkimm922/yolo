@@ -1,0 +1,157 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence schema with scope field accepting project | external | user | unknown",
+      "why": "This is the primary schema definition that evidence records must follow."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES is declared as Set containing exactly these four values",
+      "why": "This constant is used for validation throughout the codebase."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope function validates scope against VALID_EVIDENCE_SCOPES",
+      "why": "This validation ensures all evidence records declare a valid scope."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues generates EVIDENCE_SCOPE_REQUIRED blocker when scope is missing or invalid",
+      "why": "This enforces scope declaration as a hard requirement for readiness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function classifies records into project/external/user/unknown based on multiple heuristics",
+      "why": "This shows the system can distinguish scopes even when not explicitly declared."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues generates blockers when existing-project facts lack project-scoped evidence with concrete locators",
+      "why": "This enforces that project facts require project evidence with file paths."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "257-327",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt generates agent instructions requiring scope declaration and distinguishing project from external evidence",
+      "why": "This is the prompt that tells evidence agents to declare scopes correctly."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "271-272",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rule: Every evidence record must include scope: project, external, user, or unknown; Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator",
+      "why": "This is the explicit instruction to agents about scope requirements."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-157",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates that each evidence record declares one of the four valid scopes",
+      "why": "This runtime validation blocks results without proper scope declarations."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves external-only evidence cannot satisfy existing-project facts and generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker",
+      "why": "This test verifies the system rejects external evidence for project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "387-431",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves project evidence without concrete file locator generates PROJECT_EVIDENCE_PATH_REQUIRED blocker",
+      "why": "This test verifies project evidence requires a repo-relative path."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "433-478",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves external URLs mislabeled as project evidence are blocked with PROJECT_EVIDENCE_PATH_REQUIRED",
+      "why": "This test verifies URLs cannot be relabeled as project evidence."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "480-524",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves evidence records without explicit scope declaration generate EVIDENCE_SCOPE_REQUIRED blocker",
+      "why": "This test verifies scope declaration is mandatory."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "144-202",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies cross-check PRD readiness requires all three evidence agents (explorer, cross-checker, verifier) to complete",
+      "why": "This test verifies the evidence agent role requirements."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "566-601",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies agent evidence without explicit scope is blocked during normalization with EVIDENCE_SCOPE_REQUIRED error",
+      "why": "This test verifies scope enforcement happens at runtime."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "44-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine documents evidence scope requirements and evidence agent protocols with explicit scope rules",
+      "why": "This is the primary documentation explaining the scope distinction design."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: evidence records must declare scope as project | external | user | unknown; project evidence requires repo-relative path; external evidence can only be background research",
+      "why": "This documents the core contract for scope distinction."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If this claim is wrong, existing-project factual claims could be accepted based on web research or user assertions without project code/test/docs evidence, leading to incorrect PRD generation"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All four components (schema, prompt, readiness contract, tests) explicitly distinguish evidence scopes with validation and blockers. The system enforces scope declaration and requires project-scoped evidence with file locators for existing-project facts."
+  }
+}

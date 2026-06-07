@@ -1,0 +1,177 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements a boundary audit system that captures SHA256 file digests before and after agent execution, requires explicit authorization for dispatch, and blocks PRD readiness on any detected project mutation. The implementation exists in a dirty working tree and has comprehensive test coverage, but has not been stress-tested with real full-tool Claude agents.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() creates SHA256 digests of all project files using git ls-files for git repos and walkFiles() fallback for non-git. Excludes allowed_write_roots.",
+      "why": "This is the core boundary audit implementation that detects project mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after snapshots to detect added, modified, and deleted files.",
+      "why": "This is how mutations are detected after agent execution completes."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-521",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() is called before agent execution with allowed_write_roots excluding the artifact root.",
+      "why": "This establishes the baseline for mutation detection."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() is called after execution, diffBoundarySnapshots() detects changes, and BOUNDARY_PROJECT_MUTATION blockers are generated for any violations.",
+      "why": "This is the post-execution audit that blocks PRD readiness on mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "473-510",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime() requires executeAgents AND allowAgentDispatch flags to be true, defaults to dry_run mode.",
+      "why": "This shows the explicit authorization required for agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "432-456",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig() normalizes agent_tool_profile to boundary/research/full. 'full' requires allowFullAgentTools=true. Always sets claude_no_session_persistence=true for Claude provider.",
+      "why": "This shows tool profile control and session isolation for Claude agents."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "267-278",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt() tells agents 'Do not modify target project files. If verification would require mutation, report it in missing.' and specifies allowed artifact root.",
+      "why": "This shows the boundary instructions communicated to agents in their prompt."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues() checks that evidence records declare valid scope (project|external|user|unknown).",
+      "why": "This is part of the evidence validation that prevents missing scope declarations."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() blocks PRD readiness when project-facts lack project-scoped evidence or concrete path locators.",
+      "why": "This enforces that project claims require project-scoped evidence with file paths."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "678-758",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() checks evidence_scope_declaration_issues and project_evidence_blocking_issues for each agent result.",
+      "why": "This shows how scope validation blocks PRD readiness at the router level."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' simulates an agent writing unexpected-project-write.txt and verifies BOUNDARY_PROJECT_MUTATION blocker.",
+      "why": "This is evidence that the boundary audit is tested and catches mutations."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' verifies git ls-files based boundary catches untracked-mutation.txt.",
+      "why": "This proves the boundary audit works with git-backed projects and catches untracked files."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "454-491",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects gitignored project mutations outside excluded dirs' verifies .env mutations are caught even when gitignored.",
+      "why": "This shows the boundary audit detects gitignored mutations outside excluded directories."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'non-git boundary fallback detects modified project files and ignores artifacts' verifies walkFiles fallback and artifact root exclusion.",
+      "why": "This proves the boundary audit works for non-git projects and correctly excludes artifacts."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "58-60",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "excludedDir() returns true for .git, node_modules, dist, coverage, .next, .cache directories.",
+      "why": "This shows which directories are excluded from boundary snapshots."
+    },
+    {
+      "path": "tools/demand-claude-stress.mjs",
+      "line": "36-42",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Stress test scenario 'local-contract-boundary' has the exact objective and claims from the current demand.",
+      "why": "This is evidence that a stress test tool exists specifically for this demand's claims."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation() for Claude provider builds -p command with model, permission-mode, settings, tools, allowedTools, disallowedTools flags, and max-budget-usd.",
+      "why": "This shows how the provider adapter constructs Claude CLI invocations for agent execution."
+    },
+    {
+      "path": "git status",
+      "line": "N/A",
+      "scope": "project",
+      "source": "project_log",
+      "summary": "Git status shows 55 modified files including src/demand/evidence-dispatch.ts, src/demand/router.ts, src/runtime/execution/provider-adapter.ts, plus new untracked files and .yolo/demand/ and .yolo/stress/ directories.",
+      "why": "This confirms the 'dirty working tree' claim from the demand."
+    },
+    {
+      "path": "git log",
+      "line": "1-4",
+      "scope": "project",
+      "source": "project_log",
+      "summary": "Recent commits: 46d4b6d 'fix: make demand PRDs pass executable gates', 9b2c765 'feat: add demand interview PRD workflow', 9da17f2 'feat: add nontechnical demand PRD workflow'.",
+      "why": "This shows the demand evidence dispatch features were recently added in rapid succession."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "The boundary audit implementation has unit tests but has not been stress-tested with real full-tool Claude agents in production. A full-tool agent might mutate files in ways the boundary snapshot doesn't detect (e.g., very large files, binary files, symlinks, or timing-specific mutations).",
+    "The provider adapter relies on Claude CLI -p flag behavior which could change in future Claude Code versions and break the dispatch isolation or tool profile controls.",
+    "The stress test tool exists but its results in .yolo/stress/ are not shown in the current working tree, so it may not have been run yet or its results may not be integrated into readiness checks."
+  ],
+  "missing": [
+    "Stress test execution results showing boundary audit behavior with real Claude agents against this repository."
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence confirms boundary audit implementation exists with comprehensive test coverage, but real-world stress testing with full-tool Claude agents is the critical gap before PRD readiness."
+  }
+}

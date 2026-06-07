@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer and cross-checker evidence is sufficient to characterize provider isolation as intentionally partial with known gaps. Evidence shows isolation mechanisms exist and work for default/inherited cases, but cross-provider leakage is possible via explicit user input. Missing evidence reflects verification gaps, not implementation defects.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "447-449",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Explorer and cross-checker both verified model clearing logic only triggers when input model is empty, not for explicit user input.",
+      "why": "Both agents independently confirmed this is conditional logic, not comprehensive isolation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "451-462",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Explorer found claude tool profile normalization; cross-checker confirmed it is claude-specific, not universal.",
+      "why": "Cross-checker refined explorer's finding without contradiction, adding precision."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "53-54",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cross-checker verified codex provider reads from both ai.codex_model and ai.model, creating cross-provider leakage path.",
+      "why": "Explorer assumed this was a risk; cross-checker verified it as a fact from code."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Both agents confirmed test coverage only validates inherited model clearing, not explicit cross-provider input.",
+      "why": "Verification gap identified by both agents independently."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Both agents confirmed boundary enforcement is post-hoc diff detection, not real-time prevention.",
+      "why": "Explorer assumed this; cross-checker verified from code implementation."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If conditional model clearing is unintentional rather than a design choice, explicit cross-provider input could cause silent failures.",
+    "If claude-specific tool normalization should be universal, other providers may lack appropriate boundary controls.",
+    "If post-hoc boundary detection is considered insufficient, agents could write files during execution that only get caught after-the-fact."
+  ],
+  "missing": [
+    "Design intent documentation explaining whether conditional model clearing is intentional or a bug.",
+    "Design intent documentation explaining whether tool normalization should be provider-agnostic.",
+    "Design intent documentation explaining why boundary enforcement is post-hoc rather than real-time.",
+    "Test coverage for explicit cross-provider model input scenarios.",
+    "Evidence that custom providers are subjected to the same isolation requirements as claude/codex providers."
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker independently verified the same code locations with compatible interpretations. Cross-checker refined explorer's findings by showing model clearing is conditional, tool normalization is claude-specific, and boundary enforcement is post-hoc. These are characterizations of existing behavior, not contradictions. Both agents correctly identified assumptions as assumptions and missing items as missing. No assumption was promoted to fact. Evidence paths are verifiable. Missing items reflect design intent documentation and test coverage gaps, not implementation defects. The acceptance criteria 'Provider configuration preserves full tool capability under harness boundary' is partially met for default/inherited cases but has known gaps for explicit user input. PRD can proceed with these characterizations as known constraints rather than blocked requirements."
+  }
+}

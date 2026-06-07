@@ -107,12 +107,24 @@
         "max_files": 1,
         "max_lines_per_file": 180
       },
-      "state_matrix": {
-        "idle": "UI evidence panel visible without active run.",
-        "active": "UI evidence panel visible with active run data.",
-        "mobile": "Panel stacks without overflow below 640px.",
-        "desktop": "Panel scans as part of operator dashboard."
-      },
+      "state_matrix": [
+        {
+          "state": "idle",
+          "expectation": "UI evidence panel visible without active run."
+        },
+        {
+          "state": "active",
+          "expectation": "UI evidence panel visible with active run data."
+        },
+        {
+          "state": "mobile",
+          "expectation": "Panel stacks without overflow below 640px."
+        },
+        {
+          "state": "desktop",
+          "expectation": "Panel scans as part of operator dashboard."
+        }
+      ],
       "acceptance_criteria": [
         "A visible progress dashboard UI evidence panel exists in server-rendered HTML.",
         "The panel reports page, state, layout, runtime error, viewport, and visual artifact status.",
@@ -215,11 +227,20 @@
         "max_files": 2,
         "max_lines_per_file": 180
       },
-      "state_matrix": {
-        "idle": "Test verifies idle HTML contains UI evidence panel.",
-        "active": "Test verifies active HTML/evidence contains UI evidence state.",
-        "dangerous": "Test verifies raw dangerous markup is escaped."
-      },
+      "state_matrix": [
+        {
+          "state": "idle",
+          "expectation": "Test verifies idle HTML contains UI evidence panel."
+        },
+        {
+          "state": "active",
+          "expectation": "Test verifies active HTML/evidence contains UI evidence state."
+        },
+        {
+          "state": "dangerous",
+          "expectation": "Test verifies raw dangerous markup is escaped."
+        }
+      ],
       "acceptance_criteria": [
         "Tests fail if uiEvidencePanel is missing.",
         "Tests fail if dangerous UI evidence strings enter HTML unescaped.",
@@ -309,9 +330,12 @@
         "max_files": 1,
         "max_lines_per_file": 120
       },
-      "state_matrix": {
-        "acceptance": "Adapter evidence collector produces UI evidence or blocks the run."
-      },
+      "state_matrix": [
+        {
+          "state": "acceptance",
+          "expectation": "Adapter evidence collector produces UI evidence or blocks the run."
+        }
+      ],
       "acceptance_criteria": [
         "yolo check passes before execution.",
         "yolo accept with collect/execute/allow adapter evidence passes after execution.",

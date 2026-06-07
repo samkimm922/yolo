@@ -1,0 +1,809 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_dispatch.v1",
+  "status": "blocked",
+  "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+  "summary": "Demand evidence agents completed, but readiness still has blockers.",
+  "generated_at": "2026-06-01T00:18:24.442Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "state_root": "/Users/sippingroom/Developer/yolo/.yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601001824441-1uv1tt",
+  "output_file": ".yolo/demand/evidence/dispatch-20260601001824441-1uv1tt",
+  "execution_policy": {
+    "default_mode": "dry_run",
+    "execute_requires": [
+      "executeAgents=true",
+      "allowAgentDispatch=true"
+    ],
+    "writes_business_code": false,
+    "agent_instruction": "read_only"
+  },
+  "demand_status": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand dispatch must verify Claude read-only evidence dispatch hardening before PRD readiness for brownfield schema/API changes"
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "Demand evidence dispatch can call Claude -p evidence agents and should constrain them to read-only tools."
+        ],
+        "desired_outcome": [
+          "Explorer, cross-checker, and verifier return project evidence with paths; PRD readiness blocks if any missing evidence or clarification remains."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "src/runtime/execution/provider-adapter.ts",
+          "src/demand/router.ts"
+        ],
+        "scope_out": [
+          "Do not modify source code during demand evidence dispatch."
+        ],
+        "constraints": [
+          "Claude evidence agents must run with Read, Glob, and Grep only."
+        ],
+        "acceptance_criteria": [
+          "Explorer, cross-checker, and verifier return project evidence with paths; PRD readiness blocks if any missing evidence or clarification remains."
+        ],
+        "risks": [
+          "If Claude -p has write tools, evidence agents could mutate a target project during demand communication."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  },
+  "actions": [
+    {
+      "id": "demand.evidence.explorer",
+      "role": "explorer",
+      "status": "pending",
+      "reason": "Factual project claims need primary evidence.",
+      "protocol": {
+        "role": "explorer",
+        "objective": "Find primary project facts for the requested demand without editing files.",
+        "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "explorer.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601001824441-1uv1tt/explorer.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601001824441-1uv1tt/explorer.json"
+    },
+    {
+      "id": "demand.evidence.cross-checker",
+      "role": "cross-checker",
+      "status": "pending",
+      "reason": "High-risk facts require independent cross-check.",
+      "protocol": {
+        "role": "cross-checker",
+        "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+        "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+        "writes_code": false,
+        "required_when": "evidence_policy === cross_check or claim risk is high",
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "cross-checker.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601001824441-1uv1tt/cross-checker.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601001824441-1uv1tt/cross-checker.json"
+    },
+    {
+      "id": "demand.evidence.verifier",
+      "role": "verifier",
+      "status": "pending",
+      "reason": "Verify blockers and assumptions are not promoted to facts.",
+      "protocol": {
+        "role": "verifier",
+        "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+        "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "verifier.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601001824441-1uv1tt/verifier.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601001824441-1uv1tt/verifier.json"
+    }
+  ],
+  "mode": "execute",
+  "agent_results": [
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "explorer",
+      "status": "completed",
+      "completed": true,
+      "claim": "YOLO demand evidence dispatch uses provider-adapter to configure Claude agents with read-only tool restrictions through DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS that restricts tools to Read, Glob, Grep and denies Write, Edit, MultiEdit, NotebookEdit, Bash, Agent, TaskCreate, TaskUpdate, and provider-adapter translates these settings into Claude CLI arguments --allowedTools and --disallowedTools.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "14-19",
+          "source": "code",
+          "summary": "DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS defines permissions.allow array with Read, Glob, Grep and permissions.deny array with Write, Edit, MultiEdit, NotebookEdit, Bash, Agent, TaskCreate, TaskUpdate.",
+          "why": "Verifies the read-only settings schema for Claude evidence agents."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "283-295",
+          "source": "code",
+          "summary": "When provider is claude, executionConfig sets ai.settings to DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS JSON string, ai.claude_tools to Read,Glob,Grep, ai.claude_allowed_tools to Read,Glob,Grep, and ai.claude_disallowed_tools to Write,Edit,MultiEdit,NotebookEdit,Bash,Agent,TaskCreate,TaskUpdate.",
+          "why": "Verifies execution config applies read-only settings for Claude provider."
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "77-98",
+          "source": "code",
+          "summary": "buildProviderInvocation for claude provider builds args array with --tools, --allowedTools, and --disallowedTools flags from config.ai.claude_tools, config.ai.claude_allowed_tools, and config.ai.claude_disallowed_tools.",
+          "why": "Verifies provider adapter translates config into Claude CLI tool arguments."
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "31-109",
+          "source": "code",
+          "summary": "buildProviderInvocation switches on provider type: codex uses --sandbox read-only and --approval never, custom uses rendered custom_command, claude uses --tools, --allowedTools, --disallowedTools, --permission-mode, --settings, and other flags.",
+          "why": "Verifies Claude provider argument construction logic."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "283-295",
+          "source": "code",
+          "summary": "Claude evidence agent config includes ai.claude_disable_slash_commands true and ai.claude_no_session_persistence true.",
+          "why": "Verifies additional Claude safety constraints beyond read-only tools."
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "93-98",
+          "source": "code",
+          "summary": "buildProviderInvocation adds --disable-slash-commands when ai.claude_disable_slash_commands is true and --no-session-persistence when ai.claude_no_session_persistence is true.",
+          "why": "Verifies provider adapter implements Claude safety flags."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "264-303",
+          "source": "code",
+          "summary": "executionConfig function loads config, extracts provider and model options, and overrides provider-specific settings for codex sandbox/approval and Claude read-only tools and safety flags.",
+          "why": "Verifies execution config centralizes evidence agent hardening."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "52-75",
+          "source": "code",
+          "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross_checker, and verifier with writes_code false and result_schema yolo.demand.evidence_result.v1.",
+          "why": "Verifies evidence agent protocol specification matches implementation."
+        },
+        {
+          "path": ".yolo/demand/evidence/dispatch-20260531234442068-lun22q/dispatch.json",
+          "line": "1-961",
+          "source": "config",
+          "summary": "Previous dispatch result shows execution_policy with default_mode dry_run, execute_requires executeAgents=true and allowAgentDispatch=true, writes_business_code false, agent_instruction read_only, and agent_results from explorer/cross-checker/verifier using codex provider.",
+          "why": "Verifies dispatch has executed with read-only policy and provider agents have completed."
+        }
+      ],
+      "assumptions": [],
+      "risks": [
+        "If Claude CLI ignores --allowedTools or --disallowedTools flags, read-only enforcement could fail despite configuration.",
+        "If evidence-dispatch executionConfig is bypassed or provider settings are overridden after calling executionConfig, read-only constraints may not apply to spawned agents.",
+        "The provider adapter uses --permission-mode default rather than a locked mode, so permission mode changes could affect tool availability beyond allowedTools/disallowedTools."
+      ],
+      "missing": [
+        "I did not verify actual Claude CLI behavior with --allowedTools and --disallowedTools flags to confirm they prevent Write, Edit, Bash, and other denied tools.",
+        "I did not verify whether codex provider read-only sandbox behavior matches Claude provider read-only tool restrictions.",
+        "I did not find integration tests that execute provider-adapter with real Claude CLI to verify tool restrictions are enforced at runtime."
+      ],
+      "recommendation": "cross_check",
+      "result": {
+        "verdict": "pass",
+        "notes": "Source and config evidence confirms DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS schema and provider-adapter translation to Claude CLI arguments. External enforcement verification and cross-checker independent confirmation are required before treating this as runtime-verified fact."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "cross-checker",
+      "status": "completed",
+      "completed": true,
+      "claim": "Independent cross-check confirms YOLO demand evidence dispatch read-only tool restrictions are correctly implemented: DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS defines permissions.allow=[Read,Glob,Grep] and permissions.deny=[Write,Edit,MultiEdit,NotebookEdit,Bash,Agent,TaskCreate,TaskUpdate]; executionConfig applies these as ai.settings JSON string, ai.claude_tools, ai.claude_allowed_tools, ai.claude_disallowed_tools, and safety flags; buildProviderInvocation translates config into Claude CLI --allowedTools and --disallowedTools arguments.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "14-19",
+          "source": "code",
+          "summary": "DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS constant defines permissions.allow array with Read, Glob, Grep and permissions.deny array with Write, Edit, MultiEdit, NotebookEdit, Bash, Agent, TaskCreate, TaskUpdate.",
+          "why": "Primary source for read-only tool restriction schema."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "288-295",
+          "source": "code",
+          "summary": "executionConfig function when provider===claude sets ai.settings to JSON.stringify(DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS), ai.claude_tools='Read,Glob,Grep', ai.claude_allowed_tools='Read,Glob,Grep', ai.claude_disallowed_tools='Write,Edit,MultiEdit,NotebookEdit,Bash,Agent,TaskCreate,TaskUpdate', ai.claude_disable_slash_commands=true, ai.claude_no_session_persistence=true.",
+          "why": "Verifies read-only settings are applied to Claude provider config."
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "77-92",
+          "source": "code",
+          "summary": "buildProviderInvocation for claude provider constructs args array with --tools from ai.claude_tools, --allowedTools from ai.claude_allowed_tools, and --disallowedTools from ai.claude_disallowed_tools after cleaning with cleanString.",
+          "why": "Verifies provider adapter translates config to Claude CLI arguments."
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "93-98",
+          "source": "code",
+          "summary": "buildProviderInvocation conditionally adds --disable-slash-commands when ai.claude_disable_slash_commands===true and --no-session-persistence when ai.claude_no_session_persistence===true.",
+          "why": "Verifies additional Claude safety flags are translated to CLI arguments."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "52-67",
+          "source": "code",
+          "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross_checker, and verifier protocols with writes_code:false and result_schema:'yolo.demand.evidence_result.v1'.",
+          "why": "Verifies evidence agent protocols specify read-only constraint at contract level."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "264-303",
+          "source": "code",
+          "summary": "executionConfig loads config, extracts provider/model options, applies codex read-only sandbox/approval when provider===codex, applies Claude read-only settings when provider===claude, applies custom read-only sandbox when provider===custom, returns merged config.",
+          "why": "Verifies execution config centralizes provider-specific read-only constraints."
+        }
+      ],
+      "assumptions": [
+        "Claude CLI respects --allowedTools and --disallowedTools flags and actually prevents denied tools from being used at runtime.",
+        "The permissions schema in DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS is valid input for Claude CLI --settings flag.",
+        "No code path between executionConfig and buildProviderInvocation modifies ai.claude_* fields or overrides the settings.",
+        "Agent provider dispatch does not bypass provider-adapter when spawning evidence agents."
+      ],
+      "risks": [
+        "If Claude CLI does not enforce --allowedTools/--disallowedTools at runtime, read-only protection fails despite correct configuration.",
+        "If executionConfig is bypassed or config.ai is mutated after calling executionConfig, read-only constraints may not apply.",
+        "If provider adapter is bypassed in some dispatch paths, Claude CLI arguments may not be applied.",
+        "The --permission-mode default in provider-adapter could allow permission changes that affect tool availability beyond allowedTools/disallowedTools."
+      ],
+      "missing": [
+        "No integration tests found that execute provider-adapter with real Claude CLI to verify --allowedTools and --disallowedTools behavior.",
+        "No tests found that verify evidence agents actually cannot use Write, Edit, Bash, or other denied tools at runtime.",
+        "No documentation found on Claude CLI --allowedTools/--disallowedTools enforcement semantics.",
+        "No tests found comparing codex provider read-only sandbox behavior with Claude provider read-only tool restrictions."
+      ],
+      "recommendation": "cross_check",
+      "result": {
+        "verdict": "pass",
+        "notes": "Independent code reads confirm explorer's claim: source code correctly implements DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS schema, executionConfig applies it to Claude provider config, and buildProviderInvocation translates config to Claude CLI arguments. No conflicts found with explorer evidence. The claim is source-verified but requires runtime verification (missing integration tests) to treat as runtime-guaranteed fact."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "verifier",
+      "status": "completed",
+      "completed": true,
+      "claim": "Meta-verification confirms: explorer and cross-checker evidence is sufficient for PRD readiness with documented assumptions; no assumptions are presented as facts; all evidence has valid source paths; missing data and risks are clearly documented; blockers remain for runtime verification integration tests but these are documented as missing rather than hidden.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "14-19",
+          "source": "code",
+          "summary": "DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS verified by both explorer and cross-checker with identical line references.",
+          "why": "Confirms primary source is accessible and correctly identified by multiple agents."
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "77-98",
+          "source": "code",
+          "summary": "buildProviderInvocation Claude argument construction verified by both agents with consistent line ranges.",
+          "why": "Confirms provider adapter implementation is cross-checked and path-verified."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "52-75",
+          "source": "code",
+          "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS verified with writes_code:false constraint.",
+          "why": "Confirms protocol-level read-only contract is documented in code."
+        },
+        {
+          "path": ".yolo/demand/evidence/dispatch-20260531234442068-lun22q/dispatch.json",
+          "line": "1-961",
+          "source": "config",
+          "summary": "Previous dispatch execution result shows read-only policy was enforced in practice.",
+          "why": "Confirms evidence dispatch has executed with read-only policy historically."
+        },
+        {
+          "path": "explorer_evidence_result",
+          "line": "assumptions,risks,missing,recommendation",
+          "source": "evidence",
+          "summary": "Explorer result contains empty assumptions array, 3 documented risks, 3 documented missing items, cross_check recommendation.",
+          "why": "Confirms explorer separated assumptions from facts and documented gaps."
+        },
+        {
+          "path": "cross-checker_evidence_result",
+          "line": "assumptions,risks,missing,recommendation",
+          "source": "evidence",
+          "summary": "Cross-checker result contains 4 documented assumptions, 4 documented risks, 4 documented missing items, cross_check recommendation.",
+          "why": "Confirms cross-checker explicitly separated assumptions from evidence and identified additional gaps."
+        },
+        {
+          "path": "explorer_evidence_result",
+          "line": "result.verdict",
+          "source": "evidence",
+          "summary": "Explorer verdict: pass with notes requiring cross-checker confirmation.",
+          "why": "Confirms explorer correctly deferred to cross-check for independent verification."
+        },
+        {
+          "path": "cross-checker_evidence_result",
+          "line": "result.verdict",
+          "source": "evidence",
+          "summary": "Cross-checker verdict: pass with notes about runtime verification needed.",
+          "why": "Confirms cross-checker confirmed source verification while flagging runtime gap."
+        }
+      ],
+      "assumptions": [
+        "The evidence paths and line numbers in explorer and cross-checker results are correct and files have not changed since evidence collection.",
+        "The provider-adapter buildProviderInvocation function is the only code path from evidence-dispatch to Claude CLI invocation.",
+        "The previous dispatch result in .yolo/demand/evidence/ is representative of current evidence dispatch behavior."
+      ],
+      "risks": [
+        "If provider-adapter has additional undiscovered code paths that bypass Claude CLI argument construction, read-only enforcement may fail despite configuration evidence.",
+        "If evidence-dispatch.ts or provider-adapter.ts files have changed since explorer/cross-checker read them, the evidence may no longer match current code state.",
+        "If the DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS constant or executionConfig function is modified in the future, this verification becomes stale."
+      ],
+      "missing": [
+        "Integration tests that execute provider-adapter with real Claude CLI to verify --allowedTools and --disallowedTools prevent denied tool usage.",
+        "Runtime tests that spawn evidence agents and verify they cannot use Write, Edit, Bash, or other denied tools.",
+        "Documentation on Claude CLI --allowedTools and --disallowedTools enforcement semantics and error modes.",
+        "Comparison tests between codex provider --sandbox read-only and Claude provider read-only tool restrictions.",
+        "Tests that verify executionConfig cannot be bypassed or config.ai cannot be mutated after calling executionConfig.",
+        "Agent provider dispatch path verification to ensure provider-adapter is always used for evidence agent spawning."
+      ],
+      "recommendation": "clarify",
+      "result": {
+        "verdict": "pass",
+        "notes": "Meta-verification confirms: explorer and cross-checker properly separated assumptions from facts, provided valid source paths with line numbers, documented all missing items and risks transparently, and reached appropriate pass verdicts with cross_check recommendations. No assumptions are presented as facts. The evidence is sufficient for PRD readiness with the documented assumptions and missing items clearly acknowledged. The remaining blockers are integration tests for runtime verification, which are documented as missing rather than hidden."
+      }
+    }
+  ],
+  "provider_runs": [
+    {
+      "role": "explorer",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"explorer\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"YOLO demand evidence dispatch uses provider-adapter to configure Claude agents with read-only tool restrictions through DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS that restricts tools to Read, Glob, Grep and denies Write, Edit, MultiEdit, NotebookEdit, Bash, Agent, TaskCreate, TaskUpdate, and provider-adapter translates these settings into Claude CLI arguments --allowedTools and --disallowedTools.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"14-19\",\n      \"source\": \"code\",\n      \"summary\": \"DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS defines permissions.allow array with Read, Glob, Grep and permissions.deny array with Write, Edit, MultiEdit, NotebookEdit, Bash, Agent, TaskCreate, TaskUpdate.\",\n      \"why\": \"Verifies the read-only settings schema for Claude evidence agents.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"283-295\",\n      \"source\": \"code\",\n      \"summary\": \"When provider is claude, executionConfig sets ai.settings to DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS JSON string, ai.claude_tools to Read,Glob,Grep, ai.claude_allowed_tools to Read,Glob,Grep, and ai.claude_disallowed_tools to Write,Edit,MultiEdit,NotebookEdit,Bash,Agent,TaskCreate,TaskUpdate.\",\n      \"why\": \"Verifies execution config applies read-only settings for Claude provider.\"\n    },\n    {\n      \"path\": \"src/runtime/execution/provider-adapter.ts\",\n      \"line\": \"77-98\",\n      \"source\": \"code\",\n      \"summary\": \"buildProviderInvocation for claude provider builds args array with --tools, --allowedTools, and --disallowedTools flags from config.ai.claude_tools, config.ai.claude_allowed_tools, and config.ai.claude_disallowed_tools.\",\n      \"why\": \"Verifies provider adapter translates config into Claude CLI tool arguments.\"\n    },\n    {\n      \"pa\n[truncated 3824 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "cross-checker",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"cross-checker\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"Independent cross-check confirms YOLO demand evidence dispatch read-only tool restrictions are correctly implemented: DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS defines permissions.allow=[Read,Glob,Grep] and permissions.deny=[Write,Edit,MultiEdit,NotebookEdit,Bash,Agent,TaskCreate,TaskUpdate]; executionConfig applies these as ai.settings JSON string, ai.claude_tools, ai.claude_allowed_tools, ai.claude_disallowed_tools, and safety flags; buildProviderInvocation translates config into Claude CLI --allowedTools and --disallowedTools arguments.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"14-19\",\n      \"source\": \"code\",\n      \"summary\": \"DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS constant defines permissions.allow array with Read, Glob, Grep and permissions.deny array with Write, Edit, MultiEdit, NotebookEdit, Bash, Agent, TaskCreate, TaskUpdate.\",\n      \"why\": \"Primary source for read-only tool restriction schema.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"288-295\",\n      \"source\": \"code\",\n      \"summary\": \"executionConfig function when provider===claude sets ai.settings to JSON.stringify(DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS), ai.claude_tools='Read,Glob,Grep', ai.claude_allowed_tools='Read,Glob,Grep', ai.claude_disallowed_tools='Write,Edit,MultiEdit,NotebookEdit,Bash,Agent,TaskCreate,TaskUpdate', ai.claude_disable_slash_commands=true, ai.claude_no_session_persistence=true.\",\n      \"why\": \"Verifies read-only settings are applied to Claude provider config.\"\n    },\n    {\n      \"path\": \"src/runtime/execution/provider-adapter.ts\",\n      \"line\": \"77-92\",\n      \"source\": \"code\",\n      \"summary\": \"buildProviderInvocation for claude provider constructs args array with --tools from ai.claude_tools, --allowedToo\n[truncated 3579 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "verifier",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"verifier\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"Meta-verification confirms: explorer and cross-checker evidence is sufficient for PRD readiness with documented assumptions; no assumptions are presented as facts; all evidence has valid source paths; missing data and risks are clearly documented; blockers remain for runtime verification integration tests but these are documented as missing rather than hidden.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"14-19\",\n      \"source\": \"code\",\n      \"summary\": \"DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS verified by both explorer and cross-checker with identical line references.\",\n      \"why\": \"Confirms primary source is accessible and correctly identified by multiple agents.\"\n    },\n    {\n      \"path\": \"src/runtime/execution/provider-adapter.ts\",\n      \"line\": \"77-98\",\n      \"source\": \"code\",\n      \"summary\": \"buildProviderInvocation Claude argument construction verified by both agents with consistent line ranges.\",\n      \"why\": \"Confirms provider adapter implementation is cross-checked and path-verified.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"52-75\",\n      \"source\": \"code\",\n      \"summary\": \"DEMAND_EVIDENCE_AGENT_PROTOCOLS verified with writes_code:false constraint.\",\n      \"why\": \"Confirms protocol-level read-only contract is documented in code.\"\n    },\n    {\n      \"path\": \".yolo/demand/evidence/dispatch-20260531234442068-lun22q/dispatch.json\",\n      \"line\": \"1-961\",\n      \"source\": \"config\",\n      \"summary\": \"Previous dispatch execution result shows read-only policy was enforced in practice.\",\n      \"why\": \"Confirms evidence dispatch has executed with read-only policy historically.\"\n    },\n    {\n      \"path\": \"explorer_evidence_result\",\n      \"line\": \"assumptions,risks,missing,recommendation\",\n      \"source\": \"evidence\n[truncated 3605 chars]",
+      "stderr": ""
+    }
+  ],
+  "artifacts": [
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601001824441-1uv1tt/explorer.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601001824441-1uv1tt/cross-checker.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601001824441-1uv1tt/verifier.json"
+  ],
+  "readiness": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.prd_readiness.v1",
+    "required_slots": [
+      "problem",
+      "target_user",
+      "status_quo",
+      "desired_outcome",
+      "scope_in",
+      "scope_out",
+      "constraints",
+      "acceptance_criteria",
+      "risks",
+      "approval"
+    ],
+    "slot_values": {
+      "problem": [
+        "Existing YOLO demand dispatch must verify Claude read-only evidence dispatch hardening before PRD readiness for brownfield schema/API changes"
+      ],
+      "target_user": [
+        "YOLO maintainer"
+      ],
+      "status_quo": [
+        "Demand evidence dispatch can call Claude -p evidence agents and should constrain them to read-only tools."
+      ],
+      "desired_outcome": [
+        "Explorer, cross-checker, and verifier return project evidence with paths; PRD readiness blocks if any missing evidence or clarification remains."
+      ],
+      "scope_in": [
+        "src/demand/evidence-dispatch.ts",
+        "src/runtime/execution/provider-adapter.ts",
+        "src/demand/router.ts"
+      ],
+      "scope_out": [
+        "Do not modify source code during demand evidence dispatch."
+      ],
+      "constraints": [
+        "Claude evidence agents must run with Read, Glob, and Grep only."
+      ],
+      "acceptance_criteria": [
+        "Explorer, cross-checker, and verifier return project evidence with paths; PRD readiness blocks if any missing evidence or clarification remains."
+      ],
+      "risks": [
+        "If Claude -p has write tools, evidence agents could mutate a target project during demand communication."
+      ],
+      "approval": [
+        "approved"
+      ]
+    },
+    "missing_slots": [],
+    "blockers": [
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "explorer",
+        "message": "explorer reported unresolved missing evidence: I did not verify actual Claude CLI behavior with --allowedTools and --disallowedTools flags to confirm they prevent Write, Edit, Bash, and other denied tools.; I did not verify whether codex provider read-only sandbox behavior matches Claude provider read-only tool restrictions.; I did not find integration tests that execute provider-adapter with real Claude CLI to verify tool restrictions are enforced at runtime."
+      },
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "cross-checker",
+        "message": "cross-checker reported unresolved missing evidence: No integration tests found that execute provider-adapter with real Claude CLI to verify --allowedTools and --disallowedTools behavior.; No tests found that verify evidence agents actually cannot use Write, Edit, Bash, or other denied tools at runtime.; No documentation found on Claude CLI --allowedTools/--disallowedTools enforcement semantics.; No tests found comparing codex provider read-only sandbox behavior with Claude provider read-only tool restrictions."
+      },
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "verifier",
+        "message": "verifier reported unresolved missing evidence: Integration tests that execute provider-adapter with real Claude CLI to verify --allowedTools and --disallowedTools prevent denied tool usage.; Runtime tests that spawn evidence agents and verify they cannot use Write, Edit, Bash, or other denied tools.; Documentation on Claude CLI --allowedTools and --disallowedTools enforcement semantics and error modes.; Comparison tests between codex provider --sandbox read-only and Claude provider read-only tool restrictions.; Tests that verify executionConfig cannot be bypassed or config.ai cannot be mutated after calling executionConfig.; Agent provider dispatch path verification to ensure provider-adapter is always used for evidence agent spawning."
+      },
+      {
+        "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+        "role": "verifier",
+        "message": "verifier returned clarify; keep PRD readiness blocked until resolved."
+      }
+    ],
+    "assumptions": [],
+    "required_evidence_agents": [
+      "explorer",
+      "cross-checker",
+      "verifier"
+    ],
+    "evidence_agreement": {
+      "status": "pass",
+      "conflicts": []
+    },
+    "prd_ready": false
+  },
+  "demand_status_after_dispatch": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand dispatch must verify Claude read-only evidence dispatch hardening before PRD readiness for brownfield schema/API changes"
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "Demand evidence dispatch can call Claude -p evidence agents and should constrain them to read-only tools."
+        ],
+        "desired_outcome": [
+          "Explorer, cross-checker, and verifier return project evidence with paths; PRD readiness blocks if any missing evidence or clarification remains."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "src/runtime/execution/provider-adapter.ts",
+          "src/demand/router.ts"
+        ],
+        "scope_out": [
+          "Do not modify source code during demand evidence dispatch."
+        ],
+        "constraints": [
+          "Claude evidence agents must run with Read, Glob, and Grep only."
+        ],
+        "acceptance_criteria": [
+          "Explorer, cross-checker, and verifier return project evidence with paths; PRD readiness blocks if any missing evidence or clarification remains."
+        ],
+        "risks": [
+          "If Claude -p has write tools, evidence agents could mutate a target project during demand communication."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "explorer",
+          "message": "explorer reported unresolved missing evidence: I did not verify actual Claude CLI behavior with --allowedTools and --disallowedTools flags to confirm they prevent Write, Edit, Bash, and other denied tools.; I did not verify whether codex provider read-only sandbox behavior matches Claude provider read-only tool restrictions.; I did not find integration tests that execute provider-adapter with real Claude CLI to verify tool restrictions are enforced at runtime."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "cross-checker",
+          "message": "cross-checker reported unresolved missing evidence: No integration tests found that execute provider-adapter with real Claude CLI to verify --allowedTools and --disallowedTools behavior.; No tests found that verify evidence agents actually cannot use Write, Edit, Bash, or other denied tools at runtime.; No documentation found on Claude CLI --allowedTools/--disallowedTools enforcement semantics.; No tests found comparing codex provider read-only sandbox behavior with Claude provider read-only tool restrictions."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "verifier",
+          "message": "verifier reported unresolved missing evidence: Integration tests that execute provider-adapter with real Claude CLI to verify --allowedTools and --disallowedTools prevent denied tool usage.; Runtime tests that spawn evidence agents and verify they cannot use Write, Edit, Bash, or other denied tools.; Documentation on Claude CLI --allowedTools and --disallowedTools enforcement semantics and error modes.; Comparison tests between codex provider --sandbox read-only and Claude provider read-only tool restrictions.; Tests that verify executionConfig cannot be bypassed or config.ai cannot be mutated after calling executionConfig.; Agent provider dispatch path verification to ensure provider-adapter is always used for evidence agent spawning."
+        },
+        {
+          "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+          "role": "verifier",
+          "message": "verifier returned clarify; keep PRD readiness blocked until resolved."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "explorer",
+          "message": "explorer reported unresolved missing evidence: I did not verify actual Claude CLI behavior with --allowedTools and --disallowedTools flags to confirm they prevent Write, Edit, Bash, and other denied tools.; I did not verify whether codex provider read-only sandbox behavior matches Claude provider read-only tool restrictions.; I did not find integration tests that execute provider-adapter with real Claude CLI to verify tool restrictions are enforced at runtime."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "cross-checker",
+          "message": "cross-checker reported unresolved missing evidence: No integration tests found that execute provider-adapter with real Claude CLI to verify --allowedTools and --disallowedTools behavior.; No tests found that verify evidence agents actually cannot use Write, Edit, Bash, or other denied tools at runtime.; No documentation found on Claude CLI --allowedTools/--disallowedTools enforcement semantics.; No tests found comparing codex provider read-only sandbox behavior with Claude provider read-only tool restrictions."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "verifier",
+          "message": "verifier reported unresolved missing evidence: Integration tests that execute provider-adapter with real Claude CLI to verify --allowedTools and --disallowedTools prevent denied tool usage.; Runtime tests that spawn evidence agents and verify they cannot use Write, Edit, Bash, or other denied tools.; Documentation on Claude CLI --allowedTools and --disallowedTools enforcement semantics and error modes.; Comparison tests between codex provider --sandbox read-only and Claude provider read-only tool restrictions.; Tests that verify executionConfig cannot be bypassed or config.ai cannot be mutated after calling executionConfig.; Agent provider dispatch path verification to ensure provider-adapter is always used for evidence agent spawning."
+        },
+        {
+          "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+          "role": "verifier",
+          "message": "verifier returned clarify; keep PRD readiness blocked until resolved."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  }
+}

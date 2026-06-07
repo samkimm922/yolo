@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence dispatch already implements JSON repair for drift and explicit EVIDENCE_AGENT_INVALID_JSON blocking for unrecoverable JSON, with PRD readiness integration.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate attempts direct JSON.parse, then applies repair patterns: line range unquoting, backslash escapes, empty key deduplication, trailing comma removal. Returns {parsed, repaired: boolean, error}.",
+      "why": "Implements minor recoverable JSON drift handling with repair detection."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "348-368",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "extractJsonObject handles empty, direct parse, markdown code blocks, and slice from first { to last }. Returns parse result with error aggregation.",
+      "why": "Multi-strategy JSON extraction handles Claude provider output variations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-396",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns explicit error codes EVIDENCE_AGENT_INVALID_JSON (parsed null) or EVIDENCE_AGENT_PROVIDER_FAILED (provider run failed). Error recorded in result.error_code and missing array.",
+      "why": "Unrecoverable JSON fails closed with explicit blocker code."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "542-548",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime extracts JSON from provider stdout via extractJsonObject and normalizes via normalizeAgentResult. Repaired flag tracked in provider_runs.",
+      "why": "JSON repair and error handling integrated into runtime execution flow."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "574-604",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent results feed into inspectDemandPrdReadiness. Boundary violations add BOUNDARY_PROJECT_MUTATION blockers. Final readiness.prd_ready controls result status/code/summary.",
+      "why": "PRD readiness blocked when agent results have errors or boundary violations."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "repairs minor Claude JSON key drift test passes output with line: 42-88, backslash-escaped strings, and empty key duplicates. Verifies json_repaired flag recorded and status pass.",
+      "why": "Test proves minor recoverable drift is recorded and does not block."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "invalid agent JSON fails closed test returns stdout not json. Asserts status blocked, result.error_code EVIDENCE_AGENT_INVALID_JSON, and readiness blocker code EVIDENCE_AGENT_INVALID_JSON.",
+      "why": "Test proves unrecoverable JSON receives explicit error code and blocks PRD readiness."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "605-640",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "agent evidence without explicit scope blocked test removes scope field from evidence. Asserts status blocked, result.error_code EVIDENCE_SCOPE_REQUIRED, and readiness blocker.",
+      "why": "Additional validation: malformed agent results produce explicit blocker codes."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "642-685",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "agent conflict remains readiness blocker test has cross-checker return block with conflicting evidence. Asserts readiness.prd_ready false and blocker code EVIDENCE_AGENT_CONFLICT.",
+      "why": "Readiness integration verified: agent blockers propagate to PRD readiness."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If JSON repair patterns are insufficient for real Claude drift, agents may be incorrectly blocked.",
+    "If explicit error codes change, PRD readiness checks may fail to recognize blockers."
+  ],
+  "missing": [],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "All claimed functionality exists and is tested. No missing data identified. Verifier should confirm error code integration with readiness and ensure test coverage is complete for real-world Claude drift patterns."
+  }
+}

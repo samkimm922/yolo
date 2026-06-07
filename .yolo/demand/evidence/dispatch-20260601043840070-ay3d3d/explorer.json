@@ -1,0 +1,126 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "Provider configuration in YOLO demand evidence dispatch has explicit safeguards to preserve tool capability boundaries and prevent cross-provider model leakage through executionConfig contract normalization.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "423-471",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig function normalizes provider settings and explicitly clears Claude tool configuration for evidence agents",
+      "why": "This is the core safeguard that prevents cross-provider tool configuration drift in evidence mode."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "450-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude evidence agent configuration explicitly nullifies tool flags (settings, claude_tools, claude_allowed_tools, claude_disallowed_tools) and sets claude_no_session_persistence to true",
+      "why": "Direct evidence that tool configuration is actively reset to prevent inherited restrictions in evidence mode."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "451-456",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Tool profile normalization maps 'research' and 'full' profiles to normalized values and applies them to ai.agent_tool_profile",
+      "why": "Shows the tool profile is controlled and normalized rather than inheriting arbitrary provider settings."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation for Claude provider does not set tool restriction flags by default and relies on permission-mode for boundary enforcement",
+      "why": "Demonstrates the provider adapter design avoids hard-coded tool restrictions for Claude agents."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "43-61",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider capabilities include model_selection, file_write, and shell_exec based on sandbox mode, independent of Claude configuration",
+      "why": "Shows provider-specific capabilities are isolated and do not leak between providers."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "84-98",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider capabilities show sandbox and permission-mode are the primary boundaries, not tool lists",
+      "why": "Confirms the architectural design uses permission-mode for Claude boundary enforcement rather than tool allowlists."
+    },
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "37-41",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentProvider maps provider aliases (anthropic, openai, shell, local) to canonical names (claude, codex, custom)",
+      "why": "Shows provider normalization prevents ambiguous provider references that could cause configuration drift."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "244-248",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy defines boundary with project_mutation: 'forbidden' and allowed_write_roots as only the output artifact directory",
+      "why": "Provides the formal boundary specification that evidence agents must not modify project files."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation for Claude defaults to permission-mode 'default' and only sets tool flags when explicitly configured",
+      "why": "Confirms the provider adapter does not impose tool restrictions by default, preserving full tool capability."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'claude dispatch does not pass tool restriction flags and relies on boundary enforcement' verifies no tool flags are passed and no_session_persistence is true",
+      "why": "Test evidence confirming the actual runtime behavior matches the design contract."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'codex dispatch does not inherit a claude default model or force read-only sandbox' verifies Codex gets clean config without Claude model leakage",
+      "why": "Direct test evidence that cross-provider model configuration isolation is enforced."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' shows the boundary snapshot detects violations",
+      "why": "Confirms the boundary enforcement mechanism is active and blocks mutations regardless of agent success."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "275-341",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'claude full tool profile requires explicit authorization for full semantic mode' verifies full profile requires allowFullAgentTools flag",
+      "why": "Shows the system has guardrails preventing unintended tool profile downgrades."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If executionConfig normalization is bypassed or modified, provider-specific assumptions could leak into evidence agent configuration",
+    "The dirty working tree state indicates uncommitted changes that may diverge from the tested behavior documented in the test suite"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The codebase has explicit contract normalization in executionConfig (lines 450-463) that clears Claude tool configuration for evidence agents, and the test suite confirms cross-provider isolation. The safeguards are in place, but the dirty working tree should be committed before real agent stress testing to ensure tested behavior matches runtime state."
+  }
+}

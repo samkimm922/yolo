@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "blocked",
+  "completed": true,
+  "claim": "YOLO demand router schema readiness converts evidence agent missing and clarify recommendations into blockers via evidenceResultBlockingIssues, preventing prd_ready true when unresolved missing data or clarification requests exist.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "481-511",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues converts missing[], recommendation in ['clarify','blocked','block'], verdict in ['blocked','block','fail'], status in ['blocked','failed','error'] into blockers with codes EVIDENCE_AGENT_MISSING, EVIDENCE_AGENT_CLARIFICATION_REQUIRED, EVIDENCE_AGENT_BLOCKED",
+      "why": "Core implementation showing how missing and clarify recommendations become blockers"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "709-727",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness calls evidenceResultBlockingIssues for each evidence result and pushes blockers to blockerList, returns prd_ready: blockers.length === 0",
+      "why": "Integration of evidence blocking logic into PRD readiness calculation"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "108-149",
+      "source": "project_code",
+      "summary": "actionableMissingItems filters out non-missing status items, sanitizeMissing applies isNonMissingStatusItem patterns to exclude 'no missing data identified' style notes",
+      "why": "Shows how the system distinguishes actionable missing items from status notes"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "246-286",
+      "source": "project_test",
+      "summary": "Test 'evidence agent missing data and clarify recommendations block PRD readiness' verifies missing array and recommendation=clarify produce EVIDENCE_AGENT_MISSING and EVIDENCE_AGENT_CLARIFICATION_REQUIRED blockers, prd_ready=false",
+      "why": "Test evidence demonstrating the blocking behavior for missing and clarify cases"
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601003601970-y2e6j7/dispatch.json",
+      "line": "769-796",
+      "source": "project_artifact",
+      "summary": "Recent dispatch shows EVIDENCE_AGENT_MISSING blockers for explorer, cross-checker, verifier with messages listing unresolved missing evidence, prd_ready=false",
+      "why": "Runtime evidence showing the system is actively converting missing items to blockers"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "709-727",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness requires evidence_results for all roles in requiredEvidenceRoles, adds EVIDENCE_AGENT_RESULT_REQUIRED blocker if any role result is not complete",
+      "why": "Shows evidence completion requirement before PRD readiness"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "728-731",
+      "source": "project_code",
+      "summary": "inspectEvidenceAgreement adds EVIDENCE_AGENT_CONFLICT blockers when recommendations disagree (block+proceed or proceed+clarify)",
+      "why": "Additional blocker mechanism for evidence agent conflicts"
+    }
+  ],
+  "assumptions": [
+    "Evidence agents populate missing array only with truly unresolved items, not status notes",
+    "recommendation field values are normalized and case-insensitive in the blocking logic",
+    "Evidence result completion check (evidenceResultComplete) validates both completed flag and evidence presence"
+  ],
+  "risks": [
+    "If evidence agents put status notes in missing array, false-positive blockers may occur",
+    "If recommendation values have typos or non-standard casing, blocking logic may not catch them",
+    "If evidence results have completed=true but missing evidence, blockers may be missed"
+  ],
+  "missing": [
+    "evidence[0] must declare scope as project, external, user, or unknown.",
+    "evidence[1] must declare scope as project, external, user, or unknown.",
+    "evidence[2] must declare scope as project, external, user, or unknown.",
+    "evidence[3] must declare scope as project, external, user, or unknown.",
+    "evidence[4] must declare scope as project, external, user, or unknown.",
+    "evidence[5] must declare scope as project, external, user, or unknown.",
+    "evidence[6] must declare scope as project, external, user, or unknown."
+  ],
+  "recommendation": "block",
+  "result": {
+    "verdict": "blocked",
+    "notes": "Code, tests, and runtime artifacts confirm that evidenceResultBlockingIssues converts missing arrays and clarify/block recommendations into blockers that prevent prd_ready=true. The implementation handles missing[], recommendation in ['clarify','blocked','block'], verdict in ['blocked','block','fail'], and status in ['blocked','failed','error'] cases. Test coverage specifically verifies missing+clarify blocking behavior. Recent dispatch artifacts show the system is actively working as designed.",
+    "error_code": "EVIDENCE_SCOPE_REQUIRED"
+  }
+}

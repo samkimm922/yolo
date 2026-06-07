@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence is sufficient to support PRD readiness: all project claims are backed by code, tests, logs, or artifacts; no assumptions presented as facts; the single missing item (stress test with real Claude -p agents) is correctly acknowledged in both the demand status_quo and explorer missing array.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() uses git ls-files -co --exclude-standard to capture tracked/cached/other files, returning null on failure to trigger fallback.",
+      "why": "Verifies git ls-files coverage claim with exact code location and implementation details."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles() provides non-git fallback using readdirSync, excludes standard directories, returns repo-relative paths.",
+      "why": "Verifies fallback walk implementation claim with code evidence."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() combines gitFiles() || walkFiles() and excludes allowed write roots from snapshot.",
+      "why": "Verifies dual-mode file discovery and artifact exclusion claim."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test git-backed boundary detects untracked project mutations with git repo initialization and untracked file write.",
+      "why": "Verifies test coverage claim for git-backed mutation detection."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "454-494",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test non-git boundary fallback detects modified project files while ignoring artifacts in runtimeDir.",
+      "why": "Verifies test coverage claim for non-git fallback and artifact exclusion."
+    },
+    {
+      "path": "git status --porcelain",
+      "line": "working tree status",
+      "scope": "project",
+      "source": "project_log",
+      "summary": "45 modified files, 9 untracked files including evidence-dispatch implementation files in untracked state.",
+      "why": "Verifies dirty working tree claim with actual git status output."
+    },
+    {
+      "path": "git ls-files -co --exclude-standard | wc -l",
+      "line": "file count",
+      "scope": "project",
+      "source": "project_log",
+      "summary": "Git reports 906 tracked/cached/other files in working tree.",
+      "why": "Verifies the 906 files claim used in explorer summary."
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601031036907-onhmy7/dispatch.json",
+      "line": "617-623",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Recent dispatch artifact shows boundary.project_mutation=clean with allowed_write_roots exclusion and empty changes array.",
+      "why": "Verifies empirical evidence from real dispatch run that artifact exclusion works correctly."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If explorer incorrectly classified any external research as project scope, verification would miss the source category mismatch",
+    "If any evidence paths are relative to wrong root, the verification would pass but links would be unusable"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All evidence verified: (1) every evidence record has proper repo-relative path or locator, (2) all scopes are correctly classified as project for code/tests/logs/artifacts, (3) all sources match the evidence type (project_code, project_test, project_log, project_artifact), (4) no assumptions presented as facts - assumptions array is empty, (5) the single missing item (stress test with real Claude -p agents) is correctly reflected in missing array and was explicitly acknowledged in demand status_quo, (6) risks are appropriately identified as technical concerns rather than blockers. Evidence quality is high with exact line numbers and implementation details. Ready to proceed to cross_check phase."
+  }
+}

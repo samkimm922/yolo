@@ -1,0 +1,122 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch boundary audit implementation covers git ls-files tracked/cached/other files, includes walkFiles fallback for non-git projects, and excludes only the dispatch artifact root from mutation detection.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() creates file digests for all project files except allowed artifact roots, using git files or walkFiles fallback",
+      "why": "Core boundary snapshot function that captures project state before/after agent execution"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() uses 'git ls-files -co --exclude-standard' to get tracked, cached, and other files excluding standard exclusions",
+      "why": "Git-backed file discovery that covers tracked, cached, and other file categories"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles() recursively walks all directories except excluded ones (.git, node_modules, dist, coverage, .next, .cache) for non-git projects",
+      "why": "Fallback file discovery for non-git projects that excludes common build/cache dirs"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "58-60",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "excludedDir() checks if directory is in excluded list: [.git, node_modules, dist, coverage, .next, .cache]",
+      "why": "Defines which directories are excluded from boundary snapshots"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after digests to detect added, modified, and deleted files",
+      "why": "Detects project mutations by comparing file digests"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-566",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime builds boundary snapshots before agent execution and after, passing outputDir as allowed root to exclude artifacts",
+      "why": "Shows boundary snapshots are taken at the right time with proper exclusions"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "568-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary changes detected and added to result with project_mutation status and allowed_write_roots",
+      "why": "Shows how boundary violations are reported"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' - agent creates file, boundary detects violation, blocks with BOUNDARY_PROJECT_MUTATION",
+      "why": "Evidence that boundary blocks project mutations"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' - git init, agent creates untracked file, boundary detects added file",
+      "why": "Evidence that git-backed boundary detects untracked mutations"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "454-491",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects gitignored project mutations outside excluded dirs' - agent creates .env file, boundary detects added gitignored file",
+      "why": "Evidence that gitignored mutations are detected outside artifact roots"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'non-git boundary fallback detects modified project files and ignores artifacts' - agent modifies existing file and creates artifact, boundary detects modification but ignores artifact",
+      "why": "Evidence that non-git fallback works and excludes artifacts correctly"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "244-248",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Execution policy declares project_mutation forbidden and specifies allowed_write_roots as [outputDir]",
+      "why": "Policy definition that boundary enforcement is documented in dispatch plan"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If boundary snapshot coverage has gaps (e.g., certain file types or edge cases), mutations could go undetected",
+    "If git ls-files excludes some tracked files by default, those files might not be in the snapshot"
+  ],
+  "missing": [
+    "Evidence from real Claude -p agent stress testing with actual boundary mutations to confirm detection in production",
+    "Evidence that git ls-files -co covers all intended file categories for all git versions and configurations",
+    "Evidence that excludedDir list is comprehensive for common project structures"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Boundary audit implementation is factual and covers both git and non-git projects with proper artifact exclusion. Test coverage confirms detection of tracked, untracked, and gitignored mutations. Main gap is real-world stress testing with actual Claude agents."
+  }
+}

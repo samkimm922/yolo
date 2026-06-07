@@ -1,0 +1,174 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO harness boundary audit implementation exists in src/demand/evidence-dispatch.ts and __tests__/demand-evidence-dispatch.test.ts with git-backed and non-git file system coverage.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() runs git ls-files -co --exclude-standard -z to capture tracked, cached, and other files",
+      "why": "This is the primary git-backed boundary detection mechanism."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles() provides recursive filesystem walk fallback with directory exclusions",
+      "why": "This is the non-git boundary detection fallback."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() combines git and walk results, excludes allowed roots, computes sha256 digests",
+      "why": "This is the core boundary snapshot logic."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "100",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Git and walk are combined via Set union: git ? [...new Set([...git, ...walkFiles(projectRoot])] : walkFiles(projectRoot)",
+      "why": "This proves git ls-files and walk are combined, not replaced."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "104",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Allowed roots are excluded: if (allowed.some((root) => isWithin(absolute, root))) continue;",
+      "why": "This is the artifact root exclusion mechanism."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "59",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "excludedDir() excludes: .git, node_modules, dist, coverage, .next, .cache",
+      "why": "These are the standard directories excluded from boundary snapshots."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after maps and returns added/modified/deleted changes",
+      "why": "This is the mutation detection logic."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "git-backed boundary detects untracked project mutations test",
+      "why": "This proves git-backed boundary detection works for untracked files."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "447",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Assert verifies untracked-mutation.txt is detected as added: assert.ok(result.boundary.changes.some((change) => change.path === 'untracked-mutation.txt' && change.change === 'added'))",
+      "why": "This proves untracked file detection is tested."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "454-491",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "git-backed boundary detects gitignored project mutations outside excluded dirs test",
+      "why": "This proves gitignored file detection works."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "487",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Assert verifies .env (gitignored) is detected as added",
+      "why": "This proves gitignored file detection is tested."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "non-git boundary fallback detects modified project files and ignores artifacts test",
+      "why": "This proves non-git boundary detection works and excludes artifacts."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "529",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Assert verifies artifacts are excluded: assert.equal(result.boundary.changes.some((change) => change.path.includes('agent-scratch.txt')), false)",
+      "why": "This proves artifact root exclusion is tested."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-566",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime() builds boundaryBefore snapshot, runs agents, builds boundaryAfter, computes changes, and emits BOUNDARY_PROJECT_MUTATION blockers",
+      "why": "This is the full boundary enforcement workflow."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "567-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundary result includes project_mutation violated/clean status, allowed_write_roots, and detailed changes list",
+      "why": "This is the boundary audit output format."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "630-676",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandTriage() returns evidence_policy cross_check for technical risk/high cost, single_agent for existing projects, none for greenfield",
+      "why": "This is the evidence policy routing logic."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "654-660",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Route selection: technicalRisk || highCost || acceptanceMissingForPrd || unclearApprovalForPrd triggers careful route, otherwise fast",
+      "why": "This is the routing trigger logic."
+    },
+    {
+      "path": "docs/memory/CURRENT_HANDOFF.md",
+      "line": "1",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Current handoff docs exist under docs/memory/",
+      "why": "This is the project memory root location."
+    }
+  ],
+  "assumptions": [
+    "The git ls-files -co flags capture tracked, cached, and other files as documented by git",
+    "The dispatch artifact root is always excluded via allowed roots parameter",
+    "Full-tool agent stress testing with real Claude -p agents would expose any bypass vectors"
+  ],
+  "risks": [
+    "A full-tool agent with file write capabilities could bypass boundary if artifact root exclusion fails",
+    "Dirty working tree edge cases may not be fully covered by current tests"
+  ],
+  "missing": [
+    "Stress test evidence using real Claude -p agents with full tools against actual YOLO projects",
+    "Verification that dispatch artifact root path is always correctly passed to buildBoundarySnapshot allowedRoots parameter",
+    "Evidence of boundary audit behavior in dirty working trees with staged, unstaged, and untracked changes"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Implementation exists with git-backed (ls-files -co) and non-git (walk) coverage. Tests prove untracked and gitignored detection plus artifact exclusion. Stress testing with real full-tool Claude agents is the primary gap."
+  }
+}

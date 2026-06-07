@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent cross-check confirms: YOLO demand evidence dispatch implements a comprehensive scope-based evidence system that enforces separation of external research (scope=external) from target-project facts (scope=project) through multi-layer validation, blocking mechanisms, and boundary audit detection.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES = ['project', 'external', 'user', 'unknown'] - core type system for evidence classification",
+      "why": "Foundational scope definition used across both router and dispatch layers"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope implements 8-layer scope inference: explicit scope field, normalized aliases (repo/codebase→project), source type patterns (external_web→external), URL detection, path presence, and unknown defaults",
+      "why": "Automatic scope classification when explicit declaration is missing"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues: generates PROJECT_EVIDENCE_PATH_REQUIRED when project scope lacks path locator; generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE when only external/user/unknown evidence exists",
+      "why": "Runtime enforcement that project facts require project-scoped evidence"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "70-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines three agent roles with explicit protocols: explorer (find project facts), cross-checker (independent verification), verifier (evidence sufficiency)",
+      "why": "Agent workflow definitions supporting cross-check evidence policy"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot captures file digests excluding allowed roots; diffBoundarySnapshots detects added/modified/deleted files",
+      "why": "File system change detection for boundary violation audit"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "561-567",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "After agent execution, boundary comparison generates BOUNDARY_PROJECT_MUTATION blockers for any project files changed outside allowed artifact root",
+      "why": "Runtime enforcement of 'do not modify target project files' boundary"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-157",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates each evidence record declares scope in VALID_EVIDENCE_SCOPES; returns blocking errors for violations",
+      "why": "Schema validation ensuring every evidence record has valid scope"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "270-273",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rules: 'Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator' + conditional WebFetch/WebSearch instruction for research profile",
+      "why": "Explicit agent instructions separating external research from project facts"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "402-414",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult: sets status=blocked, recommendation=block, adds EVIDENCE_SCOPE_REQUIRED error when evidence records lack valid scope declaration",
+      "why": "Post-execution validation enforcing scope requirement"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine: 'external 证据可以来自 WebFetch/WebSearch 或外部文档，但只能作为背景研究，不能单独证明目标项目已有字段、API、状态机或数据流'",
+      "why": "Product-level requirement that external evidence cannot prove existing-project facts"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine: 'dispatch 不靠阉割 tools 做安全边界;agent 可以拥有审计、检索、fetch、命令和子任务等能力，但必须遵守 harness 边界，目标项目文件不得被修改'",
+      "why": "Architecture principle: boundary safety via contract and audit, not tool restrictions"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "446-450",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent tool profile normalization: research/fetch/web/web-research/external-research → 'research'; full/all/write/execution + allowFullAgentTools → 'full'; default → 'boundary'",
+      "why": "Tool profile semantics mapping to agent capability levels"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues filters evidence records for missing scope declarations and returns EVIDENCE_SCOPE_REQUIRED blockers per role",
+      "why": "Validation check used in PRD readiness inspection"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Verified risk: If scope validation in normalizeAgentResult (line 402-414) fails silently or agents mislabel external research as project scope, PRD readiness could incorrectly approve project facts without project evidence.",
+    "Verified risk: Scope inference in evidenceRecordScope (router.ts:382-406) could misclassify evidence if source types don't match expected patterns, though fallback to 'unknown' mitigates this.",
+    "Verified risk: Boundary audit only runs in execute mode (line 511, 561); dry_run mode does not detect whether agents would violate boundaries."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All 18 evidence records from explorer independently verified. The scope-based evidence system is correctly implemented with: (1) Four-scope type system (project/external/user/unknown), (2) Multi-layer scope inference and validation, (3) Hard requirement that project facts need project-scoped evidence with path locators, (4) Boundary snapshot audit detecting project mutations, (5) Schema validation enforcing scope declarations, (6) Clear agent instructions separating external research from project facts. No conflicts found between claim and implementation."
+  }
+}

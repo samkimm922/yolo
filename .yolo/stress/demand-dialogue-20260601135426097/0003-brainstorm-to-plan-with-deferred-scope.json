@@ -1,0 +1,78 @@
+{
+  "iteration": 3,
+  "scenario": "brainstorm-to-plan-with-deferred-scope",
+  "expected": "executable",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0003-brainstorm-to-plan-with-deferred-scope",
+  "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0003-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md",
+  "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0003-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.chain.json",
+  "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0003-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope-turn-3.prd.json",
+  "blocked_path": null,
+  "yolo": {
+    "no_premature_prd": true,
+    "final_class_ok": true,
+    "check_status": "pass",
+    "turn_count": 3,
+    "turn_expectations_met": 3,
+    "blocker_codes": [
+      "REFLECTION_PRESENT",
+      "INVESTIGATION_COMPLETE",
+      "REQUIREMENTS_PRESENT",
+      "ACCEPTANCE_SCENARIOS_PRESENT",
+      "SCENARIO_MATRIX_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "SCENARIO_SURFACES_PRESENT",
+      "SURFACE_SESSION_BUDGET_EXECUTABLE",
+      "OUT_OF_SCOPE_PRESENT",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "USER_APPROVAL_PRESENT"
+    ]
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "correct_final_class": true,
+      "conversation_realistic": true,
+      "no_premature_prd": true,
+      "executable": true,
+      "score": 95,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "BRAINSTORM_QUESTION_VAGUE",
+          "path": ".yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md:4",
+          "message": "Turn 1 agent question ('先把大方向拆小，确认本轮 MVP 只做一个可验证风险。') is a statement rather than a concrete clarifying question — it doesn't ask the user a specific thing to resolve."
+        },
+        {
+          "code": "SCENARIO_IDEA_NOT_CHALLENGED",
+          "path": ".yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md",
+          "message": "The brainstorm scenario name implies deferred scope was discussed, but the transcript never shows the agent explicitly deferring future anomaly types or documenting that decision. The PRD does capture out_of_scope, but the conversation coul"
+        }
+      ],
+      "dimensions": {
+        "clarification_quality": 80,
+        "project_fact_grounding": 95,
+        "stage_transition": 95,
+        "plan_convergence": 95,
+        "prd_executability": 100,
+        "deadlock_avoidance": 100,
+        "rework_risk": 90
+      }
+    },
+    "stdout": "",
+    "stderr": ""
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T13:55:29.178Z",
+  "ended_at": "2026-06-01T13:56:13.773Z",
+  "duration_ms": 44595
+}

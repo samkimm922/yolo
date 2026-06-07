@@ -94,8 +94,6 @@ function updateStatusForStage(stageId, stageStatus, options = {}) {
   const now = clean(options.now) || new Date().toISOString();
   const status = loadOrCreateStatus(stageId, { ...options, now });
   const activeStage = stageStatus === "completed" ? nextStageId(stageId) : stageId;
-  const stageOrder = new Map(LIFECYCLE_STAGES.map((stage) => [stage.id, stage.sequence]));
-  const activeSequence = stageOrder.get(activeStage) || stageOrder.get(stageId) || 1;
 
   status.current_stage = activeStage;
   status.updated_at = now;
@@ -103,9 +101,8 @@ function updateStatusForStage(stageId, stageStatus, options = {}) {
     const existing = (status.stages || []).find((item) => item.id === stage.id) || {};
     let nextStatus = existing.status || "pending";
     if (stage.id === stageId) nextStatus = stageStatus;
-    else if (stage.sequence < activeSequence && nextStatus !== "blocked") nextStatus = "completed";
     else if (stage.id === activeStage) nextStatus = "active";
-    else if (stage.sequence > activeSequence && nextStatus !== "blocked") nextStatus = "pending";
+    else if (nextStatus === "active") nextStatus = "pending";
     return {
       id: stage.id,
       sequence: stage.sequence,

@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch boundary snapshot implementation covers git ls-files tracked/cached/other files, includes fallback walks for non-git projects, and excludes only the dispatch artifact root.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles uses git ls-files -co --exclude-standard to capture tracked, cached, and other files",
+      "why": "Primary evidence that git ls-files flags cover all required file types"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles provides recursive filesystem walk as fallback for non-git projects",
+      "why": "Verifies fallback coverage for non-git scenarios"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot merges git and walk results, filters via isWithin against allowedRoots",
+      "why": "Confirms combination strategy and allowed root exclusion"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime call passes allowedRoots=[plan.output_dir] as only exclusion",
+      "why": "Runtime evidence that only dispatch artifact root is excluded"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after to detect added, modified, deleted files",
+      "why": "Verifies mutation detection covers all change types"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case verifies git-backed boundary detects untracked mutations",
+      "why": "Test evidence for untracked file detection"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "454-491",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case verifies git-backed boundary detects gitignored mutations outside excluded dirs",
+      "why": "Test evidence for gitignored file detection"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case verifies non-git fallback detects mutations while ignoring artifacts",
+      "why": "Test evidence for non-git fallback coverage"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Full-tool agent could create target project file after beforeSnapshot but before agent execution, making it appear in both snapshots and avoid detection as a mutation"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer evidence verified: all 13 records cite actual project files with correct line ranges, scope classifications are accurate (all project-scoped), no assumptions promoted as facts. Test coverage confirms git-backed tracked/untracked/gitignored detection and non-git fallback. The pre-snapshot timing risk identified by explorer is accurately categorized as risk, not blocker."
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "iteration": 1,
+  "scenario": "real-ui-field-clarification",
+  "expected": "executable",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601165113486/fixtures/0001-real-ui-field-clarification",
+  "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601165113486/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.transcript.md",
+  "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601165113486/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.chain.json",
+  "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601165113486/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+  "blocked_path": null,
+  "yolo": {
+    "no_premature_prd": true,
+    "final_class_ok": true,
+    "check_status": "pass",
+    "turn_count": 4,
+    "turn_expectations_met": 4,
+    "blocker_codes": [
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "EXECUTION_SCOPE_PRESENT",
+      "PROJECT_FACTS_GROUNDED",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "PROJECT_FACTS_GROUNDED",
+      "USER_APPROVAL_PRESENT"
+    ]
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "correct_final_class": true,
+      "conversation_realistic": true,
+      "no_premature_prd": true,
+      "executable": true,
+      "score": 95,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "DIALOGUE_AGENT_RESPONSES_IDENTICAL_TO_QUESTIONS",
+          "path": "real-ui-field-clarification.chain.json",
+          "message": "In every turn the agent_response field is identical to agent_question, suggesting the transcript captures only the question text as the full response. This is acceptable for stress fixtures but a real dialogue would include richer agent fra"
+        },
+        {
+          "code": "NO_BADGE_COMPONENT_REFERENCE",
+          "path": "src/pages/inventory-list.tsx",
+          "message": "The PRD says 'use existing badge style' but the fixture file (inventory-list.tsx) contains no badge component. A fresh agent would need to search the project for an existing badge to satisfy this instruction. The PRD is still executable bec"
+        }
+      ],
+      "dimensions": {
+        "clarification_quality": 95,
+        "project_fact_grounding": 98,
+        "stage_transition": 100,
+        "plan_convergence": 95,
+        "prd_executability": 93,
+        "deadlock_avoidance": 100,
+        "rework_risk": 92
+      }
+    },
+    "stdout": "",
+    "stderr": ""
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T16:51:13.489Z",
+  "ended_at": "2026-06-01T16:52:10.495Z",
+  "duration_ms": 57006
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildAgentBridgeInstallPlan } from "../../../tools/install-agent-bridge.js";
 import {
@@ -63,7 +63,7 @@ function skillPlanFiles(skillPlans = []) {
       scope: plan.scope || null,
       role: "workflow_skill",
       command: null,
-      path: file.path,
+      path: isAbsolute(file.path) ? file.path : join(plan.project_root || "", file.path),
       relative_path: file.relative_path || file.path,
     }))
   );

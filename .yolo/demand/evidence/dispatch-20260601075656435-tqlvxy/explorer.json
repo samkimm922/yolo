@@ -1,0 +1,116 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch API implements a boundary snapshot audit that detects project file mutations by full-tool Claude agents during evidence gathering and blocks PRD readiness when violations occur.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 97,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() captures SHA256 digests of all project files except those in allowed_write_roots",
+      "why": "This is the core boundary audit mechanism that establishes the before-state baseline"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 111,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after snapshots and returns added/modified/deleted files",
+      "why": "This function detects any mutations that occurred during agent execution"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 516,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime calls buildBoundarySnapshot before executing any evidence agents",
+      "why": "Establishes baseline before agents can potentially mutate files"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 566,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime calls buildBoundarySnapshot after all agents complete and diffs the snapshots",
+      "why": "Detects any file mutations that occurred during agent execution"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 568,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundary field in result includes project_mutation status and array of changes",
+      "why": "Provides structured evidence of any boundary violations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 585,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations are converted to BOUNDARY_PROJECT_MUTATION blockers",
+      "why": "Violations automatically block PRD readiness regardless of agent results"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 591,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary blockers extend the readiness blockers array and force prd_ready=false",
+      "why": "PRD readiness is blocked when boundary violations occur"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 104,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot excludes files within allowed_write_roots from mutation detection",
+      "why": "Agents are allowed to write artifacts to the designated output directory"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 244,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy explicitly declares project_mutation: forbidden and lists allowed_write_roots",
+      "why": "Policy is communicated to agents and enforced via boundary audit"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 267,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt explicitly instructs 'do not modify target project files' and shows allowed artifact root",
+      "why": "Agents are given clear instructions before execution"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": 678,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness validates all evidence agent results and returns blockers",
+      "why": "Router integrates boundary violations into final readiness assessment"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If buildBoundarySnapshot fails to enumerate all project files, mutations could go undetected",
+    "If allowed_write_roots is misconfigured, legitimate project writes could be blocked or malicious writes allowed",
+    "If agents modify files during execution then revert before the after-snapshot, mutations would not be detected",
+    "If the diff logic has bugs, some mutations might not trigger blockers"
+  ],
+  "missing": [
+    "Stress test evidence of boundary audit with full-tool Claude agents executing with actual write tools enabled",
+    "Verification that buildBoundarySnapshot correctly handles all edge cases (symlinks, large files, permission errors, etc.)",
+    "Evidence that boundary violations are properly surfaced to users and prevent PRD generation"
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Code review confirms boundary audit implementation exists and should theoretically detect project mutations. However, the demand explicitly requests stress-testing with real full-tool agents, which has not been performed. The evidence-dispatch code shows correct before/after snapshot logic and blocker generation, but actual runtime behavior with unrestricted Claude agents has not been verified."
+  }
+}

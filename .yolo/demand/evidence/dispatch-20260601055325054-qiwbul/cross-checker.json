@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "VERIFIED: YOLO demand evidence dispatch already supports WebFetch/WebSearch as external evidence (scope=external) and requires project-scoped path evidence for target-project facts (scope=project). All 7 evidence claims from the explorer are substantiated by actual source code, with one minor line-number discrepancy.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": 52,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES = new Set(['project', 'external', 'user', 'unknown']) defines the four valid scope values",
+      "why": "Establishes the scope taxonomy; explorer cited line 16 but actual definition is at line 52."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() classifies records by detecting URLs as 'external', paths as 'project', and validating against scope keywords",
+      "why": "Confirms explorer's line 382-406 claim; implementation correctly maps evidence sources to scopes."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() generates blockers: PROJECT_EVIDENCE_PATH_REQUIRED when project-scope lacks paths, and PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE when evidence is only external/user/unknown",
+      "why": "Verifies explorer's line 513-530 claim; function enforces project-fact-require-project-evidence invariant."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "726-732",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() calls evidenceScopeDeclarationIssues() and projectEvidenceBlockingIssues() for each complete evidence result, adding blockers to PRD readiness",
+      "why": "Verifies explorer's line 728-732 claim; integrates scope validation into PRD readiness gates."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors() validates that each evidence record declares a valid scope: project, external, user, or unknown",
+      "why": "Confirms explorer's line 151-158 claim; enforces scope declaration requirement."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "273-276",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt instructs: 'If the demand explicitly asks for external research/fetch/search, actually use WebFetch/WebSearch when available and record those records as scope=external'",
+      "why": "Confirms explorer's line 275-276 claim; agents are explicitly allowed and directed to use external research tools."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": 70,
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'external证据可以来自 WebFetch/WebSearch 或外部文档，但只能作为背景研究，不能单独证明目标项目已有字段、API、状态机或数据流'",
+      "why": "Confirms explorer's line 70 claim; documents policy that external evidence cannot prove project implementation facts."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Line number discrepancy (16 vs 52) in VALID_EVIDENCE_SCOPES evidence suggests explorer may have relied on stale or cached line numbers",
+    "If the blocking logic has edge cases (e.g., path detection fails for certain file formats), agents could submit invalid project evidence that passes validation"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All 7 explorer evidence claims are independently verified from actual source code. One minor line-number correction (52, not 16) does not affect validity. The implementation correctly: (1) defines four scopes, (2) classifies WebFetch/WebSearch as external, (3) requires project-scoped path evidence for project facts, (4) generates blockers when requirements aren't met, and (5) documents the policy in doctrine. No code changes appear required."
+  }
+}

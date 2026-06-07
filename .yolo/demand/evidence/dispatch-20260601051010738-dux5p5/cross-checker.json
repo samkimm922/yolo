@@ -1,0 +1,119 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements provider-aware boundary isolation with git-backed snapshot verification and prevents cross-provider configuration leakage via explicit normalization logic.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot uses git ls-files -co --exclude-standard -z for comprehensive file tracking, and walkFiles as fallback, creating SHA-256 digests of all project files excluding allowed_write_roots.",
+      "why": "Boundary detection requires comprehensive before/after state with proper gitignored and untracked file coverage."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after digest Maps to detect added, modified, or deleted files, returning sorted change list.",
+      "why": "This is the core detection mechanism for boundary violations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-567",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime builds boundary snapshots before and after all agent executions, then diffs them to detect violations, injecting BOUNDARY_PROJECT_MUTATION blockers when changes detected.",
+      "why": "This proves boundary enforcement is actually applied during execution, not just declared."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "423-471",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig normalizes provider settings with explicit branches: lines 447-448 prevent codex from inheriting claude model; lines 450-463 clear claude tool restriction flags for boundary mode.",
+      "why": "This is the actual normalization logic that prevents cross-provider configuration leakage."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation routes to isolated provider branches with separate argument construction: codex uses outputFile and approval_policy, custom uses shell command, claude uses -p with permission mode and tool flags.",
+      "why": "Provider isolation at the CLI argument level prevents cross-contamination."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "53-54",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex branch uses codex_model specifically, with fallback to modelValue(ai) only if no codex_model set.",
+      "why": "This confirms codex has isolated model handling independent of claude model setting."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "450-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude branch explicitly clears settings, claude_tools, claude_allowed_tools, claude_disallowed_tools to empty strings and sets claude_no_session_persistence to true.",
+      "why": "This confirms that Claude agents run with full tool capability under boundary enforcement rather than restrictive flags."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "585-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations inject BOUNDARY_PROJECT_MUTATION blockers with path and change details into readiness, preventing PRD approval when mutations occur.",
+      "why": "This enforces consequences for boundary violations by blocking demand progression."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test confirms codex dispatch does not inherit claude default model, asserting config.ai.provider equals codex and claude/i.test on model returns false.",
+      "why": "This validates provider isolation at the model configuration level."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies claude dispatch clears tool restriction flags and retains max_budget_usd through executionConfig normalization.",
+      "why": "This confirms tool capability preservation while respecting boundary constraints."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test demonstrates boundary blocking when agent writes unexpected-project-write.txt, asserting status=blocked and boundary.project_mutation=violated.",
+      "why": "This proves boundary detection actually works in practice."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Git-backed boundary test confirms detection of untracked mutations and gitignored file changes outside excluded directories.",
+      "why": "This validates comprehensive detection including untracked and gitignored files."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "SHA-256 snapshot detection may miss very fast modify-then-revert sequences within same process execution between before/after snapshots.",
+    "Provider isolation depends on executionConfig normalization being applied; any bypass of this normalization could allow cross-provider leakage.",
+    "Test coverage demonstrates isolated provider behavior but integration stress testing with real providers may reveal edge cases not caught in unit tests."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification confirms all explorer claims: git-backed boundary snapshots exist and detect mutations comprehensively; provider isolation is implemented via executionConfig normalization and buildProviderInvocation routing; test evidence validates both isolation and boundary enforcement. No contradictions or weakenings found. Risks are acceptable and documented."
+  }
+}

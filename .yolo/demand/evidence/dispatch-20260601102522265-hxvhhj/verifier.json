@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence is complete, verifiable, and sufficient to support PRD readiness for the demand. The system implements JSON drift repair and fail-closed validation as specified.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "403-420, 407-412, 422-442, 444-495, 446, 617-623, 650-680",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "All cited line ranges exist and contain the claimed implementation: parseJsonCandidate for repair, extractJsonObject for extraction, normalizeAgentResult for fail-closed validation, and runtime integration",
+      "why": "Verifies that explorer's code path citations are accurate and implement the claimed behavior."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "739-776, 778-808, 754-755, 803-804",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "All cited test line ranges exist and validate the acceptance criteria: repair recording, fail-closed behavior with explicit blocker, and drift pattern handling",
+      "why": "Verifies that explorer's test citations are accurate and cover the acceptance criteria."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Demand doctrine defines EVIDENCE_AGENT_INVALID_JSON as a standard error code for agent result validation failures",
+      "why": "Contextualizes the error code used in the implementation as part of the documented schema."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Explorer correctly identified all relevant code paths; if additional JSON handling exists outside cited files, it was not reviewed"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer provided 10 specific, verifiable evidence records with exact line numbers from implementation and tests. No assumptions promoted to facts. All acceptance criteria from the demand are covered by cited evidence: repair logic exists, fail-closed validation with EVIDENCE_AGENT_INVALID_JSON is implemented, and tests validate both behaviors. Ready for cross_check phase."
+  }
+}

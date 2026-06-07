@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "VERIFIED: YOLO demand evidence dispatch implements explicit provider isolation and boundary enforcement as claimed by the explorer, with all 10 evidence items independently confirmed through source code analysis.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "450-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider branch in executionConfig explicitly resets all tool restriction flags (settings, claude_tools, claude_allowed_tools, claude_disallowed_tools) to empty strings and sets claude_no_session_persistence to true, confirming provider isolation.",
+      "why": "Independent verification confirms explorer claim at lines 450-463: Claude evidence agents start with clean tool configuration."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot function creates SHA-256 digest map of all project files excluding allowed_write_roots, implementing the pre-execution snapshot mechanism.",
+      "why": "Confirms the snapshot infrastructure exists for boundary enforcement, supporting explorer claim about line 515-517."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots function compares before/after snapshots to detect added, modified, or deleted files, providing the change detection logic.",
+      "why": "Verifies the diff mechanism that detects mutations, supporting boundary enforcement claim at lines 566-572."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Pre-execution boundary snapshot created before spawning any agents: buildBoundarySnapshot(plan.project_root, [plan.output_dir]).",
+      "why": "Confirms exact location of pre-execution snapshot, matching explorer claim at lines 515-517."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-agent snapshot diff detects violations: boundaryAfter snapshot compared to boundaryBefore, changes trigger BOUNDARY_PROJECT_MUTATION blockers.",
+      "why": "Independent verification confirms exact lines 566-572 as claimed by explorer for boundary violation detection."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "258-327",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt generates explicit boundary instructions: 'Boundary: do not modify target project files' and 'Allowed artifact/scratch root: ${plan.output_dir}'.",
+      "why": "Verifies explorer claim that agent prompts explicitly forbid project mutations with allowed artifact root path."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation is a pure function that accepts normalized provider from config.ai and builds provider-specific invocation without cross-provider logic or state.",
+      "why": "Confirms explorer claim that provider adapter is stateless and prevents cross-provider assumption drift."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-98",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude invocation args built from scratch including -p, --model, --permission-mode, --settings, --tools, --allowedTools, --disallowedTools flags, all receiving empty or default values when not provided.",
+      "why": "Verifies explorer claim that Claude agent invocation preserves full tool capability by not passing restrictive flags."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Codex dispatch test verifies provider is codex, codex_sandbox is undefined, and claude model pattern is absent, testing provider isolation.",
+      "why": "Confirms explorer claim that test validates Codex provider does not inherit Claude defaults."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Claude dispatch test asserts all tool restriction flags are empty strings and no_session_persistence is true, verifying clean tool configuration.",
+      "why": "Verifies explorer claim that test confirms Claude provider starts with clean tool configuration."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Boundary mutation test writes unexpected-project-write.txt and asserts status is blocked, project_mutation is violated, and BOUNDARY_PROJECT_MUTATION blocker exists.",
+      "why": "Confirms explorer claim that test validates boundary enforcement catches violations even when agent results pass."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Non-git boundary test detects modified src/existing.txt and ignores agent-scratch.txt in allowed artifact root, validating git-less boundary enforcement.",
+      "why": "Verifies explorer claim that test validates boundary works without git and excludes allowed write roots."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles function excludes .git, node_modules, dist, coverage, .next, .cache directories, confirming exclusion list used in snapshot building.",
+      "why": "Verifies one of explorer assumptions about excluded directories in boundary snapshot."
+    }
+  ],
+  "assumptions": [
+    "Git ls-files with exclude-standard covers all relevant project files and gitignore patterns align with security exclusion list.",
+    "Agent prompt instructions are respected by Claude/Codex/custom providers; no provider tool can bypass boundary enforcement.",
+    "Provider-adapter.ts buildProviderInvocation is stateless and does not cache or share assumptions between provider types."
+  ],
+  "risks": [
+    "If executionConfig fails to normalize provider settings due to config loading errors, provider-specific defaults may leak.",
+    "If agent prompts ignore boundary instructions and mutate project files, PRD readiness will block but git working tree will be dirty.",
+    "If git boundary snapshot misses untracked files due to gitignore patterns, mutations may go undetected."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms all 10 evidence items from the explorer. Provider isolation via executionConfig clearing Claude-specific settings (lines 450-463) is verified. Boundary enforcement via snapshot-based mutation detection (lines 516, 566-572) is confirmed. All test assertions match source implementation. No conflicts detected between explorer claims and independent verification. The demand evidence dispatch system implements provider isolation and boundary enforcement as claimed."
+  }
+}

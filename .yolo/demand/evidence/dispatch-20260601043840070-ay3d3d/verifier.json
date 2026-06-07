@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Provider configuration in YOLO demand evidence dispatch has explicit safeguards to preserve tool capability boundaries and prevent cross-provider model leakage through executionConfig contract normalization.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "450-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig explicitly clears Claude tool configuration flags and sets claude_no_session_persistence to true for evidence agents",
+      "why": "Core safeguard preventing inherited tool restrictions in evidence mode"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "447-448",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider normalization clears inherited Claude model references",
+      "why": "Cross-provider model configuration isolation"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider defaults to permission-mode and only sets tool flags when explicitly configured",
+      "why": "Provider adapter design avoids hard-coded tool restrictions"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies Claude dispatch does not pass tool restriction flags",
+      "why": "Test evidence confirming runtime behavior matches design"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies Codex dispatch does not inherit Claude default model",
+      "why": "Test evidence confirming cross-provider isolation"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If executionConfig normalization is bypassed or modified, provider-specific assumptions could leak into evidence agent configuration",
+    "The dirty working tree indicates uncommitted changes that may diverge from the tested behavior documented in the test suite"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence verification complete. Explorer and cross-checker agree on the core claim with high confidence. All evidence records have concrete project-scoped sources with usable paths and line numbers. No assumptions are presented as fact. Cross-checker identified 2 assumptions (dirty working tree impact, executionConfig normalization coverage) that are properly separated from evidence. Missing data is empty for both agents. The safeguards are verified in code and tests, but proceed with caution: commit the dirty working tree before real agent stress testing to ensure runtime behavior matches the tested state."
+  }
+}

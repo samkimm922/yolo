@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence schema, prompt, readiness contract, and tests currently distinguish project, external, user, and unknown evidence scopes, and enforce that existing-project facts require project-scoped evidence with concrete locators, not external research.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "44",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence schema field definition states 'scope is project | external | user | unknown; project facts require project-scoped evidence'",
+      "why": "Schema contract explicitly defines four valid scopes and project-locator requirements."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES set declares the four valid scope values",
+      "why": "Implementation enforces exactly the four scope categories."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() and evidenceRecordHasDeclaredScope() implement runtime scope classification and validation",
+      "why": "Operational logic classifies and validates scope declarations."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() creates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE and PROJECT_EVIDENCE_PATH_REQUIRED blockers",
+      "why": "Blocking logic enforces project-locator requirements at readiness time."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues() creates EVIDENCE_SCOPE_REQUIRED blocker when scope is not declared",
+      "why": "Explicit scope declaration is enforced for all evidence records."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "342-343",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt explicitly requires 'Every evidence record must include scope: project, external, user, or unknown' and 'Project facts require project-scoped evidence...with a repo-relative path'",
+      "why": "Evidence agent instructions mandate scope and locator requirements."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "640-646",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot before/after and diffBoundarySnapshots detect any project file mutation",
+      "why": "Runtime boundary audit prevents evidence agents from modifying target files."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: '任何 existing-project factual claim 如果只有 external/user/unknown evidence，或 project evidence 没有具体项目定位符，都必须被 readiness blocker 拦住'",
+      "why": "Product documentation confirms this is intentional design, not implementation gap."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' verifies PRD readiness is blocked with only external evidence",
+      "why": "Test coverage confirms external evidence alone cannot prove project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "454-498",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'project evidence requires a concrete project locator' verifies PRD readiness is blocked when project evidence lacks path",
+      "why": "Test coverage confirms project evidence requires concrete locators."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "500-545",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external URLs cannot be relabeled as project evidence' verifies PRD readiness is blocked when URLs are mislabeled as project scope",
+      "why": "Test coverage prevents external evidence from being relabeled as project."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "547-591",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'evidence records must declare valid scope explicitly' verifies PRD readiness is blocked when scope is omitted",
+      "why": "Test coverage enforces explicit scope declaration requirement."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If claim is wrong, external web research could be misused as proof of target project state, leading to incorrect PRD assumptions and implementation failures."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification confirms all explorer claims. Evidence schema (line 44, 52), scope classification logic (lines 382-412), blocking enforcement (lines 513-530, 438-447), agent prompts (lines 342-343), boundary audit (lines 640-646), doctrine documentation, and test coverage (lines 407-591) all properly implement the four-scope system with project-locator requirements. No conflicts found."
+  }
+}

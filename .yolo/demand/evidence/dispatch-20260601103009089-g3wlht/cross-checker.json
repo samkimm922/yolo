@@ -1,0 +1,108 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Cross-check CRITICAL BLOCKER: Explorer misattributed cross-provider model leakage prevention code to wrong file. The code is NOT in provider-adapter.ts lines 521-523 as claimed (file is only 217 lines). Actual location is evidence-dispatch.ts lines 521-523. This is a factual error that must be corrected. Other evidence locations verified correctly: boundary enforcement, provider isolation, and tool profile management exist as documented in correct files.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "1-217",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Full provider-adapter.ts file read confirms it is only 217 lines long. Lines 521-523 DO NOT EXIST in this file.",
+      "why": "Disproves explorer evidence claim about cross-provider model leakage location"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "521-523",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "ACTUAL location of cross-provider model leakage prevention: if ((ai.provider || ai.executor) === codex) { if (!model && !clean(ai.codex_model) && /\\bclaude\\b/i.test(clean(ai.model))) ai.model = ''; }",
+      "why": "Corrects critical file attribution error in explorer evidence"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "25-29",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "settingsValue function confirmed at correct location: handles JSON strings vs file paths for Claude provider settings",
+      "why": "Verifies evidence location accuracy for this claim"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "84-102",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider tool flags confirmed: claude_tools, claude_allowed_tools, claude_disallowed_tools, claude_disable_slash_commands, claude_no_session_persistence, max_budget_usd",
+      "why": "Verifies evidence location accuracy for tool profile management"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "98-110",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot confirmed: creates file digests using git ls-files or walkFiles fallback for boundary enforcement",
+      "why": "Verifies boundary enforcement implementation exists as claimed"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "112-122",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots confirmed: compares before/after snapshots to detect added, modified, deleted files",
+      "why": "Verifies mutation detection logic accuracy"
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601102821702-7vgj73/dispatch.json",
+      "line": "504-510",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Recent dispatch artifact confirms clean boundary with project_mutation: clean and zero changes",
+      "why": "Verifies real-world evidence that boundary enforcement functions correctly"
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601102821702-7vgj73/dispatch.json",
+      "line": "458-498",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Provider runs show json_repaired: false for all three agent roles, indicating stable JSON parsing in evidence mode",
+      "why": "Confirms provider execution stability claim"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "200-234",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verified: codex dispatch does not inherit claude default model or force read-only sandbox, confirming provider isolation",
+      "why": "Verifies test coverage for provider isolation claims"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "68-69",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine confirmed: Claude provider dispatch does not use allowedTools/disallowedTools restrictions; safety from prompt contract, artifact root, boundary snapshots, and readiness blockers",
+      "why": "Verifies design rationale documentation accuracy"
+    }
+  ],
+  "assumptions": [
+    "The explorer's file attribution error for cross-provider model leakage prevention may be a copy-paste mistake or confusion between files, but this reduces confidence in evidence gathering accuracy"
+  ],
+  "risks": [
+    "If the explorer misattributed one critical piece of evidence to the wrong file, other evidence locations may also contain similar attribution errors that were not detected in this cross-check",
+    "The cross-provider model leakage prevention being in evidence-dispatch.ts instead of provider-adapter.ts means it may not apply to all provider invocation paths, only to evidence dispatch runtime",
+    "Future evidence gathering based on this explorer result could propagate the incorrect file location to downstream agents or documentation"
+  ],
+  "missing": [
+    "Verification that cross-provider model leakage prevention in evidence-dispatch.ts applies to all provider execution paths or only to evidence dispatch runtime",
+    "Explanation of why cross-provider model leakage prevention is in evidence-dispatch.ts instead of provider-adapter.ts where other provider-specific logic exists"
+  ],
+  "recommendation": "clarify",
+  "result": {
+    "verdict": "blocked",
+    "notes": "CRITICAL BLOCKER: Explorer evidence claim #3 contains a factual error. Cross-provider model leakage prevention code is NOT in provider-adapter.ts lines 521-523 as claimed. The file is only 217 lines long. Actual location is evidence-dispatch.ts lines 521-523. This file attribution error must be corrected before PRD readiness can proceed. All other evidence locations verified accurately, but this critical error undermines confidence in the evidence gathering process."
+  }
+}

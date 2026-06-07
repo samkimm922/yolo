@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence correctly verifies that boundary snapshot implementation detects tracked and untracked mutations in git-backed projects, provides directory walk fallback for non-git projects, and excludes dispatch artifact root.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() uses git ls-files -co --exclude-standard where -o captures untracked files and -c captures cached (staged) files.",
+      "why": "Verifies claim that git-backed projects detect tracked AND untracked mutations."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test explicitly validates 'git-backed boundary detects untracked project mutations'.",
+      "why": "Test evidence confirms untracked file detection capability."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "100",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Combines git and walk results with Set union, ensuring walkFiles() provides coverage for any files missed by git commands.",
+      "why": "Verifies fallback coverage even in git repos."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'non-git boundary fallback detects modified project files and ignores artifacts' validates non-git scenario.",
+      "why": "Test evidence confirms directory walk fallback works without git."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "102-107, 516",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() skips files within allowedRoots using isWithin() check; runtime passes allowedRoots=[output_dir].",
+      "why": "Verifies explicit exclusion mechanism for dispatch artifact root."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime diffs before/after snapshots and generates BOUNDARY_PROJECT_MUTATION blockers for any detected changes.",
+      "why": "Confirms mutation detection triggers blockers as claimed in demand acceptance criteria."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Evidence shows walkFiles() is always called (not just fallback), which may have performance impact on large repos."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer evidence is well-founded: all claim elements are verified by both code implementation and test coverage. Evidence paths are exact and usable. No assumptions are presented as facts. No missing data blocks PRD readiness for this claim."
+  }
+}

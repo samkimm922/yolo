@@ -11,6 +11,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "../../..");
 export const TASK_LOGS_DIR = join(YOLO_ROOT, "state", "runtime", "task-logs");
 let taskLogsDir = TASK_LOGS_DIR;
+let taskLogRunId = null;
 
 export function setTaskLogsDir(dir = TASK_LOGS_DIR) {
   taskLogsDir = resolve(dir);
@@ -19,6 +20,11 @@ export function setTaskLogsDir(dir = TASK_LOGS_DIR) {
 
 export function getTaskLogsDir() {
   return taskLogsDir;
+}
+
+export function setTaskLogRunId(runId = null) {
+  taskLogRunId = runId || null;
+  return taskLogRunId;
 }
 
 // ── ISO 8601 带时区偏移 ──────────────────────────────────────
@@ -37,6 +43,7 @@ function isoLocal() {
 export function initTaskLogs(options = {}) {
   const dir = options.taskLogsDir || options.task_logs_dir;
   if (dir) setTaskLogsDir(dir);
+  setTaskLogRunId(options.runId || options.run_id || null);
   try {
     if (!existsSync(taskLogsDir)) {
       mkdirSync(taskLogsDir, { recursive: true });
@@ -57,7 +64,8 @@ export function initTaskLogs(options = {}) {
 // entry: { type, ... } — ts 字段自动添加
 export function writeTaskLog(taskId, entry) {
   try {
-    const line = JSON.stringify({ ts: isoLocal(), task_id: taskId, ...entry }) + "\n";
+    const runContext = taskLogRunId ? { run_id: taskLogRunId } : {};
+    const line = JSON.stringify({ ts: isoLocal(), ...entry, task_id: taskId, ...runContext }) + "\n";
     appendFileSync(join(taskLogsDir, `${taskId}.jsonl`), line, "utf8");
   } catch (e) {
     console.error('[task-logger] writeTaskLog 失败:', e.message);

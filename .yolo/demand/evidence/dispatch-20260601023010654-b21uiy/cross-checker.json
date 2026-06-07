@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch API implements harness boundary audit with cryptographic snapshot comparison, project path citation requirements, evidence scope enforcement, mutation blocking, cross-check agent requirements, and agent conflict resolution.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() creates SHA-256 digests for all project files; diffBoundarySnapshots() compares before/after to detect mutations",
+      "why": "Implements cryptographic boundary audit that detects any file modifications during agent execution"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "563-569",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime calls buildBoundarySnapshot before/after agent execution and stores result in boundary.project_mutation field",
+      "why": "Executes boundary audit at runtime and reports violations in dispatch result"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "582-594",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations are converted to BOUNDARY_PROJECT_MUTATION blockers and prevent PRD readiness",
+      "why": "Connects boundary audit results to PRD readiness blockers"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() enforces that project-scoped evidence requires repo-relative paths or file locators",
+      "why": "Implements project path citation requirements for existing-project facts"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope() validates evidence records declare valid scope field",
+      "why": "Validates scope declarations are present and valid"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-156",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors() validates each evidence record declares scope as project/external/user/unknown",
+      "why": "Schema-level validation enforces scope requirements"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "709-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() iterates requiredEvidenceRoles() and blocks if any agent lacks complete results",
+      "why": "Verifies all three agents (explorer/cross-checker/verifier) complete before PRD readiness"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "475-479",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "requiredEvidenceRoles() returns ['explorer','cross-checker','verifier'] when evidence_policy is cross_check",
+      "why": "Defines cross-check agent requirements based on evidence policy"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "776-801",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectEvidenceAgreement() converts conflicting recommendations between agents into EVIDENCE_AGENT_CONFLICT blockers",
+      "why": "Prevents conflicts from being averaged away by blocking on disagreement"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If boundary audit fails to detect mutations, PRD readiness could be granted based on corrupted project state"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All six explorer claims independently verified with direct source code evidence. Boundary audit, path requirements, scope enforcement, mutation blocking, cross-check requirements, and conflict resolution all implemented as claimed."
+  }
+}

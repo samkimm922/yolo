@@ -1,0 +1,1823 @@
+{
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "version": "2.0",
+  "id": "PRD-20260606-YOLO-STABILITY",
+  "title": "YOLO Release Stability Baseline",
+  "description": "Turn the Trello dogfood failures into YOLO product fixes: discovery input fidelity, PRD/check strictness, runner/provider stability, controlled recovery, and release gates that block publishable claims until a deterministic full lifecycle passes without manual agent takeover.",
+  "project": {
+    "name": "yolo",
+    "language": "typescript",
+    "framework": "node",
+    "package_manager": "npm",
+    "test_framework": "node:test",
+    "lint_tool": "node --check",
+    "type_checker": "npm run build --silent"
+  },
+  "generated_by": "human",
+  "generated_at": "2026-06-06T16:35:51Z",
+  "base_commit": "6151b491cacfc278786427d67cd9ae003a6e19af",
+  "source": "approved_demand",
+  "demand_contract_required": true,
+  "demand": {
+    "id": "DEMAND-20260606-YOLO-STABILITY",
+    "source": "trello-dogfood-audit",
+    "approval": {
+      "approved": true,
+      "approved_by": "user",
+      "approved_at": "2026-06-06T16:35:51Z",
+      "reason": "The user requested a publishable YOLO product PRD based on YOLO failures exposed by the Trello dogfood run, not more Trello application work."
+    },
+    "question_trace": [
+      {
+        "id": "Q-YOLO-001",
+        "question": "What did the Trello dogfood expose about YOLO itself?",
+        "answer": "YOLO could not hold one lifecycle baseline across discovery, PRD, check, runner, review, acceptance, and release evidence."
+      },
+      {
+        "id": "Q-YOLO-002",
+        "question": "What outcome is required?",
+        "answer": "A publishable YOLO software baseline that is runner-stable and fail-closed, with no late-stage manual agent takeover counted as product success."
+      }
+    ],
+    "prd_intake": {
+      "problem": "YOLO currently has strong local modules and tests, but the dogfood run showed gaps between module evidence and end-to-end product reliability.",
+      "target_users": [
+        "YOLO operators",
+        "non-technical project owners",
+        "agent teams running YOLO workflows"
+      ],
+      "success_criteria": [
+        "Discovery preserves structured user intent from markdown and file inputs.",
+        "Executable PRDs fail check when demand, atomicity, adapter, or evidence contracts are weak.",
+        "Runner/provider failures produce terminal evidence instead of hanging, silently retrying, or relying on manual agent takeover.",
+        "Release readiness requires deterministic full lifecycle dogfood evidence before public-use claims."
+      ],
+      "non_goals": [
+        "Do not continue Trello feature implementation in this PRD.",
+        "Do not publish, read credentials, or execute billable providers.",
+        "Do not claim absolute stability; define deterministic gates and residual manual release decisions."
+      ]
+    },
+    "project_facts": {
+      "target_files": [
+        {
+          "file": "README.md",
+          "status": "verified",
+          "evidence": "Documents the YOLO lifecycle and run gating."
+        },
+        {
+          "file": "docs/yolo-demand-implementation-plan.md",
+          "status": "verified",
+          "evidence": "Documents demand, atomicity, session handoff, and readiness goals."
+        },
+        {
+          "file": "docs/yolo-deliverable-implementation-plan.md",
+          "status": "verified",
+          "evidence": "Documents release-side deliverables and dogfood expectations."
+        },
+        {
+          "file": "schemas/prd-v2.schema.json",
+          "status": "verified",
+          "evidence": "Defines PRD v2 contract, demand readiness, task scope, and supported post conditions."
+        },
+        {
+          "file": "src/runtime/gates/check-report.ts",
+          "status": "verified",
+          "evidence": "Current check report treats some execution-unsafe states as warnings."
+        },
+        {
+          "file": "src/runtime/gates/prd-contract-doctor.ts",
+          "status": "verified",
+          "evidence": "Current contract doctor allows target_file_modified to satisfy executable target coverage."
+        },
+        {
+          "file": "src/runtime/execution/provider-adapter.ts",
+          "status": "verified",
+          "evidence": "Builds real provider invocations and handles timeout/preflight output."
+        },
+        {
+          "file": "src/runtime/execution/worktree-session.ts",
+          "status": "verified",
+          "evidence": "Creates git and filesystem worktrees and writes baselines."
+        },
+        {
+          "file": "docs/memory/CURRENT_STATUS.md",
+          "status": "verified",
+          "evidence": "Records private package, 0.1.0 version, experimental runtime boundary, and latest full test count."
+        }
+      ],
+      "assumptions": [
+        {
+          "id": "ASSUMP-YOLO-001",
+          "status": "verified",
+          "statement": "The current package is not yet public-release ready because private=true, runtime API stability, external release, and public dogfood evidence remain blockers."
+        },
+        {
+          "id": "ASSUMP-YOLO-002",
+          "status": "verified",
+          "statement": "This PRD should create release-stabilization work for YOLO itself, not modify the Trello target project."
+        }
+      ]
+    },
+    "quality_report": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.quality.v1",
+      "phase": "prd",
+      "status": "pass",
+      "total_score": 96,
+      "pass_score": 90,
+      "block_score": 75,
+      "dimensions": [
+        {
+          "code": "clarity",
+          "label": "Problem clarity",
+          "status": "pass",
+          "score": 100,
+          "checks": [
+            {
+              "code": "TRELO_DOGFOOD_SOURCE",
+              "passed": true,
+              "message": "The PRD explicitly uses Trello dogfood as evidence for YOLO product failures."
+            }
+          ]
+        },
+        {
+          "code": "atomicity",
+          "label": "Task atomicity",
+          "status": "pass",
+          "score": 94,
+          "checks": [
+            {
+              "code": "ONE_SMALL_PROBLEM_PER_TASK",
+              "passed": true,
+              "message": "Tasks are ordered by subsystem and target one gate or runtime failure mode at a time."
+            }
+          ]
+        },
+        {
+          "code": "evidence",
+          "label": "Evidence plan",
+          "status": "pass",
+          "score": 96,
+          "checks": [
+            {
+              "code": "EXECUTABLE_POST_CONDITIONS",
+              "passed": true,
+              "message": "Every task has executable test/build/code post conditions beyond manual acceptance."
+            }
+          ]
+        },
+        {
+          "code": "handoff",
+          "label": "Runner handoff",
+          "status": "pass",
+          "score": 94,
+          "checks": [
+            {
+              "code": "FRESH_SESSION_BOUNDARY",
+              "passed": true,
+              "message": "Each task is intended for one fresh session with explicit scope, evidence, and dependencies."
+            }
+          ]
+        }
+      ],
+      "blockers": [],
+      "warnings": [],
+      "next_actions": [
+        "Run yolo check on this PRD, then execute tasks in dependency order with deterministic tests before any release claim."
+      ]
+    },
+    "execution_readiness": {
+      "quality_status": "pass",
+      "quality_report": {
+        "schema_version": "1.0",
+        "schema": "yolo.demand.quality.v1",
+        "phase": "prd",
+        "status": "pass",
+        "total_score": 96,
+        "pass_score": 90,
+        "block_score": 75,
+        "dimensions": [
+          {
+            "code": "clarity",
+            "label": "Problem clarity",
+            "status": "pass",
+            "score": 100,
+            "checks": []
+          },
+          {
+            "code": "atomicity",
+            "label": "Task atomicity",
+            "status": "pass",
+            "score": 94,
+            "checks": []
+          },
+          {
+            "code": "evidence",
+            "label": "Evidence plan",
+            "status": "pass",
+            "score": 96,
+            "checks": []
+          },
+          {
+            "code": "handoff",
+            "label": "Runner handoff",
+            "status": "pass",
+            "score": 94,
+            "checks": []
+          }
+        ],
+        "blockers": [],
+        "warnings": [],
+        "next_actions": []
+      }
+    }
+  },
+  "execution_readiness": {
+    "level": "L3",
+    "afk_ready": true,
+    "source": "trello-dogfood-audit",
+    "atomic_tasks": true,
+    "expected_task_session": "one fresh runner session per task; no shared hidden state and no manual agent takeover counted as success",
+    "quality_score": 96,
+    "quality_status": "pass",
+    "quality_report": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.quality.v1",
+      "phase": "prd",
+      "status": "pass",
+      "total_score": 96,
+      "pass_score": 90,
+      "block_score": 75,
+      "dimensions": [
+        {
+          "code": "clarity",
+          "label": "Problem clarity",
+          "status": "pass",
+          "score": 100,
+          "checks": []
+        },
+        {
+          "code": "atomicity",
+          "label": "Task atomicity",
+          "status": "pass",
+          "score": 94,
+          "checks": []
+        },
+        {
+          "code": "evidence",
+          "label": "Evidence plan",
+          "status": "pass",
+          "score": 96,
+          "checks": []
+        },
+        {
+          "code": "handoff",
+          "label": "Runner handoff",
+          "status": "pass",
+          "score": 94,
+          "checks": []
+        }
+      ],
+      "blockers": [],
+      "warnings": [],
+      "next_actions": []
+    },
+    "session_handoff": {
+      "planned": true,
+      "task_count": 18,
+      "session_count": 18,
+      "tasks_with_session_plan": 18,
+      "state_paths": [
+        ".yolo/state/runtime/release-stability-baseline/"
+      ],
+      "handoff_paths": [
+        ".yolo/state/handoffs/release-stability-baseline/"
+      ],
+      "evidence_paths": [
+        ".yolo/state/evidence/release-stability-baseline/"
+      ],
+      "memory_update_paths": [
+        "docs/memory/CURRENT_STATUS.md"
+      ],
+      "progress_update_paths": [
+        "docs/yolo-public-sdk-progress.md"
+      ]
+    }
+  },
+  "requirements": [
+    {
+      "id": "REQ-STABILITY-001",
+      "text": "YOLO discovery must preserve structured intent from markdown headings and explicit file inputs instead of treating a path or raw markdown format as the requirement itself.",
+      "demand_trace": {
+        "source_question_id": "Q-YOLO-001",
+        "evidence": "Trello dogfood exposed markdown/file intake drift."
+      }
+    },
+    {
+      "id": "REQ-STABILITY-002",
+      "text": "YOLO check/preflight must fail closed for executable PRDs with missing demand contracts, investigation-first atomicity warnings, weak post-condition gates, or unresolved project facts.",
+      "demand_trace": {
+        "source_question_id": "Q-YOLO-001",
+        "evidence": "Existing checks surfaced DEMAND_CONTRACT_MISSING and ATOMICITY_INVESTIGATE_FIRST as warnings during an execution-intended flow."
+      }
+    },
+    {
+      "id": "REQ-STABILITY-003",
+      "text": "Acceptance adapters must be versioned against the requested surface and scenario so stale MVP adapters cannot validate a later V2/V3 product target.",
+      "demand_trace": {
+        "source_question_id": "Q-YOLO-001",
+        "evidence": "Trello acceptance drift showed adapter pass can be disconnected from target product scope."
+      }
+    },
+    {
+      "id": "REQ-STABILITY-004",
+      "text": "Provider execution must expose the exact command, cwd, stdin, budget, sandbox, timeout, output capture, and terminal result before the runner can mark a task complete.",
+      "demand_trace": {
+        "source_question_id": "Q-YOLO-002",
+        "evidence": "Provider sessions hung or partially wrote output without producing a reliable lifecycle completion record."
+      }
+    },
+    {
+      "id": "REQ-STABILITY-005",
+      "text": "Runner worktrees must be dependency-stable for git and filesystem modes, and stale runner state must never block a new run after the old process is gone.",
+      "demand_trace": {
+        "source_question_id": "Q-YOLO-002",
+        "evidence": "Dogfood logs exposed stale runner.pid and isolated worktree dependency failures such as missing Vite."
+      }
+    },
+    {
+      "id": "REQ-STABILITY-006",
+      "text": "Controlled recovery may import verified evidence, but it must preserve that the original runner path failed and may only unlock review/accept/ship through an explicit recovery ledger.",
+      "demand_trace": {
+        "source_question_id": "Q-YOLO-002",
+        "evidence": "Trello passed independent checks but YOLO lifecycle remained blocked because no clean run evidence existed."
+      }
+    },
+    {
+      "id": "REQ-STABILITY-007",
+      "text": "Public-use or publishable claims must be blocked until a deterministic fake-provider full lifecycle fixture passes from init/discovery/PRD/check/run/review/accept/ship with no manual agent takeover counted as success.",
+      "demand_trace": {
+        "source_question_id": "Q-YOLO-002",
+        "evidence": "Current release docs show strong module coverage but still lack real public dogfood and billable execution evidence."
+      }
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-STABILITY-001",
+      "text": "Discovery normalization supports markdown section headings, colon labels, and explicit requirement-file input, with tests that prove target_users/problem/scope/success_criteria survive the path-to-artifact boundary.",
+      "requirement_ids": [
+        "REQ-STABILITY-001"
+      ]
+    },
+    {
+      "id": "DES-STABILITY-002",
+      "text": "Check and PRD contract doctor promote execution-unsafe warnings to blockers for L3 AFK-ready PRDs and reject tasks whose only executable gate is a file-change signal.",
+      "requirement_ids": [
+        "REQ-STABILITY-002"
+      ]
+    },
+    {
+      "id": "DES-STABILITY-003",
+      "text": "Adapter readiness compares PRD surface/scenario/version expectations with the selected acceptance adapter manifest before UI or product acceptance can pass.",
+      "requirement_ids": [
+        "REQ-STABILITY-003"
+      ]
+    },
+    {
+      "id": "DES-STABILITY-004",
+      "text": "Provider and runner logs become a signed invocation/result ledger: dry-run matrix proves the command contract, real runs record exact invocation evidence, and timeout/empty-output/partial-output failures become terminal or retry-limited outcomes.",
+      "requirement_ids": [
+        "REQ-STABILITY-004",
+        "REQ-STABILITY-005"
+      ]
+    },
+    {
+      "id": "DES-STABILITY-005",
+      "text": "Controlled recovery has a separate evidence import path that can unlock later gates only when artifacts, commands, timestamps, target files, and post-condition results are verified.",
+      "requirement_ids": [
+        "REQ-STABILITY-006"
+      ]
+    },
+    {
+      "id": "DES-STABILITY-006",
+      "text": "Release readiness includes a deterministic fake-provider fixture that exercises the full lifecycle and fails closed when any segment relies on manual code takeover, missing runner evidence, or no-code-only dogfood.",
+      "requirement_ids": [
+        "REQ-STABILITY-007"
+      ]
+    }
+  ],
+  "state_matrix": {
+    "discovery": "Markdown and file inputs produce the same structured discovery brief as equivalent CLI fields.",
+    "check": "Executable PRDs with missing demand, weak gates, stale adapter, or investigate-first tasks are blocked before run.",
+    "run": "Provider invocation evidence is recorded before execution and terminal failures cannot masquerade as successful implementation.",
+    "recovery": "Verified external evidence can be imported only through controlled recovery and is visibly distinct from a clean YOLO run.",
+    "release": "Release gates stay blocked until deterministic full lifecycle dogfood evidence exists."
+  },
+  "success_metrics": {
+    "primary": "A fake-provider stabilization fixture can complete init -> discovery -> plan -> PRD -> check -> run -> review -> accept -> ship without manual agent takeover.",
+    "secondary": [
+      "yolo check blocks weak executable PRDs before provider spawn.",
+      "provider timeout, empty output, and partial output all produce durable terminal evidence.",
+      "release readiness text and doctor output stop claiming publishable readiness while private/runtime/public-dogfood blockers remain."
+    ]
+  },
+  "out_of_scope": [
+    "No Trello application feature changes.",
+    "No npm publish, credential reads, or billable provider calls.",
+    "No runtime public API stable-boundary promotion without explicit release decision evidence.",
+    "No broad refactor of runner internals beyond the scoped gate/runtime fixes below."
+  ],
+  "defaults": {
+    "retry": {
+      "max_retries": 2,
+      "strategy": "fresh",
+      "staleness_check": true,
+      "cooldown_ms": 0
+    },
+    "scope": {
+      "max_files": 3,
+      "max_lines_per_file": 220,
+      "allow_new_files": false,
+      "allow_delete_files": false
+    }
+  },
+  "conflict_policy": {
+    "on_overlap": "sequential",
+    "overlap_detection": "file_only"
+  },
+  "tasks": [
+    {
+      "id": "FIX-DISCOVERY-MARKDOWN-001",
+      "title": "Parse markdown discovery headings",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "description": "Make discovery readiness treat common markdown headings such as '## Target User', '## Problem', '## Scope', and '## Success Criteria' as structured fields, not opaque prose.",
+      "requirement_ids": [
+        "REQ-STABILITY-001"
+      ],
+      "design_ids": [
+        "DES-STABILITY-001"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/discovery/gate.ts",
+            "description": "Discovery label extraction and readiness normalization"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 180
+      },
+      "acceptance_criteria": [
+        "A markdown brief with section headings yields target_users, problem, scope, and success_criteria in the discovery brief.",
+        "Existing colon-label and explicit field behavior remains unchanged."
+      ],
+      "verification_hint": "Run the focused discovery gate test and inspect the new markdown-heading fixture.",
+      "post_conditions": [
+        {
+          "id": "POST-DISCOVERY-GATE-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/discovery/gate.ts"
+          },
+          "message": "Discovery gate implementation must change."
+        },
+        {
+          "id": "POST-DISCOVERY-MARKDOWN-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/discovery-gate.test.ts"
+          },
+          "message": "Discovery gate tests must include the markdown-heading regression."
+        },
+        {
+          "id": "POST-DISCOVERY-MARKDOWN-TEST-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/discovery-gate.test.ts",
+            "text": "## Target User"
+          },
+          "message": "The regression test must cover markdown target-user headings."
+        },
+        {
+          "id": "POST-DISCOVERY-GATE-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/discovery-gate.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Discovery gate tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-DISCOVERY-FILE-002",
+      "title": "Read explicit discovery files",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "depends_on": [
+        "FIX-DISCOVERY-MARKDOWN-001"
+      ],
+      "description": "Ensure yolo discover treats an explicit markdown requirement file as input content instead of treating the file path string as the user's requirement.",
+      "requirement_ids": [
+        "REQ-STABILITY-001"
+      ],
+      "design_ids": [
+        "DES-STABILITY-001"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/cli/yolo.ts",
+            "description": "discover argument parsing and file-path forwarding"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 180
+      },
+      "acceptance_criteria": [
+        "Passing a requirement markdown file produces the same discovery artifact as passing its text.",
+        "The generated discovery artifact does not place the raw file path into active requirements."
+      ],
+      "verification_hint": "Use a temp markdown file in the focused discovery runtime test.",
+      "post_conditions": [
+        {
+          "id": "POST-DISCOVERY-CLI-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/cli/yolo.ts"
+          },
+          "message": "CLI discover parsing must change."
+        },
+        {
+          "id": "POST-DISCOVERY-CLI-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/cli/yolo.ts",
+            "text": "requirementFile"
+          },
+          "message": "CLI must forward explicit requirement files into discovery runtime input."
+        },
+        {
+          "id": "POST-DISCOVERY-CLI-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/discovery-runtime.test.ts __tests__/discovery-gate.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Discovery runtime and gate tests must pass after CLI forwarding changes."
+        }
+      ]
+    },
+    {
+      "id": "FIX-DISCOVERY-RUNTIME-002A",
+      "title": "Normalize discovery file content",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "depends_on": [
+        "FIX-DISCOVERY-FILE-002"
+      ],
+      "description": "Normalize explicit requirement file content inside discovery runtime so generated artifacts use the file body, not the file path string.",
+      "requirement_ids": [
+        "REQ-STABILITY-001"
+      ],
+      "design_ids": [
+        "DES-STABILITY-001"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/discovery/runtime.ts",
+            "description": "requirement file content normalization"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 180
+      },
+      "acceptance_criteria": [
+        "Discovery runtime reads requirementFile or inputFile content before readiness analysis.",
+        "The generated discovery artifact does not place the raw file path into active requirements."
+      ],
+      "verification_hint": "Use a temp markdown file in the focused discovery runtime test.",
+      "post_conditions": [
+        {
+          "id": "POST-DISCOVERY-RUNTIME-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/discovery/runtime.ts"
+          },
+          "message": "Discovery runtime normalization must change."
+        },
+        {
+          "id": "POST-DISCOVERY-RUNTIME-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/discovery-runtime.test.ts"
+          },
+          "message": "Discovery runtime tests must include explicit file input."
+        },
+        {
+          "id": "POST-DISCOVERY-FILE-TEST-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/discovery-runtime.test.ts",
+            "text": "requirementFile"
+          },
+          "message": "The regression test must exercise requirementFile input."
+        },
+        {
+          "id": "POST-DISCOVERY-RUNTIME-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/discovery-runtime.test.ts __tests__/discovery-gate.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Discovery runtime and gate tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-CHECK-DEMAND-003",
+      "title": "Block executable PRDs without demand",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "description": "Make yolo check and PRD preflight block new execution-intended PRDs that lack approved demand readiness instead of allowing DEMAND_CONTRACT_MISSING as a warning.",
+      "requirement_ids": [
+        "REQ-STABILITY-002"
+      ],
+      "design_ids": [
+        "DES-STABILITY-002"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/gates/check-report.ts",
+            "description": "Demand contract readiness policy"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 180
+      },
+      "acceptance_criteria": [
+        "Legacy planning-only PRDs may still produce advisory demand warnings.",
+        "L3/executable/default-run PRDs without approved demand are blocked before provider execution."
+      ],
+      "verification_hint": "The focused check-report suite must assert blocked status for an execution-intended missing-demand PRD.",
+      "post_conditions": [
+        {
+          "id": "POST-CHECK-DEMAND-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/gates/check-report.ts"
+          },
+          "message": "Check report demand policy must change."
+        },
+        {
+          "id": "POST-CHECK-DEMAND-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/check-report.test.ts"
+          },
+          "message": "Check report tests must cover the missing-demand blocker."
+        },
+        {
+          "id": "POST-CHECK-DEMAND-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/check-report.test.ts",
+            "text": "DEMAND_CONTRACT_MISSING"
+          },
+          "message": "Tests must assert DEMAND_CONTRACT_MISSING behavior."
+        },
+        {
+          "id": "POST-CHECK-DEMAND-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/check-report.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Check report tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-CHECK-ATOMICITY-004",
+      "title": "Block investigate-first execution",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "depends_on": [
+        "FIX-CHECK-DEMAND-003"
+      ],
+      "description": "Promote ATOMICITY_INVESTIGATE_FIRST from warning to blocker for L3 AFK-ready execution PRDs unless the task is explicitly planning_only or investigation_only.",
+      "requirement_ids": [
+        "REQ-STABILITY-002"
+      ],
+      "design_ids": [
+        "DES-STABILITY-002"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/gates/check-report.ts",
+            "description": "Atomicity readiness policy"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 180
+      },
+      "acceptance_criteria": [
+        "Execution-intended PRDs are blocked when a task requires investigation before patching.",
+        "Planning-only or investigation-only artifacts can still report the issue without pretending they are runnable."
+      ],
+      "verification_hint": "The check-report suite must include an AFK-ready PRD with an investigate-first task and expect blocked status.",
+      "post_conditions": [
+        {
+          "id": "POST-CHECK-ATOMICITY-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/gates/check-report.ts"
+          },
+          "message": "Check report atomicity policy must change."
+        },
+        {
+          "id": "POST-CHECK-ATOMICITY-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/check-report.test.ts"
+          },
+          "message": "Check report tests must include atomicity blocker coverage."
+        },
+        {
+          "id": "POST-CHECK-ATOMICITY-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/check-report.test.ts",
+            "text": "ATOMICITY_INVESTIGATE_FIRST"
+          },
+          "message": "Tests must assert ATOMICITY_INVESTIGATE_FIRST behavior."
+        },
+        {
+          "id": "POST-CHECK-ATOMICITY-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/check-report.test.ts __tests__/story-atomicity.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Check report and story atomicity tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-CONTRACT-WEAKGATE-005",
+      "title": "Reject weak-only task gates",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "depends_on": [
+        "FIX-CHECK-DEMAND-003"
+      ],
+      "description": "Update PRD contract doctor so pending executable tasks cannot pass contract checks when their only executable FAIL post conditions are target_file_modified/file_exists-style presence gates or manual acceptance criteria.",
+      "requirement_ids": [
+        "REQ-STABILITY-002"
+      ],
+      "design_ids": [
+        "DES-STABILITY-002"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/gates/prd-contract-doctor.ts",
+            "description": "Executable post-condition strength policy"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 180
+      },
+      "acceptance_criteria": [
+        "A task with only target_file_modified plus acceptance_criteria is blocked before runner execution.",
+        "A task with target coverage plus tests_pass, test_file_passes, build_pass, code_contains, or code_matches remains executable."
+      ],
+      "verification_hint": "Run the PRD contract doctor focused suite and inspect the new weak-only gate fixture.",
+      "post_conditions": [
+        {
+          "id": "POST-CONTRACT-WEAKGATE-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/gates/prd-contract-doctor.ts"
+          },
+          "message": "PRD contract doctor must change."
+        },
+        {
+          "id": "POST-CONTRACT-WEAKGATE-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/prd-contract-doctor-gate.test.ts"
+          },
+          "message": "Contract doctor tests must cover weak-only gates."
+        },
+        {
+          "id": "POST-CONTRACT-WEAKGATE-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/gates/prd-contract-doctor.ts",
+            "text": "TASK_ONLY_WEAK_EXECUTABLE_GATES"
+          },
+          "message": "Contract doctor must emit a stable weak-gate blocker code."
+        },
+        {
+          "id": "POST-CONTRACT-WEAKGATE-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/prd-contract-doctor-gate.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "PRD contract doctor tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-ADAPTER-MANIFEST-006",
+      "title": "Version acceptance adapter evidence",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "description": "Extend adapter evidence collection so the selected acceptance adapter records its adapter id, surface id, scenario id, contract version, and compatibility result in evidence artifacts.",
+      "requirement_ids": [
+        "REQ-STABILITY-003"
+      ],
+      "design_ids": [
+        "DES-STABILITY-003"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/adapters/evidence-collector.ts",
+            "description": "Adapter compatibility evidence"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 200
+      },
+      "acceptance_criteria": [
+        "Adapter evidence contains stable adapter identity and surface/scenario contract metadata.",
+        "Adapter evidence reports incompatible or missing version data as blocked, not pass."
+      ],
+      "verification_hint": "The adapter evidence collector focused suite should assert compatibility metadata in the output payload.",
+      "post_conditions": [
+        {
+          "id": "POST-ADAPTER-EVIDENCE-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/adapters/evidence-collector.ts"
+          },
+          "message": "Adapter evidence collector must change."
+        },
+        {
+          "id": "POST-ADAPTER-EVIDENCE-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/adapter-evidence-collector.test.ts"
+          },
+          "message": "Adapter evidence collector tests must change."
+        },
+        {
+          "id": "POST-ADAPTER-EVIDENCE-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/adapters/evidence-collector.ts",
+            "text": "compatibility"
+          },
+          "message": "Adapter evidence must include compatibility metadata."
+        },
+        {
+          "id": "POST-ADAPTER-EVIDENCE-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/adapter-evidence-collector.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Adapter evidence collector tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-ADAPTER-CHECK-007",
+      "title": "Block stale adapter selection",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "ui": false,
+      "depends_on": [
+        "FIX-ADAPTER-MANIFEST-006"
+      ],
+      "description": "Make check readiness compare the PRD's requested product surface contract with the selected acceptance adapter and block stale or unknown adapter compatibility.",
+      "requirement_ids": [
+        "REQ-STABILITY-003"
+      ],
+      "design_ids": [
+        "DES-STABILITY-003"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/gates/readiness-policy.ts",
+            "description": "Adapter compatibility readiness helper"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 200
+      },
+      "acceptance_criteria": [
+        "A product PRD with a mismatched adapter contract is blocked before run or acceptance.",
+        "Resolver unknown/custom adapters remain blocked for product acceptance unless a compatible manifest is present."
+      ],
+      "verification_hint": "Run check-report tests with a fixture that asks for a V3 surface while the manifest declares an MVP/V1 surface.",
+      "post_conditions": [
+        {
+          "id": "POST-ADAPTER-POLICY-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/gates/readiness-policy.ts"
+          },
+          "message": "Readiness policy must include adapter compatibility logic."
+        },
+        {
+          "id": "POST-ADAPTER-POLICY-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/gates/readiness-policy.ts",
+            "text": "ADAPTER_CONTRACT_MISMATCH"
+          },
+          "message": "Readiness policy must expose stale adapter mismatch blocking."
+        },
+        {
+          "id": "POST-ADAPTER-POLICY-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/check-report.test.ts __tests__/adapter-evidence-collector.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Adapter readiness policy and evidence tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-ADAPTER-CHECK-007A",
+      "title": "Report stale adapter blockers",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "ui": false,
+      "depends_on": [
+        "FIX-ADAPTER-CHECK-007"
+      ],
+      "description": "Wire adapter compatibility blockers from readiness policy into check report output for execution-intended PRDs.",
+      "requirement_ids": [
+        "REQ-STABILITY-003"
+      ],
+      "design_ids": [
+        "DES-STABILITY-003"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/gates/check-report.ts",
+            "description": "Check report adapter blocker wiring"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 200
+      },
+      "acceptance_criteria": [
+        "Check report blocks a product PRD whose selected adapter contract is stale.",
+        "The report includes a stable ADAPTER_CONTRACT_MISMATCH blocker code."
+      ],
+      "verification_hint": "Run check-report tests with a fixture that asks for a V3 surface while the manifest declares an MVP/V1 surface.",
+      "post_conditions": [
+        {
+          "id": "POST-ADAPTER-CHECK-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/gates/check-report.ts"
+          },
+          "message": "Check report must surface adapter compatibility blockers."
+        },
+        {
+          "id": "POST-ADAPTER-CHECK-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/check-report.test.ts"
+          },
+          "message": "Check report tests must include adapter mismatch coverage."
+        },
+        {
+          "id": "POST-ADAPTER-CHECK-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/check-report.test.ts",
+            "text": "ADAPTER_CONTRACT_MISMATCH"
+          },
+          "message": "Tests must assert stale adapter mismatch blocking."
+        },
+        {
+          "id": "POST-ADAPTER-CHECK-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/check-report.test.ts __tests__/adapter-evidence-collector.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Adapter check and evidence tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-PROVIDER-ADAPTER-008",
+      "title": "Record provider spawn evidence",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "description": "Add deterministic invocation evidence to provider spawn results: provider, command, args, cwd, stdin mode, timeout, output capture, budget, sandbox, preflight status, and terminal result.",
+      "requirement_ids": [
+        "REQ-STABILITY-004"
+      ],
+      "design_ids": [
+        "DES-STABILITY-004"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-002"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/execution/provider-adapter.ts",
+            "description": "Provider invocation/result evidence"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 220
+      },
+      "acceptance_criteria": [
+        "Provider spawn output includes invocation evidence even when preflight blocks, timeout fires, or stdout is empty.",
+        "The evidence uses stable field names for command, cwd, stdin, output, budget, and sandbox."
+      ],
+      "verification_hint": "Provider adapter tests should use fake spawn and fake clocks, not real provider execution.",
+      "post_conditions": [
+        {
+          "id": "POST-PROVIDER-ADAPTER-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/execution/provider-adapter.ts"
+          },
+          "message": "Provider adapter must record invocation evidence."
+        },
+        {
+          "id": "POST-PROVIDER-ADAPTER-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/provider-adapter.test.ts"
+          },
+          "message": "Provider adapter tests must cover invocation evidence."
+        },
+        {
+          "id": "POST-PROVIDER-LEDGER-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/execution/provider-adapter.ts",
+            "text": "invocation"
+          },
+          "message": "Provider adapter must expose invocation metadata."
+        },
+        {
+          "id": "POST-PROVIDER-LEDGER-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/provider-adapter.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Provider adapter tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-PROVIDER-MATRIX-009",
+      "title": "Align provider dry-run matrix",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "depends_on": [
+        "FIX-PROVIDER-ADAPTER-008"
+      ],
+      "description": "Align provider runtime and CLI dry-run matrix output with the real provider invocation evidence contract without spawning provider CLIs.",
+      "requirement_ids": [
+        "REQ-STABILITY-004"
+      ],
+      "design_ids": [
+        "DES-STABILITY-004"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-002"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/adapters/provider-runtime-matrix.ts",
+            "description": "Provider matrix invocation evidence fields"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 220
+      },
+      "acceptance_criteria": [
+        "Dry-run matrix and real spawn evidence use compatible fields for command, cwd, stdin, output, budget, and sandbox.",
+        "Dry-run matrix still refuses real provider execution, credentials, and billable calls."
+      ],
+      "verification_hint": "Run the provider-runtime-matrix focused suite; it must stay dry-run only.",
+      "post_conditions": [
+        {
+          "id": "POST-PROVIDER-MATRIX-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/adapters/provider-runtime-matrix.ts"
+          },
+          "message": "Provider runtime matrix must align with invocation evidence."
+        },
+        {
+          "id": "POST-PROVIDER-MATRIX-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/provider-runtime-matrix.test.ts"
+          },
+          "message": "Provider matrix tests must cover invocation evidence."
+        },
+        {
+          "id": "POST-PROVIDER-MATRIX-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/provider-runtime-matrix.test.ts",
+            "text": "output_capture"
+          },
+          "message": "Provider matrix tests must assert output capture metadata."
+        },
+        {
+          "id": "POST-PROVIDER-MATRIX-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/provider-runtime-matrix.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Provider matrix tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-RUNNER-ATTEMPT-010",
+      "title": "Record terminal session attempts",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "depends_on": [
+        "FIX-PROVIDER-ADAPTER-008"
+      ],
+      "description": "Ensure timeout, empty provider output, blocked preflight, and partial-output/no-diff sessions produce durable attempt evidence before retry or failure handling.",
+      "requirement_ids": [
+        "REQ-STABILITY-004",
+        "REQ-STABILITY-005"
+      ],
+      "design_ids": [
+        "DES-STABILITY-004"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-002"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/execution/session-attempt.ts",
+            "description": "Provider session attempt result handling"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 220
+      },
+      "acceptance_criteria": [
+        "Timed-out provider sessions record timeout evidence and do not remain in running state.",
+        "Attempt records include provider invocation evidence and terminal session metadata."
+      ],
+      "verification_hint": "Use fake provider responses in focused session-attempt tests; do not spawn real providers.",
+      "post_conditions": [
+        {
+          "id": "POST-SESSION-ATTEMPT-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/execution/session-attempt.ts"
+          },
+          "message": "Session attempt handling must change."
+        },
+        {
+          "id": "POST-SESSION-ATTEMPT-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/session-attempt.test.ts"
+          },
+          "message": "Session attempt tests must cover terminal provider attempts."
+        },
+        {
+          "id": "POST-SESSION-ATTEMPT-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/session-attempt.test.ts",
+            "text": "terminal"
+          },
+          "message": "Session attempt tests must assert terminal attempt evidence."
+        },
+        {
+          "id": "POST-SESSION-ATTEMPT-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/session-attempt.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Session attempt tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-RUNNER-OUTCOME-011",
+      "title": "Prevent manual takeover success",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "depends_on": [
+        "FIX-RUNNER-ATTEMPT-010"
+      ],
+      "description": "Classify provider terminal failures with bounded retry and no path for a later manual agent to be counted as the same run success.",
+      "requirement_ids": [
+        "REQ-STABILITY-004",
+        "REQ-STABILITY-005"
+      ],
+      "design_ids": [
+        "DES-STABILITY-004"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-002"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/execution/session-failure-outcome.ts",
+            "description": "Terminal provider failure classification"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 220
+      },
+      "acceptance_criteria": [
+        "Empty-output or no-diff sessions are failed or blocked through the runner, not recovered by invisible manual agent work.",
+        "Retry count is bounded and terminal records include provider invocation evidence."
+      ],
+      "verification_hint": "Use fake provider failures in focused outcome tests.",
+      "post_conditions": [
+        {
+          "id": "POST-SESSION-OUTCOME-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/execution/session-failure-outcome.ts"
+          },
+          "message": "Session failure classification must change."
+        },
+        {
+          "id": "POST-SESSION-OUTCOME-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/session-failure-outcome.test.ts"
+          },
+          "message": "Session outcome tests must cover terminal provider failures."
+        },
+        {
+          "id": "POST-SESSION-OUTCOME-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/session-failure-outcome.test.ts",
+            "text": "manual takeover"
+          },
+          "message": "Tests must explicitly prevent manual takeover from counting as run success."
+        },
+        {
+          "id": "POST-SESSION-OUTCOME-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/session-failure-outcome.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Session failure outcome tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-WORKTREE-DEPS-012",
+      "title": "Stabilize worktree dependencies",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "description": "Make git and filesystem worktree modes dependency-stable by linking/copying node_modules when safe, or by recording an explicit dependency-install blocker/plan before gates run in a worktree missing package executables.",
+      "requirement_ids": [
+        "REQ-STABILITY-005"
+      ],
+      "design_ids": [
+        "DES-STABILITY-004"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-002"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/execution/worktree-session.ts",
+            "description": "Worktree dependency preparation"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 200
+      },
+      "acceptance_criteria": [
+        "Git worktrees retain dependency access through a deterministic link/copy path.",
+        "Filesystem fallback worktrees either get dependency access or record a blocker before running commands that require missing package binaries.",
+        "The fix does not copy .git, runtime state, or unrelated workspace noise."
+      ],
+      "verification_hint": "Worktree-session tests should simulate missing node_modules and package binaries without running npm install for real.",
+      "post_conditions": [
+        {
+          "id": "POST-WORKTREE-DEPS-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/execution/worktree-session.ts"
+          },
+          "message": "Worktree dependency preparation must change."
+        },
+        {
+          "id": "POST-WORKTREE-DEPS-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/worktree-session.test.ts"
+          },
+          "message": "Worktree tests must cover dependency preparation."
+        },
+        {
+          "id": "POST-WORKTREE-DEPS-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/worktree-session.test.ts",
+            "text": "node_modules"
+          },
+          "message": "Tests must assert node_modules/dependency behavior."
+        },
+        {
+          "id": "POST-WORKTREE-DEPS-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/worktree-session.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Worktree session tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-RECOVERY-CHECKPOINT-013",
+      "title": "Import controlled recovery checkpoints",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "description": "Add an explicit controlled recovery evidence import checkpoint that verifies artifacts, target files, commands, timestamps, and post-condition results while preserving the original run failure status.",
+      "requirement_ids": [
+        "REQ-STABILITY-006"
+      ],
+      "design_ids": [
+        "DES-STABILITY-005"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-002"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/run-lifecycle/recovery-checkpoints.ts",
+            "description": "Recovery evidence checkpoint helpers"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 220
+      },
+      "acceptance_criteria": [
+        "Controlled recovery evidence has a separate schema/status from clean runner success.",
+        "Recovery checkpoints verify commands, artifacts, target files, and post-condition results before downstream gates can use them."
+      ],
+      "verification_hint": "Focused lifecycle tests should create synthetic recovery evidence and assert both unlock and fail-closed cases.",
+      "post_conditions": [
+        {
+          "id": "POST-RECOVERY-CHECKPOINTS-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/run-lifecycle/recovery-checkpoints.ts"
+          },
+          "message": "Recovery checkpoint helpers must change."
+        },
+        {
+          "id": "POST-RECOVERY-RUNTIME-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/run-lifecycle-runtime-modules.test.ts"
+          },
+          "message": "Run lifecycle tests must cover recovery evidence import."
+        },
+        {
+          "id": "POST-RECOVERY-CHECKPOINT-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/run-lifecycle-runtime-modules.test.ts",
+            "text": "controlled_recovery"
+          },
+          "message": "Lifecycle tests must assert controlled recovery evidence."
+        },
+        {
+          "id": "POST-RECOVERY-CHECKPOINT-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/run-lifecycle-runtime-modules.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Recovery lifecycle tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-RECOVERY-ACCEPTANCE-014",
+      "title": "Report controlled recovery acceptance",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "depends_on": [
+        "FIX-RECOVERY-CHECKPOINT-013"
+      ],
+      "description": "Make acceptance reporting show the original run failure and the controlled recovery evidence path as separate facts before accept or ship can pass.",
+      "requirement_ids": [
+        "REQ-STABILITY-006"
+      ],
+      "design_ids": [
+        "DES-STABILITY-005"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-002"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/runtime/acceptance/report.ts",
+            "description": "Acceptance reporting of controlled recovery evidence"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 220
+      },
+      "acceptance_criteria": [
+        "Reports show original run failed or blocked, then recovered through an auditable path.",
+        "Acceptance remains blocked when controlled recovery evidence is missing or unverifiable."
+      ],
+      "verification_hint": "Acceptance-report tests should assert both recovered and fail-closed cases.",
+      "post_conditions": [
+        {
+          "id": "POST-RECOVERY-ACCEPTANCE-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/runtime/acceptance/report.ts"
+          },
+          "message": "Acceptance reporting must reflect controlled recovery."
+        },
+        {
+          "id": "POST-RECOVERY-ACCEPTANCE-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/acceptance-report.test.ts"
+          },
+          "message": "Acceptance report tests must cover controlled recovery evidence."
+        },
+        {
+          "id": "POST-RECOVERY-ACCEPTANCE-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/acceptance-report.test.ts",
+            "text": "controlled_recovery"
+          },
+          "message": "Acceptance tests must assert controlled recovery evidence."
+        },
+        {
+          "id": "POST-RECOVERY-ACCEPTANCE-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/acceptance-report.test.ts",
+            "timeout_ms": 120000
+          },
+          "message": "Acceptance report tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-RELEASE-DOGFOOD-015",
+      "title": "Require fake-provider dogfood pack",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "depends_on": [
+        "FIX-CHECK-DEMAND-003",
+        "FIX-CONTRACT-WEAKGATE-005",
+        "FIX-PROVIDER-ADAPTER-008",
+        "FIX-PROVIDER-MATRIX-009",
+        "FIX-RUNNER-OUTCOME-011",
+        "FIX-RECOVERY-ACCEPTANCE-014"
+      ],
+      "description": "Upgrade the real-project dogfood pack so public-use claims require a deterministic fake-provider lifecycle that runs init, discovery, plan, PRD, check, run, review, accept, and ship evidence without manual code takeover or billable provider execution.",
+      "requirement_ids": [
+        "REQ-STABILITY-007"
+      ],
+      "design_ids": [
+        "DES-STABILITY-006"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-002"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/release/real-project-dogfood-pack.ts",
+            "description": "Full lifecycle fake-provider dogfood pack"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 240
+      },
+      "acceptance_criteria": [
+        "No-code-only dogfood is no longer enough for public-use or publishable claims.",
+        "The required dogfood lifecycle includes a deterministic fake provider run and explicit no-manual-takeover evidence.",
+        "The release gate still refuses publish, credential reads, and billable provider execution."
+      ],
+      "verification_hint": "Run the P28-P32 and P37-P39 release tests; the fixture must remain deterministic and non-billable.",
+      "post_conditions": [
+        {
+          "id": "POST-DOGFOOD-PACK-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/release/real-project-dogfood-pack.ts"
+          },
+          "message": "Real-project dogfood pack must require full fake-provider lifecycle evidence."
+        },
+        {
+          "id": "POST-DOGFOOD-PACK-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/release-p37-p39.test.ts"
+          },
+          "message": "Real-project dogfood tests must cover full fake-provider lifecycle."
+        },
+        {
+          "id": "POST-DOGFOOD-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/release/real-project-dogfood-pack.ts",
+            "text": "manual takeover"
+          },
+          "message": "Dogfood pack must explicitly track manual takeover as disallowed evidence."
+        },
+        {
+          "id": "POST-DOGFOOD-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/release-p37-p39.test.ts",
+            "timeout_ms": 180000
+          },
+          "message": "Release dogfood tests must pass."
+        }
+      ]
+    },
+    {
+      "id": "FIX-RELEASE-PUBLICBETA-016",
+      "title": "Block public beta without dogfood",
+      "priority": "P0",
+      "type": "bugfix",
+      "task_kind": "yolo_engine_change",
+      "status": "pending",
+      "depends_on": [
+        "FIX-RELEASE-DOGFOOD-015"
+      ],
+      "description": "Wire the full fake-provider dogfood result into public beta evidence so release readiness blocks publishable claims when dogfood is no-code-only, missing runner evidence, or manually taken over.",
+      "requirement_ids": [
+        "REQ-STABILITY-007"
+      ],
+      "design_ids": [
+        "DES-STABILITY-006"
+      ],
+      "source_question_ids": [
+        "Q-YOLO-002"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/release/public-beta-evidence.ts",
+            "description": "Public beta evidence gate integration"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 220
+      },
+      "acceptance_criteria": [
+        "Public beta evidence blocks when full fake-provider dogfood evidence is absent or no-code-only.",
+        "The release gate still refuses publish, credential reads, and billable provider execution."
+      ],
+      "verification_hint": "Run the P28-P32 release tests; public beta evidence must stay non-billable.",
+      "post_conditions": [
+        {
+          "id": "POST-PUBLIC-BETA-EVIDENCE-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/release/public-beta-evidence.ts"
+          },
+          "message": "Public beta evidence gate must include full lifecycle dogfood readiness."
+        },
+        {
+          "id": "POST-PUBLIC-BETA-TEST-MODIFIED",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/release-p28-p32.test.ts"
+          },
+          "message": "Public beta tests must cover the new dogfood blocker."
+        },
+        {
+          "id": "POST-PUBLIC-BETA-SIGNAL",
+          "type": "code_contains",
+          "severity": "FAIL",
+          "params": {
+            "file": "__tests__/release-p28-p32.test.ts",
+            "text": "manual takeover"
+          },
+          "message": "Public beta tests must block manual takeover evidence."
+        },
+        {
+          "id": "POST-PUBLIC-BETA-TESTS",
+          "type": "test_file_passes",
+          "severity": "FAIL",
+          "params": {
+            "command": "node --import tsx --test __tests__/release-p28-p32.test.ts",
+            "timeout_ms": 180000
+          },
+          "message": "Public beta evidence tests must pass."
+        },
+        {
+          "id": "POST-PUBLIC-BETA-BUILD",
+          "type": "build_pass",
+          "severity": "FAIL",
+          "params": {
+            "command": "npm run build --silent",
+            "timeout_ms": 240000
+          },
+          "message": "Release gate changes must build."
+        }
+      ]
+    }
+  ]
+}

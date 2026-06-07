@@ -1,0 +1,150 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence schema, protocols, readiness checks, and tests all distinguish project, external, user, and unknown evidence scopes with explicit validation and blocker generation.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence record structure with required scope field and source field validation",
+      "why": "This is the authoritative schema definition for evidence results that all agents must follow."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES is a Set with exactly four allowed values: 'project', 'external', 'user', 'unknown'",
+      "why": "This is the canonical list of valid scope values used throughout the system."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() classifies evidence by scope with explicit field checking, URL pattern detection, source inference, and path presence fallback",
+      "why": "This is the core scope classification logic that validates evidence records against the four allowed categories."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues() returns EVIDENCE_SCOPE_REQUIRED blocker when evidence records lack declared valid scope",
+      "why": "This generates explicit blockers when evidence records lack scope declarations, enforcing the scope requirement."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() enforces project-scope evidence requirements and blocks external-only evidence for existing-project claims",
+      "why": "This enforces that project-scope evidence must have concrete file paths and blocks external-only evidence for existing-project claims."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "678-751",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() integrates scope checking into readiness validation, calling evidenceScopeDeclarationIssues() and projectEvidenceBlockingIssues()",
+      "why": "This is the main readiness function that ensures scope validation is part of PRD readiness gates."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "270-271",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt explicitly states: 'Every evidence record must include scope: project, external, user, or unknown' and 'Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator'",
+      "why": "This shows scope requirements are communicated to agents in their instructions."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "365-415",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult() applies evidenceScopeErrors() validation, blocking results with invalid scope declarations and adding EVIDENCE_SCOPE_REQUIRED errors",
+      "why": "This shows that scope validation immediately blocks agent results with invalid scope declarations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() and diffBoundarySnapshots() create filesystem digests before and after agent execution to detect unauthorized mutations",
+      "why": "This is the boundary audit mechanism that prevents agents from modifying target project files during evidence gathering."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "561-568",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary audit calls buildBoundarySnapshot() before and after all agent executions, then diffBoundarySnapshots() to detect changes",
+      "why": "This enforces the boundary contract that evidence agents cannot modify target project files."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "580-592",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "If boundary audit detects violations, generates BOUNDARY_PROJECT_MUTATION blockers, sets prd_ready=false, and status=blocked",
+      "why": "This shows boundary violations block PRD readiness, enforcing the read-only evidence gathering requirement."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' creates evidence with scope='external', url field, and expects readiness.prd_ready=false with blocker code=PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE",
+      "why": "Test verifies that external-only evidence is rejected for existing-project claims."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "387-431",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'project evidence requires a concrete project locator' creates evidence with scope='project' but no path field, expects readiness.prd_ready=false with blocker code=PROJECT_EVIDENCE_PATH_REQUIRED",
+      "why": "Test verifies that project-scope evidence without a path locator is rejected."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "433-478",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external URLs cannot be relabeled as project evidence' creates evidence with scope='project' and url='https://example.com/project-docs', expects readiness.prd_ready=false with blocker code=PROJECT_EVIDENCE_PATH_REQUIRED",
+      "why": "Test verifies that external URLs cannot be passed off as project evidence even if labeled as project scope."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "480-524",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'evidence records must declare valid scope explicitly' creates evidence with path and source but no scope field, expects readiness.prd_ready=false with blocker code=EVIDENCE_SCOPE_REQUIRED",
+      "why": "Test verifies that evidence records without explicit scope declarations are rejected."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "526-566",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'non-missing status notes in missing arrays do not block readiness' puts 'No missing data identified.' in missing array and expects readiness.prd_ready=true",
+      "why": "Test verifies that status notes (not actual missing items) are correctly ignored and don't block readiness."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If evidence scope validation logic fails, agents could submit invalid scope declarations that bypass blocker generation",
+    "If boundary audit misses filesystem changes, agents could modify target project files during evidence gathering"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms all explorer claims. Evidence schema, protocols, readiness contract, and tests comprehensively distinguish project, external, user, and unknown evidence scopes with explicit validation. Scope enforcement is implemented at multiple layers: agent instructions, result normalization, readiness validation, and boundary auditing."
+  }
+}

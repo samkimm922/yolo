@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements boundary snapshot audit using git ls-files for tracked/cached/other files with walkFiles fallback and excludes only the dispatch artifact root from mutation detection.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles runs 'git ls-files -co --exclude-standard -z' to get tracked, cached, and other files",
+      "why": "-c flag adds cached files, -o adds other files, covering both tracked and untracked working tree files"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles provides fallback file walk excluding .git, node_modules, dist, coverage, .next, .cache",
+      "why": "Non-git projects still need boundary audit via filesystem walk"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot uses gitFiles with walkFiles fallback and excludes allowedRoots from snapshot",
+      "why": "Allowed artifact roots should not trigger mutation violations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "110-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after maps to detect added, deleted, and modified files",
+      "why": "Detects any project mutations during agent execution"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "514, 564-570",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime captures boundary snapshots before/after agent dispatch and reports violations",
+      "why": "Ensures evidence agents do not mutate target project files"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "415-451",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves git-backed boundary detects untracked mutations via git ls-files -co",
+      "why": "Validates that git ls-files -co catches untracked file additions"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "453-493",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves non-git walkFiles fallback detects modifications and ignores artifacts",
+      "why": "Validates fallback behavior and artifact exclusion"
+    }
+  ],
+  "assumptions": [
+    "Git ls-files -co covers all tracked and untracked working tree files (not verified against git docs)",
+    "SHA256 file digest is sufficient for mutation detection (collision risk assumed negligible)",
+    "Excluded directories (.git, node_modules, dist, coverage, .next, .cache) are sufficient for typical projects"
+  ],
+  "risks": [
+    "Git ls-files flags may not cover all edge cases (untracked directories, submodules, worktrees)",
+    "SHA256 collisions could theoretically mask mutations",
+    "Excluded directory list may miss project-specific directories that should be ignored",
+    "Race conditions: rapid file changes during snapshot could miss mutations"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Core boundary audit implementation exists and is tested. Git ls-files covers tracked/cached/other files with walkFiles fallback. Artifact root exclusion works. Assumptions around git flag coverage and directory exclusions are reasonable but not externally verified."
+  }
+}

@@ -2,6 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { join, resolve } from "node:path";
 import { detectModelProvider } from "../src/runtime/adapters/provider-doctor.js";
+import { DEFAULT_CLAUDE_SETTINGS_PATH } from "../src/runtime/execution/provider-adapter.js";
 import { createYoloSdk } from "../sdk.js";
 import {
   buildProviderCliDryRunMatrix,
@@ -82,6 +83,13 @@ describe("provider runtime matrix", () => {
     assert.deepEqual(matrix.providers.map((entry) => entry.provider), ["claude", "codex", "custom"]);
     assert.deepEqual(matrix.providers.map((entry) => entry.selected_provider), ["claude", "codex", "custom"]);
 
+    const claude = matrix.providers.find((entry) => entry.provider === "claude");
+    const settingsIndex = claude.invocation.args.indexOf("--settings");
+    assert.notEqual(settingsIndex, -1);
+    assert.equal(claude.invocation.args[settingsIndex + 1], DEFAULT_CLAUDE_SETTINGS_PATH);
+    assert.equal(claude.invocation.settings_file, DEFAULT_CLAUDE_SETTINGS_PATH);
+    assert.notEqual(claude.invocation.settings_file, join(projectRoot, "settings-minimal.json"));
+
     const codex = matrix.providers.find((entry) => entry.provider === "codex");
     assert.equal(codex.invocation.command, "codex");
     assert.equal(codex.invocation.output_file, join(stateRoot, "state", "runtime", "codex-output-123-8.txt"));
@@ -105,6 +113,34 @@ describe("provider runtime matrix", () => {
     assert.ok(blocked.blockers.some((blocker) => blocker.code === "PROVIDER_MATRIX_GATE_LOG_DIR_MISMATCH"));
     assert.ok(blocked.blockers.some((blocker) => blocker.code === "PROVIDER_MATRIX_SELECTION_MISMATCH"));
     assert.ok(blocked.blockers.some((blocker) => blocker.code === "AGENT_COMMAND_UNAVAILABLE"));
+  });
+
+  test("inspectProviderRuntimeMatrix blocks missing claude settings before provider execution", () => {
+    const result = inspectProviderRuntimeMatrix({
+      config: {
+        ai: {
+          provider: "claude",
+          model: "claude-sonnet-4",
+          settings: "missing-settings.json",
+        },
+      },
+      providers: ["claude"],
+      projectRoot,
+      stateRoot,
+      commandExists,
+      existsSync: () => false,
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.blocks_execution, true);
+    assert.ok(result.blockers.some((blocker) => (
+      blocker.code === "CLAUDE_SETTINGS_FILE_MISSING"
+      && blocker.provider === "claude"
+      && blocker.message.includes(join(projectRoot, "missing-settings.json"))
+    )));
+    const claude = result.matrix.providers[0];
+    assert.equal(claude.status, "blocked");
+    assert.equal(claude.invocation_preflight.status, "blocked");
   });
 
   test("buildProviderCliDryRunMatrix describes real provider CLI contracts without spawning", () => {

@@ -41,43 +41,77 @@ export function evalFileNotExists(params, taskScope, ROOT) {
   };
 }
 
+function splitGitFileList(output = "") {
+  return String(output || "").split("\n").map((file) => file.trim()).filter(Boolean);
+}
+
+function isBusinessDiffFile(file) {
+  if (!file || file.includes("node_modules") || file.startsWith("dist")) return false;
+  if (file.startsWith(".yolo/")) return false;
+  if (file.startsWith("scripts/yolo/")) return false;
+  if (file.startsWith("docs/")) return false;
+  if (!file.includes("/") && /\.md$/i.test(file)) return false;
+  if (file.startsWith("src/")) return true;
+  if (file.startsWith("cloudfunctions/")) return true;
+  if (file.startsWith("tests/")) return true;
+  if (file.startsWith("__tests__/")) return true;
+  if (file.includes("/__tests__/")) return true;
+  return false;
+}
+
+function isInTargetScope(file, targetFiles = []) {
+  if (targetFiles.length === 0) return true;
+  return targetFiles.some((target) => file === target || file.startsWith(target.endsWith("/") ? target : `${target}/`));
+}
+
 export function evalFilesModifiedMax(params, taskScope, ROOT, exec) {
   const maxFiles = params.max ?? 5;
-  const diff = exec("git diff --name-only");
-  if (!diff.ok) return { passed: true, detail: `无法获取 diff（限制 ${maxFiles}）` };
   const targetFiles = (taskScope?.targets || []).map((t) => t.file).filter(Boolean);
-  const inTargetScope = (file) => {
-    if (targetFiles.length === 0) return true;
-    return targetFiles.some((target) => file === target || file.startsWith(target.endsWith("/") ? target : `${target}/`));
-  };
-  const isCountable = (file) => {
-    if (!file || file.includes("node_modules") || file.startsWith("dist")) return false;
-    if (targetFiles.length > 0) return inTargetScope(file);
-    return /\.(ts|tsx|js|jsx|css)$/.test(file);
-  };
+  const diff = exec("git diff --name-only");
+  if (!diff.ok) {
+    return {
+      passed: true,
+      detail: `无法获取 diff（限制 ${maxFiles}）`,
+      target_files: targetFiles,
+      out_of_scope_files: [],
+    };
+  }
 
-  const files = diff.out
-    .split("\n")
-    .filter(isCountable);
+  const files = splitGitFileList(diff.out);
 
   const untracked = exec("git ls-files --others --exclude-standard");
   const untrackedFiles = untracked.ok
-    ? untracked.out
-        .split("\n")
-        .filter(isCountable)
+    ? splitGitFileList(untracked.out)
     : [];
 
-  const total = new Set([...files, ...untrackedFiles]).size;
+  const modifiedFiles = [...new Set([...files, ...untrackedFiles])].filter(isBusinessDiffFile);
+  const outOfScopeFiles = targetFiles.length > 0
+    ? modifiedFiles.filter((file) => !isInTargetScope(file, targetFiles))
+    : [];
+  const total = modifiedFiles.length;
+  const scopeDetail = outOfScopeFiles.length > 0
+    ? `；越界业务文件: ${outOfScopeFiles.join(", ")}`
+    : "";
 
   if (total > maxFiles) {
     return {
       passed: false,
-      detail: `修改了 ${total} 个文件（限制 ${maxFiles} 个）`,
+      detail: `修改了 ${total} 个业务文件（限制 ${maxFiles} 个）${scopeDetail}`,
       found: total,
+      files: modifiedFiles,
+      target_files: targetFiles,
+      out_of_scope_files: outOfScopeFiles,
     };
   }
 
-  return { passed: true, detail: `修改了 ${total} 个文件（限制 ${maxFiles}）`, found: total };
+  return {
+    passed: true,
+    detail: `修改了 ${total} 个业务文件（限制 ${maxFiles}）${scopeDetail}`,
+    found: total,
+    files: modifiedFiles,
+    target_files: targetFiles,
+    out_of_scope_files: outOfScopeFiles,
+  };
 }
 
 export function evalFileLinesMax(params, taskScope, ROOT) {

@@ -1,0 +1,69 @@
+{
+  "iteration": 4,
+  "scenario": "real-ui-field-clarification",
+  "expected": "executable",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601162414221/fixtures/0004-real-ui-field-clarification",
+  "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601162414221/fixtures/0004-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.transcript.md",
+  "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601162414221/fixtures/0004-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.chain.json",
+  "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601162414221/fixtures/0004-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+  "blocked_path": null,
+  "yolo": {
+    "no_premature_prd": true,
+    "final_class_ok": true,
+    "check_status": "pass",
+    "turn_count": 4,
+    "turn_expectations_met": 4,
+    "blocker_codes": [
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "EXECUTION_SCOPE_PRESENT",
+      "PROJECT_FACTS_GROUNDED",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "PROJECT_FACTS_GROUNDED",
+      "USER_APPROVAL_PRESENT"
+    ]
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "correct_final_class": true,
+      "conversation_realistic": true,
+      "no_premature_prd": true,
+      "executable": true,
+      "score": 97,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "RESOLVER_UNKNOWN_CONTEXT",
+          "path": ".yolo/dialogue-stress/real-ui-field-clarification.check.json",
+          "message": "Platform/stack/component/design/quality adapters all resolved to unknown/custom; the PRD is executable only because the acceptance adapter (local-browser) was found. In a real project this would be a gap."
+        }
+      ],
+      "dimensions": {
+        "clarification_quality": 95,
+        "project_fact_grounding": 100,
+        "stage_transition": 100,
+        "plan_convergence": 95,
+        "prd_executability": 98,
+        "deadlock_avoidance": 100,
+        "rework_risk": 95
+      }
+    },
+    "stdout": "",
+    "stderr": ""
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T16:27:15.609Z",
+  "ended_at": "2026-06-01T16:28:22.600Z",
+  "duration_ms": 66991
+}

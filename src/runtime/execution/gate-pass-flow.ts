@@ -72,12 +72,8 @@ export async function handleGatePassFlow({
 
   let postResult = null;
   if (shouldRunPostCommitPostconditions(commitResult)) {
-    if (commitResult.nonBlocking === true) {
-      postResult = preMergePost;
-    } else {
-      const prdForCheck = loadPRD(prdPath);
-      postResult = taskPostconditionsPass(task, prdForCheck);
-    }
+    const prdForCheck = loadPRD(prdPath);
+    postResult = taskPostconditionsPass(task, prdForCheck);
   }
 
   const postCommitOutcome = buildPostCommitOutcome({

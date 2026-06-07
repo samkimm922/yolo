@@ -1,0 +1,133 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verification confirms: YOLO demand evidence dispatch implements harness boundary audit that detects and blocks target-project mutations from full-tool Claude agents, with comprehensive test coverage for git-backed, non-git, and probe scenarios.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Core boundary audit functions use SHA-256 digests for cryptographic file state comparison before and after agent execution.",
+      "why": "Verifies mutation detection is based on cryptographic hashes, not trust-based checks."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "589-646",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime integration shows boundary snapshots are mandatory for every dispatch execution.",
+      "why": "Confirms boundary audit cannot be bypassed at runtime."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "659-671",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations generate BOUNDARY_PROJECT_MUTATION blockers that prevent PRD readiness.",
+      "why": "Verifies violations block the entire pipeline, not just logged as warnings."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() uses 'git ls-files -co --exclude-standard' with -o flag to include untracked files.",
+      "why": "Confirms git-backed boundary catches all mutations including untracked files."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "100",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Fallback logic uses filesystem walk when git unavailable, ensuring non-git project support.",
+      "why": "Verifies boundary audit works without git repository."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "104",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Allowed artifact root exclusion prevents false positives for legitimate artifact writes.",
+      "why": "Confirms evidence agents can write artifacts without triggering violations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "524-528",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Tool profile gating requires allowFullAgentTools=true for full tools, otherwise defaults to boundary.",
+      "why": "Verifies full tools require explicit authorization."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "495-528",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves boundary blocks readiness on unexpected-project-write.txt mutation despite passing agent results.",
+      "why": "Confirms boundary violations override agent success."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "577-613",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves git-backed boundary detects untracked mutations outside git index.",
+      "why": "Validates git untracked file mutation detection."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "615-652",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves boundary respects .gitignore but catches security-sensitive mutations like .env.",
+      "why": "Validates gitignored file handling with security exceptions."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "654-694",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves non-git fallback detects mutations while excluding allowed artifact roots.",
+      "why": "Confirms non-git boundary support and artifact exclusion work together."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "530-575",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves probe mode allows controlled writes for testing while still generating blockers.",
+      "why": "Validates boundary mutation probe stress test mechanism."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE when evidence lacks project scope.",
+      "why": "Verifies evidence scope validation complements boundary audit."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "68-69",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states external evidence cannot alone prove target project fields.",
+      "why": "Confirms project/external evidence separation is intentional design."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If verification is wrong, evidence agents with full tools could mutate target projects without detection, corrupting demand communication and project state."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker provided sufficient, verifiable evidence with no assumptions presented as facts. All project-scoped evidence includes usable repo-relative paths and line numbers. SHA-256 boundary audit is fully implemented for git-backed and non-git projects, excludes allowed artifact roots, generates blockers for violations, and has comprehensive test coverage for all scenarios. Tool profile gating requires explicit authorization for full tools. Evidence scope validation is implemented and tested separately. No unresolved missing data remains. PRD readiness blockers from explorer, cross-checker, and verifier roles should now be resolved."
+  }
+}

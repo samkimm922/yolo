@@ -1,0 +1,919 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_dispatch.v1",
+  "status": "blocked",
+  "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+  "summary": "Demand evidence agents completed, but readiness still has blockers.",
+  "generated_at": "2026-06-01T03:00:23.335Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "state_root": "/Users/sippingroom/Developer/yolo/.yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601030023333-pc5f1t",
+  "output_file": ".yolo/demand/evidence/dispatch-20260601030023333-pc5f1t",
+  "execution_policy": {
+    "default_mode": "dry_run",
+    "execute_requires": [
+      "executeAgents=true",
+      "allowAgentDispatch=true"
+    ],
+    "writes_business_code": false,
+    "agent_instruction": "boundary_controlled",
+    "agent_tool_profile": "full",
+    "boundary": {
+      "project_mutation": "forbidden",
+      "allowed_write_roots": [
+        ".yolo/demand/evidence/dispatch-20260601030023333-pc5f1t"
+      ]
+    }
+  },
+  "demand_status": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand router schema readiness must block PRD readiness when any evidence agent reports missing evidence, clarify, block, or failed status."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Evidence missing and clarify recommendations become blockers and cannot produce prd_ready true."
+        ],
+        "scope_in": [
+          "src/demand/router.ts",
+          "__tests__/demand-router.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Evidence missing and clarify recommendations become blockers and cannot produce prd_ready true."
+        ],
+        "risks": [
+          "A PRD could be generated from incomplete evidence if missing fields are ignored."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  },
+  "actions": [
+    {
+      "id": "demand.evidence.explorer",
+      "role": "explorer",
+      "status": "pending",
+      "reason": "Factual project claims need primary evidence.",
+      "protocol": {
+        "role": "explorer",
+        "objective": "Find primary project facts for the requested demand without editing files.",
+        "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "explorer.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601030023333-pc5f1t/explorer.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601030023333-pc5f1t/explorer.json"
+    },
+    {
+      "id": "demand.evidence.cross-checker",
+      "role": "cross-checker",
+      "status": "pending",
+      "reason": "High-risk facts require independent cross-check.",
+      "protocol": {
+        "role": "cross-checker",
+        "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+        "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+        "writes_code": false,
+        "required_when": "evidence_policy === cross_check or claim risk is high",
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "cross-checker.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601030023333-pc5f1t/cross-checker.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601030023333-pc5f1t/cross-checker.json"
+    },
+    {
+      "id": "demand.evidence.verifier",
+      "role": "verifier",
+      "status": "pending",
+      "reason": "Verify blockers and assumptions are not promoted to facts.",
+      "protocol": {
+        "role": "verifier",
+        "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+        "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "verifier.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601030023333-pc5f1t/verifier.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601030023333-pc5f1t/verifier.json"
+    }
+  ],
+  "mode": "execute",
+  "agent_results": [
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "explorer",
+      "status": "blocked",
+      "completed": true,
+      "claim": "YOLO demand router schema readiness converts evidence agent missing and clarify recommendations into blockers via evidenceResultBlockingIssues, preventing prd_ready true when unresolved missing data or clarification requests exist.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/router.ts",
+          "line": "481-511",
+          "source": "project_code",
+          "summary": "evidenceResultBlockingIssues converts missing[], recommendation in ['clarify','blocked','block'], verdict in ['blocked','block','fail'], status in ['blocked','failed','error'] into blockers with codes EVIDENCE_AGENT_MISSING, EVIDENCE_AGENT_CLARIFICATION_REQUIRED, EVIDENCE_AGENT_BLOCKED",
+          "why": "Core implementation showing how missing and clarify recommendations become blockers"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "709-727",
+          "source": "project_code",
+          "summary": "inspectDemandPrdReadiness calls evidenceResultBlockingIssues for each evidence result and pushes blockers to blockerList, returns prd_ready: blockers.length === 0",
+          "why": "Integration of evidence blocking logic into PRD readiness calculation"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "108-149",
+          "source": "project_code",
+          "summary": "actionableMissingItems filters out non-missing status items, sanitizeMissing applies isNonMissingStatusItem patterns to exclude 'no missing data identified' style notes",
+          "why": "Shows how the system distinguishes actionable missing items from status notes"
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "246-286",
+          "source": "project_test",
+          "summary": "Test 'evidence agent missing data and clarify recommendations block PRD readiness' verifies missing array and recommendation=clarify produce EVIDENCE_AGENT_MISSING and EVIDENCE_AGENT_CLARIFICATION_REQUIRED blockers, prd_ready=false",
+          "why": "Test evidence demonstrating the blocking behavior for missing and clarify cases"
+        },
+        {
+          "path": ".yolo/demand/evidence/dispatch-20260601003601970-y2e6j7/dispatch.json",
+          "line": "769-796",
+          "source": "project_artifact",
+          "summary": "Recent dispatch shows EVIDENCE_AGENT_MISSING blockers for explorer, cross-checker, verifier with messages listing unresolved missing evidence, prd_ready=false",
+          "why": "Runtime evidence showing the system is actively converting missing items to blockers"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "709-727",
+          "source": "project_code",
+          "summary": "inspectDemandPrdReadiness requires evidence_results for all roles in requiredEvidenceRoles, adds EVIDENCE_AGENT_RESULT_REQUIRED blocker if any role result is not complete",
+          "why": "Shows evidence completion requirement before PRD readiness"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "728-731",
+          "source": "project_code",
+          "summary": "inspectEvidenceAgreement adds EVIDENCE_AGENT_CONFLICT blockers when recommendations disagree (block+proceed or proceed+clarify)",
+          "why": "Additional blocker mechanism for evidence agent conflicts"
+        }
+      ],
+      "assumptions": [
+        "Evidence agents populate missing array only with truly unresolved items, not status notes",
+        "recommendation field values are normalized and case-insensitive in the blocking logic",
+        "Evidence result completion check (evidenceResultComplete) validates both completed flag and evidence presence"
+      ],
+      "risks": [
+        "If evidence agents put status notes in missing array, false-positive blockers may occur",
+        "If recommendation values have typos or non-standard casing, blocking logic may not catch them",
+        "If evidence results have completed=true but missing evidence, blockers may be missed"
+      ],
+      "missing": [
+        "evidence[0] must declare scope as project, external, user, or unknown.",
+        "evidence[1] must declare scope as project, external, user, or unknown.",
+        "evidence[2] must declare scope as project, external, user, or unknown.",
+        "evidence[3] must declare scope as project, external, user, or unknown.",
+        "evidence[4] must declare scope as project, external, user, or unknown.",
+        "evidence[5] must declare scope as project, external, user, or unknown.",
+        "evidence[6] must declare scope as project, external, user, or unknown."
+      ],
+      "recommendation": "block",
+      "result": {
+        "verdict": "blocked",
+        "notes": "Code, tests, and runtime artifacts confirm that evidenceResultBlockingIssues converts missing arrays and clarify/block recommendations into blockers that prevent prd_ready=true. The implementation handles missing[], recommendation in ['clarify','blocked','block'], verdict in ['blocked','block','fail'], and status in ['blocked','failed','error'] cases. Test coverage specifically verifies missing+clarify blocking behavior. Recent dispatch artifacts show the system is actively working as designed.",
+        "error_code": "EVIDENCE_SCOPE_REQUIRED"
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "cross-checker",
+      "status": "blocked",
+      "completed": true,
+      "claim": "Independent verification confirms the core blocking logic exists, but the explorer's evidence records are critically incomplete: all 7 evidence records lack required 'scope' field, making the evidence schema non-compliant and potentially misleading.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/router.ts",
+          "line": "481-511",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceResultBlockingIssues function converts missing[], recommendation in ['clarify','blocked','block'], verdict in ['blocked','block','fail'], status in ['blocked','failed','error'] into blockers",
+          "why": "Primary implementation verification of blocking logic"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "709-727",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "inspectDemandPrdReadiness integrates evidenceResultBlockingIssues and returns prd_ready: blockers.length === 0",
+          "why": "Verification that blocking issues prevent PRD readiness"
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "246-286",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test case 'evidence agent missing data and clarify recommendations block PRD readiness' verifies blocking behavior",
+          "why": "Test coverage confirms the blocking implementation works"
+        },
+        {
+          "path": ".yolo/demand/evidence/dispatch-20260601003601970-y2e6j7/dispatch.json",
+          "line": "1-50",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "Dispatch artifact structure exists and contains evidence results with blockers",
+          "why": "Runtime artifact verification that system is operational"
+        }
+      ],
+      "assumptions": [
+        "The evidence result schema requires 'scope' field for all evidence records",
+        "Evidence records without scope field cannot be properly categorized as project vs external vs user facts",
+        "The explorer's missing array correctly identifies that all 7 evidence records lack scope"
+      ],
+      "risks": [
+        "If scope field is truly required by schema, the evidence result is invalid and blocking decision may be based on non-compliant evidence",
+        "If scope field is optional, the explorer's recommendation may be a false positive",
+        "Missing scope fields prevent proper categorization of evidence sources for downstream consumers"
+      ],
+      "missing": [
+        "Schema definition file (yolo.demand.evidence_result.v1) to confirm whether 'scope' field is truly required or optional",
+        "Evidence result validator implementation that enforces schema compliance",
+        "Example compliant evidence result from previous successful dispatches showing correct scope field usage"
+      ],
+      "recommendation": "clarify",
+      "result": {
+        "verdict": "blocked",
+        "notes": "Core claim verified: evidenceResultBlockingIssues exists and prevents prd_ready when missing/clarify issues exist. However, critical schema compliance issue: explorer's evidence records all lack 'scope' field. Cannot confirm whether scope is required or optional without schema definition. Explorer's 'block' recommendation with EVIDENCE_SCOPE_REQUIRED error code needs clarification on schema requirements."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "verifier",
+      "status": "blocked",
+      "completed": true,
+      "claim": "Schema verification confirms the 'scope' field is mandatory for all evidence records. The explorer correctly identified non-compliance in their own evidence (7 records missing scope). The cross-checker's evidence IS compliant (all 4 records include scope), but their recommendation to 'clarify' is insufficient given the clear schema requirement in the codebase.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "271",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Agent protocol hard rule: 'Every evidence record must include scope: project, external, user, or unknown.'",
+          "why": "Primary schema requirement documentation"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "150-157",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceScopeErrors function validates each evidence record has scope field with valid value, returns error message if missing or invalid",
+          "why": "Validation implementation proving scope is required"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "44",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA fields definition states: 'evidence: Array of { path?, url?, line?, scope, source, summary, why } records. scope is project | external | user | unknown'",
+          "why": "Schema definition showing scope is required field"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "440-447",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceRecordsWithoutScope blocking function adds EVIDENCE_SCOPE_REQUIRED blocker when evidence records lack declared scope",
+          "why": "Blocking mechanism enforcing scope requirement"
+        },
+        {
+          "path": ".yolo/demand/evidence/dispatch-20260601030023333-pc5f1t/explorer.json",
+          "line": "10-58",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "Explorer's evidence records all lack scope field, only contain path, line, source, summary, why - 7 records non-compliant",
+          "why": "Evidence of non-compliance in explorer result"
+        },
+        {
+          "path": ".yolo/demand/evidence/dispatch-20260601030023333-pc5f1t/cross-checker.json",
+          "line": "10-41",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "Cross-checker's evidence records all include scope field with value 'project' - 4 records compliant",
+          "why": "Evidence that cross-checker knows to include scope field"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "52",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "VALID_EVIDENCE_SCOPES constant defines valid scope values: new Set(['project', 'external', 'user', 'unknown'])",
+          "why": "Shows the four valid scope values"
+        }
+      ],
+      "assumptions": [],
+      "risks": [
+        "If evidence agents continue to omit scope field, schema validation will fail and evidence cannot be used for PRD readiness",
+        "If cross-checker's 'clarify' recommendation is followed, it may delay fixing the actual schema compliance issue",
+        "Downstream consumers of evidence results may fail when processing records without scope field"
+      ],
+      "missing": [
+        "Evidence of whether the harness automatically adds default scope='unknown' to records missing scope before blocking",
+        "Test cases specifically verifying EVIDENCE_SCOPE_REQUIRED blocker is raised for missing scope fields",
+        "Documentation on whether scope field requirement was added recently or has always been required"
+      ],
+      "recommendation": "block",
+      "result": {
+        "verdict": "blocked",
+        "notes": "Schema requirement IS clear from codebase: evidence-dispatch.ts line 271 explicitly states 'Every evidence record must include scope', validation function evidenceScopeErrors enforces this, and router.ts blocking mechanism adds EVIDENCE_SCOPE_REQUIRED blocker. Explorer correctly identified non-compliance (7 records missing scope). Cross-checker's evidence IS compliant (all 4 records include scope) but their 'clarify' recommendation underestimates the issue. The schema requirement is documented in the code the cross-checker claimed was missing. Block recommended because evidence records without scope cannot be properly categorized and the validation logic will reject them."
+      }
+    }
+  ],
+  "provider_runs": [
+    {
+      "role": "explorer",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"explorer\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"YOLO demand router schema readiness converts evidence agent missing and clarify recommendations into blockers via evidenceResultBlockingIssues, preventing prd_ready true when unresolved missing data or clarification requests exist.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"481-511\",\n      \"source\": \"project_code\",\n      \"summary\": \"evidenceResultBlockingIssues converts missing[], recommendation in ['clarify','blocked','block'], verdict in ['blocked','block','fail'], status in ['blocked','failed','error'] into blockers with codes EVIDENCE_AGENT_MISSING, EVIDENCE_AGENT_CLARIFICATION_REQUIRED, EVIDENCE_AGENT_BLOCKED\",\n      \"why\": \"Core implementation showing how missing and clarify recommendations become blockers\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"709-727\",\n      \"source\": \"project_code\",\n      \"summary\": \"inspectDemandPrdReadiness calls evidenceResultBlockingIssues for each evidence result and pushes blockers to blockerList, returns prd_ready: blockers.length === 0\",\n      \"why\": \"Integration of evidence blocking logic into PRD readiness calculation\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"108-149\",\n      \"source\": \"project_code\",\n      \"summary\": \"actionableMissingItems filters out non-missing status items, sanitizeMissing applies isNonMissingStatusItem patterns to exclude 'no missing data identified' style notes\",\n      \"why\": \"Shows how the system distinguishes actionable missing items from status notes\"\n    },\n    {\n      \"path\": \"__tests__/demand-router.test.ts\",\n      \"line\": \"246-286\",\n      \"source\": \"project_test\",\n      \"summary\": \"Test 'evidence agent missing data and clarify recommendations block PRD readiness' verifies missing array and recommendation=clarify produce EVIDENCE_AGE\n[truncated 2573 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "cross-checker",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"cross-checker\",\n  \"status\": \"blocked\",\n  \"completed\": true,\n  \"claim\": \"Independent verification confirms the core blocking logic exists, but the explorer's evidence records are critically incomplete: all 7 evidence records lack required 'scope' field, making the evidence schema non-compliant and potentially misleading.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"481-511\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"evidenceResultBlockingIssues function converts missing[], recommendation in ['clarify','blocked','block'], verdict in ['blocked','block','fail'], status in ['blocked','failed','error'] into blockers\",\n      \"why\": \"Primary implementation verification of blocking logic\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"709-727\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"inspectDemandPrdReadiness integrates evidenceResultBlockingIssues and returns prd_ready: blockers.length === 0\",\n      \"why\": \"Verification that blocking issues prevent PRD readiness\"\n    },\n    {\n      \"path\": \"__tests__/demand-router.test.ts\",\n      \"line\": \"246-286\",\n      \"scope\": \"project\",\n      \"source\": \"project_test\",\n      \"summary\": \"Test case 'evidence agent missing data and clarify recommendations block PRD readiness' verifies blocking behavior\",\n      \"why\": \"Test coverage confirms the blocking implementation works\"\n    },\n    {\n      \"path\": \".yolo/demand/evidence/dispatch-20260601003601970-y2e6j7/dispatch.json\",\n      \"line\": \"1-50\",\n      \"scope\": \"project\",\n      \"source\": \"project_artifact\",\n      \"summary\": \"Dispatch artifact structure exists and contains evidence results with blockers\",\n      \"why\": \"Runtime artifact verification that system is operational\"\n    }\n  ],\n  \"assumptions\": [\n    \"The evidence result schema requires 'scope' field\n[truncated 1431 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "verifier",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"verifier\",\n  \"status\": \"blocked\",\n  \"completed\": true,\n  \"claim\": \"Schema verification confirms the 'scope' field is mandatory for all evidence records. The explorer correctly identified non-compliance in their own evidence (7 records missing scope). The cross-checker's evidence IS compliant (all 4 records include scope), but their recommendation to 'clarify' is insufficient given the clear schema requirement in the codebase.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"271\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Agent protocol hard rule: 'Every evidence record must include scope: project, external, user, or unknown.'\",\n      \"why\": \"Primary schema requirement documentation\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"150-157\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"evidenceScopeErrors function validates each evidence record has scope field with valid value, returns error message if missing or invalid\",\n      \"why\": \"Validation implementation proving scope is required\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"44\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"DEMAND_EVIDENCE_RESULT_SCHEMA fields definition states: 'evidence: Array of { path?, url?, line?, scope, source, summary, why } records. scope is project | external | user | unknown'\",\n      \"why\": \"Schema definition showing scope is required field\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"440-447\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"evidenceRecordsWithoutScope blocking function adds EVIDENCE_SCOPE_REQUIRED blocker when evidence records lack declared scope\",\n      \"why\": \"Blocking mechanism enforcing scope requirement\"\n    },\n  \n[truncated 2607 chars]",
+      "stderr": ""
+    }
+  ],
+  "artifacts": [
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601030023333-pc5f1t/explorer.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601030023333-pc5f1t/cross-checker.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601030023333-pc5f1t/verifier.json"
+  ],
+  "boundary": {
+    "project_mutation": "clean",
+    "allowed_write_roots": [
+      ".yolo/demand/evidence/dispatch-20260601030023333-pc5f1t"
+    ],
+    "changes": []
+  },
+  "readiness": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.prd_readiness.v1",
+    "required_slots": [
+      "problem",
+      "target_user",
+      "status_quo",
+      "desired_outcome",
+      "scope_in",
+      "scope_out",
+      "constraints",
+      "acceptance_criteria",
+      "risks",
+      "approval"
+    ],
+    "slot_values": {
+      "problem": [
+        "Existing YOLO demand router schema readiness must block PRD readiness when any evidence agent reports missing evidence, clarify, block, or failed status."
+      ],
+      "target_user": [
+        "YOLO maintainer"
+      ],
+      "status_quo": [
+        "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+      ],
+      "desired_outcome": [
+        "Evidence missing and clarify recommendations become blockers and cannot produce prd_ready true."
+      ],
+      "scope_in": [
+        "src/demand/router.ts",
+        "__tests__/demand-router.test.ts"
+      ],
+      "scope_out": [
+        "Do not intentionally modify target project files during evidence gathering."
+      ],
+      "constraints": [
+        "Full tools may be available; harness boundary audit must detect any target-project mutation."
+      ],
+      "acceptance_criteria": [
+        "Evidence missing and clarify recommendations become blockers and cannot produce prd_ready true."
+      ],
+      "risks": [
+        "A PRD could be generated from incomplete evidence if missing fields are ignored."
+      ],
+      "approval": [
+        "approved"
+      ]
+    },
+    "missing_slots": [],
+    "blockers": [
+      {
+        "code": "EVIDENCE_SCOPE_REQUIRED",
+        "role": "explorer",
+        "message": "explorer returned provider/runtime error EVIDENCE_SCOPE_REQUIRED."
+      },
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "explorer",
+        "message": "explorer reported unresolved missing evidence: evidence[0] must declare scope as project, external, user, or unknown.; evidence[1] must declare scope as project, external, user, or unknown.; evidence[2] must declare scope as project, external, user, or unknown.; evidence[3] must declare scope as project, external, user, or unknown.; evidence[4] must declare scope as project, external, user, or unknown.; evidence[5] must declare scope as project, external, user, or unknown.; evidence[6] must declare scope as project, external, user, or unknown."
+      },
+      {
+        "code": "EVIDENCE_AGENT_BLOCKED",
+        "role": "explorer",
+        "message": "explorer returned block; keep PRD readiness blocked until resolved."
+      },
+      {
+        "code": "EVIDENCE_SCOPE_REQUIRED",
+        "role": "explorer",
+        "message": "explorer evidence records must declare scope as project, external, user, or unknown before they can satisfy readiness."
+      },
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "cross-checker",
+        "message": "cross-checker reported unresolved missing evidence: Schema definition file (yolo.demand.evidence_result.v1) to confirm whether 'scope' field is truly required or optional; Evidence result validator implementation that enforces schema compliance; Example compliant evidence result from previous successful dispatches showing correct scope field usage"
+      },
+      {
+        "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+        "role": "cross-checker",
+        "message": "cross-checker returned clarify; keep PRD readiness blocked until resolved."
+      },
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "verifier",
+        "message": "verifier reported unresolved missing evidence: Evidence of whether the harness automatically adds default scope='unknown' to records missing scope before blocking; Test cases specifically verifying EVIDENCE_SCOPE_REQUIRED blocker is raised for missing scope fields; Documentation on whether scope field requirement was added recently or has always been required"
+      },
+      {
+        "code": "EVIDENCE_AGENT_BLOCKED",
+        "role": "verifier",
+        "message": "verifier returned block; keep PRD readiness blocked until resolved."
+      },
+      {
+        "code": "EVIDENCE_AGENT_CONFLICT",
+        "claim": "yolo demand router schema readiness converts evidence agent missing and clarify recommendations into blockers via evidenceresultblockingissues, preventing prd_ready true when unresolved missing data or clarification requests exist.",
+        "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+        "recommendations": [
+          "block"
+        ]
+      }
+    ],
+    "assumptions": [],
+    "required_evidence_agents": [
+      "explorer",
+      "cross-checker",
+      "verifier"
+    ],
+    "evidence_agreement": {
+      "status": "blocked",
+      "conflicts": [
+        {
+          "code": "EVIDENCE_AGENT_CONFLICT",
+          "claim": "yolo demand router schema readiness converts evidence agent missing and clarify recommendations into blockers via evidenceresultblockingissues, preventing prd_ready true when unresolved missing data or clarification requests exist.",
+          "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+          "recommendations": [
+            "block"
+          ]
+        },
+        {
+          "code": "EVIDENCE_AGENT_CONFLICT",
+          "claim": "schema verification confirms the 'scope' field is mandatory for all evidence records. the explorer correctly identified non-compliance in their own evidence (7 records missing scope). the cross-checker's evidence is compliant (all 4 records include scope), but their recommendation to 'clarify' is insufficient given the clear schema requirement in the codebase.",
+          "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+          "recommendations": [
+            "block"
+          ]
+        }
+      ]
+    },
+    "prd_ready": false
+  },
+  "demand_status_after_dispatch": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand router schema readiness must block PRD readiness when any evidence agent reports missing evidence, clarify, block, or failed status."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Evidence missing and clarify recommendations become blockers and cannot produce prd_ready true."
+        ],
+        "scope_in": [
+          "src/demand/router.ts",
+          "__tests__/demand-router.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Evidence missing and clarify recommendations become blockers and cannot produce prd_ready true."
+        ],
+        "risks": [
+          "A PRD could be generated from incomplete evidence if missing fields are ignored."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_SCOPE_REQUIRED",
+          "role": "explorer",
+          "message": "explorer returned provider/runtime error EVIDENCE_SCOPE_REQUIRED."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "explorer",
+          "message": "explorer reported unresolved missing evidence: evidence[0] must declare scope as project, external, user, or unknown.; evidence[1] must declare scope as project, external, user, or unknown.; evidence[2] must declare scope as project, external, user, or unknown.; evidence[3] must declare scope as project, external, user, or unknown.; evidence[4] must declare scope as project, external, user, or unknown.; evidence[5] must declare scope as project, external, user, or unknown.; evidence[6] must declare scope as project, external, user, or unknown."
+        },
+        {
+          "code": "EVIDENCE_AGENT_BLOCKED",
+          "role": "explorer",
+          "message": "explorer returned block; keep PRD readiness blocked until resolved."
+        },
+        {
+          "code": "EVIDENCE_SCOPE_REQUIRED",
+          "role": "explorer",
+          "message": "explorer evidence records must declare scope as project, external, user, or unknown before they can satisfy readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "cross-checker",
+          "message": "cross-checker reported unresolved missing evidence: Schema definition file (yolo.demand.evidence_result.v1) to confirm whether 'scope' field is truly required or optional; Evidence result validator implementation that enforces schema compliance; Example compliant evidence result from previous successful dispatches showing correct scope field usage"
+        },
+        {
+          "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker returned clarify; keep PRD readiness blocked until resolved."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "verifier",
+          "message": "verifier reported unresolved missing evidence: Evidence of whether the harness automatically adds default scope='unknown' to records missing scope before blocking; Test cases specifically verifying EVIDENCE_SCOPE_REQUIRED blocker is raised for missing scope fields; Documentation on whether scope field requirement was added recently or has always been required"
+        },
+        {
+          "code": "EVIDENCE_AGENT_BLOCKED",
+          "role": "verifier",
+          "message": "verifier returned block; keep PRD readiness blocked until resolved."
+        },
+        {
+          "code": "EVIDENCE_AGENT_CONFLICT",
+          "claim": "yolo demand router schema readiness converts evidence agent missing and clarify recommendations into blockers via evidenceresultblockingissues, preventing prd_ready true when unresolved missing data or clarification requests exist.",
+          "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+          "recommendations": [
+            "block"
+          ]
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "blocked",
+        "conflicts": [
+          {
+            "code": "EVIDENCE_AGENT_CONFLICT",
+            "claim": "yolo demand router schema readiness converts evidence agent missing and clarify recommendations into blockers via evidenceresultblockingissues, preventing prd_ready true when unresolved missing data or clarification requests exist.",
+            "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+            "recommendations": [
+              "block"
+            ]
+          },
+          {
+            "code": "EVIDENCE_AGENT_CONFLICT",
+            "claim": "schema verification confirms the 'scope' field is mandatory for all evidence records. the explorer correctly identified non-compliance in their own evidence (7 records missing scope). the cross-checker's evidence is compliant (all 4 records include scope), but their recommendation to 'clarify' is insufficient given the clear schema requirement in the codebase.",
+            "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+            "recommendations": [
+              "block"
+            ]
+          }
+        ]
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_SCOPE_REQUIRED",
+          "role": "explorer",
+          "message": "explorer returned provider/runtime error EVIDENCE_SCOPE_REQUIRED."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "explorer",
+          "message": "explorer reported unresolved missing evidence: evidence[0] must declare scope as project, external, user, or unknown.; evidence[1] must declare scope as project, external, user, or unknown.; evidence[2] must declare scope as project, external, user, or unknown.; evidence[3] must declare scope as project, external, user, or unknown.; evidence[4] must declare scope as project, external, user, or unknown.; evidence[5] must declare scope as project, external, user, or unknown.; evidence[6] must declare scope as project, external, user, or unknown."
+        },
+        {
+          "code": "EVIDENCE_AGENT_BLOCKED",
+          "role": "explorer",
+          "message": "explorer returned block; keep PRD readiness blocked until resolved."
+        },
+        {
+          "code": "EVIDENCE_SCOPE_REQUIRED",
+          "role": "explorer",
+          "message": "explorer evidence records must declare scope as project, external, user, or unknown before they can satisfy readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "cross-checker",
+          "message": "cross-checker reported unresolved missing evidence: Schema definition file (yolo.demand.evidence_result.v1) to confirm whether 'scope' field is truly required or optional; Evidence result validator implementation that enforces schema compliance; Example compliant evidence result from previous successful dispatches showing correct scope field usage"
+        },
+        {
+          "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker returned clarify; keep PRD readiness blocked until resolved."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "verifier",
+          "message": "verifier reported unresolved missing evidence: Evidence of whether the harness automatically adds default scope='unknown' to records missing scope before blocking; Test cases specifically verifying EVIDENCE_SCOPE_REQUIRED blocker is raised for missing scope fields; Documentation on whether scope field requirement was added recently or has always been required"
+        },
+        {
+          "code": "EVIDENCE_AGENT_BLOCKED",
+          "role": "verifier",
+          "message": "verifier returned block; keep PRD readiness blocked until resolved."
+        },
+        {
+          "code": "EVIDENCE_AGENT_CONFLICT",
+          "claim": "yolo demand router schema readiness converts evidence agent missing and clarify recommendations into blockers via evidenceresultblockingissues, preventing prd_ready true when unresolved missing data or clarification requests exist.",
+          "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+          "recommendations": [
+            "block"
+          ]
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  }
+}

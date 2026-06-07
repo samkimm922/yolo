@@ -6,10 +6,10 @@ import {
 } from "../src/runtime/execution/post-commit-outcome.js";
 
 describe("post commit outcome helpers", () => {
-  test("postconditions run after real merged code, even when commit is only a warning", () => {
+  test("postconditions run only after real committed code", () => {
     assert.equal(shouldRunPostCommitPostconditions({ committed: true, hasRealCode: true }), true);
     assert.equal(shouldRunPostCommitPostconditions({ committed: true, hasRealCode: false }), false);
-    assert.equal(shouldRunPostCommitPostconditions({ committed: false, hasRealCode: true, nonBlocking: true }), true);
+    assert.equal(shouldRunPostCommitPostconditions({ committed: false, hasRealCode: true, nonBlocking: true }), false);
     assert.equal(shouldRunPostCommitPostconditions({ blocked: true, hasRealCode: true }), false);
   });
 
@@ -87,7 +87,7 @@ describe("post commit outcome helpers", () => {
     });
   });
 
-  test("nonblocking commit warnings complete only after postconditions pass", () => {
+  test("YB-005 legacy nonblocking git_add_failed fails closed instead of completing", () => {
     const outcome = buildPostCommitOutcome({
       task: { id: "FIX-3B" },
       commitResult: {
@@ -100,12 +100,17 @@ describe("post commit outcome helpers", () => {
       postResult: { passed: true, failed: [] },
     });
 
-    assert.equal(outcome.status, "completed");
-    assert.equal(outcome.reason, "commit warning: git_add_failed");
-    assert.equal(outcome.doneStatus, "completed");
-    assert.equal(outcome.doneReason, "commit warning: git_add_failed");
-    assert.equal(outcome.transition.result.status, "PASS");
-    assert.equal(outcome.transition.result.commit_warning, "git_add_failed");
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.reason, "commit 失败: git_add_failed");
+    assert.equal(outcome.doneStatus, "failed");
+    assert.equal(outcome.doneReason, "commit 失败: git_add_failed");
+    assert.equal(outcome.transition.result.status, "FAIL");
+    assert.equal(outcome.transition.result.commit_failure, "git_add_failed");
+    assert.equal("commit_warning" in outcome.transition.result, false);
+    assert.deepEqual(outcome.transition.prd_update, {
+      status: "failed",
+      failReason: "commit 失败: git_add_failed",
+    });
   });
 
   test("metadata-only outcomes fail as no-code work", () => {
@@ -138,6 +143,10 @@ describe("post commit outcome helpers", () => {
     assert.equal(outcome.doneReason, "commit 失败");
     assert.equal(outcome.transition.result.status, "FAIL");
     assert.equal(outcome.transition.result.reason, "commit 失败");
-    assert.equal(outcome.transition.prd_update, null);
+    assert.equal(outcome.transition.result.commit_failure, "commit_failed");
+    assert.deepEqual(outcome.transition.prd_update, {
+      status: "failed",
+      failReason: "commit 失败",
+    });
   });
 });

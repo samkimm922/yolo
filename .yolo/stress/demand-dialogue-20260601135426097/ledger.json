@@ -1,0 +1,923 @@
+{
+  "schema": "yolo.demand.dialogue_stress.v1",
+  "run_id": "demand-dialogue-20260601135426097",
+  "started_at": "2026-06-01T13:54:26.099Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097",
+  "cycles": 4,
+  "timeout_ms": 300000,
+  "model": null,
+  "iterations": [
+    {
+      "iteration": 1,
+      "scenario": "real-ui-field-clarification",
+      "expected": "executable",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0001-real-ui-field-clarification",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.chain.json",
+      "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+      "blocked_path": null,
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": "pass",
+        "turn_count": 4,
+        "turn_expectations_met": 4,
+        "blocker_codes": [
+          "REFLECTION_PRESENT",
+          "INVESTIGATION_COMPLETE",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "USER_APPROVAL_PRESENT"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": true,
+          "score": 95,
+          "hard_failures": [],
+          "warnings": [
+            {
+              "code": "RESOLVER_UNKNOWN_CONTEXT",
+              "path": "real-ui-field-clarification.check.json",
+              "message": "All project-specific adapters/packs resolved to unknown/custom; execution agent will lack framework conventions."
+            }
+          ],
+          "dimensions": {
+            "clarification_quality": 9,
+            "project_fact_grounding": 10,
+            "stage_transition": 10,
+            "plan_convergence": 10,
+            "prd_executability": 9,
+            "deadlock_avoidance": 10,
+            "rework_risk": 9
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T13:54:26.099Z",
+      "ended_at": "2026-06-01T13:55:02.087Z",
+      "duration_ms": 35988,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/0001-real-ui-field-clarification.json"
+    },
+    {
+      "iteration": 2,
+      "scenario": "contradicted-field-blocks",
+      "expected": "blocked",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0002-contradicted-field-blocks",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0002-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0002-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.chain.json",
+      "prd_path": null,
+      "blocked_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0002-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.blocked.json",
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": null,
+        "turn_count": 2,
+        "turn_expectations_met": 2,
+        "blocker_codes": [
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "PROJECT_FACTS_GROUNDED"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": true,
+          "score": 95,
+          "hard_failures": [],
+          "warnings": [],
+          "dimensions": {
+            "clarification_quality": 95,
+            "project_fact_grounding": 100,
+            "stage_transition": 90,
+            "plan_convergence": 90,
+            "prd_executability": 100,
+            "deadlock_avoidance": 95,
+            "rework_risk": 95
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T13:55:02.090Z",
+      "ended_at": "2026-06-01T13:55:29.178Z",
+      "duration_ms": 27088,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/0002-contradicted-field-blocks.json"
+    },
+    {
+      "iteration": 3,
+      "scenario": "brainstorm-to-plan-with-deferred-scope",
+      "expected": "executable",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0003-brainstorm-to-plan-with-deferred-scope",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0003-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0003-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.chain.json",
+      "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0003-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope-turn-3.prd.json",
+      "blocked_path": null,
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": "pass",
+        "turn_count": 3,
+        "turn_expectations_met": 3,
+        "blocker_codes": [
+          "REFLECTION_PRESENT",
+          "INVESTIGATION_COMPLETE",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "OUT_OF_SCOPE_PRESENT",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "USER_APPROVAL_PRESENT"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": true,
+          "score": 95,
+          "hard_failures": [],
+          "warnings": [
+            {
+              "code": "BRAINSTORM_QUESTION_VAGUE",
+              "path": ".yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md:4",
+              "message": "Turn 1 agent question ('先把大方向拆小，确认本轮 MVP 只做一个可验证风险。') is a statement rather than a concrete clarifying question — it doesn't ask the user a specific thing to resolve."
+            },
+            {
+              "code": "SCENARIO_IDEA_NOT_CHALLENGED",
+              "path": ".yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md",
+              "message": "The brainstorm scenario name implies deferred scope was discussed, but the transcript never shows the agent explicitly deferring future anomaly types or documenting that decision. The PRD does capture out_of_scope, but the conversation coul"
+            }
+          ],
+          "dimensions": {
+            "clarification_quality": 80,
+            "project_fact_grounding": 95,
+            "stage_transition": 95,
+            "plan_convergence": 95,
+            "prd_executability": 100,
+            "deadlock_avoidance": 100,
+            "rework_risk": 90
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T13:55:29.178Z",
+      "ended_at": "2026-06-01T13:56:13.773Z",
+      "duration_ms": 44595,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/0003-brainstorm-to-plan-with-deferred-scope.json"
+    },
+    {
+      "iteration": 4,
+      "scenario": "real-ui-field-clarification",
+      "expected": "executable",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0004-real-ui-field-clarification",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0004-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0004-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.chain.json",
+      "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0004-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+      "blocked_path": null,
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": "pass",
+        "turn_count": 4,
+        "turn_expectations_met": 4,
+        "blocker_codes": [
+          "REFLECTION_PRESENT",
+          "INVESTIGATION_COMPLETE",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "USER_APPROVAL_PRESENT"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": true,
+          "score": 92,
+          "hard_failures": [],
+          "warnings": [
+            {
+              "code": "RESOLVER_UNKNOWN_CONTEXT",
+              "path": "real-ui-field-clarification.check.json:resolver",
+              "message": "All project adapters resolved to unknown/custom (platform, stack, component, design, quality). This is expected for a stress fixture but in a real project would reduce runtime guard quality."
+            },
+            {
+              "code": "SPEC_GOVERNANCE_EVIDENCE_GAP",
+              "path": "real-ui-field-clarification.check.json:checks[0].preflight.spec_governance.matrix.summary",
+              "message": "Spec governance summary reports 0 terminal tasks with evidence despite an evidence plan being present. The EVID-001 reference exists in the task but the governance matrix counts it as 0, suggesting the evidence file hasn't been produced yet"
+            }
+          ],
+          "dimensions": {
+            "clarification_quality": 9,
+            "project_fact_grounding": 9,
+            "stage_transition": 10,
+            "plan_convergence": 9,
+            "prd_executability": 9,
+            "deadlock_avoidance": 10,
+            "rework_risk": 9
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T13:56:13.774Z",
+      "ended_at": "2026-06-01T13:57:08.850Z",
+      "duration_ms": 55076,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/0004-real-ui-field-clarification.json"
+    },
+    {
+      "iteration": 5,
+      "scenario": "contradicted-field-blocks",
+      "expected": "blocked",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0005-contradicted-field-blocks",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0005-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0005-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.chain.json",
+      "prd_path": null,
+      "blocked_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0005-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.blocked.json",
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": null,
+        "turn_count": 2,
+        "turn_expectations_met": 2,
+        "blocker_codes": [
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "PROJECT_FACTS_GROUNDED"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": false,
+          "score": 92,
+          "hard_failures": [],
+          "warnings": [],
+          "dimensions": {
+            "clarification_quality": 95,
+            "project_fact_grounding": 100,
+            "stage_transition": 90,
+            "plan_convergence": 85,
+            "prd_executability": 0,
+            "deadlock_avoidance": 90,
+            "rework_risk": 95
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T13:57:08.851Z",
+      "ended_at": "2026-06-01T13:57:47.959Z",
+      "duration_ms": 39108,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/0005-contradicted-field-blocks.json"
+    },
+    {
+      "iteration": 6,
+      "scenario": "brainstorm-to-plan-with-deferred-scope",
+      "expected": "executable",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0006-brainstorm-to-plan-with-deferred-scope",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0006-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0006-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.chain.json",
+      "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0006-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope-turn-3.prd.json",
+      "blocked_path": null,
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": "pass",
+        "turn_count": 3,
+        "turn_expectations_met": 3,
+        "blocker_codes": [
+          "REFLECTION_PRESENT",
+          "INVESTIGATION_COMPLETE",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "OUT_OF_SCOPE_PRESENT",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "USER_APPROVAL_PRESENT"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": true,
+          "score": 95,
+          "hard_failures": [],
+          "warnings": [],
+          "dimensions": {
+            "clarification_quality": 9,
+            "project_fact_grounding": 9,
+            "stage_transition": 10,
+            "plan_convergence": 9,
+            "prd_executability": 10,
+            "deadlock_avoidance": 10,
+            "rework_risk": 9
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T13:57:47.960Z",
+      "ended_at": "2026-06-01T13:58:45.779Z",
+      "duration_ms": 57819,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/0006-brainstorm-to-plan-with-deferred-scope.json"
+    },
+    {
+      "iteration": 7,
+      "scenario": "real-ui-field-clarification",
+      "expected": "executable",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0007-real-ui-field-clarification",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0007-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0007-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.chain.json",
+      "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0007-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+      "blocked_path": null,
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": "pass",
+        "turn_count": 4,
+        "turn_expectations_met": 4,
+        "blocker_codes": [
+          "REFLECTION_PRESENT",
+          "INVESTIGATION_COMPLETE",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "USER_APPROVAL_PRESENT"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": true,
+          "score": 93,
+          "hard_failures": [],
+          "warnings": [
+            {
+              "code": "PRD_TARGET_FILE_UNVERIFIED",
+              "path": ".yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+              "message": "PRD targets src/pages/inventory-list.tsx but the user never confirmed this file path; it was inferred by the agent. In a real project the agent should verify the file exists before writing it into the PRD."
+            }
+          ],
+          "dimensions": {
+            "clarification_quality": 9,
+            "project_fact_grounding": 9,
+            "stage_transition": 10,
+            "plan_convergence": 9,
+            "prd_executability": 9,
+            "deadlock_avoidance": 10,
+            "rework_risk": 9
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T13:58:45.780Z",
+      "ended_at": "2026-06-01T14:00:11.911Z",
+      "duration_ms": 86131,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/0007-real-ui-field-clarification.json"
+    },
+    {
+      "iteration": 8,
+      "scenario": "contradicted-field-blocks",
+      "expected": "blocked",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0008-contradicted-field-blocks",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0008-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0008-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.chain.json",
+      "prd_path": null,
+      "blocked_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0008-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.blocked.json",
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": null,
+        "turn_count": 2,
+        "turn_expectations_met": 2,
+        "blocker_codes": [
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "PROJECT_FACTS_GROUNDED"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": false,
+          "score": 91,
+          "hard_failures": [],
+          "warnings": [
+            {
+              "code": "INVESTIGATION_ASSUMPTION_CONTRADICTS_EVIDENCE",
+              "path": ".yolo/demand/DEMAND-DIALOGUE-0008-contradicted-field-blocks/INVESTIGATION.md",
+              "message": "INVESTIGATION.md lists ASM-001 ('Inventory list already receives quantity and threshold fields') directly below EVID-001 that explicitly states threshold fields do NOT exist. The assumption should be marked contradicted rather than left as "
+            }
+          ],
+          "dimensions": {
+            "clarification_quality": 9,
+            "project_fact_grounding": 9,
+            "stage_transition": 9,
+            "plan_convergence": 8,
+            "prd_executability": 9,
+            "deadlock_avoidance": 9,
+            "rework_risk": 9
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T14:00:11.913Z",
+      "ended_at": "2026-06-01T14:01:17.482Z",
+      "duration_ms": 65569,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/0008-contradicted-field-blocks.json"
+    },
+    {
+      "iteration": 9,
+      "scenario": "brainstorm-to-plan-with-deferred-scope",
+      "expected": "executable",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0009-brainstorm-to-plan-with-deferred-scope",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0009-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0009-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.chain.json",
+      "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0009-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope-turn-3.prd.json",
+      "blocked_path": null,
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": "pass",
+        "turn_count": 3,
+        "turn_expectations_met": 3,
+        "blocker_codes": [
+          "REFLECTION_PRESENT",
+          "INVESTIGATION_COMPLETE",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "OUT_OF_SCOPE_PRESENT",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "USER_APPROVAL_PRESENT"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": true,
+          "score": 92,
+          "hard_failures": [],
+          "warnings": [
+            {
+              "code": "TRANSCRIPT_COMPRESSED",
+              "path": ".yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md",
+              "message": "Transcript uses one-line agent summaries rather than full dialogue text; realism judgment based on flow logic only, not conversational nuance."
+            },
+            {
+              "code": "RESOLVER_UNKNOWN_CONTEXT",
+              "path": ".yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.check.json",
+              "message": "All resolver packs resolved to unknown/custom; PRD correctness depends entirely on user-provided field path without project file verification."
+            }
+          ],
+          "dimensions": {
+            "clarification_quality": 9,
+            "project_fact_grounding": 8,
+            "stage_transition": 10,
+            "plan_convergence": 9,
+            "prd_executability": 9,
+            "deadlock_avoidance": 10,
+            "rework_risk": 9
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T14:01:17.484Z",
+      "ended_at": "2026-06-01T14:02:18.080Z",
+      "duration_ms": 60596,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/0009-brainstorm-to-plan-with-deferred-scope.json"
+    },
+    {
+      "iteration": 10,
+      "scenario": "real-ui-field-clarification",
+      "expected": "executable",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0010-real-ui-field-clarification",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0010-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0010-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.chain.json",
+      "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0010-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+      "blocked_path": null,
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": "pass",
+        "turn_count": 4,
+        "turn_expectations_met": 4,
+        "blocker_codes": [
+          "REFLECTION_PRESENT",
+          "INVESTIGATION_COMPLETE",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "USER_APPROVAL_PRESENT"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": true,
+          "score": 95,
+          "hard_failures": [],
+          "warnings": [],
+          "dimensions": {
+            "clarification_quality": 9,
+            "project_fact_grounding": 9,
+            "stage_transition": 10,
+            "plan_convergence": 9,
+            "prd_executability": 9,
+            "deadlock_avoidance": 10,
+            "rework_risk": 2
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T14:02:18.081Z",
+      "ended_at": "2026-06-01T14:03:17.975Z",
+      "duration_ms": 59894,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/0010-real-ui-field-clarification.json"
+    },
+    {
+      "iteration": 11,
+      "scenario": "contradicted-field-blocks",
+      "expected": "blocked",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0011-contradicted-field-blocks",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0011-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0011-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.chain.json",
+      "prd_path": null,
+      "blocked_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0011-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.blocked.json",
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": null,
+        "turn_count": 2,
+        "turn_expectations_met": 2,
+        "blocker_codes": [
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "PROJECT_FACTS_GROUNDED"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": true,
+          "score": 93,
+          "hard_failures": [],
+          "warnings": [
+            {
+              "code": "ASSUMPTION_CONTRADICTS_EVIDENCE",
+              "path": ".yolo/demand/DEMAND-DIALOGUE-0011-contradicted-field-blocks/INVESTIGATION.md",
+              "message": "INVESTIGATION.md ASM-001 states 'Inventory list already receives quantity and threshold fields' but EVID-001 directly contradicts this. Assumption should reflect the contradiction or be marked unverified."
+            }
+          ],
+          "dimensions": {
+            "clarification_quality": 9,
+            "project_fact_grounding": 10,
+            "stage_transition": 9,
+            "plan_convergence": 9,
+            "prd_executability": 9,
+            "deadlock_avoidance": 9,
+            "rework_risk": 9
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T14:03:17.976Z",
+      "ended_at": "2026-06-01T14:04:24.344Z",
+      "duration_ms": 66368,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/0011-contradicted-field-blocks.json"
+    },
+    {
+      "iteration": 12,
+      "scenario": "brainstorm-to-plan-with-deferred-scope",
+      "expected": "executable",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0012-brainstorm-to-plan-with-deferred-scope",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0012-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0012-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.chain.json",
+      "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/fixtures/0012-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope-turn-3.prd.json",
+      "blocked_path": null,
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": "pass",
+        "turn_count": 3,
+        "turn_expectations_met": 3,
+        "blocker_codes": [
+          "REFLECTION_PRESENT",
+          "INVESTIGATION_COMPLETE",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "OUT_OF_SCOPE_PRESENT",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "USER_APPROVAL_PRESENT"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": true,
+          "score": 95,
+          "hard_failures": [],
+          "warnings": [
+            {
+              "code": "TERSE_TRANSCRIPT",
+              "path": ".yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md",
+              "message": "Dialogue turns are extremely condensed (one-line agent responses); real conversations would include more exploratory back-and-forth, especially in brainstorm stage. Acceptable for stress fixture."
+            }
+          ],
+          "dimensions": {
+            "clarification_quality": 9,
+            "project_fact_grounding": 9,
+            "stage_transition": 10,
+            "plan_convergence": 9,
+            "prd_executability": 10,
+            "deadlock_avoidance": 10,
+            "rework_risk": 9
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T14:04:24.345Z",
+      "ended_at": "2026-06-01T14:05:31.044Z",
+      "duration_ms": 66699,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601135426097/0012-brainstorm-to-plan-with-deferred-scope.json"
+    }
+  ],
+  "stopped_reason": null,
+  "ended_at": "2026-06-01T14:05:31.046Z",
+  "completed": true,
+  "iteration_count": 12
+}

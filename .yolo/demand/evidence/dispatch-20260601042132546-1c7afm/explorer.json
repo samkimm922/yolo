@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch API implements scoped evidence separation where WebFetch/WebSearch results are marked as external research and cannot satisfy existing-project fact requirements without project-scoped evidence.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "366-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() classifies evidence as project/external/user/unknown based on record.path, record.url, record.source, and record fields",
+      "why": "Core evidence scope classification logic that separates external research from project facts"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker when evidence is non-project scopes only",
+      "why": "Validation that blocks external-only evidence from satisfying project fact requirements"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "709-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "PRD readiness check iterates over evidence results, calling projectEvidenceBlockingIssues() for each complete result and adding blockers",
+      "why": "Integration point where external-only evidence blocks PRD readiness"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "258-327",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt() includes rule: 'If the demand explicitly asks for external research/fetch/search, actually use WebFetch/WebSearch when available and record those records as scope=external'",
+      "why": "Agent prompt contract that requires external research to be marked as scope=external"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "451-456",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig() normalizes Claude agent_tool_profile to 'research' for research/fetch/web profiles, enabling WebFetch/WebSearch",
+      "why": "Provider configuration that enables external research tools while maintaining boundary rules"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "58-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Documentation defines three evidence agent protocols (explorer, cross-checker, verifier) and states external evidence can only be background research",
+      "why": "Product specification that external evidence cannot prove target project implementation facts"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'external evidence can come from WebFetch/WebSearch or external documents, but can only be used as background research, and cannot independently prove that the target project already has fields, APIs, state machines, or data flows'",
+      "why": "Product requirement that external-only evidence cannot satisfy project fact claims"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "605-640",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies agent evidence without explicit scope is blocked with EVIDENCE_SCOPE_REQUIRED error code",
+      "why": "Test coverage ensuring scope declaration is enforced"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "343-379",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies Claude research profile sets agent_tool_profile to 'research' and does not restrict tools",
+      "why": "Test coverage for WebFetch/WebSearch capability configuration"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "408-420",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult() checks evidenceRecordHasDeclaredScope() and sets status to blocked with EVIDENCE_SCOPE_REQUIRED when scope is missing",
+      "why": "Runtime enforcement that all evidence must declare scope before acceptance"
+    }
+  ],
+  "assumptions": [
+    "WebFetch/WebSearch tools are available in the Claude provider environment when agent_tool_profile is 'research' or 'full'",
+    "Agent providers respect the agent prompt contract and mark WebFetch/WebSearch results as scope=external",
+    "The boundary snapshot mechanism (buildBoundarySnapshot, diffBoundarySnapshots) correctly detects project mutations outside allowed artifact roots"
+  ],
+  "risks": [
+    "If agent providers ignore scope declaration rules, external research could be mistaken for project facts",
+    "If WebFetch/WebSearch tools are unavailable despite 'research' profile, agents might report missing instead of using external research",
+    "If boundary audit has false positives or false negatives, project mutations could go undetected or allowed mutations could be incorrectly blocked"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The codebase implements a complete evidence scope separation system: scope classification (project/external/user/unknown), validation that blocks external-only evidence from satisfying project facts, agent prompt rules requiring WebFetch/WebSearch results to be marked as external, and test coverage for scope enforcement and research profile configuration. The product doctrine explicitly states external evidence cannot prove project implementation facts."
+  }
+}

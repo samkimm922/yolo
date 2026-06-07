@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch API/schema supports external research evidence via WebFetch/WebSearch while enforcing strict separation between external and project-scoped facts through scope validation.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 16,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES set includes 'external' as a valid evidence scope alongside 'project', 'user', and 'unknown'",
+      "why": "Defines the allowed scope values that evidence records can declare"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "271-275",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt instructions explicitly state that evidence records must include scope field and that external research tools like WebFetch/WebSearch should be recorded as scope=external",
+      "why": "Shows the dispatch system instructs agents to properly scope external research evidence"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-157",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors function validates that every evidence record declares a valid scope",
+      "why": "Enforces scope declaration requirement at the schema level"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function automatically classifies evidence scope based on record structure, detecting URLs and external sources",
+      "why": "Provides automatic scope classification for evidence records"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function creates blockers when project facts are claimed without project-scoped evidence with concrete locators",
+      "why": "Enforces that existing-project facts require project evidence with repo-relative paths"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence field structure with scope as required and notes that 'project facts require project-scoped evidence'",
+      "why": "Defines the contract for evidence records including scope requirements"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": 70,
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states that 'external' evidence from WebFetch/WebSearch can only serve as background research and cannot alone prove target project implementation facts",
+      "why": "Documents the intended behavior that external evidence must be separated from project facts"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "449-461",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent tool profile normalization (lines 449-453) maps research-related profiles to enable WebFetch/WebSearch tools while maintaining boundary controls",
+      "why": "Shows how the system enables external research tools for agents"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "564-570",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshot detection (buildBoundarySnapshot, diffBoundarySnapshots) creates blockers if agents modify project files outside allowed artifact root",
+      "why": "Provides runtime enforcement that evidence gathering doesn't mutate target project files"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If agents mislabel external research as project-scoped evidence, the schema validation may not catch it if path field is present",
+    "The scope classification relies on agent compliance with instructions; automated classification may misclassify if agents provide malformed records"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The evidence dispatch implementation properly supports external research via WebFetch/WebSearch while enforcing scope separation. The schema requires scope declaration, validation functions enforce proper scoping, and project evidence blocking prevents external evidence from being used to prove project facts. The boundary audit ensures agents don't modify project files during evidence gathering."
+  }
+}

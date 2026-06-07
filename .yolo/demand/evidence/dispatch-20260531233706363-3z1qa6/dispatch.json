@@ -1,0 +1,681 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_dispatch.v1",
+  "status": "blocked",
+  "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+  "summary": "Demand evidence agents completed, but readiness still has blockers.",
+  "generated_at": "2026-05-31T23:37:06.365Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "state_root": "/Users/sippingroom/Developer/yolo/.yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260531233706363-3z1qa6",
+  "output_file": ".yolo/demand/evidence/dispatch-20260531233706363-3z1qa6",
+  "execution_policy": {
+    "default_mode": "dry_run",
+    "execute_requires": [
+      "executeAgents=true",
+      "allowAgentDispatch=true"
+    ],
+    "writes_business_code": false,
+    "agent_instruction": "read_only"
+  },
+  "demand_status": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand dispatch must verify src/demand/evidence-dispatch.ts and src/demand/router.ts before PRD readiness for brownfield schema/API changes"
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "Demand router can classify brownfield requests and evidence dispatch should invoke read-only provider agents."
+        ],
+        "desired_outcome": [
+          "Explorer, cross-checker, and verifier return project evidence with paths and PRD readiness stays blocked on conflicts or missing evidence."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "src/demand/router.ts"
+        ],
+        "scope_out": [
+          "Do not modify source code during demand evidence dispatch."
+        ],
+        "constraints": [
+          "Evidence agents must run read-only and return structured JSON."
+        ],
+        "acceptance_criteria": [
+          "Explorer, cross-checker, and verifier return project evidence with paths and PRD readiness stays blocked on conflicts or missing evidence."
+        ],
+        "risks": [
+          "If dispatch is bypassed, PRD facts can be generated from unverified assumptions."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  },
+  "actions": [
+    {
+      "id": "demand.evidence.explorer",
+      "role": "explorer",
+      "status": "pending",
+      "reason": "Factual project claims need primary evidence.",
+      "protocol": {
+        "role": "explorer",
+        "objective": "Find primary project facts for the requested demand without editing files.",
+        "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "explorer.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260531233706363-3z1qa6/explorer.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260531233706363-3z1qa6/explorer.json"
+    },
+    {
+      "id": "demand.evidence.cross-checker",
+      "role": "cross-checker",
+      "status": "pending",
+      "reason": "High-risk facts require independent cross-check.",
+      "protocol": {
+        "role": "cross-checker",
+        "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+        "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+        "writes_code": false,
+        "required_when": "evidence_policy === cross_check or claim risk is high",
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "cross-checker.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260531233706363-3z1qa6/cross-checker.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260531233706363-3z1qa6/cross-checker.json"
+    },
+    {
+      "id": "demand.evidence.verifier",
+      "role": "verifier",
+      "status": "pending",
+      "reason": "Verify blockers and assumptions are not promoted to facts.",
+      "protocol": {
+        "role": "verifier",
+        "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+        "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "verifier.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260531233706363-3z1qa6/verifier.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260531233706363-3z1qa6/verifier.json"
+    }
+  ],
+  "mode": "execute",
+  "agent_results": [
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "explorer",
+      "status": "failed",
+      "completed": false,
+      "claim": "Factual project claims need primary evidence.",
+      "confidence": "low",
+      "evidence": [],
+      "assumptions": [],
+      "risks": [
+        "Evidence agent did not return a valid completed result."
+      ],
+      "missing": [
+        "2026-05-31T23:37:06.486581Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\n2026-05-31T23:37:06.486718Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=claude-sonnet-4-6 personality=pragmatic\n2026-05-31T23:37:08.098617Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.discover/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098641Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.doctor/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098664Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.pi/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098667Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.ship/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098669Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.eval/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098672Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.learn/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098674Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.accept/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098677Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.check/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098679Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.fix/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098682Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.prd/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098684Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.discuss/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098687Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.plan/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098690Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.brainstorm/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098693Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.review/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.168874Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\n2026-05-31T23:37:08.170152Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\nOpenAI Codex v0.133.0-alpha.1\n--------\nworkdir: /Users/sippingroom/Developer/yolo\nmodel: claude-sonnet-4-6\nprovider: openai\napproval: never\nsandbox: read-only\nreasoning effort: medium\nreasoning summaries: none\nsession id: 019e8065-f6b6-7bb2-83a7-abe09c695ea9\n--------\nuser\nYou are the YOLO demand evidence explorer agent.\n\nHard rules:\n- READ ONLY. Do not edit, create, delete, or format project files.\n- Do not treat assumptions as facts.\n- If a project fact cannot be verified from files/docs/tests/logs, put it in missing or assumptions.\n- Return one JSON object only. No markdown, no prose outside JSON.\n\nProject root: /Users/sippingroom/Developer/yolo\nState root: /Users/sippingroom/Developer/yolo/.yolo\n\nYour protocol:\n{\n  \"role\": \"explorer\",\n  \"objective\": \"Find primary project facts for the requested demand without editing files.\",\n  \"prompt\": \"Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.\",\n  \"result_schema\": \"yolo.demand.evidence_result.v1\"\n}\n\nCurrent demand status:\n{\n  \"status\": \"blocked\",\n  \"code\": \"DEMAND_NOT_PRD_READY\",\n  \"summary\": \"Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.\",\n  \"triage\": {\n    \"schema_version\": \"1.0\",\n    \"schema\": \"yolo.demand.router.v1\",\n    \"context_type\": \"brownfield\",\n    \"route\": \"careful\",\n    \"evidence_policy\": \"cross_check\",\n    \"reason_codes\": [\n      \"EXISTING_PROJECT_FACTS\",\n      \"TECHNICAL_CONTRACT_OR_DATA_RISK\"\n    ],\n    \"blocking\": false,\n    \"explanation\": \"Careful route required by hard triggers; factual or risky claims need evidence before PRD.\"\n  },\n  \"readiness\": {\n    \"schema_version\": \"1.0\",\n    \"schema\": \"yolo.demand.prd_readiness.v1\",\n    \"required_slots\": [\n      \"problem\",\n      \"target_user\",\n      \"status_quo\",\n      \"desired_outcome\",\n      \"scope_in\",\n      \"scope_out\",\n      \"constraints\",\n      \"acceptance_criteria\",\n      \"risks\",\n      \"approval\"\n    ],\n    \"slot_values\": {\n      \"problem\": [\n        \"Existing YOLO demand dispatch must verify src/demand/evidence-dispatch.ts and src/demand/router.ts before PRD readiness for brownfield schema/API changes\"\n      ],\n      \"target_user\": [\n        \"YOLO maintainer\"\n      ],\n      \"status_quo\": [\n        \"Demand router can classify brownfield requests and evidence dispatch should invoke read-only provider agents.\"\n      ],\n      \"desired_outcome\": [\n        \"Explorer, cross-checker, and verifier return project evidence with paths and PRD readiness stays blocked on conflicts or missing evidence.\"\n      ],\n      \"scope_in\": [\n        \"src/demand/evidence-dispatch.ts\",\n        \"src/demand/router.ts\"\n      ],\n      \"scope_out\": [\n        \"Do not modify source code during demand evidence dispatch.\"\n      ],\n      \"constraints\": [\n        \"Evidence agents must run read-only and return structured JSON.\"\n      ],\n      \"acceptance_criteria\": [\n        \"Explorer, cross-checker, and verifier return project evidence with paths and PRD readiness stays blocked on conflicts or missing evidence.\"\n      ],\n      \"risks\": [\n        \"If dispatch is bypassed, PRD facts can be generated from unverified assumptions.\"\n      ],\n      \"approval\": [\n        \"approved\"\n      ]\n    },\n    \"missing_slots\": [],\n    \"blockers\": [\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"explorer\",\n        \"message\": \"explorer must complete with evidence and a result before cross_check PRD readiness.\"\n      },\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"cross-checker\",\n        \"message\": \"cross-checker must complete with evidence and a result before cross_check PRD readiness.\"\n      },\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"verifier\",\n        \"message\": \"verifier must complete with evidence and a result before cross_check PRD readiness.\"\n      }\n    ],\n    \"assumptions\": [],\n    \"required_evidence_agents\": [\n      \"explorer\",\n      \"cross-checker\",\n      \"verifier\"\n    ],\n    \"evidence_agreement\": {\n      \"status\": \"pass\",\n      \"conflicts\": []\n    },\n    \"prd_ready\": false\n  },\n  \"state\": {\n    \"schema_version\": \"1.0\",\n    \"schema\": \"yolo.demand.session_state.v1\",\n    \"context_type\": \"brownfield\",\n    \"route\": \"careful\",\n    \"evidence_policy\": \"cross_check\",\n    \"stage\": \"evidence\",\n    \"submode\": \"evidence_guarded\",\n    \"reason_codes\": [\n      \"EXISTING_PROJECT_FACTS\",\n      \"TECHNICAL_CONTRACT_OR_DATA_RISK\"\n    ],\n    \"missing_slots\": [],\n    \"blockers\": [\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"explorer\",\n        \"message\": \"explorer must complete with evidence and a result before cross_check PRD readiness.\"\n      },\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"cross-checker\",\n        \"message\": \"cross-checker must complete with evidence and a result before cross_check PRD readiness.\"\n      },\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"verifier\",\n        \"message\": \"verifier must complete with evidence and a result before cross_check PRD readiness.\"\n      }\n    ],\n    \"assumptions\": [],\n    \"evidence_tasks\": [\n      {\n        \"role\": \"explorer\",\n        \"protocol\": {\n          \"role\": \"explorer\",\n          \"objective\": \"Find primary project facts for the requested demand without editing files.\",\n          \"prompt\": \"Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.\",\n          \"writes_code\": false,\n          \"result_schema\": \"yolo.demand.evidence_result.v1\"\n        },\n        \"reason\": \"Factual project claims need primary evidence.\"\n      },\n      {\n        \"role\": \"cross-checker\",\n        \"protocol\": {\n          \"role\": \"cross-checker\",\n          \"objective\": \"Independently verify high-risk factual claims and challenge the explorer result.\",\n          \"prompt\": \"Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.\",\n          \"writes_code\": false,\n          \"required_when\": \"evidence_policy === cross_check or claim risk is high\",\n          \"result_schema\": \"yolo.demand.evidence_result.v1\"\n        },\n        \"reason\": \"High-risk facts require independent cross-check.\"\n      },\n      {\n        \"role\": \"verifier\",\n        \"protocol\": {\n          \"role\": \"verifier\",\n          \"objective\": \"Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.\",\n          \"prompt\": \"Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.\",\n          \"writes_code\": false,\n          \"result_schema\": \"yolo.demand.evidence_result.v1\"\n        },\n        \"reason\": \"Verify blockers and assumptions are not promoted to facts.\"\n      }\n    ],\n    \"needed_evidence_agents\": [\n      \"explorer\",\n      \"cross-checker\",\n      \"verifier\"\n    ],\n    \"prd_ready\": false,\n    \"next_action\": \"Run explorer + cross-checker + verifier before treating project claims as facts.\"\n  }\n}\n\nPrevious evidence results:\n[]\n\nRequired JSON shape:\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"explorer\",\n  \"status\": \"completed | blocked\",\n  \"completed\": true,\n  \"claim\": \"The factual claim you verified or challenged.\",\n  \"confidence\": \"low | medium | high\",\n  \"evidence\": [\n    {\n      \"path\": \"repo-relative path when available\",\n      \"line\": \"line number or range when available\",\n      \"source\": \"code | test | docs | config | user | unknown\",\n      \"summary\": \"short evidence summary\",\n      \"why\": \"why this evidence matters\"\n    }\n  ],\n  \"assumptions\": [\n    \"unverified assumptions, if any\"\n  ],\n  \"risks\": [\n    \"risk if claim is wrong\"\n  ],\n  \"missing\": [\n    \"what still needs verification\"\n  ],\n  \"recommendation\": \"proceed | clarify | cross_check | block\",\n  \"result\": {\n    \"verdict\": \"pass | blocked\",\n    \"notes\": \"brief verifier notes\"\n  }\n}\n2026-05-31T23:37:08.218529Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\n2026-05-31T23:37:08.326364Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path\n[truncated 3656 chars]"
+      ],
+      "recommendation": "block",
+      "result": {
+        "verdict": "blocked",
+        "provider": "codex",
+        "exit_code": 1,
+        "timed_out": false
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "cross-checker",
+      "status": "failed",
+      "completed": false,
+      "claim": "High-risk facts require independent cross-check.",
+      "confidence": "low",
+      "evidence": [],
+      "assumptions": [],
+      "risks": [
+        "Evidence agent did not return a valid completed result."
+      ],
+      "missing": [
+        "2026-05-31T23:37:16.248214Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\n2026-05-31T23:37:16.248305Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=claude-sonnet-4-6 personality=pragmatic\n2026-05-31T23:37:17.502915Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.discover/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502949Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.doctor/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502954Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.pi/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502956Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.ship/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502959Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.eval/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502961Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.learn/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502964Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.accept/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502966Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.check/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502968Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.fix/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502971Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.prd/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502973Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.discuss/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502976Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.plan/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502979Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.brainstorm/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502981Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.review/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.554453Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\n2026-05-31T23:37:17.555701Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\nOpenAI Codex v0.133.0-alpha.1\n--------\nworkdir: /Users/sippingroom/Developer/yolo\nmodel: claude-sonnet-4-6\nprovider: openai\napproval: never\nsandbox: read-only\nreasoning effort: medium\nreasoning summaries: none\nsession id: 019e8066-1cd8-7570-b432-d665ffebacf0\n--------\nuser\nYou are the YOLO demand evidence cross-checker agent.\n\nHard rules:\n- READ ONLY. Do not edit, create, delete, or format project files.\n- Do not treat assumptions as facts.\n- If a project fact cannot be verified from files/docs/tests/logs, put it in missing or assumptions.\n- Return one JSON object only. No markdown, no prose outside JSON.\n\nProject root: /Users/sippingroom/Developer/yolo\nState root: /Users/sippingroom/Developer/yolo/.yolo\n\nYour protocol:\n{\n  \"role\": \"cross-checker\",\n  \"objective\": \"Independently verify high-risk factual claims and challenge the explorer result.\",\n  \"prompt\": \"Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.\",\n  \"result_schema\": \"yolo.demand.evidence_result.v1\"\n}\n\nCurrent demand status:\n{\n  \"status\": \"blocked\",\n  \"code\": \"DEMAND_NOT_PRD_READY\",\n  \"summary\": \"Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.\",\n  \"triage\": {\n    \"schema_version\": \"1.0\",\n    \"schema\": \"yolo.demand.router.v1\",\n    \"context_type\": \"brownfield\",\n    \"route\": \"careful\",\n    \"evidence_policy\": \"cross_check\",\n    \"reason_codes\": [\n      \"EXISTING_PROJECT_FACTS\",\n      \"TECHNICAL_CONTRACT_OR_DATA_RISK\"\n    ],\n    \"blocking\": false,\n    \"explanation\": \"Careful route required by hard triggers; factual or risky claims need evidence before PRD.\"\n  },\n  \"readiness\": {\n    \"schema_version\": \"1.0\",\n    \"schema\": \"yolo.demand.prd_readiness.v1\",\n    \"required_slots\": [\n      \"problem\",\n      \"target_user\",\n      \"status_quo\",\n      \"desired_outcome\",\n      \"scope_in\",\n      \"scope_out\",\n      \"constraints\",\n      \"acceptance_criteria\",\n      \"risks\",\n      \"approval\"\n    ],\n    \"slot_values\": {\n      \"problem\": [\n        \"Existing YOLO demand dispatch must verify src/demand/evidence-dispatch.ts and src/demand/router.ts before PRD readiness for brownfield schema/API changes\"\n      ],\n      \"target_user\": [\n        \"YOLO maintainer\"\n      ],\n      \"status_quo\": [\n        \"Demand router can classify brownfield requests and evidence dispatch should invoke read-only provider agents.\"\n      ],\n      \"desired_outcome\": [\n        \"Explorer, cross-checker, and verifier return project evidence with paths and PRD readiness stays blocked on conflicts or missing evidence.\"\n      ],\n      \"scope_in\": [\n        \"src/demand/evidence-dispatch.ts\",\n        \"src/demand/router.ts\"\n      ],\n      \"scope_out\": [\n        \"Do not modify source code during demand evidence dispatch.\"\n      ],\n      \"constraints\": [\n        \"Evidence agents must run read-only and return structured JSON.\"\n      ],\n      \"acceptance_criteria\": [\n        \"Explorer, cross-checker, and verifier return project evidence with paths and PRD readiness stays blocked on conflicts or missing evidence.\"\n      ],\n      \"risks\": [\n        \"If dispatch is bypassed, PRD facts can be generated from unverified assumptions.\"\n      ],\n      \"approval\": [\n        \"approved\"\n      ]\n    },\n    \"missing_slots\": [],\n    \"blockers\": [\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"explorer\",\n        \"message\": \"explorer must complete with evidence and a result before cross_check PRD readiness.\"\n      },\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"cross-checker\",\n        \"message\": \"cross-checker must complete with evidence and a result before cross_check PRD readiness.\"\n      },\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"verifier\",\n        \"message\": \"verifier must complete with evidence and a result before cross_check PRD readiness.\"\n      }\n    ],\n    \"assumptions\": [],\n    \"required_evidence_agents\": [\n      \"explorer\",\n      \"cross-checker\",\n      \"verifier\"\n    ],\n    \"evidence_agreement\": {\n      \"status\": \"pass\",\n      \"conflicts\": []\n    },\n    \"prd_ready\": false\n  },\n  \"state\": {\n    \"schema_version\": \"1.0\",\n    \"schema\": \"yolo.demand.session_state.v1\",\n    \"context_type\": \"brownfield\",\n    \"route\": \"careful\",\n    \"evidence_policy\": \"cross_check\",\n    \"stage\": \"evidence\",\n    \"submode\": \"evidence_guarded\",\n    \"reason_codes\": [\n      \"EXISTING_PROJECT_FACTS\",\n      \"TECHNICAL_CONTRACT_OR_DATA_RISK\"\n    ],\n    \"missing_slots\": [],\n    \"blockers\": [\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"explorer\",\n        \"message\": \"explorer must complete with evidence and a result before cross_check PRD readiness.\"\n      },\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"cross-checker\",\n        \"message\": \"cross-checker must complete with evidence and a result before cross_check PRD readiness.\"\n      },\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"verifier\",\n        \"message\": \"verifier must complete with evidence and a result before cross_check PRD readiness.\"\n      }\n    ],\n    \"assumptions\": [],\n    \"evidence_tasks\": [\n      {\n        \"role\": \"explorer\",\n        \"protocol\": {\n          \"role\": \"explorer\",\n          \"objective\": \"Find primary project facts for the requested demand without editing files.\",\n          \"prompt\": \"Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.\",\n          \"writes_code\": false,\n          \"result_schema\": \"yolo.demand.evidence_result.v1\"\n        },\n        \"reason\": \"Factual project claims need primary evidence.\"\n      },\n      {\n        \"role\": \"cross-checker\",\n        \"protocol\": {\n          \"role\": \"cross-checker\",\n          \"objective\": \"Independently verify high-risk factual claims and challenge the explorer result.\",\n          \"prompt\": \"Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.\",\n          \"writes_code\": false,\n          \"required_when\": \"evidence_policy === cross_check or claim risk is high\",\n          \"result_schema\": \"yolo.demand.evidence_result.v1\"\n        },\n        \"reason\": \"High-risk facts require independent cross-check.\"\n      },\n      {\n        \"role\": \"verifier\",\n        \"protocol\": {\n          \"role\": \"verifier\",\n          \"objective\": \"Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.\",\n          \"prompt\": \"Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.\",\n          \"writes_code\": false,\n          \"result_schema\": \"yolo.demand.evidence_result.v1\"\n        },\n        \"reason\": \"Verify blockers and assumptions are not promoted to facts.\"\n      }\n    ],\n    \"needed_evidence_agents\": [\n      \"explorer\",\n      \"cross-checker\",\n      \"verifier\"\n    ],\n    \"prd_ready\": false,\n    \"next_action\": \"Run explorer + cross-checker + verifier before treating project claims as facts.\"\n  }\n}\n\nPrevious evidence results:\n[\n  {\n    \"schema_version\": \"1.0\",\n    \"schema\": \"yolo.demand.evidence_result.v1\",\n    \"role\": \"explorer\",\n    \"status\": \"failed\",\n    \"completed\": false,\n    \"claim\": \"Factual project claims need primary evidence.\",\n    \"confidence\": \"low\",\n    \"evidence\": [],\n    \"assumptions\": [],\n    \"risks\": [\n      \"Evidence agent did not return a valid completed result.\"\n    ],\n    \"missing\": [\n      \"2026-05-31T23:37:06.486581Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\\n2026-05-31T23:37:06.486718Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=claude-sonnet-4-6 personality=pragmatic\\n2026-05-31T23:37:08.098617Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.discover/SKILL.md: missing YAML frontmatter delimited by ---\\n2026-05-31T23:37:08.098641Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.doctor/SKILL.md: \n[truncated 16950 chars]"
+      ],
+      "recommendation": "block",
+      "result": {
+        "verdict": "blocked",
+        "provider": "codex",
+        "exit_code": 1,
+        "timed_out": false
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "verifier",
+      "status": "failed",
+      "completed": false,
+      "claim": "Verify blockers and assumptions are not promoted to facts.",
+      "confidence": "low",
+      "evidence": [],
+      "assumptions": [],
+      "risks": [
+        "Evidence agent did not return a valid completed result."
+      ],
+      "missing": [
+        "2026-05-31T23:37:26.039005Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\n2026-05-31T23:37:26.039115Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=claude-sonnet-4-6 personality=pragmatic\n2026-05-31T23:37:27.327161Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.discover/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327185Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.doctor/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327189Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.pi/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327192Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.ship/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327194Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.eval/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327196Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.learn/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327199Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.accept/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327201Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.check/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327204Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.fix/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327206Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.prd/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327208Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.discuss/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327211Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.plan/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327214Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.brainstorm/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327216Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.review/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.381741Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\n2026-05-31T23:37:27.383408Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\nOpenAI Codex v0.133.0-alpha.1\n--------\nworkdir: /Users/sippingroom/Developer/yolo\nmodel: claude-sonnet-4-6\nprovider: openai\napproval: never\nsandbox: read-only\nreasoning effort: medium\nreasoning summaries: none\nsession id: 019e8066-4317-7e60-b869-754dca71233c\n--------\nuser\nYou are the YOLO demand evidence verifier agent.\n\nHard rules:\n- READ ONLY. Do not edit, create, delete, or format project files.\n- Do not treat assumptions as facts.\n- If a project fact cannot be verified from files/docs/tests/logs, put it in missing or assumptions.\n- Return one JSON object only. No markdown, no prose outside JSON.\n\nProject root: /Users/sippingroom/Developer/yolo\nState root: /Users/sippingroom/Developer/yolo/.yolo\n\nYour protocol:\n{\n  \"role\": \"verifier\",\n  \"objective\": \"Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.\",\n  \"prompt\": \"Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.\",\n  \"result_schema\": \"yolo.demand.evidence_result.v1\"\n}\n\nCurrent demand status:\n{\n  \"status\": \"blocked\",\n  \"code\": \"DEMAND_NOT_PRD_READY\",\n  \"summary\": \"Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.\",\n  \"triage\": {\n    \"schema_version\": \"1.0\",\n    \"schema\": \"yolo.demand.router.v1\",\n    \"context_type\": \"brownfield\",\n    \"route\": \"careful\",\n    \"evidence_policy\": \"cross_check\",\n    \"reason_codes\": [\n      \"EXISTING_PROJECT_FACTS\",\n      \"TECHNICAL_CONTRACT_OR_DATA_RISK\"\n    ],\n    \"blocking\": false,\n    \"explanation\": \"Careful route required by hard triggers; factual or risky claims need evidence before PRD.\"\n  },\n  \"readiness\": {\n    \"schema_version\": \"1.0\",\n    \"schema\": \"yolo.demand.prd_readiness.v1\",\n    \"required_slots\": [\n      \"problem\",\n      \"target_user\",\n      \"status_quo\",\n      \"desired_outcome\",\n      \"scope_in\",\n      \"scope_out\",\n      \"constraints\",\n      \"acceptance_criteria\",\n      \"risks\",\n      \"approval\"\n    ],\n    \"slot_values\": {\n      \"problem\": [\n        \"Existing YOLO demand dispatch must verify src/demand/evidence-dispatch.ts and src/demand/router.ts before PRD readiness for brownfield schema/API changes\"\n      ],\n      \"target_user\": [\n        \"YOLO maintainer\"\n      ],\n      \"status_quo\": [\n        \"Demand router can classify brownfield requests and evidence dispatch should invoke read-only provider agents.\"\n      ],\n      \"desired_outcome\": [\n        \"Explorer, cross-checker, and verifier return project evidence with paths and PRD readiness stays blocked on conflicts or missing evidence.\"\n      ],\n      \"scope_in\": [\n        \"src/demand/evidence-dispatch.ts\",\n        \"src/demand/router.ts\"\n      ],\n      \"scope_out\": [\n        \"Do not modify source code during demand evidence dispatch.\"\n      ],\n      \"constraints\": [\n        \"Evidence agents must run read-only and return structured JSON.\"\n      ],\n      \"acceptance_criteria\": [\n        \"Explorer, cross-checker, and verifier return project evidence with paths and PRD readiness stays blocked on conflicts or missing evidence.\"\n      ],\n      \"risks\": [\n        \"If dispatch is bypassed, PRD facts can be generated from unverified assumptions.\"\n      ],\n      \"approval\": [\n        \"approved\"\n      ]\n    },\n    \"missing_slots\": [],\n    \"blockers\": [\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"explorer\",\n        \"message\": \"explorer must complete with evidence and a result before cross_check PRD readiness.\"\n      },\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"cross-checker\",\n        \"message\": \"cross-checker must complete with evidence and a result before cross_check PRD readiness.\"\n      },\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"verifier\",\n        \"message\": \"verifier must complete with evidence and a result before cross_check PRD readiness.\"\n      }\n    ],\n    \"assumptions\": [],\n    \"required_evidence_agents\": [\n      \"explorer\",\n      \"cross-checker\",\n      \"verifier\"\n    ],\n    \"evidence_agreement\": {\n      \"status\": \"pass\",\n      \"conflicts\": []\n    },\n    \"prd_ready\": false\n  },\n  \"state\": {\n    \"schema_version\": \"1.0\",\n    \"schema\": \"yolo.demand.session_state.v1\",\n    \"context_type\": \"brownfield\",\n    \"route\": \"careful\",\n    \"evidence_policy\": \"cross_check\",\n    \"stage\": \"evidence\",\n    \"submode\": \"evidence_guarded\",\n    \"reason_codes\": [\n      \"EXISTING_PROJECT_FACTS\",\n      \"TECHNICAL_CONTRACT_OR_DATA_RISK\"\n    ],\n    \"missing_slots\": [],\n    \"blockers\": [\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"explorer\",\n        \"message\": \"explorer must complete with evidence and a result before cross_check PRD readiness.\"\n      },\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"cross-checker\",\n        \"message\": \"cross-checker must complete with evidence and a result before cross_check PRD readiness.\"\n      },\n      {\n        \"code\": \"EVIDENCE_AGENT_RESULT_REQUIRED\",\n        \"role\": \"verifier\",\n        \"message\": \"verifier must complete with evidence and a result before cross_check PRD readiness.\"\n      }\n    ],\n    \"assumptions\": [],\n    \"evidence_tasks\": [\n      {\n        \"role\": \"explorer\",\n        \"protocol\": {\n          \"role\": \"explorer\",\n          \"objective\": \"Find primary project facts for the requested demand without editing files.\",\n          \"prompt\": \"Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.\",\n          \"writes_code\": false,\n          \"result_schema\": \"yolo.demand.evidence_result.v1\"\n        },\n        \"reason\": \"Factual project claims need primary evidence.\"\n      },\n      {\n        \"role\": \"cross-checker\",\n        \"protocol\": {\n          \"role\": \"cross-checker\",\n          \"objective\": \"Independently verify high-risk factual claims and challenge the explorer result.\",\n          \"prompt\": \"Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.\",\n          \"writes_code\": false,\n          \"required_when\": \"evidence_policy === cross_check or claim risk is high\",\n          \"result_schema\": \"yolo.demand.evidence_result.v1\"\n        },\n        \"reason\": \"High-risk facts require independent cross-check.\"\n      },\n      {\n        \"role\": \"verifier\",\n        \"protocol\": {\n          \"role\": \"verifier\",\n          \"objective\": \"Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.\",\n          \"prompt\": \"Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.\",\n          \"writes_code\": false,\n          \"result_schema\": \"yolo.demand.evidence_result.v1\"\n        },\n        \"reason\": \"Verify blockers and assumptions are not promoted to facts.\"\n      }\n    ],\n    \"needed_evidence_agents\": [\n      \"explorer\",\n      \"cross-checker\",\n      \"verifier\"\n    ],\n    \"prd_ready\": false,\n    \"next_action\": \"Run explorer + cross-checker + verifier before treating project claims as facts.\"\n  }\n}\n\nPrevious evidence results:\n[\n  {\n    \"schema_version\": \"1.0\",\n    \"schema\": \"yolo.demand.evidence_result.v1\",\n    \"role\": \"explorer\",\n    \"status\": \"failed\",\n    \"completed\": false,\n    \"claim\": \"Factual project claims need primary evidence.\",\n    \"confidence\": \"low\",\n    \"evidence\": [],\n    \"assumptions\": [],\n    \"risks\": [\n      \"Evidence agent did not return a valid completed result.\"\n    ],\n    \"missing\": [\n      \"2026-05-31T23:37:06.486581Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\\n2026-05-31T23:37:06.486718Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=claude-sonnet-4-6 personality=pragmatic\\n2026-05-31T23:37:08.098617Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.discover/SKILL.md: missing YAML frontmatter delimited by ---\\n2026-05-31T23:37:08.098641Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.doctor/S\n[truncated 30207 chars]"
+      ],
+      "recommendation": "block",
+      "result": {
+        "verdict": "blocked",
+        "provider": "codex",
+        "exit_code": 1,
+        "timed_out": false
+      }
+    }
+  ],
+  "provider_runs": [
+    {
+      "role": "explorer",
+      "provider": "codex",
+      "command": "codex",
+      "success": false,
+      "exit_code": 1,
+      "signal": null,
+      "timed_out": false,
+      "stdout": "",
+      "stderr": "2026-05-31T23:37:06.486581Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\n2026-05-31T23:37:06.486718Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=claude-sonnet-4-6 personality=pragmatic\n2026-05-31T23:37:08.098617Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.discover/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098641Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.doctor/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098664Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.pi/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098667Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.ship/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098669Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.eval/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098672Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.learn/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098674Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.accept/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:08.098677Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.check/SKI\n[truncated 13656 chars]"
+    },
+    {
+      "role": "cross-checker",
+      "provider": "codex",
+      "command": "codex",
+      "success": false,
+      "exit_code": 1,
+      "signal": null,
+      "timed_out": false,
+      "stdout": "",
+      "stderr": "2026-05-31T23:37:16.248214Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\n2026-05-31T23:37:16.248305Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=claude-sonnet-4-6 personality=pragmatic\n2026-05-31T23:37:17.502915Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.discover/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502949Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.doctor/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502954Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.pi/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502956Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.ship/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502959Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.eval/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502961Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.learn/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502964Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.accept/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:17.502966Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.check/SKI\n[truncated 26950 chars]"
+    },
+    {
+      "role": "verifier",
+      "provider": "codex",
+      "command": "codex",
+      "success": false,
+      "exit_code": 1,
+      "signal": null,
+      "timed_out": false,
+      "stdout": "",
+      "stderr": "2026-05-31T23:37:26.039005Z  WARN codex_models_manager::model_info: Unknown model claude-sonnet-4-6 is used. This will use fallback model metadata.\n2026-05-31T23:37:26.039115Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=claude-sonnet-4-6 personality=pragmatic\n2026-05-31T23:37:27.327161Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.discover/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327185Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.doctor/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327189Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.pi/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327192Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.ship/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327194Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.eval/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327196Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.learn/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327199Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.accept/SKILL.md: missing YAML frontmatter delimited by ---\n2026-05-31T23:37:27.327201Z ERROR codex_core::session::session: failed to load skill /Users/sippingroom/Developer/yolo/.agents/skills/yolo/workflows/yolo.check/SKI\n[truncated 40207 chars]"
+    }
+  ],
+  "artifacts": [
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260531233706363-3z1qa6/explorer.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260531233706363-3z1qa6/cross-checker.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260531233706363-3z1qa6/verifier.json"
+  ],
+  "readiness": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.prd_readiness.v1",
+    "required_slots": [
+      "problem",
+      "target_user",
+      "status_quo",
+      "desired_outcome",
+      "scope_in",
+      "scope_out",
+      "constraints",
+      "acceptance_criteria",
+      "risks",
+      "approval"
+    ],
+    "slot_values": {
+      "problem": [
+        "Existing YOLO demand dispatch must verify src/demand/evidence-dispatch.ts and src/demand/router.ts before PRD readiness for brownfield schema/API changes"
+      ],
+      "target_user": [
+        "YOLO maintainer"
+      ],
+      "status_quo": [
+        "Demand router can classify brownfield requests and evidence dispatch should invoke read-only provider agents."
+      ],
+      "desired_outcome": [
+        "Explorer, cross-checker, and verifier return project evidence with paths and PRD readiness stays blocked on conflicts or missing evidence."
+      ],
+      "scope_in": [
+        "src/demand/evidence-dispatch.ts",
+        "src/demand/router.ts"
+      ],
+      "scope_out": [
+        "Do not modify source code during demand evidence dispatch."
+      ],
+      "constraints": [
+        "Evidence agents must run read-only and return structured JSON."
+      ],
+      "acceptance_criteria": [
+        "Explorer, cross-checker, and verifier return project evidence with paths and PRD readiness stays blocked on conflicts or missing evidence."
+      ],
+      "risks": [
+        "If dispatch is bypassed, PRD facts can be generated from unverified assumptions."
+      ],
+      "approval": [
+        "approved"
+      ]
+    },
+    "missing_slots": [],
+    "blockers": [
+      {
+        "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+        "role": "explorer",
+        "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+      },
+      {
+        "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+        "role": "cross-checker",
+        "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+      },
+      {
+        "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+        "role": "verifier",
+        "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+      },
+      {
+        "code": "EVIDENCE_AGENT_CONFLICT",
+        "claim": "factual project claims need primary evidence.",
+        "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+        "recommendations": [
+          "block"
+        ]
+      }
+    ],
+    "assumptions": [],
+    "required_evidence_agents": [
+      "explorer",
+      "cross-checker",
+      "verifier"
+    ],
+    "evidence_agreement": {
+      "status": "blocked",
+      "conflicts": [
+        {
+          "code": "EVIDENCE_AGENT_CONFLICT",
+          "claim": "factual project claims need primary evidence.",
+          "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+          "recommendations": [
+            "block"
+          ]
+        },
+        {
+          "code": "EVIDENCE_AGENT_CONFLICT",
+          "claim": "high-risk facts require independent cross-check.",
+          "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+          "recommendations": [
+            "block"
+          ]
+        },
+        {
+          "code": "EVIDENCE_AGENT_CONFLICT",
+          "claim": "verify blockers and assumptions are not promoted to facts.",
+          "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+          "recommendations": [
+            "block"
+          ]
+        }
+      ]
+    },
+    "prd_ready": false
+  },
+  "demand_status_after_dispatch": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand dispatch must verify src/demand/evidence-dispatch.ts and src/demand/router.ts before PRD readiness for brownfield schema/API changes"
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "Demand router can classify brownfield requests and evidence dispatch should invoke read-only provider agents."
+        ],
+        "desired_outcome": [
+          "Explorer, cross-checker, and verifier return project evidence with paths and PRD readiness stays blocked on conflicts or missing evidence."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "src/demand/router.ts"
+        ],
+        "scope_out": [
+          "Do not modify source code during demand evidence dispatch."
+        ],
+        "constraints": [
+          "Evidence agents must run read-only and return structured JSON."
+        ],
+        "acceptance_criteria": [
+          "Explorer, cross-checker, and verifier return project evidence with paths and PRD readiness stays blocked on conflicts or missing evidence."
+        ],
+        "risks": [
+          "If dispatch is bypassed, PRD facts can be generated from unverified assumptions."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_CONFLICT",
+          "claim": "factual project claims need primary evidence.",
+          "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+          "recommendations": [
+            "block"
+          ]
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "blocked",
+        "conflicts": [
+          {
+            "code": "EVIDENCE_AGENT_CONFLICT",
+            "claim": "factual project claims need primary evidence.",
+            "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+            "recommendations": [
+              "block"
+            ]
+          },
+          {
+            "code": "EVIDENCE_AGENT_CONFLICT",
+            "claim": "high-risk facts require independent cross-check.",
+            "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+            "recommendations": [
+              "block"
+            ]
+          },
+          {
+            "code": "EVIDENCE_AGENT_CONFLICT",
+            "claim": "verify blockers and assumptions are not promoted to facts.",
+            "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+            "recommendations": [
+              "block"
+            ]
+          }
+        ]
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_CONFLICT",
+          "claim": "factual project claims need primary evidence.",
+          "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+          "recommendations": [
+            "block"
+          ]
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  }
+}

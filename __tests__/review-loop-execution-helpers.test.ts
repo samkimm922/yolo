@@ -6,6 +6,7 @@ import {
   buildReviewScannerArgs,
   normalizeAutoFixResult,
   parseReviewFindings,
+  scannerFailureDiagnostic,
   scannerStdoutFromError,
   shouldStopReviewAfterFailure,
 } from "../src/runtime/review-loop/execution-helpers.js";
@@ -29,6 +30,14 @@ describe("review-loop execution helpers", () => {
     assert.equal(scannerStdoutFromError({ stdout: "  []\n" }), "[]");
     assert.equal(scannerStdoutFromError({ stderr: "bad" }), "");
     assert.equal(scannerStdoutFromError(null), "");
+  });
+
+  test("scannerFailureDiagnostic preserves stdout as diagnostic, not scan input", () => {
+    const diagnostic = scannerFailureDiagnostic({ message: "scanner crashed", stdout: " []\n", stderr: "boom" });
+    assert.equal(diagnostic.message, "scanner crashed");
+    assert.equal(diagnostic.stdout_sample, "[]");
+    assert.equal(diagnostic.stderr_sample, "boom");
+    assert.match(diagnostic.detail, /stdout: \[\]/);
   });
 
   test("parseReviewFindings accepts arrays and object-wrapped findings", () => {

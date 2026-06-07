@@ -1,0 +1,124 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "The explorer's claim about comprehensive boundary audit implementation is confirmed, but a critical gap exists: the system relies only on prompt instructions to prevent full-tool agents from mutating project files, with no enforcement at the tool-restriction level.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "515",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot captures SHA-256 digests of all project files except output_dir before agent execution begins",
+      "why": "Establishes pre-execution baseline for detecting mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "565-571",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-execution boundary audit compares snapshots and populates result.boundary with project_mutation status",
+      "why": "Detects mutations that occurred during agent execution"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "584-596",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations generate BOUNDARY_PROJECT_MUTATION blockers and force prd_ready=false regardless of agent results",
+      "why": "Core enforcement mechanism that blocks PRD readiness on mutations"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "431-462",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig normalizes agent_tool_profile to boundary/research/full, sets claude_no_session_persistence=true, and clears claude_tools, claude_allowed_tools, claude_disallowed_tools to empty strings",
+      "why": "Confirms that tool restrictions are not set at the provider level; boundary enforcement relies only on prompt instructions"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "275-276",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt includes explicit boundary rule but no technical enforcement: 'Boundary: do not modify target project files'",
+      "why": "Shows boundary enforcement is contractual (prompt-based) not technical (tool-restriction based)"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "449-461",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig conditionally sets agent_tool_profile to 'full' when allowFullAgentTools=true and agentToolProfile includes 'full', 'all', 'write', or 'execution'",
+      "why": "Full tool profile grants actual Write/Edit tool access while relying only on prompt instructions to prevent misuse"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test boundary blocks project file mutation uses spawnProviderPrompt mock that directly writes unexpected-project-write.txt",
+      "why": "Proves boundary detection works, but mutation is injected by test harness not by real agent tools"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "100-111",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "All tests use spawnProviderPrompt mock option instead of real Claude provider invocation",
+      "why": "Confirms no evidence of real full-tool Claude agent testing"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "511",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime uses options.spawnProviderPrompt || defaultSpawnProviderPrompt, defaulting to real provider invocation",
+      "why": "Real providers can be invoked but no tests demonstrate this with full-tool agents"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-98",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation constructs Claude command with optional --allowedTools flag but evidence-dispatch clears this to empty string",
+      "why": "Technical tool restriction capability exists but is intentionally not used for evidence agents"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "243-246",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy.boundary declares project_mutation=forbidden and allowed_write_roots as output_dir only",
+      "why": "Policy boundary exists but is enforced post-execution, not pre-execution at tool level"
+    }
+  ],
+  "assumptions": [
+    "Real full-tool Claude agents will respect prompt-based boundary rules despite having Write/Edit tool access",
+    "Post-execution boundary audit can detect all possible mutations before they cause damage",
+    "Agents cannot bypass boundary detection by modifying files then reverting them before audit completes",
+    "Claude provider will honor agent_tool_profile setting without additional tool restrictions"
+  ],
+  "risks": [
+    "Full-tool agents with Write/Edit access could mutate project files before boundary audit runs, relying only on prompt compliance",
+    "Agents running in full tool profile have technical capability to modify files despite boundary rules in prompts",
+    "Post-execution detection means damage occurs before violation is discovered",
+    "No evidence that real Claude agents in full tool mode will respect contractual boundary rules",
+    "Tool restrictions (claude_allowed_tools) are deliberately cleared, removing technical enforcement layer"
+  ],
+  "missing": [
+    "Integration tests with actual Claude provider (not spawnProviderPrompt mock) using full tool profile",
+    "Evidence of boundary enforcement holding against real full-tool Claude agents in production",
+    "Documentation on whether Claude provider respects agent_tool_profile without explicit --allowedTools",
+    "Test scenarios where full-tool agents attempt mutations and are blocked by something other than post-execution audit",
+    "Analysis of window between agent execution start and boundary snapshot completion for race conditions"
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "blocked",
+    "notes": "Boundary audit implementation is confirmed and well-tested for detection, but a critical architectural gap exists: enforcement is post-execution (detect-and-block) not pre-execution (prevent). Full-tool agents have actual Write/Edit access and rely only on prompt instructions to avoid using them. This is a security-relevant finding because the claim suggests comprehensive protection when in fact the system has no technical prevention layer, only detection after the fact."
+  }
+}

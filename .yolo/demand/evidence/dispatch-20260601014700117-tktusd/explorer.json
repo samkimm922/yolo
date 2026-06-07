@@ -1,0 +1,91 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "Boundary snapshot implementation uses git ls-files for tracked/cached/other files and fallback walk for non-git projects, excludes allowed artifact roots from mutation detection, and is validated by tests for tracked, untracked, and non-git scenarios.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() runs 'git ls-files -co --exclude-standard -z' which lists tracked, cached, and other files while excluding standard patterns",
+      "why": "Confirms git-backed file discovery covers all git file categories (tracked, cached, other)"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() uses gitFiles() with fallback to walkFiles() and excludes allowedRoots",
+      "why": "Shows the hybrid git/non-git strategy and artifact root exclusion logic"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles() recursively scans directories excluding common patterns (.git, node_modules, dist, coverage, .next, .cache)",
+      "why": "Documents non-git fallback coverage and exclusion behavior"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "110-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after maps to detect added, modified, deleted files",
+      "why": "Shows mutation detection logic that identifies all changes"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "511-567",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime() captures boundaryBefore/After snapshots, diffs them, and injects BOUNDARY_PROJECT_MUTATION blockers",
+      "why": "Confirms boundary audit integration in dispatch runtime"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "367-400",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' writes unexpected-project-write.txt and expects blocked status with BOUNDARY_PROJECT_MUTATION",
+      "why": "Verifies detection of tracked project file mutations"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "402-438",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' inits git repo, writes untracked-mutation.txt, expects violation with change path",
+      "why": "Verifies detection of untracked file mutations in git-backed projects"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "245-247",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy.boundary sets project_mutation: 'forbidden' and allowed_write_roots to artifact output directory",
+      "why": "Documents policy contract for boundary enforcement"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "git ls-files -co may behave differently across git versions or platforms",
+    "walkFiles() fallback may miss platform-specific excluded patterns",
+    "Dirty working tree stress-testing with real Claude agents has not been verified in test evidence"
+  ],
+  "missing": [
+    "No test evidence for boundary behavior in truly non-git projects (walkFiles fallback)",
+    "No stress-test evidence using real Claude -p agents in dirty working trees",
+    "No test for edge cases: large file counts, binary files, permission errors during digest"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Core boundary audit implementation is verified for git-backed projects with tracked/untracked detection and artifact root exclusion. Missing test coverage for non-git fallback and real agent stress-testing are gap items but not blockers."
+  }
+}

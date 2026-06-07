@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence dispatch implements provider-specific tool configuration normalization and boundary enforcement through executionConfig, buildProviderInvocation, and snapshot-based mutation detection.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "423-471",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig provider normalization prevents cross-provider leakage: Codex clears Claude model inheritance, Claude normalizes tool profile and clears tool flags, custom gets boundary sandbox.",
+      "why": "Verifies the core claim about provider configuration logic from both explorer and cross-checker with consistent line references."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "6-9, 43-60",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Provider selection normalization and Codex-specific CLI construction prevent undefined provider values and cross-provider flag contamination.",
+      "why": "Cross-checker independently verified the exact line ranges for provider normalization that explorer cited."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414, 416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test coverage confirms boundary enforcement blocks both tracked and untracked project mutations, adding BOUNDARY_PROJECT_MUTATION blockers.",
+      "why": "Both agents cited identical test ranges proving boundary enforcement actually works, not just logged."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69, 97-121, 516-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Git-backed boundary detection implementation with git ls-files command, SHA-256 digests, and snapshot diffing.",
+      "why": "Explorer and cross-checker both verified these ranges with consistent summaries about git-based file tracking."
+    }
+  ],
+  "assumptions": [
+    "Real Claude -p agents behave consistently with mocked spawnProviderPrompt test fixtures (both agents flagged this).",
+    "Git ls-files command is available and works across different git versions (both agents flagged this).",
+    "Provider CLI flags (--model, --permission-mode, --sandbox) are stable across versions (both agents flagged this).",
+    "File digest computation performs acceptably on large projects (both agents flagged this)."
+  ],
+  "risks": [
+    "Provider CLI flag changes could break invocation construction without detection in mocked tests.",
+    "Git binary unavailability would disable boundary snapshot tracking.",
+    "Large project file trees could cause performance issues in snapshot computation.",
+    "JSON repair logic could incorrectly modify semantically valid but non-standard JSON."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verification complete. Explorer and cross-checker evidence is consistent, with no conflicts. All assumptions are properly separated from facts and explicitly listed. Evidence paths are valid and line references are accurate. Both agents independently verified the same source ranges with consistent summaries. The only remaining gap is the unverified assumption about real provider behavior vs. test mocks, which both agents explicitly acknowledge as an assumption rather than presenting it as fact."
+  }
+}

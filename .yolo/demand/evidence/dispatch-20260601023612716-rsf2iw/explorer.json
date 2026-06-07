@@ -1,0 +1,176 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements scope validation and external research support with clear separation between project facts and external evidence.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 16,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES defines four valid scopes: project, external, user, unknown",
+      "why": "Establishes the core scope taxonomy that evidence agents must use"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "271-276",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt generation includes explicit instructions for external research: 'If the demand explicitly asks for external research/fetch/search, actually use WebFetch/WebSearch when available and record those records as scope=external'",
+      "why": "Shows implementation of external research support with scope marking requirement"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 275,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Tool profile conditional logic: 'toolProfile.includes(\"research\") ? \"- WebFetch/WebSearch are allowed for external research; mark those records as scope=external and do not use them as project facts.\"'",
+      "why": "Demonstrates research profile gets external fetch tools with explicit scope separation"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "449-453",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Tool profile normalization converts 'research', 'fetch', 'web', 'web-research', 'external-research' to 'research' profile",
+      "why": "Shows how different research-related tool profiles are normalized for external research enablement"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-157",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors() function validates that every evidence record declares scope as project, external, user, or unknown",
+      "why": "Provides scope declaration validation that catches missing scope declarations"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() function analyzes evidence records and determines scope from field patterns, including URL detection and source type analysis",
+      "why": "Implements scope inference logic for processing various evidence record formats"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope() function checks if record explicitly declares valid scope from VALID_EVIDENCE_SCOPES",
+      "why": "Core validation function for scope declaration compliance"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "414-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasProjectLocator() function validates project scope records have repo-relative paths, not URLs",
+      "why": "Ensures project evidence includes concrete file locators as required"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() function generates blockers when project facts lack project-scoped evidence with path locators",
+      "why": "Enforces the core requirement that existing-project facts need project evidence"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues() function returns EVIDENCE_SCOPE_REQUIRED errors for records without declared valid scope",
+      "why": "Provides the validation mechanism that catches missing scope declarations"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "721-725",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "PRD readiness validation includes checks for evidenceScopeDeclarationIssues() and projectEvidenceBlockingIssues() for complete evidence results",
+      "why": "Shows how scope validation is integrated into PRD readiness gate"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "58-63",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Documentation defines three evidence agent protocols: explorer (primary facts), cross-checker (independent verification), verifier (evidence sufficiency check)",
+      "why": "Provides the doctrinal foundation for evidence agent roles and responsibilities"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": 66,
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'dispatch 不靠阉割 tools 做安全边界：agent 可以拥有审计、检索、fetch、命令和子任务等能力'",
+      "why": "Explains the safety philosophy of allowing full tools while maintaining boundary control"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": 70,
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: '证据记录必须声明 scope: project | external | user | unknown. project 证据来自目标项目的 code、tests、docs、config、logs 或 artifacts，并且必须带 repo-relative path'",
+      "why": "Establishes the doctrinal requirement for scope declaration and project evidence locators"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": 70,
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'external 证据可以来自 WebFetch/WebSearch 或外部文档，但只能作为背景研究，不能单独证明目标项目已有字段、API、状态机或数据流'",
+      "why": "Explicitly prohibits using external evidence as proof of existing project implementation"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() function creates before/after snapshots of project files, excluding allowed artifact roots",
+      "why": "Implements the boundary audit mechanism that detects any unauthorized project mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "564-570",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary audit compares before/after snapshots and generates BOUNDARY_PROJECT_MUTATION blockers for any changes outside allowed artifact roots",
+      "why": "Enforces the boundary control by detecting any evidence agent project mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "237-247",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Execution policy defines boundary: project_mutation: 'forbidden', allowed_write_roots: [repo-relative artifact directory]",
+      "why": "Shows the explicit boundary policy in the dispatch plan"
+    }
+  ],
+  "assumptions": [
+    "WebFetch and WebSearch tools are available in the Claude provider environment when research profile is enabled",
+    "The current implementation correctly handles the distinction between scope declaration and scope validation",
+    "The boundary audit mechanism catches all file modifications outside the allowed artifact root"
+  ],
+  "risks": [
+    "If WebFetch/WebSearch tools are not available in the runtime environment, external research requests will fail silently",
+    "Scope inference logic in evidenceRecordScope() might not handle all possible evidence record formats",
+    "Boundary audit only checks file digests, not other potential mutations like environment variables or external state"
+  ],
+  "missing": [
+    "Test files that verify the research tool profile enables WebFetch/WebSearch tools in actual Claude provider execution",
+    "Test files that verify external evidence marked as scope=external cannot satisfy project fact requirements",
+    "Documentation or examples showing the correct format for external research evidence records",
+    "Evidence that the scope validation correctly handles edge cases like malformed URLs or ambiguous path formats"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Core implementation for scope validation and external research support exists in code and documentation. The separation between project facts (requiring path locators) and external evidence (WebFetch/WebSearch) is well-defined doctrinally and implemented through scope validation functions. Main gap is test coverage for actual provider tool availability and edge case handling."
+  }
+}

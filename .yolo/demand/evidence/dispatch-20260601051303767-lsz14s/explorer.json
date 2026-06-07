@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch API/schema already supports research/fetch style evidence without mixing external facts with target-project facts. The implementation includes explicit scope declaration (project/external/user/unknown), boundary detection to prevent project mutations, and validation that project facts require project-scoped evidence with repo-relative paths.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "276",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt explicitly instructs that WebFetch/WebSearch are allowed for external research and must be marked as scope=external, not used as project facts.",
+      "why": "This is the core instruction that separates external research evidence from project facts."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "308-316",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence result schema includes url field for external scope and validates scope as project/external/user/unknown with source types including external_web and external_docs.",
+      "why": "The schema explicitly supports external URLs and separate source types for external evidence."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function auto-detects external scope from URLs, source field naming (webfetch, websearch, external_web), and distinguishes from project scope based on path presence.",
+      "why": "The implementation actively categorizes evidence by scope and prevents external evidence from being treated as project facts."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function blocks evidence that claims project scope without repo-relative path, and requires project-scoped evidence for existing-project facts.",
+      "why": "This is the validation gate that prevents external-only evidence from satisfying project fact requirements."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine explicitly states that external evidence from WebFetch/WebSearch can only serve as background research and cannot alone prove existing project fields, APIs, or state machines.",
+      "why": "The documented principle aligns with the implementation: external evidence is explicitly separated from project facts."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots functions detect any project file mutations during agent execution, with allowed_write_roots permitting only artifact directory writes.",
+      "why": "Boundary enforcement ensures agents can read and research but cannot modify target project files."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "605-640",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'agent evidence without explicit scope is blocked during normalization' verifies that evidence missing scope declaration is automatically blocked with EVIDENCE_SCOPE_REQUIRED error.",
+      "why": "The test suite confirms the implementation enforces scope declaration as a hard requirement."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' confirms that project file mutations are detected and blocked regardless of agent result quality.",
+      "why": "The boundary enforcement is tested and working independently of evidence quality."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If evidence is incorrectly categorized (e.g., external evidence marked as project), the validation may not catch the error in all cases.",
+    "Agents might misunderstand the distinction between scope=external research versus scope=project facts."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The implementation already supports the desired behavior: agents can use WebFetch/WebSearch as external evidence (scope=external), and the router requires project-scoped evidence with repo-relative paths for target-project facts. No schema changes appear necessary; the existing validation gates already enforce this separation."
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "The explorer's factual claim about YOLO harness boundary audit implementation is well-supported by project-scoped evidence with clear separation between verified facts and remaining assumptions.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69,71-85,97-109,111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence records cite exact line ranges for gitFiles, walkFiles, buildBoundarySnapshot, and diffBoundarySnapshots functions",
+      "why": "Specific line numbers verify that claimed functions exist at stated locations in the codebase"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414,416-452,454-491,493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Evidence records cite exact line ranges for tests covering untracked files, gitignored files, artifact exclusion, and enforcement blocking",
+      "why": "Specific line numbers verify that claimed test behaviors exist at stated locations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516,566-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence records cite exact lines for pre-execution snapshot and post-execution diff logic in the runtime",
+      "why": "Specific line numbers verify that boundary enforcement is integrated into agent execution flow"
+    }
+  ],
+  "assumptions": [
+    "Explorer evidence quality is high; remaining assumptions (stress testing with real Claude agents, git ls-files edge cases) are properly identified as assumptions rather than facts"
+  ],
+  "risks": [
+    "If boundary snapshot logic has implementation gaps not caught by existing tests, full-tool agents could create target-project files without triggering blockers",
+    "Complex git configurations (sparse checkouts, nested git repos) might behave differently than the tested scenarios"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer properly separated facts from assumptions. All evidence records include specific paths and line numbers from project files. No assumptions were promoted to facts. The demand is factually supported for PRD readiness with acknowledged risks and remaining validation needs appropriately categorized as assumptions."
+  }
+}

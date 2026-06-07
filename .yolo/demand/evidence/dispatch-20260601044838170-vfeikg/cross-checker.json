@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Provider configuration in demand evidence dispatch uses provider-specific CLI argument patterns and does not pass tool restriction flags to any provider, relying on boundary enforcement instead. This claim is CONFIRMED by independent verification.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "43-61",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider invocation uses --cd, --sandbox, -c for approval_policy, --output-last-message; NO --tools, --allowedTools, or --disallowedTools parameters exist in Codex dispatch contract.",
+      "why": "Directly contradicts any assumption that Codex has tool restriction APIs; confirms provider-specific CLI structure."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "63-75",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Custom provider invocation uses shell template with ${model} substitution; NO tool restriction parameters in custom dispatch contract.",
+      "why": "Confirms custom provider has no tool configuration capabilities, only command templating."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "84-92",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider invocation accepts --tools, --allowedTools, --disallowedTools, --permission-mode flags, unlike Codex and custom.",
+      "why": "Shows Claude uniquely has tool restriction parameters in its dispatch contract."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "456-462",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig clears ALL Claude tool restriction flags: settings='', claude_tools='', claude_allowed_tools='', claude_disallowed_tools='', claude_no_session_persistence=true.",
+      "why": "Evidence mode explicitly strips Claude tool flags regardless of config.ai input, preventing cross-provider flag leakage."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "447-449",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider special case: if provider is codex and config.ai.model contains 'claude', model field is cleared to avoid cross-provider model pollution.",
+      "why": "Explicit handling prevents Claude default model assumptions from leaking into Codex dispatch."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "450-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Tool profile normalization: research/fetch/web/web-research normalize to 'research'; full/all/write/execution normalize to 'full' only with allowFullAgentTools=true; default is 'boundary'.",
+      "why": "Three distinct tool profiles exist with explicit authorization gates for full mode."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "568-573",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations after agent execution result in BOUNDARY_PROJECT_MUTATION blockers and force prd_ready=false.",
+      "why": "Boundary enforcement is provider-agnostic and hard blocks violations regardless of which provider caused mutations."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies Codex dispatch does not inherit Claude default model and does not force read-only sandbox assumptions.",
+      "why": "Test evidence confirms provider isolation and model clearing logic works as claimed."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies Claude dispatch clears tool restriction flags and relies on boundary enforcement instead.",
+      "why": "Test evidence confirms Claude tool flags are empty in evidence mode, matching the clearing logic at lines 456-462."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots implement provider-agnostic git-backed file mutation detection with allowed roots exclusion.",
+      "why": "Boundary enforcement works by comparing before/after file digests regardless of which provider was used."
+    }
+  ],
+  "assumptions": [
+    "Codex and custom providers do not have tool restriction APIs equivalent to Claude's --tools/allowedTools/disallowedTools flags.",
+    "Boundary enforcement assumes git is available and working for git-backed snapshot; falls back to filesystem walk otherwise.",
+    "Provider command availability (codex, claude CLI on PATH) is assumed but verified by agent-contract inspector before execution."
+  ],
+  "risks": [
+    "If a provider other than Claude gains tool restriction flags, the current clearing logic (lines 456-462) would not apply to them.",
+    "If git is not available or repository state is dirty, boundary detection may miss changes or have false positives.",
+    "Model value clearing for Codex (line 448-449) uses string matching 'claude' which could be overly aggressive or miss other model patterns."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer claim is CORRECT. Independent verification confirms provider-specific CLI patterns, Claude tool flag clearing, and provider-agnostic boundary enforcement. No conflicts found between evidence and implementation."
+  }
+}

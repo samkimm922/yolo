@@ -1,0 +1,128 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch API implements active boundary audit using SHA256 file snapshots before/after agent execution, with violations becoming PRD readiness blockers.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "87-95",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "fileDigest() uses createHash('sha256') to compute SHA256 digest of each file",
+      "why": "Core cryptographic primitive for boundary snapshot mechanism."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() iterates all project files via git ls-files or filesystem walk, computing SHA256 digests while excluding allowed_write_roots",
+      "why": "Implements the baseline and post-execution filesystem state capture."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "110-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after maps to detect added, modified, and deleted files",
+      "why": "Boundary violation detection algorithm that identifies any filesystem mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "515",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryBefore snapshot created before agent execution loop begins",
+      "why": "Establishes baseline filesystem state for post-execution comparison."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "565-571",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryAfter snapshot captured after all agents complete; diff performed and changes stored in result.boundary",
+      "why": "Post-execution boundary audit that detects and records any mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "584-596",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations converted to BOUNDARY_PROJECT_MUTATION blockers; if any blockers exist, prd_ready forced to false",
+      "why": "Direct linkage between boundary audit violations and PRD readiness blocking."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() uses git ls-files -co --exclude-standard; walkFiles() provides non-git fallback with excludedDir() filtering",
+      "why": "Dual-mode boundary snapshot supports both git and non-git project environments."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-156",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors() validates each evidence record declares scope as project, external, user, or unknown against VALID_EVIDENCE_SCOPES set",
+      "why": "Evidence provenance validation ensures agents provide proper scope classification."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "709-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() checks evidenceResultComplete(), evidenceScopeDeclarationIssues(), projectEvidenceBlockingIssues() for each required evidence agent role",
+      "why": "PRD readiness gate consumes evidence agent results and validates completeness and correctness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "750",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "prd_ready computed as blockers.length === 0 after aggregating all evidence, boundary, assumption, and conflict blockers",
+      "why": "Final PRD readiness decision that blocks on any unresolved issues including boundary violations."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Git-backed boundary test spawns agents that write untracked files; verifies status=blocked, project_mutation=violated, and BOUNDARY_PROJECT_MUTATION blocker present",
+      "why": "Test evidence confirming detection of untracked project mutations in git repositories."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "454-494",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Non-git boundary test verifies modified project files detected while artifact writes to runtimeDir are excluded from boundary violations",
+      "why": "Test evidence confirming allowed artifacts are correctly distinguished from prohibited mutations."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states dispatch uses prompt contract, artifact root, boundary snapshots and readiness blockers instead of tool restrictions for safety",
+      "why": "Design documentation explaining the boundary audit philosophy and implementation strategy."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If buildBoundarySnapshot has filesystem race conditions during agent execution, violations could be missed",
+    "If git ls-files fails silently and walkFiles is not called, boundary snapshot could be incomplete",
+    "If allowed_write_roots contains symlinks to project files, boundary checks could be bypassed",
+    "If SHA256 collisions occur (theoretically possible but practically impossible), violations could be missed"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms all explorer claims. Boundary audit implementation is verified at lines 87-120 (SHA256 digest and diff), 515 and 565 (before/after snapshots), 584-596 (blocker conversion and PRD readiness enforcement). Router integration at lines 709-727 and 750 confirms evidence results block PRD readiness. Test coverage confirms detection of both git-backed and non-git boundary violations while excluding allowed artifacts."
+  }
+}

@@ -1,6 +1,6 @@
 # YOLO Roadmap
 
-> Refreshed: 2026-05-27T16:39:27.179Z
+> Refreshed: 2026-06-06T18:20:03.778Z
 
 The active roadmap and ordered execution progress now live in `docs/yolo-public-sdk-progress.md`.
 

@@ -1,6 +1,6 @@
 # YOLO Memory Current Status
 
-> Generated: 2026-05-29T11:20:55.607Z
+> Generated: 2026-06-06T18:20:03.400Z
 
 ## Current Truth
 
@@ -8,7 +8,7 @@
 - Version: 0.1.0.
 - Latest recorded full validation: 764 tests / 131 suites / 0 fail.
 - Root .js budget: 0 files.
-- SDK surface: 49 package exports and 6 bins.
+- SDK surface: 50 package exports and 6 bins.
 - Source/test surface: 0 src modules, 0 test files.
 
 ## Recent Lifecycle Reports
@@ -17,8 +17,8 @@
 
 ## Memory Health
 
-- Audited memory docs/jsonl: 88.
-- Canonical memory docs: 8.
+- Audited memory docs/jsonl: 1567.
+- Canonical memory docs: 0.
 - Stale compatibility mirrors found: 0.
 - Deletion candidates found: 0.
 - Learning ledger: 10 records.

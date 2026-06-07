@@ -1,0 +1,104 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Provider isolation is implemented but has gaps: agent_tool_profile field is set but never used by provider adapter, provider override bypass risk is mitigated by adapter-level normalization, and cross-provider tool cleanup is provider-scoped not comprehensive.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "80-96",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Provider adapter only reads Claude-specific fields (claude_permission_mode, settings, claude_tools, claude_allowed_tools, claude_disallowed_tools, claude_disable_slash_commands, claude_no_session_persistence, max_budget_usd) and does NOT read agent_tool_profile.",
+      "why": "This contradicts the explorer's risk claim about parameter rejection - the field is silently ignored not rejected."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "462",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Line 462 sets ai.agent_tool_profile = normalizedProfile, but provider-adapter.ts never reads this field.",
+      "why": "This confirms the field is dead configuration that creates a false sense of tool control."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "6-8",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "selectedProvider function ALWAYS calls normalizeAgentProvider(provider) before using provider value, providing adapter-level normalization even if evidence-dispatch bypass doesn't normalize.",
+      "why": "This validates a defense-in-depth pattern that mitigates the provider override bypass risk."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "127",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Line 127 calls selectedProvider(detectModelProvider()) which normalizes provider at spawn time, providing second normalization checkpoint.",
+      "why": "This shows double normalization protection: at buildProviderInvocation and at spawnProviderPrompt."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "450-466",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Provider-specific cleanup is provider-scoped: Claude tool fields cleared only when provider is claude (lines 457-459), Claude model cleared only when provider is codex (lines 447-449), custom sandbox set only when provider is custom (lines 464-465).",
+      "why": "This confirms incomplete cross-provider cleanup - each provider only cleans its own specific fields, not all provider-specific fields."
+    },
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "37-41",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentProvider function implements PROVIDER_ALIASES mapping and returns null for auto, providing the normalization foundation.",
+      "why": "This validates the explorer's claim about normalization foundation."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies Codex dispatch does not inherit Claude default model and checks provider isolation at config level.",
+      "why": "This confirms the explorer's test evidence about provider isolation validation."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Boundary tests verify project mutation detection and blocking for both tracked and untracked files.",
+      "why": "This validates the boundary enforcement claim with concrete test evidence."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary enforcement implementation with buildBoundarySnapshot before (line 516), diff after (line 567), and violation detection (line 569).",
+      "why": "This confirms the boundary enforcement mechanism works as claimed."
+    }
+  ],
+  "assumptions": [
+    "Silent ignoring of unrecognized ai fields like agent_tool_profile is acceptable behavior rather than a configuration bug.",
+    "Provider-scoped cleanup is sufficient even though cross-provider configuration leakage is theoretically possible.",
+    "Adapter-level normalization at spawn time compensates for lack of normalization at config build time."
+  ],
+  "risks": [
+    "agent_tool_profile field creates false confidence about tool capability control since it is never actually used.",
+    "Provider-scoped cleanup means if a provider receives another provider's configuration fields, those fields won't be cleared.",
+    "Defense-in-depth normalization pattern may hide the root cause of unnormalized provider strings reaching config building.",
+    "Cross-provider tool configuration leakage could occur if provider isolation fails and fields are not comprehensively cleared."
+  ],
+  "missing": [
+    "Evidence that Claude CLI silently ignores agent_tool_profile without warnings or errors.",
+    "Test coverage for cross-provider configuration leakage scenarios.",
+    "Verification that Codex/custom providers don't have equivalent tool profile configuration needs."
+  ],
+  "recommendation": "clarify",
+  "result": {
+    "verdict": "blocked",
+    "notes": "Cross-check revealed agent_tool_profile is dead configuration (set but never used), provider override bypass risk is mitigated by adapter-level normalization, and cross-provider cleanup is incomplete but provider-scoped. Require clarification on whether agent_tool_profile should be removed or implemented."
+  }
+}

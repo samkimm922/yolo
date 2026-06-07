@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runPiAgent } from "../agents/pi.js";
+import { formatLifecycleGuardText, inspectLifecycleGuard } from "../lifecycle/guard.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const defaultYoloRoot = resolve(__dirname, "../..");
@@ -104,8 +105,23 @@ export function formatPiText(result) {
 
 export async function runPiCli(argv = process.argv.slice(2), io = {}) {
   const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
   const { input, options, json } = parsePiArgs(argv);
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+  if (options.execute === true) {
+    const guard = inspectLifecycleGuard({
+      ...input,
+      command: "yolo-run",
+      projectRoot,
+      stateRoot: join(projectRoot, ".yolo"),
+      prdPath: input.prdPath ? resolve(projectRoot, input.prdPath) : input.prdPath,
+    });
+    if (guard.status !== "pass") {
+      if (json) stdout.write(`${JSON.stringify(guard, null, 2)}\n`);
+      else stderr.write(`${formatLifecycleGuardText(guard)}\n`);
+      return 2;
+    }
+  }
   const result = await runPiAgent(input, {
     yoloRoot: io.yoloRoot || defaultYoloRoot,
     projectRoot,

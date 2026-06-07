@@ -1,0 +1,50 @@
+{
+  "iteration": 14,
+  "scenario": "vague-proof-blocks",
+  "expected": "blocked",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0014-vague-proof-blocks",
+  "demand_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0014-vague-proof-blocks/.yolo/demand/DEMAND-0014-vague-proof-blocks",
+  "prd_path": null,
+  "check_path": null,
+  "blocked_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0014-vague-proof-blocks/.yolo/prd-executability/vague-proof-blocks.blocked.json",
+  "yolo": {
+    "discuss_status": "success",
+    "prd_status": "blocked",
+    "prd_code": "DEMAND_QUALITY_BLOCKED",
+    "check_status": null,
+    "check_code": null,
+    "blocker_codes": [
+      "DEMAND_QUALITY_ACCEPTANCE_EVIDENCE_LOW",
+      "QUALITY_SCENARIO_PROOF_CONCRETE",
+      "QUALITY_SURFACE_PROOF_PRESENT",
+      "QUALITY_TASK_ACCEPTANCE_EVIDENCE",
+      "DEMAND_QUALITY_HANDOFF_COMPLETENESS_LOW",
+      "QUALITY_TASK_HANDOFF_COMPLETE",
+      "QUALITY_HANDOFF_CONTEXT_COMPLETE"
+    ],
+    "task_count": 0
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "executable": false,
+      "correctly_blocked": true,
+      "score": 100,
+      "hard_failures": [],
+      "warnings": []
+    }
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T12:03:59.311Z",
+  "ended_at": "2026-06-01T12:04:23.057Z",
+  "duration_ms": 23746
+}

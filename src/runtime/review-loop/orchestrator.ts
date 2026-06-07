@@ -19,13 +19,15 @@ import {
   buildReviewScannerArgs,
   normalizeAutoFixResult,
   parseReviewFindings,
-  scannerStdoutFromError,
+  scannerFailureDiagnostic,
   shouldStopReviewAfterFailure,
 } from "./execution-helpers.js";
 import {
   appendReviewTasksToPrd,
   buildReviewTaskLimitBlock,
   hasReviewFixFailures,
+  markReviewOutcome,
+  markReviewTaskLimitBlocked,
   pendingReviewDecision,
   reviewFixFailureDetail,
   reviewTaskIdSet,
@@ -46,6 +48,21 @@ function appendUniqueDefault(target, items = []) {
 
 async function importFromRoot(rootDir, relativePath) {
   return import(pathToFileURL(join(rootDir, relativePath)).href);
+}
+
+function reviewScannerArtifactState(scanResult) {
+  let parsed;
+  try {
+    parsed = JSON.parse(scanResult);
+  } catch {
+    return { ok: true };
+  }
+  if (Array.isArray(parsed)) return { ok: true };
+  if (parsed && typeof parsed === "object" && Array.isArray(parsed.findings)) return { ok: true };
+  return {
+    ok: false,
+    detail: "scanner JSON missing findings array",
+  };
 }
 
 export async function runReviewLoop({
@@ -77,6 +94,9 @@ export async function runReviewLoop({
 
   let reviewFailCount = 0;
   let prevPendingCount;
+  let reviewCompleted = false;
+  let reviewOutcomeRecorded = false;
+  let pendingReviewFailureOutcome = null;
   const loadLatestPrd = () => {
     try {
       return prdPath ? loadPRD(prdPath) : prd;
@@ -85,12 +105,17 @@ export async function runReviewLoop({
     }
   };
   const reviewLogMeta = (extra = {}) => ({ run_id: runId, ...extra });
+  const recordReviewOutcome = (outcome) => {
+    reviewOutcomeRecorded = true;
+    markReviewOutcome({ taskResults, appendUnique, ...outcome });
+  };
 
   for (let round = 1; round <= maxReviewRounds; round++) {
     try {
       prd = loadLatestPrd();
       if (shouldSkipReviewForPrdByPolicy(prd)) {
         logProgress("REVIEW", "SKIP", "当前 PRD 为 dry-run/report_only，禁止 review 自动追加任务污染 PRD");
+        reviewCompleted = true;
         break;
       }
       logProgress("REVIEW", `Round ${round}/${maxReviewRounds}`, "扫描代码问题...");
@@ -113,19 +138,49 @@ export async function runReviewLoop({
           { cwd: rootDir, timeout: 120000, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
         );
       } catch (e) {
-        const stdout = scannerStdoutFromError(e);
-        if (stdout) {
-          scanResult = stdout;
-        } else {
-          logProgress("REVIEW", "", `Scanner 执行失败: ${e.message}`);
-          logReviewError("Scanner 执行失败", e.message, reviewLogMeta({ round }));
-          reviewFailCount++;
-          if (shouldStopReviewAfterFailure(reviewFailCount)) {
-            logProgress("REVIEW", "", "连续失败 3 次，退出 review");
-            break;
-          }
-          continue;
+        const diagnostic = scannerFailureDiagnostic(e);
+        logProgress("REVIEW", "", `Scanner 执行失败: ${diagnostic.message}`);
+        logReviewError("Scanner 执行失败", diagnostic.detail, reviewLogMeta({ round }));
+        reviewFailCount++;
+        pendingReviewFailureOutcome = {
+          id: "REVIEW-SCANNER-EXEC-FAILED",
+          status: "failed",
+          reason: "scanner_exec_failed",
+          message: diagnostic.message,
+          meta: {
+            round,
+            failures: reviewFailCount,
+            phase: "REVIEW_SCANNER_EXEC_FAILED",
+            stdout_sample: diagnostic.stdout_sample,
+            stderr_sample: diagnostic.stderr_sample,
+          },
+        };
+        if (shouldStopReviewAfterFailure(reviewFailCount)) {
+          logProgress("REVIEW", "", "连续失败 3 次，退出 review");
+          recordReviewOutcome(pendingReviewFailureOutcome);
+          break;
         }
+        continue;
+      }
+
+      const artifactState = reviewScannerArtifactState(scanResult);
+      if (!artifactState.ok) {
+        logProgress("REVIEW", "", "Scanner 缺少 review artifact，跳过本轮");
+        logReviewError("Scanner 缺少 review artifact", artifactState.detail, reviewLogMeta({ round }));
+        reviewFailCount++;
+        pendingReviewFailureOutcome = {
+          id: "REVIEW-SCANNER-MISSING-ARTIFACT",
+          status: "failed",
+          reason: "scanner_missing_review_artifact",
+          message: artifactState.detail,
+          meta: { round, failures: reviewFailCount, phase: "REVIEW_SCANNER_MISSING_ARTIFACT" },
+        };
+        if (shouldStopReviewAfterFailure(reviewFailCount)) {
+          logProgress("REVIEW", "", "连续失败 3 次，退出 review");
+          recordReviewOutcome(pendingReviewFailureOutcome);
+          break;
+        }
+        continue;
       }
 
       let findings;
@@ -135,16 +190,32 @@ export async function runReviewLoop({
         logProgress("REVIEW", "", "Scanner 返回值非 JSON，跳过本轮");
         logReviewError("Scanner 返回值非 JSON", String(scanResult || "").slice(0, 300), reviewLogMeta({ round }));
         reviewFailCount++;
+        pendingReviewFailureOutcome = {
+          id: "REVIEW-SCANNER-NON-JSON",
+          status: "failed",
+          reason: "scanner_non_json",
+          message: "Scanner 返回值非 JSON",
+          meta: {
+            round,
+            failures: reviewFailCount,
+            phase: "REVIEW_SCANNER_NON_JSON",
+            sample: String(scanResult || "").slice(0, 300),
+          },
+        };
         if (shouldStopReviewAfterFailure(reviewFailCount)) {
           logProgress("REVIEW", "", "连续失败 3 次，退出 review");
+          recordReviewOutcome(pendingReviewFailureOutcome);
           break;
         }
         continue;
       }
+      reviewFailCount = 0;
+      pendingReviewFailureOutcome = null;
 
       if (!findings.length) {
         logProgress("REVIEW", "", "无新发现，review 完成");
         logReviewDone("pass", 0, 0, reviewLogMeta({ round, status: "clean" }));
+        reviewCompleted = true;
         break;
       }
 
@@ -235,6 +306,7 @@ export async function runReviewLoop({
         }
         logProgress("REVIEW", "", "无 CLAUDE_FIX 任务且无 AUTO_FIX 改动，review 完成");
         logReviewDone("pass", findings.length, 0, reviewLogMeta({ round, status: "clean" }));
+        reviewCompleted = true;
         break;
       }
 
@@ -247,7 +319,15 @@ export async function runReviewLoop({
         });
         logProgress("REVIEW", "BLOCKED", taskLimitBlock.message);
         logReviewError(taskLimitBlock.errorTitle, taskLimitBlock.errorDetail, reviewLogMeta(taskLimitBlock.meta));
-        appendUnique(taskResults.failed, [taskLimitBlock.blockerId]);
+        markReviewTaskLimitBlocked({ taskResults, taskLimitBlock, appendUnique });
+        recordReviewOutcome({
+          id: taskLimitBlock.blockerId,
+          status: "blocked",
+          reason: taskLimitBlock.reason,
+          message: taskLimitBlock.message,
+          humanNeeded: taskLimitBlock.human_needed,
+          meta: taskLimitBlock.meta,
+        });
         break;
       }
 
@@ -281,6 +361,13 @@ export async function runReviewLoop({
             const failureDetail = reviewFixFailureDetail(reviewResults);
             logProgress("REVIEW", "BLOCKED", `review fix 未全部完成: ${failureDetail}`);
             logReviewError("review fix 未全部完成", failureDetail, reviewLogMeta({ round }));
+            recordReviewOutcome({
+              id: "REVIEW-FIX-BLOCKED",
+              status: "blocked",
+              reason: "review_fix_blocked",
+              message: failureDetail,
+              meta: { round, phase: "REVIEW_FIX_BLOCKED" },
+            });
             break;
           }
         } catch (loopErr) {
@@ -311,6 +398,17 @@ export async function runReviewLoop({
 
       if (pendingDecision.action === "break") {
         logProgress("REVIEW", "", pendingDecision.message);
+        recordReviewOutcome({
+          id: "REVIEW-FIX-STALLED",
+          status: "blocked",
+          reason: "review_fix_stalled",
+          message: pendingDecision.message,
+          meta: {
+            round,
+            phase: "REVIEW_FIX_STALLED",
+            pending_review_tasks: pendingReviewTasks.map((task) => task.id),
+          },
+        });
         break;
       }
       prevPendingCount = pendingDecision.nextPendingCount;
@@ -320,11 +418,29 @@ export async function runReviewLoop({
       logReviewError("Review Round 异常", reviewErr.message, reviewLogMeta({ round }));
       if (shouldStopReviewAfterFailure(reviewFailCount)) {
         logProgress("REVIEW", "", "连续失败 3 次，跳过 review");
+        recordReviewOutcome({
+          id: "REVIEW-ROUND-FAILED",
+          status: "failed",
+          reason: "review_round_failed",
+          message: reviewErr.message,
+          meta: { round, failures: reviewFailCount, phase: "REVIEW_ROUND_FAILED" },
+        });
         break;
       }
       progress.done = taskResults.completed.length;
       progress.failed = taskResults.failed.length;
     }
+  }
+
+  if (!reviewOutcomeRecorded && !reviewCompleted && pendingReviewFailureOutcome) {
+    recordReviewOutcome({
+      ...pendingReviewFailureOutcome,
+      meta: {
+        ...pendingReviewFailureOutcome.meta,
+        max_review_rounds: maxReviewRounds,
+        exhausted_review_rounds: true,
+      },
+    });
   }
 
   return taskResults;

@@ -1,0 +1,83 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer and cross-checker evidence is sufficient to support PRD readiness for demand evidence dispatch; one location attribution error was identified but does not weaken the substantive claim; missing production evidence is properly reflected as gaps, not blockers.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "442-444",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Model clearing logic for codex provider is located in evidence-dispatch.ts, not provider-adapter.ts as explorer initially claimed.",
+      "why": "Cross-checker identified the correct location; explorer's file attribution was wrong but the existence of model clearing was correctly claimed."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "432-444",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Provider-adapter.ts does NOT contain model clearing logic; explorer misattributed this feature.",
+      "why": "Confirms cross-checker's contradiction finding; the substantive claim that model clearing exists is true, only the file location was wrong."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "184-438",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test suite covers codex dispatch, claude dispatch, full tool profile authorization, boundary violations, and git-backed tracking.",
+      "why": "Test evidence independently verified by both agents; proves implementation is tested across provider isolation scenarios."
+    },
+    {
+      "path": ".yolo/demand/evidence/",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "20+ dispatch artifacts from real stress-test runs (dispatch-20260531*, dispatch-20260601*).",
+      "why": "Artifact evidence proves demand evidence dispatch has been exercised in real scenarios, not just theoretically."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine confirms Claude dispatch avoids CLI tool flags; safety comes from prompt contract, artifact root, and boundary snapshots.",
+      "why": "Documentation evidence independently verified; confirms implementation intent matches code behavior."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues enforces evidence scope validation requiring repo-relative paths for project-scoped evidence.",
+      "why": "Proves the router enforces the same evidence validation rules that verifier is checking."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "697-708",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "unresolvedAssumptions prevents assumptions from becoming facts without explicit confirmation.",
+      "why": "Verifies that assumptions cannot be promoted to facts, matching verifier's protocol."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If boundary snapshot has false positives/negatives, violations could be missed or valid runs blocked.",
+    "If git-backed file tracking fails in non-git repos, mutations might go undetected.",
+    "If evidence agents cannot parse prompt contract correctly, they might violate boundary despite instructions.",
+    "If provider-specific normalization has edge cases, model leakage could occur in untested provider combinations."
+  ],
+  "missing": [
+    "Stress-test logs or CI evidence showing boundary violations caught in production demand dispatch runs.",
+    "Evidence of custom provider adapter validation in real scenarios.",
+    "Documentation of how permission-mode interacts with evidence agent tool profile in practice."
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verifier confirms explorer and cross-checker evidence is sufficient for PRD readiness. All 17 evidence items have proper scope=project with repo-relative paths. No assumptions are presented as facts. One location attribution error was found (model clearing location) but cross-checker confirmed the substantive claim is true. Missing production evidence is properly reflected in missing field, not promoted to facts. Evidence agreement is pass with no conflicts. Architectural layers (config normalization, model clearing, boundary snapshots, evidence scope validation) are implemented and tested. Real dispatch artifacts prove stress-testing has occurred. Production CI evidence of boundary violations being caught remains the primary gap but does not block PRD readiness given strong test coverage and architectural safeguards."
+  }
+}

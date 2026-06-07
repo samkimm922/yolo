@@ -1,0 +1,159 @@
+{
+  "schema": "yolo.demand.claude_stress.v1",
+  "run_id": "claude-stress-20260601012148488",
+  "started_at": "2026-06-01T01:21:48.487Z",
+  "duration_ms": 10800000,
+  "timeout_ms": 300000,
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012148488",
+  "iterations": [
+    {
+      "iteration": 1,
+      "scenario": "local-contract-boundary",
+      "started_at": "2026-06-01T01:21:48.489Z",
+      "ended_at": "2026-06-01T01:23:43.333Z",
+      "duration_ms": 114844,
+      "exit_code": 0,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012148488/0001-local-contract-boundary.json",
+      "summary": {
+        "status": "pass",
+        "code": "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD",
+        "prd_ready": true,
+        "boundary": "clean",
+        "blockers": [],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 12,
+            "missing_count": 0
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 10,
+            "missing_count": 0
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 8,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 2,
+      "scenario": "research-fetch-boundary",
+      "started_at": "2026-06-01T01:23:43.339Z",
+      "ended_at": "2026-06-01T01:26:16.614Z",
+      "duration_ms": 153275,
+      "exit_code": 1,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012148488/0002-research-fetch-boundary.json",
+      "summary": {
+        "status": "blocked",
+        "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+        "prd_ready": false,
+        "boundary": "clean",
+        "blockers": [
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "explorer",
+            "message": "explorer reported unresolved missing evidence: Runtime verification that real Claude agents with WebFetch/WebSearch actually return external-scoped evidence (vs test mocks); Integration tests showing URL-based evidence correctly triggers ex"
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "cross-checker",
+            "message": "cross-checker reported unresolved missing evidence: Runtime execution logs showing real Claude agents with WebFetch/WebSearch actually returning external-scoped evidence (vs only test mocks); Integration tests using actual WebFetch/WebSearc"
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "verifier",
+            "message": "verifier reported unresolved missing evidence: Runtime execution logs showing real Claude agents with WebFetch/WebSearch actually returning external-scoped evidence (both agents flagged); Integration tests using actual WebFetch/WebSearch to"
+          }
+        ],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "cross_check",
+            "evidence_count": 11,
+            "missing_count": 5
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "cross_check",
+            "evidence_count": 14,
+            "missing_count": 7
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "cross_check",
+            "evidence_count": 6,
+            "missing_count": 7
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    }
+  ],
+  "stopped_reason": null
+}

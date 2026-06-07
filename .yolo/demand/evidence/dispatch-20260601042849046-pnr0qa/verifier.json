@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence verification confirms YOLO demand evidence dispatch implements provider-agnostic boundary enforcement with provider-specific invocation logic, but critical architectural gaps remain in real-world provider validation, custom provider enforcement, and cross-provider assumption coverage.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots implement provider-agnostic filesystem-based boundary enforcement without provider-specific checks.",
+      "why": "Core claim verified independently by both explorer and cross-checker with consistent evidence."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "41-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Three separate provider-specific code paths for codex, custom, and claude with mutually exclusive argument structures.",
+      "why": "Provider-specific invocation logic confirmed with independent line-specific verification."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "456-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider tool capability flags are explicitly cleared and boundary enforcement is relied upon for protection.",
+      "why": "Tool capability preservation approach verified and confirmed across both evidence reports."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "63-75",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Custom provider implementation is a thin shell wrapper with no technical boundary enforcement or tool capability guarantees.",
+      "why": "Critical architectural gap independently identified by both agents."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "161-196",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "All provider execution tests use controlled mock responses instead of real provider subprocess spawns.",
+      "why": "Test coverage gap confirmed by both explorer and cross-checker as synthetic."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-368",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "JSON repair logic handles Claude-specific formatting quirks with no equivalent for codex or custom providers.",
+      "why": "Provider-specific handling asymmetry verified independently."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "567-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violation detection runs post-hoc after agent execution, creating potential timing gap if processes timeout or are killed.",
+      "why": "Cross-checker identified additional risk not in explorer report, showing independent value."
+    }
+  ],
+  "assumptions": [
+    "Real Claude -p agents will respect do-not-modify-project-files instructions in agent prompts.",
+    "Custom provider implementations will honor boundary expectations without technical enforcement.",
+    "Provider detection via string equality checks is sufficient to prevent cross-provider configuration leakage.",
+    "Claude agents function correctly with all tool capability flags cleared.",
+    "JSON repair logic only needs to handle Claude-specific output quirks.",
+    "Boundary snapshot comparison will complete successfully even when agent processes timeout or are killed."
+  ],
+  "risks": [
+    "Custom provider could ignore boundary instructions and modify project files before detection runs.",
+    "Provider detection failure could cause cross-provider tool flag leakage.",
+    "Real Claude agents may behave differently than mock agents used in tests.",
+    "Timeout scenarios could bypass boundary enforcement if snapshot comparison cannot complete.",
+    "JSON repair logic being Claude-specific may fail to parse codex or custom provider output."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker evidence is consistent, independently verified, and sufficient for PRD readiness. Both agents identified the same architectural patterns and critical gaps. No contradictions found between evidence reports. All assumptions are explicitly stated and not promoted to facts. Missing data from both reports is architectural stress testing which belongs in implementation scope, not PRD readiness blockers. The evidence confirms the demand acceptance criteria can proceed: provider-agnostic boundary enforcement exists, provider-specific invocation is isolated, and tool capability preservation approach is documented. The identified gaps are known risks to be mitigated during implementation, not blockers to PRD completion."
+  }
+}

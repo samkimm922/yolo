@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch API/schema supports research/fetch style evidence with explicit scope separation between external and project facts.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES defines four allowed scopes: project, external, user, unknown",
+      "why": "Core schema definition allows scope=external for web/fetch records"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "152-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates that every evidence record declares a valid scope",
+      "why": "Schema enforcement prevents scope-less or invalid scope records"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEAND_EVIDENCE_RESULT_SCHEMA_DEFINITION states 'project facts require project-scoped evidence'",
+      "why": "Contract definition separates project facts from external evidence"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "160-175",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "demandRequestsExternalResearch detects URLs and explicit web/fetch/search requests in demand text",
+      "why": "Automatically detects when external research is explicitly requested"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "176-184",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "externalEvidencePresent checks if any agent result included scope=external evidence with URL or external source",
+      "why": "Verifies agents actually used external tools when requested"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "665-671",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime creates EXTERNAL_RESEARCH_EVIDENCE_REQUIRED blocker if external requested but no scope=external evidence found",
+      "why": "Enforces that external research requests must produce external evidence records"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues blocks when project facts lack project-scoped evidence with repo-relative path",
+      "why": "Prevents external evidence from being used to prove target-project facts"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots track file changes during agent execution",
+      "why": "Detects any target-project mutations during evidence gathering"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "659-671",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime creates BOUNDARY_PROJECT_MUTATION blockers for any project file changes outside allowed artifact root",
+      "why": "Enforces boundary constraint: agents cannot modify target project files"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states external evidence can only serve as background research, not alone prove existing project implementation",
+      "why": "Product-level contract confirms external evidence cannot establish project facts"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "344-347",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt includes tool-specific instructions for web/fetch/search-capable tools with scope=external marking",
+      "why": "Agent contract explicitly tells agents to mark web/fetch records as scope=external"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross-checker, and verifier roles with writes_code=false",
+      "why": "Evidence agent protocols are read-only by design"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "289-306",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy boundary forbids project_mutation, allows writes only to output_dir artifact root",
+      "why": "Dispatch plan enforces boundary before agent execution"
+    }
+  ],
+  "assumptions": [
+    "Demand explicitly asks for external research on https://example.com - this appears to be a test fixture URL",
+    "Web/fetch/search-capable tools are available in the Claude environment when agents run",
+    "The external research blocker at line 665-671 will correctly detect missing external evidence when agents run"
+  ],
+  "risks": [
+    "If external research tools fail or are unavailable, agents cannot satisfy the external evidence requirement",
+    "If agents mistakenly mark project file reads as scope=external, validation logic may incorrectly reject valid project evidence",
+    "The dirty working tree state mentioned in status_quo may interfere with boundary snapshot change detection"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence dispatch API correctly implements scope separation with schema validation, external research detection, boundary auditing, and blocker generation. All three core files (evidence-dispatch.ts, router.ts, doctrine.md) align on the contract: project facts require project-scoped evidence with paths, external evidence is background-only and must be marked scope=external."
+  }
+}

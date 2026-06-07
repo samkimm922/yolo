@@ -1,0 +1,175 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements harness boundary audit for full-tool Claude agents and blocks PRD readiness on project mutation or insufficient evidence.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "102-113",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() creates SHA256 digests of all project files excluding allowed artifact roots",
+      "why": "This is the core boundary audit mechanism that detects any file mutations during agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "115-125",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after snapshots to detect added, modified, or deleted files",
+      "why": "Provides explicit change detection with change type (added/modified/deleted) for each violated file."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "495-546",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshot captured before agent execution (line 495), compared after execution (lines 545-546)",
+      "why": "Demonstrates the actual runtime boundary audit flow in action."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "547-551",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Result includes boundary object with project_mutation: 'violated' or 'clean', allowed_write_roots, and changes array",
+      "why": "Explicit boundary violation reporting structure in dispatch results."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "564-576",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary blockers with code BOUNDARY_PROJECT_MUTATION are added to readiness when changes detected",
+      "why": "Direct integration between boundary audit and PRD readiness blocking."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "577-583",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Final readiness with boundary blockers sets prd_ready=false and status='blocked'",
+      "why": "Shows that boundary violations prevent PRD readiness completion."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16-21",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_CLAUDE_BOUNDARY_SETTINGS defines CLAUDE_BOUNDARY_TOOLS including Read, Write, Edit, Bash, WebFetch, WebSearch, Agent",
+      "why": "Proves that full-tool Claude agents are explicitly supported with comprehensive tool access."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "239-242",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy in dispatch plan specifies project_mutation: 'forbidden' and allowed_write_roots: [artifact output dir]",
+      "why": "Explicit policy declaration that project mutation is forbidden, only artifact writes allowed."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "261-262",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rule: 'Boundary: do not modify target project files. If verification would require mutation, report it in missing.'",
+      "why": "Agents are explicitly instructed to avoid project mutations during evidence gathering."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "693-707",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness checks for required evidence agent roles (explorer, cross-checker, verifier) and blocks if incomplete or failed",
+      "why": "Shows the integration point where evidence agent results affect PRD readiness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "494-511",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() creates blockers when project-scoped evidence lacks repo-relative path or only has external/user/unknown scope",
+      "why": "Enforces that existing-project facts require concrete project evidence, not just external research."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "462-492",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues() creates blockers from agent error codes, missing evidence, or blocked recommendations",
+      "why": "Agent problems (missing data, provider failures, blocked verdicts) become readiness blockers."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52-75",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS define explorer, cross_checker, and verifier roles with writes_code: false",
+      "why": "Evidence agents are declaratively read-only by protocol definition."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "76-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation() for Claude passes --permission-mode, --settings, --tools, --allowedTools including Bash, Write, WebFetch, WebSearch, Agent",
+      "why": "Shows the full Claude tool configuration in provider invocation, proving full-tool support."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "378-411",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' proves boundary audit catches writes and blocks readiness",
+      "why": "Executable test demonstrating boundary violation detection and blocking."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "413-449",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' proves git file system integration for change detection",
+      "why": "Shows boundary audit works with both git and non-git file tracking."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "220-263",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'claude dispatch keeps tools available and relies on boundary enforcement' validates WebFetch, WebSearch, Write, Bash are allowed",
+      "why": "Test proves full-tool Claude agents are used, not sandboxed/restricted tools."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states dispatch '会在运行前后审计项目文件边界，任何越界改动都会变成 readiness blocker'",
+      "why": "Primary product requirement doc confirming boundary audit is intentional design, not implementation detail."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "67-68",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine specifies evidence scope rules and that existing-project facts without project-scoped evidence must be blocked",
+      "why": "Product-level requirement for evidence quality enforcement."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If boundary snapshot fails silently or has false negatives, agents could mutate projects without detection",
+    "If git file tracking is unavailable and walkFiles() has permission issues, boundary audit could be incomplete",
+    "If allowed_write_roots configuration is mis-specified, legitimate artifact writes could be flagged as violations"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Claim verified: evidence-dispatch.ts implements comprehensive boundary audit (lines 102-125, 495-576), router.ts enforces evidence quality (lines 462-511, 693-707), tests prove detection works (test lines 378-449), and doctrine confirms this is intentional product design (doctrine lines 66-68). Full-tool Claude agents are supported (boundary settings lines 16-21, provider-adapter lines 76-109, test lines 220-263)."
+  }
+}

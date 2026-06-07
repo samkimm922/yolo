@@ -36,6 +36,42 @@ function readPrd(prdPath) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
+function prdJsonErrorReport({ prdPath, projectRoot, stateRoot, error, writeLifecycle, learnFailures }) {
+  const resolvedPrdPath = resolve(prdPath);
+  const report = {
+    schema_version: YOLO_CHECK_REPORT_SCHEMA_VERSION,
+    schema: YOLO_CHECK_REPORT_SCHEMA,
+    status: "error",
+    code: "PRD_JSON_INVALID",
+    summary: "PRD JSON could not be parsed.",
+    generated_at: nowIso(),
+    prd_path: resolvedPrdPath,
+    project_root: projectRoot,
+    state_root: stateRoot,
+    checks: [],
+    blockers: [{
+      code: "PRD_JSON_INVALID",
+      message: error?.message || "PRD file is not valid JSON.",
+      gate: "prd_parse",
+    }],
+    warnings: [],
+    advisory_warnings: [],
+    blocking_warnings: [],
+    artifacts: [resolvedPrdPath],
+    next_actions: ["Fix the PRD JSON syntax, then rerun /yolo-check."],
+  };
+  if (writeLifecycle) {
+    report.lifecycle_write = writeLifecycleStageReport("check", report, {
+      projectRoot,
+      stateRoot,
+      source: "yolo-check",
+      learnFailures,
+    });
+    report.artifacts.push(report.lifecycle_write.artifact_path);
+  }
+  return report;
+}
+
 function severity(status) {
   if (status === "blocked") return 3;
   if (status === "warning") return 2;
@@ -60,6 +96,89 @@ function checkRecord(name, status, summary, details = {}) {
 
 function cleanString(value) {
   return String(value ?? "").trim();
+}
+
+const STRICT_EXECUTION_MODES = new Set(["runner", "release", "strict"]);
+const ADVISORY_WARNING_CODES = new Set([
+  "ADAPTER_MANIFEST_MISSING",
+  "RESOLVER_UNKNOWN_CONTEXT",
+]);
+
+function executionMode(input = {}, options = {}) {
+  return cleanString(
+    input.executionMode ||
+    input.execution_mode ||
+    input.mode ||
+    options.executionMode ||
+    options.execution_mode ||
+    options.mode ||
+    "runner",
+  ).toLowerCase();
+}
+
+function strictExecutionPolicy({ prd, input = {}, options = {} } = {}) {
+  if (input.strictExecution === false || input.strict_execution === false || options.strictExecution === false || options.strict_execution === false) return false;
+  if (input.requireDemandContract === false || input.require_demand_contract === false || options.requireDemandContract === false || options.require_demand_contract === false) return false;
+  if (input.strictExecution === true || input.strict_execution === true || options.strictExecution === true || options.strict_execution === true) return true;
+  if (input.requireDemandContract === true || input.require_demand_contract === true || options.requireDemandContract === true || options.require_demand_contract === true) return true;
+
+  const mode = executionMode(input, options);
+  return STRICT_EXECUTION_MODES.has(mode) ||
+    prd?.execution_readiness?.afk_ready === true ||
+    prd?.execution_readiness?.level === "L3";
+}
+
+function strictWarningPolicy({ strictExecution, mode }) {
+  return strictExecution || STRICT_EXECUTION_MODES.has(cleanString(mode).toLowerCase());
+}
+
+function isAdvisoryWarning(warning = {}) {
+  return warning.advisory === true || ADVISORY_WARNING_CODES.has(warning.code);
+}
+
+function warningMessage(warning = {}) {
+  return warning.message || warning.detail || warning.summary || "Warning blocks strict execution.";
+}
+
+function warningBlocker(warning = {}, check = {}) {
+  return {
+    code: warning.code || "STRICT_WARNING",
+    gate: check.name || warning.gate || "warning_policy",
+    source: warning.source || check.name || "warning_policy",
+    task_id: warning.task_id || null,
+    message: warningMessage(warning),
+    warning_policy: "execution_blocking",
+    original_level: "warning",
+    human_needed: true,
+  };
+}
+
+function applyWarningPolicy(check = {}, context = {}) {
+  const warnings = asArray(check.warnings);
+  const existingAdvisories = asArray(check.advisories);
+  const advisoryWarnings = [
+    ...existingAdvisories,
+    ...warnings.filter(isAdvisoryWarning).map((warning) => ({ ...warning, advisory: true })),
+  ];
+  const executionWarnings = warnings.filter((warning) => !isAdvisoryWarning(warning));
+  const blockingWarnings = context.failClosed ? executionWarnings : [];
+  const nextWarnings = context.failClosed ? [] : executionWarnings;
+  const blockers = [
+    ...asArray(check.blockers),
+    ...blockingWarnings.map((warning) => warningBlocker(warning, check)),
+  ];
+  return {
+    ...check,
+    status: blockers.length > 0 ? "blocked" : nextWarnings.length > 0 ? "warning" : "pass",
+    blockers,
+    warnings: nextWarnings,
+    advisories: advisoryWarnings,
+    warning_policy: {
+      fail_closed: context.failClosed,
+      advisory_warning_count: advisoryWarnings.length,
+      blocking_warning_count: blockingWarnings.length,
+    },
+  };
 }
 
 function pathInsideProject(projectRoot, file) {
@@ -110,10 +229,10 @@ function productReadiness({ prd, discovery }) {
   });
 }
 
-function demandContractReadiness({ prd, projectRoot }) {
+function demandContractReadiness({ prd, projectRoot, strictExecution }) {
   const blockers = [];
   const warnings = [];
-  const demandRequired = prd?.demand_contract_required === true || prd?.source === "approved_demand";
+  const demandRequired = strictExecution || prd?.demand_contract_required === true || prd?.source === "approved_demand";
   const demand = prd?.demand || null;
   const executionReadiness = prd?.execution_readiness || {};
   const projectFacts = demand?.project_facts || null;
@@ -126,10 +245,16 @@ function demandContractReadiness({ prd, projectRoot }) {
   }
 
   if (demandRequired) {
-    if (!demand?.id) {
+    if (!demand) {
+      blockers.push({
+        code: "DEMAND_CONTRACT_MISSING",
+        message: "Runner/release execution requires an approved demand contract.",
+        human_needed: true,
+      });
+    } else if (!demand.id) {
       blockers.push({ code: "DEMAND_SOURCE_MISSING", message: "Executable PRD must reference its approved demand session." });
     }
-    if (demand?.approval?.approved !== true) {
+    if (demand && demand.approval?.approved !== true) {
       blockers.push({ code: "DEMAND_APPROVAL_MISSING", message: "Executable PRD must include explicit demand approval." });
     }
     if (executionReadiness.level !== "L3" || executionReadiness.afk_ready !== true) {
@@ -148,13 +273,29 @@ function demandContractReadiness({ prd, projectRoot }) {
     if (qualityStatuses.includes("blocked")) {
       blockers.push({ code: "DEMAND_QUALITY_BLOCKED", message: "Executable PRD demand quality report must not be blocked." });
     } else if (qualityStatuses.includes("warning")) {
-      warnings.push({ code: "DEMAND_QUALITY_WARNING", message: "Executable PRD demand quality report has warnings that should be reviewed." });
+      (strictExecution ? blockers : warnings).push({
+        code: "DEMAND_QUALITY_WARNING",
+        message: strictExecution
+          ? "Runner/release demand quality warnings require human review before execution."
+          : "Executable PRD demand quality report has warnings that should be reviewed.",
+        human_needed: strictExecution || undefined,
+      });
     }
     if (demandRequired && qualityReports.length === 0) {
-      warnings.push({ code: "DEMAND_QUALITY_REPORT_MISSING", message: "Executable demand PRD should include a demand quality report." });
+      (strictExecution ? blockers : warnings).push({
+        code: "DEMAND_QUALITY_REPORT_MISSING",
+        message: strictExecution
+          ? "Runner/release demand PRD must include a demand quality report."
+          : "Executable demand PRD should include a demand quality report.",
+        human_needed: strictExecution || undefined,
+      });
     }
     if (!projectFacts) {
-      warnings.push({ code: "DEMAND_PROJECT_FACTS_MISSING", message: "Executable demand PRD should include structured project facts." });
+      blockers.push({
+        code: "DEMAND_PROJECT_FACTS_MISSING",
+        message: "Runner/release demand PRD must include structured project facts.",
+        human_needed: true,
+      });
     } else {
       const unresolvedTargetFacts = asArray(projectFacts.target_files)
         .filter((fact) => ["candidate", "needs_verification", "contradicted", "invalid_scope"].includes(fact?.status)
@@ -242,7 +383,7 @@ function uiReadiness({ prd, acceptanceManifest, resolver }) {
   });
 }
 
-function atomicityReadiness({ prd, projectRoot }) {
+function atomicityReadiness({ prd, projectRoot, strictExecution }) {
   const inspections = [];
   const blockers = [];
   const warnings = [];
@@ -253,7 +394,23 @@ function atomicityReadiness({ prd, projectRoot }) {
     if (inspection.mode === "must_split") {
       blockers.push({ code: "ATOMICITY_MUST_SPLIT", task_id: task.id, message: "Task is too broad and must be split before execution.", score: inspection.score });
     } else if (inspection.mode === "investigate_then_patch") {
-      warnings.push({ code: "ATOMICITY_INVESTIGATE_FIRST", task_id: task.id, message: "Task should force investigation before patching.", score: inspection.score });
+      (strictExecution ? blockers : warnings).push({
+        code: "ATOMICITY_INVESTIGATE_FIRST",
+        task_id: task.id,
+        message: strictExecution
+          ? "Runner/release task requires investigation before patching and cannot continue as a warning."
+          : "Task should force investigation before patching.",
+        score: inspection.score,
+        human_needed: strictExecution || undefined,
+      });
+    } else if (inspection.mode === "research_only") {
+      blockers.push({
+        code: "ATOMICITY_RESEARCH_ONLY",
+        task_id: task.id,
+        message: "Task is research-only and cannot be patched by runner.",
+        score: inspection.score,
+        human_needed: true,
+      });
     }
   }
   const status = blockers.length > 0 ? "blocked" : warnings.length > 0 ? "warning" : "pass";
@@ -300,9 +457,10 @@ function adapterReadiness({ prd, acceptanceManifest, options, resolver }) {
     });
   }
   if (!adapterPresent) {
-    return checkRecord("adapter_readiness", "warning", "No adapter manifest found; continuing for non-UI tasks.", {
+    return checkRecord("adapter_readiness", "pass", "No adapter manifest found; continuing for non-UI tasks.", {
       blockers: [],
-      warnings: [{ code: "ADAPTER_MANIFEST_MISSING", message: "Adapter manifest is missing; non-UI tasks may continue with a warning." }],
+      warnings: [],
+      advisories: [{ code: "ADAPTER_MANIFEST_MISSING", message: "Adapter manifest is missing; non-UI tasks may continue as advisory.", advisory: true }],
       ui_task_count: uiTaskCount,
       adapter_present: false,
       resolver_status: resolver?.status || "unknown",
@@ -311,6 +469,7 @@ function adapterReadiness({ prd, acceptanceManifest, options, resolver }) {
   return checkRecord("adapter_readiness", "pass", "Adapter readiness passed.", {
     blockers: [],
     warnings: [],
+    advisories: [],
     ui_task_count: uiTaskCount,
     adapter_present: true,
     adapter_id: selectedAdapter?.id || options.acceptanceAdapter || options.acceptance_adapter || acceptanceManifest.acceptance_adapter || null,
@@ -339,10 +498,27 @@ function preflightReadiness(preflight) {
     source: reason.source || "preflight",
     task_id: reason.task_id || null,
     message: reason.detail || reason.message || "PRD preflight blocked execution.",
+    human_needed: reason.human_needed || undefined,
+    warning_policy: reason.source === "warning_policy" ? "execution_blocking" : undefined,
+    original_level: reason.source === "warning_policy" ? "warning" : undefined,
+  }));
+  const warnings = asArray(preflight.warnings).map((warning) => ({
+    code: warning.code || "PRD_PREFLIGHT_WARNING",
+    source: warning.source || "preflight",
+    task_id: warning.task_id || null,
+    message: warning.message || warning.detail || "PRD preflight warning.",
+  }));
+  const advisories = asArray(preflight.advisory_warnings).map((warning) => ({
+    code: warning.code || "PRD_PREFLIGHT_ADVISORY",
+    source: warning.source || "preflight",
+    task_id: warning.task_id || null,
+    message: warning.message || warning.detail || "PRD preflight advisory.",
+    advisory: true,
   }));
   return checkRecord("prd_preflight", preflight.status === "blocked" ? "blocked" : preflight.status === "warning" ? "warning" : "pass", "PRD preflight completed.", {
     blockers,
-    warnings: [],
+    warnings: preflight.status === "warning" ? warnings : [],
+    advisories,
     preflight,
   });
 }
@@ -384,8 +560,28 @@ export function inspectYoloCheck(input = {}, options = {}) {
   const stateRoot = resolve(input.stateRoot || input.state_root || options.stateRoot || options.state_root || `${projectRoot}/.yolo`);
   const acceptanceManifest = input.acceptanceManifest || input.acceptance_manifest || options.acceptanceManifest || options.acceptance_manifest || {};
   const discovery = input.discovery || input.discoveryBrief || input.discovery_brief || options.discovery || options.discoveryBrief || options.discovery_brief || null;
-  const prd = readPrd(resolvedPrdPath);
-  const preflight = preflightPrd(resolvedPrdPath);
+  let prd;
+  try {
+    prd = readPrd(resolvedPrdPath);
+  } catch (error) {
+    return prdJsonErrorReport({
+      prdPath: resolvedPrdPath,
+      projectRoot,
+      stateRoot,
+      error,
+      writeLifecycle: input.writeLifecycle || input.write_lifecycle || options.writeLifecycle || options.write_lifecycle,
+      learnFailures: options.learnFailures === true || input.learnFailures === true,
+    });
+  }
+  const strictExecution = strictExecutionPolicy({ prd, input, options });
+  const mode = executionMode(input, options);
+  const failClosedWarnings = strictWarningPolicy({ strictExecution, mode });
+  const preflight = preflightPrd(resolvedPrdPath, {
+    mode,
+    strictExecution,
+    requireDemandContract: strictExecution,
+    projectRoot,
+  });
   const surfaceSummary = summarizeTaskSurfaces(prd, { acceptanceManifest, resolver: input.resolver || options.resolver });
   const resolver = input.resolver || options.resolver || resolveProjectContext({
     projectRoot,
@@ -394,18 +590,21 @@ export function inspectYoloCheck(input = {}, options = {}) {
   });
   const checks = [
     preflightReadiness(preflight),
-    demandContractReadiness({ prd, projectRoot }),
+    demandContractReadiness({ prd, projectRoot, strictExecution }),
     productReadiness({ prd, discovery }),
     resolverReadiness({ resolver }),
     uiReadiness({ prd, acceptanceManifest, resolver }),
     storyAtomicityReadiness({ prd }),
-    atomicityReadiness({ prd, projectRoot }),
+    atomicityReadiness({ prd, projectRoot, strictExecution }),
     adapterReadiness({ prd, acceptanceManifest, options: { ...options, ...input }, resolver }),
     evidencePlanReadiness({ prd }),
-  ].sort((a, b) => severity(b.status) - severity(a.status));
+  ].map((check) => applyWarningPolicy(check, { failClosed: failClosedWarnings }))
+    .sort((a, b) => severity(b.status) - severity(a.status));
   const status = aggregateStatus(checks);
   const blockers = checks.flatMap((check) => asArray(check.blockers).map((blocker) => ({ ...blocker, gate: check.name })));
   const warnings = checks.flatMap((check) => asArray(check.warnings).map((warning) => ({ ...warning, gate: check.name })));
+  const advisoryWarnings = checks.flatMap((check) => asArray(check.advisories).map((warning) => ({ ...warning, gate: check.name, advisory: true })));
+  const blockingWarnings = blockers.filter((blocker) => blocker.warning_policy === "execution_blocking");
   const remediationPlan = buildGateRemediationPlan({
     source: "yolo-check",
     blockers,
@@ -426,16 +625,28 @@ export function inspectYoloCheck(input = {}, options = {}) {
     prd_path: resolvedPrdPath,
     project_root: projectRoot,
     state_root: stateRoot,
+    execution_mode: mode,
+    strict_execution: strictExecution,
     resolver,
     task_surface_summary: summarizeTaskSurfaces(prd, { acceptanceManifest, resolver }),
     checks,
     blockers,
     warnings,
+    advisory_warnings: advisoryWarnings,
+    blocking_warnings: blockingWarnings,
+    warning_policy: {
+      mode,
+      fail_closed: failClosedWarnings,
+      advisory_warning_count: advisoryWarnings.length,
+      blocking_warning_count: blockingWarnings.length,
+      advisory_codes: [...ADVISORY_WARNING_CODES],
+    },
     execution_policy: {
       gate_strength: "strict",
-      remediation_mode: "non_blocking_when_schedulable",
+      remediation_mode: "blocking_when_execution_unsafe",
       ship_gate: "fail_closed",
-      automation_can_continue: remediationPlan.automation_can_continue,
+      automation_can_continue: status === "blocked" ? false : remediationPlan.automation_can_continue,
+      human_needed: remediationPlan.requires_human || blockers.some((blocker) => blocker.human_needed === true) || blockingWarnings.length > 0,
     },
     remediation_plan: remediationPlan,
     artifacts: [resolvedPrdPath],
@@ -482,13 +693,29 @@ export function formatYoloCheckText(report = {}) {
   return lines.join("\n");
 }
 
+function readCliArgValue(argv, index) {
+  const arg = argv[index];
+  if (arg.includes("=")) return { value: arg.split("=").slice(1).join("="), consumed: 0 };
+  return { value: argv[index + 1], consumed: 1 };
+}
+
 export function runYoloCheckCli(argv = process.argv.slice(2), io = {}) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const json = argv.includes("--json");
-  const prdPath = argv.find((arg) => !arg.startsWith("--"));
+  const modeIndex = argv.findIndex((arg) => arg === "--mode" || arg.startsWith("--mode="));
+  const mode = argv.includes("--strict")
+    ? "strict"
+    : argv.includes("--release")
+      ? "release"
+      : modeIndex >= 0
+        ? readCliArgValue(argv, modeIndex).value
+        : undefined;
+  const strictExecution = ["strict", "release"].includes(cleanString(mode).toLowerCase()) ? true : undefined;
+  const valueFlags = new Set(["--mode"]);
+  const prdPath = argv.find((arg, index) => !arg.startsWith("--") && !valueFlags.has(argv[index - 1]));
   const writeLifecycle = !argv.includes("--no-write");
-  const report = inspectYoloCheck({ prdPath, projectRoot: io.cwd || process.cwd(), writeLifecycle }, { learnFailures: true });
+  const report = inspectYoloCheck({ prdPath, projectRoot: io.cwd || process.cwd(), mode, strictExecution, writeLifecycle }, { learnFailures: true });
   if (json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else (report.status === "error" ? stderr : stdout).write(`${formatYoloCheckText(report)}\n`);
   return report.status === "blocked" || report.status === "error" ? 1 : 0;

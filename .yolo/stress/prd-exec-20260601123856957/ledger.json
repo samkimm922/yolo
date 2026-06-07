@@ -1,0 +1,116 @@
+{
+  "schema": "yolo.prd.executability_stress.v1",
+  "run_id": "prd-exec-20260601123856957",
+  "started_at": "2026-06-01T12:38:56.958Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601123856957",
+  "cycles": 1,
+  "timeout_ms": 300000,
+  "model": null,
+  "strict_executability": true,
+  "iterations": [
+    {
+      "iteration": 1,
+      "scenario": "service-field-existing",
+      "expected": "executable",
+      "status": "fail",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601123856957/fixtures/0001-service-field-existing",
+      "demand_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601123856957/fixtures/0001-service-field-existing/.yolo/demand/DEMAND-0001-service-field-existing",
+      "prd_path": null,
+      "check_path": null,
+      "blocked_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601123856957/fixtures/0001-service-field-existing/.yolo/prd-executability/service-field-existing.blocked.json",
+      "yolo": {
+        "discuss_status": "success",
+        "prd_status": "blocked",
+        "prd_code": "DEMAND_QUALITY_BLOCKED",
+        "check_status": null,
+        "check_code": null,
+        "blocker_codes": [
+          "DEMAND_QUALITY_PROJECT_FACT_GROUNDING_LOW",
+          "QUALITY_BUSINESS_RULE_CONCRETE"
+        ],
+        "task_count": 0
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "fail",
+          "executable": false,
+          "correctly_blocked": false,
+          "score": 72,
+          "hard_failures": [
+            {
+              "code": "BLOCKER_FALSE_POSITIVE_BUSINESS_RULE",
+              "task_id": null,
+              "path": ".yolo/prd-executability/service-field-existing.blocked.json",
+              "message": "QUALITY_BUSINESS_RULE_CONCRETE blocker is a false positive: field source row.low_stock_threshold is named in code (inventory.ts:2), investigation EVID-001, context decisions DEC-001, and UPSTREAM_THRESHOLD_COLUMN constan"
+            }
+          ],
+          "warnings": [
+            {
+              "code": "GENERIC_SCENARIO_PROOF",
+              "task_id": "SCN-001",
+              "path": ".yolo/demand/DEMAND-0001-service-field-existing/SCENARIO_MATRIX.md:12",
+              "message": "Scenario proof reads 'A test can assert toInventoryItem returns lowStockThreshold from the source row' — lacks concrete expected value, null-handling spec, or data-type assertion. A coding agent can infer intent but proo"
+            },
+            {
+              "code": "EMPTY_TEST_FILE",
+              "task_id": "SCN-001-SFC-002",
+              "path": "src/services/inventory.test.ts:1",
+              "message": "src/services/inventory.test.ts contains only 'import { test } from node:test' — no existing test patterns for agent to follow. Agent must infer test structure without local exemplars."
+            },
+            {
+              "code": "TBD_PLACEHOLDERS_IN_REFLECTION",
+              "task_id": null,
+              "path": ".yolo/demand/DEMAND-0001-service-field-existing/REFLECTION.md:3-9",
+              "message": "REFLECTION.md has 'TBD' for premise challenge and alternatives. While not blocking for a trivial field exposure, it indicates incomplete self-challenge documentation."
+            },
+            {
+              "code": "NO_FAIL_POST_CONDITION_SPEC",
+              "task_id": "SCN-001",
+              "path": ".yolo/demand/DEMAND-0001-service-field-existing/SCENARIO_MATRIX.md",
+              "message": "No executable FAIL post_conditions defined — what should cause a test or agent to hard-fail is implicit (missing field) rather than explicit (assert result.lowStockThreshold === expectedValue with concrete threshold)."
+            }
+          ],
+          "dimensions": {
+            "intent_convergence": 92,
+            "project_fact_grounding": 78,
+            "behavior_gate_hardness": 55,
+            "task_dependency": 90,
+            "testability": 65,
+            "no_guessing_context": 82,
+            "runner_readiness": 88,
+            "rework_risk": 22
+          }
+        },
+        "strict_risks": [
+          {
+            "code": "BLOCKER_FALSE_POSITIVE_BUSINESS_RULE",
+            "task_id": null,
+            "path": ".yolo/prd-executability/service-field-existing.blocked.json",
+            "message": "QUALITY_BUSINESS_RULE_CONCRETE blocker is a false positive: field source row.low_stock_threshold is named in code (inventory.ts:2), investigation EVID-001, context decisions DEC-001, and UPSTREAM_THRESHOLD_COLUMN constant. This is a passthr"
+          },
+          {
+            "code": "NO_FAIL_POST_CONDITION_SPEC",
+            "task_id": "SCN-001",
+            "path": ".yolo/demand/DEMAND-0001-service-field-existing/SCENARIO_MATRIX.md",
+            "message": "No executable FAIL post_conditions defined — what should cause a test or agent to hard-fail is implicit (missing field) rather than explicit (assert result.lowStockThreshold === expectedValue with concrete threshold)."
+          }
+        ]
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T12:38:56.958Z",
+      "ended_at": "2026-06-01T12:41:29.666Z",
+      "duration_ms": 152708,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601123856957/0001-service-field-existing.json"
+    }
+  ],
+  "stopped_reason": null
+}

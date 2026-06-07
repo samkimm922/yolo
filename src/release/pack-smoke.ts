@@ -47,6 +47,9 @@ export const DEFAULT_PACKAGE_SMOKE_REQUIRED_ENTRIES = [
   "dist/src/runtime/devtools/memory-center.js",
   "dist/src/release/readiness.js",
   "dist/src/release/decision-gate.js",
+  "dist/src/release/change-provenance.js",
+  "dist/src/release/clean-environment-verify.js",
+  "dist/src/release/dogfood-matrix.js",
   "dist/src/release/operator-state.js",
   "dist/src/release/operator-runbook.js",
   "dist/src/release/post-release-audit.js",
@@ -125,7 +128,7 @@ export function buildPackageInstallSmokePlan(options = {}) {
     required_entries: options.requiredEntries || DEFAULT_PACKAGE_SMOKE_REQUIRED_ENTRIES,
     forbidden_prefixes: options.forbiddenPrefixes || DEFAULT_PACKAGE_SMOKE_FORBIDDEN_PREFIXES,
     commands: [
-      "npm pack --json --pack-destination <tmp>/pack",
+      "npm pack --json --ignore-scripts --pack-destination <tmp>/pack",
       "npm install --ignore-scripts --no-audit --fund=false --package-lock=false <tarball>",
       "node <tmp>/consumer/import-smoke.js",
       "sdk.provider.inspectProviderRuntimeMatrix()",
@@ -211,6 +214,10 @@ assert.equal(typeof sdk.project.runInitToFirstPrdSmoke, "function");
 assert.equal(typeof sdk.release.inspectPublicBetaReadiness, "function");
 assert.equal(typeof sdk.release.runPackageInstallSmoke, "function");
 assert.equal(typeof sdk.release.runControlledBetaReleaseDecisionGate, "function");
+assert.equal(typeof sdk.release.runReleaseCandidateGate, "function");
+assert.equal(typeof sdk.release.readReleaseCandidateChangeManifest, "function");
+assert.equal(typeof sdk.release.runCleanEnvironmentVerify, "function");
+assert.equal(typeof sdk.release.buildDogfoodMatrixReport, "function");
 assert.equal(typeof sdk.release.runOperatorReleaseStateMutation, "function");
 assert.equal(typeof sdk.release.runOperatorReleaseRunbookGate, "function");
 assert.equal(typeof sdk.release.runPostReleaseAuditGate, "function");
@@ -285,6 +292,13 @@ assert.equal(piPlan.artifacts.outputDir.startsWith(join(projectRoot, ".yolo")), 
 	assert.equal(init.status, "success");
 	assert.equal(existsSync(join(projectRoot, ".yolo", "config.json")), true);
 	const runnerPrdPath = join(projectRoot, ".yolo", "data/prd/current/pack-runner-state-root.json");
+	const packRunnerQuality = {
+	  schema_version: "1.0",
+	  schema: "yolo.demand.quality.v1",
+	  status: "pass",
+	  total_score: 100,
+	  dimensions: []
+	};
 	mkdirSync(dirname(runnerPrdPath), { recursive: true });
 	writeFileSync(runnerPrdPath, JSON.stringify({
 	  version: "2.0",
@@ -295,7 +309,28 @@ assert.equal(piPlan.artifacts.outputDir.startsWith(join(projectRoot, ".yolo")), 
 	  generated_at: "2026-05-24T00:00:00.000Z",
 	  base_commit: "abcdef0",
 	  review_policy: { mode: "disabled" },
-	  requirements: [{ id: "REQ-PACK-001", text: "Runner state belongs to the consumer project." }],
+	  source: "approved_demand",
+	  demand_contract_required: true,
+	  demand: {
+	    id: "DEMAND-PACK-RUNNER-TEST",
+	    approval: { approved: true, effective_for_prd: true },
+	    project_facts: {
+	      target_files: [{ file: "artifacts/pack-runner-smoke.md", status: "verified" }],
+	      assumptions: []
+	    },
+	    quality_report: packRunnerQuality
+	  },
+	  execution_readiness: {
+	    level: "L3",
+	    afk_ready: true,
+	    quality_status: "pass",
+	    quality_report: packRunnerQuality
+	  },
+	  requirements: [{
+	    id: "REQ-PACK-001",
+	    text: "Runner state belongs to the consumer project.",
+	    demand_trace: { evidence: ["EVID-REQ-PACK-001"] }
+	  }],
 	  designs: [{ id: "DES-PACK-001", text: "Run artifacts use SDK stateRoot." }],
 	  tasks: [{
 	    id: "FIX-PACK-001",
@@ -319,6 +354,15 @@ assert.equal(piPlan.artifacts.outputDir.startsWith(join(projectRoot, ".yolo")), 
 	    }]
 	  }]
 	}, null, 2) + "\\n", "utf8");
+	sdk.lifecycle.writeStageReport("discovery", { status: "success" });
+	sdk.lifecycle.writeStageReport("roadmap", { status: "success" });
+	sdk.lifecycle.writeStageReport("prd", {
+	  status: "success",
+	  prd_path: runnerPrdPath,
+	  artifacts: [runnerPrdPath]
+	});
+	const runnerCheck = sdk.runtime.inspectCheck({ prdPath: runnerPrdPath, writeLifecycle: true });
+	assert.notEqual(runnerCheck.status, "blocked");
 	const runner = await sdk.runtime.runRunner({
 	  prdPath: runnerPrdPath,
 	  runId: "run-pack-state-root",
@@ -371,7 +415,7 @@ export function runPackageInstallSmoke(options = {}) {
   mkdirSync(consumerDir, { recursive: true });
 
   try {
-    const packCommand = runCommand("npm", ["pack", "--json", "--pack-destination", packDir], plan.yolo_root, options);
+    const packCommand = runCommand("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", packDir], plan.yolo_root, options);
     if (packCommand.exit_code !== 0) {
       return {
         status: "error",

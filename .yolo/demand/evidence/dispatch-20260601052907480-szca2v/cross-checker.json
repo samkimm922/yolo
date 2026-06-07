@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Provider configuration preserves full tool capability under harness boundary and avoids cross-provider model leakage.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "238-248",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy declares project_mutation forbidden and restricts allowed_write_roots to evidence dispatch output directory only",
+      "why": "This is the core contract that defines the safety boundary: agents can only write to the evidence artifact directory, not to target project files."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime builds before/after boundary snapshots using buildBoundarySnapshot and diffBoundarySnapshots, then converts any changes to readiness blockers",
+      "why": "This is the enforcement mechanism that detects violations even when agents have full tools. Lines 566-572 show boundary changes become blockers."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "437-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig function has provider-specific branches for codex and claude that prevent cross-provider leakage",
+      "why": "Lines 437-449 clear claude model from codex provider, and lines 450-463 apply claude-specific config only when provider is claude. No cross-contamination occurs."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "456-461",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider explicitly clears claude_tools, claude_allowed_tools, and claude_disallowed_tools to empty strings",
+      "why": "This confirms the design claim that Claude agents receive full tool capability by default, with safety coming from boundary enforcement rather than tool restrictions."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "43-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation has separate branches for codex, custom, and claude providers that never mix configuration namespaces",
+      "why": "Each provider branch reads only its own configuration keys (codex_model, custom_command, claude_tools) and builds provider-specific args. No cross-provider leakage."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves codex dispatch does not inherit claude default model: asserts config.ai.provider is codex, config.ai.model is not claude, and codex sandbox settings are independent",
+      "why": "Lines 211-215 validate that when provider is codex, the claude model setting is cleared and codex defaults are preserved."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test confirms claude dispatch does not pass tool restriction flags: asserts claude_tools, claude_allowed_tools, claude_disallowed_tools are all empty strings",
+      "why": "Lines 248-253 validate that claude provider runs without tool restrictions, confirming full tool capability is preserved."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies boundary blocks project file mutation: agent writes a file but boundary detects it and status becomes blocked with BOUNDARY_PROJECT_MUTATION blocker",
+      "why": "Lines 395-410 show that even when agent succeeds and returns valid result, any project mutation triggers a boundary violation blocker."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test confirms git-backed boundary detects untracked project mutations: creates a git repo, agent writes untracked file, boundary detects the added file",
+      "why": "Lines 432-448 validate that the boundary detection works for both tracked and untracked files in git repositories."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states Claude provider dispatch does not pass tool restriction flags and relies on prompt contract, artifact root, and boundary snapshots for safety",
+      "why": "This is the product-level documentation that explains the design intent: safety comes from boundary enforcement, not from restricting agent tool access."
+    }
+  ],
+  "assumptions": [
+    "Git ls-files command succeeds in git-initialized project roots during boundary snapshot",
+    "Non-git projects use walkFiles which covers the project tree but may miss changes in deeply nested excluded directories",
+    "Provider agents respect the prompt contract even when they have full tool capability"
+  ],
+  "risks": [
+    "If boundary snapshot fails silently, agents could mutate project files without detection",
+    "If provider ignores prompt contract and has filesystem write tools, mutations could occur before boundary check runs",
+    "Non-git projects may have weaker boundary detection if walkFiles misses changes due to filesystem race conditions or permission errors"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All explorer evidence claims are independently verified. The implementation has three distinct safety layers: (1) execution_policy contract forbids project mutation and restricts writes to evidence artifact root only, (2) provider-specific configuration branches in executionConfig and buildProviderInvocation prevent cross-provider model/tool leakage, (3) boundary snapshots before/after agent execution detect any violations and convert them to readiness blockers. Tests validate each layer independently. The doctrine documentation confirms this is an intentional design choice: Claude agents receive full tool capability by default, with safety provided by prompt contract and boundary enforcement rather than tool restriction flags."
+  }
+}

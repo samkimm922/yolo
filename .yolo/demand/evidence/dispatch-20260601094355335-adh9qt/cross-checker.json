@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Cross-check confirms the explorer claim: YOLO demand evidence dispatch implementation exists with proper scope separation (project vs external) and web/fetch tool support for external evidence. All project files match the explorer summaries.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "14-16, 160-184, 317-400",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence dispatch schema defines VALID_EVIDENCE_SCOPES (project, external, user, unknown) and implements demandRequestsExternalResearch() and externalEvidencePresent() functions to detect external research requirements and validate external evidence presence.",
+      "why": "Core implementation confirms scope separation logic and external tool support claimed by explorer."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "545-698",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime implementation runDemandEvidenceDispatchRuntime() includes boundary snapshot audit (buildBoundarySnapshot, diffBoundarySnapshots), execution policy with project_mutation forbidden, and boundary violation detection that becomes readiness blockers.",
+      "why": "Confirms harness boundary audit prevents target-project mutations during evidence gathering."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "44-66",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS define explorer, cross-checker, and verifier roles with writes_code: false and explicit objectives for read-only evidence gathering and independent cross-check.",
+      "why": "Verifies evidence agent protocols exist as claimed by explorer."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406, 421-436",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence scope inference functions (evidenceRecordScope, evidenceScopeSummary) classify evidence records into project/external/user/unknown scopes based on declared scope, URL presence, path presence, and source type prefixes.",
+      "why": "Confirms automatic scope classification logic for evidence records."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() function generates blockers when evidence marked as project-scoped lacks repo-relative path, or when existing-project facts lack project-scoped evidence.",
+      "why": "Verifies project evidence requires concrete path locators as claimed."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "44-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine defines evidence agent protocols, scope requirements, and explicitly states: evidence records must declare scope as project, external, user, or unknown; project evidence requires repo-relative path or file locator; external evidence cannot alone prove existing-project facts.",
+      "why": "Documentation confirms ground rules for evidence quality and scope separation."
+    },
+    {
+      "url": "https://example.com",
+      "scope": "external",
+      "source": "external_web",
+      "summary": "Example Domain documentation page fetched successfully confirms this is a documentation example domain as specified in the demand text.",
+      "why": "External research tool availability confirmed and URL matches demand description."
+    },
+    {
+      "path": ".yolo/demand/evidence",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Evidence directory structure exists at state root with 252 entries, confirming artifact storage system is in place.",
+      "why": "Verifies evidence system infrastructure exists as claimed by explorer."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "External web evidence could be mistaken for project implementation facts without proper scope=external labeling",
+    "Web/fetch tools might not be available in all runtime environments",
+    "Evidence agents might mix project-scoped path evidence with external URL evidence"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms all explorer claims. Evidence dispatch implementation exists with VALID_EVIDENCE_SCOPES including project and external, automatic scope classification logic, boundary mutation detection, and web/fetch tool support. The demand example URL (https://example.com) was successfully fetched. Ready for verifier to confirm blockers and assumptions are properly separated from facts."
+  }
+}

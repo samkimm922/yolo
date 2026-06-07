@@ -1,0 +1,105 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements boundary audit to detect and block target-project mutations by full-tool Claude agents.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot function captures SHA256 digests of all project files except allowed artifact roots",
+      "why": "Core boundary audit mechanism for before/after comparison"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after snapshots to detect added, modified, or deleted files",
+      "why": "Mutation detection logic that identifies boundary violations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "590",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshot captured before agent execution: buildBoundarySnapshot(plan.project_root, [plan.output_dir])",
+      "why": "Establishes baseline for detecting mutations during evidence gathering"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "640-646",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-execution boundary audit compares snapshots and records changes in result.boundary field",
+      "why": "Runtime enforcement of boundary through actual comparison"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "659-671",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "BOUNDARY_PROJECT_MUTATION blockers created for any detected changes outside allowed artifact roots",
+      "why": "Enforcement mechanism that blocks PRD readiness on mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "290-307",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy boundary configuration declares project_mutation forbidden and lists allowed_write_roots",
+      "why": "Policy declaration that evidence agents cannot modify target project files"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "317-400",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt hard-codes boundary rules into agent instructions: Boundary: do not modify target project files",
+      "why": "Instruction-level boundary enforcement communicated to evidence agents"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS define explorer, cross-checker, and verifier roles with writes_code: false",
+      "why": "Protocol-level contract that evidence gathering is read-only"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "717-733",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness validates that required evidence agents (explorer, cross-checker, verifier) have completed",
+      "why": "PRD readiness gate requiring full evidence chain before proceeding"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation constructs claude CLI args with permission-mode, allowedTools, and no-session-persistence flags",
+      "why": "Provider-level tool and permission configuration for agent execution"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If boundary snapshot logic fails or has whitelist bugs, mutations could go undetected",
+    "If evidence agents ignore instructions or tools bypass boundary, target project could be corrupted before detection"
+  ],
+  "missing": [
+    "Integration test evidence showing boundary audit blocking an actual mutation attempt",
+    "Evidence log or artifact demonstrating a BOUNDARY_PROJECT_MUTATION blocker being created and processed"
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence dispatch code implements comprehensive boundary audit with before/after snapshots, policy enforcement, and blocker generation. Cross-check recommended to verify runtime behavior matches code claims and stress-test with actual mutation attempts."
+  }
+}

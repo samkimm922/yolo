@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence verification confirms: YOLO demand evidence dispatch already fully supports research/fetch style evidence with external scope separation. No assumptions presented as facts, all evidence paths are usable, and no missing data remains.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Explorer and cross-checker both independently verified VALID_EVIDENCE_SCOPES defines four scopes: project, external, user, unknown.",
+      "why": "Both agents cited same primary source for scope taxonomy, confirming no assumption masquerading as fact."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' proves blocking behavior for external-only evidence.",
+      "why": "Test evidence independently verified by both agents proves the acceptance criteria is already satisfied."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "500-545",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external URLs cannot be relabeled as project evidence' proves URL-to-path enforcement.",
+      "why": "Cross-checker independently verified this test, confirming external URLs cannot be mislabeled as project facts."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine explicitly states external evidence cannot prove existing-project facts.",
+      "why": "Both agents independently read and cited the same doctrine documentation, confirming it is a fact not an assumption."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function enforces project evidence requirements.",
+      "why": "Implementation logic independently verified by both explorer and cross-checker confirms the behavior exists in code."
+    }
+  ],
+  "assumptions": [],
+  "risks": [],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verification complete. Explorer and cross-checker independently gathered 12 evidence items from code, tests, and docs. All evidence has proper scope declarations, exact paths/lines, appropriate sources, and clear explanations. No assumptions are presented as facts. No missing data remains. No conflicts between agents. The acceptance criteria is already satisfied: WebFetch/WebSearch are supported for external evidence with scope=external, and project facts require project-scoped path evidence. PRD is ready to proceed."
+  }
+}

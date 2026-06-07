@@ -2,6 +2,23 @@ export const WORKFLOW_SKILL_DESCRIPTOR_SCHEMA_VERSION = "1.0";
 export const WORKFLOW_SKILL_DESCRIPTOR_SCHEMA = "yolo.workflow.skill_descriptor.v1";
 
 const WORKFLOWS = {
+  demand: {
+    id: "demand",
+    label: "Demand router workflow",
+    purpose: "Route early demand work through fast/careful triage, PRD readiness, evidence policy, and explicit evidence-agent dispatch before brainstorm, interview, discuss, plan, or PRD.",
+    preset: "planner",
+    triggers: ["idea.received", "demand.status.requested", "cli.yolo-demand-status"],
+    inputs: ["idea?", "demandSession?", "projectFacts?", "acceptanceCriteria?", "approval?"],
+    outputs: ["demand status", "dispatch plan", "agent evidence results", "context_type", "route", "evidence_policy", "missing_slots", "blockers", "needed_evidence_agents", "next_action"],
+    sdk_namespaces: ["demand", "evidence", "spec"],
+    phases: ["intake", "clarify", "evidence", "discuss", "requirements", "roadmap", "approval", "prd_ready"],
+    verification: ["fast_by_default", "factual_evidence_policy", "risky_cross_check", "assumptions_not_facts", "status_read_only", "dispatch_explicitly_authorized"],
+    entrypoints: {
+      sdk: "sdk.demand.status({ objective }) / sdk.demand.dispatchEvidence({ objective, executeAgents, allowAgentDispatch })",
+      cli: "yolo demand status / yolo demand dispatch",
+      skill: "yolo.demand",
+    },
+  },
   brainstorm: {
     id: "brainstorm",
     label: "Demand brainstorm workflow",
@@ -17,6 +34,23 @@ const WORKFLOWS = {
       sdk: "sdk.workflows.createWorkflowPlan({ workflow: 'brainstorm' })",
       cli: "yolo brainstorm",
       skill: "yolo.brainstorm",
+    },
+  },
+  interview: {
+    id: "interview",
+    label: "Demand interview workflow",
+    purpose: "Collect non-technical requirements one question at a time before demand discussion, planning, or executable PRD generation.",
+    preset: "planner",
+    triggers: ["idea.received", "nontechnical_user.needs_interview", "cli.yolo-interview", "cli.yolo-interview-answer"],
+    inputs: ["idea", "interviewSession?", "questionId?", "answer?", "approval?"],
+    outputs: ["interview.json", "answers.jsonl", "coverage report", "demand session?", "question handoff state"],
+    sdk_namespaces: ["demand", "discovery", "evidence"],
+    phases: ["start", "ask_next_question", "record_answer", "coverage_check", "to_demand"],
+    verification: ["one_question_at_a_time", "answers.preserved", "coverage.reported", "handoff_state.present", "no_code_change"],
+    entrypoints: {
+      sdk: "sdk.workflows.createWorkflowPlan({ workflow: 'interview' })",
+      cli: "yolo interview",
+      skill: "yolo.interview",
     },
   },
   discover: {

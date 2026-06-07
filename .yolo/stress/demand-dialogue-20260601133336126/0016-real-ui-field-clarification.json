@@ -1,0 +1,82 @@
+{
+  "iteration": 16,
+  "scenario": "real-ui-field-clarification",
+  "expected": "executable",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601133336126/fixtures/0016-real-ui-field-clarification",
+  "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601133336126/fixtures/0016-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.transcript.md",
+  "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601133336126/fixtures/0016-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.chain.json",
+  "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601133336126/fixtures/0016-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+  "blocked_path": null,
+  "yolo": {
+    "no_premature_prd": true,
+    "final_class_ok": true,
+    "check_status": "pass",
+    "turn_count": 4,
+    "turn_expectations_met": 4,
+    "blocker_codes": [
+      "REFLECTION_PRESENT",
+      "INVESTIGATION_COMPLETE",
+      "REQUIREMENTS_PRESENT",
+      "ACCEPTANCE_SCENARIOS_PRESENT",
+      "SCENARIO_MATRIX_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "SCENARIO_SURFACES_PRESENT",
+      "SURFACE_SESSION_BUDGET_EXECUTABLE",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "PROJECT_FACTS_GROUNDED",
+      "REQUIREMENTS_PRESENT",
+      "ACCEPTANCE_SCENARIOS_PRESENT",
+      "SCENARIO_MATRIX_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "SCENARIO_SURFACES_PRESENT",
+      "SURFACE_SESSION_BUDGET_EXECUTABLE",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "PROJECT_FACTS_GROUNDED",
+      "USER_APPROVAL_PRESENT"
+    ]
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "correct_final_class": true,
+      "conversation_realistic": true,
+      "no_premature_prd": true,
+      "executable": true,
+      "score": 97,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "READINESS_SKIP_L2",
+          "path": "real-ui-field-clarification.chain.json",
+          "message": "Readiness jumps L0 → L1 → L1 → L3 without an explicit L2 intermediate. Not harmful here since gates were still blocked at L1, but the L2 checkpoint is absent from the chain."
+        }
+      ],
+      "dimensions": {
+        "clarification_quality": 10,
+        "project_fact_grounding": 10,
+        "stage_transition": 10,
+        "plan_convergence": 10,
+        "prd_executability": 10,
+        "deadlock_avoidance": 10,
+        "rework_risk": 9
+      }
+    },
+    "stdout": "",
+    "stderr": ""
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T13:47:59.328Z",
+  "ended_at": "2026-06-01T13:49:03.078Z",
+  "duration_ms": 63750
+}

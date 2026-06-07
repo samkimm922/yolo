@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Cross-check verification confirms the explorer claim: YOLO demand evidence dispatch system implements provider-specific configuration with boundary enforcement and tool capability preservation for Claude, Codex, and custom providers.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "473-617",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime independently verified: spawns provider agents, collects results, runs boundary audit, and converts mutations to PRD blockers.",
+      "why": "Core dispatch implementation that executes evidence agents and enforces boundary constraints."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation independently verified: constructs isolated CLI arguments for claude, codex, and custom providers without cross-leakage.",
+      "why": "Provider isolation logic prevents configuration drift between providers."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots independently verified: git-backed file tracking detects added/modified/deleted files excluding allowed artifact roots.",
+      "why": "Boundary enforcement implementation detects any project mutations."
+    },
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "1-9",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "PROVIDER_ALIASES independently verified: maps anthropic→claude, openai→codex, shell/local→custom to normalize provider names.",
+      "why": "Provider normalization prevents name drift between configuration and execution."
+    },
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "43-98",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildAgentAdapterCapabilities independently verified: returns provider-specific sandbox, approval_policy, file_write, and shell_exec capabilities per provider.",
+      "why": "Provider capabilities contract documents feature support per provider."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "423-471",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig independently verified: normalizes agent_tool_profile to boundary/research/full, resets claude settings/tools to empty strings for evidence mode.",
+      "why": "Evidence mode configuration isolates tool capabilities based on authorized profile."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test independently verified: codex dispatch asserts provider=codex, claude model is cleared, no read-only sandbox forced.",
+      "why": "Evidence that provider-specific configuration is isolated."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test independently verified: claude dispatch asserts empty tools/allowedTools/disallowedTools, relies on boundary enforcement instead of CLI tool filtering.",
+      "why": "Evidence that tool capability preservation uses boundary enforcement."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "275-341",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test independently verified: full profile defaults to boundary without allowFullAgentTools; only with explicit authorization does it become full.",
+      "why": "Evidence that full tool capabilities require explicit opt-in."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-491",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test suite independently verified: blocks project file mutations, detects untracked and gitignored files, excludes allowed artifact roots from boundary violations.",
+      "why": "Evidence that boundary enforcement prevents target project mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-execution boundary audit independently verified: compares before/after snapshots, adds BOUNDARY_PROJECT_MUTATION blockers for any detected changes.",
+      "why": "Boundary audit converts detected mutations into PRD readiness blockers."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS independently verified: defines explorer, cross-checker, verifier with writes_code=false and scope validation requirements.",
+      "why": "Evidence agent protocol definition documents read-only constraint."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "678-752",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness independently verified: validates evidence agent results, checks scope declarations, blocks when project facts lack project-scoped evidence.",
+      "why": "Readiness enforcement separates assumptions from facts."
+    }
+  ],
+  "assumptions": [
+    "Git-based boundary detection works correctly in the target project repository",
+    "Provider CLI commands (claude, codex) are available and correctly versioned in the execution environment"
+  ],
+  "risks": [
+    "A bug in boundary snapshot logic could fail to detect project mutations, allowing silent evidence-agent mutations",
+    "Provider-specific model config normalization could drift if new providers are added without updating PROVIDER_ALIASES",
+    "Custom provider adapter executes arbitrary commands without sandbox verification by the SDK"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All 13 evidence records from the explorer were independently verified through direct file reads. Provider isolation, boundary enforcement, and tool capability preservation claims are accurate. No conflicts found."
+  }
+}

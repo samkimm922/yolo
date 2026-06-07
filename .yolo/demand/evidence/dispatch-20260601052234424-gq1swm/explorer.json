@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch already supports WebFetch/WebSearch for external research with scope=external separation, and project facts require project-scoped path evidence. The acceptance criteria are already implemented in the current codebase.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES is defined as a Set containing 'project', 'external', 'user', 'unknown'",
+      "why": "This validates that the four scope categories are explicitly defined and enforced in the system."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "273-276",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt explicitly instructs: 'If the demand explicitly asks for external research/fetch/search, actually use WebFetch/WebSearch when available and record those records as scope=external; if the tool is unavailable, put that in missing.'",
+      "why": "This shows WebFetch/WebSearch support is already documented in agent instructions."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors function validates that every evidence record declares a valid scope",
+      "why": "This enforces that evidence must declare scope as project, external, user, or unknown."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function implements comprehensive scope inference logic, including detection of 'webfetch', 'websearch' sources as external scope",
+      "why": "This demonstrates the system already recognizes and categorizes WebFetch/WebSearch records as external scope."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function creates blockers when project facts lack project-scoped evidence with path locators",
+      "why": "This enforces that existing-project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope validates that evidence records explicitly declare their scope",
+      "why": "This confirms the system requires explicit scope declaration rather than inference alone."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: '证据记录必须声明 scope: project | external | user | unknown. external 证据可以来自 WebFetch/WebSearch 或外部文档，但只能作为背景研究，不能单独证明目标项目已有字段、API、状态机或数据流'",
+      "why": "This confirms the documented requirement that external evidence (including WebFetch/WebSearch) cannot prove target-project facts alone."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "399-410",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult validates evidence scope and sets blocker status when scope errors are found",
+      "why": "This shows that missing or invalid scope declarations block evidence agent results."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "421-436",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeSummary analyzes evidence records and returns summary including has_project, has_external, has_unknown flags",
+      "why": "This demonstrates the system can detect and categorize mixed evidence sources."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary audit system creates blockers when project files are modified outside allowed write roots during evidence agent execution",
+      "why": "This shows the enforcement mechanism that prevents target-project mutation during evidence gathering."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If the WebFetch/WebSearch tools are not available in the agent environment, external research cannot be performed and must be reported in missing field"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The current implementation already satisfies the acceptance criteria. The demand's stated requirement is already implemented: agents can use WebFetch/WebSearch as external evidence (scope=external), project facts require project-scoped path evidence, and the system enforces separation between external research and target-project facts."
+  }
+}

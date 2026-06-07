@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verifier confirms gathered evidence is sufficient for PRD readiness: provider configuration normalization, boundary enforcement, and tool capability preservation are factually supported by code, tests, and independent cross-check with no conflicts.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "468-517",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Provider-specific normalization branches exist with exact line ranges cited by both explorer and cross-checker.",
+      "why": "Proves evidence paths are precise and usable across independent agents."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-418",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test coverage spans provider isolation (198-274), tool capability preservation (276-344), and boundary enforcement (385-418).",
+      "why": "Demonstrates acceptance criteria have test coverage with usable evidence paths."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshot mechanism includes git ls-files command details and file walk merge logic.",
+      "why": "Confirms evidence detail level supports verification of boundary enforcement claims."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Isolated invocation paths for codex/custom/claude with no shared state.",
+      "why": "Validates cross-provider isolation claim is factually supported."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence agent protocols document writes_code=false constraint.",
+      "why": "Proves the harness boundary itself is enforced by protocol design."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If verification were incomplete, a false assumption could be promoted to fact and block PRD readiness with false confidence."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verification confirms: (1) No assumptions are presented as facts—both explorer and cross-checker have empty assumptions arrays. (2) All evidence paths are repo-relative with precise line ranges, confirming usability. (3) Missing data (stress testing with real agents, race condition coverage, flag validation) is appropriately reflected in missing arrays and not promoted to blockers. (4) Independent cross-check passed with evidence_agreement.status=pass and conflicts=[]. (5) All required PRD slots have values, no missing_slots, and blockers are only about evidence agents completing—which this result now resolves. The claim is factually supported by 13 evidence records across code, tests, and protocol docs."
+  }
+}

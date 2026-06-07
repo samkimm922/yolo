@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "blocked",
+  "completed": true,
+  "claim": "Cross-check evidence verification failed because cross-checker agent produced invalid JSON, leaving explorer assumptions unchallenged and critical missing items unverified.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601044347233-i8aikk",
+      "scope": "unknown",
+      "source": "project_artifact",
+      "summary": "Cross-checker result contains EVIDENCE_AGENT_INVALID_JSON error with raw_output_excerpt showing markdown-wrapped JSON instead of pure JSON.",
+      "why": "Agent output format error prevents cross-check verification from completing."
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601044347233-i8aikk",
+      "scope": "unknown",
+      "source": "project_artifact",
+      "summary": "Cross-checker result.status is 'failed', completed is false, evidence array is empty, missing contains 'EVIDENCE_AGENT_INVALID_JSON: Unexpected token '`'...'",
+      "why": "Cross-check agent failed to produce usable evidence for verification."
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601044347233-i8aikk",
+      "scope": "unknown",
+      "source": "project_artifact",
+      "summary": "Explorer result correctly separated 2 assumptions and 3 missing items from 24 project-scoped evidence records with concrete paths and line numbers.",
+      "why": "Explorer evidence structure is compliant but lacks independent verification."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "710-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "requiredEvidenceRoles returns [explorer, cross-checker, verifier] for cross_check policy, meaning all three agents must complete successfully.",
+      "why": "Cross-check policy definition requires three independent agents, not just explorer."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "776-801",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectEvidenceAgreement detects conflicts when agents disagree on claims and generates EVIDENCE_AGENT_CONFLICT blockers.",
+      "why": "Evidence agreement check cannot run when cross-checker fails to return valid JSON."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Explorer assumptions about dirty working tree behavior and real Claude agent edge cases remain unchallenged because cross-checker failed.",
+    "Missing verification for gitignored file handling, real agent scope auto-detection edge cases, and actual stress testing runs.",
+    "Cross-checker JSON format error may recur in future dispatch runs if agent prompts do not explicitly forbid markdown wrapping."
+  ],
+  "missing": [
+    "Valid cross-checker evidence result to independently verify or challenge explorer claims.",
+    "Evidence agreement analysis between explorer and cross-checker results.",
+    "Verification that explorer assumptions are not promoted to facts in final PRD readiness state."
+  ],
+  "recommendation": "block",
+  "result": {
+    "verdict": "blocked",
+    "notes": "Explorer evidence is well-structured with proper scope separation, but cross-checker failed with EVIDENCE_AGENT_INVALID_JSON error. Cross-check policy requires all three agents (explorer, cross-checker, verifier) to complete successfully. Without independent verification, explorer assumptions remain unchallenged and the demand's explicit requirement for real Claude agent stress testing verification is genuinely missing. The agent prompt must explicitly forbid markdown wrapping to prevent format errors."
+  }
+}

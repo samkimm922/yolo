@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "The YOLO demand router already implements evidence missing and clarify blocking behavior as specified in the current demand; when evidence agents report missing evidence or clarify recommendations, these conditions become blockers that prevent prd_ready from becoming true.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "481-511",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues function creates EVIDENCE_AGENT_MISSING blockers when missing.length > 0 (lines 496-501) and EVIDENCE_AGENT_CLARIFICATION_REQUIRED blockers when recommendation is 'clarify' (lines 503-508).",
+      "why": "Core implementation that converts missing/clarify signals into blockers."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "717-757",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness processes each evidence result, calls evidenceResultBlockingIssues, adds issues to blockerList, and sets prd_ready to blockers.length === 0.",
+      "why": "Shows how blockers control final PRD readiness state."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "313-353",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'evidence agent missing data and clarify recommendations block PRD readiness' verifies that cross-checker with missing array and recommendation='clarify' results in prd_ready === false and both EVIDENCE_AGENT_MISSING and EVIDENCE_AGENT_CLARIFICATION_REQUIRED blockers.",
+      "why": "Test suite confirms the blocking behavior works as specified."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "98-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "actionableMissingItems filters out status notes like 'no missing data identified', preventing false blockers from status reports.",
+      "why": "Ensures only actual missing data creates blockers."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "575-598",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime calls inspectDemandPrdReadiness after evidence agents complete and sets dispatch result status based on finalReadiness.prd_ready.",
+      "why": "Shows the runtime integration of PRD readiness check."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If this verification is incorrect, PRDs could be generated from incomplete evidence when agents report missing data or clarify recommendations, violating the demand acceptance criteria."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker agree on all key findings with independent verification from the same source files. All claims are backed by specific project code and test evidence. No assumptions are presented as facts. Missing arrays are empty in both agent results, confirming all data was verified. The requested functionality already exists and is tested: evidenceResultBlockingIssues converts missing and clarify recommendations into blockers, and inspectDemandPrdReadiness ensures prd_ready is only true when blockers.length === 0."
+  }
+}

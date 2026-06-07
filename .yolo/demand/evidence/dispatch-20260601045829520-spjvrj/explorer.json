@@ -1,0 +1,179 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements provider-specific isolation with boundary-controlled tool profiles, but cross-provider model leakage detection requires additional verification.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "423-471",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig normalizes provider and model settings, clears claude-specific flags for claude provider, and normalizes tool profiles to boundary/research/full modes.",
+      "why": "This is the core provider configuration logic that prevents cross-provider flag leakage in evidence mode."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "451-462",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "When provider is claude, agent_tool_profile is normalized to boundary/research/full, settings/tools flags are cleared, and session persistence is disabled.",
+      "why": "Evidence that claude provider gets clean configuration without inheriting generic tools settings."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "447-449",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Explicit model clearing logic for codex provider: if provider is codex and model contains claude, the inherited model is cleared.",
+      "why": "Evidence of attempted mitigation for cross-provider model leakage between claude and codex."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation constructs provider-specific CLI invocations with isolated argument lists and no cross-contamination.",
+      "why": "Shows that each provider gets its own isolated invocation logic without sharing flags."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider invocation uses -p flag, optional --model, --permission-mode, and settings paths, but does not inherit codex sandbox flags.",
+      "why": "Evidence that claude and codex providers have disjoint CLI contracts."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "43-61",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider invocation uses exec, --sandbox, -c for approval policy, and --output-last-message, with separate codex_model handling.",
+      "why": "Evidence that codex has its own sandbox and approval system separate from claude."
+    },
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "1-9",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "PROVIDER_ALIASES maps anthropic→claude, openai→codex, and shell/local→custom for normalization.",
+      "why": "Evidence that provider normalization exists and prevents alias-based confusion."
+    },
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "37-41",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentProvider function normalizes provider strings and returns null for auto, defaulting to claude.",
+      "why": "Evidence of explicit provider normalization logic."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots detect file mutations using git ls-files and recursive file walking with sha256 digests.",
+      "why": "Evidence that boundary enforcement can detect project mutations during evidence dispatch."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime captures before/after boundary snapshots, diffs them, and adds BOUNDARY_PROJECT_MUTATION blockers for changes.",
+      "why": "Evidence that boundary violations block PRD readiness after agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "238-248",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy defines default_mode as dry_run, requires explicit authorization, writes_business_code as false, and agent_instruction as boundary_controlled.",
+      "why": "Evidence that evidence dispatch is designed as read-only by default with explicit authorization gates."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test codex_dispatch_does_not_inherit_a_claude_default_model verifies codex provider clears claude model inheritance.",
+      "why": "Test evidence that cross-provider model leakage is a known concern and is mitigated."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test claude_dispatch_does_not_pass_tool_restriction_flags verifies claude provider runs without tool flags.",
+      "why": "Test evidence that claude evidence mode intentionally avoids tool restrictions."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "275-341",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test claude_full_tool_profile_requires_explicit_authorization verifies full tool profile requires allowFullAgentTools flag.",
+      "why": "Test evidence that full tool access requires explicit user authorization."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test boundary_blocks_project_file_mutation verifies project mutations trigger BOUNDARY_PROJECT_MUTATION blockers.",
+      "why": "Test evidence that boundary enforcement detects and blocks project mutations."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test git-backed_boundary_detects_untracked_project_mutations verifies boundary detection works with git and gitignored files.",
+      "why": "Test evidence that boundary detection handles git-tracked and gitignored files correctly."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross-checker, and verifier protocols with writes_code=false.",
+      "why": "Evidence that evidence agents are contractually read-only."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "258-328",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt generates agent instructions that include boundary rules, scope requirements, and JSON output format.",
+      "why": "Evidence that agents are explicitly instructed about boundary constraints and evidence format."
+    }
+  ],
+  "assumptions": [
+    "The model clearing logic for codex (line 447-449) suggests cross-provider model leakage is a known risk, but the implementation only clears claude-prefixed models and does not handle other inheritance patterns.",
+    "Claude evidence mode clears tool restriction flags intentionally (line 456-462), but it's unclear if this is for isolation or to rely on harness boundary enforcement.",
+    "The boundary snapshot mechanism detects file mutations but does not prevent provider-side tool invocation within allowed artifact roots.",
+    "Provider normalization happens at multiple layers (CLI input, executionConfig, buildProviderInvocation), but there is no single source of truth for provider contract validation."
+  ],
+  "risks": [
+    "If a provider inherits model settings from config.yaml before provider-specific clearing logic runs, cross-provider model leakage could still occur.",
+    "If tool profile normalization fails or is bypassed, providers could receive tool capabilities beyond the intended boundary/research/full modes.",
+    "If custom provider commands are not properly isolated, they could write outside the allowed artifact roots without triggering boundary violations.",
+    "If git ls-files is not available or git repo is corrupted, boundary snapshot falls back to filesystem walk which may miss untracked changes or have different exclusion behavior."
+  ],
+  "missing": [
+    "Evidence that provider-specific configuration clearing happens before CLI invocation construction, not after.",
+    "Evidence that custom provider commands are subjected to the same isolation requirements as claude/codex providers.",
+    "Evidence that tool profile normalization is applied consistently across all provider dispatch paths, not just evidence dispatch.",
+    "Evidence that boundary violations are detected in real-time during agent execution, not just post-hoc via snapshot diff.",
+    "External research on claude vs codex tool capability contracts to verify that evidence mode preserves full tool capability under the harness boundary."
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Provider dispatch implementation shows clear isolation mechanisms with provider-specific CLI contracts, tool profile boundary control, and mutation detection. Test coverage validates critical paths. Assumptions and missing items represent verification gaps but not implementation defects. Proceed with cross-check to validate high-risk claims about cross-provider leakage and boundary enforcement completeness."
+  }
+}

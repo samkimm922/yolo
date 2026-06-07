@@ -4,11 +4,56 @@ import { resolve } from "node:path";
 import {
   inspectPackageReadiness,
   inspectPublicBetaReadiness,
+  inspectYoloReliabilityReadiness,
+  REQUIRED_RELIABILITY_INCIDENT_IDS,
 } from "../src/release/readiness.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 
 describe("release readiness", () => {
+  test("inspectYoloReliabilityReadiness blocks missing incident evidence", () => {
+    const result = inspectYoloReliabilityReadiness();
+
+    assert.equal(result.status, "blocked");
+    assert.ok(result.blockers.some((item) => item.code === "YOLO_RELIABILITY_INCIDENT_EVIDENCE_PRESENT"));
+    assert.ok(result.blockers.some((item) => item.code === "YOLO_RELIABILITY_INCIDENT_COVERAGE"));
+  });
+
+  test("inspectYoloReliabilityReadiness blocks fake success reports and contaminated external remediation", () => {
+    const result = inspectYoloReliabilityReadiness({
+      incidentEvidence: {
+        incidents: REQUIRED_RELIABILITY_INCIDENT_IDS.map((id) => ({ id, status: "pass", evidence: `fixtures/${id}.json` })),
+      },
+      runReports: [{
+        run_id: "run-bad",
+        status: "error",
+        summary: { task_success_rate: 100, run_success_rate: 100 },
+      }],
+      externalRemediation: [{ id: "manual-claude-p", counts_as_yolo_success: true }],
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.ok(result.blockers.some((item) => item.code === "YOLO_RELIABILITY_NO_FAKE_SUCCESS_REPORTS"));
+    assert.ok(result.blockers.some((item) => item.code === "YOLO_RELIABILITY_EXTERNAL_REMEDIATION_ISOLATED"));
+  });
+
+  test("inspectYoloReliabilityReadiness passes complete project-independent incident evidence", () => {
+    const result = inspectYoloReliabilityReadiness({
+      incidentEvidence: {
+        incidents: REQUIRED_RELIABILITY_INCIDENT_IDS.map((id) => ({ id, status: "fixed", evidence: `fixtures/${id}.json` })),
+      },
+      runReports: [{
+        run_id: "run-good",
+        status: "success",
+        summary: { task_success_rate: 100, run_success_rate: 100 },
+      }],
+      externalRemediation: [{ id: "manual-claude-p", counts_as_yolo_success: false }],
+    });
+
+    assert.equal(result.status, "pass", JSON.stringify(result.blockers, null, 2));
+    assert.equal(result.blocks_release, false);
+  });
+
   test("inspectPackageReadiness blocks public release while package is private", () => {
     const result = inspectPackageReadiness({
       name: "yolo",
@@ -57,6 +102,8 @@ describe("release readiness", () => {
     assert.ok(result.checks.some((item) => item.code === "API_BOUNDARY_VERSION_POLICY" && item.passed === true));
     assert.ok(result.checks.some((item) => item.code === "API_BOUNDARY_SDK_SURFACE" && item.passed === true));
     assert.ok(result.checks.some((item) => item.code === "FIXTURE_REGISTRY_PASS" && item.passed === true));
+    assert.ok(result.checks.some((item) => item.code === "YOLO_RELIABILITY_INCIDENT_EVIDENCE_PRESENT" && item.passed === false));
+    assert.ok(result.blockers.some((item) => item.code === "YOLO_RELIABILITY_INCIDENT_COVERAGE"));
     assert.ok(result.blockers.some((item) => item.code === "PACKAGE_PRIVATE_RELEASE_BLOCK"));
   });
 });

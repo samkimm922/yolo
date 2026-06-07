@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements boundary audit that detects project file mutations and blocks PRD readiness when violations occur, regardless of agent tool profile.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-616",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime takes before/after boundary snapshots, computes changes via diffBoundarySnapshots, and injects BOUNDARY_PROJECT_MUTATION blockers when violations occur, overriding prd_ready to false.",
+      "why": "Runtime enforcement is the core claim - this evidence verifies boundary audit is integrated and blocks PRD readiness."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test suite confirms boundary blocks project file mutations, including untracked and gitignored files, and blocks PRD readiness even when agent results pass.",
+      "why": "Test evidence validates that boundary enforcement works as claimed across git and non-git scenarios."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "243-248",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy in dispatch plan defines boundary.project_mutation as forbidden and allowed_write_roots as the output directory.",
+      "why": "Verifies that boundary rules are declared in the plan configuration, not conditional on agent tool profile."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues blocks when project facts lack project-scoped evidence or file locators.",
+      "why": "Router-level validation ensures evidence quality - prevents assumptions from being presented as facts."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot uses git ls-files or directory walk to capture file digests excluding allowed_write_roots.",
+      "why": "Core snapshot logic that enables mutation detection - covered by both agents with consistent evidence."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If boundary snapshot logic has false positives (e.g., temporary files, build artifacts not in allowed_write_roots) or misses edge cases (e.g., symlink changes, submodule modifications), PRD readiness could be incorrectly blocked or mutations could go undetected.",
+    "If allowed_write_roots configuration is mis-set or doesn't properly exclude all artifact directories, legitimate writes could be flagged as violations."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker evidence is consistent, comprehensive, and properly scoped. Both provided exact repo-relative paths and line numbers for all project facts. No assumptions were presented as facts (both agents have empty assumptions arrays). No conflicts exist between agents - evidence agreement shows pass. All evidence is project-scoped with clear sources (project_code, project_test). Missing data is empty - no blockers or assumptions needed. The claim is fully verified by implementation code and test coverage. Ready to unblock evidence stage and proceed to PRD."
+  }
+}

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { config, loadConfig } from "./src/core/config.js";
 import { buildProjectBootstrapPlan, initProject } from "./src/core/bootstrap.js";
 import { buildInitToFirstPrdSmokePlan, runInitToFirstPrdSmoke } from "./src/core/init-smoke.js";
+import { buildProjectSetupPlan, inspectProjectSetupTarget, runProjectSetup } from "./src/core/setup.js";
 import { ensureCanonicalDirs, resolvePrdPath, yoloPath } from "./src/core/paths.js";
 import {
   evaluatePostConditions,
@@ -98,12 +99,29 @@ import {
   inspectDemandReadiness,
 } from "./src/demand/gate.js";
 import {
+  buildDemandEvidenceTasks,
+  buildDemandSessionState,
+  DEMAND_EVIDENCE_AGENT_PROTOCOLS,
+  DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION,
+  DEMAND_PRD_READINESS_SCHEMA_VERSION,
+  DEMAND_ROUTER_SCHEMA_VERSION,
+  inspectDemandPrdReadiness,
+  inspectDemandTriage,
+  inspectEvidenceAgreement,
+} from "./src/demand/router.js";
+import {
+  buildDemandEvidenceDispatchPlan,
+  DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION,
+  runDemandEvidenceDispatchRuntime,
+} from "./src/demand/evidence-dispatch.js";
+import {
   defaultDemandSessionPath,
   demandStateDir,
   readDemandSession,
   runDemandBrainstormRuntime,
   runDemandDiscussRuntime,
   runDemandPrdRuntime,
+  runDemandStatusRuntime,
   writeDemandArtifacts,
 } from "./src/demand/runtime.js";
 import { discoverPackManifests, readPackManifest, validatePackManifest } from "./src/packs/manifest.js";
@@ -204,8 +222,32 @@ import {
   buildControlledBetaReleaseDecisionPlan,
   CONTROLLED_BETA_RELEASE_ACTIONS,
   CONTROLLED_BETA_RELEASE_DECISION_SCHEMA_VERSION,
+  evaluateReleaseCandidateGate,
+  RELEASE_CANDIDATE_GATE_SCHEMA_VERSION,
+  RELEASE_CANDIDATE_REQUIRED_REPORTS,
   runControlledBetaReleaseDecisionGate,
+  runReleaseCandidateGate,
 } from "./src/release/decision-gate.js";
+import {
+  buildReleaseCandidateChangeManifest,
+  classifyReleaseChangeDomain,
+  readReleaseCandidateChangeManifest,
+  RELEASE_CHANGE_DOMAINS,
+} from "./src/release/change-provenance.js";
+import {
+  buildCleanEnvironmentVerifyPlan,
+  CLEAN_ENVIRONMENT_VERIFY_SCHEMA_VERSION,
+  executeCleanEnvironmentVerifyPlan,
+  runCleanEnvironmentVerify,
+} from "./src/release/clean-environment-verify.js";
+import {
+  buildDogfoodMatrixEvidence,
+  buildDogfoodMatrixPlan,
+  buildDogfoodMatrixReport,
+  DOGFOOD_MATRIX_SCENARIO_IDS,
+  DOGFOOD_MATRIX_SCHEMA_VERSION,
+  listDogfoodMatrixScenarios,
+} from "./src/release/dogfood-matrix.js";
 import {
   buildOperatorReleaseStatePlan,
   OPERATOR_RELEASE_STATE_SCHEMA_VERSION,
@@ -312,7 +354,10 @@ export function createYoloSdk(options = {}) {
     project: {
       buildInitPlan: (projectOptions = {}) => buildProjectBootstrapPlan({ projectRoot, ...projectOptions }),
       buildInitToFirstPrdSmokePlan: (projectOptions = {}) => buildInitToFirstPrdSmokePlan({ projectRoot, ...projectOptions }),
+      buildSetupPlan: (projectOptions = {}) => buildProjectSetupPlan({ projectRoot, yoloRoot, ...projectOptions }),
+      inspectSetupTarget: (projectOptions = {}) => inspectProjectSetupTarget({ projectRoot, ...projectOptions }),
       initProject: (projectOptions = {}) => initProject({ projectRoot, ...projectOptions }),
+      runSetup: (projectOptions = {}) => runProjectSetup({ projectRoot, yoloRoot, ...projectOptions }),
       runInitToFirstPrdSmoke: (projectOptions = {}) => runInitToFirstPrdSmoke({ projectRoot, ...projectOptions }),
     },
     contract: {
@@ -441,6 +486,24 @@ export function createYoloSdk(options = {}) {
       blockedArtifacts: demandBlockedArtifacts,
       defaultSessionPath: (id = "") => defaultDemandSessionPath(stateRoot, id),
       inspectReadiness: inspectDemandReadiness,
+      inspectPrdReadiness: (demandInput = {}, demandOptions = {}) => inspectDemandPrdReadiness({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      inspectTriage: (demandInput = {}, demandOptions = {}) => inspectDemandTriage({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
       markdownArtifacts: demandMarkdownArtifacts,
       readSession: readDemandSession,
       readyArtifacts: demandReadyArtifacts,
@@ -471,10 +534,53 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...demandOptions,
       }),
+      status: (demandInput = {}, demandOptions = {}) => runDemandStatusRuntime({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      buildEvidenceDispatchPlan: (demandInput = {}, demandOptions = {}) => buildDemandEvidenceDispatchPlan({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      dispatchEvidence: (demandInput = {}, demandOptions = {}) => runDemandEvidenceDispatchRuntime({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      buildSessionState: (demandInput = {}, demandOptions = {}) => buildDemandSessionState({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      buildEvidenceTasks: buildDemandEvidenceTasks,
+      evidenceAgentProtocols: DEMAND_EVIDENCE_AGENT_PROTOCOLS,
+      evidenceResultSchema: DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION,
+      inspectEvidenceAgreement,
       schemaVersion: DEMAND_SESSION_SCHEMA_VERSION,
       stateDir: (id = "") => demandStateDir(stateRoot, id),
       graphSchemaVersion: DEMAND_GRAPH_SCHEMA_VERSION,
       readinessSchemaVersion: DEMAND_READINESS_SCHEMA_VERSION,
+      routerSchemaVersion: DEMAND_ROUTER_SCHEMA_VERSION,
+      prdReadinessSchemaVersion: DEMAND_PRD_READINESS_SCHEMA_VERSION,
+      evidenceDispatchSchemaVersion: DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION,
       writeArtifacts: writeDemandArtifacts,
     },
     packs: {
@@ -606,6 +712,11 @@ export function createYoloSdk(options = {}) {
     release: {
       buildPackageInstallSmokePlan: (releaseOptions = {}) => buildPackageInstallSmokePlan({ yoloRoot, ...releaseOptions }),
       buildControlledBetaReleaseDecisionPlan: (releaseOptions = {}) => buildControlledBetaReleaseDecisionPlan({ yoloRoot, ...releaseOptions }),
+      buildReleaseCandidateChangeManifest: (releaseOptions = {}) => buildReleaseCandidateChangeManifest({ rootDir: yoloRoot, ...releaseOptions }),
+      buildCleanEnvironmentVerifyPlan: (releaseOptions = {}) => buildCleanEnvironmentVerifyPlan({ yoloRoot, ...releaseOptions }),
+      buildDogfoodMatrixPlan: (releaseOptions = {}) => buildDogfoodMatrixPlan({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildDogfoodMatrixReport: (releaseOptions = {}) => buildDogfoodMatrixReport({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildDogfoodMatrixEvidence,
       buildOperatorReleaseRunbookPlan: (releaseOptions = {}) => buildOperatorReleaseRunbookPlan({ yoloRoot, ...releaseOptions }),
       buildOperatorReleaseStatePlan: (releaseOptions = {}) => buildOperatorReleaseStatePlan({ yoloRoot, ...releaseOptions }),
       buildPostReleaseAuditPlan: (releaseOptions = {}) => buildPostReleaseAuditPlan({ yoloRoot, ...releaseOptions }),
@@ -624,8 +735,15 @@ export function createYoloSdk(options = {}) {
       inspectPackedPackage,
       inspectPackageReadiness,
       inspectPublicBetaReadiness: (releaseOptions = {}) => inspectPublicBetaReadiness({ yoloRoot, ...releaseOptions }),
+      classifyReleaseChangeDomain,
+      listDogfoodMatrixScenarios,
       runPackageInstallSmoke: (releaseOptions = {}) => runPackageInstallSmoke({ yoloRoot, ...releaseOptions }),
       runControlledBetaReleaseDecisionGate: (releaseOptions = {}) => runControlledBetaReleaseDecisionGate({ yoloRoot, ...releaseOptions }),
+      runReleaseCandidateGate,
+      evaluateReleaseCandidateGate,
+      readReleaseCandidateChangeManifest: (releaseOptions = {}) => readReleaseCandidateChangeManifest({ rootDir: yoloRoot, ...releaseOptions }),
+      executeCleanEnvironmentVerifyPlan,
+      runCleanEnvironmentVerify: (releaseOptions = {}) => runCleanEnvironmentVerify({ yoloRoot, ...releaseOptions }),
       runOperatorReleaseRunbookGate: (releaseOptions = {}) => runOperatorReleaseRunbookGate({ yoloRoot, ...releaseOptions }),
       runOperatorReleaseStateMutation: (releaseOptions = {}) => runOperatorReleaseStateMutation({ yoloRoot, ...releaseOptions }),
       runPostReleaseAuditGate: (releaseOptions = {}) => runPostReleaseAuditGate({ yoloRoot, ...releaseOptions }),
@@ -771,6 +889,9 @@ export {
   buildProjectBootstrapPlan,
   buildInitToFirstPrdSmokePlan,
   initProject,
+  inspectProjectSetupTarget,
+  buildProjectSetupPlan,
+  runProjectSetup,
   runInitToFirstPrdSmoke,
   evaluatePreConditions,
   evaluatePostConditions,
@@ -792,6 +913,9 @@ export {
   ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION,
   buildAdapterEvidencePlan,
   runAdapterEvidenceCollector,
+  buildDemandEvidenceDispatchPlan,
+  runDemandEvidenceDispatchRuntime,
+  DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION,
   buildProgressDashboardUiEvidence,
   inspectProgressDashboardUiEvidence,
   PROGRESS_DASHBOARD_UI_EVIDENCE_SCHEMA_VERSION,
@@ -924,9 +1048,22 @@ export {
   buildPackageInstallSmokePlan,
   buildControlledBetaReleaseDecisionPlan,
   buildPublicBetaHardeningDrillPlan,
+  buildReleaseCandidateChangeManifest,
+  buildCleanEnvironmentVerifyPlan,
+  buildDogfoodMatrixEvidence,
+  buildDogfoodMatrixPlan,
+  buildDogfoodMatrixReport,
   inspectPackedPackage,
+  classifyReleaseChangeDomain,
+  listDogfoodMatrixScenarios,
   CONTROLLED_BETA_RELEASE_ACTIONS,
   CONTROLLED_BETA_RELEASE_DECISION_SCHEMA_VERSION,
+  RELEASE_CANDIDATE_GATE_SCHEMA_VERSION,
+  RELEASE_CANDIDATE_REQUIRED_REPORTS,
+  RELEASE_CHANGE_DOMAINS,
+  CLEAN_ENVIRONMENT_VERIFY_SCHEMA_VERSION,
+  DOGFOOD_MATRIX_SCHEMA_VERSION,
+  DOGFOOD_MATRIX_SCENARIO_IDS,
   buildOperatorReleaseRunbookPlan,
   buildOperatorReleaseStatePlan,
   buildPostReleaseAuditPlan,
@@ -961,6 +1098,11 @@ export {
   YOLO_ONE_SENTENCE_ENTRY,
   runPackageInstallSmoke,
   runControlledBetaReleaseDecisionGate,
+  runReleaseCandidateGate,
+  evaluateReleaseCandidateGate,
+  readReleaseCandidateChangeManifest,
+  executeCleanEnvironmentVerifyPlan,
+  runCleanEnvironmentVerify,
   runOperatorReleaseRunbookGate,
   runOperatorReleaseStateMutation,
   runPostReleaseAuditGate,

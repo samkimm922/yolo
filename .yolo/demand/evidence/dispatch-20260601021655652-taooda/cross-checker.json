@@ -1,0 +1,153 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch requires evidence scope declaration with project-external-user-unknown separation, enforced through schema validation, classification logic, blocker contracts, and test coverage, but lacks evidence of stress-testing with real Claude -p agents in the current dirty working tree.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION documents that evidence field requires scope: project|external|user|unknown and that project facts require project-scoped evidence",
+      "why": "This is the schema contract that defines scope requirements."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES Set contains exactly four valid scope values",
+      "why": "This validates that only four scopes are permitted."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross_checker, and verifier with writes_code=false and shared result_schema",
+      "why": "This shows the three evidence agent roles exist and share the result schema."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope classifies evidence by inspecting scope, source, path, and url fields, returning one of four valid scope values",
+      "why": "This is the classification logic that determines scope from field combinations."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope validates that scope field contains one of the four VALID_EVIDENCE_SCOPES values",
+      "why": "This enforces that only valid scope values are accepted."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "414-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasProjectLocator checks for concrete repo-relative path and rejects URLs as project locators",
+      "why": "This enforces that project evidence requires a file path, not a URL."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-529",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE or PROJECT_EVIDENCE_PATH_REQUIRED blockers when evidence is not project-scoped or lacks a path",
+      "why": "This is the blocker contract that enforces project evidence requirements."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "257-273",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt generates agent prompts with explicit scope requirements: line 270 requires scope field, line 271 requires project evidence with repo-relative path, line 273 restricts external research to background only",
+      "why": "This is the actual prompt text that enforces scope requirements to agents."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES is redefined in evidence-dispatch.ts with the same four values",
+      "why": "This confirms consistent scope validation across modules."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-157",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates that each evidence record declares a valid scope from VALID_EVIDENCE_SCOPES",
+      "why": "This is the validation logic that checks scope compliance in agent results."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' verifies PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker is raised",
+      "why": "This test contract validates external evidence cannot prove project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "387-431",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'project evidence requires a concrete project locator' verifies PROJECT_EVIDENCE_PATH_REQUIRED blocker is raised when project-scoped evidence lacks a path",
+      "why": "This test contract validates project evidence requires a concrete path."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "367-400",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' verifies BOUNDARY_PROJECT_MUTATION blocker is raised when agents modify project files",
+      "why": "This test contract validates the boundary enforcement prevents project mutation."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "551-586",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'agent evidence without explicit scope is blocked during normalization' verifies EVIDENCE_SCOPE_REQUIRED blocker is raised when agents return evidence without scope field",
+      "why": "This test contract validates scope enforcement in real agent outputs."
+    },
+    {
+      "path": ".yolo/demand/evidence",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Evidence dispatch artifact directory exists but contains no stress test results or logs from real Claude -p agent runs",
+      "why": "This shows the absence of stress test artifacts despite the dispatch implementation being complete."
+    },
+    {
+      "path": ".git/index",
+      "scope": "project",
+      "source": "project_log",
+      "summary": "Git working tree shows 66 uncommitted changes confirming dirty state",
+      "why": "This confirms the dirty working tree condition that should be stress-tested."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Evidence scope classification heuristics in evidenceRecordScope may misclassify edge cases where field combinations are ambiguous",
+    "Boundary enforcement depends on git file tracking which may not work correctly in all repository states or non-git projects",
+    "Agent prompts may not be sufficient to prevent all scope violations in practice with real Claude agents"
+  ],
+  "missing": [
+    "Evidence logs or artifacts showing the demand evidence dispatch has been stress-tested with real Claude -p agents in the current dirty working tree",
+    "Evidence that boundary enforcement correctly detects mutations in the current git state",
+    "Evidence that agent prompts effectively prevent scope violations in real-world agent executions"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms all explorer claims about evidence schema, classification logic, blocker enforcement, and test coverage. The implementation correctly distinguishes project, external, user, and unknown evidence scopes through multiple enforcement layers: schema definition, classification logic, validation functions, blocker contracts, and comprehensive test coverage. The only verified gap is the absence of stress-testing evidence with real Claude -p agents in the current dirty working tree, which is accurately reflected in the missing field."
+  }
+}

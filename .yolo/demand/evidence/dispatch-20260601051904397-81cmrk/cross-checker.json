@@ -1,0 +1,115 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Confirmed: YOLO provider dispatch maintains complete isolation between Claude, Codex, and custom providers. The buildProviderInvocation function implements separate code paths for each provider type with no shared state leakage. executionConfig explicitly prevents cross-provider model inheritance by clearing codex model field when it contains claude. Claude evidence mode preserves full tool capability using agent_tool_profile modes while boundary enforcement provides safety instead of tool restrictions. The buildBoundarySnapshot/diffBoundarySnapshots system applies provider-agnostic mutation detection that converts any project file changes into readiness blockers.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation implements three completely separate branches: lines 43-61 for codex (exec, --cd, --sandbox, --output-last-message), lines 63-75 for custom (sh -c), lines 77-108 for claude (-p with distinct flags). No provider inherits argument patterns from another.",
+      "why": "This is the core isolation mechanism proving providers have independent code paths with no shared state."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "53-54",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "codexModel variable is computed separately from modelValue(ai): const codexModel = cleanString(ai.codex_model) || modelValue(ai), then used only for codex provider via --model flag splice.",
+      "why": "Shows codex model handling is isolated from general model value handling."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "437-450",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig contains explicit anti-leakage logic: if ((ai.provider || ai.executor) === 'codex') { if (!model && !clean(ai.codex_model) && /\\bclaude\\b/i.test(clean(ai.model))) ai.model = ''; }",
+      "why": "This is the direct evidence that cross-provider model leakage is explicitly prevented, not just assumed."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "450-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider configuration normalizes agent_tool_profile into research/boundary/full modes, then explicitly clears all tool restriction flags: ai.settings = ''; ai.claude_tools = ''; ai.claude_allowed_tools = ''; ai.claude_disallowed_tools = '';",
+      "why": "Proves claude evidence mode preserves full tool capability by clearing restrictive flags rather than adding them."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot uses git ls-files and filesystem walking to create SHA256 digest map of all project files, excluding allowed_write_roots: if (allowed.some((root) => isWithin(absolute, root))) continue;",
+      "why": "Shows boundary enforcement is file-system based and provider-agnostic."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots iterates both before/after maps to detect added, modified, deleted files: for (const [file, digest] of before.entries()) { if (!after.has(file)) changes.push({ path: file, change: 'deleted' }); else if (after.get(file) !== digest) changes.push({ path: file, change: 'modified' }); }",
+      "why": "Demonstrates provider-agnostic change detection that works regardless of which provider caused mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "515-565",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime calls buildBoundarySnapshot before and after all agents, then diffBoundarySnapshots to detect changes, then converts changes to BOUNDARY_PROJECT_MUTATION blockers added to readiness.blockers array.",
+      "why": "Shows complete workflow that applies boundary enforcement uniformly across all providers."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'codex dispatch does not inherit a claude default model or force read-only sandbox' asserts: assert.equal(/claude/i.test(runOptions.config.ai.model || ''), false);",
+      "why": "Executable verification that cross-provider model leakage protection works as designed."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'claude dispatch does not pass tool restriction flags and relies on boundary enforcement' verifies claude_tools, claude_allowed_tools, claude_disallowed_tools are all empty strings.",
+      "why": "Test evidence confirming full tool capability preservation under boundary protection."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' shows writeFileSync(join(root, 'unexpected-project-write.txt'), 'mutation\\n') causes result.status = 'blocked' and BOUNDARY_PROJECT_MUTATION blocker.",
+      "why": "Test proving boundary enforcement works regardless of agent result quality or provider type."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' uses git init + writeFileSync for untracked file, verifies boundary catches mutation and adds BOUNDARY_PROJECT_MUTATION blocker.",
+      "why": "Test evidence showing boundary integrates with git and catches mutations from any source."
+    }
+  ],
+  "assumptions": [
+    "Git ls-files command behavior is consistent across git versions for boundary snapshot creation",
+    "SHA256 file digests reliably detect content changes for boundary enforcement",
+    "Provider CLI flags (-p for claude, exec for codex) maintain stable semantics across versions"
+  ],
+  "risks": [
+    "If provider CLIs change flag behavior (e.g., claude -p changes semantics or codex exec changes argument order), the provider-specific isolation could weaken",
+    "If git ls-files behavior changes, buildBoundarySnapshot might miss files or include incorrect files",
+    "If file system timing issues cause race conditions between snapshot creation and agent execution, boundary enforcement could miss mutations"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification confirms all explorer claims. Provider isolation is architecturally sound: buildProviderInvocation has separate branches for each provider with no shared state. executionConfig line 447-448 explicitly clears claude model from codex to prevent leakage. Claude evidence mode preserves full tool capability by clearing restriction flags rather than adding them. Boundary enforcement via buildBoundarySnapshot/diffBoundarySnapshots applies equally to all providers and converts violations into blockers. Test coverage validates isolation, cross-leakage prevention, tool capability preservation, and boundary enforcement. No conflicts found between explorer evidence and independent code analysis."
+  }
+}

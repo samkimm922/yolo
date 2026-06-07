@@ -38,7 +38,11 @@ describe("session failure outcome helpers", () => {
     assert.equal(outcome.result, null);
     assert.equal(outcome.transition.result.status, "FAIL");
     assert.equal(outcome.transition.result.provider, "codex");
+    assert.equal(outcome.transition.result.provider_status, "failed");
     assert.equal(outcome.transition.result.retries, 1);
+    assert.equal(outcome.transition.result.attempt_ledger[0].task_id, "FIX-1");
+    assert.equal(outcome.transition.result.attempt_ledger[0].attempt, 1);
+    assert.equal(outcome.transition.result.attempt_ledger[0].status, "failed");
     assert.deepEqual(outcome.transition.prd_update, {
       status: "failed",
       failReason: "codex 退出失败: exit=1 stderr=network failed",
@@ -71,6 +75,93 @@ describe("session failure outcome helpers", () => {
     assert.equal(outcome.transition.prd_update.phase, "provider_budget");
   });
 
+  test("buildProviderFailureOutcome returns terminal provider preflight blockers without retry", () => {
+    const outcome = buildProviderFailureOutcome({
+      taskId: "FIX-SETTINGS",
+      providerName: "claude",
+      providerRun: {
+        success: false,
+        blocked: true,
+        reason: "claude_settings_missing",
+        exitCode: null,
+        stderr: "Claude settings file not found: /repo/missing-settings.json",
+      },
+      attempt: 1,
+      maxRetry: 3,
+    });
+
+    assert.equal(outcome.retryMessage, null);
+    assert.deepEqual(outcome.result, {
+      status: "blocked",
+      reason: "claude_settings_missing",
+    });
+    assert.equal(outcome.transition.result.status, "BLOCKED");
+    assert.equal(outcome.transition.result.reason, "claude_settings_missing");
+    assert.equal(outcome.transition.prd_update.status, "blocked");
+    assert.equal(outcome.transition.prd_update.phase, "provider_preflight");
+    assert.equal(outcome.transition.prd_update.phaseDetail, "claude_settings_missing");
+  });
+
+  test("buildProviderFailureOutcome fails closed for provider timeout with attempt ledger", () => {
+    const outcome = buildProviderFailureOutcome({
+      taskId: "FIX-TIMEOUT",
+      providerName: "codex",
+      providerRun: {
+        success: false,
+        status: "timed_out",
+        reason: "provider_timed_out",
+        exitCode: null,
+        signal: "SIGTERM",
+        stdout: "",
+        stderr: "[signal:SIGTERM]",
+        timedOut: true,
+      },
+      attempt: 1,
+      maxRetry: 0,
+    });
+
+    assert.equal(outcome.failReason, "codex 超时");
+    assert.deepEqual(outcome.result, {
+      status: "failed",
+      reason: "codex 超时",
+    });
+    assert.equal(outcome.transition.result.status, "FAIL");
+    assert.equal(outcome.transition.result.provider_status, "timed_out");
+    assert.equal(outcome.transition.result.provider_reason, "provider_timed_out");
+    assert.equal(outcome.transition.result.attempt_ledger[0].status, "timed_out");
+    assert.equal(outcome.transition.result.attempt_ledger[0].task_id, "FIX-TIMEOUT");
+    assert.equal(outcome.transition.result.attempt_ledger[0].attempt, 1);
+  });
+
+  test("buildProviderFailureOutcome fails closed for fake completion verification failures", () => {
+    const outcome = buildProviderFailureOutcome({
+      taskId: "FIX-FAKE",
+      providerName: "codex",
+      providerRun: {
+        success: false,
+        status: "verification_failed",
+        reason: "codex_output_missing",
+        exitCode: 0,
+        signal: null,
+        stdout: "looks done",
+        stderr: "",
+        timedOut: false,
+        output_verification: {
+          status: "failed",
+          reason: "codex_output_missing",
+        },
+      },
+      attempt: 2,
+      maxRetry: 1,
+    });
+
+    assert.match(outcome.failReason, /codex 完成验证失败/);
+    assert.equal(outcome.result.status, "failed");
+    assert.equal(outcome.transition.result.provider_status, "verification_failed");
+    assert.equal(outcome.transition.result.provider_reason, "codex_output_missing");
+    assert.equal(outcome.transition.result.attempt_ledger[0].status, "verification_failed");
+  });
+
   test("buildProviderFailureOutcome fails when retry budget is exhausted", () => {
     const outcome = buildProviderFailureOutcome({
       taskId: "FIX-3",
@@ -91,6 +182,8 @@ describe("session failure outcome helpers", () => {
       reason: "claude 输出为空",
     });
     assert.equal(outcome.transition.result.status, "FAIL");
+    assert.equal(outcome.transition.result.provider_status, "no_output");
+    assert.equal(outcome.transition.result.attempt_ledger[0].status, "no_output");
   });
 
   test("buildDiffQualityFailureOutcome returns retry metadata before max retry", () => {

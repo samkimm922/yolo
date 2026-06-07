@@ -1,0 +1,91 @@
+{
+  "scenario_id": "brainstorm-to-plan-with-deferred-scope",
+  "expected": "executable",
+  "fixture_files": [
+    "package.json",
+    "scripts/acceptance-smoke.mjs",
+    "src/api/orders.test.ts",
+    "src/api/orders.ts"
+  ],
+  "turns": [
+    {
+      "index": 1,
+      "user_text": "订单这块想做得安全点，也许以后要防很多异常。",
+      "agent_stage": "brainstorm",
+      "agent_question": "先把大方向拆小。本轮 MVP 只能选一个可验证风险：负数、零数量、超库存，还是空 lines？还需要确认 payload 字段和明确不碰履约。",
+      "agent_response": "先把大方向拆小。本轮 MVP 只能选一个可验证风险：负数、零数量、超库存，还是空 lines？还需要确认 payload 字段和明确不碰履约。",
+      "expected_prd_state": "blocked",
+      "demand_status": "blocked",
+      "readiness_status": "blocked",
+      "readiness_level": "L0",
+      "prd_status": "blocked",
+      "prd_code": "DEMAND_NOT_EXECUTABLE",
+      "blocker_codes": [
+        "BLOCKING_OPEN_QUESTIONS_EMPTY",
+        "USER_APPROVAL_PRESENT",
+        "EXECUTION_SCOPE_PRESENT"
+      ],
+      "failed_readiness_check_codes": [
+        "REFLECTION_PRESENT",
+        "INVESTIGATION_COMPLETE",
+        "REQUIREMENTS_PRESENT",
+        "ACCEPTANCE_SCENARIOS_PRESENT",
+        "SCENARIO_MATRIX_PRESENT",
+        "SCENARIO_PROOF_PRESENT",
+        "SCENARIO_SURFACES_PRESENT",
+        "SURFACE_SESSION_BUDGET_EXECUTABLE",
+        "OUT_OF_SCOPE_PRESENT",
+        "BLOCKING_OPEN_QUESTIONS_EMPTY",
+        "USER_APPROVAL_PRESENT",
+        "EXECUTION_SCOPE_PRESENT"
+      ],
+      "expectation_met": true,
+      "demand_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601170250296/fixtures/0012-brainstorm-to-plan-with-deferred-scope/.yolo/demand/DEMAND-DIALOGUE-0012-brainstorm-to-plan-with-deferred-scope",
+      "prd_path": null
+    },
+    {
+      "index": 2,
+      "user_text": "先只拦截负数，payload 是 input.lines[].quantity，别改履约；返回 ok:false 和 error code NEGATIVE_QUANTITY。",
+      "agent_stage": "plan",
+      "agent_question": "MVP、字段来源、边界和验收已收敛：只拦截负数，input.lines[].quantity 是证据字段，履约不动，等待批准。",
+      "agent_response": "MVP、字段来源、边界和验收已收敛：只拦截负数，input.lines[].quantity 是证据字段，履约不动，等待批准。",
+      "expected_prd_state": "blocked",
+      "demand_status": "blocked",
+      "readiness_status": "blocked",
+      "readiness_level": "L1",
+      "prd_status": "blocked",
+      "prd_code": "DEMAND_NOT_EXECUTABLE",
+      "blocker_codes": [
+        "USER_APPROVAL_PRESENT"
+      ],
+      "failed_readiness_check_codes": [
+        "USER_APPROVAL_PRESENT"
+      ],
+      "expectation_met": true,
+      "demand_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601170250296/fixtures/0012-brainstorm-to-plan-with-deferred-scope/.yolo/demand/DEMAND-DIALOGUE-0012-brainstorm-to-plan-with-deferred-scope",
+      "prd_path": null
+    },
+    {
+      "index": 3,
+      "user_text": "确认生成 PRD。",
+      "agent_stage": "prd",
+      "agent_question": "收到显式批准，按负数数量校验生成 PRD；不扩大到零数量、库存占用或履约流程。",
+      "agent_response": "收到显式批准，按负数数量校验生成 PRD；不扩大到零数量、库存占用或履约流程。",
+      "expected_prd_state": "ready",
+      "demand_status": "success",
+      "readiness_status": "pass",
+      "readiness_level": "L3",
+      "prd_status": "success",
+      "prd_code": "DEMAND_PRD_READY",
+      "blocker_codes": [],
+      "failed_readiness_check_codes": [],
+      "expectation_met": true,
+      "demand_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601170250296/fixtures/0012-brainstorm-to-plan-with-deferred-scope/.yolo/demand/DEMAND-DIALOGUE-0012-brainstorm-to-plan-with-deferred-scope",
+      "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601170250296/fixtures/0012-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope-turn-3.prd.json"
+    }
+  ],
+  "final_status": "success",
+  "final_code": "DEMAND_PRD_READY",
+  "final_prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601170250296/fixtures/0012-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope-turn-3.prd.json",
+  "final_check_status": "pass"
+}

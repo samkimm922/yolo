@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent cross-check confirms YOLO demand evidence dispatch read-only tool restrictions are correctly implemented: DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS defines permissions.allow=[Read,Glob,Grep] and permissions.deny=[Write,Edit,MultiEdit,NotebookEdit,Bash,Agent,TaskCreate,TaskUpdate]; executionConfig applies these as ai.settings JSON string, ai.claude_tools, ai.claude_allowed_tools, ai.claude_disallowed_tools, and safety flags; buildProviderInvocation translates config into Claude CLI --allowedTools and --disallowedTools arguments.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "14-19",
+      "source": "code",
+      "summary": "DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS constant defines permissions.allow array with Read, Glob, Grep and permissions.deny array with Write, Edit, MultiEdit, NotebookEdit, Bash, Agent, TaskCreate, TaskUpdate.",
+      "why": "Primary source for read-only tool restriction schema."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "288-295",
+      "source": "code",
+      "summary": "executionConfig function when provider===claude sets ai.settings to JSON.stringify(DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS), ai.claude_tools='Read,Glob,Grep', ai.claude_allowed_tools='Read,Glob,Grep', ai.claude_disallowed_tools='Write,Edit,MultiEdit,NotebookEdit,Bash,Agent,TaskCreate,TaskUpdate', ai.claude_disable_slash_commands=true, ai.claude_no_session_persistence=true.",
+      "why": "Verifies read-only settings are applied to Claude provider config."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-92",
+      "source": "code",
+      "summary": "buildProviderInvocation for claude provider constructs args array with --tools from ai.claude_tools, --allowedTools from ai.claude_allowed_tools, and --disallowedTools from ai.claude_disallowed_tools after cleaning with cleanString.",
+      "why": "Verifies provider adapter translates config to Claude CLI arguments."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "93-98",
+      "source": "code",
+      "summary": "buildProviderInvocation conditionally adds --disable-slash-commands when ai.claude_disable_slash_commands===true and --no-session-persistence when ai.claude_no_session_persistence===true.",
+      "why": "Verifies additional Claude safety flags are translated to CLI arguments."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52-67",
+      "source": "code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross_checker, and verifier protocols with writes_code:false and result_schema:'yolo.demand.evidence_result.v1'.",
+      "why": "Verifies evidence agent protocols specify read-only constraint at contract level."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "264-303",
+      "source": "code",
+      "summary": "executionConfig loads config, extracts provider/model options, applies codex read-only sandbox/approval when provider===codex, applies Claude read-only settings when provider===claude, applies custom read-only sandbox when provider===custom, returns merged config.",
+      "why": "Verifies execution config centralizes provider-specific read-only constraints."
+    }
+  ],
+  "assumptions": [
+    "Claude CLI respects --allowedTools and --disallowedTools flags and actually prevents denied tools from being used at runtime.",
+    "The permissions schema in DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS is valid input for Claude CLI --settings flag.",
+    "No code path between executionConfig and buildProviderInvocation modifies ai.claude_* fields or overrides the settings.",
+    "Agent provider dispatch does not bypass provider-adapter when spawning evidence agents."
+  ],
+  "risks": [
+    "If Claude CLI does not enforce --allowedTools/--disallowedTools at runtime, read-only protection fails despite correct configuration.",
+    "If executionConfig is bypassed or config.ai is mutated after calling executionConfig, read-only constraints may not apply.",
+    "If provider adapter is bypassed in some dispatch paths, Claude CLI arguments may not be applied.",
+    "The --permission-mode default in provider-adapter could allow permission changes that affect tool availability beyond allowedTools/disallowedTools."
+  ],
+  "missing": [
+    "No integration tests found that execute provider-adapter with real Claude CLI to verify --allowedTools and --disallowedTools behavior.",
+    "No tests found that verify evidence agents actually cannot use Write, Edit, Bash, or other denied tools at runtime.",
+    "No documentation found on Claude CLI --allowedTools/--disallowedTools enforcement semantics.",
+    "No tests found comparing codex provider read-only sandbox behavior with Claude provider read-only tool restrictions."
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent code reads confirm explorer's claim: source code correctly implements DEMAND_EVIDENCE_CLAUDE_READ_ONLY_SETTINGS schema, executionConfig applies it to Claude provider config, and buildProviderInvocation translates config to Claude CLI arguments. No conflicts found with explorer evidence. The claim is source-verified but requires runtime verification (missing integration tests) to treat as runtime-guaranteed fact."
+  }
+}

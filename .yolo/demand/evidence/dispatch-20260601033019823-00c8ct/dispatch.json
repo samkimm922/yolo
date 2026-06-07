@@ -1,0 +1,874 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_dispatch.v1",
+  "status": "pass",
+  "code": "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD",
+  "summary": "Demand evidence agents completed and PRD readiness passed.",
+  "generated_at": "2026-06-01T03:30:19.825Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "state_root": "/Users/sippingroom/Developer/yolo/.yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033019823-00c8ct",
+  "output_file": ".yolo/demand/evidence/dispatch-20260601033019823-00c8ct",
+  "execution_policy": {
+    "default_mode": "dry_run",
+    "execute_requires": [
+      "executeAgents=true",
+      "allowAgentDispatch=true"
+    ],
+    "writes_business_code": false,
+    "agent_instruction": "boundary_controlled",
+    "agent_tool_profile": "full",
+    "boundary": {
+      "project_mutation": "forbidden",
+      "allowed_write_roots": [
+        ".yolo/demand/evidence/dispatch-20260601033019823-00c8ct"
+      ]
+    }
+  },
+  "demand_status": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand readiness must require project-scoped evidence for existing-project claims while allowing external research as background only."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes."
+        ],
+        "scope_in": [
+          "src/demand/router.ts",
+          "__tests__/demand-router.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes."
+        ],
+        "risks": [
+          "Agents could cite web research or user claims as if they proved the target project's actual fields, APIs, or state."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  },
+  "actions": [
+    {
+      "id": "demand.evidence.explorer",
+      "role": "explorer",
+      "status": "pending",
+      "reason": "Factual project claims need primary evidence.",
+      "protocol": {
+        "role": "explorer",
+        "objective": "Find primary project facts for the requested demand without editing files.",
+        "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "explorer.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033019823-00c8ct/explorer.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601033019823-00c8ct/explorer.json"
+    },
+    {
+      "id": "demand.evidence.cross-checker",
+      "role": "cross-checker",
+      "status": "pending",
+      "reason": "High-risk facts require independent cross-check.",
+      "protocol": {
+        "role": "cross-checker",
+        "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+        "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+        "writes_code": false,
+        "required_when": "evidence_policy === cross_check or claim risk is high",
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "cross-checker.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033019823-00c8ct/cross-checker.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601033019823-00c8ct/cross-checker.json"
+    },
+    {
+      "id": "demand.evidence.verifier",
+      "role": "verifier",
+      "status": "pending",
+      "reason": "Verify blockers and assumptions are not promoted to facts.",
+      "protocol": {
+        "role": "verifier",
+        "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+        "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "verifier.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033019823-00c8ct/verifier.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601033019823-00c8ct/verifier.json"
+    }
+  ],
+  "mode": "execute",
+  "agent_results": [
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "explorer",
+      "status": "completed",
+      "completed": true,
+      "claim": "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/router.ts",
+          "line": "37-50",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence schema with scope field accepting project | external | user | unknown",
+          "why": "This is the primary schema definition that evidence records must follow."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "52",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "VALID_EVIDENCE_SCOPES is declared as Set containing exactly these four values",
+          "why": "This constant is used for validation throughout the codebase."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "408-412",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceRecordHasDeclaredScope function validates scope against VALID_EVIDENCE_SCOPES",
+          "why": "This validation ensures all evidence records declare a valid scope."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "438-447",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceScopeDeclarationIssues generates EVIDENCE_SCOPE_REQUIRED blocker when scope is missing or invalid",
+          "why": "This enforces scope declaration as a hard requirement for readiness."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "382-406",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceRecordScope function classifies records into project/external/user/unknown based on multiple heuristics",
+          "why": "This shows the system can distinguish scopes even when not explicitly declared."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "513-530",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "projectEvidenceBlockingIssues generates blockers when existing-project facts lack project-scoped evidence with concrete locators",
+          "why": "This enforces that project facts require project evidence with file paths."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "257-327",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildDemandEvidenceAgentPrompt generates agent instructions requiring scope declaration and distinguishing project from external evidence",
+          "why": "This is the prompt that tells evidence agents to declare scopes correctly."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "271-272",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Agent prompt hard rule: Every evidence record must include scope: project, external, user, or unknown; Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator",
+          "why": "This is the explicit instruction to agents about scope requirements."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "150-157",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceScopeErrors validates that each evidence record declares one of the four valid scopes",
+          "why": "This runtime validation blocks results without proper scope declarations."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "340-385",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test proves external-only evidence cannot satisfy existing-project facts and generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker",
+          "why": "This test verifies the system rejects external evidence for project facts."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "387-431",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test proves project evidence without concrete file locator generates PROJECT_EVIDENCE_PATH_REQUIRED blocker",
+          "why": "This test verifies project evidence requires a repo-relative path."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "433-478",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test proves external URLs mislabeled as project evidence are blocked with PROJECT_EVIDENCE_PATH_REQUIRED",
+          "why": "This test verifies URLs cannot be relabeled as project evidence."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "480-524",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test proves evidence records without explicit scope declaration generate EVIDENCE_SCOPE_REQUIRED blocker",
+          "why": "This test verifies scope declaration is mandatory."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "144-202",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test verifies cross-check PRD readiness requires all three evidence agents (explorer, cross-checker, verifier) to complete",
+          "why": "This test verifies the evidence agent role requirements."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "566-601",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test verifies agent evidence without explicit scope is blocked during normalization with EVIDENCE_SCOPE_REQUIRED error",
+          "why": "This test verifies scope enforcement happens at runtime."
+        },
+        {
+          "path": "docs/yolo-demand-doctrine.md",
+          "line": "44-70",
+          "scope": "project",
+          "source": "project_docs",
+          "summary": "Doctrine documents evidence scope requirements and evidence agent protocols with explicit scope rules",
+          "why": "This is the primary documentation explaining the scope distinction design."
+        },
+        {
+          "path": "docs/yolo-demand-doctrine.md",
+          "line": "70",
+          "scope": "project",
+          "source": "project_docs",
+          "summary": "Doctrine states: evidence records must declare scope as project | external | user | unknown; project evidence requires repo-relative path; external evidence can only be background research",
+          "why": "This documents the core contract for scope distinction."
+        }
+      ],
+      "assumptions": [],
+      "risks": [
+        "If this claim is wrong, existing-project factual claims could be accepted based on web research or user assertions without project code/test/docs evidence, leading to incorrect PRD generation"
+      ],
+      "missing": [],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "All four components (schema, prompt, readiness contract, tests) explicitly distinguish evidence scopes with validation and blockers. The system enforces scope declaration and requires project-scoped evidence with file locators for existing-project facts."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "cross-checker",
+      "status": "completed",
+      "completed": true,
+      "claim": "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/router.ts",
+          "line": "37-50",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence schema with scope field accepting project | external | user | unknown in field description",
+          "why": "Cross-check confirms schema definition at lines 37-50 explicitly documents scope field requirement."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "52",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "VALID_EVIDENCE_SCOPES is declared as Set containing exactly these four values: project, external, user, unknown",
+          "why": "Cross-check confirms line 52 defines the constant Set used for validation throughout."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "408-412",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceRecordHasDeclaredScope function validates scope against VALID_EVIDENCE_SCOPES by checking clean(record.scope || record.evidence_scope || record.source_scope).toLowerCase()",
+          "why": "Cross-check confirms lines 408-412 implement the validation that rejects invalid scopes."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "438-447",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceScopeDeclarationIssues generates EVIDENCE_SCOPE_REQUIRED blocker when scope is missing or invalid",
+          "why": "Cross-check confirms lines 438-447 enforce scope declaration as hard requirement."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "382-406",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceRecordScope function classifies records into project/external/user/unknown based on heuristics checking scope, kind, type, url, source, and path fields",
+          "why": "Cross-check confirms lines 382-406 implement comprehensive scope classification logic."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "513-530",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "projectEvidenceBlockingIssues generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE or PROJECT_EVIDENCE_PATH_REQUIRED blockers when existing-project facts lack project-scoped evidence with concrete locators",
+          "why": "Cross-check confirms lines 513-530 enforce project evidence requirements for existing-project claims."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "257-327",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildDemandEvidenceAgentPrompt generates agent instructions with explicit scope rules: Every evidence record must include scope: project, external, user, or unknown",
+          "why": "Cross-check confirms lines 257-327 contain the full prompt that tells evidence agents to declare scopes correctly."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "271-272",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Agent prompt hard rule: Every evidence record must include scope: project, external, user, or unknown; Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator",
+          "why": "Cross-check confirms lines 271-272 are the explicit instructions to agents about scope requirements."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "150-157",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceScopeErrors validates that each evidence record declares one of the four valid scopes by checking VALID_EVIDENCE_SCOPES.has(scope)",
+          "why": "Cross-check confirms lines 150-157 implement runtime validation that blocks results without proper scope declarations."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "340-385",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test proves external-only evidence cannot satisfy existing-project facts and generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker",
+          "why": "Cross-check confirms lines 340-385 test verifies the system rejects external evidence for project facts."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "387-431",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test proves project evidence without concrete file locator generates PROJECT_EVIDENCE_PATH_REQUIRED blocker",
+          "why": "Cross-check confirms lines 387-431 test verifies project evidence requires a repo-relative path."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "433-478",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test proves external URLs mislabeled as project evidence are blocked with PROJECT_EVIDENCE_PATH_REQUIRED",
+          "why": "Cross-check confirms lines 433-478 test verifies URLs cannot be relabeled as project evidence."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "480-524",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test proves evidence records without explicit scope declaration generate EVIDENCE_SCOPE_REQUIRED blocker",
+          "why": "Cross-check confirms lines 480-524 test verifies scope declaration is mandatory."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "144-202",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test verifies cross-check PRD readiness requires all three evidence agents (explorer, cross-checker, verifier) to complete before marking prd_ready=true",
+          "why": "Cross-check confirms lines 144-202 test verifies the evidence agent role requirements for cross_check policy."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "566-601",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test verifies agent evidence without explicit scope is blocked during normalization with EVIDENCE_SCOPE_REQUIRED error",
+          "why": "Cross-check confirms lines 566-601 test verifies scope enforcement happens at runtime during dispatch."
+        },
+        {
+          "path": "docs/yolo-demand-doctrine.md",
+          "line": "44-70",
+          "scope": "project",
+          "source": "project_docs",
+          "summary": "Doctrine documents evidence scope requirements and evidence agent protocols with explicit scope rules: evidence records must declare scope as project | external | user | unknown; project evidence requires repo-relative path; external evidence can only be background research",
+          "why": "Cross-check confirms lines 44-70 document the core design contract for scope distinction and the three evidence agent roles (explorer, cross-checker, verifier)."
+        }
+      ],
+      "assumptions": [],
+      "risks": [
+        "If this claim is wrong, existing-project factual claims could be accepted based on web research or user assertions without project code/test/docs evidence, leading to incorrect PRD generation that doesn't match the actual codebase"
+      ],
+      "missing": [],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "Cross-check confirms all 16 evidence records from the explorer are accurate. The schema, prompt, readiness contract, and tests all explicitly distinguish evidence scopes with validation and blockers. All four components (schema, prompt, readiness contract, tests) implement scope distinction: schema defines the field, prompt instructs agents to use it, readiness enforces it with blockers, and tests verify the enforcement."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "verifier",
+      "status": "completed",
+      "completed": true,
+      "claim": "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/router.ts",
+          "line": "37-50, 52, 382-406, 408-412, 438-447, 513-530",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Schema defines VALID_EVIDENCE_SCOPES constant and implements scope validation/classification functions; readiness contract enforces scope declaration with blockers",
+          "why": "Router.ts implements the core scope distinction logic in schema definition, validation, and PRD readiness enforcement."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "150-157, 257-327",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Runtime scope validation blocks invalid results; agent prompt instructs evidence agents to declare scopes correctly",
+          "why": "Evidence-dispatch.ts provides both the agent instructions (prompt) and runtime validation that enforce scope distinction."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "144-202, 340-385, 387-431, 433-478, 480-524",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Tests verify external evidence is rejected for project facts, project evidence requires file locators, scope declaration is mandatory, and cross-check requires all three evidence agents",
+          "why": "Test suite provides comprehensive coverage of scope distinction enforcement across PRD readiness contract and validation logic."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "566-601",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test verifies runtime scope validation blocks agent results without explicit scope declaration",
+          "why": "Test confirms evidence-dispatch runtime enforcement rejects results missing scope field."
+        },
+        {
+          "path": "docs/yolo-demand-doctrine.md",
+          "line": "44-70",
+          "scope": "project",
+          "source": "project_docs",
+          "summary": "Doctrine documents evidence scope requirements and three-agent protocol (explorer, cross-checker, verifier)",
+          "why": "Documentation explains the design intent and formal contract for evidence scope distinction."
+        }
+      ],
+      "assumptions": [],
+      "risks": [
+        "If scope distinction enforcement is incomplete or incorrect, existing-project facts could be accepted based on external research or user assertions, leading to incorrect PRDs that do not match the actual codebase"
+      ],
+      "missing": [],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "Verifier confirms: (1) No assumptions promoted to facts; both explorer and cross-checker have empty assumptions arrays and all 16 evidence records are backed by concrete file paths with line numbers. (2) Evidence paths are usable; all cited files and line ranges are specific and verifiable. (3) No unresolved missing data; both agents report missing=[] and assumptions=[]. (4) Full agent agreement; explorer and cross-checker independently reached identical conclusions with high confidence. All four components (schema, prompt, readiness contract, tests) explicitly distinguish evidence scopes with validation and blockers. Cross-check PRD readiness can proceed."
+      }
+    }
+  ],
+  "provider_runs": [
+    {
+      "role": "explorer",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"explorer\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"37-50\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence schema with scope field accepting project | external | user | unknown\",\n      \"why\": \"This is the primary schema definition that evidence records must follow.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"52\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"VALID_EVIDENCE_SCOPES is declared as Set containing exactly these four values\",\n      \"why\": \"This constant is used for validation throughout the codebase.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"408-412\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"evidenceRecordHasDeclaredScope function validates scope against VALID_EVIDENCE_SCOPES\",\n      \"why\": \"This validation ensures all evidence records declare a valid scope.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"438-447\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"evidenceScopeDeclarationIssues generates EVIDENCE_SCOPE_REQUIRED blocker when scope is missing or invalid\",\n      \"why\": \"This enforces scope declaration as a hard requirement for readiness.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"382-406\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"evidenceRecordScope function classifies records into project/external/user/unknown based on multiple heuristics\",\n      \"why\": \"This shows the system can distinguish scopes even when not explici\n[truncated 5155 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "cross-checker",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "Looking at the explorer's evidence, I'll independently verify each claim by examining the actual source files.\n\n```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"cross-checker\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"37-50\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence schema with scope field accepting project | external | user | unknown in field description\",\n      \"why\": \"Cross-check confirms schema definition at lines 37-50 explicitly documents scope field requirement.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"52\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"VALID_EVIDENCE_SCOPES is declared as Set containing exactly these four values: project, external, user, unknown\",\n      \"why\": \"Cross-check confirms line 52 defines the constant Set used for validation throughout.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"408-412\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"evidenceRecordHasDeclaredScope function validates scope against VALID_EVIDENCE_SCOPES by checking clean(record.scope || record.evidence_scope || record.source_scope).toLowerCase()\",\n      \"why\": \"Cross-check confirms lines 408-412 implement the validation that rejects invalid scopes.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"438-447\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"evidenceScopeDeclarationIssues generates EVIDENCE_SCOPE_REQUIRED blocker when scope is missing or invalid\",\n      \"why\": \"Cross-check confirms lines 438-447 enforce scope declaration as hard r\n[truncated 6162 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "verifier",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"verifier\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"37-50, 52, 382-406, 408-412, 438-447, 513-530\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Schema defines VALID_EVIDENCE_SCOPES constant and implements scope validation/classification functions; readiness contract enforces scope declaration with blockers\",\n      \"why\": \"Router.ts implements the core scope distinction logic in schema definition, validation, and PRD readiness enforcement.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"150-157, 257-327\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Runtime scope validation blocks invalid results; agent prompt instructs evidence agents to declare scopes correctly\",\n      \"why\": \"Evidence-dispatch.ts provides both the agent instructions (prompt) and runtime validation that enforce scope distinction.\"\n    },\n    {\n      \"path\": \"__tests__/demand-router.test.ts\",\n      \"line\": \"144-202, 340-385, 387-431, 433-478, 480-524\",\n      \"scope\": \"project\",\n      \"source\": \"project_test\",\n      \"summary\": \"Tests verify external evidence is rejected for project facts, project evidence requires file locators, scope declaration is mandatory, and cross-check requires all three evidence agents\",\n      \"why\": \"Test suite provides comprehensive coverage of scope distinction enforcement across PRD readiness contract and validation logic.\"\n    },\n    {\n      \"path\": \"__tests__/demand-evidence-dispatch.test.ts\",\n      \"line\": \"566-601\",\n      \"scope\": \"project\",\n      \"source\": \"project_test\",\n      \"summary\": \"Test verifies runtime scope validation blocks agent results with\n[truncated 1552 chars]",
+      "stderr": ""
+    }
+  ],
+  "artifacts": [
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033019823-00c8ct/explorer.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033019823-00c8ct/cross-checker.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033019823-00c8ct/verifier.json"
+  ],
+  "boundary": {
+    "project_mutation": "clean",
+    "allowed_write_roots": [
+      ".yolo/demand/evidence/dispatch-20260601033019823-00c8ct"
+    ],
+    "changes": []
+  },
+  "readiness": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.prd_readiness.v1",
+    "required_slots": [
+      "problem",
+      "target_user",
+      "status_quo",
+      "desired_outcome",
+      "scope_in",
+      "scope_out",
+      "constraints",
+      "acceptance_criteria",
+      "risks",
+      "approval"
+    ],
+    "slot_values": {
+      "problem": [
+        "Existing YOLO demand readiness must require project-scoped evidence for existing-project claims while allowing external research as background only."
+      ],
+      "target_user": [
+        "YOLO maintainer"
+      ],
+      "status_quo": [
+        "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+      ],
+      "desired_outcome": [
+        "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes."
+      ],
+      "scope_in": [
+        "src/demand/router.ts",
+        "__tests__/demand-router.test.ts"
+      ],
+      "scope_out": [
+        "Do not intentionally modify target project files during evidence gathering."
+      ],
+      "constraints": [
+        "Full tools may be available; harness boundary audit must detect any target-project mutation."
+      ],
+      "acceptance_criteria": [
+        "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes."
+      ],
+      "risks": [
+        "Agents could cite web research or user claims as if they proved the target project's actual fields, APIs, or state."
+      ],
+      "approval": [
+        "approved"
+      ]
+    },
+    "missing_slots": [],
+    "blockers": [],
+    "assumptions": [],
+    "required_evidence_agents": [
+      "explorer",
+      "cross-checker",
+      "verifier"
+    ],
+    "evidence_agreement": {
+      "status": "pass",
+      "conflicts": []
+    },
+    "prd_ready": true
+  },
+  "demand_status_after_dispatch": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand readiness must require project-scoped evidence for existing-project claims while allowing external research as background only."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes."
+        ],
+        "scope_in": [
+          "src/demand/router.ts",
+          "__tests__/demand-router.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes."
+        ],
+        "risks": [
+          "Agents could cite web research or user claims as if they proved the target project's actual fields, APIs, or state."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": true
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": true,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  }
+}

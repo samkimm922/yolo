@@ -1,0 +1,68 @@
+{
+  "iteration": 11,
+  "scenario": "contradicted-field-blocks",
+  "expected": "blocked",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601160628265/fixtures/0011-contradicted-field-blocks",
+  "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601160628265/fixtures/0011-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.transcript.md",
+  "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601160628265/fixtures/0011-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.chain.json",
+  "prd_path": null,
+  "blocked_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601160628265/fixtures/0011-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.blocked.json",
+  "yolo": {
+    "no_premature_prd": true,
+    "final_class_ok": true,
+    "check_status": null,
+    "turn_count": 2,
+    "turn_expectations_met": 2,
+    "blocker_codes": [
+      "REQUIREMENTS_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "EXECUTION_SCOPE_PRESENT",
+      "PROJECT_FACTS_GROUNDED",
+      "PROJECT_FACTS_GROUNDED"
+    ]
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "correct_final_class": true,
+      "conversation_realistic": true,
+      "no_premature_prd": true,
+      "executable": false,
+      "score": 93,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "MINOR_TURN2_ALTERNATIVES_COULD_CITE_ASM_ID",
+          "path": ".yolo/dialogue-stress/contradicted-field-blocks.transcript.md:9",
+          "message": "Turn 2 alternatives reference the contradicted field but could explicitly tie back to ASM-001 for traceability."
+        }
+      ],
+      "dimensions": {
+        "clarification_quality": 9,
+        "project_fact_grounding": 10,
+        "stage_transition": 9,
+        "plan_convergence": 9,
+        "prd_executability": 10,
+        "deadlock_avoidance": 9,
+        "rework_risk": 9
+      }
+    },
+    "stdout": "",
+    "stderr": ""
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T16:18:24.909Z",
+  "ended_at": "2026-06-01T16:19:34.532Z",
+  "duration_ms": 69623
+}

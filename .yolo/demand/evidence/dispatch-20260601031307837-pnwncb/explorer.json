@@ -1,0 +1,141 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch already supports WebFetch/WebSearch as external evidence with scope=external, and requires project-scoped path evidence for target-project facts.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Four valid evidence scopes are defined: project, external, user, unknown",
+      "why": "This shows the schema already supports separate scope categories for external vs project evidence."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-156",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors function validates that all evidence records declare a valid scope",
+      "why": "This proves the system enforces scope declaration as a requirement, not optional."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "274-275",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt instructs: 'If the demand explicitly asks for external research/fetch/search, actually use WebFetch/WebSearch when available and record those records as scope=external'",
+      "why": "This directly shows external research is explicitly supported and must be marked scope=external."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "308-309",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Schema definition requires 'path: repo-relative path or file locator; required when scope is project' and 'url: external URL when scope is external'",
+      "why": "This shows the schema enforces that project facts require concrete project locators, while external facts use URLs."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "306-315",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence record schema requires scope declaration and source type",
+      "why": "This shows every evidence record must explicitly declare its scope and source type."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function infers scope from record structure and validates project vs external evidence",
+      "why": "This shows the router has logic to detect and validate evidence scope from record structure."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function checks that project facts have project-scoped evidence with locators",
+      "why": "This shows the system blocks attempts to use non-project evidence (external/user/unknown) to prove existing-project facts."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence agent protocols define explorer, cross-checker, and verifier roles with specific objectives",
+      "why": "This shows the protocol structure that agents must follow when gathering evidence."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues generates blockers when evidence records lack scope declaration",
+      "why": "This proves scope declaration is enforced as a blocker, not just a recommendation."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "70",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "cross-checker protocol requires: 'Use independent reads or sources. Confirm, weaken, or contradict each claim.'",
+      "why": "This shows cross-check validation is built into the evidence gathering process."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'Project facts require project-scoped evidence from code, tests, docs, config, logs or artifacts, with repo-relative path or file locator'",
+      "why": "This confirms the documented contract that project facts must come from project artifacts."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'External evidence from WebFetch/WebSearch or external docs can only serve as background research, not standalone proof of target project fields, APIs, state machines, or data flows'",
+      "why": "This documents the clear separation: external evidence is background only, not proof of project implementation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots functions detect any project file mutations",
+      "why": "This shows the boundary enforcement mechanism that prevents agents from modifying target project files."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "565-571",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime execution compares before/after snapshots to detect boundary violations and generates blockers",
+      "why": "This proves the system actively audits and blocks any project mutations during evidence gathering."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "449-462",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider supports 'research', 'full', and 'boundary' agent tool profiles with different capabilities",
+      "why": "This shows the system can configure agent tool access while maintaining boundary controls."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If evidence scope validation is buggy or inconsistent, external evidence could be mistakenly treated as project facts."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The evidence dispatch system already implements the required behavior: WebFetch/WebSearch are allowed for external research, must be marked scope=external, and project facts require project-scoped path evidence. The schema, validation, and boundary enforcement are all in place."
+  }
+}

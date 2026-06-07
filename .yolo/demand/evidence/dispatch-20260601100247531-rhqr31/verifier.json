@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer and cross-checker evidence is sufficient and proper: project facts are backed by project-scoped evidence with exact paths and line numbers; assumptions are clearly separated from facts; no missing data remains unreflected; evidence sources are usable and verifiable.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "87-95, 97-109, 111-121, 590, 640-646, 659-678",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Both explorer and cross-checker cite identical code ranges with matching line numbers for boundary audit implementation: fileDigest (SHA-256), buildBoundarySnapshot, diffBoundarySnapshots, before/after timing, and BOUNDARY_PROJECT_MUTATION blocker enforcement.",
+      "why": "Independent verification confirms explorer claims are reproducible and specific to exact code locations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "291-301, 334-338, 342-343",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Both agents cite execution_policy configuration and agent prompt hard rules defining project_mutation forbidden and scope declaration requirements.",
+      "why": "Verifies policy constraints and agent protocols are documented in code."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530, 709-733",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Both agents cite router validation logic that enforces project evidence requirements and converts blocking issues into readiness blockers.",
+      "why": "Confirms integration between evidence dispatch and router validation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-84, 53-56",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cross-checker independently verified file discovery methods (gitFiles, walkFiles) and isWithin containment logic cited by explorer.",
+      "why": "Verifies snapshot completeness and allowed root exclusion mechanisms."
+    },
+    {
+      "scope": "project",
+      "source": "evidence_review",
+      "summary": "Explorer and cross-checker both return empty missing arrays, no blockers, and pass verdicts, with all evidence having scope=project and source=project_code.",
+      "why": "Confirms no unresolved gaps remain and all claims are properly scoped."
+    },
+    {
+      "scope": "project",
+      "source": "evidence_review",
+      "summary": "Both agents explicitly list 3-5 assumptions each under assumptions array, separate from evidence array, including filesystem behavior and git limitations.",
+      "why": "Confirms assumptions are not promoted to factual claims."
+    }
+  ],
+  "assumptions": [],
+  "risks": [],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verification confirms explorer and cross-checker evidence is complete and proper. All project facts cite exact repo-relative paths and line numbers. Assumptions are clearly separated and not treated as facts. No missing data remains unreflected. Evidence sources are usable, specific, and independently verified. PRD readiness evidence requirements are satisfied."
+  }
+}

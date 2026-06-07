@@ -1,0 +1,126 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence system implements scope-based evidence classification with project-scope validation.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence result schema definition confirms scope field with values project | external | user | unknown, and states project facts require project-scoped evidence.",
+      "why": "Schema-level contract evidence for evidence scope classification requirement."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES set validates scope values against four allowed categories.",
+      "why": "Independent verification of runtime scope validation."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence agent protocols define explorer, cross-checker, and verifier roles with writes_code: false constraints.",
+      "why": "Independent verification of agent protocol definitions for evidence gathering workflow."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function implements scope classification logic checking scope field, source type, path/url patterns, and validating against source prefixes.",
+      "why": "Independent verification of core scope classification implementation."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "414-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasProjectLocator function validates project evidence by checking for non-URL path field.",
+      "why": "Independent verification of project locator validation logic."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues function generates EVIDENCE_SCOPE_REQUIRED blockers for records without declared scope.",
+      "why": "Independent verification of scope declaration enforcement."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker when evidence lacks project scope and PROJECT_EVIDENCE_PATH_REQUIRED when project scope lacks path locator.",
+      "why": "Independent verification of enforcement logic for existing-project facts requiring project-scoped evidence with concrete locators."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "717-732",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness function calls evidenceScopeDeclarationIssues and projectEvidenceBlockingIssues for complete evidence agent results, adding blockers to readiness check.",
+      "why": "Independent verification of integration of scope validation into PRD readiness gate."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test external-only evidence cannot satisfy existing project facts validates that external web evidence blocks PRD readiness with PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE error.",
+      "why": "Independent verification of test coverage for external evidence rejection on project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "454-498",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test project evidence requires a concrete project locator validates that project-scoped evidence without path field blocks with PROJECT_EVIDENCE_PATH_REQUIRED error.",
+      "why": "Independent verification of test coverage for project locator requirement."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "500-545",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test external URLs cannot be relabeled as project evidence validates that URL-based evidence labeled as scope: project cannot bypass validation.",
+      "why": "Independent verification of test coverage preventing URL evidence from being treated as project-scoped."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "547-591",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test evidence records must declare valid scope explicitly validates that evidence without scope field blocks with EVIDENCE_SCOPE_REQUIRED error.",
+      "why": "Independent verification of test coverage for mandatory scope declaration requirement."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "144-202",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test cross-check PRD readiness requires every evidence agent result validates that cross_check policy requires explorer, cross-checker, and verifier results before PRD ready.",
+      "why": "Independent verification of test coverage for evidence agent completion requirements."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If evidence scope validation is bypassed or incorrectly implemented, agents could cite external research as proof of project state.",
+    "If project locator validation fails to detect URLs labeled as paths, external evidence could be treated as project-scoped."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification confirms all 14 evidence records from the explorer. Schema definitions, validation logic, enforcement functions, PRD readiness integration, and test coverage all match the claimed implementation at the specified line numbers. No conflicts found between explorer claims and actual source code. The evidence system correctly implements scope-based classification with project-scope validation requiring concrete path locators."
+  }
+}

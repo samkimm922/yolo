@@ -1,0 +1,128 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements harness boundary audit for full-tool Claude agents with cross-check evidence policy and blocks PRD readiness on boundary violations.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "98-110",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() hashes all project files outside allowed_write_roots using SHA-256, with git ls-files optimization and symlink detection.",
+      "why": "Independent verification confirms boundary baseline creation mechanism exists and matches explorer description."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "112-122",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after digests to detect added/modified/deleted files, returning sorted changes with path and change type.",
+      "why": "Confirms violation detection logic matches explorer claim."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "299-300",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy sets project_mutation='forbidden' and allowed_write_roots=[output_dir] in dispatch plan.",
+      "why": "Verifies policy-level enforcement of non-mutation constraint."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "591-647",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime() builds boundary snapshots before/after agent execution, detects changes via diffBoundarySnapshots, sets project_mutation status, and creates BOUNDARY_PROJECT_MUTATION blockers for each violation.",
+      "why": "Runtime enforcement loop confirms boundary audit is active during agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "660-671",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryBlockers map each detected change to BOUNDARY_PROJECT_MUTATION blocker with path and change type, then merged into readiness.blockers, forcing prd_ready=false.",
+      "why": "Direct integration between boundary violations and PRD readiness gate confirmed."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross_checker, and verifier with writes_code=false and result_schema.",
+      "why": "Confirms evidence agent protocol specification matches implementation."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "656-660",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidence_policy routing: technicalRisk or highCost triggers 'cross_check'; existing projects get 'single_agent'; greenfield gets 'none'.",
+      "why": "Verifies cross-check policy triggers on high-risk signals as explorer claimed."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "717-725",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() checks for each required evidence role that at least one result is complete, adding EVIDENCE_AGENT_RESULT_REQUIRED blockers otherwise.",
+      "why": "PRD readiness gate enforcement matches explorer description."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "495-528",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' creates unexpected-project-write.txt during agent run, asserts status=blocked, project_mutation=violated, and BOUNDARY_PROJECT_MUTATION blocker present.",
+      "why": "Test evidence independently verifies boundary enforcement works as claimed."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "577-613",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Tests 'git-backed boundary detects untracked project mutations' and 'gitignored project mutations' verify git ls-files integration and gitignore-aware filesystem walk.",
+      "why": "Confirms boundary works with both git and non-git repos, matching explorer claim."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() runs 'git ls-files -co --exclude-standard -z' for project file list; walkFiles() provides fallback for non-git repos.",
+      "why": "Provides deeper verification of boundary implementation details."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "87-96",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryEntryDigest() handles symlinks via readlinkSync(), files via SHA-256 hash, and other nodes via mode/size/mtimeMs tuple.",
+      "why": "Independent verification of symlink detection and digest strategy."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation() constructs Claude/codex/custom provider commands with -p flag, permission-mode, settings, tools, and budget controls for full-tool agent spawning.",
+      "why": "Verifies provider abstraction used by evidence dispatch for full-tool agents."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Boundary snapshot uses filesystem timestamp (mtimeMs) for non-file nodes; rapid filesystem changes could potentially miss mutations within the same millisecond.",
+    "Git ls-files -co flag includes untracked files but may miss files in submodules if not configured properly.",
+    "Symlink detection reads link target but does not prevent symlink-based path traversal attacks if agent creates malicious symlinks pointing outside project.",
+    "allowed_write_roots path resolution uses isWithin() with relative() check; complex symlinks or Windows UNC paths could create false negatives."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification confirms all explorer claims. Evidence dispatch implements boundary audit via buildBoundarySnapshot/diffBoundarySnapshots with SHA-256 hashing, git/non-git fallback, and symlink detection. Execution policy sets project_mutation='forbidden'. Runtime enforcement builds snapshots before/after agents and creates BOUNDARY_PROJECT_MUTATION blockers that merge into PRD readiness, blocking completion. Cross-check policy triggers on technical/high-cost risks. Tests verify git/non-git boundary detection. Provider adapter confirms full-tool agent spawning capability."
+  }
+}

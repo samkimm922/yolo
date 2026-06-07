@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verified: YOLO demand evidence dispatch implements JSON repair for recoverable drift and explicit fail-closed blocker codes for unrecoverable JSON, meeting PRD requirements. Dirty working tree state and lack of real Claude agent stress testing remain as documented risks, not blockers.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "402-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate function repairs trailing commas, line-number keys, and escaped backslashes in Claude JSON output",
+      "why": "Verifies explorer claim: recoverable JSON drift patterns are handled before blocking."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "421-441",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "extractJsonObject attempts three strategies: direct parse, fenced code block extraction, and JSON object detection",
+      "why": "Verifies explorer claim: multi-strategy extraction provides robustness against varying provider formats."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "443-494",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns explicit blocker codes EVIDENCE_AGENT_INVALID_JSON and EVIDENCE_AGENT_PROVIDER_FAILED with clear error messages",
+      "why": "Verifies explorer claim: fail-closed behavior with explicit blocker codes matches acceptance criteria."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "696-733",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "test confirms parseJsonCandidate repairs line range keys and backslashes, sets json_repaired flag in provider output",
+      "why": "Verifies explorer claim: repair logic is tested and records drift for observability."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "735-765",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "test confirms invalid JSON produces EVIDENCE_AGENT_INVALID_JSON in agent result and readiness blockers, keeping PRD blocked",
+      "why": "Verifies explorer claim: fail-closed behavior is tested and blocks PRD readiness as required."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "497-505",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "isNotJsonRecoverable checks for JSON syntax errors and returns true only for unrecoverable corruption",
+      "why": "Confirms recoverable vs unrecoverable distinction is implemented in code."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates evidence records include scope field and returns explicit error messages for missing or invalid scopes",
+      "why": "Supports explorer claim: explicit blocker codes are used for validation failures, not silent acceptance."
+    },
+    {
+      "path": "git status",
+      "line": "working tree",
+      "scope": "project",
+      "source": "project_log",
+      "summary": "Dirty working tree with 55 modified files including evidence-dispatch.ts and demand-evidence-dispatch.test.ts",
+      "why": "Verifies explorer assumption: implementation state is unstable and lacks real-world stress testing."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Real Claude -p agents may produce JSON drift patterns not covered by parseJsonCandidate repairs",
+    "Fail-closed behavior may reject valid agent results if repair logic is too strict",
+    "Dirty working tree means implementation may have uncommitted behavioral changes affecting reproducibility"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer evidence is accurate and sufficient. Core requirements from PRD are verified: JSON repair exists for recoverable drift, explicit EVIDENCE_AGENT_INVALID_JSON blocker code is used for unrecoverable JSON, and PRD readiness stays blocked on invalid agent output. Dirty working tree and lack of real Claude stress testing are correctly documented as risks and missing data, not blockers to treating verified implementation as fact."
+  }
+}

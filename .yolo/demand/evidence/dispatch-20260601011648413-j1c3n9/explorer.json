@@ -1,0 +1,158 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements a post-execution boundary detection mechanism (not prevention) that allows Write tools but detects project file mutations via SHA256 snapshot diff, with unit test coverage confirming detection after mutation, but stress tests show no actual mutations from real Claude agents.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "103-114",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot function creates SHA256 hash map of all project files, excluding allowed write roots",
+      "why": "Core boundary detection mechanism implementation"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "116-126",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after snapshots to detect added, modified, or deleted files",
+      "why": "Mutation detection algorithm"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "CLAUD_BOUNDARY_TOOLS includes 'Write', 'Edit', 'MultiEdit', 'NotebookEdit' mutation tools",
+      "why": "Proves boundary mode allows write mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "18-22",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_CLAUDE_BOUNDARY_SETTINGS.permissions.allow includes all CLAUDE_BOUNDARY_TOOLS including Write",
+      "why": "Settings prove agents have write permissions even in boundary mode"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "517",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryBefore snapshot taken BEFORE agent execution loop",
+      "why": "Proves detection is post-execution, not prevention"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "567-573",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryAfter snapshot taken AFTER all agents complete, diff compared, boundary.violated set if changes found",
+      "why": "Proves mutations detected after execution, not prevented during"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "586-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "BOUNDARY_PROJECT_MUTATION blockers created after boundary diff, PRD readiness set to false if mutations detected",
+      "why": "Shows blockers are added after mutations already occurred"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "378-411",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Unit test 'boundary blocks project file mutation even when agent results pass' uses fake agent that writes unexpected-project-write.txt during execution, then confirms detection and blocker added",
+      "why": "Synthetic test proves boundary mechanism CAN detect mutations after they occur"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "413-449",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Unit test 'git-backed boundary detects untracked project mutations' confirms detection of untracked file additions",
+      "why": "Proves boundary works with git repositories and detects untracked mutations"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "220-263",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'claude dispatch keeps tools available and relies on boundary enforcement' confirms Read, Bash, WebSearch tools allowed and Write tools available in boundary profile",
+      "why": "Confirms tool permissions in boundary mode"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "265-333",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'claude full tool profile requires explicit authorization for full semantic mode' shows 'full' profile requires allowFullAgentTools=true and includes Write tools",
+      "why": "Proves full-tool agents have write access when authorized"
+    },
+    {
+      "path": ".yolo/stress/claude-stress-20260601010854514/ledger.json",
+      "line": "1-276",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Stress test ledger shows 4 iterations with real Claude agents, all with boundary='clean', no actual mutations occurred during stress testing",
+      "why": "Real-world evidence shows agents don't mutate in practice, but doesn't prove they can't"
+    },
+    {
+      "path": ".git",
+      "line": "working-tree",
+      "scope": "project",
+      "source": "project_log",
+      "summary": "Git status shows 55 modified files and 15 new untracked files including demand evidence system files, confirming dirty working tree",
+      "why": "Confirms demand claim about dirty working tree state"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS define explorer, cross-checker, and verifier roles with explicit 'writes_code: false' field",
+      "why": "Shows protocol specification claims agents don't write, but tool permissions allow it"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "457-462",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider configuration sets claude_tools='default', claude_allowed_tools=CLAUD_BOUNDARY_TOOLS (including Write), claude_disallowed_tools=''",
+      "why": "Confirms all mutation tools are passed to Claude CLI"
+    }
+  ],
+  "assumptions": [
+    "Claude Code CLI honors claude_allowed_tools and claude_disallowed_tools flags to restrict tool availability",
+    "Agent tool profile 'boundary' is intended to mean read-only but implementation actually allows write tools",
+    "Real Claude agents in stress tests did not attempt to write project files, but absence of evidence is not evidence of absence",
+    "Post-execution boundary detection is sufficient to prevent PRD readiness when mutations occur",
+    "Unit tests with fake agents accurately represent real Claude agent behavior"
+  ],
+  "risks": [
+    "Write tools are available to full-tool Claude agents during evidence gathering, allowing potential project mutations before detection",
+    "Boundary detection is post-execution (after mutations already occurred) not prevention (before mutations happen)",
+    "No stress test evidence shows real Claude agents attempting and failing to mutate due to boundary restrictions",
+    "Protocol specifies writes_code=false but tool permissions allow Write/Edit/MultiEdit/NotebookEdit, creating contract ambiguity",
+    "If agent mutates project files early in execution and later agent results pass, PRD readiness could incorrectly succeed if boundary logic has bugs"
+  ],
+  "missing": [
+    "Evidence from real Claude agent stress tests where agents actually attempted to mutate project files and were prevented",
+    "Evidence that Claude Code CLI honors claude_allowed_tools/claude_disallowed_tools flags at runtime",
+    "Evidence that boundary mechanism works correctly when agents use Edit/MultiEdit/NotebookEdit tools (not just Write)",
+    "Evidence that boundary detection catches mutations before PRD readiness is evaluated",
+    "Evidence of any preventive boundary mechanism (tool permission enforcement) vs only post-hoc detection",
+    "Evidence that agent tool profile 'full' with allowFullAgentTools=true is required for agents to actually mutate files"
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Core claim verified: boundary mechanism exists and is implemented with snapshot diff detection. However, critical nuance: boundary is post-execution detection, not prevention, and Write tools are allowed even in 'boundary' mode. Stress tests show no mutations from real agents, but unit tests use synthetic mutations. Cross-check recommended to verify tool permission enforcement and prevention vs detection semantics."
+  }
+}

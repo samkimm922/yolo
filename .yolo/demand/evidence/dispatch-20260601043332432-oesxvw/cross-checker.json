@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verified explorer claim: YOLO demand evidence schema, readiness contract, and tests implement scope separation between project, external, user, and unknown evidence, with validation requiring project-scoped evidence for existing-project facts.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Confirmed DEMAND_EVIDENCE_RESULT_SCHEMA defines scope field as exact union: 'project' | 'external' | 'user' | 'unknown', with description explaining each type.",
+      "why": "Primary schema definition proves scope separation is built into the type system."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52-54",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Confirmed VALID_EVIDENCE_SCOPES is new Set(['project', 'external', 'user', 'unknown']) - runtime enforcement of valid scope values.",
+      "why": "Shows runtime validation matches compile-time schema."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Confirmed evidenceRecordHasProjectLocator checks for path/line fields when scope === 'project', preventing external URLs from masquerading as project evidence.",
+      "why": "Core validation prevents external sources from satisfying project scope."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Confirmed projectEvidenceBlockingIssues function: if no project-scoped evidence exists for existing-project claim, returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker.",
+      "why": "Critical enforcement logic that prevents external evidence from satisfying project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Confirmed test case 'external-only evidence cannot satisfy existing project facts' verifies blocker is correctly generated.",
+      "why": "Test proves the validation logic works as intended."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "144-202",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Confirmed test 'cross-check PRD readiness requires every evidence agent result' checks all three agents (explorer, cross-checker, verifier) must complete.",
+      "why": "Test verifies evidence policy enforcement."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "117-145",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Confirmed PRD readiness check iterates requiredEvidenceAgents and generates EVIDENCE_AGENT_RESULT_REQUIRED blocker if any agent missing.",
+      "why": "Shows evidence policy is enforced at PRD readiness gate."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If validation logic is bypassed or schema constraints are weakened in future changes, external evidence could incorrectly satisfy project-fact requirements.",
+    "If tests are disabled or schema validation is removed, scope separation enforcement would fail silently."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification confirms explorer claim. Schema, validation functions, and tests all consistently implement scope separation. Project facts require project-scoped evidence with path/line locators. External evidence is explicitly blocked from satisfying project facts through multiple layers: type schema, runtime validation, and test coverage."
+  }
+}

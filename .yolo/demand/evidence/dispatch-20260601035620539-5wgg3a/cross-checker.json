@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch API/schema supports research/fetch style evidence with external scope declaration, separating external research from target-project facts.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "272-276",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt lines 275-276 explicitly instruct: use WebFetch/WebSearch and record as scope=external; line 276 reinforces external research must be marked scope=external and not used as project facts.",
+      "why": "Direct code verification of explorer claim 1: external research support is built into agent instructions"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION line 44 explicitly states: 'scope is project | external | user | unknown'",
+      "why": "Direct code verification of explorer claim 2: schema has explicit scope field with four valid values"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES declared as Set containing ['project', 'external', 'user', 'unknown']",
+      "why": "Direct code verification of explorer claim 3: only four scope values are accepted"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() function classifies records: explicit scope field check, URLs starting with http/https as external, source types like external_web/webfetch/websearch as external",
+      "why": "Direct code verification of explorer claim 4: scope inference logic distinguishes external web sources from project files"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() function: if summary.has_project is false, blocks claims that lack project-scoped evidence; if only has_project_scope but no path, blocks with PROJECT_EVIDENCE_PATH_REQUIRED",
+      "why": "Direct code verification of explorer claim 5: target-project facts require project-scoped evidence with concrete path locators; external-only evidence becomes blocker"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: evidence records must declare scope; project evidence from code/tests/docs/config/logs/artifacts requires repo-relative path; external evidence from WebFetch/WebSearch only supports background research",
+      "why": "Direct code verification of explorer claim 6: doctrinal contract separates external research from project facts"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES declared in dispatch module as Set(['project', 'external', 'user', 'unknown'])",
+      "why": "Direct code verification of explorer claim 7: schema consistency across modules"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors() validates that every evidence record declares valid scope from VALID_EVIDENCE_SCOPES, blocking invalid scope declarations",
+      "why": "Direct code verification of explorer claim 8: runtime enforcement of scope requirement"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() function includes explicit checks: line 393 /^https?:\\/\\//i.test(url) or /^https?:\\/\\//i.test(path) returns 'external'",
+      "why": "Cross-check verification: URLs starting with http/https are automatically classified as external scope"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "395-401",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Source type classification: project_code, project_test, project_docs, project_config, project_log, project_artifact map to 'project'; external_web, webfetch, websearch map to 'external'",
+      "why": "Cross-check verification: source types are explicitly mapped to scope values"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If external research tools are misconfigured or unavailable, agents may fail to gather external evidence"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All explorer claims independently verified. evidence-dispatch.ts, router.ts, and doctrine all confirm support for external research with scope=external, separated from project-scoped facts requiring path evidence. No conflicts found."
+  }
+}

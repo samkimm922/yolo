@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": 44,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION.fields.evidence declares 'scope is project | external | user | unknown; project facts require project-scoped evidence'",
+      "why": "Schema contract enforces scope distinction at data model level"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": 52,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES Set initialized with exactly four values: ['project', 'external', 'user', 'unknown']",
+      "why": "Type constraint validates scope values are from allowed set"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope normalizes scope declarations; evidenceRecordHasDeclaredScope validates against VALID_EVIDENCE_SCOPES.has(scope)",
+      "why": "Runtime enforcement ensures evidence records declare valid scopes"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues filters records by evidenceRecordHasDeclaredScope and returns EVIDENCE_SCOPE_REQUIRED blocker for invalid records",
+      "why": "Blocks readiness when scope field is missing or invalid"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE when project facts lack project evidence, or PROJECT_EVIDENCE_PATH_REQUIRED when project scope lacks path",
+      "why": "Readiness contract enforces project facts require concrete locators"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "722-725",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness calls evidenceScopeDeclarationIssues and projectEvidenceBlockingIssues on complete evidence results",
+      "why": "Readiness contract actively validates scope separation"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "270-273",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt instructs: 'Every evidence record must include scope: project, external, user, or unknown' and 'External research tools may be available; mark external records as scope=external and do not use them as project facts'",
+      "why": "Agent prompt enforces scope distinction during evidence gathering"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "403-415",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult calls evidenceScopeErrors and blocks with EVIDENCE_SCOPE_REQUIRED when scope validation fails",
+      "why": "Dispatch runtime enforces scope validation before accepting agent results"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' verifies PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker",
+      "why": "Test confirms external evidence cannot substitute for project evidence"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "387-431",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'project evidence requires a concrete project locator' verifies PROJECT_EVIDENCE_PATH_REQUIRED blocker",
+      "why": "Test enforces project evidence requires concrete file locators"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "433-478",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external URLs cannot be relabeled as project evidence' verifies PROJECT_EVIDENCE_PATH_REQUIRED blocker when URL present with project scope",
+      "why": "Test prevents external URLs from being mislabeled as project evidence"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "480-524",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'evidence records must declare valid scope explicitly' verifies EVIDENCE_SCOPE_REQUIRED blocker when scope field missing",
+      "why": "Test enforces explicit scope declaration on all evidence records"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "509-544",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'agent evidence without explicit scope is blocked during normalization' verifies agents returning evidence without scope are blocked",
+      "why": "Test confirms dispatch runtime blocks agent results when scope missing"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "367-400",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' verifies BOUNDARY_PROJECT_MUTATION blocker",
+      "why": "Test enforces evidence gathering boundary even when agents claim success"
+    }
+  ],
+  "assumptions": [],
+  "risks": [],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification confirms all four components (schema, prompt, readiness contract, tests) explicitly distinguish and enforce the four evidence scopes. Schema defines type contract, prompts instruct agents, readiness contract validates at inspection time, and tests verify all enforcement paths. No conflicts found with explorer claims."
+  }
+}

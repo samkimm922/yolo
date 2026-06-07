@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence is sufficient and properly scoped: all claims are backed by project-scoped code and test evidence, no assumptions are presented as facts, and missing is correctly empty.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601101111431-m5tq17/explorer.json",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Explorer result shows 6 evidence records all with scope=project, exact paths, and line numbers from code and tests",
+      "why": "Confirms all evidence is properly scoped and sourced from project artifacts."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "406-411",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate() implementation shows regex-based repair of JSON key drift",
+      "why": "Verifies the repair implementation exists at claimed location."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "443-469",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult() shows try-catch returning EVIDENCE_AGENT_INVALID_JSON on parse failure",
+      "why": "Verifies the fail-closed behavior exists at claimed location."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "696-765",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test suite covers both JSON repair and invalid JSON failure cases",
+      "why": "Verifies test coverage exists for acceptance criteria behavior."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Explorer risks about future Claude JSON variations are noted but do not affect current PRD readiness",
+    "Test coverage may not exhaust all real-world Claude JSON edge cases"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer evidence is valid: all 6 records are project-scoped with exact paths and line numbers from code and tests. No assumptions are presented as facts. Missing is correctly empty. The claim that implementation matches acceptance criteria is supported by primary evidence from parseJsonCandidate(), normalizeAgentResult(), and test coverage."
+  }
+}

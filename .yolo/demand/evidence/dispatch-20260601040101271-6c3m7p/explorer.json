@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch currently implements JSON repair for minor Claude key drift patterns (line ranges, lone backslashes, empty string keys, trailing commas) and fails closed with EVIDENCE_AGENT_INVALID_JSON for unrecoverable output, but has not been stress-tested against real Claude -p agents in the current dirty working tree.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate function implements multi-stage JSON repair: first tries direct parse, then repairs specific Claude drift patterns (line ranges, backslashes, malformed keys, trailing commas), returns parsed result with repair flag",
+      "why": "This is the core repair logic that handles recoverable JSON formatting issues from Claude agents."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "348-368",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "extractJsonObject function attempts multiple extraction strategies: direct parse, fenced code blocks (```json...```), and object slicing from first { to last }, aggregating all parse errors",
+      "why": "This shows the fallback strategy for finding JSON within noisy provider output."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-421",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON error code when parsed is null, with raw output excerpt in result field, and validates evidence scope declarations returning EVIDENCE_SCOPE_REQUIRED blocker",
+      "why": "This is the fail-closed logic that produces explicit blockers on invalid agent JSON."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "test 'repairs minor Claude JSON key drift and records the repair' confirms repair of line format changes (42-88), escaped characters (\\.yolo), and malformed keys (space-prefixed), asserts json_repaired flag is true",
+      "why": "This test evidence documents which drift patterns are currently handled and recorded."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "test 'invalid agent JSON fails closed with explicit blocker code' uses 'not json' as provider output and asserts result.status is blocked, error_code is EVIDENCE_AGENT_INVALID_JSON, and readiness blockers include the error code",
+      "why": "This test confirms the fail-closed behavior for unrecoverable JSON errors."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues function returns EVIDENCE_SCOPE_REQUIRED blocker when evidence records lack declared scope, called during readiness inspection",
+      "why": "This confirms that scope validation produces explicit blockers during PRD readiness checks."
+    },
+    {
+      "path": "",
+      "line": "",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "git status shows dirty working tree with 30+ modified files including core demand and evidence dispatch code, confirming demand status about dirty state",
+      "why": "This validates the demand claim that evidence dispatch exists in uncommitted state requiring stress testing."
+    }
+  ],
+  "assumptions": [
+    "Minor JSON key drift refers to the four specific patterns currently repaired: unquoted line ranges, lone backslashes, empty string keys, and trailing commas",
+    "Real Claude -p agents may produce additional drift patterns not covered by current repair logic",
+    "The dirty working tree represents active development that may have changed provider behavior expectations"
+  ],
+  "risks": [
+    "If Claude agents produce new drift patterns beyond the four currently handled, parseJsonCandidate will return unrepaired result and trigger EVIDENCE_AGENT_INVALID_JSON blocker, blocking PRD readiness",
+    "If the repair logic incorrectly repairs valid JSON, it could silently accept malformed output",
+    "If evidence scope validation is not consistently applied, invalid evidence could be accepted as facts"
+  ],
+  "missing": [
+    "Stress test results against real Claude -p agents to confirm current repair patterns cover all observed drift",
+    "Evidence of any new JSON drift patterns from recent Claude model versions",
+    "Confirmation that dirty working tree changes do not affect JSON parsing or error handling behavior"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Current implementation handles documented minor drift patterns with explicit fail-closed for unrecoverable JSON. Stress testing against real agents is the remaining validation step."
+  }
+}

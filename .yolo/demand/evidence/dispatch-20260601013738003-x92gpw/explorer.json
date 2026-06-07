@@ -1,0 +1,179 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO evidence dispatch has provider-specific configuration paths and tool capability variations across Claude, Codex, and custom providers that require explicit normalization to prevent drift.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "418-466",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig function normalizes provider selection with different logic for claude, codex, and custom providers",
+      "why": "This is the core function that handles provider configuration during evidence dispatch and shows provider-specific paths"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "442-458",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider normalization clears settings, tools, and slash command flags then sets agent_tool_profile and no_session_persistence",
+      "why": "Shows evidence mode explicitly removes Claude's configuration options to enforce boundary control"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "459-461",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Custom provider sets custom_sandbox to 'boundary' mode during evidence dispatch",
+      "why": "Demonstrates custom provider configuration differs from Claude/Codex in evidence mode"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation creates provider-specific command structures: codex uses exec with output file, claude uses -p with tools/settings, custom uses shell execution",
+      "why": "Shows fundamental differences in how each provider is invoked and what parameters they accept"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "43-60",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex invocation includes sandbox mode, approval policy, and output file capture for last message",
+      "why": "Codex has different execution model with file-based output capture not used by Claude or custom"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude invocation supports permission mode, settings, tools, allowed/disallowed tools, slash commands disable, session persistence disable, and max budget",
+      "why": "Claude has the most complex configuration options, many of which are cleared in evidence mode"
+    },
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "1-9",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Provider aliases normalize anthropic→claude, openai→codex, shell/local→custom",
+      "why": "Shows provider name normalization that happens before configuration"
+    },
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "43-98",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildAgentAdapterCapabilities defines different sandbox, file_write, and shell_exec capabilities per provider",
+      "why": "Each provider has different capability contracts that affect what agents can do in evidence mode"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots detect project file mutations by comparing before/after file digests",
+      "why": "Boundary enforcement system that prevents evidence agents from modifying project files"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "468-612",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime executes evidence agents with boundary checks and feeds results into PRD readiness",
+      "why": "Main dispatch runtime that orchestrates provider execution with boundary enforcement"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "184-218",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies codex dispatch does not inherit claude default model or force read-only sandbox",
+      "why": "Test evidence showing provider isolation requirements"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "220-259",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies claude dispatch clears settings and tools flags and relies on boundary enforcement",
+      "why": "Test evidence showing Claude configuration normalization in evidence mode"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "261-327",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies full tool profile requires explicit authorization and defaults to boundary without allowFullAgentTools",
+      "why": "Test evidence showing tool profile variations require authorization"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "367-400",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies boundary blocks project file mutation even when agent results pass",
+      "why": "Test evidence showing boundary enforcement is independent of agent success"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "402-438",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies git-backed boundary detects untracked project mutations",
+      "why": "Test evidence showing boundary detection works for both modified and new files"
+    },
+    {
+      "path": "config.yaml",
+      "line": "26-30",
+      "scope": "project",
+      "source": "project_config",
+      "summary": "Current configuration defaults to claude executor with claude-sonnet-4-6 model and settings-minimal.json",
+      "why": "Shows current default configuration that evidence dispatch must handle correctly"
+    },
+    {
+      "path": "src/runtime/runner-core-helpers.ts",
+      "line": "16-29",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "withExecutionConfig function shows model inheritance pattern: if provider is codex, sets both model and codex_model",
+      "why": "Demonstrates cross-provider model leakage risk in configuration helpers"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "237-247",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy defines writes_business_code: false, agent_instruction: boundary_controlled, agent_tool_profile, and project_mutation: forbidden",
+      "why": "Shows evidence dispatch policy constraints that all providers must respect"
+    }
+  ],
+  "assumptions": [
+    "Evidence agents respect the boundary rules enforced by the snapshot system",
+    "Provider-specific tool restrictions are correctly applied before agent execution",
+    "JSON repair mechanism handles all common Claude output format variations"
+  ],
+  "risks": [
+    "A provider-specific assumption in executionConfig could silently weaken dispatch or break real agent calls",
+    "Tool profile variations (boundary vs full vs research) might not be consistently applied across all three providers",
+    "Model inheritance logic in withExecutionConfig could leak Claude model to Codex or vice versa",
+    "Boundary enforcement might not catch all mutation vectors (symlinks, external processes, file descriptor abuse)",
+    "Provider invocation differences (Codex output file vs Claude stdout) could cause result parsing failures",
+    "Agent tool capability differences per provider could lead to inconsistent evidence gathering"
+  ],
+  "missing": [
+    "Verification that current Codex installation handles the evidence dispatch invocation correctly",
+    "Evidence that custom provider commands respect boundary constraints in practice",
+    "Verification that tool profile normalization works identically across all three providers",
+    "Testing of real Claude agent behavior with evidence mode prompts vs test mocks"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Primary evidence confirms provider-specific configuration paths exist and are explicitly normalized in evidence dispatch. Code shows boundary enforcement, tool profile variations, and provider isolation mechanisms are implemented. Missing items are operational verification, not architectural gaps."
+  }
+}

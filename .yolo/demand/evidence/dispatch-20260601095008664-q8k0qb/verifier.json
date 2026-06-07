@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence is verified: YOLO demand evidence dispatch implements JSON repair for minor Claude key drift and fails closed with EVIDENCE_AGENT_INVALID_JSON on unrecoverable JSON.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "407-411",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Four Claude JSON drift repair patterns verified: line ranges, lone backslashes, duplicate key quotes, and trailing commas.",
+      "why": "Confirms the implementation matches the demand requirements for recoverable drift."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "445",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "errorCode is set to EVIDENCE_AGENT_INVALID_JSON when !parsed, with status=failed, completed=false, recommendation=block.",
+      "why": "Verifies the fail-closed behavior produces explicit blockers as required."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "632",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "json_repaired field records whether parseJsonCandidate applied repairs via parsedOutput.repaired.",
+      "why": "Confirms that recoverable drift is recorded as required."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "696-733",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test repairs minor Claude JSON key drift and records the repair; line 729 asserts json_repaired === true.",
+      "why": "Test demonstrates expected behavior for recoverable drift with real Claude output patterns."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "735-765",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies invalid JSON fails closed with status=blocked and error_code=EVIDENCE_AGENT_INVALID_JSON on line 760.",
+      "why": "Test confirms fail-closed behavior produces explicit blockers for unrecoverable JSON."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "10-11",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA constants define the evidence result schema contract used across dispatch.",
+      "why": "Verifies the schema contract that evidence results must satisfy."
+    }
+  ],
+  "assumptions": [],
+  "risks": [],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All explorer evidence verified directly from source code and tests. Line numbers are accurate, all four repair patterns are implemented, fail-closed behavior with EVIDENCE_AGENT_INVALID_JSON is confirmed, and tests demonstrate both recoverable drift recording and unrecoverable JSON blocking. No assumptions promoted to facts. All evidence paths are usable and verified."
+  }
+}

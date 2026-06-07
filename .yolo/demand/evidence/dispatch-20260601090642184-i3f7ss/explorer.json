@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch supports external research evidence (scope=external) without mixing it with target-project facts, and validates that project facts require project-scoped path evidence.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES defines four valid scopes: project, external, user, unknown.",
+      "why": "Scope system exists to categorize evidence sources."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "342-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt rules: 'If the demand explicitly asks for external research/fetch/search, actually use an available web/fetch/search-capable tool. Record those records as scope=external; if no such tool is available, put that in missing.'",
+      "why": "Agents are instructed to use web tools for external research and mark records as scope=external."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "344",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt rule: 'Web/fetch/search-capable tools are allowed for external research; mark those records as scope=external and do not use them as project facts.'",
+      "why": "External evidence must not be used as project facts."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "341",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt rule: 'Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator.'",
+      "why": "Project facts require project-scoped path evidence."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "478-490",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult function validates evidence scope declarations and adds EVIDENCE_SCOPE_REQUIRED blocker if any evidence record lacks scope.",
+      "why": "Evidence must declare scope; missing scope is a blocker."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function in router.ts checks if evidence marked as project-scoped has a repo-relative path. If evidence has project scope but no path, it adds PROJECT_EVIDENCE_PATH_REQUIRED blocker.",
+      "why": "Project-scoped evidence must have a repo-relative path or file locator."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "663-668",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "External research blocker: if demandRequestsExternalResearch returns true but externalEvidencePresent returns false, dispatch adds EXTERNAL_RESEARCH_EVIDENCE_REQUIRED blocker.",
+      "why": "Demands requesting external research must include at least one external evidence record."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "381-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function infers scope from declared scope field, URL patterns, source field patterns (external_web, project_code), and path presence.",
+      "why": "Scope inference uses multiple heuristics when scope is not explicitly declared."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine: '证据记录必须声明 scope: project | external | user | unknown。project 证据来自目标项目的 code、tests、docs、config、logs 或 artifacts，并且必须带 repo-relative path 或 file locator；external 证据可以来自 WebFetch/WebSearch、MCP web reader、browser fetch 或外部文档，但只能作为背景研究'",
+      "why": "Doctrine explicitly separates external evidence (background research) from project evidence (with path locators)."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If scope validation fails, external evidence could be mistaken for project facts."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence dispatch implementation correctly supports scope=external for web/fetch/search tools and requires project-scoped path evidence for target-project facts. Scope validation and blocker logic enforce separation between external research and project facts."
+  }
+}

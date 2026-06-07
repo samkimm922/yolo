@@ -1,0 +1,133 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements harness boundary audit that detects and blocks target-project mutations from full-tool Claude agents, with comprehensive test coverage for git-backed, non-git, and probe scenarios.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() and diffBoundarySnapshots() implement full boundary audit by capturing SHA-256 digests of all project files before and after agent execution, excluding allowed artifact roots.",
+      "why": "Core boundary audit implementation proves mutation detection is not based on trust but on cryptographic file state comparison."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "589-646",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime() calls buildBoundarySnapshot before agent spawn, then builds post-execution snapshot and diffs to generate BOUNDARY_PROJECT_MUTATION blockers.",
+      "why": "Runtime integration shows boundary audit is mandatory for every evidence dispatch execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "659-671",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations are converted to runtime blockers: BOUNDARY_PROJECT_MUTATION for each changed file, preventing PRD readiness even when agent results pass.",
+      "why": "Shows boundary violations are not logged but block the entire demand readiness pipeline."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "524-537",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig() normalizes agent_tool_profile: research allows WebFetch/WebSearch, full requires allowFullAgentTools=true, otherwise defaults to boundary.",
+      "why": "Tool profile gating shows full tools are not available without explicit authorization flags."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "317-399",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt() injects hard rules including boundary mutation probe instructions when enabled, with writes_code=probe_write_only override for controlled testing.",
+      "why": "Agent prompt generation shows boundary instructions are explicit and non-negotiable in agent protocol."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE when evidence lacks project scope or path, preventing external-only evidence from satisfying brownfield claims.",
+      "why": "Readiness validation enforces evidence scope requirements separate from boundary mutation detection."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "495-528",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "test 'boundary blocks project file mutation even when agent results pass' proves boundary audit blocks readiness on unexpected-project-write.txt mutation despite passing agent results.",
+      "why": "Integration test validates boundary violation overrides agent success and blocks PRD readiness."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "577-613",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "test 'git-backed boundary detects untracked project mutations' proves git ls-files boundary catches mutations outside git index including untracked files.",
+      "why": "Test validates boundary audit works with git-backed projects and detects untracked mutations."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "615-652",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "test 'git-backed boundary detects gitignored project mutations outside excluded dirs' proves boundary audit respects .gitignore but still catches sensitive mutations like .env.",
+      "why": "Test validates boundary audit handles gitignored files correctly while catching security-sensitive mutations."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "654-694",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "test 'non-git boundary fallback detects modified project files and ignores artifacts' proves fallback file walk detects mutations when git is unavailable while excluding allowed artifact roots.",
+      "why": "Test validates boundary audit works on non-git projects and correctly excludes artifact directory from mutation checks."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "530-575",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "test 'boundary mutation probe prompts a controlled write and blocks readiness' proves probe mode allows controlled writes for testing boundary enforcement while still generating BOUNDARY_PROJECT_MUTATION blockers.",
+      "why": "Test validates boundary mutation probe stress test mechanism detects the probe write and blocks as designed."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "test 'external-only evidence cannot satisfy existing project facts' proves projectEvidenceBlockingIssues blocks PRD readiness when agents return only external web evidence for brownfield claims.",
+      "why": "Test validates evidence scope validation is separate from but complementary to boundary mutation detection."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation() constructs provider-specific command lines with claude_permission_mode=bypassPermissions and agent_tool_profile propagation.",
+      "why": "Provider adapter shows how tool profiles and permission modes are passed to Claude agents during dispatch."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "68-69",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'external evidence can come from WebFetch/WebSearch but only as background research, cannot alone prove target project fields.'",
+      "why": "Product documentation confirms boundary between external research and project facts is intentional design."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If this claim is wrong, evidence agents with full tools could mutate target projects without detection, corrupting demand communication and project state."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Boundary audit is fully implemented with SHA-256 snapshot comparison, supports both git-backed and non-git projects, excludes allowed artifact roots, generates blockers for violations, and has comprehensive test coverage. Tool profiles gate full tools behind explicit authorization, and evidence scope validation enforces project/external separation. The system is production-ready for full-tool Claude agent dispatch."
+  }
+}

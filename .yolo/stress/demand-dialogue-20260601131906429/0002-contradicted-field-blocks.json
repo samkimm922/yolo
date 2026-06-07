@@ -1,0 +1,65 @@
+{
+  "iteration": 2,
+  "scenario": "contradicted-field-blocks",
+  "expected": "blocked",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131906429/fixtures/0002-contradicted-field-blocks",
+  "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131906429/fixtures/0002-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.transcript.md",
+  "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131906429/fixtures/0002-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.chain.json",
+  "prd_path": null,
+  "blocked_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131906429/fixtures/0002-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.blocked.json",
+  "yolo": {
+    "no_premature_prd": true,
+    "final_class_ok": true,
+    "check_status": null,
+    "turn_count": 2,
+    "turn_expectations_met": 2,
+    "blocker_codes": [
+      "REQUIREMENTS_PRESENT",
+      "ACCEPTANCE_SCENARIOS_PRESENT",
+      "SCENARIO_MATRIX_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "SCENARIO_SURFACES_PRESENT",
+      "SURFACE_SESSION_BUDGET_EXECUTABLE",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "PROJECT_FACTS_GROUNDED",
+      "PROJECT_FACTS_GROUNDED"
+    ]
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "correct_final_class": true,
+      "conversation_realistic": true,
+      "no_premature_prd": true,
+      "executable": false,
+      "score": 95,
+      "hard_failures": [],
+      "warnings": [],
+      "dimensions": {
+        "clarification_quality": 9,
+        "project_fact_grounding": 10,
+        "stage_transition": 9,
+        "plan_convergence": 8,
+        "prd_executability": 10,
+        "deadlock_avoidance": 9,
+        "rework_risk": 9
+      }
+    },
+    "stdout": "",
+    "stderr": ""
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T13:20:06.475Z",
+  "ended_at": "2026-06-01T13:20:46.583Z",
+  "duration_ms": 40108
+}

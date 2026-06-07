@@ -1,0 +1,684 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_dispatch.v1",
+  "status": "blocked",
+  "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+  "summary": "Demand evidence agents completed, but readiness still has blockers.",
+  "generated_at": "2026-06-01T04:46:34.986Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "state_root": "/Users/sippingroom/Developer/yolo/.yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601044634984-8fopg8",
+  "output_file": ".yolo/demand/evidence/dispatch-20260601044634984-8fopg8",
+  "execution_policy": {
+    "default_mode": "dry_run",
+    "execute_requires": [
+      "executeAgents=true",
+      "allowAgentDispatch=true"
+    ],
+    "writes_business_code": false,
+    "agent_instruction": "boundary_controlled",
+    "agent_tool_profile": "full",
+    "boundary": {
+      "project_mutation": "forbidden",
+      "allowed_write_roots": [
+        ".yolo/demand/evidence/dispatch-20260601044634984-8fopg8"
+      ]
+    }
+  },
+  "demand_status": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "hybrid",
+      "route": "fast",
+      "evidence_policy": "single_agent",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "HYBRID_NEW_WORK_ON_EXISTING_SYSTEM"
+      ],
+      "blocking": false,
+      "explanation": "Fast route by default; no hard factual risk trigger was found."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO harness boundary audit must detect tracked and untracked target-project mutations in git-backed and non-git projects."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "__tests__/demand-evidence-dispatch.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root."
+        ],
+        "risks": [
+          "A full-tool agent could create a new target project file without readiness blockers."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "hybrid",
+      "route": "fast",
+      "evidence_policy": "single_agent",
+      "stage": "evidence",
+      "submode": "fast_intake",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "HYBRID_NEW_WORK_ON_EXISTING_SYSTEM"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + verifier before treating project claims as facts."
+    }
+  },
+  "actions": [
+    {
+      "id": "demand.evidence.explorer",
+      "role": "explorer",
+      "status": "pending",
+      "reason": "Factual project claims need primary evidence.",
+      "protocol": {
+        "role": "explorer",
+        "objective": "Find primary project facts for the requested demand without editing files.",
+        "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "explorer.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601044634984-8fopg8/explorer.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601044634984-8fopg8/explorer.json"
+    },
+    {
+      "id": "demand.evidence.verifier",
+      "role": "verifier",
+      "status": "pending",
+      "reason": "Verify blockers and assumptions are not promoted to facts.",
+      "protocol": {
+        "role": "verifier",
+        "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+        "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "verifier.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601044634984-8fopg8/verifier.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601044634984-8fopg8/verifier.json"
+    }
+  ],
+  "mode": "execute",
+  "agent_results": [
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "explorer",
+      "status": "failed",
+      "completed": false,
+      "claim": "Factual project claims need primary evidence.",
+      "confidence": "low",
+      "evidence": [],
+      "assumptions": [],
+      "risks": [
+        "Evidence agent did not return a valid completed result."
+      ],
+      "missing": [
+        "EVIDENCE_AGENT_INVALID_JSON: Unexpected token 'T', \"This is th\"... is not valid JSON"
+      ],
+      "recommendation": "block",
+      "result": {
+        "verdict": "blocked",
+        "error_code": "EVIDENCE_AGENT_INVALID_JSON",
+        "provider": "claude",
+        "exit_code": 0,
+        "timed_out": false,
+        "raw_output_excerpt": "This is the start of our conversation — there's no prior history for me to learn from yet.\n\nI'm ready to help with the YOLO project. What would you like to work on?"
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "verifier",
+      "status": "blocked",
+      "completed": false,
+      "claim": "Evidence collection failed - no factual evidence available to verify boundary audit claims for YOLO demand evidence-dispatch.",
+      "confidence": "low",
+      "evidence": [
+        {
+          "path": ".yolo/demand/session-state.json",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "Demand session state shows explorer agent failed with EVIDENCE_AGENT_INVALID_JSON error",
+          "why": "Previous evidence collection did not return valid structured output for verification"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "File exists as claimed in scope_in but content not verified by failed explorer",
+          "why": "Cannot verify claimed functionality without reading implementation"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test file exists as claimed but coverage not verified",
+          "why": "Cannot verify acceptance criteria without test evidence"
+        }
+      ],
+      "assumptions": [
+        "src/demand/evidence-dispatch.ts implements boundary snapshot logic as claimed",
+        "Test coverage exists for the claimed acceptance criteria",
+        "Current dirty working tree indicates need for stress testing as stated in status_quo"
+      ],
+      "risks": [
+        "Explorer agent failure may indicate protocol or harness issues preventing evidence collection",
+        "No factual evidence exists to verify boundary audit functionality claims",
+        "Assumptions may be promoted to facts without proper evidence verification"
+      ],
+      "missing": [
+        "EVIDENCE_AGENT_FAILURE: Explorer agent returned invalid JSON instead of structured evidence",
+        "BOUNDARY_AUDIT_IMPLEMENTATION: Actual code implementation details not verified",
+        "TEST_COVERAGE_EVIDENCE: Test suite coverage for acceptance criteria not verified",
+        "GIT_TRACKING_BEHAVIOR: Evidence for git ls-files tracking behavior not collected",
+        "NON_GIT_FALLBACK: Evidence for non-git project fallback behavior not collected",
+        "ARTIFACT_EXCLUSION: Evidence that dispatch artifact root is properly excluded not collected"
+      ],
+      "recommendation": "block",
+      "result": {
+        "verdict": "blocked",
+        "notes": "Explorer agent failed with EVIDENCE_AGENT_INVALID_JSON, returning conversational text instead of required yolo.demand.evidence_result.v1 schema. No factual evidence available for verification. Either retry explorer agent with corrected protocol or conduct manual file reading to collect primary evidence before PRD can be considered ready."
+      }
+    }
+  ],
+  "provider_runs": [
+    {
+      "role": "explorer",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "Unexpected token 'T', \"This is th\"... is not valid JSON",
+      "stdout": "This is the start of our conversation — there's no prior history for me to learn from yet.\n\nI'm ready to help with the YOLO project. What would you like to work on?",
+      "stderr": ""
+    },
+    {
+      "role": "verifier",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"verifier\",\n  \"status\": \"blocked\",\n  \"completed\": false,\n  \"claim\": \"Evidence collection failed - no factual evidence available to verify boundary audit claims for YOLO demand evidence-dispatch.\",\n  \"confidence\": \"low\",\n  \"evidence\": [\n    {\n      \"path\": \".yolo/demand/session-state.json\",\n      \"scope\": \"project\",\n      \"source\": \"project_artifact\",\n      \"summary\": \"Demand session state shows explorer agent failed with EVIDENCE_AGENT_INVALID_JSON error\",\n      \"why\": \"Previous evidence collection did not return valid structured output for verification\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"File exists as claimed in scope_in but content not verified by failed explorer\",\n      \"why\": \"Cannot verify claimed functionality without reading implementation\"\n    },\n    {\n      \"path\": \"__tests__/demand-evidence-dispatch.test.ts\",\n      \"scope\": \"project\", \n      \"source\": \"project_test\",\n      \"summary\": \"Test file exists as claimed but coverage not verified\",\n      \"why\": \"Cannot verify acceptance criteria without test evidence\"\n    }\n  ],\n  \"assumptions\": [\n    \"src/demand/evidence-dispatch.ts implements boundary snapshot logic as claimed\",\n    \"Test coverage exists for the claimed acceptance criteria\",\n    \"Current dirty working tree indicates need for stress testing as stated in status_quo\"\n  ],\n  \"risks\": [\n    \"Explorer agent failure may indicate protocol or harness issues preventing evidence collection\",\n    \"No factual evidence exists to verify boundary audit functionality claims\",\n    \"Assumptions may be promoted to facts without proper evidence verification\"\n  ],\n  \"missing\": [\n    \"EVIDENCE_AGENT_FAILURE: Explorer agent returned invalid JSON instead of structured evidence\",\n    \"BOUNDARY_AUDIT_IMPLEMENTATION: Actual code implementation details not verified\",\n    \"TEST_COVE\n[truncated 784 chars]",
+      "stderr": ""
+    }
+  ],
+  "artifacts": [
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601044634984-8fopg8/explorer.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601044634984-8fopg8/verifier.json"
+  ],
+  "boundary": {
+    "project_mutation": "clean",
+    "allowed_write_roots": [
+      ".yolo/demand/evidence/dispatch-20260601044634984-8fopg8"
+    ],
+    "changes": []
+  },
+  "readiness": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.prd_readiness.v1",
+    "required_slots": [
+      "problem",
+      "target_user",
+      "status_quo",
+      "desired_outcome",
+      "scope_in",
+      "scope_out",
+      "constraints",
+      "acceptance_criteria",
+      "risks",
+      "approval"
+    ],
+    "slot_values": {
+      "problem": [
+        "Existing YOLO harness boundary audit must detect tracked and untracked target-project mutations in git-backed and non-git projects."
+      ],
+      "target_user": [
+        "YOLO maintainer"
+      ],
+      "status_quo": [
+        "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+      ],
+      "desired_outcome": [
+        "Boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root."
+      ],
+      "scope_in": [
+        "src/demand/evidence-dispatch.ts",
+        "__tests__/demand-evidence-dispatch.test.ts"
+      ],
+      "scope_out": [
+        "Do not intentionally modify target project files during evidence gathering."
+      ],
+      "constraints": [
+        "Full tools may be available; harness boundary audit must detect any target-project mutation."
+      ],
+      "acceptance_criteria": [
+        "Boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root."
+      ],
+      "risks": [
+        "A full-tool agent could create a new target project file without readiness blockers."
+      ],
+      "approval": [
+        "approved"
+      ]
+    },
+    "missing_slots": [],
+    "blockers": [
+      {
+        "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+        "role": "explorer",
+        "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+      },
+      {
+        "code": "EVIDENCE_AGENT_INVALID_JSON",
+        "role": "explorer",
+        "message": "explorer returned provider/runtime error EVIDENCE_AGENT_INVALID_JSON."
+      },
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "explorer",
+        "message": "explorer reported unresolved missing evidence: EVIDENCE_AGENT_INVALID_JSON: Unexpected token 'T', \"This is th\"... is not valid JSON"
+      },
+      {
+        "code": "EVIDENCE_AGENT_BLOCKED",
+        "role": "explorer",
+        "message": "explorer returned block; keep PRD readiness blocked until resolved."
+      },
+      {
+        "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+        "role": "verifier",
+        "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+      },
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "verifier",
+        "message": "verifier reported unresolved missing evidence: EVIDENCE_AGENT_FAILURE: Explorer agent returned invalid JSON instead of structured evidence; BOUNDARY_AUDIT_IMPLEMENTATION: Actual code implementation details not verified; TEST_COVERAGE_EVIDENCE: Test suite coverage for acceptance criteria not verified; GIT_TRACKING_BEHAVIOR: Evidence for git ls-files tracking behavior not collected; NON_GIT_FALLBACK: Evidence for non-git project fallback behavior not collected; ARTIFACT_EXCLUSION: Evidence that dispatch artifact root is properly excluded not collected"
+      },
+      {
+        "code": "EVIDENCE_AGENT_BLOCKED",
+        "role": "verifier",
+        "message": "verifier returned block; keep PRD readiness blocked until resolved."
+      },
+      {
+        "code": "EVIDENCE_AGENT_CONFLICT",
+        "claim": "factual project claims need primary evidence.",
+        "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+        "recommendations": [
+          "block"
+        ]
+      }
+    ],
+    "assumptions": [],
+    "required_evidence_agents": [
+      "explorer",
+      "verifier"
+    ],
+    "evidence_agreement": {
+      "status": "blocked",
+      "conflicts": [
+        {
+          "code": "EVIDENCE_AGENT_CONFLICT",
+          "claim": "factual project claims need primary evidence.",
+          "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+          "recommendations": [
+            "block"
+          ]
+        },
+        {
+          "code": "EVIDENCE_AGENT_CONFLICT",
+          "claim": "evidence collection failed - no factual evidence available to verify boundary audit claims for yolo demand evidence-dispatch.",
+          "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+          "recommendations": [
+            "block"
+          ]
+        }
+      ]
+    },
+    "prd_ready": false
+  },
+  "demand_status_after_dispatch": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "hybrid",
+      "route": "fast",
+      "evidence_policy": "single_agent",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "HYBRID_NEW_WORK_ON_EXISTING_SYSTEM"
+      ],
+      "blocking": false,
+      "explanation": "Fast route by default; no hard factual risk trigger was found."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO harness boundary audit must detect tracked and untracked target-project mutations in git-backed and non-git projects."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "__tests__/demand-evidence-dispatch.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root."
+        ],
+        "risks": [
+          "A full-tool agent could create a new target project file without readiness blockers."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_INVALID_JSON",
+          "role": "explorer",
+          "message": "explorer returned provider/runtime error EVIDENCE_AGENT_INVALID_JSON."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "explorer",
+          "message": "explorer reported unresolved missing evidence: EVIDENCE_AGENT_INVALID_JSON: Unexpected token 'T', \"This is th\"... is not valid JSON"
+        },
+        {
+          "code": "EVIDENCE_AGENT_BLOCKED",
+          "role": "explorer",
+          "message": "explorer returned block; keep PRD readiness blocked until resolved."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "verifier",
+          "message": "verifier reported unresolved missing evidence: EVIDENCE_AGENT_FAILURE: Explorer agent returned invalid JSON instead of structured evidence; BOUNDARY_AUDIT_IMPLEMENTATION: Actual code implementation details not verified; TEST_COVERAGE_EVIDENCE: Test suite coverage for acceptance criteria not verified; GIT_TRACKING_BEHAVIOR: Evidence for git ls-files tracking behavior not collected; NON_GIT_FALLBACK: Evidence for non-git project fallback behavior not collected; ARTIFACT_EXCLUSION: Evidence that dispatch artifact root is properly excluded not collected"
+        },
+        {
+          "code": "EVIDENCE_AGENT_BLOCKED",
+          "role": "verifier",
+          "message": "verifier returned block; keep PRD readiness blocked until resolved."
+        },
+        {
+          "code": "EVIDENCE_AGENT_CONFLICT",
+          "claim": "factual project claims need primary evidence.",
+          "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+          "recommendations": [
+            "block"
+          ]
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "blocked",
+        "conflicts": [
+          {
+            "code": "EVIDENCE_AGENT_CONFLICT",
+            "claim": "factual project claims need primary evidence.",
+            "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+            "recommendations": [
+              "block"
+            ]
+          },
+          {
+            "code": "EVIDENCE_AGENT_CONFLICT",
+            "claim": "evidence collection failed - no factual evidence available to verify boundary audit claims for yolo demand evidence-dispatch.",
+            "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+            "recommendations": [
+              "block"
+            ]
+          }
+        ]
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "hybrid",
+      "route": "fast",
+      "evidence_policy": "single_agent",
+      "stage": "evidence",
+      "submode": "fast_intake",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "HYBRID_NEW_WORK_ON_EXISTING_SYSTEM"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_INVALID_JSON",
+          "role": "explorer",
+          "message": "explorer returned provider/runtime error EVIDENCE_AGENT_INVALID_JSON."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "explorer",
+          "message": "explorer reported unresolved missing evidence: EVIDENCE_AGENT_INVALID_JSON: Unexpected token 'T', \"This is th\"... is not valid JSON"
+        },
+        {
+          "code": "EVIDENCE_AGENT_BLOCKED",
+          "role": "explorer",
+          "message": "explorer returned block; keep PRD readiness blocked until resolved."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "verifier",
+          "message": "verifier reported unresolved missing evidence: EVIDENCE_AGENT_FAILURE: Explorer agent returned invalid JSON instead of structured evidence; BOUNDARY_AUDIT_IMPLEMENTATION: Actual code implementation details not verified; TEST_COVERAGE_EVIDENCE: Test suite coverage for acceptance criteria not verified; GIT_TRACKING_BEHAVIOR: Evidence for git ls-files tracking behavior not collected; NON_GIT_FALLBACK: Evidence for non-git project fallback behavior not collected; ARTIFACT_EXCLUSION: Evidence that dispatch artifact root is properly excluded not collected"
+        },
+        {
+          "code": "EVIDENCE_AGENT_BLOCKED",
+          "role": "verifier",
+          "message": "verifier returned block; keep PRD readiness blocked until resolved."
+        },
+        {
+          "code": "EVIDENCE_AGENT_CONFLICT",
+          "claim": "factual project claims need primary evidence.",
+          "message": "Evidence agents disagree; keep the claim blocked until reconciled.",
+          "recommendations": [
+            "block"
+          ]
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + verifier before treating project claims as facts."
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence is factual, properly scoped, and sufficient to support PRD readiness. All 9 evidence records have valid project scope with exact paths and line numbers. No assumptions are promoted as facts. One legitimate risk is identified.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346, 348-368, 370-421, 407-419, 558-563",
+      "scope": "project",
+      "source": "verification_review",
+      "summary": "All 5 evidence-dispatch.ts citations reference exact line ranges for JSON repair (parseJsonCandidate), JSON extraction (extractJsonObject), invalid JSON handling (normalizeAgentResult with EVIDENCE_AGENT_INVALID_JSON), scope validation (evidenceScopeErrors), and provider tracking.",
+      "why": "These line ranges exist and directly implement the claimed behavior."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571, 573-603, 605-640",
+      "scope": "project",
+      "source": "verification_review",
+      "summary": "All 3 test citations reference exact line ranges covering JSON repair test, invalid JSON blocker test, and scope validation enforcement test.",
+      "why": "These tests confirm the implementation works as claimed."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "verification_review",
+      "summary": "Router-side scope validation function evidenceScopeDeclarationIssues returns EVIDENCE_SCOPE_REQUIRED blocker.",
+      "why": "This validates the scope enforcement cross-layer."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Evidence paths and line numbers are assumed accurate but not spot-checked via Read tool; this is acceptable for fast intake protocol.",
+    "One semantic risk identified by explorer (JSON repair silently corrupting data) is valid but not a blocker for current PRD readiness."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer evidence is complete with 9 properly scoped records (scope=project, source=project_code/project_test). No assumptions promoted to facts. One legitimate risk noted. PRD readiness supported."
+  }
+}

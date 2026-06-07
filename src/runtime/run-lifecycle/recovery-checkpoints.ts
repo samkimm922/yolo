@@ -21,6 +21,7 @@ export const MEMORY_CHECKPOINT_STATUSES = new Set([
 
 export function createRunnerLedgerWriters({
   getStateDir,
+  getRunId = () => null,
   appendStateEvent,
   appendRunEvent,
   error = console.error,
@@ -28,14 +29,18 @@ export function createRunnerLedgerWriters({
   return {
     logEvent(event, data = {}) {
       try {
-        appendStateEvent(getStateDir(), event, data);
+        const runId = getRunId();
+        const payload = runId && data?.run_id == null ? { ...data, run_id: runId } : data;
+        appendStateEvent(getStateDir(), event, payload);
       } catch (e) {
         error("[runner] logEvent 写入失败:", e.message);
       }
     },
     logRun(event, data = {}) {
       try {
-        appendRunEvent(getStateDir(), event, data);
+        const runId = getRunId();
+        const payload = runId && data?.run_id == null ? { ...data, run_id: runId } : data;
+        appendRunEvent(getStateDir(), event, payload);
       } catch (e) {
         error("[runner] logRun 写入失败:", e.message);
       }

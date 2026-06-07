@@ -7,6 +7,7 @@ import {
   buildCommitResultDecision,
   buildDocUpdatePayload,
   buildDryRunOutOfScopeBlock,
+  buildOutOfScopeBlock,
   buildScopeAuditDecision,
   buildScopeAuditRecord,
   buildTaskCommitMessage,
@@ -38,7 +39,7 @@ describe("commit flow helpers", () => {
     assert.equal(isDocUpdateHookFailure({ stderr: "other git failure" }), false);
   });
 
-  test("scope audit helpers build and append JSONL records without blocking callers", () => {
+  test("scope audit helpers build and append JSONL records with optional failures", () => {
     const writes = [];
     const record = buildScopeAuditRecord({
       taskId: "T1",
@@ -75,14 +76,17 @@ describe("commit flow helpers", () => {
       skipped: true,
       reason: "no_out_of_scope",
     });
-    assert.equal(appendScopeAuditRecord({
+    const optionalFailure = appendScopeAuditRecord({
       auditPath: "/bad/path",
       taskId: "T1",
       outOfScope: ["src/b.ts"],
+      required: false,
       appendFileSync: () => {
         throw new Error("disk full");
       },
-    }).error, "disk full");
+    });
+    assert.equal(optionalFailure.error, "disk full");
+    assert.equal(optionalFailure.blocked, false);
   });
 
   test("buildScopeAuditDecision returns logs and append payload for out-of-scope files", () => {
@@ -143,6 +147,7 @@ describe("commit flow helpers", () => {
       outOfScope: ["src/b.ts"],
       targetFiles: ["src/a.ts"],
       modified: ["src/a.ts", "src/b.ts"],
+      required: true,
     }]);
     assert.equal(result.auditResult.written, true);
 
@@ -158,6 +163,43 @@ describe("commit flow helpers", () => {
       written: false,
       skipped: true,
       reason: "no_out_of_scope",
+    });
+  });
+
+  test("applyScopeAudit blocks required audit write failures and warns for optional", () => {
+    const requiredLogs = [];
+    assert.throws(
+      () => applyScopeAudit({
+        auditPath: "/bad/path",
+        task: { id: "T-AUDIT" },
+        outOfScope: ["src/b.ts"],
+        targetFiles: ["src/a.ts"],
+        modified: ["src/a.ts", "src/b.ts"],
+        log: (id, marker, message) => requiredLogs.push({ id, marker, message }),
+        appendRecord: () => ({ written: false, reason: "scope_audit_write_failed", error: "disk full" }),
+      }),
+      /scope_audit_write_failed: disk full/,
+    );
+    assert.deepEqual(requiredLogs.at(-1), {
+      id: "T-AUDIT",
+      marker: "!!",
+      message: "scope audit write failed: disk full",
+    });
+
+    const optionalLogs = [];
+    const optionalResult = applyScopeAudit({
+      auditPath: "/bad/path",
+      task: { id: "T-AUDIT-OPT" },
+      outOfScope: ["src/b.ts"],
+      required: false,
+      log: (id, marker, message) => optionalLogs.push({ id, marker, message }),
+      appendRecord: () => ({ written: false, reason: "scope_audit_write_failed", error: "disk full" }),
+    });
+    assert.equal(optionalResult.auditResult.error, "disk full");
+    assert.deepEqual(optionalLogs.at(-1), {
+      id: "T-AUDIT-OPT",
+      marker: "WARN",
+      message: "scope audit skipped: disk full",
     });
   });
 
@@ -178,6 +220,29 @@ describe("commit flow helpers", () => {
       hasRealCode: true,
       businessFiles: ["src/a.ts"],
       metadataFiles: ["state/dry-run/report.md"],
+      blocked: true,
+      blockReason: "out_of_scope_files: src/b.ts",
+      outOfScope: ["src/b.ts"],
+    });
+  });
+
+  test("buildOutOfScopeBlock hard-blocks ordinary scope violations", () => {
+    assert.equal(buildOutOfScopeBlock({
+      task: { task_kind: "feature" },
+      outOfScope: [],
+    }), null);
+
+    assert.deepEqual(buildOutOfScopeBlock({
+      task: { task_kind: "feature" },
+      hasRealCode: true,
+      businessFiles: ["src/a.ts"],
+      metadataFiles: ["README.md"],
+      outOfScope: ["src/b.ts"],
+    }), {
+      committed: false,
+      hasRealCode: true,
+      businessFiles: ["src/a.ts"],
+      metadataFiles: ["README.md"],
       blocked: true,
       blockReason: "out_of_scope_files: src/b.ts",
       outOfScope: ["src/b.ts"],
@@ -281,7 +346,7 @@ describe("commit flow helpers", () => {
     });
   });
 
-  test("doc update helper imports the local updater, passes rootDir, and degrades to warning", async () => {
+  test("doc update helper imports the local updater, passes rootDir, and optionally degrades to warning", async () => {
     const calls = [];
     const updated = await updateDocsBeforeCommit({
       rootDir: "/repo",
@@ -306,6 +371,7 @@ describe("commit flow helpers", () => {
     const failed = await updateDocsBeforeCommit({
       task: { id: "T4", title: "Task title" },
       modifiedFiles: ["src/b.ts"],
+      required: false,
       importDocUpdater: async () => {
         throw new Error("missing updater");
       },
@@ -313,11 +379,12 @@ describe("commit flow helpers", () => {
 
     assert.equal(failed.updated, false);
     assert.equal(failed.skipped, true);
+    assert.equal(failed.warning, true);
     assert.equal(failed.reason, "doc_update_failed");
     assert.equal(failed.error, "missing updater");
   });
 
-  test("buildCommitResultDecision maps commit outcomes to logs events refresh and result", () => {
+  test("buildCommitResultDecision maps commit outcomes to logs events refresh and hard failures", () => {
     assert.deepEqual(buildCommitResultDecision({
       commitResult: { committed: true, retried: false, commit: "abc123" },
       task: { id: "T1" },
@@ -351,18 +418,17 @@ describe("commit flow helpers", () => {
       hasRealCode: true,
       businessFiles: ["src/c.ts"],
     }), {
-      status: "commit_warning",
-      logs: [{ id: "T2B", marker: "WARN", message: "commit 未完成但不阻塞已通过 gate 的合并: git_add_failed" }],
-      events: [{ event: "task_commit_warning", data: { task: "T2B", reason: "git_add_failed", error: "not a work tree" } }],
+      status: "git_add_failed",
+      logs: [{ id: "T2B", marker: "!!", message: "commit 失败，worktree 已 merge，跳过 rollback: git_add_failed" }],
+      events: [],
       refreshBaselines: false,
       result: {
         committed: false,
         hasRealCode: true,
         businessFiles: ["src/c.ts"],
         metadataFiles: [],
-        commitWarning: "git_add_failed",
+        commitFailure: "git_add_failed",
         commitError: "not a work tree",
-        nonBlocking: true,
       },
     });
 
@@ -380,6 +446,7 @@ describe("commit flow helpers", () => {
         hasRealCode: false,
         businessFiles: ["src/a.ts"],
         metadataFiles: [],
+        commitFailure: "doc_retry_failed",
       },
     });
 
@@ -387,7 +454,7 @@ describe("commit flow helpers", () => {
       commitResult: { committed: false, reason: "commit_failed" },
       task: { id: "T4" },
     }).logs, [
-      { id: "T4", marker: "!!", message: "commit 失败，worktree 已 merge，跳过 rollback" },
+      { id: "T4", marker: "!!", message: "commit 失败，worktree 已 merge，跳过 rollback: commit_failed" },
     ]);
   });
 
@@ -415,6 +482,66 @@ describe("commit flow helpers", () => {
       blocked: true,
       blockReason: "out_of_scope_files: src/app.ts",
       outOfScope: ["src/app.ts"],
+    });
+  });
+
+  test("runTaskCommitFlow blocks ordinary out-of-scope before docs or commit work", async () => {
+    const logs = [];
+    const events = [];
+    const result = await runTaskCommitFlow({
+      task: { id: "T-SCOPE", task_kind: "feature" },
+      code: ["src/app.ts", "src/out.ts"],
+      hasRealCode: true,
+      businessFiles: ["src/app.ts", "src/out.ts"],
+      outOfScope: ["src/out.ts"],
+      log: (id, marker, message) => logs.push({ id, marker, message }),
+      emitEvent: (event, data) => events.push({ event, data }),
+      updateDocs: async () => {
+        throw new Error("should not update docs");
+      },
+      commitChanges: () => {
+        throw new Error("should not commit");
+      },
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.deepEqual(result.result, {
+      committed: false,
+      hasRealCode: true,
+      businessFiles: ["src/app.ts", "src/out.ts"],
+      metadataFiles: [],
+      blocked: true,
+      blockReason: "out_of_scope_files: src/out.ts",
+      outOfScope: ["src/out.ts"],
+    });
+    assert.deepEqual(logs, []);
+    assert.deepEqual(events, []);
+  });
+
+  test("runTaskCommitFlow blocks package app lib skipped out-of-scope files", async () => {
+    const result = await runTaskCommitFlow({
+      task: { id: "T-PKG", task_kind: "feature" },
+      code: ["src/a.ts"],
+      hasRealCode: true,
+      businessFiles: ["src/a.ts"],
+      outOfScope: ["packages/app/lib/page.ts"],
+      updateDocs: async () => {
+        throw new Error("should not update docs");
+      },
+      commitChanges: () => {
+        throw new Error("should not commit");
+      },
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.deepEqual(result.result, {
+      committed: false,
+      hasRealCode: true,
+      businessFiles: ["src/a.ts"],
+      metadataFiles: [],
+      blocked: true,
+      blockReason: "out_of_scope_files: packages/app/lib/page.ts",
+      outOfScope: ["packages/app/lib/page.ts"],
     });
   });
 
@@ -452,7 +579,7 @@ describe("commit flow helpers", () => {
     });
   });
 
-  test("runTaskCommitFlow keeps doc update failures nonblocking", async () => {
+  test("runTaskCommitFlow keeps optional doc update failures nonblocking", async () => {
     const logs = [];
     const result = await runTaskCommitFlow({
       rootDir: "/repo",
@@ -460,6 +587,7 @@ describe("commit flow helpers", () => {
       code: ["src/a.ts"],
       hasRealCode: true,
       businessFiles: ["src/a.ts"],
+      docUpdateRequired: false,
       importDocUpdater: async () => {
         throw new Error("doc import failed");
       },
@@ -472,6 +600,40 @@ describe("commit flow helpers", () => {
     assert.deepEqual(logs, [
       { id: "T1", marker: "WARN", message: "doc update skipped: doc import failed" },
       { id: "", marker: "└─", message: "commit ok (1 biz, 0 meta)" },
+    ]);
+  });
+
+  test("required doc update failure blocks task success", async () => {
+    const logs = [];
+    const result = await runTaskCommitFlow({
+      rootDir: "/repo",
+      task: { id: "T-DOC", title: "Code task" },
+      code: ["src/a.ts"],
+      hasRealCode: true,
+      businessFiles: ["src/a.ts"],
+      importDocUpdater: async () => {
+        throw new Error("doc import failed");
+      },
+      commitChanges: () => {
+        throw new Error("should not commit when required docs fail");
+      },
+      log: (id, marker, message) => logs.push({ id, marker, message }),
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.docsResult.reason, "doc_update_failed");
+    assert.equal(result.docsResult.blocked, true);
+    assert.deepEqual(result.result, {
+      committed: false,
+      hasRealCode: true,
+      businessFiles: ["src/a.ts"],
+      metadataFiles: [],
+      blocked: true,
+      blockReason: "doc_update_failed: doc import failed",
+      outOfScope: [],
+    });
+    assert.deepEqual(logs, [
+      { id: "T-DOC", marker: "!!", message: "doc update failed: doc import failed" },
     ]);
   });
 
@@ -555,7 +717,44 @@ describe("commit flow helpers", () => {
       hasRealCode: true,
       businessFiles: ["src/a.ts"],
       metadataFiles: [],
+      commitFailure: "doc_retry_failed",
     });
+  });
+
+  test("YB-005 runTaskCommitFlow treats git_add_failed as hard failure, not completed", async () => {
+    const logs = [];
+    const events = [];
+    let refreshCount = 0;
+    const result = await runTaskCommitFlow({
+      rootDir: "/repo",
+      task: { id: "YB-005" },
+      code: ["src/a.ts"],
+      hasRealCode: true,
+      businessFiles: ["src/a.ts"],
+      updateDocs: async () => {},
+      commitChanges: () => ({
+        committed: false,
+        reason: "git_add_failed",
+        nonBlocking: true,
+        error: "fatal: this operation must be run in a work tree",
+      }),
+      log: (id, marker, message) => logs.push({ id, marker, message }),
+      emitEvent: (event, data) => events.push({ event, data }),
+      refreshBaselines: () => {
+        refreshCount += 1;
+      },
+    });
+
+    assert.equal(result.status, "git_add_failed");
+    assert.notEqual(result.status, "committed");
+    assert.equal(result.result.committed, false);
+    assert.equal(result.result.commitFailure, "git_add_failed");
+    assert.equal("nonBlocking" in result.result, false);
+    assert.deepEqual(logs, [
+      { id: "YB-005", marker: "!!", message: "commit 失败，worktree 已 merge，跳过 rollback: git_add_failed" },
+    ]);
+    assert.deepEqual(events, []);
+    assert.equal(refreshCount, 0);
   });
 
   test("commitTaskChanges stages files, commits, and reads short hash", () => {
@@ -642,7 +841,6 @@ describe("commit flow helpers", () => {
       committed: false,
       retried: true,
       reason: "doc_retry_failed",
-      nonBlocking: true,
       error: "SNAPSHOT.md 未暂存",
     });
     assert.deepEqual(calls.at(-1), ["git", "reset", "HEAD", "--", "SESSION.md", "SNAPSHOT.md"]);
@@ -672,7 +870,6 @@ describe("commit flow helpers", () => {
       committed: false,
       retried: false,
       reason: "commit_failed",
-      nonBlocking: true,
       error: "normal failure",
     });
     assert.deepEqual(calls.slice(-2), [
@@ -681,7 +878,7 @@ describe("commit flow helpers", () => {
     ]);
   });
 
-  test("commitTaskChanges returns a nonblocking warning when git add fails", () => {
+  test("YB-005 commitTaskChanges returns hard failure when git add fails", () => {
     const calls = [];
     const execFileSync = (bin, args) => {
       calls.push([bin, ...args]);
@@ -704,9 +901,9 @@ describe("commit flow helpers", () => {
       committed: false,
       retried: false,
       reason: "git_add_failed",
-      nonBlocking: true,
       error: "fatal: this operation must be run in a work tree",
     });
+    assert.equal("nonBlocking" in result, false);
     assert.deepEqual(calls, [["git", "add", "src/a.ts"]]);
   });
 });

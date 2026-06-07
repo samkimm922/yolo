@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "The explorer's claim that 'provider isolation mechanisms are implemented' is weakened by evidence that Codex defaults to write-capable sandbox mode and custom providers retain file_write/shell_exec capabilities in evidence mode, relying solely on post-facto boundary enforcement rather than provider-level restrictions.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "48",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex invocation defaults to 'workspace-write' sandbox mode when codex_sandbox is not set",
+      "why": "Contradicts the assertion that Codex is restricted in evidence mode; it defaults to a write-capable mode"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "199",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies codex_sandbox is undefined in evidence mode, confirming no explicit sandbox restriction is set",
+      "why": "Test evidence confirms that evidence dispatch does not override Codex's default write-capable sandbox"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "460",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence dispatch sets custom_sandbox to 'boundary' for custom providers",
+      "why": "Shows the configuration value set in evidence mode for custom providers"
+    },
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "67-82",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Custom provider capability contract restricts file_write and shell_exec only when customMode is 'read-only', not 'boundary'",
+      "why": "Demonstrates that 'boundary' mode does not prevent file writes or shell execution for custom providers"
+    },
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "79-80",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "file_write and shell_exec are true for custom providers unless mode is 'read-only'",
+      "why": "Confirms custom providers retain write and shell capabilities in 'boundary' mode used by evidence dispatch"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "367-400",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies boundary enforcement blocks mutations after they occur, proving enforcement is post-facto not preventative",
+      "why": "Evidence that boundary detection happens after execution, not at provider capability level"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "511",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshot is taken before agent execution and compared after, confirming post-facto detection model",
+      "why": "Confirms the architecture relies on detecting violations after they happen rather than preventing them at provider level"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Codex agents in evidence mode can execute file writes because workspace-write sandbox is the default and not overridden",
+    "Custom provider agents in evidence mode can execute file writes and shell commands because 'boundary' mode does not restrict these capabilities",
+    "Boundary enforcement only detects mutations after they occur; it does not prevent them at the provider invocation level",
+    "A malicious or buggy evidence agent could exploit file_write capabilities to mutate project files before boundary detection runs",
+    "The explorer's conclusion that 'provider isolation mechanisms are implemented' overstated the actual preventative restrictions"
+  ],
+  "missing": [
+    "Verification that evidence mode prompts explicitly forbid file writes regardless of provider capability",
+    "Testing of Codex or custom provider agents actually attempting file mutations in evidence mode to verify boundary catches them",
+    "Evidence that provider-level sandbox restrictions (not just post-facto boundary checks) are considered out of scope or intentionally omitted"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The explorer's primary claim about provider-specific configuration paths is accurate, but the conclusion about provider isolation is weakened. Codex and custom providers retain write-capable defaults in evidence mode; boundary enforcement is post-facto detection, not provider-level prevention. This is an architectural distinction that should be reflected in the risk assessment, not a blocker to proceeding."
+  }
+}

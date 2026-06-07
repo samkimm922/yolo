@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent cross-check confirms the explorer's claim: YOLO demand evidence dispatch implements provider-specific configuration isolation and boundary enforcement to prevent drift between Claude, Codex, and custom provider assumptions in evidence mode.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "1-132",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cross-check verified: Provider contract normalization exists with distinct capabilities for Claude (no sandbox, permission-mode, budget enforcement), Codex (sandbox modes, file_write shell_exec controls), and custom (external/local modes, shell execution).",
+      "why": "Direct read confirms explorer's line range and summary are accurate."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cross-check verified: buildProviderInvocation generates provider-specific CLI arguments. Lines 77-102 show Claude uses -p, --model, --permission-mode, --max-budget-usd, --no-session-persistence. Lines 43-60 show Codex uses exec, --cd, --sandbox, --output-last-message.",
+      "why": "Direct read confirms provider-specific invocation isolation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "418-466",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cross-check verified: executionConfig at lines 442-444 clears Claude model when provider is Codex. Lines 445-458 set Claude-specific agent_tool_profile and clear tools/settings. Line 460 sets custom_sandbox boundary mode.",
+      "why": "Direct read confirms configuration normalization happens as claimed."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cross-check verified: buildBoundarySnapshot at lines 99-107 uses git ls-files or filesystem walk, skips allowed roots, captures file digests. diffBoundarySnapshots at lines 110-120 compares before/after for mutations.",
+      "why": "Direct read confirms the boundary snapshot system implementation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "510-567",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cross-check verified: Runtime flow captures pre-execution snapshot (line 511), runs agents (lines 514-560), captures post-execution snapshot (line 561), compares violations (line 562), injects blockers into readiness.",
+      "why": "Direct read confirms the enforcement mechanism works as claimed."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "326-363",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cross-check verified: parseJsonCandidate (lines 326-341) repairs line ranges (line 331), quoted keys with spaces (line 332), trailing commas (line 333). extractJsonObject (lines 343-363) handles fenced code blocks (lines 349-354) and object extraction (lines 355-361).",
+      "why": "Direct read confirms JSON repair handles provider output variations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "132-148",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cross-check verified: sanitizeMissing (lines 142-148) filters out status phrases like 'no missing data' using isNonMissingStatusItem (lines 132-140) which matches patterns like 'no missing', 'all complete', '100%'.",
+      "why": "Direct read confirms missing sanitization prevents status text pollution."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cross-check verified: evidenceRecordScope (lines 382-406) normalizes various field names (scope, evidence_scope, source_scope, kind, type) to canonical values (project, external, user, unknown).",
+      "why": "Direct read confirms scope normalization handles provider field naming variations."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cross-check verified: projectEvidenceBlockingIssues (lines 513-530) enforces that project-scoped evidence must have repo-relative path (lines 415-418), blocking claims without concrete locators.",
+      "why": "Direct read confirms project evidence path enforcement."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "184-218",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Cross-check verified: Test 'codex dispatch does not inherit a claude default model or force read-only sandbox' asserts provider isolation (line 198: config.ai.provider is codex; line 201: model doesn't contain 'claude').",
+      "why": "Direct read confirms test evidence exists as claimed."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "220-259",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Cross-check verified: Test 'claude dispatch does not pass tool restriction flags and relies on boundary enforcement' asserts Claude receives empty settings/tools strings (lines 236-240) and sets no_session_persistence (line 241).",
+      "why": "Direct read confirms prompt-based boundary evidence exists."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "367-400",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Cross-check verified: Test 'boundary blocks project file mutation even when agent results pass' simulates mutation (line 381), verifies status blocked (line 394), and checks BOUNDARY_PROJECT_MUTATION blocker (line 396).",
+      "why": "Direct read confirms boundary enforcement test evidence."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Cross-check verified: Doctrine confirms Claude dispatch doesn't use tool restriction flags; agent_tool_profile expresses semantic mode; safety relies on prompt contract, artifact root, boundary snapshots, and readiness blockers.",
+      "why": "Direct read confirms design documentation matches security model."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Git-based boundary detection at lines 99-107 of evidence-dispatch.ts uses git ls-files first; if the repo has uncommitted changes that are not part of agent actions, they could be incorrectly attributed to the agent or mask actual violations.",
+    "JSON repair logic at lines 330-333 of evidence-dispatch.ts uses regex transformations that could incorrectly normalize malformed but semantically valid JSON from an unfamiliar provider pattern.",
+    "No evidence that Codex or custom providers have been tested with real agent execution in demand evidence context; all tests use mocked spawnProviderPrompt callbacks."
+  ],
+  "missing": [
+    "No evidence of stress testing the boundary system against agents that deliberately attempt to mutate project files beyond the single simulated mutation in test line 381.",
+    "No evidence of how the system handles provider timeout or crash scenarios during evidence dispatch; lines 526-536 show error handling but no test coverage.",
+    "No evidence of cross-provider drift testing where an agent assumes a different provider's capabilities during execution."
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All 13 evidence items independently verified against source files. Line ranges, summaries, and cross-references are accurate. The implementation matches the claimed security model. Risks are mitigated by boundary snapshot system and readiness gate. Missing evidence represents test coverage gaps but not architectural defects."
+  }
+}

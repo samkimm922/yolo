@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer and cross-checker evidence is substantially verified, but one external evidence claim remains unverified and should be treated as an assumption rather than a fact.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16-700",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Both agents verified the complete implementation of external evidence support including VALID_EVIDENCE_SCOPES, validation functions, boundary snapshots, and agent protocol instructions",
+      "why": "Core implementation evidence is consistent across both independent verifications"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-513",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Schema enforcement and project-fact boundary validation confirmed by both agents with corrected line numbers",
+      "why": "Cross-checker provided line number corrections, confirming independent verification"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Product doctrine explicitly separates project vs external evidence requirements",
+      "why": "Documentation evidence supports implementation claims"
+    },
+    {
+      "scope": "external",
+      "source": "external_web",
+      "summary": "Explorer claims to have fetched https://example.com using mcp__web_reader__webReader tool, but cross-checker could not verify this from code artifacts",
+      "why": "This represents the only unverifiable claim in the evidence chain"
+    }
+  ],
+  "assumptions": [
+    "The explorer successfully used mcp__web_reader__webReader to fetch https://example.com during evidence gathering, as this could not be independently verified by the cross-checker from available artifacts",
+    "Web/fetch/search-capable tools are available to agents during evidence dispatch execution, as this depends on runtime environment configuration not visible in static code review"
+  ],
+  "risks": [
+    "If external evidence tools are not actually available at runtime, agents cannot fulfill the protocol requirement to fetch and mark external evidence as scope=external",
+    "If the assumption is wrong and no external fetch occurred, the protocol validation that checks for scope=external evidence when external research is requested would fail in production"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verification complete: (1) All project-scoped evidence is verified with usable paths and sources by both agents independently. (2) Line number corrections from cross-checker confirm actual code review occurred. (3) The single unverifiable claim (external web fetch) is properly captured as an assumption by the cross-checker, not promoted to fact. (4) The system implementation is correctly verified. (5) Assumptions are explicitly documented rather than hidden. The evidence is sufficient to proceed with the understanding that external tool availability is a runtime dependency verified as an assumption."
+  }
+}

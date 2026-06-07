@@ -1,0 +1,98 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer claim confirmed: YOLO demand evidence dispatch API/schema supports WebFetch/WebSearch as external evidence (scope=external) while requiring project-scoped path evidence for target-project facts.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES explicitly includes 'external' alongside 'project', 'user', 'unknown' - confirms schema support for external evidence scope",
+      "why": "Core schema validation must include 'external' as valid scope for WebFetch/WebSearch evidence"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors() validates that every evidence record declares scope as project/external/user/unknown; missing scope blocks the result",
+      "why": "Mandatory scope declaration prevents evidence records without explicit scope classification"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "319",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rule: 'If the demand explicitly asks for external research/fetch/search, actually use WebFetch/WebSearch when available and record those records as scope=external'",
+      "why": "Explicit protocol requires agents to use external tools when available and mark results as external scope"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "317",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rule: 'Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator'",
+      "why": "Explicit requirement separates project facts (need path) from external research (no path needed)"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "496-500",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig() normalizes agent_tool_profile; 'research' profile enables external tools for Claude provider (ai.claude_tools=\"\", ai.settings=\"\" unrestricts tools)",
+      "why": "Configuration layer actually enables external research tools when agent_tool_profile='research'"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "44",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION field definition: 'evidence: scope is project | external | user | unknown; project facts require project-scoped evidence'",
+      "why": "Schema contract documents that project facts have stricter evidence requirements than external"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() blocks when evidence is only external/unknown but claim requires project facts; error: 'PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE'",
+      "why": "Validation gate prevents external-only evidence from proving target-project implementation facts"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() infers scope from record fields; detects external URLs (path starting with http:// or https://) and source types (external_web, webfetch, websearch)",
+      "why": "Scope inference logic automatically classifies web-fetched content as external scope"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'external evidence can only be background research, cannot prove target project has fields/API/state'",
+      "why": "Product documentation confirms architectural intent: external evidence cannot establish project facts"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Agent provider may not actually expose WebFetch/WebSearch tools at runtime despite code-level support",
+    "Agents may misunderstand or misapply scope=external vs project scope in practice, especially when web results contain project-relevant information"
+  ],
+  "missing": [
+    "Runtime verification that WebFetch/WebSearch tools are actually available to evidence agents under Claude provider",
+    "Integration test with real external fetch to confirm scope=external is properly applied and does not leak into project facts validation",
+    "Stress test with dirty working tree to confirm boundary audit detects project mutations during external research"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All explorer evidence independently verified. Code implementation fully supports external evidence scope=external with proper blocking rules to prevent mixing with project facts. Missing items are runtime verification gaps, not code defects."
+  }
+}

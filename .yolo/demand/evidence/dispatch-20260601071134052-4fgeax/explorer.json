@@ -1,0 +1,134 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence system implements scope-based evidence classification with project-scope validation.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence result schema defines scope field as required with values project | external | user | unknown. Field definition explicitly states project facts require project-scoped evidence.",
+      "why": "Schema-level contract for evidence scope classification."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES set validates scope values against four allowed categories.",
+      "why": "Runtime enforcement of valid scope declarations."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence agent protocols define explorer, cross-checker, and verifier roles with writes_code: false constraints.",
+      "why": "Agent protocol definitions for evidence gathering workflow."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function classifies evidence by scope field, source type, and path/url patterns. Returns project for paths, external for URLs, and validates against source prefixes like project_ and external_.",
+      "why": "Core scope classification logic for evidence records."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasProjectLocator function validates project evidence by checking for non-URL path field. Returns false for URLs or missing paths.",
+      "why": "Project evidence requires concrete file locator validation."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "421-436",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeSummary function analyzes evidence records to determine scope distribution and project locator presence.",
+      "why": "Scope analysis for evidence validation."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues function generates EVIDENCE_SCOPE_REQUIRED blockers for records without declared scope.",
+      "why": "Validation that evidence records declare scope explicitly."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker when evidence lacks project scope. Generates PROJECT_EVIDENCE_PATH_REQUIRED when project scope lacks path locator.",
+      "why": "Enforcement that existing-project facts require project-scoped evidence with concrete locators."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "717-732",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness function calls evidenceScopeDeclarationIssues and projectEvidenceBlockingIssues for complete evidence agent results, adding blockers to readiness check.",
+      "why": "Integration of scope validation into PRD readiness gate."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test external-only evidence cannot satisfy existing project facts validates that external web evidence blocks PRD readiness with PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE error.",
+      "why": "Test coverage for external evidence rejection on project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "454-498",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test project evidence requires a concrete project locator validates that project-scoped evidence without path field blocks with PROJECT_EVIDENCE_PATH_REQUIRED error.",
+      "why": "Test coverage for project locator requirement."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "500-545",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test external URLs cannot be relabeled as project evidence validates that URL-based evidence cannot be labeled as scope: project to bypass validation.",
+      "why": "Test coverage preventing URL evidence from being treated as project-scoped."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "547-591",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test evidence records must declare valid scope explicitly validates that evidence without scope field blocks with EVIDENCE_SCOPE_REQUIRED error.",
+      "why": "Test coverage for mandatory scope declaration requirement."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "144-202",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test cross-check PRD readiness requires every evidence agent result validates that cross_check policy requires explorer, cross-checker, and verifier results before PRD ready.",
+      "why": "Test coverage for evidence agent completion requirements."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If evidence scope validation is bypassed or incorrectly implemented, agents could cite external research as proof of project state.",
+    "If project locator validation fails to detect URLs labeled as paths, external evidence could be treated as project-scoped."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence schema, validation logic, and tests all implement scope-based evidence classification with project-scope requirements. The codebase already validates that existing-project facts require project-scoped evidence with concrete path locators, while external evidence is tracked separately and cannot satisfy project fact requirements."
+  }
+}

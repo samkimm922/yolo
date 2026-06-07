@@ -1,6 +1,11 @@
+import { existsSync as defaultExistsSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { detectModelProvider } from "./provider-doctor.js";
-import { buildProviderInvocation } from "../execution/provider-adapter.js";
+import {
+  buildProviderInvocation,
+  inspectProviderInvocationPreflight,
+  YOLO_PACKAGE_ROOT,
+} from "../execution/provider-adapter.js";
 import { inspectAgentAdapterContract, normalizeAgentProvider } from "./agent-contract.js";
 
 export const PROVIDER_RUNTIME_MATRIX_SCHEMA_VERSION = "1.0";
@@ -69,6 +74,8 @@ function serializeInvocation(invocation) {
     provider: invocation.provider,
     command: invocation.command,
     args: invocation.args,
+    settings_file: invocation.settingsFile || null,
+    settings: invocation.settings || null,
     output_file: invocation.outputFile || null,
     custom_command: invocation.customCommand || null,
   };
@@ -87,6 +94,8 @@ export function buildProviderRuntimeMatrix(options = {}) {
   const workDir = resolve(options.workDir || options.work_dir || projectRoot);
   const rootDir = resolve(options.rootDir || options.root_dir || projectRoot);
   const commandExists = options.commandExists || (() => null);
+  const existsSync = options.existsSync || defaultExistsSync;
+  const packageRoot = resolve(options.packageRoot || options.package_root || YOLO_PACKAGE_ROOT);
 
   const entries = providerList(options.providers).map((provider) => {
     const entryConfig = providerConfig(config, provider, options);
@@ -99,6 +108,12 @@ export function buildProviderRuntimeMatrix(options = {}) {
     });
     let invocation = null;
     let invocationError = null;
+    let invocationPreflight = {
+      status: "pass",
+      blocks_execution: false,
+      blockers: [],
+      warnings: [],
+    };
     try {
       invocation = buildProviderInvocation({
         provider,
@@ -108,10 +123,20 @@ export function buildProviderRuntimeMatrix(options = {}) {
         runtimeDir,
         now: options.now,
         random: options.random,
+        packageRoot,
       });
+      invocationPreflight = inspectProviderInvocationPreflight(invocation, { existsSync });
     } catch (error) {
       invocationError = error?.message || String(error);
     }
+    const blockers = [
+      ...(inspection.blockers || []),
+      ...(invocationPreflight.blockers || []),
+    ];
+    const warnings = [
+      ...(inspection.warnings || []),
+      ...(invocationPreflight.warnings || []),
+    ];
 
     return {
       provider,
@@ -119,13 +144,14 @@ export function buildProviderRuntimeMatrix(options = {}) {
       requested_provider: detection.requested,
       detection_reason: detection.reason,
       available: detection.available,
-      status: invocationError ? "blocked" : inspection.status,
-      blocks_execution: Boolean(invocationError || inspection.blocks_execution),
+      status: invocationError || invocationPreflight.blocks_execution ? "blocked" : inspection.status,
+      blocks_execution: Boolean(invocationError || inspection.blocks_execution || invocationPreflight.blocks_execution),
       contract: inspection.contract,
       invocation: serializeInvocation(invocation),
       invocation_error: invocationError,
-      blockers: inspection.blockers,
-      warnings: inspection.warnings,
+      invocation_preflight: invocationPreflight,
+      blockers,
+      warnings,
     };
   });
 
@@ -136,6 +162,7 @@ export function buildProviderRuntimeMatrix(options = {}) {
     state_root: stateRoot,
     runtime_dir: runtimeDir,
     gate_log_dir: gateLogDir,
+    package_root: packageRoot,
     runner_runtime: {
       project_root: projectRoot,
       state_root: stateRoot,

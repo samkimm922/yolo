@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence properly distinguishes facts from assumptions, provides verifiable project-scoped evidence with file paths and line numbers, and correctly identifies missing stress-testing evidence as a gap rather than presenting it as factual implementation validation.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "58-60",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "excludedDir() implementation is factual and verifiable in codebase",
+      "why": "Explorer correctly identified code location and scope"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() uses 'git ls-files -co --exclude-standard' - exact command is factual",
+      "why": "Explorer provided precise git command without assumptions"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles() fallback is verifiable implementation, not claimed coverage",
+      "why": "Code shows actual fallback logic"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() is verifiable in codebase with exact behavior",
+      "why": "Function implementation is factual"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test evidence proves boundary blocks project mutations in test environment",
+      "why": "Test behavior is observable fact"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test evidence proves non-git fallback works and excludes artifacts",
+      "why": "Test validates fallback behavior factually"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "244-248",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Execution policy is documented in code, not assumed",
+      "why": "Policy definition is factual code artifact"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Real-world Claude agent stress testing gap could miss edge cases not covered by unit tests",
+    "Git ls-files behavior across different git versions and configurations is not empirically validated"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer evidence is high-quality: all claims are backed by verifiable code or test evidence with exact paths and line numbers. Assumptions array is empty because explorer correctly identified gaps as missing items rather than promoting them to facts. Evidence properly distinguishes between implementation existence (fact) and real-world stress validation (missing). The 3 missing items from explorer are appropriate reflections of what cannot be verified from code/tests alone."
+  }
+}

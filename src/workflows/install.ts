@@ -104,7 +104,11 @@ function yamlString(value) {
   return JSON.stringify(cleanString(value));
 }
 
-function expectedSkillPaths(targetDir, descriptors) {
+function skillMarkdownFilename(options = {}) {
+  return cleanString(options.skillMarkdownFile || options.skill_markdown_file || "SKILL.md") || "SKILL.md";
+}
+
+function expectedSkillPaths(targetDir, descriptors, markdownFile = "SKILL.md") {
   const paths = [
     `${targetDir}/${WORKFLOW_SKILL_AGENT_RULES_FILE}`,
     `${targetDir}/${WORKFLOW_SKILL_TRIGGER_INDEX_FILE}`,
@@ -112,7 +116,7 @@ function expectedSkillPaths(targetDir, descriptors) {
   ];
   for (const descriptor of descriptors) {
     const skillDir = `${targetDir}/${skillFolderName(descriptor.id)}`;
-    paths.push(`${skillDir}/skill.json`, `${skillDir}/SKILL.md`);
+    paths.push(`${skillDir}/skill.json`, `${skillDir}/${markdownFile}`);
   }
   return paths;
 }
@@ -233,6 +237,9 @@ function renderSkillMarkdown(descriptor) {
     "## Execution Contract",
     "",
     "- Keep requirements, design, tasks, and evidence traceable.",
+    "- This descriptor is not permission to advance to downstream workflows automatically.",
+    "- Complete only the listed workflow outputs and stop; a later workflow needs an explicit matching trigger or user-selected `/yolo-*` stage command.",
+    "- If this workflow lists `no_code_change`, do not compile executable PRD, run implementation, fix code, or edit source files from this workflow.",
     "- Fail closed when a required verification hook cannot run.",
     "- Do not assume one model; inspect provider capability before execution.",
     "",
@@ -240,7 +247,7 @@ function renderSkillMarkdown(descriptor) {
   return lines.join("\n");
 }
 
-function buildWorkflowSkillTriggerIndex(targetInfo, descriptors) {
+function buildWorkflowSkillTriggerIndex(targetInfo, descriptors, markdownFile = "SKILL.md") {
   const triggers = [];
   for (const descriptor of descriptors) {
     for (const trigger of descriptor.trigger || []) {
@@ -250,7 +257,7 @@ function buildWorkflowSkillTriggerIndex(targetInfo, descriptors) {
         workflow: descriptor.workflow,
         agent: descriptor.agent,
         descriptor_path: `${targetInfo.relative_dir}/${skillFolderName(descriptor.id)}/skill.json`,
-        markdown_path: `${targetInfo.relative_dir}/${skillFolderName(descriptor.id)}/SKILL.md`,
+        markdown_path: `${targetInfo.relative_dir}/${skillFolderName(descriptor.id)}/${markdownFile}`,
         entrypoints: {
           sdk: descriptor.entrypoints?.sdk || null,
           cli: descriptor.entrypoints?.cli || null,
@@ -269,12 +276,12 @@ function buildWorkflowSkillTriggerIndex(targetInfo, descriptors) {
     schema: WORKFLOW_SKILL_TRIGGER_INDEX_SCHEMA,
     target: targetInfo.target,
     target_dir: targetInfo.relative_dir,
-    convention: "route a matching trigger to the named skill descriptor; fail closed when required inputs, PRD/spec gates, or verification hooks are missing",
+    convention: "route a matching trigger to the named skill descriptor, complete only that workflow, then stop unless a later workflow is explicitly selected; fail closed when required inputs, PRD/spec gates, or verification hooks are missing",
     triggers,
   };
 }
 
-function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex) {
+function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex, markdownFile = "SKILL.md") {
   const triggerLines = triggerIndex.triggers.length > 0
     ? triggerIndex.triggers.map((item) =>
       `- ${item.trigger} -> ${item.skill_id} (${item.entrypoints.cli})`
@@ -291,7 +298,7 @@ function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex) {
     "## Source Of Truth",
     "",
     "- Treat `skill.json` as the machine-readable workflow contract.",
-    "- Treat `SKILL.md` as the human-readable workflow guide.",
+    `- Treat \`${markdownFile}\` as the human-readable workflow guide.`,
     "- Treat `triggers.json` as the trigger routing index for this target.",
     "- Keep runtime artifacts under the consumer project state root, not under the YOLO package root.",
     "",
@@ -299,10 +306,12 @@ function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex) {
     "",
     "- Start a workflow only when the current user intent, CLI event, or automation event matches a listed trigger.",
     "- Route the trigger to exactly one listed skill unless a caller explicitly selects multiple workflows.",
-    "- Re-read the selected `skill.json` before execution and use `SKILL.md` only for agent-readable guidance.",
+    `- Re-read the selected \`skill.json\` before execution and use \`${markdownFile}\` only for agent-readable guidance.`,
     "",
     "## Gate Policy",
     "",
+    "- A selected workflow is terminal for the current turn unless the caller explicitly selected a later workflow.",
+    "- Do not treat user approval of a no-code workflow as permission to implement code.",
     "- Fail closed when required PRD, spec, evidence, review, lint, test, or release gates cannot run.",
     "- Do not mark a workflow complete until every listed verification hook has either passed or produced a blocking finding.",
     "- Preserve traceability from requirement to task, implementation, review finding, fix, and final evidence.",
@@ -333,10 +342,11 @@ export function buildWorkflowSkillInstallPlan(options = {}) {
     ...options,
     target: targetInfo.target,
   });
+  const markdownFile = skillMarkdownFilename(options);
 
   const directories = [targetInfo.relative_dir];
   const files = [];
-  const triggerIndex = buildWorkflowSkillTriggerIndex(targetInfo, descriptors);
+  const triggerIndex = buildWorkflowSkillTriggerIndex(targetInfo, descriptors, markdownFile);
 
   for (const descriptor of descriptors) {
     const skillDir = join(targetInfo.relative_dir, skillFolderName(descriptor.id));
@@ -348,7 +358,7 @@ export function buildWorkflowSkillInstallPlan(options = {}) {
       content: stableJson(descriptor),
     });
     files.push({
-      path: `${skillDir}/SKILL.md`,
+      path: `${skillDir}/${markdownFile}`,
       role: "skill_markdown",
       descriptor_id: descriptor.id,
       content: renderSkillMarkdown(descriptor),
@@ -359,7 +369,7 @@ export function buildWorkflowSkillInstallPlan(options = {}) {
     path: `${targetInfo.relative_dir}/${WORKFLOW_SKILL_AGENT_RULES_FILE}`,
     role: "agent_rules",
     descriptor_id: null,
-    content: renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex),
+    content: renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex, markdownFile),
   });
   files.push({
     path: `${targetInfo.relative_dir}/${WORKFLOW_SKILL_TRIGGER_INDEX_FILE}`,
@@ -390,6 +400,7 @@ export function buildWorkflowSkillInstallPlan(options = {}) {
     project_root: projectRoot,
     target: targetInfo.target,
     target_dir: targetInfo.relative_dir,
+    skill_markdown_file: markdownFile,
     directories: unique(directories),
     descriptors,
     files,
@@ -401,6 +412,7 @@ export function buildWorkflowSkillInstallPlan(options = {}) {
     project_root: projectRoot,
     target: targetInfo.target,
     target_dir: targetInfo.relative_dir,
+    skill_markdown_file: markdownFile,
     directories: unique(directories),
     descriptors,
     files,

@@ -13,6 +13,7 @@ import {
 } from "../runtime/parallel/wave-planner.js";
 import { buildAgentBridgeInstallPlan, installAgentBridge } from "../../tools/install-agent-bridge.js";
 import { REAL_PROJECT_DOGFOOD_V2_MODES, runRealProjectDogfoodGate } from "./real-project-dogfood.js";
+import { buildDogfoodMatrixEvidence } from "./dogfood-matrix.js";
 import { listYoloCommandNames } from "../workflows/command-registry.js";
 
 export const REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION = "1.0";
@@ -71,7 +72,7 @@ function plannedPathsFromDryRun(result = {}) {
 
 function commandForMode(mode) {
   if (mode === "idea") return "/yolo";
-  if (mode === "discovery") return "/yolo-discover";
+  if (mode === "discovery") return "/yolo-demand";
   if (mode === "plan") return "/yolo-plan";
   if (mode === "prd") return "/yolo-prd";
   if (mode === "check") return "/yolo-check";
@@ -302,6 +303,25 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now }) {
             readiness_level: "L3",
             quality_score: 100,
             quality_report: demandQualityReport,
+            project_facts: {
+              schema: "yolo.demand.project_facts.v1",
+              target_files: [
+                {
+                  file: "src/index.js",
+                  status: "verified",
+                  source: "real-project-dogfood-pack fixture created and inspected this no-code smoke target",
+                },
+              ],
+              candidate_target_files: [],
+              assumptions: [
+                {
+                  id: "ASM-DOGFOOD-001",
+                  text: "src/index.js is the isolated no-code dogfood smoke target.",
+                  status: "verified",
+                  evidence: ["src/index.js exists in the external fixture project."],
+                },
+              ],
+            },
           },
           execution_readiness: {
             level: "L3",
@@ -486,6 +506,7 @@ export function runRealProjectDogfoodPack(options = {}) {
     modes: DOGFOOD_MODES,
     agentIntegration: dryRunDoctor,
     dogfoodEvidence: evidence,
+    dogfoodMatrixEvidence: buildDogfoodMatrixEvidence(),
   });
 
   const checks = [

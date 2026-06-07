@@ -1,0 +1,115 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch supports WebFetch/WebSearch for external research with proper scope separation and boundary enforcement.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES is defined as Set(['project', 'external', 'user', 'unknown'])",
+      "why": "Shows the four valid evidence scopes are explicitly defined in the codebase"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "275-276",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt instructs to use WebFetch/WebSearch for external research and mark those records as scope=external, not as project facts",
+      "why": "Proves the protocol explicitly tells agents how to handle external research tools"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "450-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider normalizes agent_tool_profile to 'research', 'boundary', or 'full' based on configuration",
+      "why": "Shows how the system configures Claude agents with different tool access levels"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "515-517",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot creates file hash snapshot before agent execution excluding allowed artifact roots",
+      "why": "Demonstrates the boundary protection mechanism that detects unauthorized project mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary changes after agent execution are compared and any violations become PRD readiness blockers",
+      "why": "Proves the system enforces project boundary and prevents unauthorized modifications"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "38-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION requires evidence array with scope and states project facts need project-scoped evidence",
+      "why": "Shows the schema contract enforces proper evidence scoping"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function infers scope from record content and structure, distinguishing project from external sources",
+      "why": "Demonstrates the system has logic to automatically classify evidence scope"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function blocks project facts without project-scoped evidence or proper path locators",
+      "why": "Proves the system enforces that project facts require concrete project evidence, not external sources"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states evidence records must declare scope and project evidence requires repo-relative paths; external evidence cannot prove existing project facts",
+      "why": "Shows the documented contract that external research cannot substitute for project-scoped facts"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "143-149",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "sanitizeMissing filters out non-missing status items like 'no missing data' to keep missing array actionable",
+      "why": "Proves the system handles the requirement that missing should be [] when nothing is missing"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates that every evidence record declares scope as project, external, user, or unknown",
+      "why": "Shows enforcement of scope declaration requirement at the dispatch level"
+    }
+  ],
+  "assumptions": [
+    "WebFetch and WebSearch tools would be available in the actual Claude agent execution environment when dispatched"
+  ],
+  "risks": [
+    "If WebFetch/WebSearch tools are unavailable or fail, external evidence cannot be gathered and must be reported in missing",
+    "Agents might misunderstand scope labeling and accidentally mark external research as project facts"
+  ],
+  "missing": [
+    "Verification that WebFetch/WebSearch tools actually work when agents are dispatched with agent_tool_profile=research or full",
+    "Test evidence from actual agent dispatch showing WebFetch/WebSearch being used successfully with scope=external"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The codebase implements comprehensive scope separation, boundary enforcement, and validation for external research evidence. The protocol explicitly instructs agents to use WebFetch/WebSearch for external research and mark those records scope=external, while enforcing that project facts require project-scoped evidence with concrete paths. Missing verification only exists because tools are not available in this read-only explorer context."
+  }
+}

@@ -1,0 +1,712 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_dispatch.v1",
+  "status": "pass",
+  "code": "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD",
+  "summary": "Demand evidence agents completed and PRD readiness passed.",
+  "generated_at": "2026-06-01T05:27:40.164Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "state_root": "/Users/sippingroom/Developer/yolo/.yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601052740163-ls5k5c",
+  "output_file": ".yolo/demand/evidence/dispatch-20260601052740163-ls5k5c",
+  "execution_policy": {
+    "default_mode": "dry_run",
+    "execute_requires": [
+      "executeAgents=true",
+      "allowAgentDispatch=true"
+    ],
+    "writes_business_code": false,
+    "agent_instruction": "boundary_controlled",
+    "agent_tool_profile": "full",
+    "boundary": {
+      "project_mutation": "forbidden",
+      "allowed_write_roots": [
+        ".yolo/demand/evidence/dispatch-20260601052740163-ls5k5c"
+      ]
+    }
+  },
+  "demand_status": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand router schema readiness must block PRD readiness when any evidence agent reports missing evidence, clarify, block, or failed status."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Evidence missing and clarify recommendations become blockers and cannot produce prd_ready true."
+        ],
+        "scope_in": [
+          "src/demand/router.ts",
+          "__tests__/demand-router.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Evidence missing and clarify recommendations become blockers and cannot produce prd_ready true."
+        ],
+        "risks": [
+          "A PRD could be generated from incomplete evidence if missing fields are ignored."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  },
+  "actions": [
+    {
+      "id": "demand.evidence.explorer",
+      "role": "explorer",
+      "status": "pending",
+      "reason": "Factual project claims need primary evidence.",
+      "protocol": {
+        "role": "explorer",
+        "objective": "Find primary project facts for the requested demand without editing files.",
+        "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "explorer.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601052740163-ls5k5c/explorer.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601052740163-ls5k5c/explorer.json"
+    },
+    {
+      "id": "demand.evidence.cross-checker",
+      "role": "cross-checker",
+      "status": "pending",
+      "reason": "High-risk facts require independent cross-check.",
+      "protocol": {
+        "role": "cross-checker",
+        "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+        "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+        "writes_code": false,
+        "required_when": "evidence_policy === cross_check or claim risk is high",
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "cross-checker.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601052740163-ls5k5c/cross-checker.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601052740163-ls5k5c/cross-checker.json"
+    },
+    {
+      "id": "demand.evidence.verifier",
+      "role": "verifier",
+      "status": "pending",
+      "reason": "Verify blockers and assumptions are not promoted to facts.",
+      "protocol": {
+        "role": "verifier",
+        "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+        "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "verifier.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601052740163-ls5k5c/verifier.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601052740163-ls5k5c/verifier.json"
+    }
+  ],
+  "mode": "execute",
+  "agent_results": [
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "explorer",
+      "status": "completed",
+      "completed": true,
+      "claim": "The YOLO demand router schema already implements blocking logic that prevents PRD readiness when evidence agents report missing, clarify, block, or failed status.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/router.ts",
+          "line": "481-511",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceResultBlockingIssues function checks agent recommendation, verdict, status, and missing fields",
+          "why": "Core blocking logic for evidence agent results that determines PRD readiness blockers."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "678-752",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "inspectDemandPrdReadiness calls evidenceResultBlockingIssues for each evidence agent result and returns prd_ready: blockers.length === 0",
+          "why": "PRD readiness calculation that incorporates evidence agent blockers."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "709-727",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Router iterates through required evidence agent roles, calls evidenceResultBlockingIssues, and adds blockers for each result",
+          "why": "Integration point where evidence agent blocking issues are added to PRD readiness blockers list."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "246-286",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test case 'evidence agent missing data and clarify recommendations block PRD readiness' verifies the blocking behavior",
+          "why": "Executable test specification proving missing/clarify recommendations become blockers."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "740",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "prd_ready is computed as blockers.length === 0",
+          "why": "Final determination that any blocker including evidence agent blockers prevents PRD readiness."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "496-502",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "If result.missing has actionable items, blocker with code EVIDENCE_AGENT_MISSING is added",
+          "why": "Specific handling of missing field that creates blockers."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "503-509",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "If recommendation is clarify/blocked/block or verdict is blocked/fail or status is blocked/failed/error, a blocker is added",
+          "why": "Comprehensive status field checking that creates blockers for negative recommendations."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "370-420",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "normalizeAgentResult converts agent provider failure or invalid JSON into a blocker result with recommendation: block",
+          "why": "Agent dispatch layer ensures failed provider runs produce block recommendations."
+        }
+      ],
+      "assumptions": [],
+      "risks": [
+        "If this claim is wrong, the system might allow incomplete evidence to produce PRD-ready status, violating the evidence-based readiness contract."
+      ],
+      "missing": [],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "The router already implements complete blocking logic for missing/clarify/block/failed evidence agent status. Lines 481-511 define evidenceResultBlockingIssues, which checks recommendation, verdict, status, and missing fields. Lines 709-727 integrate these checks into PRD readiness blockers. Test at lines 246-286 confirms this works. The demand being considered is already satisfied by the existing implementation."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "cross-checker",
+      "status": "completed",
+      "completed": true,
+      "claim": "The YOLO demand router schema already implements blocking logic that prevents PRD readiness when evidence agents report missing, clarify, block, or failed status.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/router.ts",
+          "line": "481-511",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceResultBlockingIssues function checks agent recommendation, verdict, status, missing, and error_code fields and returns blockers array",
+          "why": "Core blocking logic that converts negative agent states into PRD readiness blockers."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "496-502",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "If result.missing has actionable items, blocker with code EVIDENCE_AGENT_MISSING is added",
+          "why": "Specific handling of missing field that creates blockers when unresolved evidence exists."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "503-509",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "If recommendation is clarify/blocked/block or verdict is blocked/fail or status is blocked/failed/error, a blocker is added",
+          "why": "Comprehensive status field checking that creates blockers for negative agent recommendations."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "709-727",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Router iterates through required evidence agent roles, calls evidenceResultBlockingIssues for each result, and adds all returned blockers to the blockerList",
+          "why": "Integration point where evidence agent blocking issues are collected and added to PRD readiness blockers."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "740",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "prd_ready is computed as blockers.length === 0 in inspectDemandPrdReadiness return statement",
+          "why": "Final determination that any blocker including evidence agent blockers prevents PRD readiness."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "246-286",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test case 'evidence agent missing data and clarify recommendations block PRD readiness' verifies prd_ready is false and both EVIDENCE_AGENT_MISSING and EVIDENCE_AGENT_CLARIFICATION_REQUIRED blockers exist",
+          "why": "Executable test specification proving missing/clarify recommendations actually become blockers that prevent PRD readiness."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "678-752",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "inspectDemandPrdReadiness orchestrates the entire PRD readiness check including evidence agent result processing",
+          "why": "High-level function that coordinates all blocking logic including evidence agent checks."
+        }
+      ],
+      "assumptions": [],
+      "risks": [
+        "If this claim is wrong, the system might allow incomplete evidence to produce PRD-ready status, violating the evidence-based readiness contract."
+      ],
+      "missing": [],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "Independent verification confirms the explorer's claim. The evidenceResultBlockingIssues function (481-511) checks recommendation, verdict, status, missing, and error_code fields. Lines 496-502 add blockers for actionable missing items. Lines 503-509 add blockers for negative recommendations (clarify/blocked/block) or verdicts (blocked/fail) or statuses (blocked/failed/error). Lines 709-727 integrate these checks by calling evidenceResultBlockingIssues for each evidence agent result and adding all returned issues to the blocker list. Line 740 computes prd_ready as blockers.length === 0, ensuring any evidence agent blocker prevents PRD readiness. Test at 246-286 confirms this behavior with missing data and clarify recommendations. The demand is already satisfied by existing implementation."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "verifier",
+      "status": "completed",
+      "completed": true,
+      "claim": "The YOLO demand router schema already implements blocking logic that prevents PRD readiness when evidence agents report missing, clarify, block, or failed status.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/router.ts",
+          "line": "481-511",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceResultBlockingIssues function converts negative evidence agent states into PRD readiness blockers",
+          "why": "Core blocking logic that validates the claim by showing exactly how agent results create blockers."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "246-286",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Executable test case demonstrating that missing/clarify recommendations produce blockers and prd_ready: false",
+          "why": "Test proof that the blocking logic actually works as claimed in runtime behavior."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "740",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "prd_ready computed as blockers.length === 0, ensuring any evidence agent blocker prevents readiness",
+          "why": "Final integration point confirming blockers control PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "risks": [],
+      "missing": [],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "Verification confirms both explorer and cross-checker provided complete evidence without presenting assumptions as facts. All evidence paths reference valid project files (src/demand/router.ts, __tests__/demand-router.test.ts, src/demand/evidence-dispatch.ts). The claim is directly supported by code at lines 481-511 (blocking logic), 740 (prd_ready calculation), and test proof at lines 246-286. No unresolved missing data exists, and all blockers/assumptions are properly reflected in the results. The demand acceptance criteria are already met by existing implementation."
+      }
+    }
+  ],
+  "provider_runs": [
+    {
+      "role": "explorer",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"explorer\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"The YOLO demand router schema already implements blocking logic that prevents PRD readiness when evidence agents report missing, clarify, block, or failed status.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"481-511\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"evidenceResultBlockingIssues function checks agent recommendation, verdict, status, and missing fields\",\n      \"why\": \"Core blocking logic for evidence agent results that determines PRD readiness blockers.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"678-752\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"inspectDemandPrdReadiness calls evidenceResultBlockingIssues for each evidence agent result and returns prd_ready: blockers.length === 0\",\n      \"why\": \"PRD readiness calculation that incorporates evidence agent blockers.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"709-727\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Router iterates through required evidence agent roles, calls evidenceResultBlockingIssues, and adds blockers for each result\",\n      \"why\": \"Integration point where evidence agent blocking issues are added to PRD readiness blockers list.\"\n    },\n    {\n      \"path\": \"__tests__/demand-router.test.ts\",\n      \"line\": \"246-286\",\n      \"scope\": \"project\",\n      \"source\": \"project_test\",\n      \"summary\": \"Test case 'evidence agent missing data and clarify recommendations block PRD readiness' verifies the blocking behavior\",\n      \"why\": \"Executable test specification proving missing/clarify recommendations become blockers.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"740\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \n[truncated 1971 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "cross-checker",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"cross-checker\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"The YOLO demand router schema already implements blocking logic that prevents PRD readiness when evidence agents report missing, clarify, block, or failed status.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"481-511\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"evidenceResultBlockingIssues function checks agent recommendation, verdict, status, missing, and error_code fields and returns blockers array\",\n      \"why\": \"Core blocking logic that converts negative agent states into PRD readiness blockers.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"496-502\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"If result.missing has actionable items, blocker with code EVIDENCE_AGENT_MISSING is added\",\n      \"why\": \"Specific handling of missing field that creates blockers when unresolved evidence exists.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"503-509\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"If recommendation is clarify/blocked/block or verdict is blocked/fail or status is blocked/failed/error, a blocker is added\",\n      \"why\": \"Comprehensive status field checking that creates blockers for negative agent recommendations.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"709-727\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Router iterates through required evidence agent roles, calls evidenceResultBlockingIssues for each result, and adds all returned blockers to the blockerList\",\n      \"why\": \"Integration point where evidence agent blocking issues are collected and added to PRD readiness blockers.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"740\"\n[truncated 2272 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "verifier",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"verifier\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"The YOLO demand router schema already implements blocking logic that prevents PRD readiness when evidence agents report missing, clarify, block, or failed status.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"481-511\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"evidenceResultBlockingIssues function converts negative evidence agent states into PRD readiness blockers\",\n      \"why\": \"Core blocking logic that validates the claim by showing exactly how agent results create blockers.\"\n    },\n    {\n      \"path\": \"__tests__/demand-router.test.ts\",\n      \"line\": \"246-286\",\n      \"scope\": \"project\",\n      \"source\": \"project_test\",\n      \"summary\": \"Executable test case demonstrating that missing/clarify recommendations produce blockers and prd_ready: false\",\n      \"why\": \"Test proof that the blocking logic actually works as claimed in runtime behavior.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"740\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"prd_ready computed as blockers.length === 0, ensuring any evidence agent blocker prevents readiness\",\n      \"why\": \"Final integration point confirming blockers control PRD readiness.\"\n    }\n  ],\n  \"assumptions\": [],\n  \"risks\": [],\n  \"missing\": [],\n  \"recommendation\": \"proceed\",\n  \"result\": {\n    \"verdict\": \"pass\",\n    \"notes\": \"Verification confirms both explorer and cross-checker provided complete evidence without presenting assumptions as facts. All evidence paths reference valid project files (src/demand/router.ts, __tests__/demand-router.test.ts, src/demand/evidence-dispatch.ts). The claim is directly supported by code at lines 481-511 (blocking logic), 740 (prd_ready calculation), and test proof at lines 246-286. No unresolved mis\n[truncated 171 chars]",
+      "stderr": ""
+    }
+  ],
+  "artifacts": [
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601052740163-ls5k5c/explorer.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601052740163-ls5k5c/cross-checker.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601052740163-ls5k5c/verifier.json"
+  ],
+  "boundary": {
+    "project_mutation": "clean",
+    "allowed_write_roots": [
+      ".yolo/demand/evidence/dispatch-20260601052740163-ls5k5c"
+    ],
+    "changes": []
+  },
+  "readiness": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.prd_readiness.v1",
+    "required_slots": [
+      "problem",
+      "target_user",
+      "status_quo",
+      "desired_outcome",
+      "scope_in",
+      "scope_out",
+      "constraints",
+      "acceptance_criteria",
+      "risks",
+      "approval"
+    ],
+    "slot_values": {
+      "problem": [
+        "Existing YOLO demand router schema readiness must block PRD readiness when any evidence agent reports missing evidence, clarify, block, or failed status."
+      ],
+      "target_user": [
+        "YOLO maintainer"
+      ],
+      "status_quo": [
+        "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+      ],
+      "desired_outcome": [
+        "Evidence missing and clarify recommendations become blockers and cannot produce prd_ready true."
+      ],
+      "scope_in": [
+        "src/demand/router.ts",
+        "__tests__/demand-router.test.ts"
+      ],
+      "scope_out": [
+        "Do not intentionally modify target project files during evidence gathering."
+      ],
+      "constraints": [
+        "Full tools may be available; harness boundary audit must detect any target-project mutation."
+      ],
+      "acceptance_criteria": [
+        "Evidence missing and clarify recommendations become blockers and cannot produce prd_ready true."
+      ],
+      "risks": [
+        "A PRD could be generated from incomplete evidence if missing fields are ignored."
+      ],
+      "approval": [
+        "approved"
+      ]
+    },
+    "missing_slots": [],
+    "blockers": [],
+    "assumptions": [],
+    "required_evidence_agents": [
+      "explorer",
+      "cross-checker",
+      "verifier"
+    ],
+    "evidence_agreement": {
+      "status": "pass",
+      "conflicts": []
+    },
+    "prd_ready": true
+  },
+  "demand_status_after_dispatch": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand router schema readiness must block PRD readiness when any evidence agent reports missing evidence, clarify, block, or failed status."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Evidence missing and clarify recommendations become blockers and cannot produce prd_ready true."
+        ],
+        "scope_in": [
+          "src/demand/router.ts",
+          "__tests__/demand-router.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Evidence missing and clarify recommendations become blockers and cannot produce prd_ready true."
+        ],
+        "risks": [
+          "A PRD could be generated from incomplete evidence if missing fields are ignored."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": true
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": true,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  }
+}

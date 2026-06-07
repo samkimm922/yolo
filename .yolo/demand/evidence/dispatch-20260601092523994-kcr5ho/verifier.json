@@ -1,0 +1,126 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES explicitly defines four scopes: project, external, user, unknown",
+      "why": "Verifies explorer and cross-checker evidence at line 52 is accurate"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION fields.evidence requires scope field and states project facts need project-scoped evidence",
+      "why": "Verifies schema definition matches evidence claim"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross_checker, verifier with writes_code=false and scope-aware prompts",
+      "why": "Verifies agent protocols match evidence claim"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope implements multi-heuristic scope classification with explicit scope, URL detection, and source keyword patterns",
+      "why": "Verifies scope classification logic matches evidence claim"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope and evidenceRecordHasProjectLocator validate scope declaration and concrete path requirements",
+      "why": "Verifies validation functions match evidence claim"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues returns PROJECT_EVIDENCE_PATH_REQUIRED and PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blockers",
+      "why": "Verifies readiness contract enforcement matches evidence claim"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "98-110",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "isNonMissingStatusItem and actionableMissingItems filter status notes from actual blockers",
+      "why": "Verifies missing array processing matches evidence claim"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates external-only evidence triggers PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker",
+      "why": "Verifies test coverage matches evidence claim"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "454-498",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates project evidence without path triggers PROJECT_EVIDENCE_PATH_REQUIRED blocker",
+      "why": "Verifies test coverage matches evidence claim"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "500-545",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates external URLs with project scope trigger PROJECT_EVIDENCE_PATH_REQUIRED blocker",
+      "why": "Verifies test coverage matches evidence claim"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "547-591",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates missing scope declaration triggers EVIDENCE_SCOPE_REQUIRED blocker",
+      "why": "Verifies test coverage matches evidence claim"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "593-633",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates status-only notes like 'no missing data identified' do not block readiness",
+      "why": "Verifies test coverage matches evidence claim"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "698-709",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates agent protocols define three roles and inspectEvidenceAgreement detects conflicts",
+      "why": "Verifies test coverage matches evidence claim"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Evidence scope classification could fail if agents provide malformed scope or source values",
+    "Project evidence validation could be bypassed if path validation logic is incomplete"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All explorer and cross-checker evidence verified directly from source files. Every evidence record path and line number is accurate. No assumptions presented as facts. All evidence has project scope with concrete locators. No missing data remains. Explorer and cross-checker results agree with no conflicts. All four evidence scopes are properly distinguished in schema, protocols, validation logic, readiness contract, and comprehensive test coverage."
+  }
+}

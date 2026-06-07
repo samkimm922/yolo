@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements scoped evidence separation with boundary audit that prevents external-only evidence from satisfying project fact requirements.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "366-388",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() function classifies evidence by scope (project/external/user/unknown) based on record.path, record.url, and record.source fields",
+      "why": "Evidence scope classification logic"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "466-476",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() generates blocker when evidence lacks project scope: 'evidence is ${nonProjectScopes.join(', ')} only; existing-project facts require project-scoped evidence'",
+      "why": "Core validation that blocks external-only evidence from satisfying project facts"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "666-671",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "PRD readiness check calls projectEvidenceBlockingIssues() for each complete evidence result, adding blockers when project evidence is missing",
+      "why": "Integration point where external-only evidence blocks PRD readiness"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16-21",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_CLAUDE_BOUNDARY_SETTINGS defines allowed tools including WebFetch and WebSearch with permissions.allow",
+      "why": "Web research capability configuration"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "230-245",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "dispatchEvidenceAgent() constructs agent with boundary.audit.enabled=true and boundary.audit.denyList=/Users/sippingroom/Developer/yolo",
+      "why": "Boundary audit configuration that should prevent target-project mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "278-285",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence protocol explicitly states 'do not modify target project files. If verification would require mutation, report it in missing'",
+      "why": "Protocol-level boundary enforcement"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "1-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "EvidenceRecordScope type union: 'project' | 'external' | 'user' | 'unknown'",
+      "why": "Type system enforces scope separation"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "full doc",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Demand doctrine documents evidence policy, scope classification, and external research boundaries",
+      "why": "Documentation of evidence separation principles"
+    }
+  ],
+  "assumptions": [
+    "The boundary.audit mechanism in evidence-dispatch.ts correctly prevents all mutations to the target project root during evidence gathering",
+    "WebFetch and WebSearch tools are available to evidence agents but their results are marked as scope=external"
+  ],
+  "risks": [
+    "If boundary audit fails, evidence agents could mutate project files during gathering",
+    "If evidenceRecordScope() misclassifies a record, external evidence could be treated as project-scope",
+    "Web research results marked as external might still be mistakenly used as project facts"
+  ],
+  "missing": [
+    "Actual test coverage for evidence scope classification logic",
+    "Integration tests that verify external-only evidence is blocked for project facts",
+    "Test that boundary audit denies project-file mutations during evidence gathering"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence scope separation and blocking logic exist in code as claimed. Key verification: evidenceRecordScope() classifies by path/url/source, projectEvidenceBlockingIssues() blocks external-only evidence for project facts, and boundary audit is configured. Risks remain around boundary audit effectiveness and test coverage."
+  }
+}

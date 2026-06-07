@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements provider-specific configuration with boundary enforcement and tool profile controls to prevent cross-provider model leakage and preserve tool capability under harness constraints.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "496-545",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig function normalizes provider-specific settings: Claude providers get claude_tools=default, permission_mode=bypassPermissions, no_session_persistence=true; Codex providers keep model separate; Custom providers get sandbox=boundary.",
+      "why": "Shows how provider-specific configuration prevents cross-contamination of settings between Claude, Codex, and custom providers."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "520-537",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent tool profile normalization: research profile (external-research, web, fetch) maps to 'research'; full profile maps to 'full' only when allowFullAgentTools=true; default is 'boundary'.",
+      "why": "Tool profiles control provider capabilities and prevent unintended access to write tools or external research."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots functions detect file mutations by comparing SHA256 digests before and after agent execution, excluding allowed write roots.",
+      "why": "Boundary enforcement is the primary mechanism preventing project mutations during evidence gathering."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation creates provider-specific command invocations: Claude uses -p flag with model/permission/tools settings; Codex uses --cd, --sandbox, --approval-policy, --output-last-message; Custom uses shell -c with rendered command.",
+      "why": "Provider invocation isolation ensures each provider receives only its intended configuration without inheriting defaults from other providers."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "317-400",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt generates role-specific instructions for explorer/cross-checker/verifier agents with explicit boundary rules: 'do not modify target project files', 'allowed artifact/scratch root', evidence scope requirements.",
+      "why": "Agent prompt engineering is the first line of defense against boundary violations during evidence gathering."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "659-696",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-execution validation: boundary changes generate BOUNDARY_PROJECT_MUTATION blockers; external research demand without external evidence generates EXTERNAL_RESEARCH_EVIDENCE_REQUIRED blockers; both block PRD readiness.",
+      "why": "Runtime validation catches violations even if agents ignore boundary instructions."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "200-234",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'codex dispatch does not inherit a claude default model or force read-only sandbox' verifies Codex provider isolation: checks provider=codex, undefined codex_sandbox/codex_approval, and no Claude model contamination.",
+      "why": "Test evidence demonstrates provider isolation is a verified requirement, not just theoretical."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "236-276",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'claude dispatch keeps default tools available and relies on boundary enforcement' verifies Claude gets claude_tools=default, bypassPermissions mode, and relies on post-execution boundary audit rather than pre-restricting tools.",
+      "why": "Shows design decision: Claude agents receive full tool capability and are trusted to follow boundary rules, with enforcement via snapshot diff."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "278-346",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'claude full tool profile requires explicit authorization' verifies agent_tool_profile='full' only applies when allowFullAgentTools=true; otherwise defaults to 'boundary' profile.",
+      "why": "Full semantic mode is a separate authorization gate from provider selection, preventing accidental tool escalation."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "495-528",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' simulates a claude agent that writes unexpected-project-write.txt and verifies blocked status, violated boundary, and BOUNDARY_PROJECT_MUTATION blocker.",
+      "why": "Boundary enforcement catches mutations regardless of agent-reported success, providing defense-in-depth."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "530-575",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary mutation probe prompts a controlled write and blocks readiness' verifies boundary_mutation_probe option explicitly allows one write for testing boundary detection, then correctly blocks readiness on the detected mutation.",
+      "why": "Mutation probe is a stress-test feature that validates boundary enforcement is working correctly."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS define explorer, cross-checker, and verifier roles with writes_code=false, enforcing read-only evidence gathering as a protocol requirement.",
+      "why": "Protocol-level write prohibition prevents agents from claiming they need to modify files to gather evidence."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function normalizes evidence scope declarations: project/repo/codebase→project, external/web/internet→external, user/human→operator, with fallback inference from path/url/source fields.",
+      "why": "Scope classification separates project facts from external research and user input, preventing cross-contamination of evidence types."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If an agent successfully writes to a project file outside the allowed artifact root and the snapshot diff fails to detect it (e.g., due to gitignore exclusion or filesystem race condition), project state could drift without triggering a blocker.",
+    "If provider-adapter inherits a model setting from config.ai.model for Codex when it should only use config.ai.codex_model, cross-provider model contamination could occur.",
+    "If external research evidence is not properly scoped as scope=external, project facts could be polluted with web research that should remain separate."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Provider configuration preserves tool capability under harness boundary through multi-layer defense: provider-specific invocation isolation, tool profile gates, boundary snapshot diff detection, and post-execution validation. Cross-checker agents verify high-risk claims independently. The architecture is sound and has comprehensive test coverage."
+  }
+}

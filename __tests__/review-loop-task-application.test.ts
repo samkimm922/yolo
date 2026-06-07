@@ -4,6 +4,7 @@ import {
   appendReviewTasksToPrd,
   buildReviewTaskLimitBlock,
   hasReviewFixFailures,
+  markReviewTaskLimitBlocked,
   pendingReviewDecision,
   reviewFixFailureDetail,
   reviewTaskIdSet,
@@ -27,14 +28,37 @@ describe("review-loop task application helpers", () => {
       message: "本轮将生成 7 个 CLAUDE_FIX，超过上限 5，拒绝写入 PRD",
       errorTitle: "REVIEW_TASK_LIMIT_BLOCKED",
       errorDetail: "generated=7, max=5",
+      status: "blocked",
+      reason: "review_task_limit",
+      human_needed: true,
+      recovery_action: "split_review_findings_or_raise_review_task_limit",
       meta: {
         round: 2,
         phase: "REVIEW_TASK_LIMIT_BLOCKED",
         generated_tasks: 7,
         max_allowed: 5,
         blocked_task_ids: ["A", "B"],
+        human_needed: true,
+        recoverable: true,
+        queue_strategy: "human_needed",
       },
     });
+  });
+
+  test("markReviewTaskLimitBlocked records a recoverable human-needed blocker", () => {
+    const taskResults = { completed: [], failed: [], skipped: [] };
+    const block = buildReviewTaskLimitBlock({
+      round: 1,
+      taskCount: 8,
+      maxTasks: 5,
+      taskIds: ["FIX-R1-001"],
+    });
+
+    assert.equal(markReviewTaskLimitBlocked({ taskResults, taskLimitBlock: block }), taskResults);
+    assert.deepEqual(taskResults.failed, []);
+    assert.deepEqual(taskResults.blocked, ["REVIEW-TASK-LIMIT-R1"]);
+    assert.equal(taskResults.review_blocker.human_needed, true);
+    assert.equal(taskResults.review_blocker.reason, "review_task_limit");
   });
 
   test("appendReviewTasksToPrd shapes tasks, mutates PRD, and increments progress", () => {

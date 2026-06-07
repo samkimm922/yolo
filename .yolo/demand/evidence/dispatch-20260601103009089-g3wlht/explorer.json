@@ -1,0 +1,154 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO provider dispatch API/state handling has recent changes in evidence-dispatch.ts and provider-adapter.ts to support demand evidence mode with boundary enforcement and provider-specific configuration isolation. Cross-provider model leakage prevention exists but requires stress testing with real agents.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "25-29",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "settingsValue function added to handle JSON settings strings vs file paths for Claude provider configuration",
+      "why": "New capability for inline settings in evidence mode"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "84-102",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider now supports claude_tools, claude_allowed_tools, claude_disallowed_tools, claude_disable_slash_commands, claude_no_session_persistence, and max_budget_usd flags",
+      "why": "Tool profile management for evidence mode boundary enforcement"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "521-523",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider includes explicit Claude model leak prevention: if model is empty and ai.model contains claude, ai.model is cleared to avoid cross-provider model confusion",
+      "why": "Cross-provider model leakage mitigation"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "98-110",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot function creates file digests before and after agent execution to detect mutations, using git ls-files when available or walkFiles fallback",
+      "why": "Core harness boundary enforcement mechanism"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "112-122",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after snapshots to detect added, modified, or deleted files for boundary violation detection",
+      "why": "Mutation detection logic for boundary enforcement"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "497-546",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig function normalizes provider settings including agent_tool_profile mapping to research/full/boundary for Claude, and sets claude_permission_mode to bypassPermissions",
+      "why": "Provider-specific configuration normalization for evidence mode"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "548-699",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime spawns agents, captures results, audits boundary changes, and updates readiness with blockers for mutations or missing external evidence",
+      "why": "Complete evidence dispatch lifecycle with boundary enforcement"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "200-234",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test codex dispatch does not inherit claude default model or force read-only sandbox, verifying provider isolation",
+      "why": "Provider isolation test coverage"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "236-276",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test claude dispatch keeps default tools available and relies on boundary enforcement instead of tool restriction",
+      "why": "Boundary enforcement over tool restriction approach validation"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "495-528",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test boundary blocks project file mutation even when agent results pass, verifying boundary enforcement actually works",
+      "why": "Boundary enforcement effectiveness test"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "68-69",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Claude provider demand dispatch does not use allowedTools/disallowedTools/tools restrictions; safety comes from prompt contract, artifact root, boundary snapshots, and readiness blockers",
+      "why": "Design rationale for boundary-based safety vs tool restrictions"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "161-176",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "demandRequestsExternalResearch and externalEvidencePresent functions detect when demand requires external research and verify scope=external evidence exists",
+      "why": "External evidence validation for demand compliance"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "318-401",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt generates protocol-specific prompts with boundary rules, scope requirements, and external research instructions based on tool profile",
+      "why": "Agent prompt generation with boundary and scope contract enforcement"
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601102821702-7vgj73/dispatch.json",
+      "line": "504-510",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Recent dispatch execution shows clean boundary with project_mutation: clean and zero changes, proving boundary enforcement works in practice",
+      "why": "Real-world evidence that boundary enforcement is functioning"
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601102821702-7vgj73/dispatch.json",
+      "line": "458-498",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Provider runs show successful Claude provider execution with json_repaired: false for all three agent roles, indicating stable JSON parsing",
+      "why": "Evidence of stable provider execution in evidence mode"
+    }
+  ],
+  "assumptions": [
+    "The git working tree with 55 modified files includes intentional changes for evidence dispatch and is not a symptom of provider configuration drift",
+    "Cross-provider model leakage prevention in provider-adapter.ts line 522-523 is sufficient but may not cover all edge cases",
+    "Stress test artifacts in .yolo/stress/ indicate previous testing but current demand claims these tests need to be run with real Claude -p agents"
+  ],
+  "risks": [
+    "A provider-specific assumption in executionConfig or buildProviderInvocation could silently weaken dispatch or break real agent calls if provider isolation is incomplete",
+    "Tool profile flags (claude_tools, claude_allowed_tools, claude_disallowed_tools) may have different behavior across Claude versions or configurations",
+    "Boundary enforcement relies on file system state; concurrent modifications or timing issues could produce false negatives or positives",
+    "The settingsValue function may not handle all valid JSON settings formats, leading to configuration errors",
+    "Cross-provider model leakage prevention only clears ai.model for Codex when it contains 'claude', which may not catch all model leakage scenarios"
+  ],
+  "missing": [
+    "Stress test results using real Claude -p agents to verify provider isolation and boundary enforcement under load",
+    "Evidence that tool profile flags (claude_tools, claude_allowed_tools, claude_disallowed_tools) preserve full tool capability under harness boundary",
+    "Verification that cross-provider model leakage prevention covers all edge cases beyond Claude model string detection",
+    "Testing of boundary enforcement with concurrent project modifications or unusual file system states"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Provider configuration includes boundary enforcement, provider isolation measures, and tool profile management. Evidence from code, tests, docs, and recent dispatch execution shows the implementation is functioning as designed. Cross-provider model leakage prevention exists but may benefit from additional stress testing with real agents to validate all edge cases."
+  }
+}

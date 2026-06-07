@@ -1,0 +1,121 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Cross-check of explorer claim: The YOLO demand evidence dispatch API/schema enforces clear separation between external research (WebFetch/WebSearch) and target-project facts through scope declarations and path requirements.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 16,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES = Set(['project', 'external', 'user', 'unknown']) - confirmed exactly as explorer stated.",
+      "why": "Defines the four valid scope values that all evidence records must declare."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 276,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt explicitly states: 'WebFetch/WebSearch are allowed for external research; mark those records as scope=external and do not use them as project facts.'",
+      "why": "This is the direct instruction that prevents external research from being used as project evidence."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "272-273",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt requires: 'Every evidence record must include scope: project, external, user, or unknown' and 'Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator.'",
+      "why": "Enforces scope declaration requirement and path locator requirement for project facts."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors function validates each evidence record has valid scope; returns error if missing or invalid.",
+      "why": "Runtime validation that prevents evidence without proper scope from being accepted."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function contains 14 heuristic rules to distinguish external evidence (URLs, web sources) from project evidence (repo-relative paths).",
+      "why": "Scope inference logic that prevents external sources from being classified as project evidence."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker when only external/unknown evidence exists for project-scoped claims.",
+      "why": "Core validation that blocks PRD readiness when project facts lack project-scoped evidence."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasProjectLocator checks evidence has repo-relative path (not URL); returns false for paths starting with http:// or https://.",
+      "why": "Ensures project-scoped evidence requires concrete file paths, not web URLs."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION field definition states: 'scope is project | external | user | unknown; project facts require project-scoped evidence.'",
+      "why": "Schema contract that codifies the scope separation requirement at the type level."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": 70,
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: '证据记录必须声明 scope: project | external | user | unknown。project 证据...必须带 repo-relative path 或 file locator；external 证据可以来自 WebFetch/WebSearch...但只能作为背景研究，不能单独证明目标项目已有字段、API、状态机或数据流。'",
+      "why": "Product-level requirement that external research cannot substitute for project evidence.",
+      "note": "Explorer referenced lines 58-66 for scope declarations, but that section describes agent protocol roles. Scope requirement is at line 70. Evidence locator error does not weaken claim."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues filters for records without declared scope and returns EVIDENCE_SCOPE_REQUIRED blocker.",
+      "why": "Enforcement layer that ensures scope is declared before evidence can satisfy readiness."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-573",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot called before/after agent execution; diffBoundarySnapshots detects any file mutations outside allowed artifact root.",
+      "why": "Runtime boundary audit that detects if agents modified project files."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "585-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations are transformed into BOUNDARY_PROJECT_MUTATION blockers and added to readiness.blockers array, setting prd_ready=false.",
+      "why": "Ensures any detected project file mutations prevent PRD readiness."
+    }
+  ],
+  "assumptions": [
+    "Explorer evidence #9 line reference (58-66) was for scope declarations but actually describes agent protocol roles; correct line is 70. This does not weaken the claim."
+  ],
+  "risks": [
+    "If buildBoundarySnapshot fails to detect mutations (e.g., due to git behavior changes), agents could modify project files without triggering blockers.",
+    "If evidenceRecordScope heuristics misclassify a URL as a project path, external evidence could be accepted as project evidence."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification confirms all 13 evidence points from explorer are factually correct. The implementation has multi-layered scope enforcement: schema definition, validation functions (evidenceScopeErrors, evidenceRecordHasDeclaredScope, projectEvidenceBlockingIssues), agent prompt instructions, and runtime boundary snapshots. One minor evidence locator error found (line 58-66 vs 70 for doctrine scope requirement) but does not affect claim validity."
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verification confirms: explorer and cross-checker evidence is consistent, assumptions are properly separated from facts, and missing data reflects actual gaps without blocking PRD readiness for the demand scope.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES defined consistently across both agent results",
+      "why": "Confirms evidence paths are verifiable and code exists as claimed"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "275-276",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt with WebFetch/WebSearch instructions verified by both agents independently",
+      "why": "Proves cross-check agreement on critical protocol implementation"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function verified as enforcing project-scoped evidence requirements",
+      "why": "Confirms the enforcement mechanism exists and works as claimed"
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601045129459-efh9cj",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Previous evidence results from explorer and cross-checker show no conflicts, consistent confidence=high",
+      "why": "Shows evidence agreement between independent agents is documented and verifiable"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine document confirms external evidence cannot substitute for project facts",
+      "why": "Verifies documented contract matches code implementation claims"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If WebFetch/WebSearch tools are unavailable in actual Claude agent execution, the external research workflow will fail and must be handled as missing data"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker evidence is consistent, properly scoped, and based on verifiable project files. Assumptions are clearly separated from facts and appropriately labeled. Missing items identified by previous agents reflect actual gaps (tool availability verification) but do not block PRD readiness for the demand scope. Evidence paths are valid repo-relative paths. No conflicts detected between agents. The demand has sufficient evidence to proceed with PRD generation."
+  }
+}

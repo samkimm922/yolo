@@ -1,0 +1,142 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes with project-scoped evidence requirements.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence schema with scope field and four valid scopes: project, external, user, unknown.",
+      "why": "This is the core evidence schema that mandates scope declaration."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES Set validates only four scopes are allowed: project, external, user, unknown.",
+      "why": "This enforces scope enumeration at the schema level."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross-checker, and verifier roles with writes_code: false and result_schema: yolo.demand.evidence_result.v1.",
+      "why": "This establishes the three-agent evidence protocol with scope-aware result schema."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function classifies evidence by scope field and source, with explicit mapping of project_code, project_test, project_docs, project_config, project_log, project_artifact to 'project' scope.",
+      "why": "This is the core scope classification logic that maps source types to scopes."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues and projectEvidenceBlockingIssues functions block evidence records without declared scope and require project-scoped evidence with concrete locators.",
+      "why": "This enforces scope declaration requirements for PRD readiness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues blocks claims when evidence is non-project (external/user/unknown only) for existing-project facts, and requires repo-relative path for project-scope evidence.",
+      "why": "This is the core validation that prevents external-only evidence from satisfying project facts."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "678-758",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness calls evidenceScopeDeclarationIssues and projectEvidenceBlockingIssues for complete evidence results, blocking PRD readiness for scope or locator violations.",
+      "why": "This integrates scope validation into the readiness contract."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "258-328",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt generates agent prompts with explicit scope rules, requiring project evidence with repo-relative paths and marking external research as scope=external.",
+      "why": "This communicates scope requirements to evidence agents in their protocol prompt."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates each evidence record declares scope as project, external, user, or unknown and blocks during result normalization.",
+      "why": "This enforces scope validation at dispatch time when processing agent results."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' verifies external evidence blocks PRD readiness with PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker.",
+      "why": "This confirms the readiness contract rejects external-only evidence for project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "454-498",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'project evidence requires a concrete project locator' verifies project-scope evidence without path fails with PROJECT_EVIDENCE_PATH_REQUIRED blocker.",
+      "why": "This confirms project-scope evidence requires repo-relative path or file locator."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "500-545",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external URLs cannot be relabeled as project evidence' verifies mislabeled external URLs with scope=project fail with PROJECT_EVIDENCE_PATH_REQUIRED.",
+      "why": "This confirms URLs cannot satisfy project evidence even with project scope label."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "547-591",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'evidence records must declare valid scope explicitly' verifies evidence without scope field fails with EVIDENCE_SCOPE_REQUIRED blocker.",
+      "why": "This confirms scope declaration is mandatory for all evidence records."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "605-640",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'agent evidence without explicit scope is blocked during normalization' verifies dispatch blocks agents that return evidence without scope field.",
+      "why": "This confirms dispatch runtime enforces scope validation during agent result processing."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "144-202",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'cross-check PRD readiness requires every evidence agent result' verifies all three agents (explorer, cross-checker, verifier) must complete with project-scoped evidence.",
+      "why": "This confirms the three-agent protocol with scope validation is enforced by readiness."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If evidence scope validation is bypassed or disabled, agents could cite external sources as project facts.",
+    "If boundary enforcement fails, agents could modify project files during evidence gathering."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All four components (schema, prompt, readiness contract, tests) explicitly distinguish evidence scopes and enforce project-scoped evidence requirements. The schema defines four scopes, the prompt communicates scope rules to agents, the readiness contract validates scope declarations and project locators, and tests verify external-only evidence cannot satisfy project facts."
+  }
+}

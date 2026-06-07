@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements JSON repair logic that handles specific Claude key drift patterns and records repairs via json_repaired flag, but stress tests show real Claude agents have not triggered this repair logic yet.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate() attempts JSON.parse with three regex-based repair patterns: line number format (42-88 to \"42-88\"), backslash escaping, empty key names, and trailing commas",
+      "why": "Core repair logic for handling predictable Claude JSON drift"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "348-368",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "extractJsonObject() applies three extraction strategies: direct parse, fenced code block (```json), and sliced object extraction, all tracking repaired flag",
+      "why": "Multi-strategy extraction ensures JSON is found even when Claude wraps output in markdown or adds prose"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "558",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "json_repaired field in provider_runs records whether parsedOutput.repaired === true, tracking if any repair occurred",
+      "why": "Recording repair events enables auditing whether drift is actually occurring in practice"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-397",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult() returns EVIDENCE_AGENT_INVALID_JSON error code when parsed is null or providerRun.success is false, with raw_output_excerpt in result",
+      "why": "Invalid JSON fails closed with explicit error code and raw output for debugging"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'repairs minor Claude JSON key drift and records the repair' mocks drift patterns: line range format (42-88), escaped backslashes (\\.yolo), empty key names (\" \"summary), and asserts json_repaired === true",
+      "why": "Test validates the specific drift patterns the repair logic is designed to handle"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'invalid agent JSON fails closed with explicit blocker code' validates that 'not json' output returns status=blocked with EVIDENCE_AGENT_INVALID_JSON error code in both agent_results and readiness.blockers",
+      "why": "Test confirms fail-closed behavior for unrecoverable JSON"
+    },
+    {
+      "path": ".yolo/stress/claude-stress-20260601010854514/0004-json-output-resilience.json",
+      "line": "624-660",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Stress test provider_runs show json_repaired: false for all three agent roles (explorer, cross-checker, verifier) with parse_error: empty strings, indicating no drift occurred",
+      "why": "Real Claude agent execution evidence that repair logic has not been triggered in practice"
+    },
+    {
+      "path": ".yolo/stress/claude-stress-20260601010854514/0004-json-output-resilience.json",
+      "line": "60-90",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Stress test demand problem statement: 'Existing YOLO demand evidence dispatch must handle minor Claude JSON key drift and fail closed with explicit blockers on invalid agent JSON'",
+      "why": "Evidence this exact demand was previously run and passed PRD readiness after evidence collection"
+    }
+  ],
+  "assumptions": [
+    "The regex repair patterns in parseJsonCandidate cover the actual drift Claude produces, but stress tests have not observed real drift yet",
+    "Line 335 regex /(\"line\"\\s*:\\s*)(\\d+)\\s*-\\s*(\\d+)(\\s*[,}])/g repairs Claude outputting unquoted line ranges like 42-88 instead of \"42-88\"",
+    "Line 336 regex /\\\\(?!([\"\\\\/bfnrtu]))/g repairs unescaped backslashes before non-JSON characters",
+    "Line 337 regex /([,{]\\s*)\"\\s+\"([A-Za-z_][\\w-]*)\"\\s*:/g repairs empty key names with spaces like \" \"summary",
+    "Line 338 regex /,\\s*([}\\]])/g repairs trailing commas before closing brackets"
+  ],
+  "risks": [
+    "If real Claude agents produce drift outside these four regex patterns, JSON will be rejected as EVIDENCE_AGENT_INVALID_JSON even though it might be recoverable",
+    "The repair logic has not been validated against actual Claude output from stress tests (all show json_repaired: false)"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence confirms: (1) JSON repair logic exists with four specific regex patterns for line ranges, backslashes, empty keys, and trailing commas. (2) Fail-closed behavior implemented: invalid JSON returns EVIDENCE_AGENT_INVALID_JSON with explicit blocker. (3) Test coverage validates both repair recording and failure modes. (4) Stress tests show real Claude agents have not triggered repair yet (json_repaired: false across 9 agent runs). Remaining risk: actual drift patterns may differ from the four regex patterns implemented."
+  }
+}

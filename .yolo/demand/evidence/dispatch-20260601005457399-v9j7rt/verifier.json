@@ -1,0 +1,68 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "blocked",
+  "completed": true,
+  "claim": "Evidence verification confirms scope separation logic exists but PRD readiness is blocked by failed explorer and missing test coverage validation.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "366-388",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() implementation verified - exists and classifies evidence by scope",
+      "why": "Verifies cross-checker evidence path is valid"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "466-476",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() implementation verified - blocks external-only evidence",
+      "why": "Verifies cross-checker evidence path is valid"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "230-245",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "dispatchEvidenceAgent() boundary.audit configuration verified",
+      "why": "Verifies cross-checker evidence path is valid"
+    },
+    {
+      "path": "evidence_result_cross_checker.json",
+      "line": "result",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Cross-checker completed with pass verdict but identified 3 missing test coverage items",
+      "why": "Cross-checker found scope separation logic exists but test coverage is missing"
+    },
+    {
+      "path": "evidence_result_explorer.json",
+      "line": "raw_output_excerpt",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Explorer failed with EVIDENCE_AGENT_INVALID_JSON error - JSON wrapped in markdown code blocks",
+      "why": "Evidence agreement incomplete without valid explorer result"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Cross-checker recommendation 'proceed' conflicts with missing test coverage that prevents acceptance criteria verification",
+    "Explorer may have found additional evidence that cross-checker did not validate",
+    "Missing test coverage means scope separation logic is verified only by code inspection, not by runtime tests"
+  ],
+  "missing": [
+    "Valid explorer result to complete evidence agreement (currently failing due to JSON parse error)",
+    "Integration tests that verify external-only evidence blocks for project facts (prevents acceptance criteria verification)",
+    "Boundary audit tests that confirm no project-file mutations during evidence gathering",
+    "Unit tests for evidenceRecordScope() classification logic"
+  ],
+  "recommendation": "block",
+  "result": {
+    "verdict": "blocked",
+    "notes": "Verification confirms: (1) Cross-checker evidence paths are valid and exist in project; (2) Assumptions properly separated from facts; (3) Missing data correctly reflected. However, PRD readiness blocked because: explorer failed with JSON error preventing full evidence agreement, and cross-checker identified missing test coverage that prevents verifying acceptance criteria 'Agents can discuss WebFetch/WebSearch capability and separate external evidence from project code evidence'. Require re-run of explorer with valid JSON output before PRD can proceed."
+  }
+}

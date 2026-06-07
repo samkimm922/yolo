@@ -1,0 +1,133 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence schema with scope field as 'project | external | user | unknown' and states 'project facts require project-scoped evidence.'",
+      "why": "This is the core evidence schema that defines the four valid scopes."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES = new Set(['project', 'external', 'user', 'unknown'])",
+      "why": "Explicit constant validating only these four scope values are accepted."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() function distinguishes all four scopes: project (repo/repository/codebase/local), external (web/internet/research), user (human/operator), unknown (unverified). Falls back based on path/url/source patterns.",
+      "why": "Core scope inference logic handles all four scope types explicitly."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope() validates evidence records declare one of the four VALID_EVIDENCE_SCOPES.",
+      "why": "Enforcement function ensures records explicitly declare valid scope."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "414-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasProjectLocator() checks project-scoped records include a repo-relative file path.",
+      "why": "Project scope enforcement requires concrete path locator."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE error when evidence lacks project scope, and PROJECT_EVIDENCE_PATH_REQUIRED when project-scoped records lack paths.",
+      "why": "Readiness contract enforces project facts need project-scoped evidence with paths."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "316",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rule: 'Every evidence record must include scope: project, external, user, or unknown.'",
+      "why": "Agent prompt explicitly requires all four scope values."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "317-318",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt: 'Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator.'",
+      "why": "Agent prompt explicitly links project facts to project-scoped evidence only."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors() validates each evidence record declares scope as one of the four VALID_EVIDENCE_SCOPES.",
+      "why": "Runtime validation in evidence-dispatch enforces scope requirement."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' uses evidence with scope='external' and verifies PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker.",
+      "why": "Test validates external scope is distinguished from project scope and cannot satisfy project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "454-498",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'project evidence requires a concrete project locator' uses scope='project' evidence without path and verifies PROJECT_EVIDENCE_PATH_REQUIRED blocker.",
+      "why": "Test validates project scope requires path locator."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "500-545",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external URLs cannot be relabeled as project evidence' uses scope='project' with url field and verifies PROJECT_EVIDENCE_PATH_REQUIRED blocker.",
+      "why": "Test validates project scope cannot be faked with external URLs."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "547-591",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'evidence records must declare valid scope explicitly' omits scope field and verifies EVIDENCE_SCOPE_REQUIRED blocker.",
+      "why": "Test validates evidence must explicitly declare one of the four scopes."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES constant duplicated in evidence-dispatch as new Set(['project', 'external', 'user', 'unknown'])",
+      "why": "Cross-file validation confirms same four scopes used throughout."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If claim is wrong, PRD readiness could incorrectly accept external research as project facts"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All four components (schema, prompt, readiness contract, tests) explicitly distinguish and validate the four evidence scopes. Schema defines scopes, constants validate them, inference logic distinguishes them, readiness enforces project-evidence requirements, agent prompt requires explicit declaration, and tests cover all validation paths."
+  }
+}

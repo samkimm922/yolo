@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch currently implements JSON repair for documented minor Claude key drift patterns and fails closed with explicit EVIDENCE_AGENT_INVALID_JSON blockers for unrecoverable output, with validated test coverage for both repair and failure paths.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate function implements multi-stage JSON repair: direct parse attempt, then repairs specific Claude drift patterns (line ranges like '42-88' to quoted strings, lone backslashes, malformed keys with empty string prefixes, trailing commas), returns parsed result with repaired flag and error message",
+      "why": "This is the core repair logic that handles recoverable JSON formatting issues from Claude agents and records when repair occurred."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "348-368",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "extractJsonObject function attempts multiple extraction strategies: direct parse, fenced code blocks (```json...```), and object slicing from first { to last }, aggregating all parse errors for reporting",
+      "why": "This shows the fallback strategy for finding JSON within noisy provider output, handling cases where agents wrap JSON in markdown or prepend prose."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-421",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON error code with raw output excerpt when parsed is null, and validates evidence scope declarations returning EVIDENCE_SCOPE_REQUIRED blocker when missing",
+      "why": "This is the fail-closed logic that produces explicit blockers on invalid agent JSON, ensuring malformed provider output cannot silently pass."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'repairs minor Claude JSON key drift and records the repair' confirms four specific drift patterns: line format changes (42-88), escaped characters (\\.yolo), malformed keys (space-prefixed), trailing commas, asserts json_repaired flag is true",
+      "why": "Test evidence defines the boundary of 'minor recoverable drift' with concrete examples and validates repair tracking."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'invalid agent JSON fails closed with explicit blocker code' validates that non-JSON output produces blocked status, EVIDENCE_AGENT_INVALID_JSON error code, and readiness blocker",
+      "why": "Test evidence confirms fail-closed behavior produces explicit blockers that keep PRD readiness blocked on unrecoverable JSON."
+    },
+    {
+      "path": ".yolo/stress/claude-stress-20260601035332471/0004-json-output-resilience.json",
+      "line": "360-378",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Stress test run shows explorer and verifier agents returning valid JSON without repair (json_repaired: false), confirming current implementation handles real Claude output correctly",
+      "why": "Real-world stress test evidence validates that documented repair patterns cover actual Claude agent output patterns."
+    },
+    {
+      "path": ".yolo/stress/claude-stress-20260601023010041/0001-local-contract-boundary.json",
+      "line": "267-276",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Earlier stress test shows agent returning prose text 'I've completed my exploration' instead of JSON, correctly failing with EVIDENCE_AGENT_INVALID_JSON and explicit blocker in readiness",
+      "why": "Evidence confirms that unrecoverable non-JSON output triggers fail-closed behavior as required by acceptance criteria."
+    },
+    {
+      "path": "tools/demand-claude-stress.mjs",
+      "line": "59-64",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Stress test scenario 'json-output-resilience' defines acceptance criteria: minor recoverable drift recorded, unrecoverable JSON receives EVIDENCE_AGENT_INVALID_JSON, PRD readiness stays blocked",
+      "why": "Stress test configuration evidence confirms the acceptance criteria match the expected behavior."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Stress tests show agents occasionally return prose text instead of JSON, but current fail-closed logic correctly blocks these cases"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence confirms implementation meets acceptance criteria: minor JSON drift patterns are documented and repaired with tracking, unrecoverable JSON fails closed with explicit EVIDENCE_AGENT_INVALID_JSON blockers, and stress tests validate real Claude agent behavior."
+  }
+}

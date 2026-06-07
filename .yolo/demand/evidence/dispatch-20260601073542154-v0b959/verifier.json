@@ -1,0 +1,95 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent verification confirms: All evidence paths cited by explorer and cross-checker are valid and contain the claimed content. No assumptions are presented as facts. Evidence is sufficient to support PRD readiness for evidence scope discrimination across schema, router, dispatch, tests, and docs.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES defines exactly four scope categories: project, external, user, unknown.",
+      "why": "Core schema definition validates evidence scope contract."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross_checker, and verifier with writes_code=false and result_schema=DEMAND_EVIDENCE_RESULT_SCHEMA.",
+      "why": "Agent protocols confirm read-only evidence gathering."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope infers scope from declared scope, path, URL, or source field; maps project_code/project_test/project_docs/project_config/project_log/project_artifact to project scope.",
+      "why": "Scope inference logic validates evidence classification."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-411",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope validates scope against VALID_EVIDENCE_SCOPES.",
+      "why": "Validation ensures evidence records declare required scope."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE or PROJECT_EVIDENCE_PATH_REQUIRED when project facts lack project-scoped evidence with paths.",
+      "why": "Readiness enforcement prevents unverified project claims."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot creates file hash map; diffBoundarySnapshots detects added/modified/deleted files.",
+      "why": "Boundary audit detects project file mutations during evidence gathering."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "258-328",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt encodes hard rules: boundary forbids target project modification; every evidence record must include scope; project facts require project-scoped evidence with repo-relative paths.",
+      "why": "Agent prompt enforces evidence scope discipline at contract level."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates external-only evidence (url=https://example.com/api-schema-guidance, scope=external) triggers PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker.",
+      "why": "Test proves external evidence cannot satisfy existing-project facts."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "58-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine specifies three evidence agent protocols and scope requirements: evidence records must declare scope; project evidence requires repo-relative paths; external evidence is background only.",
+      "why": "Documentation codifies evidence scope philosophy and contract."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Scope inference logic has many heuristics that could misclassify edge cases if path patterns overlap.",
+    "Boundary snapshot uses file hash which could miss mutations if files change and change back within the same agent run.",
+    "Evidence agents could misclassify scope if a URL-like string appears in a path field."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verified all evidence paths cited by explorer and cross-checker. All files exist and contain the claimed content. No assumptions presented as facts. Evidence is comprehensive across schema definition, scope inference, readiness enforcement, boundary audit, agent prompt contracts, tests, and documentation. The implementation correctly distinguishes project, external, user, and unknown evidence scopes. Project facts require project-scoped evidence with repo-relative paths; external-only evidence is blocked from satisfying existing-project claims. PRD readiness for evidence scope discrimination is supported by gathered evidence."
+  }
+}

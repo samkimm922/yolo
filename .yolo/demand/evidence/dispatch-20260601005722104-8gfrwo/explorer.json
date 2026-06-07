@@ -1,0 +1,144 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements harness boundary audit via SHA-256 file snapshots before and after full-tool Claude agents, converting any detected project mutations into BOUNDARY_PROJECT_MUTATION blockers that keep PRD readiness blocked.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "102-113",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() creates SHA-256 hashes of all project files excluding allowed_write_roots (artifact directory)",
+      "why": "This is the core boundary audit mechanism that creates immutable fingerprints of project state before agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "115-125",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after snapshots and returns detailed change list with added/modified/deleted status",
+      "why": "This function enables precise detection of any project mutations during agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "469",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryBefore = buildBoundarySnapshot(plan.project_root, [plan.output_dir]) captures project state before agent execution",
+      "why": "Snapshot before execution establishes the baseline for mutation detection."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "519-526",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryAfter snapshot taken after all agents; diffBoundarySnapshots() compares and assigns result.boundary.project_mutation = 'violated' if changes detected",
+      "why": "Post-execution snapshot comparison is the actual boundary violation detection."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "538-550",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryBlockers array maps each change to BOUNDARY_PROJECT_MUTATION blocker with path and change type; blockers merged into readiness and prd_ready set to false if any exist",
+      "why": "This converts boundary violations into PRD readiness blockers, fulfilling the audit contract."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16-21",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "CLAUDE_BOUNDARY_TOOLS = [Read, Write, Edit, MultiEdit, NotebookEdit, Bash, Glob, Grep, WebFetch, WebSearch, Agent, TaskCreate, TaskUpdate] and DEMAND_EVIDENCE_CLAUDE_BOUNDARY_SETTINGS.permissions.allow = CLAUDE_BOUNDARY_TOOLS",
+      "why": "This proves full-tool Claude agents (including Write/Edit) are permitted; boundary audit is the safety mechanism, not tool restriction."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "216-220",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy.boundary.project_mutation = 'forbidden' and execution_policy.boundary.allowed_write_roots = [artifact output directory]",
+      "why": "Policy declaration that project mutation is forbidden and only the artifact scratch root is writable."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "238-240",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt explicitly states: 'Hard rules: - Boundary: do not modify target project files. If verification would require mutation, report it in missing.'",
+      "why": "This documents the boundary contract in the agent prompt, creating explicit instruction for agent behavior."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "378-411",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' creates unexpected-project-write.txt during agent execution, asserts status=blocked, boundary.project_mutation=violated, and BOUNDARY_PROJECT_MUTATION blocker exists",
+      "why": "This is runtime proof that the boundary audit detects mutations and blocks readiness even when agent results would otherwise pass."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "413-449",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' initializes git repo, creates untracked-mutation.txt during execution, asserts boundary detects it as 'added' and blocks with BOUNDARY_PROJECT_MUTATION",
+      "why": "This proves the boundary works with git-backed file tracking and detects untracked file additions."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "220-263",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'claude dispatch keeps tools available and relies on boundary enforcement' asserts claude_allowed_tools includes Write and Bash, claude_disable_slash_commands=false, and relies on boundary enforcement instead of tool restrictions",
+      "why": "This confirms Claude agents have full tool access including mutation-capable tools, with boundary audit as the safety mechanism."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "466-476",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() function checks if evidence results have only non-project scopes and returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker for existing-project claims without project-scoped evidence",
+      "why": "This is the cross-check validation that prevents external-only evidence from supporting brownfield project facts."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "426-462",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime() checks execute and allow flags; returns blocked status with DEMAND_EVIDENCE_AGENT_DISPATCH_NOT_ALLOWED if executeAgents=true but allowAgentDispatch=false",
+      "why": "This shows the explicit authorization requirement preventing accidental agent execution."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "111-203",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "spawnProviderPrompt() spawns child process for provider (claude/codex/custom), pipes prompt to stdin, collects stdout/stderr, and returns structured result with success/provider/exitCode/stdout/stderr/timedOut fields",
+      "why": "This shows how evidence agents are invoked as separate processes that can potentially mutate files."
+    },
+    {
+      "path": "",
+      "line": "git-status",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Current working tree shows 50+ modified files including src/demand/*.ts, __tests__/*.ts, docs/*.md, bin/yolo.ts",
+      "why": "This confirms the demand's 'dirty working tree' claim in status_quo; the project has pending changes."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If boundary snapshot logic fails (file system errors, permission issues, git conflicts), mutations might go undetected.",
+    "If allowed_write_roots configuration is mis-specified, project files could be excluded from boundary checks.",
+    "Agents running with full tools could still mutate files between snapshot creation and PRD readiness determination if there's a time-of-check-to-time-of-use gap.",
+    "The boundary audit only detects file system mutations; it cannot detect external system mutations (database changes, API calls, etc.)."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The claim is verified: YOLO demand evidence dispatch implements boundary audit via SHA-256 file snapshots with full-tool Claude agents. The implementation takes before/after snapshots, diffs them, converts mutations to BOUNDARY_PROJECT_MUTATION blockers, and keeps PRD readiness blocked. Test coverage confirms detection of tracked and untracked file mutations. Evidence scope validation prevents external-only sources from supporting brownfield project facts."
+  }
+}

@@ -1,0 +1,173 @@
+{
+  "schema": "yolo.demand.dialogue_stress.v1",
+  "run_id": "demand-dialogue-20260601131504481",
+  "started_at": "2026-06-01T13:15:04.482Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131504481",
+  "cycles": 7,
+  "timeout_ms": 300000,
+  "model": null,
+  "iterations": [
+    {
+      "iteration": 1,
+      "scenario": "real-ui-field-clarification",
+      "expected": "executable",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131504481/fixtures/0001-real-ui-field-clarification",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131504481/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131504481/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.chain.json",
+      "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131504481/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+      "blocked_path": null,
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": "pass",
+        "turn_count": 4,
+        "turn_expectations_met": 4,
+        "blocker_codes": [
+          "REFLECTION_PRESENT",
+          "INVESTIGATION_COMPLETE",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "USER_APPROVAL_PRESENT"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": true,
+          "score": 95,
+          "hard_failures": [],
+          "warnings": [
+            {
+              "code": "PRD_TARGET_FILE_ASSUMED",
+              "path": ".yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+              "message": "PRD targets src/pages/inventory-list.tsx but no evidence this file was verified against the actual project. The path appears inferred rather than confirmed through file reads. Acceptable for a stress fixture but a production dialogue should"
+            }
+          ],
+          "dimensions": {
+            "clarification_quality": 95,
+            "project_fact_grounding": 95,
+            "stage_transition": 100,
+            "plan_convergence": 95,
+            "prd_executability": 95,
+            "deadlock_avoidance": 100,
+            "rework_risk": 5
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T13:15:04.482Z",
+      "ended_at": "2026-06-01T13:16:17.404Z",
+      "duration_ms": 72922,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131504481/0001-real-ui-field-clarification.json"
+    },
+    {
+      "iteration": 2,
+      "scenario": "contradicted-field-blocks",
+      "expected": "blocked",
+      "status": "pass",
+      "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131504481/fixtures/0002-contradicted-field-blocks",
+      "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131504481/fixtures/0002-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.transcript.md",
+      "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131504481/fixtures/0002-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.chain.json",
+      "prd_path": null,
+      "blocked_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131504481/fixtures/0002-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.blocked.json",
+      "yolo": {
+        "no_premature_prd": true,
+        "final_class_ok": true,
+        "check_status": null,
+        "turn_count": 2,
+        "turn_expectations_met": 2,
+        "blocker_codes": [
+          "REQUIREMENTS_PRESENT",
+          "ACCEPTANCE_SCENARIOS_PRESENT",
+          "SCENARIO_MATRIX_PRESENT",
+          "SCENARIO_PROOF_PRESENT",
+          "SCENARIO_SURFACES_PRESENT",
+          "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "USER_APPROVAL_PRESENT",
+          "PROJECT_FACTS_GROUNDED",
+          "PROJECT_FACTS_GROUNDED"
+        ]
+      },
+      "claude": {
+        "success": true,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "parse_error": "",
+        "review": {
+          "verdict": "pass",
+          "correct_final_class": true,
+          "conversation_realistic": true,
+          "no_premature_prd": true,
+          "executable": true,
+          "score": 92,
+          "hard_failures": [],
+          "warnings": [
+            {
+              "code": "INVESTIGATION_ASM_CONTRADICTS_EVIDENCE",
+              "path": ".yolo/demand/DEMAND-DIALOGUE-0002-contradicted-field-blocks/INVESTIGATION.md",
+              "message": "INVESTIGATION.md ASM-001 says 'Inventory list already receives quantity and threshold fields' but EVID-001 found no threshold field. Assumption contradicts own evidence."
+            },
+            {
+              "code": "DISCUSS_READINESS_PASSED_GROUNDING_PREMATURELY",
+              "path": ".yolo/demand/DEMAND-DIALOGUE-0002-contradicted-field-blocks/READINESS.json",
+              "message": "READINESS.json at discuss phase shows PROJECT_FACTS_GROUNDED passed=true with zero fact_grounding_issues, yet the PRD quality gate later blocked on the same check. Discuss-phase readiness was too lenient."
+            }
+          ],
+          "dimensions": {
+            "clarification_quality": 9,
+            "project_fact_grounding": 9,
+            "stage_transition": 9,
+            "plan_convergence": 8,
+            "prd_executability": 10,
+            "deadlock_avoidance": 9,
+            "rework_risk": 9
+          }
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "reviewer_boundary": {
+        "project_mutation": "clean",
+        "changes": []
+      },
+      "started_at": "2026-06-01T13:16:17.406Z",
+      "ended_at": "2026-06-01T13:17:57.682Z",
+      "duration_ms": 100276,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131504481/0002-contradicted-field-blocks.json"
+    }
+  ],
+  "stopped_reason": null
+}

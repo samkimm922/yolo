@@ -1,0 +1,142 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements complete boundary audit via SHA-256 file snapshot comparison before/after agent execution, with enforcement that converts any detected mutations into PRD readiness blockers via BOUNDARY_PROJECT_MUTATION code.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "87-95",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "fileDigest computes SHA-256 hash using createHash('sha256').update(readFileSync(path)).digest('hex'), confirming SHA-256 algorithm.",
+      "why": "Confirms the exact hash algorithm used for snapshot integrity verification."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot resolves allowedRoots, uses gitFiles or walkFiles for file discovery, skips allowed roots via isWithin check, computes SHA-256 digests, returns Map.",
+      "why": "Independently confirms explorer's claim about snapshot creation and allowed root exclusion logic."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots iterates before/after Maps, detects deleted, modified, and added files by comparing presence and digest equality, returns sorted changes array.",
+      "why": "Verifies the core change detection logic that identifies mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "590",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot(plan.project_root, [plan.output_dir]) executes BEFORE mkdirSync and agent loop, establishing baseline state.",
+      "why": "Confirms pre-execution snapshot timing matches explorer's evidence."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "640-646",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot called AFTER agent loop completes at line 640, diffBoundarySnapshots computes changes stored in result.boundary with project_mutation and changes array.",
+      "why": "Confirms post-execution audit and boundary result structure."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "659-678",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryBlockers maps changes to BOUNDARY_PROJECT_MUTATION blockers; finalReadiness spreads readiness.blockers with runtimeBlockers and sets prd_ready false when blockers exist.",
+      "why": "Verifies the enforcement mechanism that converts mutations into PRD readiness blockers."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "291-301",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy sets project_mutation forbidden and allowed_write_roots [repoRelative(outputDir)], declaring boundary constraints.",
+      "why": "Confirms policy configuration matches explorer's evidence."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "334-338",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rules: 'do not modify target project files' and 'If verification would require mutation, report it in missing', confirming non-editing constraint.",
+      "why": "Verifies agent protocol constraints on evidence gathering."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "342-343",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt requires 'Every evidence record must include scope: project, external, user, or unknown.' and 'Project facts require project-scoped evidence with repo-relative path.'",
+      "why": "Confirms scope declaration and path requirements for project evidence."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues returns PROJECT_EVIDENCE_PATH_REQUIRED blocker when has_project_scope is true without path locator, or PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE when no project scope.",
+      "why": "Independently verifies router validation logic for project evidence requirements."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "709-733",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent results loop calls evidenceResultBlockingIssues, evidenceScopeDeclarationIssues, and projectEvidenceBlockingIssues; blocking issues pushed to blockerList.",
+      "why": "Confirms agent result validation integration into readiness blockers."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-84",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles uses git ls-files -co --exclude-standard -z; walkFiles recursively reads directories excluding .git, node_modules, dist, coverage, .next, .cache.",
+      "why": "Verifies file discovery methods and exclusion patterns for snapshot completeness."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "53-56",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "isWithin computes relative(path, root) and checks for absence of .. prefix and non-absolute path, confirming subtree containment logic.",
+      "why": "Verifies allowed root exclusion logic prevents false positives from legitimate writes."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "672-677",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "finalReadiness conditional spreads readiness with [...readiness.blockers, ...runtimeBlockers] and prd_ready false when runtimeBlockers exist, confirming blocker enforcement.",
+      "why": "Verifies that boundary mutations actually block PRD readiness."
+    }
+  ],
+  "assumptions": [
+    "git ls-files -co --exclude-standard returns all tracked and untracked files excluding .gitignore patterns.",
+    "Agent provider filesystem operations are observable by buildBoundarySnapshot via standard file walking.",
+    "SHA-256 digests computed via readFileSync capture complete file content including any agent writes.",
+    "Agent provider cannot bypass snapshot detection by writing outside project root or using special filesystem features.",
+    "File system state remains stable between snapshot computation and agent execution for non-mutated files."
+  ],
+  "risks": [
+    "If git ls-files misses untracked files not covered by walkFiles fallback, mutations could occur undetected.",
+    "If agent provider has direct block-device or volume-level filesystem access, snapshot could miss mutations.",
+    "If allowedRoots configuration includes project root subdirectories incorrectly, legitimate project mutations could be allowed.",
+    "If buildBoundarySnapshot excludes very large files or symlinks via fileDigest null return, those mutations would not be detected."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Cross-check confirms all explorer claims via independent code verification. Boundary audit implementation exists with SHA-256 snapshot comparison, before/after timing, and BOUNDARY_PROJECT_MUTATION blocker enforcement. Router validation integration confirmed. Assumptions align with filesystem and git behavior limitations."
+  }
+}

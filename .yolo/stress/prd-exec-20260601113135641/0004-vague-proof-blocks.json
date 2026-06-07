@@ -1,0 +1,57 @@
+{
+  "iteration": 4,
+  "scenario": "vague-proof-blocks",
+  "expected": "blocked",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601113135641/fixtures/0004-vague-proof-blocks",
+  "demand_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601113135641/fixtures/0004-vague-proof-blocks/.yolo/demand/DEMAND-0004-vague-proof-blocks",
+  "prd_path": null,
+  "check_path": null,
+  "blocked_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601113135641/fixtures/0004-vague-proof-blocks/.yolo/prd-executability/vague-proof-blocks.blocked.json",
+  "yolo": {
+    "discuss_status": "success",
+    "prd_status": "blocked",
+    "prd_code": "DEMAND_QUALITY_BLOCKED",
+    "check_status": null,
+    "check_code": null,
+    "blocker_codes": [
+      "DEMAND_QUALITY_ACCEPTANCE_EVIDENCE_LOW",
+      "QUALITY_SCENARIO_PROOF_CONCRETE",
+      "QUALITY_SURFACE_PROOF_PRESENT",
+      "QUALITY_TASK_ACCEPTANCE_EVIDENCE",
+      "DEMAND_QUALITY_HANDOFF_COMPLETENESS_LOW",
+      "QUALITY_TASK_HANDOFF_COMPLETE",
+      "QUALITY_HANDOFF_CONTEXT_COMPLETE"
+    ],
+    "task_count": 0
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "executable": false,
+      "correctly_blocked": true,
+      "score": 95,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "HANDOFF_BLOCKER_THRESHOLD_INCONSISTENCY",
+          "task_id": null,
+          "path": ".yolo/prd-executability/vague-proof-blocks.blocked.json",
+          "message": "handoff_completeness dimension scored 62 vs block_threshold 60 — score is above threshold yet the dimension is listed as blocked and its checks appear in the top-level blockers array. Does not affect overall block (accep"
+        }
+      ]
+    }
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T11:36:21.889Z",
+  "ended_at": "2026-06-01T11:37:37.789Z",
+  "duration_ms": 75900
+}

@@ -1,0 +1,1435 @@
+{
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "version": "2.0",
+  "id": "PRD-20260601-0007-UI-BADGE-WITH-ADAPTER",
+  "title": "Show a visible low-stock badge in the inventory list before stockout.",
+  "description": "Compiled from approved demand session DEMAND-0007-ui-badge-with-adapter.",
+  "project": {
+    "name": "Show a visible low-stock badge in the inventory list before stockout.",
+    "language": "other",
+    "framework": "generic"
+  },
+  "generated_by": "yolo-demand",
+  "generated_at": "2026-06-01T11:56:10.961Z",
+  "base_commit": "abcdef0",
+  "source": "approved_demand",
+  "demand_contract_required": true,
+  "demand": {
+    "id": "DEMAND-0007-ui-badge-with-adapter",
+    "source": "yolo-discuss",
+    "approval": {
+      "approved": true,
+      "approved_by": "user",
+      "approved_at": null,
+      "reason": "",
+      "note": ""
+    },
+    "approval_reason": "",
+    "prd_intake": {
+      "schema": "yolo.demand.prd_intake.v1",
+      "source": "derived_nontechnical_intake",
+      "question_ids": [],
+      "plain_language_problem": "Show a visible low-stock badge in the inventory list before stockout.",
+      "audience": [
+        "store manager"
+      ],
+      "desired_outcomes": [
+        "Inventory list displays a visible low-stock badge on affected SKUs."
+      ],
+      "success_proof": [
+        "A screenshot or component test can show the low-stock badge on a SKU below threshold."
+      ],
+      "boundaries": [
+        "Do not change order import behavior.",
+        "Do not build supplier ordering."
+      ],
+      "exceptions": []
+    },
+    "interview": null,
+    "question_trace": [],
+    "readiness_level": "L3",
+    "readiness_score": 100,
+    "quality_score": 100,
+    "quality_report": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.quality.v1",
+      "phase": "prd",
+      "status": "pass",
+      "total_score": 100,
+      "pass_score": 85,
+      "block_score": 70,
+      "dimensions": [
+        {
+          "code": "requirement_clarity",
+          "label": "需求清晰度",
+          "weight": 20,
+          "critical": true,
+          "status": "pass",
+          "score": 100,
+          "earned_points": 100,
+          "possible_points": 100,
+          "block_threshold": 60,
+          "warning_threshold": 85,
+          "checks": [
+            {
+              "code": "QUALITY_VISION_CONCRETE",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Vision must describe the product direction in concrete language."
+            },
+            {
+              "code": "QUALITY_TARGET_USER_SPECIFIC",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Target users must be explicit."
+            },
+            {
+              "code": "QUALITY_STATUS_QUO_CAPTURED",
+              "passed": true,
+              "points": 15,
+              "severity": "warning",
+              "message": "Current behavior or workaround should be captured."
+            },
+            {
+              "code": "QUALITY_REQUIREMENTS_CONCRETE",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Confirmed requirements must be present and concrete enough to implement.",
+              "requirement_count": 1
+            },
+            {
+              "code": "QUALITY_SCOPE_BOUNDARIES_PRESENT",
+              "passed": true,
+              "points": 15,
+              "severity": "warning",
+              "message": "Constraints or out-of-scope boundaries should be explicit."
+            },
+            {
+              "code": "QUALITY_EVIDENCE_OR_ASSUMPTIONS_PRESENT",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Demand should carry either evidence or explicit assumptions."
+            }
+          ],
+          "failed_checks": []
+        },
+        {
+          "code": "task_atomicity",
+          "label": "任务原子度",
+          "weight": 20,
+          "critical": true,
+          "status": "pass",
+          "score": 100,
+          "earned_points": 100,
+          "possible_points": 100,
+          "block_threshold": 60,
+          "warning_threshold": 85,
+          "checks": [
+            {
+              "code": "QUALITY_SCENARIO_MATRIX_COVERAGE",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Scenario matrix must cover confirmed requirements.",
+              "scenario_count": 1,
+              "requirement_count": 1
+            },
+            {
+              "code": "QUALITY_SCENARIO_SURFACES_PRESENT",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Every scenario must map to at least one implementation surface."
+            },
+            {
+              "code": "QUALITY_SURFACE_SESSION_BUDGETS",
+              "passed": true,
+              "points": 25,
+              "severity": "error",
+              "message": "Every surface must be bounded to a single-session budget with max_files <= 2.",
+              "surface_budget_issues": []
+            },
+            {
+              "code": "QUALITY_GENERATED_TASKS_SESSION_SIZED",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Generated tasks must be session-sized and target at most two files.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_ATOMIC_DOCTOR_PASSED",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Atomicity doctor must not require a split before PRD execution.",
+              "atomicity_status": "pass",
+              "blockers": []
+            }
+          ],
+          "failed_checks": []
+        },
+        {
+          "code": "acceptance_evidence",
+          "label": "验收证据",
+          "weight": 20,
+          "critical": true,
+          "status": "pass",
+          "score": 100,
+          "earned_points": 100,
+          "possible_points": 100,
+          "block_threshold": 60,
+          "warning_threshold": 85,
+          "checks": [
+            {
+              "code": "QUALITY_ACCEPTANCE_SCENARIOS_PRESENT",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Each requirement should include an acceptance scenario."
+            },
+            {
+              "code": "QUALITY_SCENARIO_PROOF_CONCRETE",
+              "passed": true,
+              "points": 30,
+              "severity": "error",
+              "message": "Every scenario must include concrete proof a non-technical user can recognize."
+            },
+            {
+              "code": "QUALITY_SURFACE_PROOF_PRESENT",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Every scenario surface must inherit or declare concrete proof."
+            },
+            {
+              "code": "QUALITY_TASK_ACCEPTANCE_EVIDENCE",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Each generated task must carry proof, acceptance criteria, and an acceptance post-condition.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_VERIFICATION_HINTS_PRESENT",
+              "passed": true,
+              "points": 15,
+              "severity": "warning",
+              "message": "Each generated task should include a plain-language verification hint.",
+              "task_count": 1,
+              "required": true
+            }
+          ],
+          "failed_checks": []
+        },
+        {
+          "code": "session_executability",
+          "label": "session 可执行性",
+          "weight": 20,
+          "critical": true,
+          "status": "pass",
+          "score": 100,
+          "earned_points": 100,
+          "possible_points": 100,
+          "block_threshold": 60,
+          "warning_threshold": 85,
+          "checks": [
+            {
+              "code": "QUALITY_APPROVAL_PRESENT",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Approved-demand PRD requires explicit user approval."
+            },
+            {
+              "code": "QUALITY_BLOCKING_QUESTIONS_EMPTY",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Blocking open questions must be resolved or deferred before execution.",
+              "blocking_questions": []
+            },
+            {
+              "code": "QUALITY_EXECUTION_SCOPE_PRESENT",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Executable PRD needs bounded target files or modules."
+            },
+            {
+              "code": "QUALITY_GENERATED_TASKS_PRESENT",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "PRD quality evaluation must see generated tasks before execution.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_TASK_SCOPES_BOUNDED",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Every task scope must name targets, forbid deletes, and cap per-file edits.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_READINESS_L3_EXECUTABLE",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Demand readiness must be L3 executable before PRD execution.",
+              "readiness_level": "L3",
+              "readiness_status": "pass"
+            }
+          ],
+          "failed_checks": []
+        },
+        {
+          "code": "handoff_completeness",
+          "label": "上下文接力棒完整度",
+          "weight": 20,
+          "critical": true,
+          "status": "pass",
+          "score": 100,
+          "earned_points": 105,
+          "possible_points": 105,
+          "block_threshold": 60,
+          "warning_threshold": 85,
+          "checks": [
+            {
+              "code": "QUALITY_QUESTION_TRACE_PRESENT",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Question trace or discussion rounds must be preserved."
+            },
+            {
+              "code": "QUALITY_SOURCE_QUESTIONS_PROPAGATED",
+              "passed": true,
+              "points": 20,
+              "severity": "warning",
+              "message": "Source question IDs should propagate to scenarios or generated tasks.",
+              "task_count": 1,
+              "scenario_count": 1
+            },
+            {
+              "code": "QUALITY_TASK_HANDOFF_COMPLETE",
+              "passed": true,
+              "points": 25,
+              "severity": "error",
+              "message": "Every generated task needs a complete agent handoff payload.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_EVIDENCE_CHAIN_COMPLETE",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Task handoff must include demand, scenario, and surface evidence-chain IDs.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_TASK_SESSION_PLAN_COMPLETE",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Each generated task must include a fresh-session handoff plan with state, evidence, memory, progress, and resume targets.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_HANDOFF_CONTEXT_COMPLETE",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Task handoff must include read-first context, key interfaces, and acceptance criteria.",
+              "task_count": 1,
+              "required": true
+            }
+          ],
+          "failed_checks": []
+        }
+      ],
+      "blockers": [],
+      "warnings": [],
+      "readiness_status": "pass",
+      "readiness_level": "L3",
+      "atomicity_status": "pass",
+      "next_actions": [
+        "Demand quality is sufficient for approved-demand PRD execution."
+      ]
+    },
+    "scenario_matrix": {
+      "schema": "yolo.demand.scenario_matrix.v1",
+      "scenario_count": 1,
+      "surface_count": 1,
+      "scenarios": [
+        {
+          "id": "SCN-001",
+          "requirement_id": "REQ-001",
+          "proof": "A screenshot or component test can show the low-stock badge on a SKU below threshold.",
+          "source_question_ids": [
+            "Q1"
+          ],
+          "surfaces": [
+            {
+              "id": "SCN-001-SFC-001",
+              "kind": "ui",
+              "label": "用户可见界面",
+              "session_budget": {
+                "expected": "single_session",
+                "max_files": 1,
+                "max_lines_per_file": 120
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "atomicity_contract": {
+      "rule": "one scenario surface becomes one session-sized task unless atomicity gate requires more splitting",
+      "session_budget_required": true,
+      "max_files_per_surface": 2,
+      "generated_task_count": 1,
+      "doctor_status": "pass",
+      "session_handoff": {
+        "planned": true,
+        "task_count": 1,
+        "session_count": 1,
+        "tasks_with_session_plan": 1,
+        "state_paths": [
+          ".yolo/demand/DEMAND-0007-ui-badge-with-adapter/tasks/DEMAND-REQ-001-0010101/session.json"
+        ],
+        "handoff_paths": [
+          ".yolo/demand/DEMAND-0007-ui-badge-with-adapter/tasks/DEMAND-REQ-001-0010101/handoff.md"
+        ],
+        "evidence_paths": [
+          ".yolo/demand/DEMAND-0007-ui-badge-with-adapter/tasks/DEMAND-REQ-001-0010101/evidence.jsonl"
+        ],
+        "memory_update_paths": [
+          ".yolo/memory/CURRENT_HANDOFF.md",
+          ".yolo/memory/PROGRESS.md",
+          ".yolo/state/session-memory.jsonl"
+        ],
+        "progress_update_paths": [
+          ".yolo/memory/PROGRESS.md"
+        ]
+      }
+    },
+    "execution_readiness": {
+      "level": "L3",
+      "prd_ready": true,
+      "executable_prd_ready": true,
+      "readiness_score": 100,
+      "quality_score": 100,
+      "quality_report": {
+        "schema_version": "1.0",
+        "schema": "yolo.demand.quality.v1",
+        "phase": "prd",
+        "status": "pass",
+        "total_score": 100,
+        "pass_score": 85,
+        "block_score": 70,
+        "dimensions": [
+          {
+            "code": "requirement_clarity",
+            "label": "需求清晰度",
+            "weight": 20,
+            "critical": true,
+            "status": "pass",
+            "score": 100,
+            "earned_points": 100,
+            "possible_points": 100,
+            "block_threshold": 60,
+            "warning_threshold": 85,
+            "checks": [
+              {
+                "code": "QUALITY_VISION_CONCRETE",
+                "passed": true,
+                "points": 20,
+                "severity": "error",
+                "message": "Vision must describe the product direction in concrete language."
+              },
+              {
+                "code": "QUALITY_TARGET_USER_SPECIFIC",
+                "passed": true,
+                "points": 15,
+                "severity": "error",
+                "message": "Target users must be explicit."
+              },
+              {
+                "code": "QUALITY_STATUS_QUO_CAPTURED",
+                "passed": true,
+                "points": 15,
+                "severity": "warning",
+                "message": "Current behavior or workaround should be captured."
+              },
+              {
+                "code": "QUALITY_REQUIREMENTS_CONCRETE",
+                "passed": true,
+                "points": 20,
+                "severity": "error",
+                "message": "Confirmed requirements must be present and concrete enough to implement.",
+                "requirement_count": 1
+              },
+              {
+                "code": "QUALITY_SCOPE_BOUNDARIES_PRESENT",
+                "passed": true,
+                "points": 15,
+                "severity": "warning",
+                "message": "Constraints or out-of-scope boundaries should be explicit."
+              },
+              {
+                "code": "QUALITY_EVIDENCE_OR_ASSUMPTIONS_PRESENT",
+                "passed": true,
+                "points": 15,
+                "severity": "error",
+                "message": "Demand should carry either evidence or explicit assumptions."
+              }
+            ],
+            "failed_checks": []
+          },
+          {
+            "code": "task_atomicity",
+            "label": "任务原子度",
+            "weight": 20,
+            "critical": true,
+            "status": "pass",
+            "score": 100,
+            "earned_points": 100,
+            "possible_points": 100,
+            "block_threshold": 60,
+            "warning_threshold": 85,
+            "checks": [
+              {
+                "code": "QUALITY_SCENARIO_MATRIX_COVERAGE",
+                "passed": true,
+                "points": 20,
+                "severity": "error",
+                "message": "Scenario matrix must cover confirmed requirements.",
+                "scenario_count": 1,
+                "requirement_count": 1
+              },
+              {
+                "code": "QUALITY_SCENARIO_SURFACES_PRESENT",
+                "passed": true,
+                "points": 20,
+                "severity": "error",
+                "message": "Every scenario must map to at least one implementation surface."
+              },
+              {
+                "code": "QUALITY_SURFACE_SESSION_BUDGETS",
+                "passed": true,
+                "points": 25,
+                "severity": "error",
+                "message": "Every surface must be bounded to a single-session budget with max_files <= 2.",
+                "surface_budget_issues": []
+              },
+              {
+                "code": "QUALITY_GENERATED_TASKS_SESSION_SIZED",
+                "passed": true,
+                "points": 20,
+                "severity": "error",
+                "message": "Generated tasks must be session-sized and target at most two files.",
+                "task_count": 1,
+                "required": true
+              },
+              {
+                "code": "QUALITY_ATOMIC_DOCTOR_PASSED",
+                "passed": true,
+                "points": 15,
+                "severity": "error",
+                "message": "Atomicity doctor must not require a split before PRD execution.",
+                "atomicity_status": "pass",
+                "blockers": []
+              }
+            ],
+            "failed_checks": []
+          },
+          {
+            "code": "acceptance_evidence",
+            "label": "验收证据",
+            "weight": 20,
+            "critical": true,
+            "status": "pass",
+            "score": 100,
+            "earned_points": 100,
+            "possible_points": 100,
+            "block_threshold": 60,
+            "warning_threshold": 85,
+            "checks": [
+              {
+                "code": "QUALITY_ACCEPTANCE_SCENARIOS_PRESENT",
+                "passed": true,
+                "points": 20,
+                "severity": "error",
+                "message": "Each requirement should include an acceptance scenario."
+              },
+              {
+                "code": "QUALITY_SCENARIO_PROOF_CONCRETE",
+                "passed": true,
+                "points": 30,
+                "severity": "error",
+                "message": "Every scenario must include concrete proof a non-technical user can recognize."
+              },
+              {
+                "code": "QUALITY_SURFACE_PROOF_PRESENT",
+                "passed": true,
+                "points": 15,
+                "severity": "error",
+                "message": "Every scenario surface must inherit or declare concrete proof."
+              },
+              {
+                "code": "QUALITY_TASK_ACCEPTANCE_EVIDENCE",
+                "passed": true,
+                "points": 20,
+                "severity": "error",
+                "message": "Each generated task must carry proof, acceptance criteria, and an acceptance post-condition.",
+                "task_count": 1,
+                "required": true
+              },
+              {
+                "code": "QUALITY_VERIFICATION_HINTS_PRESENT",
+                "passed": true,
+                "points": 15,
+                "severity": "warning",
+                "message": "Each generated task should include a plain-language verification hint.",
+                "task_count": 1,
+                "required": true
+              }
+            ],
+            "failed_checks": []
+          },
+          {
+            "code": "session_executability",
+            "label": "session 可执行性",
+            "weight": 20,
+            "critical": true,
+            "status": "pass",
+            "score": 100,
+            "earned_points": 100,
+            "possible_points": 100,
+            "block_threshold": 60,
+            "warning_threshold": 85,
+            "checks": [
+              {
+                "code": "QUALITY_APPROVAL_PRESENT",
+                "passed": true,
+                "points": 20,
+                "severity": "error",
+                "message": "Approved-demand PRD requires explicit user approval."
+              },
+              {
+                "code": "QUALITY_BLOCKING_QUESTIONS_EMPTY",
+                "passed": true,
+                "points": 15,
+                "severity": "error",
+                "message": "Blocking open questions must be resolved or deferred before execution.",
+                "blocking_questions": []
+              },
+              {
+                "code": "QUALITY_EXECUTION_SCOPE_PRESENT",
+                "passed": true,
+                "points": 20,
+                "severity": "error",
+                "message": "Executable PRD needs bounded target files or modules."
+              },
+              {
+                "code": "QUALITY_GENERATED_TASKS_PRESENT",
+                "passed": true,
+                "points": 15,
+                "severity": "error",
+                "message": "PRD quality evaluation must see generated tasks before execution.",
+                "task_count": 1,
+                "required": true
+              },
+              {
+                "code": "QUALITY_TASK_SCOPES_BOUNDED",
+                "passed": true,
+                "points": 15,
+                "severity": "error",
+                "message": "Every task scope must name targets, forbid deletes, and cap per-file edits.",
+                "task_count": 1,
+                "required": true
+              },
+              {
+                "code": "QUALITY_READINESS_L3_EXECUTABLE",
+                "passed": true,
+                "points": 15,
+                "severity": "error",
+                "message": "Demand readiness must be L3 executable before PRD execution.",
+                "readiness_level": "L3",
+                "readiness_status": "pass"
+              }
+            ],
+            "failed_checks": []
+          },
+          {
+            "code": "handoff_completeness",
+            "label": "上下文接力棒完整度",
+            "weight": 20,
+            "critical": true,
+            "status": "pass",
+            "score": 100,
+            "earned_points": 105,
+            "possible_points": 105,
+            "block_threshold": 60,
+            "warning_threshold": 85,
+            "checks": [
+              {
+                "code": "QUALITY_QUESTION_TRACE_PRESENT",
+                "passed": true,
+                "points": 15,
+                "severity": "error",
+                "message": "Question trace or discussion rounds must be preserved."
+              },
+              {
+                "code": "QUALITY_SOURCE_QUESTIONS_PROPAGATED",
+                "passed": true,
+                "points": 20,
+                "severity": "warning",
+                "message": "Source question IDs should propagate to scenarios or generated tasks.",
+                "task_count": 1,
+                "scenario_count": 1
+              },
+              {
+                "code": "QUALITY_TASK_HANDOFF_COMPLETE",
+                "passed": true,
+                "points": 25,
+                "severity": "error",
+                "message": "Every generated task needs a complete agent handoff payload.",
+                "task_count": 1,
+                "required": true
+              },
+              {
+                "code": "QUALITY_EVIDENCE_CHAIN_COMPLETE",
+                "passed": true,
+                "points": 15,
+                "severity": "error",
+                "message": "Task handoff must include demand, scenario, and surface evidence-chain IDs.",
+                "task_count": 1,
+                "required": true
+              },
+              {
+                "code": "QUALITY_TASK_SESSION_PLAN_COMPLETE",
+                "passed": true,
+                "points": 15,
+                "severity": "error",
+                "message": "Each generated task must include a fresh-session handoff plan with state, evidence, memory, progress, and resume targets.",
+                "task_count": 1,
+                "required": true
+              },
+              {
+                "code": "QUALITY_HANDOFF_CONTEXT_COMPLETE",
+                "passed": true,
+                "points": 15,
+                "severity": "error",
+                "message": "Task handoff must include read-first context, key interfaces, and acceptance criteria.",
+                "task_count": 1,
+                "required": true
+              }
+            ],
+            "failed_checks": []
+          }
+        ],
+        "blockers": [],
+        "warnings": [],
+        "readiness_status": "pass",
+        "readiness_level": "L3",
+        "atomicity_status": "pass",
+        "next_actions": [
+          "Demand quality is sufficient for approved-demand PRD execution."
+        ]
+      },
+      "checks": [
+        {
+          "code": "VISION_PRESENT",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "TARGET_USER_PRESENT",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "STATUS_QUO_PRESENT",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "REFLECTION_PRESENT",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "INVESTIGATION_COMPLETE",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "QUESTIONING_ROUNDS_COMPLETE",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "REQUIREMENTS_PRESENT",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "ACCEPTANCE_SCENARIOS_PRESENT",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "SCENARIO_MATRIX_PRESENT",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "SCENARIO_PROOF_PRESENT",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "SCENARIO_SURFACES_PRESENT",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "SURFACE_SESSION_BUDGET_EXECUTABLE",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "OUT_OF_SCOPE_PRESENT",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "ROADMAP_PRESENT",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "BLOCKING_OPEN_QUESTIONS_EMPTY",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "USER_APPROVAL_PRESENT",
+          "passed": true,
+          "severity": "error"
+        },
+        {
+          "code": "EXECUTION_SCOPE_PRESENT",
+          "passed": true,
+          "severity": "error"
+        }
+      ]
+    }
+  },
+  "execution_readiness": {
+    "level": "L3",
+    "afk_ready": true,
+    "source": "approved_demand_report",
+    "atomic_tasks": true,
+    "expected_task_session": "single_session",
+    "demand_id": "DEMAND-0007-ui-badge-with-adapter",
+    "readiness_score": 100,
+    "quality_score": 100,
+    "quality_status": "pass",
+    "quality_report": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.quality.v1",
+      "phase": "prd",
+      "status": "pass",
+      "total_score": 100,
+      "pass_score": 85,
+      "block_score": 70,
+      "dimensions": [
+        {
+          "code": "requirement_clarity",
+          "label": "需求清晰度",
+          "weight": 20,
+          "critical": true,
+          "status": "pass",
+          "score": 100,
+          "earned_points": 100,
+          "possible_points": 100,
+          "block_threshold": 60,
+          "warning_threshold": 85,
+          "checks": [
+            {
+              "code": "QUALITY_VISION_CONCRETE",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Vision must describe the product direction in concrete language."
+            },
+            {
+              "code": "QUALITY_TARGET_USER_SPECIFIC",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Target users must be explicit."
+            },
+            {
+              "code": "QUALITY_STATUS_QUO_CAPTURED",
+              "passed": true,
+              "points": 15,
+              "severity": "warning",
+              "message": "Current behavior or workaround should be captured."
+            },
+            {
+              "code": "QUALITY_REQUIREMENTS_CONCRETE",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Confirmed requirements must be present and concrete enough to implement.",
+              "requirement_count": 1
+            },
+            {
+              "code": "QUALITY_SCOPE_BOUNDARIES_PRESENT",
+              "passed": true,
+              "points": 15,
+              "severity": "warning",
+              "message": "Constraints or out-of-scope boundaries should be explicit."
+            },
+            {
+              "code": "QUALITY_EVIDENCE_OR_ASSUMPTIONS_PRESENT",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Demand should carry either evidence or explicit assumptions."
+            }
+          ],
+          "failed_checks": []
+        },
+        {
+          "code": "task_atomicity",
+          "label": "任务原子度",
+          "weight": 20,
+          "critical": true,
+          "status": "pass",
+          "score": 100,
+          "earned_points": 100,
+          "possible_points": 100,
+          "block_threshold": 60,
+          "warning_threshold": 85,
+          "checks": [
+            {
+              "code": "QUALITY_SCENARIO_MATRIX_COVERAGE",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Scenario matrix must cover confirmed requirements.",
+              "scenario_count": 1,
+              "requirement_count": 1
+            },
+            {
+              "code": "QUALITY_SCENARIO_SURFACES_PRESENT",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Every scenario must map to at least one implementation surface."
+            },
+            {
+              "code": "QUALITY_SURFACE_SESSION_BUDGETS",
+              "passed": true,
+              "points": 25,
+              "severity": "error",
+              "message": "Every surface must be bounded to a single-session budget with max_files <= 2.",
+              "surface_budget_issues": []
+            },
+            {
+              "code": "QUALITY_GENERATED_TASKS_SESSION_SIZED",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Generated tasks must be session-sized and target at most two files.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_ATOMIC_DOCTOR_PASSED",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Atomicity doctor must not require a split before PRD execution.",
+              "atomicity_status": "pass",
+              "blockers": []
+            }
+          ],
+          "failed_checks": []
+        },
+        {
+          "code": "acceptance_evidence",
+          "label": "验收证据",
+          "weight": 20,
+          "critical": true,
+          "status": "pass",
+          "score": 100,
+          "earned_points": 100,
+          "possible_points": 100,
+          "block_threshold": 60,
+          "warning_threshold": 85,
+          "checks": [
+            {
+              "code": "QUALITY_ACCEPTANCE_SCENARIOS_PRESENT",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Each requirement should include an acceptance scenario."
+            },
+            {
+              "code": "QUALITY_SCENARIO_PROOF_CONCRETE",
+              "passed": true,
+              "points": 30,
+              "severity": "error",
+              "message": "Every scenario must include concrete proof a non-technical user can recognize."
+            },
+            {
+              "code": "QUALITY_SURFACE_PROOF_PRESENT",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Every scenario surface must inherit or declare concrete proof."
+            },
+            {
+              "code": "QUALITY_TASK_ACCEPTANCE_EVIDENCE",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Each generated task must carry proof, acceptance criteria, and an acceptance post-condition.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_VERIFICATION_HINTS_PRESENT",
+              "passed": true,
+              "points": 15,
+              "severity": "warning",
+              "message": "Each generated task should include a plain-language verification hint.",
+              "task_count": 1,
+              "required": true
+            }
+          ],
+          "failed_checks": []
+        },
+        {
+          "code": "session_executability",
+          "label": "session 可执行性",
+          "weight": 20,
+          "critical": true,
+          "status": "pass",
+          "score": 100,
+          "earned_points": 100,
+          "possible_points": 100,
+          "block_threshold": 60,
+          "warning_threshold": 85,
+          "checks": [
+            {
+              "code": "QUALITY_APPROVAL_PRESENT",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Approved-demand PRD requires explicit user approval."
+            },
+            {
+              "code": "QUALITY_BLOCKING_QUESTIONS_EMPTY",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Blocking open questions must be resolved or deferred before execution.",
+              "blocking_questions": []
+            },
+            {
+              "code": "QUALITY_EXECUTION_SCOPE_PRESENT",
+              "passed": true,
+              "points": 20,
+              "severity": "error",
+              "message": "Executable PRD needs bounded target files or modules."
+            },
+            {
+              "code": "QUALITY_GENERATED_TASKS_PRESENT",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "PRD quality evaluation must see generated tasks before execution.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_TASK_SCOPES_BOUNDED",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Every task scope must name targets, forbid deletes, and cap per-file edits.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_READINESS_L3_EXECUTABLE",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Demand readiness must be L3 executable before PRD execution.",
+              "readiness_level": "L3",
+              "readiness_status": "pass"
+            }
+          ],
+          "failed_checks": []
+        },
+        {
+          "code": "handoff_completeness",
+          "label": "上下文接力棒完整度",
+          "weight": 20,
+          "critical": true,
+          "status": "pass",
+          "score": 100,
+          "earned_points": 105,
+          "possible_points": 105,
+          "block_threshold": 60,
+          "warning_threshold": 85,
+          "checks": [
+            {
+              "code": "QUALITY_QUESTION_TRACE_PRESENT",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Question trace or discussion rounds must be preserved."
+            },
+            {
+              "code": "QUALITY_SOURCE_QUESTIONS_PROPAGATED",
+              "passed": true,
+              "points": 20,
+              "severity": "warning",
+              "message": "Source question IDs should propagate to scenarios or generated tasks.",
+              "task_count": 1,
+              "scenario_count": 1
+            },
+            {
+              "code": "QUALITY_TASK_HANDOFF_COMPLETE",
+              "passed": true,
+              "points": 25,
+              "severity": "error",
+              "message": "Every generated task needs a complete agent handoff payload.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_EVIDENCE_CHAIN_COMPLETE",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Task handoff must include demand, scenario, and surface evidence-chain IDs.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_TASK_SESSION_PLAN_COMPLETE",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Each generated task must include a fresh-session handoff plan with state, evidence, memory, progress, and resume targets.",
+              "task_count": 1,
+              "required": true
+            },
+            {
+              "code": "QUALITY_HANDOFF_CONTEXT_COMPLETE",
+              "passed": true,
+              "points": 15,
+              "severity": "error",
+              "message": "Task handoff must include read-first context, key interfaces, and acceptance criteria.",
+              "task_count": 1,
+              "required": true
+            }
+          ],
+          "failed_checks": []
+        }
+      ],
+      "blockers": [],
+      "warnings": [],
+      "readiness_status": "pass",
+      "readiness_level": "L3",
+      "atomicity_status": "pass",
+      "next_actions": [
+        "Demand quality is sufficient for approved-demand PRD execution."
+      ]
+    },
+    "atomicity_status": "pass",
+    "session_handoff": {
+      "planned": true,
+      "task_count": 1,
+      "session_count": 1,
+      "tasks_with_session_plan": 1,
+      "state_paths": [
+        ".yolo/demand/DEMAND-0007-ui-badge-with-adapter/tasks/DEMAND-REQ-001-0010101/session.json"
+      ],
+      "handoff_paths": [
+        ".yolo/demand/DEMAND-0007-ui-badge-with-adapter/tasks/DEMAND-REQ-001-0010101/handoff.md"
+      ],
+      "evidence_paths": [
+        ".yolo/demand/DEMAND-0007-ui-badge-with-adapter/tasks/DEMAND-REQ-001-0010101/evidence.jsonl"
+      ],
+      "memory_update_paths": [
+        ".yolo/memory/CURRENT_HANDOFF.md",
+        ".yolo/memory/PROGRESS.md",
+        ".yolo/state/session-memory.jsonl"
+      ],
+      "progress_update_paths": [
+        ".yolo/memory/PROGRESS.md"
+      ]
+    }
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Inventory list displays a visible low-stock badge on affected SKUs.",
+      "demand_trace": {
+        "evidence": [
+          "EVID-001"
+        ],
+        "decisions": [
+          "DEC-001"
+        ],
+        "question_ids": []
+      }
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-REQ-001",
+      "text": "Implement REQ-001 according to approved demand CONTEXT.md and ROADMAP.md."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "DEMAND-REQ-001-0010101",
+      "title": "用户可见界面: Inventory list displays a visible low-stock badge on affected SKUs.",
+      "description": "Inventory list displays a visible low-stock badge on affected SKUs.",
+      "priority": "P1",
+      "type": "feature",
+      "status": "pending",
+      "task_kind": "demand_atomic_task",
+      "requirement_ids": [
+        "REQ-001"
+      ],
+      "design_ids": [
+        "DES-REQ-001"
+      ],
+      "source_finding_ids": [
+        "REQ-001"
+      ],
+      "source_question_ids": [
+        "Q1"
+      ],
+      "verification_hint": "Verify \"A screenshot or component test can show the low-stock badge on a SKU below threshold.\" through primary user workflow on 用户可见界面 (src/pages/inventory-list.tsx).",
+      "state_matrix": [
+        {
+          "state": "ready",
+          "surface_id": "SCN-001-SFC-001",
+          "touchpoint": "primary user workflow",
+          "trigger": "the user exercises this requirement",
+          "expected_visible_result": "A screenshot or component test can show the low-stock badge on a SKU below threshold."
+        }
+      ],
+      "evidence_plan": [
+        {
+          "type": "screenshot",
+          "surface_id": "SCN-001-SFC-001",
+          "target_files": [
+            "src/pages/inventory-list.tsx"
+          ],
+          "description": "Capture the UI state for primary user workflow and verify: A screenshot or component test can show the low-stock badge on a SKU below threshold.."
+        },
+        {
+          "type": "runtime_log",
+          "surface_id": "SCN-001-SFC-001",
+          "description": "Confirm the UI path has no blocking runtime errors during acceptance."
+        }
+      ],
+      "depends_on": [],
+      "handoff": {
+        "type": "agent_brief",
+        "category": "enhancement",
+        "session": {
+          "schema": "yolo.demand.task_session_plan.v1",
+          "session_id": "DEMAND-REQ-001-0010101-session",
+          "task_id": "DEMAND-REQ-001-0010101",
+          "demand_id": "DEMAND-0007-ui-badge-with-adapter",
+          "requirement_id": "REQ-001",
+          "scenario_id": "SCN-001",
+          "surface_id": "SCN-001-SFC-001",
+          "state_path": ".yolo/demand/DEMAND-0007-ui-badge-with-adapter/tasks/DEMAND-REQ-001-0010101/session.json",
+          "handoff_path": ".yolo/demand/DEMAND-0007-ui-badge-with-adapter/tasks/DEMAND-REQ-001-0010101/handoff.md",
+          "evidence_path": ".yolo/demand/DEMAND-0007-ui-badge-with-adapter/tasks/DEMAND-REQ-001-0010101/evidence.jsonl",
+          "memory_update_paths": [
+            ".yolo/memory/CURRENT_HANDOFF.md",
+            ".yolo/memory/PROGRESS.md",
+            ".yolo/state/session-memory.jsonl"
+          ],
+          "progress_update_path": ".yolo/memory/PROGRESS.md",
+          "resume_instructions": "Start a fresh execution session for task DEMAND-REQ-001-0010101. Use .yolo/demand/DEMAND-0007-ui-badge-with-adapter/tasks/DEMAND-REQ-001-0010101/session.json as the task session state plan and .yolo/demand/DEMAND-0007-ui-badge-with-adapter/tasks/DEMAND-REQ-001-0010101/handoff.md for the next handoff when the session closes. Record command results, changed files, blockers, and acceptance evidence in the evidence path. Update the listed memory and progress targets before handing off."
+        },
+        "plain_language_goal": "Inventory list displays a visible low-stock badge on affected SKUs.",
+        "user_story": "As store manager, I want Inventory list displays a visible low-stock badge on affected SKUs., so that A screenshot or component test can show the low-stock badge on a SKU below threshold..",
+        "source_question_ids": [
+          "Q1"
+        ],
+        "current_behavior": "Managers only see raw inventory counts in the inventory list.",
+        "desired_behavior": "Inventory list displays a visible low-stock badge on affected SKUs.",
+        "touchpoint": "primary user workflow",
+        "trigger": "the user exercises this requirement",
+        "scenario": {
+          "id": "SCN-001",
+          "actor": "store manager",
+          "touchpoint": "primary user workflow",
+          "trigger": "the user exercises this requirement",
+          "current_behavior": "Managers only see raw inventory counts in the inventory list.",
+          "desired_behavior": "Inventory list displays a visible low-stock badge on affected SKUs.",
+          "proof": "A screenshot or component test can show the low-stock badge on a SKU below threshold."
+        },
+        "requirement": {
+          "id": "REQ-001",
+          "text": "Inventory list displays a visible low-stock badge on affected SKUs."
+        },
+        "surface": {
+          "id": "SCN-001-SFC-001",
+          "kind": "ui",
+          "label": "用户可见界面",
+          "target_files": [
+            "src/pages/inventory-list.tsx"
+          ],
+          "readonly_files": [],
+          "session_budget": {
+            "expected": "single_session",
+            "max_files": 1,
+            "max_lines_per_file": 120
+          }
+        },
+        "key_interfaces": [
+          "src/pages/inventory-list.tsx"
+        ],
+        "read_first": [
+          "src/pages/inventory-list.tsx"
+        ],
+        "acceptance_criteria": [
+          "A screenshot or component test can show the low-stock badge on a SKU below threshold."
+        ],
+        "proof": "A screenshot or component test can show the low-stock badge on a SKU below threshold.",
+        "verification_hint": "Verify \"A screenshot or component test can show the low-stock badge on a SKU below threshold.\" through primary user workflow on 用户可见界面 (src/pages/inventory-list.tsx).",
+        "state_matrix": [
+          {
+            "state": "ready",
+            "surface_id": "SCN-001-SFC-001",
+            "touchpoint": "primary user workflow",
+            "trigger": "the user exercises this requirement",
+            "expected_visible_result": "A screenshot or component test can show the low-stock badge on a SKU below threshold."
+          }
+        ],
+        "evidence_plan": [
+          {
+            "type": "screenshot",
+            "surface_id": "SCN-001-SFC-001",
+            "target_files": [
+              "src/pages/inventory-list.tsx"
+            ],
+            "description": "Capture the UI state for primary user workflow and verify: A screenshot or component test can show the low-stock badge on a SKU below threshold.."
+          },
+          {
+            "type": "runtime_log",
+            "surface_id": "SCN-001-SFC-001",
+            "description": "Confirm the UI path has no blocking runtime errors during acceptance."
+          }
+        ],
+        "out_of_scope": [
+          "Do not build supplier ordering."
+        ],
+        "constraints": [
+          "Do not change order import behavior."
+        ],
+        "exceptions": [],
+        "question_trace": [],
+        "evidence_chain": {
+          "intake_schema": "yolo.demand.prd_intake.v1",
+          "demand_id": "DEMAND-0007-ui-badge-with-adapter",
+          "scenario_id": "SCN-001",
+          "surface_id": "SCN-001-SFC-001",
+          "approval_reason": ""
+        }
+      },
+      "scope": {
+        "targets": [
+          {
+            "file": "src/pages/inventory-list.tsx",
+            "description": "Inventory list displays a visible low-stock badge on affected SKUs."
+          }
+        ],
+        "readonly_files": [],
+        "allow_new_files": true,
+        "allow_delete_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 120
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-DEMAND-REQ-001-0010101-TARGET-1",
+          "type": "target_file_modified",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/pages/inventory-list.tsx"
+          },
+          "message": "Target file must be modified: src/pages/inventory-list.tsx"
+        },
+        {
+          "id": "POST-DEMAND-REQ-001-0010101-SCENARIO-1",
+          "type": "acceptance_criteria",
+          "severity": "WARN",
+          "params": {
+            "text": "A screenshot or component test can show the low-stock badge on a SKU below threshold."
+          },
+          "message": "A screenshot or component test can show the low-stock badge on a SKU below threshold."
+        }
+      ],
+      "trace": {
+        "demand_id": "DEMAND-0007-ui-badge-with-adapter",
+        "requirement_id": "REQ-001",
+        "scenario_id": "SCN-001",
+        "surface_id": "SCN-001-SFC-001",
+        "evidence": [
+          "EVID-001"
+        ],
+        "decisions": [
+          "DEC-001"
+        ],
+        "question_trace": [],
+        "source_question_ids": [
+          "Q1"
+        ]
+      },
+      "atomicity": {
+        "expected_session": "single_session",
+        "source": "scenario_surface"
+      },
+      "must_fix_before_ship": true
+    }
+  ],
+  "conflict_policy": {
+    "on_overlap": "sequential",
+    "overlap_detection": "file_only"
+  }
+}

@@ -1,0 +1,558 @@
+{
+  "scenario_id": "contradicted-field-blocks",
+  "status": "blocked",
+  "code": "DEMAND_QUALITY_BLOCKED",
+  "blockers": [
+    {
+      "code": "DEMAND_QUALITY_PROJECT_FACT_GROUNDING_LOW",
+      "dimension": "project_fact_grounding",
+      "score": 80,
+      "threshold": 60,
+      "message": "项目事实落地 has blocking failed checks before executable PRD generation."
+    },
+    {
+      "code": "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+      "dimension": "project_fact_grounding",
+      "score": 80,
+      "message": "Demand assumes threshold-like fields exist, but target project files do not show a matching field/source."
+    }
+  ],
+  "warnings": [],
+  "quality_report": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.quality.v1",
+    "phase": "prd",
+    "status": "blocked",
+    "total_score": 97,
+    "pass_score": 85,
+    "block_score": 70,
+    "dimensions": [
+      {
+        "code": "requirement_clarity",
+        "label": "需求清晰度",
+        "weight": 20,
+        "critical": true,
+        "status": "pass",
+        "score": 100,
+        "earned_points": 100,
+        "possible_points": 100,
+        "block_threshold": 60,
+        "warning_threshold": 85,
+        "checks": [
+          {
+            "code": "QUALITY_VISION_CONCRETE",
+            "passed": true,
+            "points": 20,
+            "severity": "error",
+            "message": "Vision must describe the product direction in concrete language."
+          },
+          {
+            "code": "QUALITY_TARGET_USER_SPECIFIC",
+            "passed": true,
+            "points": 15,
+            "severity": "error",
+            "message": "Target users must be explicit."
+          },
+          {
+            "code": "QUALITY_STATUS_QUO_CAPTURED",
+            "passed": true,
+            "points": 15,
+            "severity": "warning",
+            "message": "Current behavior or workaround should be captured."
+          },
+          {
+            "code": "QUALITY_REQUIREMENTS_CONCRETE",
+            "passed": true,
+            "points": 20,
+            "severity": "error",
+            "message": "Confirmed requirements must be present and concrete enough to implement.",
+            "requirement_count": 1
+          },
+          {
+            "code": "QUALITY_SCOPE_BOUNDARIES_PRESENT",
+            "passed": true,
+            "points": 15,
+            "severity": "warning",
+            "message": "Constraints or out-of-scope boundaries should be explicit."
+          },
+          {
+            "code": "QUALITY_EVIDENCE_OR_ASSUMPTIONS_PRESENT",
+            "passed": true,
+            "points": 15,
+            "severity": "error",
+            "message": "Demand should carry either evidence or explicit assumptions."
+          }
+        ],
+        "failed_checks": []
+      },
+      {
+        "code": "project_fact_grounding",
+        "label": "项目事实落地",
+        "weight": 20,
+        "critical": true,
+        "status": "blocked",
+        "score": 80,
+        "earned_points": 80,
+        "possible_points": 100,
+        "block_threshold": 60,
+        "warning_threshold": 85,
+        "checks": [
+          {
+            "code": "QUALITY_BUSINESS_RULE_CONCRETE",
+            "passed": true,
+            "points": 30,
+            "severity": "error",
+            "message": "Business behavior should not require the execution agent to invent a rule.",
+            "issues": [
+              {
+                "code": "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+                "message": "Demand assumes threshold-like fields exist, but target project files do not show a matching field/source."
+              }
+            ]
+          },
+          {
+            "code": "QUALITY_FIELD_SOURCE_CONCRETE",
+            "passed": true,
+            "points": 30,
+            "severity": "error",
+            "message": "Field-dependent behavior should cite concrete field/source names.",
+            "issues": [
+              {
+                "code": "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+                "message": "Demand assumes threshold-like fields exist, but target project files do not show a matching field/source."
+              }
+            ]
+          },
+          {
+            "code": "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+            "passed": false,
+            "points": 20,
+            "severity": "error",
+            "message": "Demand assumes threshold-like fields exist, but target project files do not show a matching field/source.",
+            "issues": [
+              {
+                "code": "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+                "message": "Demand assumes threshold-like fields exist, but target project files do not show a matching field/source."
+              }
+            ]
+          },
+          {
+            "code": "QUALITY_UI_VISUAL_SPEC_CONCRETE",
+            "passed": true,
+            "points": 20,
+            "severity": "error",
+            "message": "Visible UI behavior should include concrete visual/text/position/component specs.",
+            "issues": [
+              {
+                "code": "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+                "message": "Demand assumes threshold-like fields exist, but target project files do not show a matching field/source."
+              }
+            ]
+          }
+        ],
+        "failed_checks": [
+          {
+            "code": "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+            "passed": false,
+            "points": 20,
+            "severity": "error",
+            "message": "Demand assumes threshold-like fields exist, but target project files do not show a matching field/source.",
+            "issues": [
+              {
+                "code": "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+                "message": "Demand assumes threshold-like fields exist, but target project files do not show a matching field/source."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "code": "task_atomicity",
+        "label": "任务原子度",
+        "weight": 20,
+        "critical": true,
+        "status": "pass",
+        "score": 100,
+        "earned_points": 100,
+        "possible_points": 100,
+        "block_threshold": 60,
+        "warning_threshold": 85,
+        "checks": [
+          {
+            "code": "QUALITY_SCENARIO_MATRIX_COVERAGE",
+            "passed": true,
+            "points": 20,
+            "severity": "error",
+            "message": "Scenario matrix must cover confirmed requirements.",
+            "scenario_count": 1,
+            "requirement_count": 1
+          },
+          {
+            "code": "QUALITY_SCENARIO_SURFACES_PRESENT",
+            "passed": true,
+            "points": 20,
+            "severity": "error",
+            "message": "Every scenario must map to at least one implementation surface."
+          },
+          {
+            "code": "QUALITY_SURFACE_SESSION_BUDGETS",
+            "passed": true,
+            "points": 25,
+            "severity": "error",
+            "message": "Every surface must be bounded to a single-session budget with max_files <= 2.",
+            "surface_budget_issues": []
+          },
+          {
+            "code": "QUALITY_GENERATED_TASKS_SESSION_SIZED",
+            "passed": true,
+            "points": 20,
+            "severity": "error",
+            "message": "Generated tasks must be session-sized and target at most two files.",
+            "task_count": 1,
+            "required": true
+          },
+          {
+            "code": "QUALITY_ATOMIC_DOCTOR_PASSED",
+            "passed": true,
+            "points": 15,
+            "severity": "error",
+            "message": "Atomicity doctor must not require a split before PRD execution.",
+            "atomicity_status": "pass",
+            "blockers": []
+          }
+        ],
+        "failed_checks": []
+      },
+      {
+        "code": "acceptance_evidence",
+        "label": "验收证据",
+        "weight": 20,
+        "critical": true,
+        "status": "pass",
+        "score": 100,
+        "earned_points": 100,
+        "possible_points": 100,
+        "block_threshold": 60,
+        "warning_threshold": 85,
+        "checks": [
+          {
+            "code": "QUALITY_ACCEPTANCE_SCENARIOS_PRESENT",
+            "passed": true,
+            "points": 20,
+            "severity": "error",
+            "message": "Each requirement should include an acceptance scenario."
+          },
+          {
+            "code": "QUALITY_SCENARIO_PROOF_CONCRETE",
+            "passed": true,
+            "points": 30,
+            "severity": "error",
+            "message": "Every scenario must include concrete proof a non-technical user can recognize."
+          },
+          {
+            "code": "QUALITY_SURFACE_PROOF_PRESENT",
+            "passed": true,
+            "points": 15,
+            "severity": "error",
+            "message": "Every scenario surface must inherit or declare concrete proof."
+          },
+          {
+            "code": "QUALITY_TASK_ACCEPTANCE_EVIDENCE",
+            "passed": true,
+            "points": 20,
+            "severity": "error",
+            "message": "Each generated task must carry proof, acceptance criteria, and an acceptance post-condition.",
+            "task_count": 1,
+            "required": true
+          },
+          {
+            "code": "QUALITY_VERIFICATION_HINTS_PRESENT",
+            "passed": true,
+            "points": 15,
+            "severity": "warning",
+            "message": "Each generated task should include a plain-language verification hint.",
+            "task_count": 1,
+            "required": true
+          }
+        ],
+        "failed_checks": []
+      },
+      {
+        "code": "session_executability",
+        "label": "session 可执行性",
+        "weight": 20,
+        "critical": true,
+        "status": "pass",
+        "score": 100,
+        "earned_points": 100,
+        "possible_points": 100,
+        "block_threshold": 60,
+        "warning_threshold": 85,
+        "checks": [
+          {
+            "code": "QUALITY_APPROVAL_PRESENT",
+            "passed": true,
+            "points": 20,
+            "severity": "error",
+            "message": "Approved-demand PRD requires explicit user approval."
+          },
+          {
+            "code": "QUALITY_BLOCKING_QUESTIONS_EMPTY",
+            "passed": true,
+            "points": 15,
+            "severity": "error",
+            "message": "Blocking open questions must be resolved or deferred before execution.",
+            "blocking_questions": []
+          },
+          {
+            "code": "QUALITY_EXECUTION_SCOPE_PRESENT",
+            "passed": true,
+            "points": 20,
+            "severity": "error",
+            "message": "Executable PRD needs bounded target files or modules."
+          },
+          {
+            "code": "QUALITY_GENERATED_TASKS_PRESENT",
+            "passed": true,
+            "points": 15,
+            "severity": "error",
+            "message": "PRD quality evaluation must see generated tasks before execution.",
+            "task_count": 1,
+            "required": true
+          },
+          {
+            "code": "QUALITY_TASK_SCOPES_BOUNDED",
+            "passed": true,
+            "points": 15,
+            "severity": "error",
+            "message": "Every task scope must name targets, forbid deletes, and cap per-file edits.",
+            "task_count": 1,
+            "required": true
+          },
+          {
+            "code": "QUALITY_READINESS_L3_EXECUTABLE",
+            "passed": true,
+            "points": 15,
+            "severity": "error",
+            "message": "Demand readiness must be L3 executable before PRD execution.",
+            "readiness_level": "L3",
+            "readiness_status": "pass"
+          }
+        ],
+        "failed_checks": []
+      },
+      {
+        "code": "handoff_completeness",
+        "label": "上下文接力棒完整度",
+        "weight": 20,
+        "critical": true,
+        "status": "pass",
+        "score": 100,
+        "earned_points": 105,
+        "possible_points": 105,
+        "block_threshold": 60,
+        "warning_threshold": 85,
+        "checks": [
+          {
+            "code": "QUALITY_QUESTION_TRACE_PRESENT",
+            "passed": true,
+            "points": 15,
+            "severity": "error",
+            "message": "Question trace or discussion rounds must be preserved."
+          },
+          {
+            "code": "QUALITY_SOURCE_QUESTIONS_PROPAGATED",
+            "passed": true,
+            "points": 20,
+            "severity": "warning",
+            "message": "Source question IDs should propagate to scenarios or generated tasks.",
+            "task_count": 1,
+            "scenario_count": 1
+          },
+          {
+            "code": "QUALITY_TASK_HANDOFF_COMPLETE",
+            "passed": true,
+            "points": 25,
+            "severity": "error",
+            "message": "Every generated task needs a complete agent handoff payload.",
+            "task_count": 1,
+            "required": true
+          },
+          {
+            "code": "QUALITY_EVIDENCE_CHAIN_COMPLETE",
+            "passed": true,
+            "points": 15,
+            "severity": "error",
+            "message": "Task handoff must include demand, scenario, and surface evidence-chain IDs.",
+            "task_count": 1,
+            "required": true
+          },
+          {
+            "code": "QUALITY_TASK_SESSION_PLAN_COMPLETE",
+            "passed": true,
+            "points": 15,
+            "severity": "error",
+            "message": "Each generated task must include a fresh-session handoff plan with state, evidence, memory, progress, and resume targets.",
+            "task_count": 1,
+            "required": true
+          },
+          {
+            "code": "QUALITY_HANDOFF_CONTEXT_COMPLETE",
+            "passed": true,
+            "points": 15,
+            "severity": "error",
+            "message": "Task handoff must include read-first context, key interfaces, and acceptance criteria.",
+            "task_count": 1,
+            "required": true
+          }
+        ],
+        "failed_checks": []
+      }
+    ],
+    "blockers": [
+      {
+        "code": "DEMAND_QUALITY_PROJECT_FACT_GROUNDING_LOW",
+        "dimension": "project_fact_grounding",
+        "score": 80,
+        "threshold": 60,
+        "message": "项目事实落地 has blocking failed checks before executable PRD generation."
+      },
+      {
+        "code": "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+        "dimension": "project_fact_grounding",
+        "score": 80,
+        "message": "Demand assumes threshold-like fields exist, but target project files do not show a matching field/source."
+      }
+    ],
+    "warnings": [],
+    "readiness_status": "pass",
+    "readiness_level": "L3",
+    "atomicity_status": "pass",
+    "next_actions": [
+      "项目事实落地 has blocking failed checks before executable PRD generation.",
+      "Demand assumes threshold-like fields exist, but target project files do not show a matching field/source."
+    ]
+  },
+  "readiness": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.readiness.v1",
+    "phase": "prd",
+    "status": "pass",
+    "readiness_level": "L3",
+    "demand_ready": true,
+    "prd_ready": true,
+    "executable_prd_ready": true,
+    "quality_score": 100,
+    "checks": [
+      {
+        "code": "VISION_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Vision must state the product direction or opportunity in enough detail."
+      },
+      {
+        "code": "TARGET_USER_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Target user must be explicit before PRD work."
+      },
+      {
+        "code": "STATUS_QUO_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Status quo/current workaround must be captured."
+      },
+      {
+        "code": "REFLECTION_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Reflection must challenge premises, assumptions, or alternatives."
+      },
+      {
+        "code": "INVESTIGATION_COMPLETE",
+        "passed": true,
+        "severity": "error",
+        "message": "Investigation must record evidence or explicit assumptions/TBD-needs-validation."
+      },
+      {
+        "code": "QUESTIONING_ROUNDS_COMPLETE",
+        "passed": true,
+        "severity": "error",
+        "message": "Question trace or discussion rounds must capture the non-technical answers before PRD."
+      },
+      {
+        "code": "REQUIREMENTS_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "At least one confirmed requirement is required."
+      },
+      {
+        "code": "ACCEPTANCE_SCENARIOS_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Every requirement should include at least one acceptance scenario."
+      },
+      {
+        "code": "SCENARIO_MATRIX_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Demand must be translated into a scenario matrix before executable PRD generation."
+      },
+      {
+        "code": "SCENARIO_PROOF_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Every scenario must include explicit proof that a non-technical user can recognize."
+      },
+      {
+        "code": "SCENARIO_SURFACES_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Every scenario must map to at least one implementation surface for atomic task slicing."
+      },
+      {
+        "code": "SURFACE_SESSION_BUDGET_EXECUTABLE",
+        "passed": true,
+        "severity": "error",
+        "message": "Every scenario surface must declare session_budget.max_files <= 2 before executable PRD generation.",
+        "surface_budget_issues": []
+      },
+      {
+        "code": "OUT_OF_SCOPE_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Out-of-scope boundaries must be explicit."
+      },
+      {
+        "code": "ROADMAP_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Roadmap must define MVP or phased delivery."
+      },
+      {
+        "code": "BLOCKING_OPEN_QUESTIONS_EMPTY",
+        "passed": true,
+        "severity": "error",
+        "message": "Blocking open questions must be resolved or explicitly deferred before PRD.",
+        "blocking_questions": []
+      },
+      {
+        "code": "USER_APPROVAL_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Explicit user approval with approved=true is required before executable PRD compilation."
+      },
+      {
+        "code": "EXECUTION_SCOPE_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Executable PRD requires target files/modules or a bounded execution scope."
+      }
+    ],
+    "blockers": [],
+    "warnings": [],
+    "next_actions": [
+      "Demand artifacts are ready for executable PRD compilation."
+    ]
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verification confirms: gathered evidence from explorer and cross-checker is sufficient to support PRD readiness. No assumptions presented as fact, all evidence paths are usable with concrete locators, and no unresolved missing data remains.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence result schema definition validates the contract requiring scope field.",
+      "why": "This is the foundational schema that enforces scope separation across the system."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function implements the scope classification logic.",
+      "why": "This is the runtime logic that separates evidence into four scope categories."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues generates blockers when project facts lack proper evidence.",
+      "why": "This is the validation that prevents external evidence from satisfying project facts."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "710-726",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness enforces cross_check evidence requirements.",
+      "why": "This is the readiness gate requiring all three agents before PRD."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves external-only evidence cannot satisfy existing-project facts.",
+      "why": "This validates the core requirement that project facts need project evidence."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves boundary audit detects project file mutations.",
+      "why": "This validates the enforcement of read-only evidence gathering."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Evidence agents could still mislabel scope if they ignore prompts or hallucinate file paths",
+    "Boundary snapshot may miss mutations in very large repos or non-git filesystems",
+    "Cross-check agent could be influenced by explorer result instead of doing independent verification"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker results agree with no conflicts. All evidence records have concrete project paths and explicit scope declarations. No assumptions promoted to facts. No unresolved missing data. Evidence is sufficient to support PRD readiness acceptance criteria."
+  }
+}

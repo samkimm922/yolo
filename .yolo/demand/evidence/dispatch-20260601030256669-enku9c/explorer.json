@@ -1,0 +1,140 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements provider-specific configuration handling to prevent drift between Claude, Codex, and custom providers in evidence mode, with boundary enforcement and tool profile controls but existing cross-provider model leakage assumptions.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "421-469",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig function implements provider-specific logic for claude, codex, and custom providers with explicit model and tool profile handling",
+      "why": "This is the core configuration logic that prevents provider drift by normalizing settings per provider type."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "445-461",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider has explicit model inheritance prevention; Claude provider normalizes tool profiles to boundary/research/full and clears restrictive tool flags",
+      "why": "Shows active measures to prevent cross-provider assumptions from leaking into evidence dispatch configuration."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots implement git-backed or filesystem-based project file mutation detection",
+      "why": "Core boundary enforcement mechanism that detects any project file changes during evidence gathering."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "514, 564-570",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime creates before/after boundary snapshots and converts any changes outside allowed artifact roots into BOUNDARY_PROJECT_MUTATION blockers",
+      "why": "Runtime boundary enforcement that blocks PRD readiness if agents modify project files."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation implements provider-specific command-line argument generation for claude, codex, and custom providers",
+      "why": "Provider adapter that translates normalized config into actual provider CLI invocations."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "197-231",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies codex dispatch does not inherit claude default model and does not force read-only sandbox",
+      "why": "Evidence that cross-provider model leakage is a known concern with active mitigation."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "233-272",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies claude dispatch clears tool restriction flags and relies on boundary enforcement rather than tool limiting",
+      "why": "Evidence that Claude provider safety is achieved through boundary control, not tool restriction."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "274-378",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Tests verify claude full/research tool profiles require explicit authorization and normalize correctly",
+      "why": "Evidence that tool profile modes are guarded against accidental full tool enablement."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "380-451",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Tests verify boundary blocks project file mutations, detects untracked files via git, and allows artifacts while blocking other writes",
+      "why": "Comprehensive boundary enforcement test evidence covering git and non-git scenarios."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "44-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine specifies evidence agent protocols (explorer/cross-checker/verifier), scope requirements, and that cross-provider model leakage should be prevented",
+      "why": "Product requirements that define what the evidence dispatch system should accomplish."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence agent protocol definitions specify objectives, prompts, and when each role is required",
+      "why": "Formal specification of evidence agent roles and their validation requirements."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "242-247",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Execution policy declares default dry_run mode, requires explicit authorization for agent dispatch, and forbids project mutation",
+      "why": "Policy-level evidence that safety defaults are enforced and require explicit opt-in."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "473-508",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime requires both executeAgents and allowAgentDispatch flags to be true before spawning any provider agents",
+      "why": "Double-opt-in mechanism prevents accidental agent execution with provider access."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "130-158",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "CLI dispatch defaults to dry-run and blocks execute without explicit allowAgentDispatch authorization",
+      "why": "Evidence that the public CLI enforces safe defaults and requires explicit authorization."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "A provider-specific assumption can silently weaken dispatch or break real agent calls if not explicitly handled in executionConfig normalization",
+    "Cross-provider model inheritance could cause evidence agents to run with wrong provider/model combination if normalization logic misses edge cases",
+    "Boundary enforcement relies on git or filesystem walking; exotic project layouts or sparse checkouts could reduce detection accuracy",
+    "Tool profile normalization only applies to Claude provider; Codex and custom providers may have different tool capability assumptions"
+  ],
+  "missing": [
+    "Stress testing evidence with real Claude -p agents in current working tree state",
+    "Evidence of how provider-specific tool capabilities actually differ between claude, codex, and custom in practice",
+    "Documentation of specific provider assumption risks and their mitigation strategies"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Provider dispatch configuration has comprehensive evidence for cross-provider isolation, boundary enforcement, and tool profile controls. Main gap is runtime stress testing with real agents and documentation of provider-specific assumption edge cases."
+  }
+}

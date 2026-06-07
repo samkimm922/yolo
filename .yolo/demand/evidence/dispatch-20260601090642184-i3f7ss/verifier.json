@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "blocked",
+  "completed": true,
+  "claim": "Explorer and cross-checker evidence is internally consistent but incomplete: demand explicitly requires external research on https://example.com, but neither agent performed external research using web/fetch/search tools despite agent prompt rules instructing them to do so.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "342-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt rule: 'If the demand explicitly asks for external research/fetch/search, actually use an available web/fetch/search-capable tool... Record those records as scope=external'",
+      "why": "Agents are explicitly instructed to perform external research when demand requests it"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine: 'external 证据可以来自 WebFetch/WebSearch、MCP web reader、browser fetch 或外部文档，但只能作为背景研究'",
+      "why": "Doctrine documents external evidence sources"
+    },
+    {
+      "scope": "external",
+      "source": "demand_text",
+      "summary": "Demand problem slot: 'During this scenario, use an available web/fetch/search-capable tool on https://example.com only as external background evidence.'",
+      "url": "https://example.com",
+      "why": "Demand explicitly requests external research on specific URL"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "663-668",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Blocker logic: if demandRequestsExternalResearch returns true but externalEvidencePresent returns false, dispatch adds EXTERNAL_RESEARCH_EVIDENCE_REQUIRED blocker",
+      "why": "Implementation enforces external research requirement via blocker"
+    }
+  ],
+  "assumptions": [
+    "Web/fetch/search tools are available in the verifier agent environment (not yet confirmed by attempted use)"
+  ],
+  "risks": [
+    "Evidence validation logic may not catch missing external evidence in all cases",
+    "Future demands requesting external research may also skip actual web tool usage"
+  ],
+  "missing": [
+    "External evidence record with scope=external from https://example.com using WebFetch, WebSearch, MCP web reader, or equivalent web tool"
+  ],
+  "recommendation": "block",
+  "result": {
+    "verdict": "blocked",
+    "notes": "Explorer and cross-checker evidence correctly documents the scope system and validation logic, but both agents failed to perform the explicit external research requested in the demand. The demand asks to 'use an available web/fetch/search-capable tool on https://example.com only as external background evidence' but neither agent attempted to fetch or research this URL. This violates the agent prompt rule at line 342-346. External evidence record with scope=external is missing. Blocker should be added: EXTERNAL_RESEARCH_EVIDENCE_REQUIRED."
+  }
+}

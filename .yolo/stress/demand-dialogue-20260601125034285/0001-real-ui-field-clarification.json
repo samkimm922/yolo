@@ -1,0 +1,80 @@
+{
+  "iteration": 1,
+  "scenario": "real-ui-field-clarification",
+  "expected": "executable",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601125034285/fixtures/0001-real-ui-field-clarification",
+  "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601125034285/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.transcript.md",
+  "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601125034285/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.chain.json",
+  "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601125034285/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+  "blocked_path": null,
+  "yolo": {
+    "no_premature_prd": true,
+    "final_class_ok": true,
+    "check_status": "pass",
+    "turn_count": 4,
+    "turn_expectations_met": 4,
+    "blocker_codes": [
+      "REFLECTION_PRESENT",
+      "INVESTIGATION_COMPLETE",
+      "REQUIREMENTS_PRESENT",
+      "ACCEPTANCE_SCENARIOS_PRESENT",
+      "SCENARIO_MATRIX_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "SCENARIO_SURFACES_PRESENT",
+      "SURFACE_SESSION_BUDGET_EXECUTABLE",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "REQUIREMENTS_PRESENT",
+      "ACCEPTANCE_SCENARIOS_PRESENT",
+      "SCENARIO_MATRIX_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "SCENARIO_SURFACES_PRESENT",
+      "SURFACE_SESSION_BUDGET_EXECUTABLE",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "USER_APPROVAL_PRESENT"
+    ]
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "correct_final_class": true,
+      "conversation_realistic": true,
+      "no_premature_prd": true,
+      "executable": true,
+      "score": 95,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "TRANSCRIPT_CONCISENESS",
+          "path": "real-ui-field-clarification.transcript.md",
+          "message": "Transcript lines are condensed one-liners rather than natural dialogue prose, but the logical progression is sound and all required information is captured in the PRD artifacts."
+        }
+      ],
+      "dimensions": {
+        "clarification_quality": 10,
+        "project_fact_grounding": 10,
+        "stage_transition": 10,
+        "plan_convergence": 10,
+        "prd_executability": 10,
+        "deadlock_avoidance": 10,
+        "rework_risk": 9
+      }
+    },
+    "stdout": "",
+    "stderr": ""
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T12:50:34.286Z",
+  "ended_at": "2026-06-01T12:51:43.688Z",
+  "duration_ms": 69402
+}

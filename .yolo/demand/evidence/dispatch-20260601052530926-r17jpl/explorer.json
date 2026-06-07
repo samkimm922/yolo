@@ -1,0 +1,142 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch already implements JSON drift repair, fails closed with explicit error codes for invalid agent JSON, and validates evidence scope requirements.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate function repairs common Claude JSON key drift: line ranges as strings, escaped backslashes, double-spaced keys, trailing commas.",
+      "why": "This is the repair logic for minor recoverable JSON drift from Claude provider output."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "348-368",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "extractJsonObject function handles multiple JSON formats: direct, fenced, and sliced from larger output.",
+      "why": "Shows how agent JSON is extracted from provider stdout before parsing."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-421",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns explicit error codes: EVIDENCE_AGENT_INVALID_JSON when parsed is null, EVIDENCE_AGENT_PROVIDER_FAILED on provider failure, and EVIDENCE_SCOPE_REQUIRED when evidence lacks declared scope.",
+      "why": "This is the fail-closed behavior for invalid or incomplete agent results."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "542-548",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent execution extracts JSON from provider stdout, normalizes the result, and tracks it in agent_results array.",
+      "why": "Shows the runtime flow from provider output to normalized evidence result."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "143-149",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "sanitizeMissing function filters out non-missing status items like 'no missing data identified' from the missing array.",
+      "why": "This prevents status notes from being treated as missing evidence blockers."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors function validates that every evidence record declares scope as project, external, user, or unknown.",
+      "why": "This enforces scope declaration requirement during normalization."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshot diff detects project file mutations outside allowed artifact root and adds BOUNDARY_PROJECT_MUTATION blockers.",
+      "why": "This is the boundary audit that enforces no project mutation during evidence gathering."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "574-604",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "After agent execution, dispatch re-runs inspectDemandPrdReadiness with evidence results and merges boundary blockers into final readiness.",
+      "why": "Shows how evidence results and boundary violations feed back into PRD readiness."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'repairs minor Claude JSON key drift and records the repair' confirms that line ranges, backslashes, and key spacing are repaired and json_repaired is set to true.",
+      "why": "This test verifies the JSON repair behavior works as expected."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'invalid agent JSON fails closed with explicit blocker code' confirms that non-JSON provider output returns EVIDENCE_AGENT_INVALID_JSON and blocks readiness.",
+      "why": "This test verifies fail-closed behavior for unrecoverable JSON errors."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "605-640",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'agent evidence without explicit scope is blocked during normalization' confirms that missing scope field triggers EVIDENCE_SCOPE_REQUIRED blocker.",
+      "why": "This test verifies that scope validation blocks invalid evidence results."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues function checks each evidence record and returns EVIDENCE_SCOPE_REQUIRED blockers for records without declared scope.",
+      "why": "This is the PRD readiness validation that enforces scope requirements."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "481-511",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues function returns blockers for error codes, missing evidence items, and blocked/clarify recommendations.",
+      "why": "This is how individual agent blockers propagate to PRD readiness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function validates that project-scoped evidence includes a repo-relative path or file locator.",
+      "why": "This enforces that project facts require concrete file locators."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "710-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness iterates over required evidence agent roles, checks for complete results, and collects blocking issues.",
+      "why": "This is the main readiness gate that validates evidence agent results."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If the repair logic accepts malformed JSON that should fail, invalid agent output could be treated as valid evidence.",
+    "If boundary snapshot misses certain types of mutations (like permission changes or metadata), project files could be modified without detection."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The implementation already handles minor JSON drift with repair logic, fails closed with explicit error codes (EVIDENCE_AGENT_INVALID_JSON, EVIDENCE_AGENT_PROVIDER_FAILED, EVIDENCE_SCOPE_REQUIRED), and validates evidence scope declarations. The test suite confirms these behaviors work as intended."
+  }
+}

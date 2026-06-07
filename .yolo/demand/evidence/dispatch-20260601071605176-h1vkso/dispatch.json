@@ -1,0 +1,654 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_dispatch.v1",
+  "status": "pass",
+  "code": "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD",
+  "summary": "Demand evidence agents completed and PRD readiness passed.",
+  "generated_at": "2026-06-01T07:16:05.177Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "state_root": "/Users/sippingroom/Developer/yolo/.yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601071605176-h1vkso",
+  "output_file": ".yolo/demand/evidence/dispatch-20260601071605176-h1vkso",
+  "execution_policy": {
+    "default_mode": "dry_run",
+    "execute_requires": [
+      "executeAgents=true",
+      "allowAgentDispatch=true"
+    ],
+    "writes_business_code": false,
+    "agent_instruction": "boundary_controlled",
+    "agent_tool_profile": "full",
+    "boundary": {
+      "project_mutation": "forbidden",
+      "allowed_write_roots": [
+        ".yolo/demand/evidence/dispatch-20260601071605176-h1vkso"
+      ]
+    }
+  },
+  "demand_status": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "hybrid",
+      "route": "fast",
+      "evidence_policy": "single_agent",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "HYBRID_NEW_WORK_ON_EXISTING_SYSTEM"
+      ],
+      "blocking": false,
+      "explanation": "Fast route by default; no hard factual risk trigger was found."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO harness boundary audit must detect tracked and untracked target-project mutations in git-backed and non-git projects."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "__tests__/demand-evidence-dispatch.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root."
+        ],
+        "risks": [
+          "A full-tool agent could create a new target project file without readiness blockers."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "hybrid",
+      "route": "fast",
+      "evidence_policy": "single_agent",
+      "stage": "evidence",
+      "submode": "fast_intake",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "HYBRID_NEW_WORK_ON_EXISTING_SYSTEM"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + verifier before treating project claims as facts."
+    }
+  },
+  "actions": [
+    {
+      "id": "demand.evidence.explorer",
+      "role": "explorer",
+      "status": "pending",
+      "reason": "Factual project claims need primary evidence.",
+      "protocol": {
+        "role": "explorer",
+        "objective": "Find primary project facts for the requested demand without editing files.",
+        "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "explorer.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601071605176-h1vkso/explorer.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601071605176-h1vkso/explorer.json"
+    },
+    {
+      "id": "demand.evidence.verifier",
+      "role": "verifier",
+      "status": "pending",
+      "reason": "Verify blockers and assumptions are not promoted to facts.",
+      "protocol": {
+        "role": "verifier",
+        "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+        "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "verifier.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601071605176-h1vkso/verifier.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601071605176-h1vkso/verifier.json"
+    }
+  ],
+  "mode": "execute",
+  "agent_results": [
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "explorer",
+      "status": "completed",
+      "completed": true,
+      "claim": "YOLO demand evidence dispatch implements boundary audit that detects tracked and untracked target-project mutations in git-backed and non-git projects, using SHA-256 digests and fallback filesystem walks.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "97-121",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildBoundarySnapshot() creates SHA-256 digests for all project files; diffBoundarySnapshots() compares before/after to detect mutations",
+          "why": "Core boundary audit implementation uses git ls-files and filesystem walk fallback"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "62-69",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "gitFiles() runs 'git ls-files -co --exclude-standard' to capture tracked, cached, and other files",
+          "why": "Git-backed boundary detection captures all tracked and untracked files"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "71-85",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "walkFiles() recursively scans filesystem excluding .git, node_modules, dist, coverage, .next, .cache",
+          "why": "Non-git boundary fallback walks filesystem while excluding common build/cache dirs"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "516-567",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Runtime calls buildBoundarySnapshot before/after agent execution and stores result in boundary.project_mutation field",
+          "why": "Boundary audit is integrated into evidence dispatch runtime lifecycle"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "585-597",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Boundary violations add BOUNDARY_PROJECT_MUTATION blockers to readiness and block PRD approval",
+          "why": "Boundary violations are enforced as PRD readiness blockers"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "416-452",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test 'git-backed boundary detects untracked project mutations' writes untracked file and expects blocked status",
+          "why": "Evidence that git-backed boundary detects untracked file mutations"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "454-491",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test 'git-backed boundary detects gitignored project mutations outside excluded dirs' writes .env file and expects violation",
+          "why": "Evidence that gitignored mutations outside excluded dirs are detected"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "493-533",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test 'non-git boundary fallback detects modified project files and ignores artifacts' expects src/existing.txt modification detected",
+          "why": "Evidence that non-git fallback detects modifications while excluding artifact root"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "381-414",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test 'boundary blocks project file mutation even when agent results pass' expects blocked status when agent writes project file",
+          "why": "Evidence that boundary violations block PRD readiness even when agents return success"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "656-660",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Triage evidence_policy is 'single_agent' for existing/hybrid projects, 'cross_check' for technical/high-cost risks",
+          "why": "Evidence policy determines which agents are dispatched for boundary testing"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "714-726",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "inspectDemandPrdReadiness requires explorer and verifier completion for single_agent policy",
+          "why": "Readiness gates require evidence agents to complete before PRD approval"
+        }
+      ],
+      "assumptions": [],
+      "risks": [
+        "Full-tool agent could bypass boundary if allowed_write_roots is misconfigured",
+        "Non-git walkFiles may miss files if excluded directories don't cover all build artifacts",
+        "SHA-256 collisions could theoretically mask mutations (cryptographically negligible)"
+      ],
+      "missing": [],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "Boundary audit implementation is complete with git and non-git coverage, proper exclusion logic, and PRD readiness enforcement. Tests confirm tracked, untracked, and gitignored mutation detection."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "verifier",
+      "status": "completed",
+      "completed": true,
+      "claim": "Verified: explorer evidence is complete, accurate, and supports PRD readiness for boundary audit implementation. All claims are backed by primary project sources with exact line references.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "62-95",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "gitFiles() and walkFiles() implementations exactly match explorer descriptions: git ls-files -co --exclude-standard for tracked/cached/other, recursive filesystem walk excluding standard build/cache dirs",
+          "why": "Confirms explorer's line range accuracy and implementation details for boundary detection methods"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "97-121",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildBoundarySnapshot() creates SHA-256 digests via hashFile(); diffBoundarySnapshots() compares before/after to detect added/modified/deleted files",
+          "why": "Verifies core boundary audit mechanism matches explorer claim"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "516-567",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "EvidenceDispatchRuntime.run() calls buildBoundarySnapshot at line 530 (pre-agent) and 554 (post-agent); stores mutation result in boundary.project_mutation",
+          "why": "Confirms boundary audit integration into evidence dispatch lifecycle as claimed"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "585-597",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "checkReadiness() adds BOUNDARY_PROJECT_MUTATION blocker when boundary.project_mutation detected; sets blocked status and PRD readiness flag",
+          "why": "Verifies PRD readiness enforcement mechanism matches explorer description"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "381-414",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test 'boundary blocks project file mutation even when agent results pass' creates src/mutated.txt, expects blocked status and BOUNDARY_PROJECT_MUTATION blocker code",
+          "why": "Confirms boundary violations block PRD readiness even with successful agent results"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "416-452",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test 'git-backed boundary detects untracked project mutations' writes untracked src/new-feature.ts, expects blocked and boundary_violation true",
+          "why": "Verifies untracked file detection in git-backed projects"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "454-491",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test 'git-backed boundary detects gitignored project mutations outside excluded dirs' writes .env, expects violation and blocked status",
+          "why": "Confirms gitignored mutations are detected when outside excluded directories"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "493-533",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Non-git test writes src/existing.txt, expects boundary_violation true; artifact root /tmp/artifact-root is excluded from mutation detection",
+          "why": "Verifies non-git fallback detects modifications while excluding artifact root"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "656-660",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Triage sets evidence_policy to 'single_agent' when reason_codes include EXISTING_PROJECT_FACTS or HYBRID_NEW_WORK_ON_EXISTING_SYSTEM",
+          "why": "Confirms evidence policy routing logic matches explorer claim"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "714-726",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "inspectDemandPrdReadiness() blocks PRD approval when evidence_policy is 'single_agent' until explorer and verifier agents complete",
+          "why": "Verifies readiness gates require evidence agent completion"
+        }
+      ],
+      "assumptions": [
+        "SHA-256 collision resistance is assumed to be cryptographically sufficient (standard assumption)",
+        "Excluded directories (.git, node_modules, dist, coverage, .next, .cache) are assumed to cover all build artifacts in typical projects"
+      ],
+      "risks": [
+        "Full-tool agent with allowed_write_roots misconfiguration could theoretically bypass boundary if artifact root exclusion is too broad",
+        "Non-git walkFiles may miss mutations in non-standard build directories not in exclusion list",
+        "Edge case: file replaced with different content of identical SHA-256 hash (cryptographically negligible but theoretically possible)"
+      ],
+      "missing": [],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "All explorer evidence verified against primary sources. Line references are accurate, implementation details match claims, and test coverage confirms tracked/untracked/gitignored mutation detection. Boundary audit is complete with proper git/non-git coverage, artifact root exclusion, and PRD readiness enforcement. Assumptions are reasonable and risks are documented."
+      }
+    }
+  ],
+  "provider_runs": [
+    {
+      "role": "explorer",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"explorer\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"YOLO demand evidence dispatch implements boundary audit that detects tracked and untracked target-project mutations in git-backed and non-git projects, using SHA-256 digests and fallback filesystem walks.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"97-121\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"buildBoundarySnapshot() creates SHA-256 digests for all project files; diffBoundarySnapshots() compares before/after to detect mutations\",\n      \"why\": \"Core boundary audit implementation uses git ls-files and filesystem walk fallback\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"62-69\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"gitFiles() runs 'git ls-files -co --exclude-standard' to capture tracked, cached, and other files\",\n      \"why\": \"Git-backed boundary detection captures all tracked and untracked files\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"71-85\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"walkFiles() recursively scans filesystem excluding .git, node_modules, dist, coverage, .next, .cache\",\n      \"why\": \"Non-git boundary fallback walks filesystem while excluding common build/cache dirs\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"516-567\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Runtime calls buildBoundarySnapshot before/after agent execution and stores result in boundary.project_mutation field\",\n      \"why\": \"Boundary audit is integrated into evidence dispatch runtime lifecycle\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"585-597\",\n      \"scope\": \"project\",\n      \"so\n[truncated 3101 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "verifier",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"verifier\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"Verified: explorer evidence is complete, accurate, and supports PRD readiness for boundary audit implementation. All claims are backed by primary project sources with exact line references.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"62-95\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"gitFiles() and walkFiles() implementations exactly match explorer descriptions: git ls-files -co --exclude-standard for tracked/cached/other, recursive filesystem walk excluding standard build/cache dirs\",\n      \"why\": \"Confirms explorer's line range accuracy and implementation details for boundary detection methods\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"97-121\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"buildBoundarySnapshot() creates SHA-256 digests via hashFile(); diffBoundarySnapshots() compares before/after to detect added/modified/deleted files\",\n      \"why\": \"Verifies core boundary audit mechanism matches explorer claim\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"516-567\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"EvidenceDispatchRuntime.run() calls buildBoundarySnapshot at line 530 (pre-agent) and 554 (post-agent); stores mutation result in boundary.project_mutation\",\n      \"why\": \"Confirms boundary audit integration into evidence dispatch lifecycle as claimed\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"585-597\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"checkReadiness() adds BOUNDARY_PROJECT_MUTATION blocker when boundary.project_mutation detected; sets blocked status and PRD readiness flag\",\n      \"why\": \"Verifie\n[truncated 3590 chars]",
+      "stderr": ""
+    }
+  ],
+  "artifacts": [
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601071605176-h1vkso/explorer.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601071605176-h1vkso/verifier.json"
+  ],
+  "boundary": {
+    "project_mutation": "clean",
+    "allowed_write_roots": [
+      ".yolo/demand/evidence/dispatch-20260601071605176-h1vkso"
+    ],
+    "changes": []
+  },
+  "readiness": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.prd_readiness.v1",
+    "required_slots": [
+      "problem",
+      "target_user",
+      "status_quo",
+      "desired_outcome",
+      "scope_in",
+      "scope_out",
+      "constraints",
+      "acceptance_criteria",
+      "risks",
+      "approval"
+    ],
+    "slot_values": {
+      "problem": [
+        "Existing YOLO harness boundary audit must detect tracked and untracked target-project mutations in git-backed and non-git projects."
+      ],
+      "target_user": [
+        "YOLO maintainer"
+      ],
+      "status_quo": [
+        "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+      ],
+      "desired_outcome": [
+        "Boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root."
+      ],
+      "scope_in": [
+        "src/demand/evidence-dispatch.ts",
+        "__tests__/demand-evidence-dispatch.test.ts"
+      ],
+      "scope_out": [
+        "Do not intentionally modify target project files during evidence gathering."
+      ],
+      "constraints": [
+        "Full tools may be available; harness boundary audit must detect any target-project mutation."
+      ],
+      "acceptance_criteria": [
+        "Boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root."
+      ],
+      "risks": [
+        "A full-tool agent could create a new target project file without readiness blockers."
+      ],
+      "approval": [
+        "approved"
+      ]
+    },
+    "missing_slots": [],
+    "blockers": [],
+    "assumptions": [],
+    "required_evidence_agents": [
+      "explorer",
+      "verifier"
+    ],
+    "evidence_agreement": {
+      "status": "pass",
+      "conflicts": []
+    },
+    "prd_ready": true
+  },
+  "demand_status_after_dispatch": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "hybrid",
+      "route": "fast",
+      "evidence_policy": "single_agent",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "HYBRID_NEW_WORK_ON_EXISTING_SYSTEM"
+      ],
+      "blocking": false,
+      "explanation": "Fast route by default; no hard factual risk trigger was found."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO harness boundary audit must detect tracked and untracked target-project mutations in git-backed and non-git projects."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "__tests__/demand-evidence-dispatch.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root."
+        ],
+        "risks": [
+          "A full-tool agent could create a new target project file without readiness blockers."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": true
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "hybrid",
+      "route": "fast",
+      "evidence_policy": "single_agent",
+      "stage": "evidence",
+      "submode": "fast_intake",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "HYBRID_NEW_WORK_ON_EXISTING_SYSTEM"
+      ],
+      "missing_slots": [],
+      "blockers": [],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "verifier"
+      ],
+      "prd_ready": true,
+      "next_action": "Run explorer + verifier before treating project claims as facts."
+    }
+  }
+}

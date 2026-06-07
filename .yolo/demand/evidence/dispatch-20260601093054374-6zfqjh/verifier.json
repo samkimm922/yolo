@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verified that the explorer's evidence is accurate: the YOLO demand evidence dispatch boundary snapshot system combines git ls-files for tracked/cached/other files with fallback walks, excludes the allowed artifact root, and can detect mutations in both git-backed and non-git projects, with comprehensive test coverage.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Verified buildBoundarySnapshot implementation matches explorer claim: combines git ls-files with walkFiles fallback, excludes allowed roots via isWithin check, creates SHA256 digests",
+      "why": "Spot-check confirms core boundary audit function implementation is accurate."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Verified gitFiles runs exact command claimed: 'git ls-files -co --exclude-standard -z' for tracked/cached/other files",
+      "why": "Confirms git coverage claim is accurate."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "58-60",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Verified excludedDir excludes exactly the directories claimed: .git, node_modules, dist, coverage, .next, .cache",
+      "why": "Confirms standard build artifact exclusion claim is accurate."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "495-528",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Verified test confirms boundary blocks mutation (line 522-524) even when agent returns success",
+      "why": "Confirms test proves boundary blocks readiness independently of agent claims."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "659-671",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Verified boundary mutations add BOUNDARY_PROJECT_MUTATION blockers (lines 659-664) and are merged into runtime blockers (line 671)",
+      "why": "Confirms boundary violation blocking mechanism is implemented as claimed."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Explorer's identified risks remain valid: full-tool agent side-effects beyond file writes, git version/edge cases, large codebase performance, exotic filesystem walk issues, concurrent execution consistency"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Spot-checked 5 key evidence points across code and tests; all paths, line ranges, and summaries are accurate. Explorer presented no assumptions as facts. All evidence is project-scoped with usable paths. The claim is fully supported by verified implementation and test coverage."
+  }
+}

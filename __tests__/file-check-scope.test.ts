@@ -11,7 +11,7 @@ function fakeExec(outputs) {
 }
 
 describe("files_modified_max scope filtering", () => {
-  test("counts only explicit targets when task scope declares targets", () => {
+  test("counts all business diffs and reports target scope violations", () => {
     const result = evalFilesModifiedMax(
       { max: 1 },
       { targets: [{ file: "scripts/yolo/state/dry-run/p3/00-runbook.md" }] },
@@ -25,8 +25,27 @@ describe("files_modified_max scope filtering", () => {
         "git ls-files --others --exclude-standard": "docs/out-of-band.md",
       }),
     );
+    assert.equal(result.passed, false);
+    assert.equal(result.found, 2);
+    assert.deepEqual(result.files, ["src/a.ts", "src/b.ts"]);
+    assert.deepEqual(result.target_files, ["scripts/yolo/state/dry-run/p3/00-runbook.md"]);
+    assert.deepEqual(result.out_of_scope_files, ["src/a.ts", "src/b.ts"]);
+  });
+
+  test("counts in-scope and out-of-scope files together when task scope declares targets", () => {
+    const result = evalFilesModifiedMax(
+      { max: 2 },
+      { targets: [{ file: "src/a.ts" }] },
+      "/repo",
+      fakeExec({
+        "git diff --name-only": "src/a.ts\nsrc/b.ts\n",
+        "git ls-files --others --exclude-standard": "",
+      }),
+    );
     assert.equal(result.passed, true);
-    assert.equal(result.found, 1);
+    assert.equal(result.found, 2);
+    assert.deepEqual(result.target_files, ["src/a.ts"]);
+    assert.deepEqual(result.out_of_scope_files, ["src/b.ts"]);
   });
 });
 

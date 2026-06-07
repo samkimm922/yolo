@@ -1,0 +1,135 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence schema, readiness contract, and tests already enforce scope separation between project and external evidence. Project facts require project-scoped evidence with repo-relative paths; external evidence is allowed but cannot alone satisfy existing-project factual claims.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence array with scope field required; field description explicitly states scope is project | external | user | unknown and project facts require project-scoped evidence",
+      "why": "Primary code evidence that evidence schema requires scope declaration and project-scoped evidence for project facts"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES is a Set containing only 'project', 'external', 'user', 'unknown' - no other values are accepted",
+      "why": "Code evidence showing scope validation is enforced at the schema level"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function normalizes scope values and classifies evidence by analyzing scope field, path/url patterns, and source type prefixes; returns 'project' only for repo-relative paths or project_* sources",
+      "why": "Core classification logic that distinguishes project from external evidence based on concrete locators"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function checks if evidence result has project-scoped evidence; returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker if only external/user/unknown evidence exists, or PROJECT_EVIDENCE_PATH_REQUIRED if project scope lacks concrete locator",
+      "why": "Critical enforcement logic that blocks PRD readiness when project facts lack project-scoped evidence with paths"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues function validates that all evidence records declare valid scope; returns EVIDENCE_SCOPE_REQUIRED blocker for records without declared scope",
+      "why": "Enforcement that scope must be explicitly declared on every evidence record"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES is defined identically in evidence-dispatch.ts, ensuring scope validation is consistent across router and dispatch modules",
+      "why": "Shows scope validation is implemented consistently across the demand evidence system"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors function validates evidence records during dispatch normalization; returns errors for records that don't declare valid scope values",
+      "why": "Dispatch-level validation that prevents invalid scope values from being written to artifacts"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "272-276",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rules state: 'Every evidence record must include scope: project, external, user, or unknown' and 'If the demand explicitly asks for external research/fetch/search, actually use WebFetch/WebSearch when available and record those records as scope=external'",
+      "why": "Prompt contract evidence that agents are instructed to mark external research as scope=external explicitly"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "308-317",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Required JSON shape in agent prompt documents the evidence record structure: path is required when scope is project, url is allowed when scope is external, scope must be one of four values, source examples include project_* and external_* types",
+      "why": "Shows agents are given explicit schema guidance on when to use project vs external scope"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'evidence records must declare scope: project | external | user | unknown. Project evidence from target projects code, tests, docs, config, logs, artifacts must include repo-relative path or file locator; external evidence from WebFetch/WebSearch can only be background, not proof of target project state'",
+      "why": "Product requirements documentation confirming scope separation is intentional, not accidental"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' verifies that when all three evidence agents return only external evidence (url without path), PRD readiness is blocked with PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE",
+      "why": "Test evidence proving the system correctly rejects external-only evidence for project facts"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "454-498",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'project evidence requires a concrete project locator' verifies that project-scoped evidence without a path field triggers PROJECT_EVIDENCE_PATH_REQUIRED blocker",
+      "why": "Test evidence proving project scope alone is insufficient; concrete path locator is required"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "500-545",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external URLs cannot be relabeled as project evidence' verifies that evidence records with scope='project' but url field (not path) are correctly rejected as PROJECT_EVIDENCE_PATH_REQUIRED",
+      "why": "Test evidence showing the system prevents masquerading external URLs as project evidence"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "547-591",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'evidence records must declare valid scope explicitly' verifies that evidence records without any scope field trigger EVIDENCE_SCOPE_REQUIRED blocker",
+      "why": "Test evidence proving scope declaration is mandatory, not optional"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If evidence agents ignore prompt instructions and misclassify external research as project evidence, the readiness checks would not catch this if paths are fabricated",
+    "If the scope normalization logic in evidenceRecordScope has edge cases that misclassify unusual URL patterns, some external evidence might be accepted as project",
+    "If test coverage is incomplete, there could be scope validation paths that don't have corresponding tests"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Primary claim verified: YOLO demand evidence system already implements scope separation. Evidence schema (router.ts:37-50) requires scope field with four valid values. Classification logic (router.ts:382-406) distinguishes project from external evidence based on path/url patterns. Readiness enforcement (router.ts:513-530) blocks when project facts lack project-scoped evidence with concrete paths. Agent prompts (evidence-dispatch.ts:272-276) explicitly instruct to mark external research as scope=external. Doctrine (yolo-demand-doctrine.md:70) confirms this is intentional design. Tests validate external-only evidence is blocked (router.test.ts:407-452), project evidence requires paths (454-498), and URLs cannot be relabeled as project evidence (500-545). Recommendation 'proceed' because the current implementation already satisfies the demand acceptance criteria: evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes."
+  }
+}

@@ -1,0 +1,143 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent cross-check confirms: YOLO demand evidence dispatch implements harness boundary audit with SHA256-based snapshot diff, multi-agent cross-check protocol, and evidence scope validation that blocks PRD readiness on project mutations, missing evidence results, or malformed evidence records.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot computes SHA256 digests for all project files; diffBoundarySnapshots compares before/after snapshots to detect additions, deletions, and modifications",
+      "why": "Cryptographic file hashing provides tamper-evident boundary audit that cannot be bypassed by agents."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-517, 566-598",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshot captured before agent execution and after completion; mutations generate BOUNDARY_PROJECT_MUTATION blockers and force prd_ready=false",
+      "why": "Runtime integration proves boundary audit is enforced, not optional."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "709-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness iterates requiredEvidenceRoles and generates EVIDENCE_AGENT_RESULT_REQUIRED blockers for any missing role results",
+      "why": "Evidence that incomplete evidence chains directly block PRD readiness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross-checker, and verifier with writes_code=false and cross_checker required_when cross_check",
+      "why": "Protocol contract establishes read-only constraint and mandatory cross-check for high-risk facts."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "475-479",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "requiredEvidenceRoles returns [explorer, cross-checker, verifier] for cross_check policy and [explorer, verifier] for single_agent",
+      "why": "Evidence that three-agent protocol is required for careful routing to existing projects."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE when evidence lacks project scope and PROJECT_EVIDENCE_PATH_REQUIRED when project scope lacks paths",
+      "why": "Scope validation prevents external URLs from satisfying existing-project fact requirements."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "208-252",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceDispatchPlan sets execution_policy with writes_business_code=false, project_mutation=forbidden, allowed_write_roots=[output_dir]",
+      "why": "Dispatch plan declares boundary constraints before any agent execution begins."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "258-328",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt includes 'Boundary: do not modify target project files. If verification would require mutation, report it in missing.' and agent_tool_profile warnings",
+      "why": "Agents receive boundary constraints directly in their prompt, not only post-hoc enforcement."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "473-510",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime returns early with status=blocked unless executeAgents=true AND allowAgentDispatch=true",
+      "why": "Evidence agent execution requires dual authorization flags; dry_run is default behavior."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "External-only evidence test validates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker when agents cite external URLs for existing-project facts",
+      "why": "Test proves scope validation blocks PRD readiness when project facts lack project-scoped evidence."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "387-431",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Project evidence path locator test validates PROJECT_EVIDENCE_PATH_REQUIRED blocker when project-scope evidence lacks repo-relative paths",
+      "why": "Test proves concrete file locators are required for project-scoped evidence."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "144-202",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Cross-check PRD readiness test validates EVIDENCE_AGENT_RESULT_REQUIRED blockers for missing cross-checker and verifier results",
+      "why": "Test proves all three evidence agents must complete before cross_check PRD readiness passes."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines required fields: claim, confidence, evidence, assumptions, risks, missing, recommendation",
+      "why": "Schema contract enforces structured evidence; missing fields result in normalization failures."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-421",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult sets status=blocked and recommendation=block when provider run fails, evidence lacks scope, or JSON is invalid",
+      "why": "Malformed or failed agent results are converted to blocked status before readiness evaluation."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "776-801",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectEvidenceAgreement detects conflicts when recommendations disagree (block vs proceed, or clarify/cross_check vs proceed) and adds EVIDENCE_AGENT_CONFLICT blockers",
+      "why": "Cross-checker disagreement cannot be averaged away; conflicts generate blockers."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If buildBoundarySnapshot does not walk all relevant files or ignores hidden files, mutations could occur undetected.",
+    "If provider-adapter executes shell commands that bypass filesystem visibility, boundary audit may miss mutations.",
+    "If evidence agents use indirect write mechanisms (symlinks, external tooling) not captured by snapshot, boundary could be violated."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms all explorer claims: boundary audit uses SHA256 digests, mutations trigger blockers, three-agent protocol is mandatory for cross_check policy, scope validation blocks external-only evidence for project facts, and conflicts generate blockers. No discrepancies found between explorer evidence and independent source reads."
+  }
+}

@@ -8,6 +8,10 @@ function splitGitFileList(output = "") {
   return String(output || "").trim().split("\n").map((file) => file.trim()).filter(Boolean);
 }
 
+function uniqueFiles(files = []) {
+  return [...new Set(files.filter(Boolean))];
+}
+
 export function readTaskChangedFiles({
   rootDir,
   worktreeFiles = null,
@@ -100,6 +104,9 @@ export function buildCommitChangeContext({
   const { targetFiles: auditTargets, outOfScope } = scopedOutOfScopeFiles(code, task, {
     isFileAllowedByScope,
   });
+  const skippedOutOfScope = Array.isArray(worktreeFiles?.outOfScopeSkipped)
+    ? worktreeFiles.outOfScopeSkipped
+    : [];
   return {
     allChanged,
     code,
@@ -107,6 +114,6 @@ export function buildCommitChangeContext({
     metadataFiles,
     hasRealCode,
     auditTargets,
-    outOfScope,
+    outOfScope: uniqueFiles([...outOfScope, ...skippedOutOfScope]),
   };
 }

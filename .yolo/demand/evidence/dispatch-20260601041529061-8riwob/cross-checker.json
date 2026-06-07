@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand router PRD readiness inspection includes blocking logic for evidence agents that report missing evidence, clarify recommendations, or block status.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "481-511",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues function independently verified: checks missing.length > 0 (line 496) adds EVIDENCE_AGENT_MISSING blocker; checks clarify/block in recommendation/verdict/status (line 503) adds EVIDENCE_AGENT_CLARIFICATION_REQUIRED or EVIDENCE_AGENT_BLOCKED blocker.",
+      "why": "Core blocking logic converts evidence agent missing/clarify/block recommendations into PRD readiness blockers."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "710-726",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness function independently verified: iterates required evidence roles (line 710), checks evidenceResultComplete for each (line 713), calls evidenceResultBlockingIssues for each result (line 721), and accumulates all blockers into blockerList.",
+      "why": "Shows how blocking issues from evidence agents flow into the final blocker list that determines PRD readiness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "750",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "prd_ready computed as blockers.length === 0, meaning any blocker (including EVIDENCE_AGENT_MISSING, EVIDENCE_AGENT_CLARIFICATION_REQUIRED, or EVIDENCE_AGENT_BLOCKED) results in prd_ready false.",
+      "why": "Final decision logic confirms blocking behavior prevents readiness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "100-106",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "isNonMissingStatusItem function independently verified: filters status notes like 'no missing data identified', 'no conflicts', '100% agreement' using regex patterns to prevent them from being treated as missing blockers.",
+      "why": "Distinguishes between status notes and actual missing data."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "108-110",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "actionableMissingItems function independently verified: filters missing array through isNonMissingStatusItem to remove status notes before checking if missing.length > 0.",
+      "why": "Ensures only real missing data triggers blockers, not status messages."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "246-286",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'evidence agent missing data and clarify recommendations block PRD readiness' independently verified: cross-checker returns missing array and recommendation: clarify, test expects prd_ready false and EVIDENCE_AGENT_MISSING blocker.",
+      "why": "Proves system correctly blocks readiness on missing/clarify recommendations."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "144-202",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'cross-check PRD readiness requires every evidence agent result' independently verified: missing cross-checker or verifier results each add EVIDENCE_AGENT_RESULT_REQUIRED blockers and prevent prd_ready true.",
+      "why": "Validates incomplete evidence agent participation blocks readiness."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "204-244",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'evidence conflicts and existing blockers prevent PRD readiness' independently verified: conflicting recommendations (proceed vs block) trigger EVIDENCE_AGENT_CONFLICT blocker and prevent readiness.",
+      "why": "Validates conflict handling prevents readiness when agents disagree."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "526-566",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'non-missing status notes in missing arrays do not block readiness' independently verified: status notes like 'No missing data identified' and 'All required evidence tasks completed' in missing arrays don't prevent readiness.",
+      "why": "Validates isNonMissingStatusItem filtering works correctly."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Evidence agent implementations must use standard recommendation values (proceed, clarify, block) or verdict values (pass, blocked, fail) to trigger blockers; non-standard values might bypass blocking logic.",
+    "Edge case: status normalization relies on specific string patterns; if agents return creative status messages not covered by the clarify/block check, blockers might not trigger."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms all evidence cited by explorer is accurate. Core blocking logic in evidenceResultBlockingIssues correctly adds EVIDENCE_AGENT_MISSING, EVIDENCE_AGENT_CLARIFICATION_REQUIRED, and EVIDENCE_AGENT_BLOCKED blockers. Test cases validate the blocking behavior works for missing, clarify, block, and conflict scenarios. No contradictions found between explorer claims and source code."
+  }
+}

@@ -1,0 +1,650 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.session.v1",
+  "id": "DEMAND-DIALOGUE-0011-contradicted-field-blocks",
+  "generated_at": "2026-06-01T16:02:31.501Z",
+  "phase": "discuss",
+  "mode": "standard",
+  "source": "yolo-discuss",
+  "project": {
+    "title": "Show a Low stock badge in the inventory list.",
+    "target_users": [
+      "store manager"
+    ],
+    "target_files": [
+      "src/pages/inventory-list.tsx"
+    ],
+    "candidate_target_files": []
+  },
+  "project_facts": {
+    "schema": "yolo.demand.project_facts.v1",
+    "target_files": [
+      {
+        "file": "src/pages/inventory-list.tsx",
+        "status": "verified",
+        "source": "project_read",
+        "evidence": [
+          "src/pages/inventory-list.tsx exists in project root."
+        ],
+        "message": "Target file is verified enough to enter execution scope."
+      }
+    ],
+    "candidate_target_files": [],
+    "assumptions": [
+      {
+        "id": "ASM-001",
+        "text": "Inventory list already receives quantity and threshold fields.",
+        "status": "contradicted",
+        "source": "user_or_dialogue",
+        "contradicted_by": [
+          "evidence"
+        ],
+        "identifiers": [
+          "quantity",
+          "threshold"
+        ],
+        "verified_by": [
+          "project_read",
+          "evidence"
+        ],
+        "message": "Assumption conflicts with available evidence or project files and must not be promoted to fact."
+      }
+    ],
+    "policy": {
+      "inferred_files_are_execution_scope": false,
+      "unverified_project_facts_block_prd": true,
+      "user_approval_cannot_override_fact_conflicts": true
+    },
+    "next_actions": [
+      "Resolve contradicted assumption ASM-001: Inventory list already receives quantity and threshold fields."
+    ]
+  },
+  "question_trace": [
+    {
+      "id": "Q01",
+      "question": "需要读取项目确认字段来源，不能默认 threshold 存在。",
+      "answer": "库存列表加 Low stock badge，我觉得已经有 threshold 字段。",
+      "source": "dialogue_stress"
+    },
+    {
+      "id": "Q02",
+      "question": "我已读取目标文件，当前只看到 item.quantity，没有 threshold/replenishment/floor 字段；批准不能覆盖被代码反证的字段事实，需要继续澄清或派 agent 查证。",
+      "answer": "先别管字段，直接按 threshold 做吧，我批准。",
+      "source": "dialogue_stress"
+    }
+  ],
+  "prd_intake": {
+    "schema": "yolo.demand.prd_intake.v1",
+    "source": "derived_nontechnical_intake",
+    "question_ids": [
+      "Q01",
+      "Q02"
+    ],
+    "plain_language_problem": "Show a Low stock badge in the inventory list.",
+    "audience": [
+      "store manager"
+    ],
+    "desired_outcomes": [
+      "Inventory list displays an inline 'Low stock' badge on affected SKUs."
+    ],
+    "success_proof": [
+      "A screenshot can show a Low stock badge below threshold."
+    ],
+    "boundaries": [
+      "Do not change order import behavior.",
+      "Do not build supplier ordering."
+    ],
+    "exceptions": []
+  },
+  "approval_reason": "",
+  "interview": null,
+  "nontechnical_intake": {
+    "schema": "yolo.demand.nontechnical_intake.v1",
+    "actor": "store manager",
+    "audience": [
+      "store manager"
+    ],
+    "plain_language_problem": "Show a Low stock badge in the inventory list.",
+    "touchpoints": [],
+    "current_workarounds": [
+      "Managers only see quantity in the inventory list."
+    ],
+    "desired_outcomes": [
+      "Inventory list displays an inline 'Low stock' badge on affected SKUs."
+    ],
+    "success_proof": [
+      "A screenshot can show a Low stock badge below threshold."
+    ],
+    "boundaries": [
+      "Do not change order import behavior.",
+      "Do not build supplier ordering."
+    ],
+    "exceptions": [],
+    "evidence": [
+      "Project read shows src/pages/inventory-list.tsx renders item.quantity and does not show threshold, replenishment, floor, or lowStock fields."
+    ],
+    "assumptions": [
+      "Inventory list already receives quantity and threshold fields."
+    ],
+    "technical_terms_required_from_user": false,
+    "user_should_not_need_to_name_files": true,
+    "inferred_target_files": [
+      "src/pages/inventory-list.tsx"
+    ],
+    "candidate_target_files": [],
+    "question_model": [
+      "Who has the problem?",
+      "Where in the workflow does it happen?",
+      "What happens today?",
+      "What should happen instead?",
+      "How will you know it worked?",
+      "What is explicitly out of scope?",
+      "What edge cases would make this feel wrong?"
+    ]
+  },
+  "vision": {
+    "statement": "Show a Low stock badge in the inventory list.",
+    "idea": "Show a Low stock badge in the inventory list.",
+    "problem": "",
+    "target_users": [
+      "store manager"
+    ],
+    "status_quo": [
+      "Managers only see quantity in the inventory list."
+    ],
+    "narrow_wedge": ""
+  },
+  "reflection": {
+    "summary": "",
+    "assumptions": [
+      "Inventory list already receives quantity and threshold fields."
+    ],
+    "assumption_records": [
+      {
+        "id": "ASM-001",
+        "text": "Inventory list already receives quantity and threshold fields.",
+        "status": "contradicted",
+        "source": "user_or_dialogue",
+        "contradicted_by": [
+          "evidence"
+        ],
+        "identifiers": [
+          "quantity",
+          "threshold"
+        ],
+        "verified_by": [
+          "project_read",
+          "evidence"
+        ],
+        "message": "Assumption conflicts with available evidence or project files and must not be promoted to fact."
+      }
+    ],
+    "alternatives": [],
+    "premise_challenges": []
+  },
+  "investigation": {
+    "evidence": [
+      {
+        "id": "EVID-001",
+        "text": "Project read shows src/pages/inventory-list.tsx renders item.quantity and does not show threshold, replenishment, floor, or lowStock fields."
+      }
+    ],
+    "assumptions": [
+      {
+        "id": "ASM-001",
+        "text": "Inventory list already receives quantity and threshold fields.",
+        "status": "contradicted",
+        "source": "user_or_dialogue",
+        "contradicted_by": [
+          "evidence"
+        ],
+        "identifiers": [
+          "quantity",
+          "threshold"
+        ],
+        "verified_by": [
+          "project_read",
+          "evidence"
+        ],
+        "message": "Assumption conflicts with available evidence or project files and must not be promoted to fact."
+      }
+    ],
+    "codebase_scouts": [
+      {
+        "file": "src/pages/inventory-list.tsx",
+        "surface": "ui",
+        "reason": "project_read",
+        "status": "verified",
+        "message": "Target file is verified enough to enter execution scope."
+      }
+    ],
+    "risks": []
+  },
+  "discussion": {
+    "rounds": [
+      {
+        "id": "Q01",
+        "question": "需要读取项目确认字段来源，不能默认 threshold 存在。",
+        "answer": "库存列表加 Low stock badge，我觉得已经有 threshold 字段。"
+      },
+      {
+        "id": "Q02",
+        "question": "我已读取目标文件，当前只看到 item.quantity，没有 threshold/replenishment/floor 字段；批准不能覆盖被代码反证的字段事实，需要继续澄清或派 agent 查证。",
+        "answer": "先别管字段，直接按 threshold 做吧，我批准。"
+      }
+    ],
+    "decisions": [
+      {
+        "id": "DEC-001",
+        "text": "Show an inline badge labelled 'Low stock' after the SKU."
+      }
+    ],
+    "open_questions": [],
+    "deferred": []
+  },
+  "requirements": {
+    "active": [
+      {
+        "id": "REQ-001",
+        "text": "Inventory list displays an inline 'Low stock' badge on affected SKUs.",
+        "source": "demand",
+        "status": "confirmed",
+        "acceptance_scenarios": [
+          {
+            "id": "SCN-001",
+            "when": "the user exercises this requirement",
+            "then": "Inventory list displays an inline 'Low stock' badge on affected SKUs."
+          }
+        ],
+        "trace": {
+          "evidence": [
+            "EVID-001"
+          ],
+          "decisions": [
+            "DEC-001"
+          ],
+          "question_ids": [
+            "Q01",
+            "Q02"
+          ]
+        }
+      }
+    ],
+    "constraints": [
+      "Do not change order import behavior."
+    ],
+    "out_of_scope": [
+      "Do not build supplier ordering."
+    ]
+  },
+  "context": {
+    "summary": "Show a Low stock badge in the inventory list.",
+    "domain_terms": [],
+    "current_state": [
+      "Managers only see quantity in the inventory list."
+    ],
+    "constraints": [
+      "Do not change order import behavior."
+    ]
+  },
+  "roadmap": {
+    "mvp": [
+      "discuss"
+    ],
+    "phases": [
+      {
+        "id": "P1",
+        "text": "discuss"
+      }
+    ],
+    "later": []
+  },
+  "scenario_matrix": {
+    "schema": "yolo.demand.scenario_matrix.v1",
+    "generated_from": "nontechnical_interview",
+    "nontechnical_user_safe": true,
+    "scenarios": [
+      {
+        "id": "SCN-001",
+        "requirement_id": "REQ-001",
+        "actor": "store manager",
+        "touchpoint": "primary user workflow",
+        "trigger": "the user exercises this requirement",
+        "current_behavior": "Managers only see quantity in the inventory list.",
+        "desired_behavior": "Inventory list displays an inline 'Low stock' badge on affected SKUs.",
+        "proof": "A screenshot can show a Low stock badge below threshold.",
+        "out_of_scope": [
+          "Do not build supplier ordering."
+        ],
+        "constraints": [
+          "Do not change order import behavior."
+        ],
+        "exceptions": [],
+        "surfaces": [
+          {
+            "id": "SCN-001-SFC-001",
+            "kind": "ui",
+            "label": "用户可见界面",
+            "user_visible": true,
+            "target_files": [
+              "src/pages/inventory-list.tsx"
+            ],
+            "readonly_files": [],
+            "session_budget": {
+              "expected": "single_session",
+              "max_files": 1,
+              "max_lines_per_file": 120
+            },
+            "proof": "A screenshot can show a Low stock badge below threshold."
+          }
+        ],
+        "question_trace": [
+          "Q01",
+          "Q02"
+        ],
+        "source_question_ids": [
+          "Q01",
+          "Q02"
+        ]
+      }
+    ],
+    "atomic_task_rule": "one scenario surface becomes one session-sized task unless atomicity gate requires more splitting"
+  },
+  "approval": {
+    "approved": true,
+    "approved_by": "user",
+    "approved_at": "2026-06-01T16:02:31.501Z",
+    "reason": "",
+    "note": ""
+  },
+  "readiness": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.readiness.v1",
+    "phase": "discuss",
+    "status": "blocked",
+    "readiness_level": "L3",
+    "demand_ready": true,
+    "prd_ready": false,
+    "executable_prd_ready": false,
+    "quality_score": 94,
+    "checks": [
+      {
+        "code": "VISION_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Vision must state the product direction or opportunity in enough detail."
+      },
+      {
+        "code": "TARGET_USER_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Target user must be explicit before PRD work."
+      },
+      {
+        "code": "STATUS_QUO_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Status quo/current workaround must be captured."
+      },
+      {
+        "code": "REFLECTION_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Reflection must challenge premises, assumptions, or alternatives."
+      },
+      {
+        "code": "INVESTIGATION_COMPLETE",
+        "passed": true,
+        "severity": "error",
+        "message": "Investigation must record evidence or explicit assumptions/TBD-needs-validation."
+      },
+      {
+        "code": "QUESTIONING_ROUNDS_COMPLETE",
+        "passed": true,
+        "severity": "error",
+        "message": "Question trace or discussion rounds must capture the non-technical answers before PRD."
+      },
+      {
+        "code": "REQUIREMENTS_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "At least one confirmed requirement is required."
+      },
+      {
+        "code": "ACCEPTANCE_SCENARIOS_PRESENT",
+        "passed": true,
+        "severity": "warning",
+        "message": "Every requirement should include at least one acceptance scenario."
+      },
+      {
+        "code": "SCENARIO_MATRIX_PRESENT",
+        "passed": true,
+        "severity": "warning",
+        "message": "Demand must be translated into a scenario matrix before executable PRD generation."
+      },
+      {
+        "code": "SCENARIO_PROOF_PRESENT",
+        "passed": true,
+        "severity": "warning",
+        "message": "Every scenario must include explicit proof that a non-technical user can recognize."
+      },
+      {
+        "code": "SCENARIO_SURFACES_PRESENT",
+        "passed": true,
+        "severity": "warning",
+        "message": "Every scenario must map to at least one implementation surface for atomic task slicing."
+      },
+      {
+        "code": "SURFACE_SESSION_BUDGET_EXECUTABLE",
+        "passed": true,
+        "severity": "warning",
+        "message": "Every scenario surface must declare session_budget.max_files <= 2 before executable PRD generation.",
+        "surface_budget_issues": []
+      },
+      {
+        "code": "OUT_OF_SCOPE_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Out-of-scope boundaries must be explicit."
+      },
+      {
+        "code": "ROADMAP_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Roadmap must define MVP or phased delivery."
+      },
+      {
+        "code": "BLOCKING_OPEN_QUESTIONS_EMPTY",
+        "passed": true,
+        "severity": "error",
+        "message": "Blocking open questions must be resolved or explicitly deferred before PRD.",
+        "blocking_questions": []
+      },
+      {
+        "code": "USER_APPROVAL_PRESENT",
+        "passed": true,
+        "severity": "error",
+        "message": "Explicit user approval with approved=true is required before executable PRD compilation."
+      },
+      {
+        "code": "EXECUTION_SCOPE_PRESENT",
+        "passed": true,
+        "severity": "warning",
+        "message": "Executable PRD requires target files/modules or a bounded execution scope."
+      },
+      {
+        "code": "PROJECT_FACTS_GROUNDED",
+        "passed": false,
+        "severity": "error",
+        "message": "Executable PRD requires project facts, field assumptions, and UI specs to be grounded before approval can proceed.",
+        "fact_grounding_issues": [
+          {
+            "code": "QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED",
+            "assumption_id": "ASM-001",
+            "message": "Contradicted assumptions must not be promoted to executable PRD facts, even with user approval."
+          },
+          {
+            "code": "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+            "message": "Demand assumes threshold-like fields exist, but target project files do not show a matching field/source."
+          }
+        ]
+      }
+    ],
+    "blockers": [
+      {
+        "code": "PROJECT_FACTS_GROUNDED",
+        "passed": false,
+        "severity": "error",
+        "message": "Executable PRD requires project facts, field assumptions, and UI specs to be grounded before approval can proceed.",
+        "fact_grounding_issues": [
+          {
+            "code": "QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED",
+            "assumption_id": "ASM-001",
+            "message": "Contradicted assumptions must not be promoted to executable PRD facts, even with user approval."
+          },
+          {
+            "code": "QUALITY_FIELD_ASSUMPTION_VERIFIED",
+            "message": "Demand assumes threshold-like fields exist, but target project files do not show a matching field/source."
+          }
+        ]
+      }
+    ],
+    "warnings": [],
+    "next_actions": [
+      "Executable PRD requires project facts, field assumptions, and UI specs to be grounded before approval can proceed."
+    ]
+  },
+  "graph": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.artifact_graph.v1",
+    "build_order": [
+      "vision",
+      "reflection",
+      "investigation",
+      "questioning_rounds",
+      "depth_verification",
+      "requirements_confirmation",
+      "context",
+      "roadmap",
+      "approval",
+      "executable_prd"
+    ],
+    "completed": [
+      "approval",
+      "context",
+      "depth_verification",
+      "investigation",
+      "questioning_rounds",
+      "reflection",
+      "requirements_confirmation",
+      "roadmap",
+      "vision"
+    ],
+    "ready": [
+      "executable_prd"
+    ],
+    "blocked": {},
+    "artifacts": [
+      {
+        "id": "vision",
+        "generates": "VISION.md",
+        "description": "Initial product vision, target user, problem, status quo, and opportunity hypothesis.",
+        "requires": [],
+        "status": "done",
+        "missing_dependencies": []
+      },
+      {
+        "id": "reflection",
+        "generates": "REFLECTION.md",
+        "description": "Premise challenge, assumptions, alternatives, and why this should continue.",
+        "requires": [
+          "vision"
+        ],
+        "status": "done",
+        "missing_dependencies": []
+      },
+      {
+        "id": "investigation",
+        "generates": "INVESTIGATION.md",
+        "description": "Evidence, codebase scout, existing behavior, risks, and validation gaps.",
+        "requires": [
+          "reflection"
+        ],
+        "status": "done",
+        "missing_dependencies": []
+      },
+      {
+        "id": "questioning_rounds",
+        "generates": "DISCUSSION-LOG.md",
+        "description": "Questioning rounds, answers, decisions, unresolved questions, and deferred ideas.",
+        "requires": [
+          "investigation"
+        ],
+        "status": "done",
+        "missing_dependencies": []
+      },
+      {
+        "id": "depth_verification",
+        "generates": "READINESS.json",
+        "description": "Demand quality gate, depth verification, and readiness level.",
+        "requires": [
+          "questioning_rounds"
+        ],
+        "status": "done",
+        "missing_dependencies": []
+      },
+      {
+        "id": "requirements_confirmation",
+        "generates": "REQUIREMENTS.md",
+        "description": "Confirmed requirements, acceptance scenarios, constraints, and out-of-scope boundaries.",
+        "requires": [
+          "depth_verification"
+        ],
+        "status": "done",
+        "missing_dependencies": []
+      },
+      {
+        "id": "context",
+        "generates": "CONTEXT.md",
+        "description": "Domain language, project context, current state, constraints, and durable decisions.",
+        "requires": [
+          "requirements_confirmation"
+        ],
+        "status": "done",
+        "missing_dependencies": []
+      },
+      {
+        "id": "roadmap",
+        "generates": "ROADMAP.md",
+        "description": "MVP, sequencing, later phases, dependencies, and risk-driven ordering.",
+        "requires": [
+          "requirements_confirmation"
+        ],
+        "status": "done",
+        "missing_dependencies": []
+      },
+      {
+        "id": "approval",
+        "generates": "APPROVAL.json",
+        "description": "Explicit human approval for PRD compilation and execution readiness.",
+        "requires": [
+          "requirements_confirmation",
+          "context",
+          "roadmap"
+        ],
+        "status": "done",
+        "missing_dependencies": []
+      },
+      {
+        "id": "executable_prd",
+        "generates": "prd.json",
+        "description": "Executable PRD compiled from approved demand artifacts.",
+        "requires": [
+          "approval"
+        ],
+        "status": "ready",
+        "missing_dependencies": []
+      }
+    ]
+  }
+}

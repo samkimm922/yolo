@@ -1,0 +1,149 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence schema with scope field accepting project | external | user | unknown in field description",
+      "why": "Cross-check confirms schema definition at lines 37-50 explicitly documents scope field requirement."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES is declared as Set containing exactly these four values: project, external, user, unknown",
+      "why": "Cross-check confirms line 52 defines the constant Set used for validation throughout."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope function validates scope against VALID_EVIDENCE_SCOPES by checking clean(record.scope || record.evidence_scope || record.source_scope).toLowerCase()",
+      "why": "Cross-check confirms lines 408-412 implement the validation that rejects invalid scopes."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues generates EVIDENCE_SCOPE_REQUIRED blocker when scope is missing or invalid",
+      "why": "Cross-check confirms lines 438-447 enforce scope declaration as hard requirement."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function classifies records into project/external/user/unknown based on heuristics checking scope, kind, type, url, source, and path fields",
+      "why": "Cross-check confirms lines 382-406 implement comprehensive scope classification logic."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE or PROJECT_EVIDENCE_PATH_REQUIRED blockers when existing-project facts lack project-scoped evidence with concrete locators",
+      "why": "Cross-check confirms lines 513-530 enforce project evidence requirements for existing-project claims."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "257-327",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt generates agent instructions with explicit scope rules: Every evidence record must include scope: project, external, user, or unknown",
+      "why": "Cross-check confirms lines 257-327 contain the full prompt that tells evidence agents to declare scopes correctly."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "271-272",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rule: Every evidence record must include scope: project, external, user, or unknown; Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator",
+      "why": "Cross-check confirms lines 271-272 are the explicit instructions to agents about scope requirements."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-157",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates that each evidence record declares one of the four valid scopes by checking VALID_EVIDENCE_SCOPES.has(scope)",
+      "why": "Cross-check confirms lines 150-157 implement runtime validation that blocks results without proper scope declarations."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves external-only evidence cannot satisfy existing-project facts and generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker",
+      "why": "Cross-check confirms lines 340-385 test verifies the system rejects external evidence for project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "387-431",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves project evidence without concrete file locator generates PROJECT_EVIDENCE_PATH_REQUIRED blocker",
+      "why": "Cross-check confirms lines 387-431 test verifies project evidence requires a repo-relative path."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "433-478",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves external URLs mislabeled as project evidence are blocked with PROJECT_EVIDENCE_PATH_REQUIRED",
+      "why": "Cross-check confirms lines 433-478 test verifies URLs cannot be relabeled as project evidence."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "480-524",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves evidence records without explicit scope declaration generate EVIDENCE_SCOPE_REQUIRED blocker",
+      "why": "Cross-check confirms lines 480-524 test verifies scope declaration is mandatory."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "144-202",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies cross-check PRD readiness requires all three evidence agents (explorer, cross-checker, verifier) to complete before marking prd_ready=true",
+      "why": "Cross-check confirms lines 144-202 test verifies the evidence agent role requirements for cross_check policy."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "566-601",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies agent evidence without explicit scope is blocked during normalization with EVIDENCE_SCOPE_REQUIRED error",
+      "why": "Cross-check confirms lines 566-601 test verifies scope enforcement happens at runtime during dispatch."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "44-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine documents evidence scope requirements and evidence agent protocols with explicit scope rules: evidence records must declare scope as project | external | user | unknown; project evidence requires repo-relative path; external evidence can only be background research",
+      "why": "Cross-check confirms lines 44-70 document the core design contract for scope distinction and the three evidence agent roles (explorer, cross-checker, verifier)."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If this claim is wrong, existing-project factual claims could be accepted based on web research or user assertions without project code/test/docs evidence, leading to incorrect PRD generation that doesn't match the actual codebase"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Cross-check confirms all 16 evidence records from the explorer are accurate. The schema, prompt, readiness contract, and tests all explicitly distinguish evidence scopes with validation and blockers. All four components (schema, prompt, readiness contract, tests) implement scope distinction: schema defines the field, prompt instructs agents to use it, readiness enforces it with blockers, and tests verify the enforcement."
+  }
+}

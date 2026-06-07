@@ -1,0 +1,861 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_dispatch.v1",
+  "status": "blocked",
+  "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+  "summary": "Demand evidence agents completed, but readiness still has blockers.",
+  "generated_at": "2026-06-01T07:00:10.796Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "state_root": "/Users/sippingroom/Developer/yolo/.yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601070010795-atir8g",
+  "output_file": ".yolo/demand/evidence/dispatch-20260601070010795-atir8g",
+  "execution_policy": {
+    "default_mode": "dry_run",
+    "execute_requires": [
+      "executeAgents=true",
+      "allowAgentDispatch=true"
+    ],
+    "writes_business_code": false,
+    "agent_instruction": "boundary_controlled",
+    "agent_tool_profile": "full",
+    "boundary": {
+      "project_mutation": "forbidden",
+      "allowed_write_roots": [
+        ".yolo/demand/evidence/dispatch-20260601070010795-atir8g"
+      ]
+    }
+  },
+  "demand_status": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO provider dispatch API/state handling must not drift between Claude, Codex, and custom provider assumptions in demand evidence mode."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Provider configuration preserves full tool capability under harness boundary and avoids cross-provider model leakage."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "src/runtime/execution/provider-adapter.ts",
+          "__tests__/demand-evidence-dispatch.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Provider configuration preserves full tool capability under harness boundary and avoids cross-provider model leakage."
+        ],
+        "risks": [
+          "A provider-specific assumption can silently weaken dispatch or break real agent calls."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  },
+  "actions": [
+    {
+      "id": "demand.evidence.explorer",
+      "role": "explorer",
+      "status": "pending",
+      "reason": "Factual project claims need primary evidence.",
+      "protocol": {
+        "role": "explorer",
+        "objective": "Find primary project facts for the requested demand without editing files.",
+        "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "explorer.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601070010795-atir8g/explorer.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601070010795-atir8g/explorer.json"
+    },
+    {
+      "id": "demand.evidence.cross-checker",
+      "role": "cross-checker",
+      "status": "pending",
+      "reason": "High-risk facts require independent cross-check.",
+      "protocol": {
+        "role": "cross-checker",
+        "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+        "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+        "writes_code": false,
+        "required_when": "evidence_policy === cross_check or claim risk is high",
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "cross-checker.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601070010795-atir8g/cross-checker.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601070010795-atir8g/cross-checker.json"
+    },
+    {
+      "id": "demand.evidence.verifier",
+      "role": "verifier",
+      "status": "pending",
+      "reason": "Verify blockers and assumptions are not promoted to facts.",
+      "protocol": {
+        "role": "verifier",
+        "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+        "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "verifier.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601070010795-atir8g/verifier.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601070010795-atir8g/verifier.json"
+    }
+  ],
+  "mode": "execute",
+  "agent_results": [
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "explorer",
+      "status": "completed",
+      "completed": true,
+      "claim": "YOLO demand evidence dispatch implements provider-specific configuration isolation with boundary snapshot enforcement, but relies on explicit normalization and has gaps in cross-provider tool configuration cleanup.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "423-471",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "executionConfig function implements provider-specific isolation: lines 450-463 for Claude clear settings/tools and set no_session_persistence; lines 447-449 for Codex clear Claude models; line 464 for custom sets sandbox.",
+          "why": "This is the core configuration isolation logic that prevents provider assumptions from leaking."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "451-455",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Tool profile normalization maps research/full/boundary profiles and only applies full profile when allowFullAgentTools is explicitly true.",
+          "why": "This controls agent capabilities and prevents unexpected tool access in evidence mode."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "516-572",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Boundary snapshot enforcement with buildBoundarySnapshot before agents and diffBoundarySnapshots after, detecting project mutations and blocking if files outside allowed_write_roots change.",
+          "why": "This provides runtime protection against evidence agents modifying target project files."
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "31-109",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildProviderInvocation implements provider-specific command building: Claude uses -p flag with permission modes; Codex uses exec with sandbox and output file; custom uses shell execution.",
+          "why": "This shows the actual provider invocation strategies are separated."
+        },
+        {
+          "path": "src/runtime/adapters/agent-contract.ts",
+          "line": "1-41",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "PROVIDER_ALIASES map (lines 1-9) and normalizeAgentProvider function (lines 37-41) normalize provider strings: anthropic/claude→claude, openai/codex→codex, shell/local→custom, returns null for auto.",
+          "why": "This provides the normalization foundation that prevents unnormalized provider strings from reaching isolation logic."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "198-232",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test 'codex dispatch does not inherit a claude default model' (lines 198-232) verifies that Codex provider does not inherit Claude-specific configuration when switching providers.",
+          "why": "This test validates the provider isolation claim with concrete evidence."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "234-273",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test 'claude dispatch does not pass tool restriction flags' (lines 234-273) verifies that Claude dispatch clears tool flags and relies on boundary enforcement.",
+          "why": "This test shows that Claude-specific isolation is intentionally minimal."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "381-452",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Tests 'boundary blocks project file mutation' (lines 381-414) and 'git-backed boundary detects untracked project mutations' (lines 416-452) verify boundary enforcement detects mutations and blocks readiness.",
+          "why": "These tests validate that the boundary system actually prevents and detects project mutations."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "462",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Line 462 sets ai.agent_tool_profile which is an internal field not recognized by external providers (Codex/custom), potentially causing parameter rejection.",
+          "why": "This identifies a potential cross-provider compatibility issue."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "437-439",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Provider override logic (lines 437-439) sets ai.provider and ai.executor directly from input without normalization validation before executionConfig.",
+          "why": "This shows a potential path for unnormalized provider strings to bypass isolation."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "457-459",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Claude tool restrictions are cleared (lines 457-459) but Codex/custom tool restrictions are not explicitly cleared, leaving potential for cross-provider tool leakage.",
+          "why": "This shows incomplete cleanup of provider-specific configuration."
+        }
+      ],
+      "assumptions": [
+        "The agent_tool_profile internal field is ignored rather than rejected by external providers.",
+        "Provider detection logic in runDemandEvidenceDispatchRuntime (line 529) always calls normalizeAgentProvider before building config.",
+        "Tool restrictions for Codex/custom providers are either not set or handled correctly by those providers.",
+        "The boundary snapshot system correctly identifies all project mutations including gitignored files."
+      ],
+      "risks": [
+        "A provider-specific configuration assumption (like agent_tool_profile) could silently weaken dispatch or cause provider failures.",
+        "Cross-provider tool restriction leakage could break agent capabilities or security boundaries.",
+        "Unnormalized provider strings could bypass isolation logic if input validation fails."
+      ],
+      "missing": [],
+      "recommendation": "cross_check",
+      "result": {
+        "verdict": "pass",
+        "notes": "Provider isolation is implemented with explicit normalization and boundary enforcement, but cross-provider configuration cleanup gaps warrant cross-check verification."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "cross-checker",
+      "status": "completed",
+      "completed": true,
+      "claim": "Provider isolation is implemented but has gaps: agent_tool_profile field is set but never used by provider adapter, provider override bypass risk is mitigated by adapter-level normalization, and cross-provider tool cleanup is provider-scoped not comprehensive.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "80-96",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Provider adapter only reads Claude-specific fields (claude_permission_mode, settings, claude_tools, claude_allowed_tools, claude_disallowed_tools, claude_disable_slash_commands, claude_no_session_persistence, max_budget_usd) and does NOT read agent_tool_profile.",
+          "why": "This contradicts the explorer's risk claim about parameter rejection - the field is silently ignored not rejected."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "462",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Line 462 sets ai.agent_tool_profile = normalizedProfile, but provider-adapter.ts never reads this field.",
+          "why": "This confirms the field is dead configuration that creates a false sense of tool control."
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "6-8",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "selectedProvider function ALWAYS calls normalizeAgentProvider(provider) before using provider value, providing adapter-level normalization even if evidence-dispatch bypass doesn't normalize.",
+          "why": "This validates a defense-in-depth pattern that mitigates the provider override bypass risk."
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "127",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Line 127 calls selectedProvider(detectModelProvider()) which normalizes provider at spawn time, providing second normalization checkpoint.",
+          "why": "This shows double normalization protection: at buildProviderInvocation and at spawnProviderPrompt."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "450-466",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Provider-specific cleanup is provider-scoped: Claude tool fields cleared only when provider is claude (lines 457-459), Claude model cleared only when provider is codex (lines 447-449), custom sandbox set only when provider is custom (lines 464-465).",
+          "why": "This confirms incomplete cross-provider cleanup - each provider only cleans its own specific fields, not all provider-specific fields."
+        },
+        {
+          "path": "src/runtime/adapters/agent-contract.ts",
+          "line": "37-41",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "normalizeAgentProvider function implements PROVIDER_ALIASES mapping and returns null for auto, providing the normalization foundation.",
+          "why": "This validates the explorer's claim about normalization foundation."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "198-232",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test verifies Codex dispatch does not inherit Claude default model and checks provider isolation at config level.",
+          "why": "This confirms the explorer's test evidence about provider isolation validation."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "381-452",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Boundary tests verify project mutation detection and blocking for both tracked and untracked files.",
+          "why": "This validates the boundary enforcement claim with concrete test evidence."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "516-572",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Boundary enforcement implementation with buildBoundarySnapshot before (line 516), diff after (line 567), and violation detection (line 569).",
+          "why": "This confirms the boundary enforcement mechanism works as claimed."
+        }
+      ],
+      "assumptions": [
+        "Silent ignoring of unrecognized ai fields like agent_tool_profile is acceptable behavior rather than a configuration bug.",
+        "Provider-scoped cleanup is sufficient even though cross-provider configuration leakage is theoretically possible.",
+        "Adapter-level normalization at spawn time compensates for lack of normalization at config build time."
+      ],
+      "risks": [
+        "agent_tool_profile field creates false confidence about tool capability control since it is never actually used.",
+        "Provider-scoped cleanup means if a provider receives another provider's configuration fields, those fields won't be cleared.",
+        "Defense-in-depth normalization pattern may hide the root cause of unnormalized provider strings reaching config building.",
+        "Cross-provider tool configuration leakage could occur if provider isolation fails and fields are not comprehensively cleared."
+      ],
+      "missing": [
+        "Evidence that Claude CLI silently ignores agent_tool_profile without warnings or errors.",
+        "Test coverage for cross-provider configuration leakage scenarios.",
+        "Verification that Codex/custom providers don't have equivalent tool profile configuration needs."
+      ],
+      "recommendation": "clarify",
+      "result": {
+        "verdict": "blocked",
+        "notes": "Cross-check revealed agent_tool_profile is dead configuration (set but never used), provider override bypass risk is mitigated by adapter-level normalization, and cross-provider cleanup is incomplete but provider-scoped. Require clarification on whether agent_tool_profile should be removed or implemented."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "verifier",
+      "status": "completed",
+      "completed": true,
+      "claim": "Evidence gathering is sufficient for PRD readiness with clarification; all assumptions are properly separated from facts, evidence paths are usable and specific, and missing items are properly reflected. Cross-checker successfully identified that agent_tool_profile is dead configuration rather than a rejection risk.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "450-466",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Provider-specific cleanup implementation shows Claude clears tool fields only when provider is claude, confirming provider-scoped rather than comprehensive cleanup.",
+          "why": "This validates cross-checker's finding about incomplete cross-provider cleanup being provider-scoped."
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "80-96",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Provider adapter reads Claude-specific fields but does NOT read agent_tool_profile, confirming cross-checker's finding that the field is silently ignored.",
+          "why": "This resolves explorer's risk claim about parameter rejection by confirming the field is dead configuration."
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "127",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Spawn-time normalization call at line 127 provides defense-in-depth validation of provider strings.",
+          "why": "This validates cross-checker's mitigation claim about adapter-level normalization compensating for config-build gaps."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "198-273, 381-452",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test coverage exists for provider isolation (lines 198-273) and boundary enforcement (lines 381-452), providing factual validation for core claims.",
+          "why": "This confirms that primary functionality has test evidence supporting the factual claims."
+        },
+        {
+          "path": "src/runtime/adapters/agent-contract.ts",
+          "line": "37-41",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "normalizeAgentProvider implementation validates the normalization foundation claim from both explorer and cross-checker.",
+          "why": "This confirms shared factual basis about provider normalization infrastructure."
+        }
+      ],
+      "assumptions": [],
+      "risks": [
+        "Dead configuration field agent_tool_profile creates false confidence about tool capability control.",
+        "Provider-scoped cleanup may leave cross-provider configuration fields uncleared if isolation fails.",
+        "Missing test coverage for cross-provider leakage scenarios could allow integration bugs."
+      ],
+      "missing": [
+        "Evidence confirming Claude CLI behavior for unrecognized ai fields like agent_tool_profile.",
+        "Test coverage specifically for cross-provider configuration leakage scenarios.",
+        "Verification that Codex/custom providers don't require equivalent tool profile configuration."
+      ],
+      "recommendation": "clarify",
+      "result": {
+        "verdict": "pass",
+        "notes": "Verification complete: assumptions are properly separated from facts in both agent results; all evidence paths are specific and usable; missing items are accurately reflected. Cross-checker successfully elevated explorer's risk claim about agent_tool_profile from 'potential rejection' to 'dead configuration' by tracing actual field usage. Evidence is sufficient for PRD readiness with clarification requirement for agent_tool_profile treatment and cross-provider cleanup completeness."
+      }
+    }
+  ],
+  "provider_runs": [
+    {
+      "role": "explorer",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"explorer\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"YOLO demand evidence dispatch implements provider-specific configuration isolation with boundary snapshot enforcement, but relies on explicit normalization and has gaps in cross-provider tool configuration cleanup.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"423-471\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"executionConfig function implements provider-specific isolation: lines 450-463 for Claude clear settings/tools and set no_session_persistence; lines 447-449 for Codex clear Claude models; line 464 for custom sets sandbox.\",\n      \"why\": \"This is the core configuration isolation logic that prevents provider assumptions from leaking.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"451-455\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Tool profile normalization maps research/full/boundary profiles and only applies full profile when allowFullAgentTools is explicitly true.\",\n      \"why\": \"This controls agent capabilities and prevents unexpected tool access in evidence mode.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"516-572\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Boundary snapshot enforcement with buildBoundarySnapshot before agents and diffBoundarySnapshots after, detecting project mutations and blocking if files outside allowed_write_roots change.\",\n      \"why\": \"This provides runtime protection against evidence agents modifying target project files.\"\n    },\n    {\n      \"path\": \"src/runtime/execution/provider-adapter.ts\",\n      \"line\": \"31-109\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"buildProviderInvocation implements provider-specific command\n[truncated 4418 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "cross-checker",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"cross-checker\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"Provider isolation is implemented but has gaps: agent_tool_profile field is set but never used by provider adapter, provider override bypass risk is mitigated by adapter-level normalization, and cross-provider tool cleanup is provider-scoped not comprehensive.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/runtime/execution/provider-adapter.ts\",\n      \"line\": \"80-96\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Provider adapter only reads Claude-specific fields (claude_permission_mode, settings, claude_tools, claude_allowed_tools, claude_disallowed_tools, claude_disable_slash_commands, claude_no_session_persistence, max_budget_usd) and does NOT read agent_tool_profile.\",\n      \"why\": \"This contradicts the explorer's risk claim about parameter rejection - the field is silently ignored not rejected.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"462\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Line 462 sets ai.agent_tool_profile = normalizedProfile, but provider-adapter.ts never reads this field.\",\n      \"why\": \"This confirms the field is dead configuration that creates a false sense of tool control.\"\n    },\n    {\n      \"path\": \"src/runtime/execution/provider-adapter.ts\",\n      \"line\": \"6-8\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"selectedProvider function ALWAYS calls normalizeAgentProvider(provider) before using provider value, providing adapter-level normalization even if evidence-dispatch bypass doesn't normalize.\",\n      \"why\": \"This validates a defense-in-depth pattern that mitigates the provider override bypass risk.\"\n    },\n    {\n      \"path\": \"src/runtime/execution/provider-adapter.ts\",\n      \"line\": \"127\",\n      \"scope\": \"project\",\n      \"sour\n[truncated 4004 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "verifier",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"verifier\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"Evidence gathering is sufficient for PRD readiness with clarification; all assumptions are properly separated from facts, evidence paths are usable and specific, and missing items are properly reflected. Cross-checker successfully identified that agent_tool_profile is dead configuration rather than a rejection risk.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"450-466\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Provider-specific cleanup implementation shows Claude clears tool fields only when provider is claude, confirming provider-scoped rather than comprehensive cleanup.\",\n      \"why\": \"This validates cross-checker's finding about incomplete cross-provider cleanup being provider-scoped.\"\n    },\n    {\n      \"path\": \"src/runtime/execution/provider-adapter.ts\",\n      \"line\": \"80-96\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Provider adapter reads Claude-specific fields but does NOT read agent_tool_profile, confirming cross-checker's finding that the field is silently ignored.\",\n      \"why\": \"This resolves explorer's risk claim about parameter rejection by confirming the field is dead configuration.\"\n    },\n    {\n      \"path\": \"src/runtime/execution/provider-adapter.ts\",\n      \"line\": \"127\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Spawn-time normalization call at line 127 provides defense-in-depth validation of provider strings.\",\n      \"why\": \"This validates cross-checker's mitigation claim about adapter-level normalization compensating for config-build gaps.\"\n    },\n    {\n      \"path\": \"__tests__/demand-evidence-dispatch.test.ts\",\n      \"line\": \"198-273, 381-452\",\n      \"scope\": \"project\",\n      \"source\": \"project_test\",\n      \"summary\":\n[truncated 1886 chars]",
+      "stderr": ""
+    }
+  ],
+  "artifacts": [
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601070010795-atir8g/explorer.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601070010795-atir8g/cross-checker.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601070010795-atir8g/verifier.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601070010795-atir8g/dispatch.json"
+  ],
+  "boundary": {
+    "project_mutation": "clean",
+    "allowed_write_roots": [
+      ".yolo/demand/evidence/dispatch-20260601070010795-atir8g"
+    ],
+    "changes": []
+  },
+  "readiness": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.prd_readiness.v1",
+    "required_slots": [
+      "problem",
+      "target_user",
+      "status_quo",
+      "desired_outcome",
+      "scope_in",
+      "scope_out",
+      "constraints",
+      "acceptance_criteria",
+      "risks",
+      "approval"
+    ],
+    "slot_values": {
+      "problem": [
+        "Existing YOLO provider dispatch API/state handling must not drift between Claude, Codex, and custom provider assumptions in demand evidence mode."
+      ],
+      "target_user": [
+        "YOLO maintainer"
+      ],
+      "status_quo": [
+        "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+      ],
+      "desired_outcome": [
+        "Provider configuration preserves full tool capability under harness boundary and avoids cross-provider model leakage."
+      ],
+      "scope_in": [
+        "src/demand/evidence-dispatch.ts",
+        "src/runtime/execution/provider-adapter.ts",
+        "__tests__/demand-evidence-dispatch.test.ts"
+      ],
+      "scope_out": [
+        "Do not intentionally modify target project files during evidence gathering."
+      ],
+      "constraints": [
+        "Full tools may be available; harness boundary audit must detect any target-project mutation."
+      ],
+      "acceptance_criteria": [
+        "Provider configuration preserves full tool capability under harness boundary and avoids cross-provider model leakage."
+      ],
+      "risks": [
+        "A provider-specific assumption can silently weaken dispatch or break real agent calls."
+      ],
+      "approval": [
+        "approved"
+      ]
+    },
+    "missing_slots": [],
+    "blockers": [
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "cross-checker",
+        "message": "cross-checker reported unresolved missing evidence: Evidence that Claude CLI silently ignores agent_tool_profile without warnings or errors.; Test coverage for cross-provider configuration leakage scenarios.; Verification that Codex/custom providers don't have equivalent tool profile configuration needs."
+      },
+      {
+        "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+        "role": "cross-checker",
+        "message": "cross-checker returned clarify; keep PRD readiness blocked until resolved."
+      },
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "verifier",
+        "message": "verifier reported unresolved missing evidence: Evidence confirming Claude CLI behavior for unrecognized ai fields like agent_tool_profile.; Test coverage specifically for cross-provider configuration leakage scenarios.; Verification that Codex/custom providers don't require equivalent tool profile configuration."
+      },
+      {
+        "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+        "role": "verifier",
+        "message": "verifier returned clarify; keep PRD readiness blocked until resolved."
+      }
+    ],
+    "assumptions": [],
+    "required_evidence_agents": [
+      "explorer",
+      "cross-checker",
+      "verifier"
+    ],
+    "evidence_agreement": {
+      "status": "pass",
+      "conflicts": []
+    },
+    "prd_ready": false
+  },
+  "demand_status_after_dispatch": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO provider dispatch API/state handling must not drift between Claude, Codex, and custom provider assumptions in demand evidence mode."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Provider configuration preserves full tool capability under harness boundary and avoids cross-provider model leakage."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "src/runtime/execution/provider-adapter.ts",
+          "__tests__/demand-evidence-dispatch.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Provider configuration preserves full tool capability under harness boundary and avoids cross-provider model leakage."
+        ],
+        "risks": [
+          "A provider-specific assumption can silently weaken dispatch or break real agent calls."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "cross-checker",
+          "message": "cross-checker reported unresolved missing evidence: Evidence that Claude CLI silently ignores agent_tool_profile without warnings or errors.; Test coverage for cross-provider configuration leakage scenarios.; Verification that Codex/custom providers don't have equivalent tool profile configuration needs."
+        },
+        {
+          "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker returned clarify; keep PRD readiness blocked until resolved."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "verifier",
+          "message": "verifier reported unresolved missing evidence: Evidence confirming Claude CLI behavior for unrecognized ai fields like agent_tool_profile.; Test coverage specifically for cross-provider configuration leakage scenarios.; Verification that Codex/custom providers don't require equivalent tool profile configuration."
+        },
+        {
+          "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+          "role": "verifier",
+          "message": "verifier returned clarify; keep PRD readiness blocked until resolved."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "cross-checker",
+          "message": "cross-checker reported unresolved missing evidence: Evidence that Claude CLI silently ignores agent_tool_profile without warnings or errors.; Test coverage for cross-provider configuration leakage scenarios.; Verification that Codex/custom providers don't have equivalent tool profile configuration needs."
+        },
+        {
+          "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker returned clarify; keep PRD readiness blocked until resolved."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "verifier",
+          "message": "verifier reported unresolved missing evidence: Evidence confirming Claude CLI behavior for unrecognized ai fields like agent_tool_profile.; Test coverage specifically for cross-provider configuration leakage scenarios.; Verification that Codex/custom providers don't require equivalent tool profile configuration."
+        },
+        {
+          "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+          "role": "verifier",
+          "message": "verifier returned clarify; keep PRD readiness blocked until resolved."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  }
+}

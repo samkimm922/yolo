@@ -1,0 +1,135 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch already implements complete support for research/fetch style external evidence with proper scope=external marking and project-fact boundary enforcement.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 16,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES defines four scope values: project, external, user, unknown",
+      "why": "Core data model supports external scope declaration"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 152,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates that all evidence records declare scope as project, external, user, or unknown",
+      "why": "Schema enforcement ensures scope is always declared"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 161,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "demandRequestsExternalResearch detects explicit external research requests via URLs or fetch/search keywords",
+      "why": "System can detect when external evidence is required"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 178,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "externalEvidencePresent checks if agent results include scope=external evidence with URL or external source",
+      "why": "Validation verifies external evidence was actually gathered"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 346,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt instructs: 'If the demand explicitly asks for external research/fetch/search, actually use an available web/fetch/search-capable tool. Record those records as scope=external'",
+      "why": "Agent protocol explicitly requires external tool usage and scope marking"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 666,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-execution validation adds EXTERNAL_RESEARCH_EVIDENCE_REQUIRED blocker when external research was requested but no scope=external evidence found",
+      "why": "Runtime enforcement prevents missing external evidence"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": 37,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION requires path for project scope, url for external scope, and mandatory scope field",
+      "why": "Schema enforces proper evidence structure per scope type"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": 513,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues adds PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker when evidence is only external/user/unknown for existing-project facts",
+      "why": "Prevents external evidence from being used as project facts"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": 70,
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator'",
+      "why": "Product requirements explicitly separate project vs external evidence"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 98,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot creates pre-execution snapshot of all project files outside allowed artifact roots",
+      "why": "Boundary enforcement detects any unauthorized project mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 112,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after snapshots to detect any added, modified, or deleted project files",
+      "why": "Post-execution audit identifies boundary violations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 643,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-execution boundary diff generates BOUNDARY_PROJECT_MUTATION blockers for any project files changed outside allowed artifact root",
+      "why": "Runtime enforcement prevents target project mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 525,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig normalizes agent_tool_profile to 'research' for research/fetch/web tool profiles",
+      "why": "Tool access control supports external research mode"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 346,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt allows web/fetch/search tools with scope=external marking when agentToolProfile includes 'research'",
+      "why": "Tool access control supports external research mode"
+    }
+  ],
+  "assumptions": [
+    "The explorer used mcp__web_reader__webReader to fetch https://example.com during evidence gathering, but this is not present in the code artifacts I reviewed"
+  ],
+  "risks": [
+    "If claim is wrong, agents might use external evidence as project facts or mutate project files during evidence gathering"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification confirms the explorer's claim: YOLO demand evidence dispatch fully implements external evidence support with (1) four-scope data model including 'external', (2) agent protocol requiring scope=external marking for fetched/web evidence, (3) schema validation enforcing scope declarations, (4) PRD readiness validation preventing external evidence from satisfying project-fact requirements, (5) boundary audit preventing target project mutations. All evidence verified from actual source files with corrected line numbers. The system correctly separates project-scoped facts from external research evidence."
+  }
+}

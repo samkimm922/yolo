@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectPrdContract } from "../runtime/gates/prd-contract-doctor.js";
 import { createPrdMigrationAdvice, findPrdFiles } from "./migration.js";
@@ -8,9 +8,83 @@ import { inspectSpecGovernanceGate, specGovernancePolicy } from "../runtime/gate
 import { validatePrdPath } from "./validate.js";
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+const STRICT_WARNING_MODES = new Set(["verify", "runner", "release", "strict", "ship"]);
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function clean(value) {
+  return String(value ?? "").trim();
+}
+
+function asArray(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (value == null || value === "") return [];
+  return [value];
+}
+
+function preflightMode(options = {}) {
+  return clean(options.mode || options.executionMode || options.execution_mode || "verify").toLowerCase();
+}
+
+function strictWarningPolicy(options = {}) {
+  if (options.failClosedWarnings === false || options.fail_closed_warnings === false) return false;
+  if (options.strictWarnings === true || options.strict_warnings === true) return true;
+  if (options.strictExecution === true || options.strict_execution === true) return true;
+  return STRICT_WARNING_MODES.has(preflightMode(options));
+}
+
+function schemaWarningCode(warning) {
+  const text = clean(warning);
+  if (/ajv/i.test(text)) return "PRD_SCHEMA_VALIDATOR_SKIPPED";
+  if (/未知条件类型/.test(text)) return "PRD_SCHEMA_UNKNOWN_CONDITION_TYPE";
+  if (/ID 格式/.test(text)) return "PRD_SCHEMA_TASK_ID_FORMAT";
+  if (/priority/.test(text)) return "PRD_SCHEMA_PRIORITY_FORMAT";
+  return "PRD_SCHEMA_WARNING";
+}
+
+function normalizeWarning(source, warning) {
+  if (typeof warning === "string") {
+    return {
+      source,
+      code: source === "schema" ? schemaWarningCode(warning) : `${source.toUpperCase()}_WARNING`,
+      detail: warning,
+      message: warning,
+    };
+  }
+  return {
+    source,
+    code: warning?.code || `${source.toUpperCase()}_WARNING`,
+    detail: warning?.detail || warning?.message || "PRD preflight warning.",
+    message: warning?.message || warning?.detail || "PRD preflight warning.",
+    task_id: warning?.task_id || null,
+    condition_id: warning?.condition_id || null,
+    condition_type: warning?.condition_type || null,
+    severity: warning?.severity || "WARN",
+    human_needed: warning?.human_needed || undefined,
+  };
+}
+
+function collectWarnings({ schema, contract, specGovernance }) {
+  return [
+    ...asArray(schema?.warnings).map((warning) => normalizeWarning("schema", warning)),
+    ...asArray(contract?.warnings).map((warning) => normalizeWarning("contract", warning)),
+    ...asArray(specGovernance?.warnings).map((warning) => normalizeWarning("spec", warning)),
+  ];
+}
+
+function warningBlockedReason(warning) {
+  return {
+    source: "warning_policy",
+    code: warning.code || "PRD_PREFLIGHT_WARNING",
+    detail: warning.detail || warning.message || "PRD preflight warning blocks strict verification.",
+    message: warning.message || warning.detail || "PRD preflight warning blocks strict verification.",
+    warning_source: warning.source || null,
+    task_id: warning.task_id || null,
+    condition_id: warning.condition_id || null,
+    human_needed: true,
+  };
 }
 
 function readPrd(path) {
@@ -79,7 +153,7 @@ function specBlockedReasons(specGovernance) {
   }));
 }
 
-function nextActions({ read, schema, contract, migration, specGovernance }) {
+function nextActions({ read, schema, contract, migration, specGovernance, blockingWarnings = [] }) {
   const actions = [];
   if (!read.ok) {
     actions.push("Fix the PRD file path or JSON syntax before running YOLO.");
@@ -95,13 +169,16 @@ function nextActions({ read, schema, contract, migration, specGovernance }) {
   if (specGovernance?.blocks_execution) {
     actions.push("Add requirement_ids, design_ids, and terminal evidence trace before running YOLO.");
   }
-  if (schema?.ok && !contract?.blocks_execution && !specGovernance?.blocks_execution) {
+  if (blockingWarnings.length > 0) {
+    actions.push("Resolve or explicitly approve blocking PRD warnings before running YOLO.");
+  }
+  if (schema?.ok && !contract?.blocks_execution && !specGovernance?.blocks_execution && blockingWarnings.length === 0) {
     actions.push("PRD preflight passed; runner can start.");
   }
   return [...new Set(actions)];
 }
 
-function buildRunnerReadiness({ read, schema, contract, migration, specGovernance, blockedReasons }) {
+function buildRunnerReadiness({ read, schema, contract, migration, specGovernance, blockedReasons, blockingWarnings = [] }) {
   const stats = read.ok ? taskStats(read.prd) : taskStats(null);
   const canExecute = blockedReasons.length === 0;
   return {
@@ -109,7 +186,7 @@ function buildRunnerReadiness({ read, schema, contract, migration, specGovernanc
     reason: canExecute ? "ready" : "blocked",
     execution_mode: read.ok ? read.prd?.execution_mode || "default" : null,
     tasks: stats,
-    next_actions: nextActions({ read, schema, contract, migration, specGovernance }),
+    next_actions: nextActions({ read, schema, contract, migration, specGovernance, blockingWarnings }),
   };
 }
 
@@ -125,7 +202,12 @@ export function preflightPrd(prdPath, options = {}) {
   let specGovernance = null;
 
   if (read.ok) {
-    contract = inspectPrdContract(read.prd);
+    contract = inspectPrdContract(read.prd, {
+      mode: options.mode || options.executionMode || options.execution_mode || "verify",
+      strictExecution: options.strictExecution ?? options.strict_execution,
+      requireDemandContract: options.requireDemandContract ?? options.require_demand_contract,
+      projectRoot: options.projectRoot || options.project_root || dirname(read.file),
+    });
     migration = createPrdMigrationAdvice(read.prd, prdPath);
     specGovernance = inspectSpecGovernanceGate({
       prd: read.prd,
@@ -133,13 +215,18 @@ export function preflightPrd(prdPath, options = {}) {
     }).result;
   }
 
+  const warnings = collectWarnings({ schema, contract, specGovernance });
+  const failClosedWarnings = strictWarningPolicy(options);
+  const advisoryWarnings = failClosedWarnings ? [] : warnings;
+  const blockingWarnings = failClosedWarnings ? warnings : [];
   const blockedReasons = [
     schemaBlockedReason(schema),
     ...contractBlockedReasons(contract),
     ...specBlockedReasons(specGovernance),
+    ...blockingWarnings.map(warningBlockedReason),
   ].filter(Boolean);
-  const warningCount = (schema?.warnings?.length || 0) + (contract?.warning_count || 0) + (specGovernance?.warnings?.length || 0);
-  const runnerReadiness = buildRunnerReadiness({ read, schema, contract, migration, specGovernance, blockedReasons });
+  const warningCount = warnings.length;
+  const runnerReadiness = buildRunnerReadiness({ read, schema, contract, migration, specGovernance, blockedReasons, blockingWarnings });
 
   return {
     status: blockedReasons.length > 0 ? "blocked" : warningCount > 0 ? "warning" : "pass",
@@ -153,6 +240,17 @@ export function preflightPrd(prdPath, options = {}) {
     runner_readiness: runnerReadiness,
     blocked_count: blockedReasons.length,
     warning_count: warningCount,
+    advisory_warning_count: advisoryWarnings.length,
+    blocking_warning_count: blockingWarnings.length,
+    warnings,
+    advisory_warnings: advisoryWarnings,
+    blocking_warnings: blockingWarnings,
+    warning_policy: {
+      mode: preflightMode(options),
+      fail_closed: failClosedWarnings,
+      advisory_warning_count: advisoryWarnings.length,
+      blocking_warning_count: blockingWarnings.length,
+    },
     blocked_reasons: blockedReasons,
   };
 }
@@ -167,6 +265,8 @@ export function preflightAllPrds(options = {}) {
     pass_count: results.filter((result) => result.status === "pass").length,
     warning_count: results.filter((result) => result.status === "warning").length,
     blocked_count: results.filter((result) => result.status === "blocked").length,
+    advisory_warning_count: results.reduce((sum, result) => sum + (result.advisory_warning_count || 0), 0),
+    blocking_warning_count: results.reduce((sum, result) => sum + (result.blocking_warning_count || 0), 0),
     results,
   };
 }
@@ -174,8 +274,8 @@ export function preflightAllPrds(options = {}) {
 function usage() {
   return [
     "用法:",
-    "  yolo-prd-preflight <prd.json> [--json]",
-    "  yolo-prd-preflight --check-all [--json]",
+    "  yolo-prd-preflight <prd.json> [--json] [--verify|--strict|--release]",
+    "  yolo-prd-preflight --check-all [--json] [--verify|--strict|--release]",
     "",
     "Preflight 会汇总 schema、contract、migration advice 和 runner readiness，不修改 PRD。",
   ].join("\n");
@@ -190,6 +290,9 @@ function printSingle(result) {
   }
   for (const reason of result.blocked_reasons.slice(0, 8)) {
     console.log(`  blocked ${reason.source}:${reason.code}${reason.task_id ? ` task=${reason.task_id}` : ""}: ${reason.detail}`);
+  }
+  for (const warning of result.advisory_warnings.slice(0, 8)) {
+    console.log(`  advisory ${warning.source}:${warning.code}${warning.task_id ? ` task=${warning.task_id}` : ""}: ${warning.detail}`);
   }
   for (const action of result.runner_readiness.next_actions) {
     console.log(`  next: ${action}`);
@@ -206,15 +309,42 @@ function printAll(result) {
   }
 }
 
+function parseCliArgs(argv = process.argv.slice(2)) {
+  const options = { mode: "verify" };
+  let fileArg = "";
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--json") options.json = true;
+    else if (arg === "--check-all") options.checkAll = true;
+    else if (arg === "--strict") {
+      options.mode = "strict";
+      options.strictExecution = true;
+      options.strictWarnings = true;
+    } else if (arg === "--release") {
+      options.mode = "release";
+      options.strictExecution = true;
+      options.strictWarnings = true;
+    } else if (arg === "--verify") {
+      options.mode = "verify";
+      options.strictWarnings = true;
+    } else if (arg === "--mode" || arg.startsWith("--mode=")) {
+      const value = arg.includes("=") ? arg.split("=").slice(1).join("=") : argv[++i];
+      options.mode = value || "verify";
+    } else if (!arg.startsWith("--") && !fileArg) {
+      fileArg = arg;
+    }
+  }
+  return { options, fileArg };
+}
+
 function main() {
-  const args = process.argv.slice(2);
-  const json = args.includes("--json");
-  const checkAll = args.includes("--check-all");
-  const fileArg = args.find((arg) => !arg.startsWith("--"));
+  const { options, fileArg } = parseCliArgs();
+  const json = options.json;
+  const checkAll = options.checkAll;
 
   try {
     if (checkAll) {
-      const result = preflightAllPrds();
+      const result = preflightAllPrds(options);
       if (json) console.log(JSON.stringify(result, null, 2));
       else printAll(result);
       process.exit(result.status === "blocked" ? 1 : 0);
@@ -225,7 +355,7 @@ function main() {
       process.exit(2);
     }
 
-    const result = preflightPrd(fileArg);
+    const result = preflightPrd(fileArg, options);
     if (json) console.log(JSON.stringify(result, null, 2));
     else printSingle(result);
     process.exit(result.status === "blocked" ? 1 : 0);

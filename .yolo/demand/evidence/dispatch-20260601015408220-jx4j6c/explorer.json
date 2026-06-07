@@ -1,0 +1,148 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements boundary audit that detects target-project mutations via before/after snapshots and injects BOUNDARY_PROJECT_MUTATION blockers that keep PRD readiness blocked until resolved.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() runs 'git ls-files -co --exclude-standard -z' which lists tracked, cached, and other files while excluding standard patterns",
+      "why": "Confirms git-backed file discovery covers all git file categories for mutation detection"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() uses gitFiles() with fallback to walkFiles(), computes SHA-256 digests for all project files, and excludes allowedRoots (artifact directories)",
+      "why": "Shows the hybrid git/non-git snapshot strategy and artifact root exclusion logic"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "110-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after maps to detect added, modified, deleted files and returns sorted change list",
+      "why": "Shows mutation detection logic that identifies all changes between snapshots"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "511-567",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime() captures boundaryBefore/After snapshots, diffs them, builds BOUNDARY_PROJECT_MUTATION blockers for each change, and injects them into readiness",
+      "why": "Confirms boundary audit integration in dispatch runtime that blocks PRD on mutation"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "580-592",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary blockers are added to readiness.blockers array, forcing prd_ready=false when violations detected",
+      "why": "Shows the blocking mechanism that prevents PRD readiness when mutations occur"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "243-246",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy.boundary sets project_mutation: 'forbidden' and allowed_write_roots to artifact output directory",
+      "why": "Documents policy contract for boundary enforcement visible in dispatch plans"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "367-400",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' writes unexpected-project-write.txt and expects blocked status with BOUNDARY_PROJECT_MUTATION",
+      "why": "Verifies detection of tracked project file mutations and PRD blocking"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "402-438",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' inits git repo, writes untracked-mutation.txt, expects violation with change path",
+      "why": "Verifies detection of untracked file mutations in git-backed projects"
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601014700117-tktusd/dispatch.json",
+      "line": "424-430",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Actual dispatch artifact shows boundary object with project_mutation: 'clean', allowed_write_roots array, and empty changes array",
+      "why": "Real-world evidence that boundary audit runs and reports status in production dispatches"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "710-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() iterates requiredEvidenceAgents, checks evidenceResultComplete(), and calls evidenceResultBlockingIssues() for each result",
+      "why": "Shows PRD readiness logic that processes evidence agent results including boundary violations"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "481-511",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues() checks recommendation, verdict, missing array, and status codes to determine if an agent result blocks PRD readiness",
+      "why": "Shows how missing/unresolved evidence from agents becomes blockers"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "111-203",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "spawnProviderPrompt() spawns Claude/codex/custom provider commands with configured tool restrictions and permissions, returning structured run result",
+      "why": "Shows how evidence agents are invoked with boundary-aware tool profiles"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "446-466",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig() normalizes agent tool profiles (boundary/research/full), handles allowFullAgentTools flag, and configures claude-specific tool restriction flags",
+      "why": "Shows tool profile gating that controls agent write capabilities during evidence gathering"
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601014700117-tktusd/explorer.json",
+      "line": "210-301",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Explorer agent result cites specific project paths with line numbers (src/demand/evidence-dispatch.ts:62-69, 97-108, 110-120, 511-567, __tests__/demand-evidence-dispatch.test.ts:367-400, 402-438)",
+      "why": "Real evidence agent output showing project-scoped path citations with exact line ranges"
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601014700117-tktusd/verifier.json",
+      "line": "310-388",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Verifier agent independently validates all 8 explorer evidence citations with VERIFIED prefixes, confirming path and line accuracy",
+      "why": "Shows cross-check verification pattern that confirms evidence accuracy"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "git ls-files behavior may vary across git versions or platforms affecting boundary detection",
+    "walkFiles() fallback may miss platform-specific excluded patterns in non-git projects",
+    "No test evidence for boundary behavior in truly non-git projects (walkFiles fallback)",
+    "No stress-test evidence using real Claude -p agents in dirty working trees"
+  ],
+  "missing": [
+    "No test evidence for boundary behavior in truly non-git projects (walkFiles fallback)",
+    "No stress-test evidence using real Claude -p agents in dirty working trees",
+    "No test for edge cases: large file counts, binary files, permission errors during digest"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Boundary audit mechanism is fully implemented with before/after snapshots, mutation detection, BOUNDARY_PROJECT_MUTATION blocker injection, and PRD blocking. Evidence agents cite project paths with line numbers. Tests verify tracked and untracked mutation detection. Missing items are gap items, not blockers."
+  }
+}

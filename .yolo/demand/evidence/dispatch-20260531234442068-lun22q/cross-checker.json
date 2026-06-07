@@ -1,0 +1,175 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "In the current working tree, router and dispatch source support cross-check demand evidence for technical-risk brownfield work: technical-risk routing selects cross_check, required roles are explorer/cross-checker/verifier, readiness stays blocked for missing or conflicting evidence, dispatch defaults to dry-run/read-only instructions, and provider execution requires explicit authorization. This is verified as working-tree source/test evidence, not as a committed-release or executed-test result.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "490-535",
+      "source": "code",
+      "summary": "Technical-risk keywords include field, schema, api, auth, state, data flow, migration, database and related terms; technical risk makes route careful and evidence_policy cross_check.",
+      "why": "Confirms router basis for cross_check routing on schema/API/state/data risk."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "378-380",
+      "source": "code",
+      "summary": "requiredEvidenceRoles returns explorer, cross-checker, and verifier when policy is cross_check.",
+      "why": "Confirms all three evidence agents are mandatory for cross_check readiness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "553-622",
+      "source": "code",
+      "summary": "PRD readiness builds blockers from missing slots, active blockers, open questions, unresolved assumptions, incomplete required evidence agents, evidence result issues, and evidence agreement conflicts; prd_ready is true only when blocker list is empty.",
+      "why": "Confirms readiness remains blocked until required evidence and blockers are resolved."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "383-405",
+      "source": "code",
+      "summary": "Evidence results with missing evidence, clarify/block recommendations, blocked/failed verdicts, or failed statuses become readiness blockers.",
+      "why": "Confirms unresolved evidence cannot be promoted to PRD-ready facts."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "647-672",
+      "source": "code",
+      "summary": "inspectEvidenceAgreement groups evidence results by claim and emits EVIDENCE_AGENT_CONFLICT when recommendations disagree in blocking ways.",
+      "why": "Confirms conflicts are preserved as blockers."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "625-644",
+      "source": "code",
+      "summary": "buildDemandEvidenceTasks adds explorer for non-none evidence policies, cross-checker for cross_check, and verifier after that.",
+      "why": "Confirms dispatch planning includes the required roles for cross_check demands."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "128-133",
+      "source": "code",
+      "summary": "Dispatch plan execution_policy declares dry_run default, execution requires executeAgents=true and allowAgentDispatch=true, writes_business_code false, and read_only agent instruction.",
+      "why": "Confirms default dispatch policy is non-executing and read-only by instruction."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "143-199",
+      "source": "code",
+      "summary": "Agent prompt builder includes hard rules for READ ONLY behavior, separating assumptions from facts, and returning one structured JSON object.",
+      "why": "Confirms provider agents are instructed to provide structured read-only evidence."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "258-287",
+      "source": "code",
+      "summary": "Execution config sets codex_sandbox read-only and codex_approval never for codex provider, and custom_sandbox read-only for custom provider.",
+      "why": "Confirms supported provider config attempts read-only sandboxing."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "289-326",
+      "source": "code",
+      "summary": "Runtime mode defaults to dry_run unless executeAgents is true and returns before spawning providers when not executing or when allowAgentDispatch is false.",
+      "why": "Confirms provider agents are not invoked by default and execute mode is authorization-gated."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "333-388",
+      "source": "code",
+      "summary": "Runtime sequentially prompts actions, parses JSON output into agent_results, then reruns inspectDemandPrdReadiness with gathered evidence_results and sets final status from readiness.",
+      "why": "Confirms evidence agent outputs are fed back into PRD readiness."
+    },
+    {
+      "path": "src/cli/yolo.ts",
+      "line": "470-497",
+      "source": "code",
+      "summary": "CLI workflow options default executeAgents and allowAgentDispatch to false and only set them from explicit flags.",
+      "why": "Confirms CLI dispatch authorization is opt-in."
+    },
+    {
+      "path": "src/cli/yolo.ts",
+      "line": "1527-1539",
+      "source": "code",
+      "summary": "yolo demand dispatch/evidence calls runDemandEvidenceDispatchRuntime with executeAgents and allowAgentDispatch options and exits 1 when result status is blocked.",
+      "why": "Confirms CLI is wired to evidence dispatch runtime and blocked results affect exit status."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "20-31",
+      "source": "test",
+      "summary": "Test asserts existing inventory API schema field work routes careful, evidence_policy cross_check, and needed evidence agents explorer/cross-checker/verifier.",
+      "why": "Provides test definition coverage for the routing claim."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "132-190",
+      "source": "test",
+      "summary": "Test asserts cross-check readiness blocks when only explorer is complete and passes when explorer, cross-checker, and verifier all provide completed evidence.",
+      "why": "Provides test definition coverage for required evidence completion."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "192-274",
+      "source": "test",
+      "summary": "Tests assert existing blockers, evidence conflicts, missing evidence, and clarify recommendations prevent PRD readiness.",
+      "why": "Provides test definition coverage for blocker preservation."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "70-113",
+      "source": "test",
+      "summary": "Tests assert dispatch plan includes explorer/cross-checker/verifier, dry-run does not spawn providers, and execute mode without allowAgentDispatch is blocked.",
+      "why": "Provides test definition coverage for planning and authorization gates."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "145-180",
+      "source": "test",
+      "summary": "Test asserts execute mode with explicit authorization calls explorer, cross-checker, and verifier and feeds results into readiness until prd_ready true.",
+      "why": "Provides test definition coverage for dispatch-result readiness integration."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "182-216",
+      "source": "test",
+      "summary": "Test asserts codex dispatch config uses provider codex, read-only sandbox, never approval, and no inherited Claude model.",
+      "why": "Provides test definition coverage for codex execution config."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "218-260",
+      "source": "test",
+      "summary": "Test asserts a cross-checker block recommendation during dispatch leaves readiness blocked with EVIDENCE_AGENT_CONFLICT.",
+      "why": "Provides test definition coverage that conflicting evidence blocks PRD readiness."
+    },
+    {
+      "path": "git status --short",
+      "line": "n/a",
+      "source": "unknown",
+      "summary": "Read-only git status reported src/demand/router.ts and src/demand/evidence-dispatch.ts as untracked, __tests__/demand-router.test.ts and __tests__/demand-evidence-dispatch.test.ts as untracked, and src/cli/yolo.ts as modified; git also emitted cache warnings due sandbox restrictions.",
+      "why": "Confirms evidence describes the current working tree rather than a committed release state."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If this working-tree implementation is not committed or shipped, treating it as release behavior would be incorrect.",
+    "If external provider adapters ignore codex_sandbox/custom_sandbox settings or prompt instructions, read-only enforcement may fail despite the dispatch configuration.",
+    "If tests are not executed, source-level test coverage does not prove the implementation currently passes in this environment.",
+    "If dispatch runtime is bypassed by another code path, PRD facts could still be promoted without these evidence checks."
+  ],
+  "missing": [
+    "Tests were not executed under the read-only protocol, so actual test pass status is not verified.",
+    "External provider sandbox enforcement was not verified beyond local configuration and test definitions.",
+    "No verifier evidence result has been evaluated in this cross-checker result; the workflow still requires the verifier role separately."
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent source and test reads confirm the explorer's main working-tree claim. No contradiction found. Keep scope limited to working-tree behavior and require separate verifier completion before PRD readiness is treated as satisfied."
+  }
+}

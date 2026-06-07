@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implementation handles minor Claude JSON key drift through explicit repair patterns and fails closed with EVIDENCE_AGENT_INVALID_JSON on unrecoverable JSON. Boundary enforcement and PRD readiness integration are implemented as specified.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "322-337",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate() attempts JSON repair on parse failure with three regex patterns: line range format, empty key names, and trailing commas",
+      "why": "This is the core JSON repair logic that handles minor Claude key drift"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "361-388",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult() returns explicit EVIDENCE_AGENT_INVALID_JSON error code when parsed is null and populates missing array with parse error details",
+      "why": "This ensures invalid JSON fails closed with explicit blocker codes"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "546-551",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary changes are detected via diffBoundarySnapshots() and result.boundary.project_mutation is set to 'violated' or 'clean', with BOUNDARY_PROJECT_MUTATION blockers added for violations",
+      "why": "This is the boundary enforcement that detects project file mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "554-583",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() is called with evidence_results, boundary blockers are merged into finalReadiness.blockers, and result.status depends on finalReadiness.prd_ready",
+      "why": "This ensures PRD readiness stays blocked when agents fail or boundary is violated"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "451-486",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'repairs minor Claude JSON key drift and records the repair' verifies that line range (42-88) and empty key (\" \"summary\") are repaired and json_repaired flag is set",
+      "why": "This validates the JSON repair behavior with minor drift patterns"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "488-518",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'invalid agent JSON fails closed with explicit blocker code' verifies that 'not json' output results in EVIDENCE_AGENT_INVALID_JSON error code and blocked status with blockers",
+      "why": "This validates the fail-closed behavior for unrecoverable JSON"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "378-411",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' verifies that writing unexpected-project-write.txt causes boundary violation with BOUNDARY_PROJECT_MUTATION blocker",
+      "why": "This validates boundary enforcement blocks mutations regardless of agent success"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "413-449",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' verifies boundary detects added untracked files and reports violation",
+      "why": "This validates boundary detection works with git-tracked files"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "520-563",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'agent conflict remains a readiness blocker after dispatch' verifies that cross-checker blocking verdict causes EVIDENCE_AGENT_CONFLICT blocker and prd_ready=false",
+      "why": "This validates PRD readiness integration propagates agent conflicts to blockers"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Dirty working tree state may have uncommitted changes that affect boundary snapshot behavior, but git-backed boundary has tests for untracked file detection"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All acceptance criteria verified: JSON repair implemented with explicit patterns, invalid JSON receives EVIDENCE_AGENT_INVALID_JSON, boundary enforcement blocks mutations, PRD readiness stays blocked on failures, and comprehensive test coverage exists."
+  }
+}

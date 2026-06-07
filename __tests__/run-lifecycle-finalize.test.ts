@@ -189,7 +189,7 @@ describe("run lifecycle finalization helpers", () => {
     const result = buildRunReturnResult({
       runId: "run-1",
       prdPath: "/repo/prd.json",
-      taskResults: { completed: ["A"], failed: ["B"], skipped: ["C"], blocked: ["D"] },
+      taskResults: { completed: ["A"], failed: ["B"], skipped: ["C"], blocked: ["D"], contractReview: [] },
       runReportResult: {
         json_path: "/repo/state/report.json",
         markdown_path: "/repo/state/report.md",
@@ -201,7 +201,7 @@ describe("run lifecycle finalization helpers", () => {
 
     assert.deepEqual(result, {
       status: "error",
-      summary: "runner completed with 1 failed task(s)",
+      summary: "runner failed closed: FAILED_TASKS=1, BLOCKED_TASKS=1",
       exit_code: 1,
       run_id: "run-1",
       prd: "/repo/prd.json",
@@ -209,13 +209,105 @@ describe("run lifecycle finalization helpers", () => {
       failed: ["B"],
       skipped: ["C"],
       blocked: ["D"],
+      contract_review: [],
       remediation: [],
       immediate_remediation_queue: [],
+      final_verdict: {
+        status: "error",
+        exit_code: 1,
+        summary: "runner failed closed: FAILED_TASKS=1, BLOCKED_TASKS=1",
+        issues: [
+          { code: "FAILED_TASKS", count: 1, detail: "runner has failed tasks" },
+          { code: "BLOCKED_TASKS", count: 1, detail: "runner has blocked tasks" },
+        ],
+      },
       report_file: "state/report.json",
       report_markdown: "state/report.md",
       final_answer_file: "state/final-answer.json",
       final_answer_markdown: "state/final-answer.md",
     });
+  });
+
+  test("buildRunReturnResult fails closed for blocked-only runs", () => {
+    const result = buildRunReturnResult({
+      runId: "run-blocked",
+      prdPath: "/repo/prd.json",
+      taskResults: { completed: ["A"], failed: [], skipped: [], blocked: ["B"], contractReview: [] },
+      runReportResult: {
+        json_path: "/repo/state/report.json",
+        markdown_path: "/repo/state/report.md",
+        report: { status: "success", summary: { failed: 0, blocked: 0, evidence_failures: 0 } },
+      },
+      normalizeRepoPath: (value) => value.replace("/repo/", ""),
+    });
+
+    assert.equal(result.status, "error");
+    assert.equal(result.exit_code, 1);
+    assert.deepEqual(result.final_verdict.issues.map((issue) => issue.code), ["BLOCKED_TASKS"]);
+  });
+
+  test("buildRunReturnResult fails closed for contract-review-only runs", () => {
+    const result = buildRunReturnResult({
+      runId: "run-contract",
+      prdPath: "/repo/prd.json",
+      taskResults: { completed: ["A"], failed: [], skipped: [], blocked: [], contractReview: ["C"] },
+      runReportResult: {
+        json_path: "/repo/state/report.json",
+        markdown_path: "/repo/state/report.md",
+        report: { status: "success", summary: { failed: 0, blocked: 0, evidence_failures: 0 } },
+      },
+      normalizeRepoPath: (value) => value.replace("/repo/", ""),
+    });
+
+    assert.equal(result.status, "error");
+    assert.equal(result.exit_code, 1);
+    assert.deepEqual(result.contract_review, ["C"]);
+    assert.deepEqual(result.final_verdict.issues.map((issue) => issue.code), ["CONTRACT_REVIEW_TASKS"]);
+  });
+
+  test("buildRunReturnResult fails closed when the run report has errors", () => {
+    const result = buildRunReturnResult({
+      runId: "run-report-error",
+      prdPath: "/repo/prd.json",
+      taskResults: { completed: ["A"], failed: [], skipped: [], blocked: [], contractReview: [] },
+      runReportResult: {
+        json_path: "/repo/state/report.json",
+        markdown_path: "/repo/state/report.md",
+        report: {
+          status: "error",
+          summary: { failed: 0, blocked: 0, evidence_failures: 1 },
+          review: { error_count: 1 },
+        },
+      },
+      normalizeRepoPath: (value) => value.replace("/repo/", ""),
+    });
+
+    assert.equal(result.status, "error");
+    assert.equal(result.exit_code, 1);
+    assert.ok(result.final_verdict.issues.some((issue) => issue.code === "RUN_REPORT_STATUS_ERROR"));
+    assert.ok(result.final_verdict.issues.some((issue) => issue.code === "EVIDENCE_FAILURES"));
+    assert.ok(result.final_verdict.issues.some((issue) => issue.code === "REVIEW_ERRORS"));
+  });
+
+  test("buildRunReturnResult fails closed when successful runs lack report artifacts", () => {
+    const result = buildRunReturnResult({
+      runId: "run-missing-report",
+      prdPath: "/repo/prd.json",
+      taskResults: { completed: ["A"], failed: [], skipped: [], blocked: [], contractReview: [] },
+      runReportResult: {},
+      normalizeRepoPath: (value) => value,
+    });
+
+    assert.equal(result.status, "error");
+    assert.equal(result.exit_code, 1);
+    assert.deepEqual(result.final_verdict.issues.map((issue) => issue.code), [
+      "RUN_REPORT_MISSING",
+      "FINAL_ANSWER_MISSING",
+      "RUN_REPORT_ARTIFACT_MISSING",
+      "RUN_REPORT_MARKDOWN_MISSING",
+      "FINAL_ANSWER_ARTIFACT_MISSING",
+      "FINAL_ANSWER_MARKDOWN_MISSING",
+    ]);
   });
 
   test("finalizeRun writes report, archives current run, kills progress server, and returns result", () => {
@@ -239,7 +331,10 @@ describe("run lifecycle finalization helpers", () => {
         writeRunReport: () => ({
           json_path: join(stateDir, "report.json"),
           markdown_path: join(stateDir, "report.md"),
-          report: { summary: { task_success_rate: 100, run_success_rate: 100 } },
+          final_answer_json_path: join(stateDir, "final-answer.json"),
+          final_answer_markdown_path: join(stateDir, "final-answer.md"),
+          report: { status: "success", summary: { task_success_rate: 100, run_success_rate: 100 } },
+          final_answer: { status: "success", outcome: "success", checks: [], blockers: [] },
         }),
         logRun: (...entry) => calls.logRun.push(entry),
         logProgress: (...entry) => calls.archives.push(entry),

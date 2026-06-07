@@ -1,0 +1,1008 @@
+{
+  "schema": "yolo.demand.claude_stress.v1",
+  "run_id": "claude-stress-20260601012759072",
+  "started_at": "2026-06-01T01:27:59.071Z",
+  "duration_ms": 10800000,
+  "timeout_ms": 300000,
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072",
+  "iterations": [
+    {
+      "iteration": 1,
+      "scenario": "local-contract-boundary",
+      "started_at": "2026-06-01T01:27:59.073Z",
+      "ended_at": "2026-06-01T01:30:10.977Z",
+      "duration_ms": 131904,
+      "exit_code": 0,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0001-local-contract-boundary.json",
+      "summary": {
+        "status": "pass",
+        "code": "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD",
+        "prd_ready": true,
+        "boundary": "clean",
+        "blockers": [],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 21,
+            "missing_count": 0
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 16,
+            "missing_count": 0
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 5,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 2,
+      "scenario": "research-fetch-boundary",
+      "started_at": "2026-06-01T01:30:10.981Z",
+      "ended_at": "2026-06-01T01:31:43.140Z",
+      "duration_ms": 92159,
+      "exit_code": 0,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0002-research-fetch-boundary.json",
+      "summary": {
+        "status": "pass",
+        "code": "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD",
+        "prd_ready": true,
+        "boundary": "clean",
+        "blockers": [],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 17,
+            "missing_count": 0
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 13,
+            "missing_count": 0
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 10,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 3,
+      "scenario": "evidence-scope-contract",
+      "started_at": "2026-06-01T01:31:43.142Z",
+      "ended_at": "2026-06-01T01:33:14.328Z",
+      "duration_ms": 91186,
+      "exit_code": 0,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0003-evidence-scope-contract.json",
+      "summary": {
+        "status": "pass",
+        "code": "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD",
+        "prd_ready": true,
+        "boundary": "clean",
+        "blockers": [],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 15,
+            "missing_count": 0
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 14,
+            "missing_count": 0
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 5,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 4,
+      "scenario": "json-output-resilience",
+      "started_at": "2026-06-01T01:33:14.331Z",
+      "ended_at": "2026-06-01T01:34:06.221Z",
+      "duration_ms": 51890,
+      "exit_code": 1,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0004-json-output-resilience.json",
+      "summary": {
+        "status": "blocked",
+        "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+        "prd_ready": false,
+        "boundary": "clean",
+        "blockers": [
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "explorer",
+            "message": "explorer reported unresolved missing evidence: Evidence that the current implementation has been stress-tested with real Claude -p agents in the current dirty working tree state; Evidence of what specific JSON drift patterns beyond the impl"
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "verifier",
+            "message": "verifier reported unresolved missing evidence: Stress testing evidence from real Claude -p agent runs in current working tree state"
+          }
+        ],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 12,
+            "missing_count": 2
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 4,
+            "missing_count": 1
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 5,
+      "scenario": "git-untracked-boundary",
+      "started_at": "2026-06-01T01:34:06.223Z",
+      "ended_at": "2026-06-01T01:35:37.599Z",
+      "duration_ms": 91376,
+      "exit_code": 1,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0005-git-untracked-boundary.json",
+      "summary": {
+        "status": "blocked",
+        "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+        "prd_ready": false,
+        "boundary": "clean",
+        "blockers": [
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "explorer",
+            "message": "explorer reported unresolved missing evidence: Real-world stress-test evidence with actual Claude -p agents against live projects (the demand states 'must be stress-tested with real Claude -p agents' but only mock agents are tested); Non-gi"
+          }
+        ],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 8,
+            "missing_count": 3
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 5,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 6,
+      "scenario": "readiness-missing-clarify",
+      "started_at": "2026-06-01T01:35:37.601Z",
+      "ended_at": "2026-06-01T01:37:37.390Z",
+      "duration_ms": 119789,
+      "exit_code": 0,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0006-readiness-missing-clarify.json",
+      "summary": {
+        "status": "pass",
+        "code": "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD",
+        "prd_ready": true,
+        "boundary": "clean",
+        "blockers": [],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 8,
+            "missing_count": 0
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 10,
+            "missing_count": 0
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 4,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 7,
+      "scenario": "provider-profile-drift",
+      "started_at": "2026-06-01T01:37:37.392Z",
+      "ended_at": "2026-06-01T01:40:09.002Z",
+      "duration_ms": 151610,
+      "exit_code": 1,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0007-provider-profile-drift.json",
+      "summary": {
+        "status": "blocked",
+        "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+        "prd_ready": false,
+        "boundary": "clean",
+        "blockers": [
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "explorer",
+            "message": "explorer reported unresolved missing evidence: Verification that current Codex installation handles the evidence dispatch invocation correctly; Evidence that custom provider commands respect boundary constraints in practice; Verification th"
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "cross-checker",
+            "message": "cross-checker reported unresolved missing evidence: Verification that evidence mode prompts explicitly forbid file writes regardless of provider capability; Testing of Codex or custom provider agents actually attempting file mutations in ev"
+          }
+        ],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 18,
+            "missing_count": 4
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 7,
+            "missing_count": 3
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 7,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 8,
+      "scenario": "local-contract-boundary",
+      "started_at": "2026-06-01T01:40:09.004Z",
+      "ended_at": "2026-06-01T01:42:18.140Z",
+      "duration_ms": 129136,
+      "exit_code": 0,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0008-local-contract-boundary.json",
+      "summary": {
+        "status": "pass",
+        "code": "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD",
+        "prd_ready": true,
+        "boundary": "clean",
+        "blockers": [],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 14,
+            "missing_count": 0
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 13,
+            "missing_count": 0
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 5,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 9,
+      "scenario": "research-fetch-boundary",
+      "started_at": "2026-06-01T01:42:18.142Z",
+      "ended_at": "2026-06-01T01:43:52.948Z",
+      "duration_ms": 94806,
+      "exit_code": 0,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0009-research-fetch-boundary.json",
+      "summary": {
+        "status": "pass",
+        "code": "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD",
+        "prd_ready": true,
+        "boundary": "clean",
+        "blockers": [],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 10,
+            "missing_count": 0
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 10,
+            "missing_count": 0
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 4,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 10,
+      "scenario": "evidence-scope-contract",
+      "started_at": "2026-06-01T01:43:52.950Z",
+      "ended_at": "2026-06-01T01:45:48.710Z",
+      "duration_ms": 115760,
+      "exit_code": 0,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0010-evidence-scope-contract.json",
+      "summary": {
+        "status": "pass",
+        "code": "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD",
+        "prd_ready": true,
+        "boundary": "clean",
+        "blockers": [],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 21,
+            "missing_count": 0
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 16,
+            "missing_count": 0
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 5,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 11,
+      "scenario": "json-output-resilience",
+      "started_at": "2026-06-01T01:45:48.711Z",
+      "ended_at": "2026-06-01T01:46:59.516Z",
+      "duration_ms": 70805,
+      "exit_code": 0,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0011-json-output-resilience.json",
+      "summary": {
+        "status": "pass",
+        "code": "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD",
+        "prd_ready": true,
+        "boundary": "clean",
+        "blockers": [],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 9,
+            "missing_count": 0
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 7,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 12,
+      "scenario": "git-untracked-boundary",
+      "started_at": "2026-06-01T01:46:59.517Z",
+      "ended_at": "2026-06-01T01:48:26.097Z",
+      "duration_ms": 86580,
+      "exit_code": 1,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0012-git-untracked-boundary.json",
+      "summary": {
+        "status": "blocked",
+        "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+        "prd_ready": false,
+        "boundary": "clean",
+        "blockers": [
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "explorer",
+            "message": "explorer reported unresolved missing evidence: No test evidence for boundary behavior in truly non-git projects (walkFiles fallback); No stress-test evidence using real Claude -p agents in dirty working trees; No test for edge cases: large "
+          }
+        ],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 8,
+            "missing_count": 3
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 8,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 13,
+      "scenario": "readiness-missing-clarify",
+      "started_at": "2026-06-01T01:48:26.098Z",
+      "ended_at": "2026-06-01T01:50:32.769Z",
+      "duration_ms": 126671,
+      "exit_code": 1,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0013-readiness-missing-clarify.json",
+      "summary": {
+        "status": "blocked",
+        "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+        "prd_ready": false,
+        "boundary": "clean",
+        "blockers": [
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "cross-checker",
+            "message": "cross-checker reported unresolved missing evidence: Direct test assertion that 'blocked' or 'failed' verdicts create EVIDENCE_AGENT_BLOCKED blocker; Test coverage for error_code pathway in evidenceResultBlockingIssues (lines 489-495)"
+          }
+        ],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 8,
+            "missing_count": 0
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 7,
+            "missing_count": 2
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 8,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 14,
+      "scenario": "provider-profile-drift",
+      "started_at": "2026-06-01T01:50:32.771Z",
+      "ended_at": "2026-06-01T01:54:07.567Z",
+      "duration_ms": 214796,
+      "exit_code": 1,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0014-provider-profile-drift.json",
+      "summary": {
+        "status": "blocked",
+        "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+        "prd_ready": false,
+        "boundary": "clean",
+        "blockers": [
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "explorer",
+            "message": "explorer reported unresolved missing evidence: Stress-test logs or CI evidence showing boundary violations caught in production demand dispatch runs.; Evidence of custom provider adapter validation in real scenarios.; Documentation of how p"
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "cross-checker",
+            "message": "cross-checker reported unresolved missing evidence: Stress-test logs or CI evidence showing boundary violations caught in production demand dispatch runs.; Evidence of custom provider adapter validation in real scenarios.; Documentation of "
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "verifier",
+            "message": "verifier reported unresolved missing evidence: Stress-test logs or CI evidence showing boundary violations caught in production demand dispatch runs.; Evidence of custom provider adapter validation in real scenarios.; Documentation of how p"
+          }
+        ],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 18,
+            "missing_count": 3
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 18,
+            "missing_count": 3
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 7,
+            "missing_count": 3
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 15,
+      "scenario": "local-contract-boundary",
+      "started_at": "2026-06-01T01:54:07.569Z",
+      "ended_at": "2026-06-01T01:56:26.728Z",
+      "duration_ms": 139159,
+      "exit_code": 1,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601012759072/0015-local-contract-boundary.json",
+      "summary": {
+        "status": "blocked",
+        "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+        "prd_ready": false,
+        "boundary": "clean",
+        "blockers": [
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "explorer",
+            "message": "explorer reported unresolved missing evidence: No test evidence for boundary behavior in truly non-git projects (walkFiles fallback); No stress-test evidence using real Claude -p agents in dirty working trees; No test for edge cases: large "
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "cross-checker",
+            "message": "cross-checker reported unresolved missing evidence: No test evidence for boundary behavior in truly non-git projects (walkFiles fallback); No stress-test evidence using real Claude -p agents in dirty working trees; No test for edge cases: l"
+          }
+        ],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 15,
+            "missing_count": 3
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 15,
+            "missing_count": 3
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 8,
+            "missing_count": 0
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    }
+  ],
+  "stopped_reason": null
+}

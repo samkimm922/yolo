@@ -113,21 +113,21 @@ describe("demand runtime", () => {
   test("discuss requires approval and compiles approved demand to L3 PRD", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-discuss-"));
     try {
-      seedDemandTargetFiles(root, ["src/services/inventory-alerts.ts"]);
+      seedDemandTargetFiles(root, ["src/services/label-summary.ts"]);
       const discuss = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
-        idea: "Build inventory stockout prevention for store managers.",
-        target_users: ["store manager"],
-        status_quo: ["Managers discover stockouts after customers complain."],
-        evidence: ["Support tickets mention stockout surprises weekly.", "MVP inventory rows use the existing lowStockThreshold field."],
-        assumptions: ["Thresholds are configurable per SKU through lowStockThreshold."],
-        success_criteria: ["Managers can see a low-stock alert before stockout."],
-        constraints: ["Do not change order import behavior."],
-        non_goals: ["Do not build supplier ordering."],
-        target_files: ["src/services/inventory-alerts.ts"],
-        decisions: ["Start with one configurable threshold per SKU: item.quantity <= item.lowStockThreshold means low stock."],
-        roadmap: ["MVP alert generation before stockout."],
+        idea: "Build a label summary helper for support operators.",
+        target_users: ["support operator"],
+        status_quo: ["Operators manually trim and normalize labels before writing summaries."],
+        evidence: ["Support notes show repeated label cleanup before handoff.", "The existing helper file is src/services/label-summary.ts."],
+        assumptions: ["Labels arrive as short plain strings from the support form."],
+        success_criteria: ["Operators get a trimmed label summary from one helper call."],
+        constraints: ["Do not change ticket routing behavior."],
+        non_goals: ["Do not build a label editor."],
+        target_files: ["src/services/label-summary.ts"],
+        decisions: ["Start with trimming whitespace and returning the normalized label text."],
+        roadmap: ["MVP label summary helper."],
         approve: true,
         writeArtifacts: true,
       });

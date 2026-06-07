@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch already implements JSON drift repair and explicit invalid JSON error handling in src/demand/evidence-dispatch.ts with corresponding test coverage.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "329-367",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate and extractJsonObject functions implement multi-strategy JSON repair: line range stringification, backslash escaping, double-quote key drift correction, trailing comma removal, fenced code block extraction, and JSON object slicing fallback.",
+      "why": "This is the core JSON drift repair logic that handles recoverable formatting issues from provider output."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "369-420",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns explicit error codes: EVIDENCE_AGENT_INVALID_JSON when parsing fails, EVIDENCE_SCOPE_REQUIRED when evidence records lack required scope field, and EVIDENCE_AGENT_PROVIDER_FAILED for provider execution failures.",
+      "why": "This validates the fail-closed behavior with explicit blocker codes as required by the demand."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "549-561",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime tracks json_repaired boolean in provider_runs output, records parse_error when parsing fails, and propagates agent results with error codes to readiness assessment.",
+      "why": "This confirms JSON repair is recorded and failures are properly propagated to PRD readiness blockers."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "496-531",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'repairs minor Claude JSON key drift and records the repair' validates repair of line ranges, backslash escapes, and double-quote key drift with json_repaired assertion.",
+      "why": "This is the test coverage for JSON drift repair behavior."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "534-563",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'invalid agent JSON fails closed with explicit blocker code' validates EVIDENCE_AGENT_INVALID_JSON error code in both agent_results and readiness.blockers for non-JSON output.",
+      "why": "This validates the fail-closed behavior for unrecoverable JSON errors."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "566-600",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'agent evidence without explicit scope is blocked during normalization' validates EVIDENCE_SCOPE_REQUIRED error code when evidence records lack required scope field.",
+      "why": "This validates schema validation fails closed with explicit error codes."
+    },
+    {
+      "path": "git status",
+      "line": "working tree status",
+      "scope": "project",
+      "source": "project_log",
+      "summary": "Working tree is dirty with 45 modified files and 9 untracked files including src/demand/evidence-dispatch.ts (untracked) and __tests__/demand-evidence-dispatch.test.ts (untracked).",
+      "why": "This confirms the demand status_quo claim about dirty working tree state."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If the evidence-dispatch.ts implementation has untested edge cases or the stress tests with real Claude -p agents reveal additional drift patterns, the current repair logic may be insufficient."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All required functionality exists: parseJsonCandidate handles drift, normalizeAgentResult returns explicit error codes, tests cover repair and failure cases. Dirty working tree confirmed. No missing data identified."
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Provider isolation is intentionally partial and relies on explicit user input and post-hoc boundary enforcement rather than comprehensive cross-provider leakage prevention.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "441-449",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Model clearing logic only triggers when input model is empty and no explicit codex_model is set, not when user explicitly passes a claude model with codex provider.",
+      "why": "This contradicts the explorer assumption that model clearing is a comprehensive mitigation. It is conditional and user-input-dependent."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "437-443",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "When model is explicitly provided, executionConfig sets both ai.model and ai.codex_model regardless of provider, then only clears ai.model under specific conditions.",
+      "why": "Shows that explicit model input bypasses the clearing logic, allowing cross-provider model leakage if user requests it."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig is called before spawnProviderPrompt, and the same modified config object is passed through buildProviderInvocation.",
+      "why": "Confirms that provider clearing happens before CLI construction, but the clearing logic itself is conditional."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "450-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude tool profile normalization only applies to claude provider. No equivalent normalization exists for codex or custom providers.",
+      "why": "Evidence that tool profile normalization is provider-specific, not universal across all dispatch paths."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "53-54",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider reads model from ai.codex_model OR falls back to modelValue(ai) which reads ai.model directly.",
+      "why": "Shows that codex provider can access models set for other providers, creating cross-provider leakage path."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshots are taken before and after agent execution, with diff detection happening post-hoc.",
+      "why": "Confirms that boundary enforcement is detection-based, not prevention-based. Agents can write files during execution and violations are caught after."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test only validates clearing when model is not explicitly passed. Does not test explicit claude model with codex provider case.",
+      "why": "Test coverage gap for the most likely cross-provider leakage scenario: explicit user input."
+    },
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "43-98",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildAgentAdapterCapabilities provides a unified view of provider capabilities but does not enforce provider-specific configuration isolation.",
+      "why": "Evidence that provider contract normalization exists at a different layer than execution configuration."
+    }
+  ],
+  "assumptions": [
+    "The conditional model clearing logic (line 447-449) suggests that cross-provider model leakage is only a concern for inherited models, not explicitly user-provided models.",
+    "Tool profile normalization for claude provider (line 456-462) may be intentionally provider-specific rather than a missing cross-provider feature.",
+    "Post-hoc boundary detection may be an intentional design trade-off rather than a limitation, as real-time prevention would require intercepting all file system operations.",
+    "The lack of cross-provider configuration validation may reflect that YOLO treats provider selection as user intent and does not second-guess explicit model choices."
+  ],
+  "risks": [
+    "If a user explicitly passes provider: codex with model: claude-sonnet, the model clearing logic will not trigger and codex will receive a claude-prefixed model.",
+    "If tool profile normalization is intentionally claude-only, other providers may not have the same boundary/research/full mode controls during evidence dispatch.",
+    "If agents write files outside allowed roots during execution, those files exist on disk until the post-hoc boundary diff detects them.",
+    "If custom provider commands inherit or mutate the shared config object, they could bypass provider-specific normalization.",
+    "The test gap for explicit cross-provider model input means the leakage path exists but is untested."
+  ],
+  "missing": [
+    "Evidence that the conditional model clearing logic is intentional rather than a bug.",
+    "Evidence that tool profile normalization should be provider-agnostic.",
+    "Evidence that custom providers are subjected to the same isolation requirements as claude/codex providers.",
+    "Test coverage for explicit cross-provider model input (e.g., provider: codex, model: claude-sonnet).",
+    "Documentation explaining why boundary enforcement is post-hoc rather than real-time."
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer claims are substantially correct but incompletely characterized the risks. Provider isolation exists and works for default/inherited cases, but has known gaps when users provide explicit cross-provider input. Model clearing is conditional, not comprehensive. Tool profile normalization is claude-specific. Boundary enforcement is post-hoc detection, not real-time prevention. These appear to be intentional design choices rather than bugs. The missing test coverage for explicit cross-provider model input is a verification gap but not an implementation defect. Proceed with awareness that provider isolation is partial and user-input-dependent."
+  }
+}

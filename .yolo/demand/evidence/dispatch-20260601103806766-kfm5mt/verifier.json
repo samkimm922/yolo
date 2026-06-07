@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verification confirms gathered evidence is sufficient: YOLO demand evidence schema, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes with validation blockers. No assumptions presented as facts. All evidence paths are usable with concrete file locators. No unresolved missing data.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Core evidence schema definition defines four valid scopes (project, external, user, unknown) and validates evidence records must declare scope from VALID_EVIDENCE_SCOPES.",
+      "why": "Foundational contract that defines all allowed evidence scopes."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-591",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Executable test coverage validates all four blocker codes: EVIDENCE_SCOPE_REQUIRED, PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE, PROJECT_EVIDENCE_PATH_REQUIRED, and external URLs cannot be relabeled as project evidence.",
+      "why": "Test contract proving validation blockers work as designed."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "678-758",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness gate calls evidenceScopeDeclarationIssues and projectEvidenceBlockingIssues for each evidence agent result, preventing PRD readiness when scope validation fails.",
+      "why": "Readiness enforcement that blocks PRD without proper evidence scoping."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "152-159, 343-347, 443-495",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Dispatch agent prompt hard rules and normalizeAgentResult enforce scope validation at dispatch time, blocking agent results that fail evidenceScopeErrors.",
+      "why": "Agent prompt contract and dispatch-time enforcement."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "387-493, 810-845",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Dispatch tests validate external research requests require external-scoped evidence, background mentions do not force fetch, and agent evidence without explicit scope is blocked during normalization.",
+      "why": "Dispatch-level contract that scope enforcement works at agent result normalization."
+    }
+  ],
+  "assumptions": [],
+  "risks": [],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verification complete: Explorer provided 17 evidence records, cross-checker independently confirmed 11 records, both with high confidence and no assumptions. All evidence has concrete project file paths with line numbers. No unresolved missing data. All four scope types (project, external, user, unknown) are implemented in schema, validated by blockers, enforced at readiness gate, tested in test suites, and communicated in agent prompts. The demand acceptance criteria is met: evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes."
+  }
+}

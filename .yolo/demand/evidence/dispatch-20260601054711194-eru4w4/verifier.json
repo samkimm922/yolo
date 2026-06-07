@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence is verified: all facts have project-scoped sources with exact paths, no assumptions presented as facts, and no unresolved missing data. The claim that evidence dispatch implements JSON repair with explicit error blocking and PRD readiness integration is correct.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate implements JSON repair with tracked repaired flag",
+      "why": "Verifies explorer fact 1: minor recoverable JSON drift is handled"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test confirms JSON repair records json_repaired flag and passes status",
+      "why": "Verifies explorer test evidence: repair behavior is validated"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-396",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns explicit EVIDENCE_AGENT_INVALID_JSON error code",
+      "why": "Verifies explorer fact 3: unrecoverable JSON fails closed"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test asserts status blocked and error_code EVIDENCE_AGENT_INVALID_JSON",
+      "why": "Verifies explorer test evidence: blocking behavior validated"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "574-604",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent errors feed into inspectDemandPrdReadiness and set prd_ready false",
+      "why": "Verifies explorer fact 5: PRD readiness integration exists"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "642-685",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies agent conflicts cause prd_ready false and blocker code",
+      "why": "Verifies explorer test evidence: readiness propagation validated"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "JSON repair patterns in parseJsonCandidate may not cover all real-world Claude drift variations",
+    "Test coverage may not reflect actual agent output patterns in production"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All 10 explorer evidence records verified against actual code and tests. No assumptions promoted to facts. All evidence paths exist and are usable. PRD readiness criteria met: project has JSON repair implementation, explicit error blocking, integration tests, and readiness gate. Cross_check not required."
+  }
+}

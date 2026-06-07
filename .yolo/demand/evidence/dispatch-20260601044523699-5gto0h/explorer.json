@@ -1,0 +1,122 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch currently implements JSON repair for 4 specific drift patterns and fails closed with explicit EVIDENCE_AGENT_INVALID_JSON blocker on unrecoverable JSON, but has known gaps in repair coverage for complex nested drift and type coercion.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate implements 4 repair patterns: range strings (42-88), unescaped backslashes, keys with internal spaces, and trailing commas",
+      "why": "Defines what 'minor recoverable JSON drift' currently means in the implementation"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "348-368",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "extractJsonObject handles JSON in 3 formats: direct, fenced code blocks (```json), and sliced (first { to last })",
+      "why": "Shows multi-format JSON extraction strategy before repair attempts"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-396",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON when parsed is null, with status='failed', completed=false, recommendation='block'",
+      "why": "Confirms fail-closed behavior with explicit error code for invalid agent JSON"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "408-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Scope validation checks evidence records for required scope field and adds EVIDENCE_SCOPE_REQUIRED blocker to missing array",
+      "why": "Shows post-JSON-parsing validation blocks PRD readiness on malformed evidence structure"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "488-494",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues checks result.error_code and pushes it as a blocker with the role and message",
+      "why": "Confirms EVIDENCE_AGENT_INVALID_JSON propagates to PRD readiness blockers"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "710-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness iterates required evidence roles, checks result completeness, and calls evidenceResultBlockingIssues for each result",
+      "why": "Shows PRD readiness integration path for evidence agent error codes"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'repairs minor Claude JSON key drift and records the repair' simulates 42-88 range drift, escaped backslash, key with space, and asserts json_repaired=true",
+      "why": "Test confirms current repair patterns work and are tracked in provider_runs"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'invalid agent JSON fails closed with explicit blocker code' sends 'not json', asserts status='blocked', EVIDENCE_AGENT_INVALID_JSON in agent_results and readiness.blockers",
+      "why": "Integration test confirms invalid JSON blocks entire dispatch and PRD readiness"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "605-640",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'agent evidence without explicit scope is blocked during normalization' removes scope from evidence, asserts EVIDENCE_SCOPE_REQUIRED error and blocked status",
+      "why": "Test confirms scope validation blocks PRD readiness even when JSON parses successfully"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "558-567",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "provider_runs tracking includes json_repaired boolean and parse_error, result.readiness blocked status depends on boundary changes and agent results",
+      "why": "Shows repair tracking and final readiness decision logic in dispatch runtime"
+    },
+    {
+      "path": ".git",
+      "line": "46d4b6d",
+      "scope": "project",
+      "source": "project_log",
+      "summary": "Latest commit 'fix: make demand PRDs pass executable gates' indicates recent work on demand PRD gate integration",
+      "why": "Git history shows evidence dispatch is under active development"
+    }
+  ],
+  "assumptions": [
+    "Minor JSON drift refers only to the 4 patterns implemented in parseJsonCandidate (ranges, backslashes, spaced keys, trailing commas)",
+    "Claude agents are expected to return JSON objects rather than JSON arrays or primitives",
+    "Evidence agents run in subprocess with stdout/stderr capture rather than direct API calls"
+  ],
+  "risks": [
+    "If Claude introduces new JSON key drift patterns beyond the 4 implemented, parseJsonCandidate will fail and trigger EVIDENCE_AGENT_INVALID_JSON blocker",
+    "If nested objects have complex structural drift (e.g., missing brackets, misplaced commas inside nested structures), current repair will not recover",
+    "If type coercion drift occurs (e.g., number as string in unhandled fields), it may pass parsing but cause schema validation failures downstream",
+    "If agents return JSON arrays instead of objects, extractJsonObject may return null with 'no JSON object found' even if valid JSON exists"
+  ],
+  "missing": [
+    "No evidence found for repair behavior with complex nested object drift (e.g., bracket mismatches deep in structure)",
+    "No evidence found for repair behavior with type coercion patterns beyond line ranges",
+    "No evidence found for handling JSON primitive or array responses from agents",
+    "No evidence found for integration between EVIDENCE_AGENT_INVALID_JSON and specific PRD gate error messages shown to users",
+    "No evidence found for how json_repaired flag affects downstream schema validation or evidence quality scoring"
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Current implementation correctly handles the 4 defined minor drift patterns and fails closed with EVIDENCE_AGENT_INVALID_JSON. Cross-check recommended to verify whether repair coverage is sufficient for real Claude agent output patterns and whether additional drift patterns should be added."
+  }
+}

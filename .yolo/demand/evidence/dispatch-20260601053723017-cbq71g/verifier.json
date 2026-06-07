@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence is factually grounded and properly separates assumptions from verified project facts.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles function uses git ls-files -co --exclude-standard -z to discover tracked, cached, and other files",
+      "why": "Verifies explorer claim that git-backed file discovery covers untracked files."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles function recursively walks project tree excluding standard directories",
+      "why": "Verifies explorer claim about non-git boundary fallback coverage."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot combines gitFiles and walkFiles, excludes allowed roots",
+      "why": "Confirms core boundary snapshot implementation matches acceptance criteria."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots function detects added, modified, and deleted files",
+      "why": "Verifies change detection mechanism for boundary violations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-568",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime captures before/after boundary snapshots and diffs for mutations",
+      "why": "Confirms runtime boundary audit detects target project mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "585-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary mutations add BOUNDARY_PROJECT_MUTATION blockers and fail PRD readiness",
+      "why": "Verifies enforcement mechanism blocks demand progress on violations."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'git-backed boundary blocks untracked project mutation' creates untracked file and verifies detection",
+      "why": "Verifies explorer claim about git untracked file detection evidence."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "454-491",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'git-backed boundary blocks gitignored project mutation' creates gitignored file outside standard exclusions",
+      "why": "Verifies explorer claim about gitignored file detection evidence."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'non-git boundary blocks project mutation and ignores artifacts' verifies non-git behavior",
+      "why": "Verifies explorer claim about non-git boundary behavior evidence."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'boundary blocks project mutation even when agent results pass' confirms enforcement priority",
+      "why": "Verifies explorer claim about boundary enforcement over agent results."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence agent protocols define explorer, cross-checker, and verifier roles with specific schemas",
+      "why": "Verifies explorer claim about evidence agent architecture."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "239-248",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy defines forbidden project mutation and allowed write roots including dispatch artifact root",
+      "why": "Confirms boundary rules are explicit in dispatch plan."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "258-328",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt function generates strict JSON-only agent instructions with protocol boundary",
+      "why": "Verifies agent prompt structure enforces evidence protocol compliance."
+    }
+  ],
+  "assumptions": [
+    "Explorer's three assumptions are properly segregated from evidence and not presented as facts.",
+    "Evidence paths and line numbers are usable and point to actual project code.",
+    "Missing data is properly reflected as assumptions rather than gaps in evidence."
+  ],
+  "risks": [
+    "Explorer evidence is sufficient for current PRD readiness but real Claude agent stress testing remains an assumption.",
+    "Acceptance criteria mention 'exclude only the dispatch artifact root' but evidence shows standard exclusions (.git, node_modules, etc.) are also applied - this is reasonable but not explicitly stated in acceptance criteria."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer evidence is factually grounded with 15 verifiable project code/test references. Assumptions are clearly separated and identified. Evidence paths are usable and accurate. One minor clarification: acceptance criteria state 'exclude only the dispatch artifact root' but implementation also applies standard exclusions (.git, node_modules, dist, coverage, .next, .cache) which is appropriate and tested. The claim that boundary snapshots cover git ls-files plus fallback walk and exclude dispatch artifact root is verified by evidence."
+  }
+}

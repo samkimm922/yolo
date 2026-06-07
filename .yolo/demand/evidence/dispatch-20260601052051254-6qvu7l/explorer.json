@@ -1,0 +1,120 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch has boundary snapshot audit implemented in code but requires actual stress-testing with full-tool agents to verify it prevents target-project mutations under real execution conditions.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() builds SHA-256 digests of project files excluding allowed write roots",
+      "why": "This is the core boundary protection mechanism that should detect mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after digests to detect added, modified, or deleted files",
+      "why": "This is the detection logic that should flag boundary violations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime() takes boundary snapshots before and after agent execution, detects changes, and converts violations into PRD readiness blockers",
+      "why": "This is the runtime enforcement that should block PRD readiness on mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "585-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations add BOUNDARY_PROJECT_MUTATION blockers and set prd_ready=false",
+      "why": "This is the enforcement mechanism that keeps PRD blocked on mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "423-471",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig() normalizes agent_tool_profile to 'boundary' by default for Claude provider, but allows 'full' when allowFullAgentTools=true and agentToolProfile includes full/execution/write keywords",
+      "why": "This shows the boundary control depends on explicit configuration flags."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "473-510",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime() requires executeAgents=true AND allowAgentDispatch=true for actual execution",
+      "why": "This shows the double-opt-in guard for agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "237-248",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy declares boundary.project_mutation=forbidden and agent_instruction=boundary_controlled",
+      "why": "This is the policy declaration that should constrain agent behavior."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION requires evidence records with scope field and project-scoped evidence must have path locators",
+      "why": "This defines the evidence contract that agents must satisfy."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() blocks PRD readiness when agents mark evidence as project-scoped without providing repo-relative paths, or when evidence is only external/unknown for existing-project facts",
+      "why": "This is the validation that ensures project facts have project evidence."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation() constructs Claude CLI args but does not directly constrain tools; it passes through claude_allowed_tools and claude_disallowed_tools from config.ai",
+      "why": "This shows provider invocation does not enforce boundary by itself; it depends on config."
+    }
+  ],
+  "assumptions": [
+    "Boundary snapshot mechanism works correctly for file digest comparison",
+    "Git-based file listing (git ls-files -co --exclude-standard) returns complete project file set",
+    "Allowed write roots exclusion in snapshot logic correctly permits artifacts output directory",
+    "Agents cannot bypass boundary detection by modifying files during execution then reverting before snapshot",
+    "Claude Code tool execution actually respects allowedTools/disallowedTools when passed",
+    "No concurrent file system modifications from other processes during agent execution window",
+    "SHA-256 digests are sufficient for detecting meaningful content changes",
+    "The excludeDir list (.git, node_modules, dist, coverage, .next, .cache) covers all directories that should not be in project boundary"
+  ],
+  "risks": [
+    "If agents can write to target project files during evidence gathering and revert before snapshot, boundary audit will not catch mutations",
+    "If Claude Code does not enforce allowedTools at runtime, full-tool agents could mutate project despite boundary policy",
+    "If git ls-files misses untracked files, they would not be in boundary snapshot and mutations would go undetected",
+    "If concurrent processes modify project files during agent execution, false positive boundary violations would block PRD readiness incorrectly",
+    "If evidence agents cannot read files due to permissions but return assumptions as facts, project claims would be based on unverified data"
+  ],
+  "missing": [
+    "Actual test results showing boundary audit detecting and blocking project mutations from full-tool Claude agents",
+    "Test results showing Claude Code respecting allowedTools/boundary constraints under real agent execution",
+    "Verification that provider-adapter invocation correctly passes boundary settings to spawned Claude processes",
+    "Evidence that current dirty working tree state does not interfere with boundary snapshot logic",
+    "Integration test results showing end-to-end evidence dispatch with boundary enforcement on actual demand sessions"
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Boundary audit code exists and is correctly structured, but needs real execution testing to verify it actually prevents mutations from full-tool agents. The code declares the right constraints, but we need stress-test evidence to confirm enforcement."
+  }
+}

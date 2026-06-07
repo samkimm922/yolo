@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence schema, prompt, readiness contract, and tests currently distinguish project, external, user, and unknown evidence scopes, and enforce that existing-project facts require project-scoped evidence with concrete locators, not external research.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence schema definition requires scope field and states 'Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator.'",
+      "why": "The schema contract explicitly defines scope requirements and project evidence locator requirements."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES explicitly defined as new Set(['project', 'external', 'user', 'unknown']).",
+      "why": "The four scope categories are encoded in the implementation."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() classifies evidence records into project/external/user/unknown scopes.",
+      "why": "Runtime scope classification logic exists and is operational."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope() checks if scope is explicitly declared as one of the valid scopes.",
+      "why": "Scope declaration enforcement prevents undeclared evidence."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() creates blockers when project evidence is missing or lacks a path, returning PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE or PROJECT_EVIDENCE_PATH_REQUIRED.",
+      "why": "Project evidence must be present with locators for existing-project claims."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues() creates EVIDENCE_SCOPE_REQUIRED blocker when scope is not declared.",
+      "why": "Explicit scope declaration is enforced for all evidence records."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "342-347",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt explicitly requires 'Every evidence record must include scope: project, external, user, or unknown' and 'Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator.'",
+      "why": "Evidence agent instructions mandate scope declaration and project locator requirements."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "640-646",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshot before/after audit detects any project file mutation; changes become BOUNDARY_PROJECT_MUTATION blockers.",
+      "why": "Runtime verification that evidence agents do not modify target project files."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Demand doctrine explicitly states '任何 existing-project factual claim 如果只有 external/user/unknown evidence，或 project evidence 没有具体项目定位符，都必须被 readiness blocker 拦住。'",
+      "why": "Product documentation confirms the evidence scope requirement is intentional design."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' verifies PRD readiness is blocked when only external evidence is provided.",
+      "why": "Test coverage confirms external evidence cannot prove existing-project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "454-498",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'project evidence requires a concrete project locator' verifies PRD readiness is blocked when project evidence lacks a path.",
+      "why": "Test coverage confirms project evidence requires concrete file locators."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "500-545",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external URLs cannot be relabeled as project evidence' verifies PRD readiness is blocked when external URLs are mislabeled as project scope.",
+      "why": "Test coverage prevents external evidence from being relabeled as project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "547-591",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'evidence records must declare valid scope explicitly' verifies PRD readiness is blocked when evidence records omit scope declaration.",
+      "why": "Test coverage enforces explicit scope declaration requirement."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If claim is wrong, external web research could be misused as proof of target project state, leading to incorrect PRD assumptions and implementation failures."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence schema, prompts, readiness contract, and tests all properly implement and enforce the four-scope system with project-locator requirements. External research is explicitly marked as background-only and cannot satisfy existing-project factual claims."
+  }
+}

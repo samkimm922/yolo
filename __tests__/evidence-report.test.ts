@@ -59,6 +59,7 @@ describe("evidence run report", () => {
       mkdirSync(taskLogsDir, { recursive: true });
       writeFileSync(join(taskLogsDir, "FIX-2.jsonl"), `${JSON.stringify({
         ts: "2026-05-24T10:01:30.000Z",
+        run_id: "RUN-1",
         task_id: "FIX-2",
         type: "GATE",
         check: "post",
@@ -68,6 +69,7 @@ describe("evidence run report", () => {
       writeFileSync(join(taskLogsDir, "_review.jsonl"), [
         JSON.stringify({
           ts: "2026-05-24T10:01:40.000Z",
+          run_id: "RUN-1",
           task_id: "_review",
           type: "REVIEW_ISSUE",
           severity: "critical",
@@ -77,6 +79,7 @@ describe("evidence run report", () => {
         }),
         JSON.stringify({
           ts: "2026-05-24T10:01:50.000Z",
+          run_id: "RUN-1",
           task_id: "_review",
           type: "DONE",
           result: "round_done",
@@ -113,10 +116,13 @@ describe("evidence run report", () => {
       assert.equal(report.summary.completed, 2);
       assert.equal(report.summary.failed, 1);
       assert.equal(report.summary.task_success_rate, 66.7);
-      assert.equal(report.summary.run_success_rate, 66.7);
+      assert.equal(report.summary.evidence_failures, 2);
+      assert.equal(report.summary.run_success_rate, 40);
       assert.equal(report.ledger.run_events, 2);
       assert.equal(report.ledger.state_events, 4);
       assert.equal(report.ledger.task_log_events, 3);
+      assert.equal(report.ledger.legacy_unscoped_task_log_events, 0);
+      assert.equal(report.ledger.other_run_task_log_events, 0);
       assert.equal(report.gates.failed_count, 2);
       assert.deepEqual(report.gates.failed_tasks, ["FIX-2"]);
       assert.equal(report.remediation.item_count, 2);
@@ -136,6 +142,7 @@ describe("evidence run report", () => {
       assert.equal(finalAnswer.schema, "yolo.evidence.final_answer.v1");
       assert.equal(finalAnswer.outcome, "needs_attention");
       assert.ok(finalAnswer.blockers.some((blocker) => blocker.includes("failed tasks: FIX-2")));
+      assert.ok(finalAnswer.blockers.some((blocker) => blocker.includes("review issues: 1")));
       assert.ok(finalAnswer.checks.some((check) => check.name === "gates" && check.status === "fail"));
     } finally {
       rmSync(stateDir, { recursive: true, force: true });
@@ -229,8 +236,229 @@ describe("evidence run report", () => {
 
       assert.equal(report.status, "error");
       assert.deepEqual(report.tasks.blocked, ["FIX-BLOCKED"]);
+      assert.equal(report.summary.planned, 1);
+      assert.equal(report.summary.task_success_rate, 0);
     } finally {
       rmSync(stateDir, { recursive: true, force: true });
     }
   });
+
+  test("buildRunReport ignores legacy unscoped state events for current run status", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", {
+        run_id: "RUN-CURRENT",
+        prd: "data/prd.json",
+        tasks: 1,
+      }, { now: "2026-06-05T10:00:00.000Z" });
+      appendStateEvent(stateDir, "gate.failed", {
+        task_id: "OLD-TASK",
+        status: "fail",
+        reason: "legacy failure without run id",
+      }, { now: "2026-06-05T09:00:00.000Z", source: "legacy-gate" });
+      appendStateEvent(stateDir, "fixture.run", {
+        run_id: "RUN-CURRENT",
+        fixture_id: "current",
+        status: "pass",
+      }, { now: "2026-06-05T10:01:00.000Z", source: "fixture" });
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-CURRENT",
+        taskResults: {
+          completed: ["FIX-1"],
+          failed: [],
+          skipped: [],
+          blocked: [],
+        },
+        progressTotal: 1,
+      });
+
+      assert.equal(report.status, "success");
+      assert.equal(report.gates.failed_count, 0);
+      assert.equal(report.ledger.state_events, 1);
+      assert.equal(report.ledger.legacy_unscoped_events, 1);
+      assert.equal(report.ledger.legacy_unscoped_state_events, 1);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("buildRunReport ignores other-run and unscoped task logs for current run status", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", {
+        run_id: "RUN-CURRENT",
+        prd: "data/prd.json",
+        tasks: 1,
+      }, { now: "2026-06-05T10:00:00.000Z" });
+      const taskLogsDir = join(stateDir, "runtime", "task-logs");
+      mkdirSync(taskLogsDir, { recursive: true });
+      writeFileSync(join(taskLogsDir, "FIX-1.jsonl"), [
+        JSON.stringify({
+          ts: "2026-06-05T09:00:00.000Z",
+          run_id: "RUN-OLD",
+          task_id: "FIX-OLD",
+          type: "GATE",
+          check: "post",
+          result: "fail",
+          errors: ["old failure"],
+        }),
+        JSON.stringify({
+          ts: "2026-06-05T09:01:00.000Z",
+          task_id: "FIX-LEGACY",
+          type: "GATE",
+          check: "post",
+          result: "fail",
+          errors: ["legacy failure"],
+        }),
+        JSON.stringify({
+          ts: "2026-06-05T10:01:00.000Z",
+          run_id: "RUN-CURRENT",
+          task_id: "FIX-1",
+          type: "GATE",
+          check: "post",
+          result: "pass",
+        }),
+      ].join("\n") + "\n", "utf8");
+      writeFileSync(join(taskLogsDir, "_review.jsonl"), [
+        JSON.stringify({
+          ts: "2026-06-05T09:02:00.000Z",
+          run_id: "RUN-OLD",
+          task_id: "_review",
+          type: "REVIEW_ISSUE",
+          severity: "critical",
+          file: "src/old.ts",
+          line: 1,
+          message: "old issue",
+        }),
+        JSON.stringify({
+          ts: "2026-06-05T09:03:00.000Z",
+          task_id: "_review",
+          type: "ERROR",
+          message: "legacy review error",
+        }),
+        JSON.stringify({
+          ts: "2026-06-05T10:02:00.000Z",
+          run_id: "RUN-CURRENT",
+          task_id: "_review",
+          type: "DONE",
+          result: "round_done",
+          issues_found: 0,
+          issues_fixed: 0,
+        }),
+      ].join("\n") + "\n", "utf8");
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-CURRENT",
+        taskResults: {
+          completed: ["FIX-1"],
+          failed: [],
+          skipped: [],
+          blocked: [],
+        },
+        progressTotal: 1,
+      });
+
+      assert.equal(report.status, "success");
+      assert.equal(report.gates.failed_count, 0);
+      assert.equal(report.review.issue_count, 0);
+      assert.equal(report.review.error_count, 0);
+      assert.equal(report.review.latest_result, "round_done");
+      assert.equal(report.ledger.task_log_events, 2);
+      assert.equal(report.ledger.legacy_unscoped_task_log_events, 2);
+      assert.equal(report.ledger.other_run_task_log_events, 2);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("buildRunReport treats current-run gate failures as error status", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", {
+        run_id: "RUN-GATE",
+        prd: "data/prd.json",
+        tasks: 1,
+      }, { now: "2026-06-05T11:00:00.000Z" });
+      appendStateEvent(stateDir, "gate.failed", {
+        run_id: "RUN-GATE",
+        task_id: "FIX-1",
+        status: "fail",
+        reason: "postcondition failed",
+      }, { now: "2026-06-05T11:01:00.000Z", source: "gate" });
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-GATE",
+        taskResults: {
+          completed: ["FIX-1"],
+          failed: [],
+          skipped: [],
+          blocked: [],
+        },
+        progressTotal: 1,
+      });
+
+      assert.equal(report.status, "error");
+      assert.equal(report.summary.evidence_failures, 1);
+      assert.equal(report.summary.run_success_rate, 50);
+      assert.equal(report.gates.failed_count, 1);
+      const finalAnswer = buildRunFinalAnswer(report);
+      assert.equal(finalAnswer.outcome, "needs_attention");
+      assert.ok(finalAnswer.blockers.some((blocker) => blocker.includes("failed gates: 1")));
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("YB-007 buildRunReport folds review and fixture failures into run success rate", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", {
+        run_id: "RUN-EVIDENCE",
+        prd: "data/prd.json",
+        tasks: 1,
+      }, { now: "2026-06-05T12:00:00.000Z" });
+      appendStateEvent(stateDir, "fixture.run", {
+        run_id: "RUN-EVIDENCE",
+        fixture_id: "browser-smoke",
+        status: "fail",
+      }, { now: "2026-06-05T12:01:00.000Z", source: "fixture" });
+      const taskLogsDir = join(stateDir, "runtime", "task-logs");
+      mkdirSync(taskLogsDir, { recursive: true });
+      writeFileSync(join(taskLogsDir, "_review.jsonl"), `${JSON.stringify({
+        ts: "2026-06-05T12:02:00.000Z",
+        run_id: "RUN-EVIDENCE",
+        task_id: "_review",
+        type: "ERROR",
+        message: "review task limit exhausted",
+      })}\n`, "utf8");
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-EVIDENCE",
+        taskResults: {
+          completed: ["FIX-1"],
+          failed: [],
+          skipped: [],
+          blocked: [],
+        },
+        progressTotal: 1,
+      });
+
+      assert.equal(report.status, "error");
+      assert.equal(report.summary.completed, 1);
+      assert.equal(report.summary.evidence_failures, 2);
+      assert.equal(report.summary.run_success_rate, 33.3);
+      const finalAnswer = buildRunFinalAnswer(report);
+      assert.equal(finalAnswer.outcome, "needs_attention");
+      assert.ok(finalAnswer.blockers.some((blocker) => blocker.includes("review errors: 1")));
+      assert.ok(finalAnswer.blockers.some((blocker) => blocker.includes("fixture failures: 1")));
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
 });

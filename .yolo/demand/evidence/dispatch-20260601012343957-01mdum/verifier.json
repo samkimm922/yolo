@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements WebFetch/WebSearch support with explicit external/project scope separation enforced by evidence scope declaration validation and project evidence path requirements.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "explorer and cross-checker both independently verified evidenceRecordScope() classifies URLs as external via http(s):// detection and paths as project, with source field including webfetch/websearch as external triggers.",
+      "why": "Core scope classification logic is independently confirmed by two agents with identical line references."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Both agents verified projectEvidenceBlockingIssues() implements PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE and PROJECT_EVIDENCE_PATH_REQUIRED blockers preventing external-only evidence from satisfying project facts.",
+      "why": "Critical enforcement mechanism independently confirmed."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-477",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Three test cases independently verified: external-only evidence triggers PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE, project evidence without path triggers PROJECT_EVIDENCE_PATH_REQUIRED, missing scope triggers EVIDENCE_SCOPE_REQUIRED.",
+      "why": "Test coverage independently confirmed blocking behaviors work as specified."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Both agents verified doctrine explicitly limits external evidence to background research, stating it cannot prove project implementation facts.",
+      "why": "Product documentation confirms policy intent matches implementation."
+    },
+    {
+      "path": ".yolo/demand/evidence",
+      "line": "34 dispatch directories",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Cross-checker verified 34 dispatch directories contain evidence agent artifacts, showing system has been actively used with structured results.",
+      "why": "Runtime evidence shows system is operational, not just theoretical."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cross-checker identified dual VALID_EVIDENCE_SCOPES definition at router.ts:52 and evidence-dispatch.ts:16, creating synchronization risk if only one is updated.",
+      "why": "Cross-checker found additional schema architecture risk not noted by explorer."
+    }
+  ],
+  "assumptions": [
+    "WebFetch/WebSearch tools populate url field consistently in real Claude agent execution (both agents independently flagged this as unverified)",
+    "Evidence agents follow prompt instructions to mark WebFetch/WebSearch as scope=external in production (both agents flagged as unverified)",
+    "toolProfile='research' is actually used in production dispatch configurations (cross-checker noted conditional prompt only applies for research profiles)",
+    "URL regex /^https?:\\/\\//i handles all URL formats WebFetch/WebSearch might return",
+    "VALID_EVIDENCE_SCOPES dual definitions remain synchronized if new scope types are added"
+  ],
+  "risks": [
+    "Evidence agents may ignore prompt instructions and mark WebFetch/WebSearch as scope=project, allowing external research to satisfy project facts (both agents flagged)",
+    "If WebFetch/WebSearch don't populate url field, URL detection won't trigger, potentially misclassifying external evidence as project scope (both agents flagged)",
+    "Conditional prompt at evidence-dispatch.ts:273 only applies when toolProfile.includes('research') - non-research profiles won't receive explicit external scope instructions (cross-checker identified)",
+    "VALID_EVIDENCE_SCOPES dual definition risks desynchronization (cross-checker identified)",
+    "Scope validation checks membership but not semantic correctness - agents could declare invalid scopes that match the set (cross-checker identified)"
+  ],
+  "missing": [
+    "Runtime execution logs showing real Claude agents with WebFetch/WebSearch actually returning external-scoped evidence (both agents flagged)",
+    "Integration tests using actual WebFetch/WebSearch tool responses to verify URL-based classification triggers external scope (both agents flagged)",
+    "Production dispatch logs showing external evidence being correctly separated from project facts (both agents flagged)",
+    "Evidence that toolProfile='research' is used in production dispatch configurations (cross-checker flagged)",
+    "Audit of recent dispatch artifacts verifying agents properly distinguished external research from project code in practice (both agents flagged)",
+    "Verification that WebFetch/WebSearch tools consistently populate url field in their results (both agents flagged)",
+    "Test coverage for conditional prompt line at evidence-dispatch.ts:273 to verify research vs non-research profile behavior (cross-checker flagged)"
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker achieved high evidence agreement with independent verification of all core implementation claims: URL detection, scope validation, project evidence blocking, test coverage, and doctrine alignment. Both agents confirmed code, tests, and docs provide comprehensive evidence that demand evidence dispatch implements WebFetch/WebSearch support with external/project scope separation. No conflicts found between explorer and cross-checker results - cross-checker added nuance (dual VALID_EVIDENCE_SCOPES, conditional prompt scope) but didn't contradict explorer findings. Critical assumption remains: real Claude agents follow prompt instructions and WebFetch/WebSearch populate url field as tests assume. Implementation is sound per code/tests/docs, but production runtime behavior against actual Claude agents is assumed, not demonstrated. For acceptance criteria 'external-only evidence cannot satisfy existing project facts', code and tests confirm enforcement exists. However, gap between test-proven and production-verified means agents discussing WebFetch/WebSearch capability must acknowledge this is implementation-proven, not runtime-validated."
+  }
+}

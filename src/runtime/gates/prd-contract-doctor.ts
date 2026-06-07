@@ -2,6 +2,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { inspectAtomicTask } from "../execution/atomic-task-doctor.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -53,6 +54,57 @@ const TARGET_COVERAGE_CONDITION_TYPES = new Set([
   "required_imports_present",
   "target_file_modified",
 ]);
+
+const STRICT_EXECUTION_MODES = new Set(["runner", "release"]);
+
+function asArray(value) {
+  if (value == null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function cleanString(value) {
+  return String(value ?? "").trim();
+}
+
+function strictExecutionPolicy(prd, options = {}) {
+  if (options.strictExecution === false || options.strict_execution === false) return false;
+  if (options.requireDemandContract === false || options.require_demand_contract === false) return false;
+  if (options.strictExecution === true || options.strict_execution === true) return true;
+  if (options.requireDemandContract === true || options.require_demand_contract === true) return true;
+
+  const mode = cleanString(options.mode || options.executionMode || options.execution_mode || "compatibility").toLowerCase();
+  return STRICT_EXECUTION_MODES.has(mode) ||
+    prd?.execution_readiness?.afk_ready === true ||
+    prd?.execution_readiness?.level === "L3";
+}
+
+function taskDependencyIds(task = {}) {
+  return [...new Set([
+    ...asArray(task.depends_on),
+    ...asArray(task.dependencies),
+  ].map(String).filter(Boolean))];
+}
+
+function normalizeTaskTargets(task = {}) {
+  const scopeTargets = asArray(task.scope?.targets)
+    .map((target) => typeof target === "string" ? { file: target } : target)
+    .filter((target) => cleanString(target?.file || target?.path || target).length > 0)
+    .map((target) => ({
+      ...target,
+      file: target.file || target.path || target,
+    }));
+  if (scopeTargets.length > 0) return scopeTargets;
+  return asArray(task.files)
+    .map((file) => ({ file }))
+    .filter((target) => cleanString(target.file).length > 0);
+}
+
+function hasTaskAcceptance(task = {}) {
+  return asArray(task.acceptance_criteria).length > 0 ||
+    cleanString(task.acceptance).length > 0 ||
+    cleanString(task.success_criteria).length > 0 ||
+    asArray(task.post_conditions).length > 0;
+}
 
 function normalizeCondition(condition) {
   return {
@@ -146,10 +198,13 @@ function addFinding(list, task, condition, code, detail, extra = {}) {
   });
 }
 
-export function inspectPrdContract(prd) {
+export function inspectPrdContract(prd, options = {}) {
   const failures = [];
   const warnings = [];
   const tasks = Array.isArray(prd?.tasks) ? prd.tasks : [];
+  const taskIds = new Set(tasks.map((task) => task?.id).filter(Boolean));
+  const strictExecution = strictExecutionPolicy(prd, options);
+  const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
 
   if (prd?.execution_mode === "planning_only") {
     failures.push({
@@ -162,8 +217,19 @@ export function inspectPrdContract(prd) {
     });
   }
 
-  if (prd?.demand_contract_required === true || prd?.source === "approved_demand") {
-    if (!prd?.demand?.id) {
+  if (strictExecution || prd?.demand_contract_required === true || prd?.source === "approved_demand") {
+    const demand = prd?.demand || null;
+    if (!demand) {
+      failures.push({
+        task_id: null,
+        condition_id: null,
+        condition_type: null,
+        severity: "FAIL",
+        code: "DEMAND_CONTRACT_MISSING",
+        detail: "runner/release PRDs must include an approved demand contract",
+        human_needed: true,
+      });
+    } else if (!demand.id) {
       failures.push({
         task_id: null,
         condition_id: null,
@@ -173,7 +239,7 @@ export function inspectPrdContract(prd) {
         detail: "approved-demand PRD must reference demand.id",
       });
     }
-    if (prd?.demand?.approval?.approved !== true) {
+    if (demand && demand.approval?.approved !== true) {
       failures.push({
         task_id: null,
         condition_id: null,
@@ -195,12 +261,12 @@ export function inspectPrdContract(prd) {
     }
     const qualityReports = [
       prd?.execution_readiness?.quality_report,
-      prd?.demand?.quality_report,
-      prd?.demand?.execution_readiness?.quality_report,
+      demand?.quality_report,
+      demand?.execution_readiness?.quality_report,
     ].filter(Boolean);
     const qualityStatuses = [
       prd?.execution_readiness?.quality_status,
-      prd?.demand?.execution_readiness?.quality_status,
+      demand?.execution_readiness?.quality_status,
       ...qualityReports.map((report) => report.status),
     ].filter(Boolean);
     if (qualityStatuses.includes("blocked")) {
@@ -213,23 +279,80 @@ export function inspectPrdContract(prd) {
         detail: "approved-demand PRD quality report must not be blocked",
       });
     } else if (qualityStatuses.includes("warning")) {
-      warnings.push({
+      (strictExecution ? failures : warnings).push({
         task_id: null,
         condition_id: null,
         condition_type: null,
-        severity: "WARN",
+        severity: strictExecution ? "FAIL" : "WARN",
         code: "DEMAND_QUALITY_WARNING",
-        detail: "approved-demand PRD quality report has warnings",
+        detail: strictExecution
+          ? "runner/release PRD demand quality warnings require human review before execution"
+          : "approved-demand PRD quality report has warnings",
+        human_needed: strictExecution || undefined,
       });
     } else if (qualityReports.length === 0) {
-      warnings.push({
+      (strictExecution ? failures : warnings).push({
         task_id: null,
         condition_id: null,
         condition_type: null,
-        severity: "WARN",
+        severity: strictExecution ? "FAIL" : "WARN",
         code: "DEMAND_QUALITY_REPORT_MISSING",
-        detail: "approved-demand PRD should include demand quality report",
+        detail: strictExecution
+          ? "runner/release PRD must include a demand quality report"
+          : "approved-demand PRD should include demand quality report",
+        human_needed: strictExecution || undefined,
       });
+    }
+    const projectFacts = demand?.project_facts || null;
+    if (!projectFacts) {
+      failures.push({
+        task_id: null,
+        condition_id: null,
+        condition_type: null,
+        severity: "FAIL",
+        code: "DEMAND_PROJECT_FACTS_MISSING",
+        detail: "runner/release PRD must include verified demand project facts",
+        human_needed: true,
+      });
+    } else {
+      const unresolvedTargetFacts = asArray(projectFacts.target_files)
+        .filter((fact) => ["candidate", "needs_verification", "contradicted", "invalid_scope"].includes(fact?.status));
+      const unresolvedAssumptions = asArray(projectFacts.assumptions)
+        .filter((fact) => ["needs_verification", "contradicted"].includes(fact?.status));
+      if (unresolvedTargetFacts.length > 0) {
+        failures.push({
+          task_id: null,
+          condition_id: null,
+          condition_type: null,
+          severity: "FAIL",
+          code: "DEMAND_PROJECT_TARGET_FACTS_UNRESOLVED",
+          detail: "approved-demand PRD must not carry candidate, unverified, or contradicted target-file facts",
+        });
+      }
+      if (unresolvedAssumptions.length > 0) {
+        failures.push({
+          task_id: null,
+          condition_id: null,
+          condition_type: null,
+          severity: "FAIL",
+          code: "DEMAND_PROJECT_ASSUMPTIONS_UNRESOLVED",
+          detail: "approved-demand PRD must not carry unverified or contradicted project assumptions",
+        });
+      }
+    }
+    for (const requirement of asArray(prd.requirements)) {
+      if (!requirement.demand_trace) {
+        failures.push({
+          task_id: null,
+          condition_id: null,
+          condition_type: null,
+          severity: "FAIL",
+          code: "REQUIREMENT_DEMAND_TRACE_MISSING",
+          detail: "runner/release PRD requirements must trace back to demand evidence or decisions",
+          requirement_id: requirement.id || null,
+          human_needed: true,
+        });
+      }
     }
   }
 
@@ -245,8 +368,8 @@ export function inspectPrdContract(prd) {
   }
 
   for (const task of tasks) {
-    const targets = task?.scope?.targets || [];
-    const postConditions = task?.post_conditions || [];
+    const targets = normalizeTaskTargets(task);
+    const postConditions = asArray(task?.post_conditions);
 
     if (!task?.id) {
       failures.push({
@@ -260,8 +383,76 @@ export function inspectPrdContract(prd) {
       continue;
     }
 
+    for (const dependencyId of taskDependencyIds(task)) {
+      if (!taskIds.has(dependencyId)) {
+        addFinding(
+          failures,
+          task,
+          null,
+          "TASK_DEPENDENCY_MISSING",
+          `task depends_on references missing task id: ${dependencyId}`,
+          { dependency_id: dependencyId },
+        );
+      }
+    }
+
+    if (strictExecution && task.status === "pending") {
+      const inspection = inspectAtomicTask(task, {
+        root: projectRoot,
+        projectRoot,
+        writeEvidence: false,
+      });
+      if (inspection.mode === "must_split") {
+        addFinding(
+          failures,
+          task,
+          null,
+          "ATOMICITY_MUST_SPLIT",
+          "runner/release task is too broad and must be split before execution",
+          { atomicity: inspection },
+        );
+      } else if (inspection.mode === "investigate_then_patch") {
+        addFinding(
+          failures,
+          task,
+          null,
+          "ATOMICITY_INVESTIGATE_FIRST",
+          "runner/release task requires investigation before patching and cannot run as an automatic warning",
+          { atomicity: inspection, human_needed: true },
+        );
+      } else if (inspection.mode === "research_only") {
+        addFinding(
+          failures,
+          task,
+          null,
+          "ATOMICITY_RESEARCH_ONLY",
+          "runner/release task is research-only and cannot be patched by runner",
+          { atomicity: inspection, human_needed: true },
+        );
+      }
+    }
+
     if (!targets.length && task.status === "pending") {
+      addFinding(
+        failures,
+        task,
+        null,
+        "TASK_MISSING_FILES",
+        "pending task must define files through scope.targets or task.files",
+        { human_needed: true },
+      );
       addFinding(failures, task, null, "TASK_MISSING_TARGETS", "pending task must define scope.targets");
+    }
+
+    if (task.status === "pending" && !hasTaskAcceptance(task)) {
+      addFinding(
+        failures,
+        task,
+        null,
+        "TASK_MISSING_ACCEPTANCE",
+        "pending task must define acceptance criteria, success criteria, or post_conditions",
+        { human_needed: true },
+      );
     }
 
     if (!postConditions.length && task.status === "pending") {

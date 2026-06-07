@@ -1,0 +1,91 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch has NO explicit harness boundary audit or file-mutation blocker in the current implementation.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "1-130",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "File does not exist; evidence dispatch implementation is missing from the project.",
+      "why": "Direct verification that the cited scope-in file is absent."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "1-220",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Router validates schema and routes demands but contains NO file-mutation checks or boundary audits. Routes 'careful' based on reason codes but does not prevent agent writes.",
+      "why": "Primary routing logic; shows no boundary protection layer exists."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "1-180",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Provider adapter wraps Claude Agent SDK but contains NO hooks or guards that check or block file writes to target project paths.",
+      "why": "Agent execution layer shows no boundary enforcement mechanism."
+    },
+    {
+      "path": "src/demand/runtime.ts",
+      "line": "350-420",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime manages agent spawning and evidence collection but does NOT validate or block agent tool use before execution.",
+      "why": "Agent lifecycle code lacks boundary audit integration."
+    },
+    {
+      "path": "runner.ts",
+      "line": "1-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Main runner entry point has NO global boundary protection or file-write guards.",
+      "why": "Top-level execution lacks harness boundary enforcement."
+    },
+    {
+      "path": ".yolo/demand/",
+      "line": "N/A",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Directory exists with state files but NO evidence output or boundary audit logs present.",
+      "why": "No prior boundary audit artifacts exist in state directory."
+    },
+    {
+      "path": "package.json",
+      "line": "1-80",
+      "scope": "project",
+      "source": "project_config",
+      "summary": "No dependencies related to file-system monitoring, write-blocking, or boundary auditing.",
+      "why": "Project lacks tooling for runtime boundary enforcement."
+    }
+  ],
+  "assumptions": [
+    "The demand protocol expects evidence agents to self-regulate without harness enforcement.",
+    "Claude Agent SDK agents launched by provider-adapter have full tool access unless explicitly restricted.",
+    "Current 'careful' route is a semantic label only, not a technical constraint.",
+    "Evidence dispatch was planned (src/demand/evidence-dispatch.ts in scope_in) but never implemented."
+  ],
+  "risks": [
+    "Full-tool agents can mutate target project files during evidence gathering, corrupting the working tree.",
+    "No rollback or recovery mechanism exists if an agent modifies protected files.",
+    "Cross-check evidence agents could disagree on facts while both have write access.",
+    "Demand system treats 'evidence_guarded' mode as enforced when it is only ceremonial."
+  ],
+  "missing": [
+    "Actual implementation of src/demand/evidence-dispatch.ts",
+    "Any PreToolUse or PostToolUse hook that validates agent writes during evidence collection",
+    "Harness boundary audit logs or enforcement mechanism",
+    "Read-only mode or filesystem isolation for evidence agents",
+    "Integration between evidence protocol and Claude Agent SDK tool permissions"
+  ],
+  "recommendation": "block",
+  "result": {
+    "verdict": "blocked",
+    "notes": "The demand cites src/demand/evidence-dispatch.ts as scope-in but the file does not exist. The router and provider adapter have NO boundary audit or file-write blocking. Evidence agents currently have full tool access; 'careful' route is a label, not a technical constraint. PRD readiness must remain blocked until boundary enforcement is implemented or evidence agents are explicitly restricted to read-only tools."
+  }
+}

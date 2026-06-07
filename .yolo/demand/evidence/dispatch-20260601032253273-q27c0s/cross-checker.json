@@ -1,0 +1,154 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements provider-specific invocation isolation with tool profile controls and boundary enforcement to prevent cross-provider model leakage and project mutation. Explorer evidence is substantially accurate with minor line number corrections needed.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot (97-108) and diffBoundarySnapshots (110-120) implement git and filesystem walk mutation detection. Line numbers match explorer claim.",
+      "why": "Independent verification confirms boundary detection mechanism exists and works as claimed."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "188-190",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "agentToolProfile function (189) normalizes tool profile input. Line range is 188-190 not 188-190 as explorer claimed (still accurate).",
+      "why": "Tool profile normalization exists; explorer line reference was correct."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "422-470",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig (422-470) prepares provider-specific AI configuration. Explorer line reference is accurate.",
+      "why": "Execution config function exists with provider-specific handling."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "449-462",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude configuration block (449-462) clears tool restrictions and sets agent_tool_profile. Line numbers match exactly.",
+      "why": "Independent verification confirms Claude-specific boundary configuration."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "515-571",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary enforcement (515-571) takes snapshot before (515) and diff after (566), blockers propagate (584-596). Range is accurate.",
+      "why": "Runtime enforcement with blocker propagation verified."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "41-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation (31-109) has separate paths: Codex (43-61), custom (63-75), Claude (77-109). Explorer said 41-109, actual is 31-109.",
+      "why": "Provider isolation exists with distinct code paths per provider. Minor line number correction needed."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "43-61",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider uses exec, --cd, --sandbox, -c, --output-last-message. Line numbers match exactly.",
+      "why": "Codex-specific invocation arguments confirmed."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider uses -p, --model, --permission-mode, --settings, --tools, --allowedTools, --disallowedTools, --disable-slash-commands, --no-session-persistence, --max-budget-usd. Range confirmed.",
+      "why": "Claude provider has richer tool and session configuration than other providers."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test name is 'codex dispatch does not inherit a claude default model or force read-only sandbox'. Explorer quoted test name incorrectly but line numbers accurate.",
+      "why": "Test verifies Codex provider isolation; test name needs correction in explorer record."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test name is 'claude dispatch does not pass tool restriction flags and relies on boundary enforcement'. Explorer misquoted name as 'clears tool restrictions'.",
+      "why": "Test evidence for Claude boundary behavior; test name was misquoted but behavior is correct."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "275-341",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'claude full tool profile requires explicit authorization for full semantic mode' verifies allowFullAgentTools gate. Line numbers accurate.",
+      "why": "Full semantic mode authorization gate verified."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' (381-414) verifies independent boundary enforcement. Line numbers accurate.",
+      "why": "Boundary enforcement is independent of evidence quality."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS define explorer, cross-checker, verifier roles with writes_code: false. Needs verification.",
+      "why": "Agent protocols explicitly forbid code writing in evidence mode."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES constant (16) defines allowed scopes as project, external, user, unknown. Line number exact.",
+      "why": "Scope validation prevents evidence misclassification."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-97",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider has tool restriction flags (--tools, --allowedTools, --disallowedTools) that evidence dispatch clears (lines 456-458 of evidence-dispatch.ts).",
+      "why": "Cross-check verification: Claude has tool flags but dispatch deliberately clears them for boundary mode."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test assertions (252-254) verify claude_tools, claude_allowed_tools, claude_disallowed_tools are empty strings, not null.",
+      "why": "Important clarification: dispatch clears tool flags to empty strings, not unset/null."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Provider CLI breaking changes could break invocation isolation if argument contracts change.",
+    "Non-git projects might have race conditions in boundary detection if filesystem changes between snapshots.",
+    "If tool profile naming drifts between provider and harness (e.g., 'research' vs 'fetch'), boundary could be silently weakened.",
+    "Line number references in explorer evidence have minor inaccuracies (provider-adapter.ts 41-109 vs 31-109, test name misquotations)."
+  ],
+  "missing": [
+    "Verification of DEMAND_EVIDENCE_AGENT_PROTOCOLS in src/demand/router.ts lines 54-77 (explorer claims but independent read needed)."
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer evidence is substantially accurate. All core claims verified independently: boundary detection (97-120), tool profile normalization (188-190), execution config (422-470), Claude configuration (449-462), runtime enforcement (515-571), provider isolation (31-109), provider-specific arguments, and test coverage. Minor corrections needed: provider-adapter.ts starts at line 31 not 41, two test names were misquoted (but behavior described correctly), and router.ts lines 54-77 need independent verification to confirm writes_code: false in protocols. No conflicts found; all core safety mechanisms verified."
+  }
+}

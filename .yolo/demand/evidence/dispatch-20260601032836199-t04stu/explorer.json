@@ -1,0 +1,142 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch API/schema supports research/fetch style evidence with proper scope separation between external and project facts, including WebFetch/WebSearch capabilities marked as scope=external.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 16,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES defines four valid scopes: project, external, user, unknown",
+      "why": "Establishes the foundational scope taxonomy for evidence classification"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "271-275",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt instructions explicitly state: evidence records must declare scope, project facts require project-scoped evidence with paths, WebFetch/WebSearch should be marked scope=external and not used as project facts",
+      "why": "Core behavioral contract for evidence agents to properly separate external from project facts"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-157",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors function validates that each evidence record declares scope as project, external, user, or unknown",
+      "why": "Runtime validation enforcement of scope declarations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "308-315",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Result schema requires evidence records with path (for project scope), url (for external scope), scope, source, summary, why fields",
+      "why": "Structural schema enforces proper evidence record shape including scope field"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": 52,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES constant same set: project, external, user, unknown",
+      "why": "Confirms consistent scope definition across router and dispatch modules"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function implements scope detection logic with multiple heuristics: explicit scope field, URL patterns, source field prefixes, path presence",
+      "why": "Sophisticated scope inference when explicit declaration missing"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope checks for explicit scope field values; evidenceRecordHasProjectLocator checks for repo-relative path",
+      "why": "Validation helpers ensure proper evidence record structure"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function blocks when evidence lacks project scope despite project claims, or when only non-project scopes exist for project facts",
+      "why": "Core enforcement preventing external/user evidence from standing for project facts"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "475-479",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "requiredEvidenceRoles maps cross_check policy to [explorer, cross-checker, verifier] and single_agent to [explorer, verifier]",
+      "why": "Shows evidence agent orchestration supports different rigor levels"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross-checker, verifier protocols with writes_code: false",
+      "why": "Agent role definitions and behavioral contracts including read-only constraint"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot creates file digest map excluding allowed write roots; gitFiles and walkFiles collect project file inventory",
+      "why": "Implementation of boundary detection for project mutation protection"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "110-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after digests to detect added, modified, deleted files",
+      "why": "Boundary violation detection algorithm for post-execution safety audit"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "565-571",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-execution boundary diff creates BOUNDARY_PROJECT_MUTATION blockers for any detected changes outside allowed artifact roots",
+      "why": "Runtime enforcement converting boundary violations into readiness blockers"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": 66,
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Dispatch runs boundary audits before/after, converts violations to blockers, requires project-scoped path evidence for facts, external evidence only background",
+      "why": "Product documentation confirming intended behavior of evidence scope separation"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": 70,
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Evidence records must declare scope; project evidence requires repo-relative path; external evidence cannot prove project fields/APIs alone",
+      "why": "Product doctrine explicitly separating external from project evidence requirements"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "External evidence might be mistakenly promoted to project facts if scope validation fails or is bypassed",
+    "WebFetch/WebSearch tools might be unavailable in some provider environments causing external research to fail silently"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The YOLO demand evidence dispatch API/schema fully supports research/fetch style evidence with proper scope separation. Evidence records must declare scope as project, external, user, or unknown. Project facts require project-scoped evidence with repo-relative paths. WebFetch/WebSearch are explicitly allowed and should be marked scope=external. Boundary auditing prevents project mutations. Multiple validation layers enforce these constraints."
+  }
+}

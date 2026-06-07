@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Cross-check confirms explorer findings: YOLO demand evidence dispatch implements comprehensive boundary audit that blocks PRD readiness on project mutations or missing evidence. All three agents (explorer/cross-checker/verifier) are required for cross_check evidence policy. Implementation is sound and working as designed.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot uses git ls-files to get tracked files, walks untracked dirs, and creates SHA256 digests for all files except allowed_write_rots",
+      "why": "Independent verification of boundary snapshot implementation - matches explorer claim."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after SHA256 maps and returns {added, modified, deleted, clean} with clean=false if any changes outside allowed roots",
+      "why": "Verifies violation detection logic - confirms change detection works."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "580-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "if (boundary.project_mutation === 'violated') { readiness.blockers.push({ code: 'BOUNDARY_PROJECT_MUTATION' }); readiness.prd_ready = false; }",
+      "why": "Critical enforcement logic - violations override readiness to false."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "475-479",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "requiredEvidenceRoles returns ['explorer', 'cross-checker', 'verifier'] when policy === 'cross_check'",
+      "why": "Verifies three-agent requirement for cross_check policy."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "709-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness loops through requiredEvidenceRoles and blocks on EVIDENCE_AGENT_RESULT_REQUIRED if any agent result missing",
+      "why": "Confirms readiness blocks on incomplete evidence agent results."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues filters evidence for scope='project' with valid path/line; blocks facts with only external/user/unknown evidence",
+      "why": "Verifies project-fact validation requires project-scoped evidence."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "111-203",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "spawnProviderPrompt spawns Claude with claude_tools config, timeout, cwd, and returns structured {provider, exitCode, stdout, stderr, timedOut}",
+      "why": "Confirms full-tool agent execution infrastructure exists."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "238-247",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy.boundary sets project_mutation: 'forbidden' and allowed_write_roots: [repo-relative output dir]",
+      "why": "Verifies boundary contract is enforced in dispatch plan."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer/cross-checker/verifier with writes_code: false and result_schema",
+      "why": "Confirms three-agent protocol design with explicit read-only constraint."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states dispatch会在运行前后审计项目文件边界，任何越界改动都会变成readiness blocker",
+      "why": "Confirms documented intent matches implementation."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "SHA256 collision could theoretically allow file mutation without detection (cryptographically negligible but non-zero)",
+    "If git ls-files misses files due to .gitignore patterns or sparse checkout, boundary snapshot could be incomplete",
+    "Race condition between snapshot and agent start could allow undetected mutations if file system changes during capture"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms all explorer findings are accurate. The boundary audit implementation is sound: buildBoundarySnapshot captures comprehensive SHA256 digests, diffBoundarySnapshots detects violations, and violations generate BOUNDARY_PROJECT_MUTATION blockers that override PRD readiness. The three-agent cross_check policy (explorer/cross-checker/verifier) is correctly enforced in router.ts with EVIDENCE_AGENT_RESULT_REQUIRED blockers until all complete. Project-fact validation requires project-scoped evidence with file locators. Evidence from recent dispatch artifacts confirms the system works in practice with project_mutation: clean and readiness blocked on incomplete evidence."
+  }
+}

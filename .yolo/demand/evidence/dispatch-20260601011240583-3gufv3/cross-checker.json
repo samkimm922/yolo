@@ -1,0 +1,126 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Cross-check confirms: YOLO demand evidence system implements scope discrimination across schema, dispatch, readiness checks, and tests; project evidence requires repo-relative paths and external evidence is explicitly marked.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence schema with scope field required; explicitly states 'project facts require project-scoped evidence' in field documentation",
+      "why": "Core schema contract enforces scope discrimination at the data structure level"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "380-404",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() classifies evidence by checking scope field, URLs, source patterns, and file paths; returns normalized values: project, external, user, unknown",
+      "why": "Scope classification determines how each evidence record is categorized and validated"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "494-511",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() generates blockers when evidence lacks project scope or project-scoped evidence has no file locator; codes: PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE, PROJECT_EVIDENCE_PATH_REQUIRED",
+      "why": "PRD readiness enforcement blocks project facts without proper project-scoped evidence"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "266-267",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rules: 'Every evidence record must include scope: project, external, user, or unknown' and 'Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path'",
+      "why": "Evidence dispatch instructs agents to enforce scope discrimination through explicit hard rules"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "147-153",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "sanitizeMissing() filters status notes like 'no missing data identified', 'all complete', 'no conflicts' from missing arrays using isNonMissingStatusItem() pattern matching",
+      "why": "Prevents status notes from being treated as actual missing data blockers"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "545-576",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "After agent execution, boundary snapshot diff detects mutations; BOUNDARY_PROJECT_MUTATION blockers added to readiness when project files outside allowed roots are modified",
+      "why": "Runtime boundary violation detection prevents agents from modifying target project during evidence gathering"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' verifies evidence with scope=external and url triggers PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker",
+      "why": "Test evidence that external sources cannot substitute for project facts"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "387-431",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'project evidence requires a concrete project locator' verifies project-scoped evidence without path triggers PROJECT_EVIDENCE_PATH_REQUIRED blocker",
+      "why": "Test evidence that project facts require concrete file paths"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "433-473",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'non-missing status notes in missing arrays do not block readiness' verifies sanitizeMissing() filters status notes like 'No missing data identified' from blocking PRD readiness",
+      "why": "Test evidence for sanitizeMissing() filter that prevents status notes from blocking"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "378-411",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' verifies agents modifying project files outside allowed root triggers BOUNDARY_PROJECT_MUTATION blocker and blocks readiness",
+      "why": "Test evidence that boundary enforcement detects and blocks project mutation"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "147-182",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'executes explorer cross-checker and verifier then feeds results into readiness' verifies agent execution sequence and that successful results pass PRD readiness",
+      "why": "Test evidence that evidence agents execute in correct order and feed results into readiness"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "19-27",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "projectEvidence() helper creates project-scoped evidence with path='src/api/accounts.ts', scope='project', source='project_code'; demonstrates correct evidence record structure",
+      "why": "Test utility demonstrates correct evidence record structure for project facts"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Evidence agents may ignore scope hard rules and cite external web research as proof of project state",
+    "Agents may present user claims or assumptions as project facts without project-scoped evidence",
+    "Claude JSON drift may cause agents to return invalid or malformed evidence records that bypass scope checks",
+    "Boundary detection may miss mutations in untracked files or non-git repositories",
+    "Evidence dispatch has not been stress-tested with real Claude -p agents in a dirty working tree"
+  ],
+  "missing": [
+    "Real Claude agent execution evidence from actual dispatch runs in a working git repository",
+    "Evidence that scope field values are enforced at parse time, not just checked at readiness",
+    "Test coverage for edge cases: mixed scope evidence in single result, conflicting scope classifications, malformed URLs or paths",
+    "Evidence that sanitizeMissing() correctly filters all status note patterns across agent outputs"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Cross-check confirms all 15 evidence points from explorer are accurate based on independent file reads. Scope discrimination is properly implemented across schema (lines 37-50), classification logic (lines 380-404), blocking enforcement (lines 494-511), agent prompts (lines 266-267), boundary detection (lines 545-576), and comprehensive test coverage. Primary verification gap remains: lack of real-world stress testing with actual Claude agents in a dirty working tree, as noted in the demand status_quo."
+  }
+}

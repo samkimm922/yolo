@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer's factual claim is verified: YOLO demand evidence dispatch boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root. The implementation is complete with test coverage showing detection capability for the required file types.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() implementation using git ls-files -co --exclude-standard captures tracked, cached, and other/untracked files",
+      "why": "Verifies the core mechanism for git-backed project boundary coverage."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Unit test explicitly validates untracked file detection via BOUNDARY_PROJECT_MUTATION blocker",
+      "why": "Provides test evidence that the 'other' category from git ls-files -co is actually covered."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() combines gitFiles() and walkFiles() fallback with allowedRoots exclusion logic",
+      "why": "Verifies the complete boundary snapshot implementation matches acceptance criteria."
+    },
+    {
+      "path": ".yolo/stress/claude-stress-20260601012759072/ledger.json",
+      "line": "1-1009",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Stress test ledger shows 15 real Claude agent iterations all completed with boundary='clean'",
+      "why": "Provides real-world execution evidence supporting the claim that boundary detection works in practice."
+    }
+  ],
+  "assumptions": [
+    "git ls-files -co --exclude-standard behavior is consistent across git versions",
+    "SHA256 digests are sufficient for mutation detection",
+    "walkFiles() excluded directories list covers common non-git project cases",
+    "Real Claude agents in stress tests did not attempt file mutations (absence of attempts ≠ evidence of prevention capability)"
+  ],
+  "risks": [
+    "If walkFiles() encounters filesystem errors or permission issues, non-git project coverage may be incomplete",
+    "No test evidence for projects with 10000+ files to verify snapshot performance",
+    "Nested .yolo/demand/evidence/dispatch-* directory exclusion is not explicitly tested",
+    "Stress tests show clean boundaries but don't prove agents can't mutate - absence is not evidence of prevention"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer evidence is comprehensive and properly scoped. All factual claims are backed by project code or test evidence with exact paths. Assumptions are clearly separated from facts and appropriately documented. Missing items identified by explorer (large-scale tests, nested exclusion tests, stress tests with actual mutation attempts) are real gaps but don't block the core claim verification. The acceptance criteria 'Boundary snapshots cover git ls-files tracked/cached/other files plus fallback walks and exclude only the dispatch artifact root' is met by the implementation. Post-execution detection vs prevention limitation is appropriately acknowledged."
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch API supports research/fetch style evidence with explicit scope separation; project facts require project-scoped path evidence, while external research is marked as scope=external and cannot prove project implementation facts.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 16,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES Set enforces valid scope values: project, external, user, unknown",
+      "why": "Defines the four allowed evidence scopes that separate project facts from external research."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "341-344",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt explicitly requires: 'Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator.' and 'If the demand explicitly asks for external research/fetch/search, actually use an available web/fetch/search-capable tool...Record those records as scope=external'",
+      "why": "Hard constraint that project facts need project-scoped evidence with paths; external research must be marked scope=external."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": 52,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES Set validates scope values: project, external, user, unknown",
+      "why": "Router enforces same scope validation as dispatch."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION requires evidence array with scope field and clarifies: 'scope is project | external | user | unknown; project facts require project-scoped evidence'",
+      "why": "Schema contract explicitly separates project facts from external evidence."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues function blocks PRD readiness when: 1) evidence marked project-scoped lacks repo-relative path, 2) evidence is non-project scopes only. Error: 'existing-project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts'",
+      "why": "Readiness gate prevents non-project evidence from proving project facts."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70-71",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'evidence records must declare scope: project, external, user, or unknown. project evidence from target projects code, tests, docs, config, logs, or artifacts, and must bring repo-relative path or file locator; external evidence can come from WebFetch/WebSearch, MCP web reader, browser fetch or external docs, but can only be background research, cannot singly prove target project already has fields, API, state machine or data flow'",
+      "why": "Product doctrine explicitly forbids using external evidence to prove project implementation facts."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "663-668",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "externalResearchBlockers check adds EXTERNAL_RESEARCH_EVIDENCE_REQUIRED blocker when: 'demand explicitly requested external web/fetch/search evidence, but no agent result included scope=external evidence with a URL or external source'",
+      "why": "Dispatch enforces that external research requests must produce external-scoped evidence."
+    },
+    {
+      "url": "https://example.com",
+      "scope": "external",
+      "source": "external_web",
+      "summary": "Example Domain page content: 'This domain is for use in documentation examples without needing permission'",
+      "why": "Demonstrates external web fetch tool working as required by demand text; this is external background evidence, not a project fact."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function infers scope from record structure; returns 'external' for URLs starting with http/https or source starting with 'external_'/'web_'/'research'; returns 'project' for paths or sources starting with 'project_'/'code'/'test'/'docs'/'config'/'log'/'artifact'",
+      "why": "Scope inference logic separates external web research from project file evidence."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "479-490",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors function validates each evidence record has valid scope; invalid scope causes status='blocked', recommendation='block', and adds EVIDENCE_SCOPE_REQUIRED error to missing array",
+      "why": "Runtime validation blocks agents that omit scope field or use invalid values."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "638-644",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary audit: buildBoundarySnapshot creates SHA256 digest of all project files before agent execution; diffBoundarySnapshots compares before/after to detect any mutations; changes outside allowed_write_roots become BOUNDARY_PROJECT_MUTATION blockers",
+      "why": "Prevents target project modification during evidence gathering, even with full tools available."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If scope validation or project-evidence blocking logic has bugs, external evidence could incorrectly prove project facts",
+    "If agent providers ignore scope instructions or misclassify evidence, PRD readiness could pass on invalid claims"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All three scope_in files exist and implement scope separation as designed. External research tools are available and produce scope=external evidence. Readiness gates explicitly block project facts without project-scoped path evidence and block external-research requests that lack external evidence."
+  }
+}

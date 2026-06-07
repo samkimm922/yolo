@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence is factually sound: all code paths, line numbers, and test assertions exist and match the claimed functionality. No assumptions are presented as facts. Missing data is properly empty, and risks are identified separately from evidence.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "322-337",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate() verified: contains three repair regex patterns for line ranges, empty keys, and trailing commas. Returns parsed object on success or null with error message on failure.",
+      "why": "Confirms JSON repair implementation matches explorer claim at exact line range."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "361-388",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult() verified: returns EVIDENCE_AGENT_INVALID_JSON when parsed is null, populates missing array with parse error, and sets verdict to blocked.",
+      "why": "Confirms fail-closed behavior with explicit blocker code matches explorer claim."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "546-583",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary enforcement and PRD readiness integration verified: diffBoundarySnapshots detects mutations, BOUNDARY_PROJECT_MUTATION blockers are added for violations, and finalReadiness.prd_ready determines result status.",
+      "why": "Confirms boundary and PRD readiness flow matches explorer claim."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "451-486",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "JSON repair test verified: injects '42-88' line range and empty key '\" \"summary' into fake agent output, asserts result.status is pass and json_repaired flag is true.",
+      "why": "Confirms test validates JSON repair behavior as explorer claimed."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "488-518",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Invalid JSON test verified: spawns provider with 'not json' output, asserts status blocked, error_code EVIDENCE_AGENT_INVALID_JSON, and blocker exists in readiness.blockers.",
+      "why": "Confirms test validates fail-closed behavior with explicit blocker code."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "378-449",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Boundary tests verified: one test writes unexpected-project-write.txt and asserts BOUNDARY_PROJECT_MUTATION blocker, another test uses git init and asserts untracked file detection.",
+      "why": "Confirms boundary enforcement tests match explorer claims."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "520-563",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Agent conflict test verified: cross-checker returns recommendation: block with conflict evidence, asserts result.status blocked, prd_ready false, and EVIDENCE_AGENT_CONFLICT blocker exists.",
+      "why": "Confirms PRD readiness integration test matches explorer claim."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Dirty working tree exists in target project, but git-backed boundary detection is tested and working tree state does not affect evidence verification accuracy."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All explorer evidence verified against source files. Line numbers, code paths, and test assertions match claims exactly. No assumptions promoted to facts. Acceptance criteria fully covered by implementation and tests."
+  }
+}

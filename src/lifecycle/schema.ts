@@ -9,7 +9,7 @@ export const LIFECYCLE_STAGES = [
     label: "Idea intake",
     purpose: "Capture the original user idea before planning or implementation.",
     default_artifact: "idea.json",
-    entry_commands: ["yolo", "yolo-discover"],
+    entry_commands: ["yolo", "yolo-brainstorm", "yolo-interview", "yolo-discover"],
     writes_code: false,
   },
   {
@@ -18,7 +18,7 @@ export const LIFECYCLE_STAGES = [
     label: "Discovery",
     purpose: "Clarify problem, audience, success criteria, constraints, and unknowns.",
     default_artifact: "discovery.json",
-    entry_commands: ["yolo-discover"],
+    entry_commands: ["yolo-interview", "yolo-discuss", "yolo-discover"],
     writes_code: false,
   },
   {
@@ -27,7 +27,7 @@ export const LIFECYCLE_STAGES = [
     label: "Project setup",
     purpose: "Initialize YOLO state, memory, specs, agent bridge, and project policy.",
     default_artifact: "setup.json",
-    entry_commands: ["yolo-init", "yolo-install", "yolo-doctor"],
+    entry_commands: ["yolo-init", "yolo-setup", "yolo-install", "yolo-doctor"],
     writes_code: false,
   },
   {

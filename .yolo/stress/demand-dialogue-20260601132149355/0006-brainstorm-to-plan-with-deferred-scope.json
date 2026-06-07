@@ -1,0 +1,78 @@
+{
+  "iteration": 6,
+  "scenario": "brainstorm-to-plan-with-deferred-scope",
+  "expected": "executable",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601132149355/fixtures/0006-brainstorm-to-plan-with-deferred-scope",
+  "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601132149355/fixtures/0006-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md",
+  "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601132149355/fixtures/0006-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.chain.json",
+  "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601132149355/fixtures/0006-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope-turn-3.prd.json",
+  "blocked_path": null,
+  "yolo": {
+    "no_premature_prd": true,
+    "final_class_ok": true,
+    "check_status": "pass",
+    "turn_count": 3,
+    "turn_expectations_met": 3,
+    "blocker_codes": [
+      "REFLECTION_PRESENT",
+      "INVESTIGATION_COMPLETE",
+      "REQUIREMENTS_PRESENT",
+      "ACCEPTANCE_SCENARIOS_PRESENT",
+      "SCENARIO_MATRIX_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "SCENARIO_SURFACES_PRESENT",
+      "SURFACE_SESSION_BUDGET_EXECUTABLE",
+      "OUT_OF_SCOPE_PRESENT",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "USER_APPROVAL_PRESENT"
+    ]
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "correct_final_class": true,
+      "conversation_realistic": true,
+      "no_premature_prd": true,
+      "executable": true,
+      "score": 95,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "RESOLVER_UNKNOWN_CONTEXT",
+          "path": "brainstorm-to-plan-with-deferred-scope.check.json",
+          "message": "Resolver warnings on unknown/custom for platform_adapter, stack_adapter, component_adapter, design_reference_pack, quality_rule_pack. Expected for stress fixture but would be blocking in a real project."
+        },
+        {
+          "code": "DEFERRED_SCOPE_IMPLICIT",
+          "path": "brainstorm-to-plan-with-deferred-scope-turn-3.prd.json",
+          "message": "User's original 'maybe prevent many exceptions in the future' is deferred implicitly by narrowing to negative-quantity MVP. The out-of-scope section captures UI redesign and normalization but does not explicitly enumerate the deferred excep"
+        }
+      ],
+      "dimensions": {
+        "clarification_quality": 9,
+        "project_fact_grounding": 9,
+        "stage_transition": 10,
+        "plan_convergence": 9,
+        "prd_executability": 10,
+        "deadlock_avoidance": 10,
+        "rework_risk": 9
+      }
+    },
+    "stdout": "",
+    "stderr": ""
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T13:26:40.019Z",
+  "ended_at": "2026-06-01T13:27:48.195Z",
+  "duration_ms": 68176
+}

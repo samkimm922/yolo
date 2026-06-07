@@ -165,6 +165,172 @@ export function cleanupRunArtifacts({
   return { cleanedCount, worktreeCleanup };
 }
 
+const RUN_ERROR_STATUSES = new Set(["blocked", "error", "failed", "fail"]);
+const RUN_ATTENTION_STATUSES = new Set(["needs_attention", ...RUN_ERROR_STATUSES]);
+
+function cleanStatus(value) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function asArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value == null || value === false) return [];
+  return [value];
+}
+
+function countItems(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).length;
+  if (typeof value === "number") return Number.isFinite(value) && value > 0 ? value : 0;
+  if (typeof value === "string") return value.trim() ? 1 : 0;
+  if (value instanceof Error) return 1;
+  if (value && typeof value === "object") return Object.keys(value).length > 0 ? 1 : 0;
+  return value === true ? 1 : 0;
+}
+
+function positiveNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : 0;
+}
+
+function pushIssue(issues, code, detail, count = 1) {
+  if (count <= 0) return;
+  issues.push({ code, count, detail });
+}
+
+function reportStatusValues(report = {}) {
+  return [
+    report.status,
+    report.verdict,
+    report.outcome,
+    report.result?.status,
+    report.report?.status,
+    report.report?.verdict,
+    report.report?.outcome,
+    report.report?.result?.status,
+  ].map(cleanStatus).filter(Boolean);
+}
+
+function reportHasErrorStatus(report = {}) {
+  return reportStatusValues(report).some((status) => RUN_ERROR_STATUSES.has(status));
+}
+
+function pathCount(value) {
+  return typeof value === "string" && value.trim() ? 1 : 0;
+}
+
+function collectTaskResultStatusIssues(result = {}) {
+  const issues = [];
+  const statusValues = reportStatusValues(result);
+  pushIssue(issues, "RUNNER_RESULT_STATUS_ERROR", "runner result status is not clean", statusValues.some((status) => RUN_ERROR_STATUSES.has(status)) ? 1 : 0);
+  pushIssue(issues, "RUNNER_RESULT_ERRORS", "runner result contains errors", countItems(result.error) + countItems(result.errors));
+  return issues;
+}
+
+function collectRunArtifactIssues(runReportResult = {}) {
+  const issues = [];
+  pushIssue(issues, "RUN_REPORT_ARTIFACT_MISSING", "run report JSON artifact is missing", pathCount(runReportResult.json_path) ? 0 : 1);
+  pushIssue(issues, "RUN_REPORT_MARKDOWN_MISSING", "run report markdown artifact is missing", pathCount(runReportResult.markdown_path) ? 0 : 1);
+  pushIssue(issues, "FINAL_ANSWER_ARTIFACT_MISSING", "final answer JSON artifact is missing", pathCount(runReportResult.final_answer_json_path) ? 0 : 1);
+  pushIssue(issues, "FINAL_ANSWER_MARKDOWN_MISSING", "final answer markdown artifact is missing", pathCount(runReportResult.final_answer_markdown_path) ? 0 : 1);
+  return issues;
+}
+
+function collectRunReportIssues(runReportResult = {}, { requireArtifacts = false } = {}) {
+  const issues = [];
+  const report = runReportResult.report || runReportResult.run_report || runReportResult.runReport || null;
+  const finalAnswer = runReportResult.final_answer || runReportResult.finalAnswer || null;
+
+  pushIssue(issues, "RUN_REPORT_WRITE_ERROR", "run report writer returned an error", countItems(runReportResult.error));
+  pushIssue(issues, "RUN_REPORT_WRITE_ERRORS", "run report writer returned errors", countItems(runReportResult.errors));
+  if (requireArtifacts) {
+    pushIssue(issues, "RUN_REPORT_MISSING", "run report writer did not return a report object", report ? 0 : 1);
+    pushIssue(issues, "FINAL_ANSWER_MISSING", "run report writer did not return a final answer object", finalAnswer ? 0 : 1);
+    issues.push(...collectRunArtifactIssues(runReportResult));
+  }
+
+  if (report) {
+    pushIssue(issues, "RUN_REPORT_STATUS_ERROR", "run report status is not clean", reportHasErrorStatus(report) ? 1 : 0);
+    pushIssue(issues, "RUN_REPORT_ERRORS", "run report contains errors", countItems(report.errors) + countItems(report.error));
+    pushIssue(issues, "EVIDENCE_FAILURES", "run report contains evidence failures", positiveNumber(report.summary?.evidence_failures ?? report.evidence_failure_count ?? report.evidence_failures));
+    pushIssue(issues, "REVIEW_ISSUES", "run report contains review issues", positiveNumber(report.review?.issue_count));
+    pushIssue(issues, "REVIEW_ERRORS", "run report contains review errors", positiveNumber(report.review?.error_count));
+    pushIssue(issues, "GATE_FAILURES", "run report contains gate failures", positiveNumber(report.gates?.failed_count));
+    pushIssue(issues, "FIXTURE_FAILURES", "run report contains fixture failures", positiveNumber(report.fixtures?.fail_count));
+    pushIssue(issues, "SPEC_GOVERNANCE_BLOCKED", "run report contains spec governance blockers", positiveNumber(report.spec_governance?.blocked_count));
+    pushIssue(issues, "HUMAN_REMEDIATION_REQUIRED", "run report requires human remediation", positiveNumber(report.remediation?.human_required_count));
+    pushIssue(issues, "UNSAFE_REMEDIATION_STOP", "run report contains unsafe remediation stops", positiveNumber(report.remediation?.unsafe_stop_count));
+    pushIssue(issues, "EVIDENCE_ERRORS", "run report evidence contains errors", countItems(report.evidence?.errors) + positiveNumber(report.evidence?.error_count));
+    pushIssue(issues, "EVIDENCE_FAILURE_COUNT", "run report evidence contains failures", positiveNumber(report.evidence?.failure_count ?? report.evidence?.failed_count));
+  }
+
+  if (finalAnswer) {
+    const status = cleanStatus(finalAnswer.status);
+    const outcome = cleanStatus(finalAnswer.outcome);
+    pushIssue(issues, "FINAL_ANSWER_STATUS_ERROR", "final answer status is not clean", RUN_ERROR_STATUSES.has(status) ? 1 : 0);
+    pushIssue(issues, "FINAL_ANSWER_NEEDS_ATTENTION", "final answer outcome needs attention", RUN_ATTENTION_STATUSES.has(outcome) ? 1 : 0);
+    pushIssue(issues, "FINAL_ANSWER_BLOCKERS", "final answer contains blockers", countItems(finalAnswer.blockers));
+    pushIssue(
+      issues,
+      "FINAL_ANSWER_CHECK_FAILURES",
+      "final answer contains failed checks",
+      asArray(finalAnswer.checks).filter((check) => RUN_ERROR_STATUSES.has(cleanStatus(check?.status))).length,
+    );
+  }
+
+  return issues;
+}
+
+function collectSkippedIssues(result = {}) {
+  const skipped = asArray(result.skipped);
+  const abnormal = skipped.filter((item) => {
+    if (!item || typeof item !== "object") return false;
+    const status = cleanStatus(item.status || item.result?.status || item.skip_status);
+    const skipKind = cleanStatus(item.skip_kind || item.skipKind || item.reason);
+    return RUN_ERROR_STATUSES.has(status) ||
+      item.error ||
+      item.errors ||
+      item.counts_as_completed === false ||
+      skipKind.includes("blocked") ||
+      skipKind.includes("invalid") ||
+      skipKind.includes("error");
+  });
+  return abnormal.length +
+    positiveNumber(result.skipped_error_count ?? result.skipped_errors_count) +
+    countItems(result.skipped_errors ?? result.invalid_skipped);
+}
+
+function verdictSummary(issues = []) {
+  return issues.map((issue) => `${issue.code}=${issue.count}`).join(", ");
+}
+
+export function buildRunFinalVerdict({
+  taskResults = {},
+  runReportResult = {},
+  failOnSkippedIssues = false,
+  requireRunArtifacts = false,
+} = {}) {
+  const issues = [];
+  const failedCount = asArray(taskResults.failed).length;
+  const blockedCount = asArray(taskResults.blocked).length;
+  const contractReviewCount = asArray(taskResults.contractReview || taskResults.contract_review).length;
+
+  issues.push(...collectTaskResultStatusIssues(taskResults));
+  pushIssue(issues, "FAILED_TASKS", "runner has failed tasks", failedCount);
+  pushIssue(issues, "BLOCKED_TASKS", "runner has blocked tasks", blockedCount);
+  pushIssue(issues, "CONTRACT_REVIEW_TASKS", "runner has tasks pending contract review", contractReviewCount);
+  if (failOnSkippedIssues) {
+    pushIssue(issues, "SKIPPED_TASK_ERRORS", "runner has abnormal skipped tasks", collectSkippedIssues(taskResults));
+  }
+  issues.push(...collectRunReportIssues(runReportResult, { requireArtifacts: requireRunArtifacts && issues.length === 0 }));
+
+  return {
+    status: issues.length === 0 ? "success" : "error",
+    exit_code: issues.length === 0 ? 0 : 1,
+    summary: issues.length === 0 ? "runner completed" : `runner failed closed: ${verdictSummary(issues)}`,
+    issues,
+  };
+}
+
 export function buildRunReturnResult({
   runId,
   prdPath,
@@ -172,10 +338,12 @@ export function buildRunReturnResult({
   runReportResult,
   normalizeRepoPath = (value) => value,
 } = {}) {
-  const exitCode = taskResults.failed.length > 0 ? 1 : 0;
+  const finalVerdict = buildRunFinalVerdict({ taskResults, runReportResult, requireRunArtifacts: true });
+  const exitCode = finalVerdict.exit_code;
+  const contractReview = taskResults.contractReview || taskResults.contract_review || [];
   return {
-    status: exitCode === 0 ? "success" : "error",
-    summary: exitCode === 0 ? "runner completed" : `runner completed with ${taskResults.failed.length} failed task(s)`,
+    status: finalVerdict.status,
+    summary: finalVerdict.summary,
     exit_code: exitCode,
     run_id: runId,
     prd: prdPath,
@@ -183,8 +351,10 @@ export function buildRunReturnResult({
     failed: taskResults.failed,
     skipped: taskResults.skipped,
     blocked: taskResults.blocked || [],
+    contract_review: contractReview,
     remediation: taskResults.remediation || [],
     immediate_remediation_queue: taskResults.immediateRemediationQueue || [],
+    final_verdict: finalVerdict,
     report_file: normalizeRepoPath(runReportResult.json_path),
     report_markdown: normalizeRepoPath(runReportResult.markdown_path),
     ...(runReportResult.final_answer_json_path ? { final_answer_file: normalizeRepoPath(runReportResult.final_answer_json_path) } : {}),

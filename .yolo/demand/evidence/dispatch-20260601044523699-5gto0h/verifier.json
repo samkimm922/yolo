@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence is valid: 4 JSON drift patterns are implemented with fail-closed EVIDENCE_AGENT_INVALID_JSON blocker, documented gaps in complex nested drift and type coercion repair coverage.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate implements 4 repair patterns: range strings (42-88), unescaped backslashes, keys with internal spaces, and trailing commas",
+      "why": "Confirms exact implementation of 'minor recoverable JSON drift' patterns"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-396",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON when parsed is null, with status='failed', completed=false, recommendation='block'",
+      "why": "Verifies fail-closed behavior with explicit error code"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Integration test confirms invalid JSON blocks entire dispatch with EVIDENCE_AGENT_INVALID_JSON in readiness.blockers",
+      "why": "Test evidence confirms blocker propagates to PRD readiness"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "488-494, 710-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues and inspectDemandPrdReadiness show EVIDENCE_AGENT_INVALID_JSON propagates to blockers",
+      "why": "Confirms PRD readiness integration path for error codes"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If claim is wrong, PRD readiness could accept invalid agent JSON or fail to block on unrecoverable drift"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer evidence is well-sourced with exact file paths and line numbers. Assumptions are clearly separated from facts. Missing data accurately reflects gaps in test coverage for complex nested drift and type coercion. Evidence supports the claim that 4 drift patterns are implemented with fail-closed blocking behavior."
+  }
+}

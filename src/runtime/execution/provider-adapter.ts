@@ -19,6 +19,120 @@ function cleanString(value) {
   return String(value ?? "").trim();
 }
 
+function byteLength(value) {
+  return Buffer.byteLength(String(value ?? ""), "utf8");
+}
+
+function isNonEmptyOutput(value) {
+  return cleanString(value).length > 0;
+}
+
+function isoFromMs(value) {
+  return Number.isFinite(value) ? new Date(value).toISOString() : null;
+}
+
+function providerRunReason(status, verification = null) {
+  if (status === "timed_out") return "provider_timed_out";
+  if (status === "killed") return "provider_killed";
+  if (status === "no_output") return "provider_no_output";
+  if (status === "verification_failed") return verification?.reason || "provider_verification_failed";
+  if (status === "failed") return "provider_exit_failed";
+  return null;
+}
+
+export function classifyProviderRunStatus({
+  exitCode = null,
+  signal = null,
+  timedOut = false,
+  stdout = "",
+  verification = null,
+  commandSucceeded = null,
+} = {}) {
+  if (timedOut) return "timed_out";
+  if (signal) return "killed";
+  if (verification?.status === "failed") return "verification_failed";
+  if (exitCode !== null && exitCode !== undefined && exitCode !== 0) return "failed";
+  if (commandSucceeded === false) return "failed";
+  if (!isNonEmptyOutput(stdout)) return "no_output";
+  return "completed";
+}
+
+export function buildProviderAttemptLedgerEntry(providerRun = {}, {
+  attempt = null,
+  taskId = null,
+  runId = null,
+} = {}) {
+  const verification = providerRun.output_verification || providerRun.outputVerification || null;
+  const status = providerRun.status || classifyProviderRunStatus({
+    exitCode: providerRun.exitCode ?? null,
+    signal: providerRun.signal || null,
+    timedOut: providerRun.timedOut === true,
+    stdout: providerRun.stdout || "",
+    verification,
+    commandSucceeded: providerRun.success,
+  });
+  return {
+    run_id: runId,
+    task_id: taskId,
+    attempt,
+    provider: providerRun.provider || "provider",
+    command: providerRun.command || null,
+    status,
+    reason: providerRun.reason || providerRunReason(status, verification),
+    exit_code: providerRun.exitCode ?? null,
+    signal: providerRun.signal || null,
+    timed_out: providerRun.timedOut === true,
+    stdout_bytes: byteLength(providerRun.stdout || ""),
+    stderr_bytes: byteLength(providerRun.stderr || ""),
+    started_at: providerRun.started_at || isoFromMs(providerRun.startedAtMs),
+    ended_at: providerRun.ended_at || isoFromMs(providerRun.endedAtMs),
+    duration_ms: Number.isFinite(providerRun.durationMs) ? providerRun.durationMs : null,
+  };
+}
+
+function buildProviderRunResult({
+  provider,
+  command,
+  stdout = "",
+  stderr = "",
+  terminal = {},
+  commandSucceeded = null,
+  startedAtMs = null,
+  endedAtMs = Date.now(),
+  outputVerification = null,
+} = {}) {
+  const exitCode = Number.isInteger(terminal.exitCode) ? terminal.exitCode : null;
+  const signal = terminal.signal || null;
+  const timedOut = !!terminal.timedOut;
+  const status = classifyProviderRunStatus({
+    exitCode,
+    signal,
+    timedOut,
+    stdout,
+    verification: outputVerification,
+    commandSucceeded,
+  });
+  const reason = providerRunReason(status, outputVerification);
+  const run = {
+    success: status === "completed",
+    status,
+    reason,
+    provider,
+    command,
+    exitCode,
+    signal,
+    stdout: cleanString(stdout),
+    stderr: cleanString(stderr),
+    timedOut,
+    startedAtMs,
+    endedAtMs,
+    durationMs: Number.isFinite(startedAtMs) && Number.isFinite(endedAtMs) ? endedAtMs - startedAtMs : null,
+  };
+  if (outputVerification) run.output_verification = outputVerification;
+  run.attempt_ledger = [buildProviderAttemptLedgerEntry(run)];
+  return run;
+}
+
 function modelValue(ai = {}) {
   const model = cleanString(ai.model);
   return model && model !== "auto" ? model : "";
@@ -192,8 +306,10 @@ export function spawnProviderPrompt(prompt, {
   const preflight = inspectProviderInvocationPreflight(invocation, { existsSync });
   if (preflight.blocks_execution) {
     const detail = preflight.blockers.map((blocker) => blocker.message).join("\n");
-    return Promise.resolve({
+    const nowMs = Date.now();
+    const blockedRun = {
       success: false,
+      status: "blocked",
       provider,
       command: invocation.command,
       exitCode: null,
@@ -204,12 +320,18 @@ export function spawnProviderPrompt(prompt, {
       blocked: true,
       reason: "claude_settings_missing",
       preflight,
-    });
+      startedAtMs: nowMs,
+      endedAtMs: nowMs,
+      durationMs: 0,
+    };
+    blockedRun.attempt_ledger = [buildProviderAttemptLedgerEntry(blockedRun)];
+    return Promise.resolve(blockedRun);
   }
 
   return new Promise((resolveRun) => {
     let done = false;
     let timeoutTriggered = false;
+    const startedAtMs = Date.now();
     const child = spawnImpl(
       invocation.command,
       invocation.args,
@@ -234,16 +356,16 @@ export function spawnProviderPrompt(prompt, {
           setTimeout(() => {
             if (!done) {
               done = true;
-              resolveRun({
-                success: false,
+              resolveRun(buildProviderRunResult({
                 provider,
                 command: invocation.command,
-                exitCode: null,
-                signal: "TIMEOUT",
                 stdout: out.trim(),
                 stderr: err.trim(),
-                timedOut: true,
-              });
+                terminal: { exitCode: null, signal: "TIMEOUT", timedOut: true },
+                commandSucceeded: false,
+                startedAtMs,
+                endedAtMs: Date.now(),
+              }));
             }
           }, 5000);
         }, timeout)
@@ -253,23 +375,53 @@ export function spawnProviderPrompt(prompt, {
       if (timer) clearTimeout(timer);
       if (done) return;
       done = true;
+      const endedAtMs = Date.now();
       let finalStdout = (stdout || "").trim();
+      let outputVerification = null;
       if (provider === "codex" && invocation.outputFile && existsSync(invocation.outputFile)) {
         try {
           const lastMessage = readFileSync(invocation.outputFile, "utf8").trim();
+          outputVerification = {
+            type: "output_last_message_file",
+            path: invocation.outputFile,
+            exists: true,
+            non_empty: isNonEmptyOutput(lastMessage),
+            status: isNonEmptyOutput(lastMessage) ? "pass" : "failed",
+            reason: isNonEmptyOutput(lastMessage) ? null : "codex_output_empty",
+          };
           if (lastMessage) finalStdout = lastMessage;
-        } catch {}
+        } catch (error) {
+          outputVerification = {
+            type: "output_last_message_file",
+            path: invocation.outputFile,
+            exists: true,
+            non_empty: false,
+            status: "failed",
+            reason: "codex_output_unreadable",
+            error: error.message,
+          };
+        }
+      } else if (provider === "codex" && invocation.outputFile) {
+        outputVerification = {
+          type: "output_last_message_file",
+          path: invocation.outputFile,
+          exists: false,
+          non_empty: false,
+          status: "failed",
+          reason: "codex_output_missing",
+        };
       }
-      resolveRun({
-        success,
+      resolveRun(buildProviderRunResult({
         provider,
         command: invocation.command,
-        exitCode: Number.isInteger(terminal.exitCode) ? terminal.exitCode : null,
-        signal: terminal.signal || null,
         stdout: finalStdout,
-        stderr: (stderr || "").trim(),
-        timedOut: !!terminal.timedOut,
-      });
+        stderr,
+        terminal,
+        commandSucceeded: success,
+        startedAtMs,
+        endedAtMs,
+        outputVerification,
+      }));
     };
 
     child.on("close", (code, signal) => {
@@ -305,6 +457,47 @@ export function classifyProviderFailure(providerRun = {}) {
       terminal: true,
       status: "blocked",
       reason: "provider_budget_exceeded",
+      detail: combined.trim().slice(0, 500),
+    };
+  }
+  if (providerRun.timedOut === true) {
+    return {
+      terminal: false,
+      status: "timed_out",
+      reason: "provider_timed_out",
+      detail: combined.trim().slice(0, 500),
+    };
+  }
+  if (providerRun.signal) {
+    return {
+      terminal: false,
+      status: "killed",
+      reason: "provider_killed",
+      detail: combined.trim().slice(0, 500),
+    };
+  }
+  if ((providerRun.output_verification || providerRun.outputVerification)?.status === "failed") {
+    const verification = providerRun.output_verification || providerRun.outputVerification;
+    return {
+      terminal: false,
+      status: "verification_failed",
+      reason: verification.reason || "provider_verification_failed",
+      detail: combined.trim().slice(0, 500),
+    };
+  }
+  if (providerRun.success === true && !isNonEmptyOutput(providerRun.stdout || "")) {
+    return {
+      terminal: false,
+      status: "no_output",
+      reason: "provider_no_output",
+      detail: "",
+    };
+  }
+  if (providerRun.status && providerRun.status !== "completed" && providerRun.status !== "blocked") {
+    return {
+      terminal: false,
+      status: providerRun.status,
+      reason: providerRun.reason || providerRunReason(providerRun.status, providerRun.output_verification || null),
       detail: combined.trim().slice(0, 500),
     };
   }

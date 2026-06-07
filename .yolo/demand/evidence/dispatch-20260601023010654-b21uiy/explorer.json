@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "failed",
+  "completed": false,
+  "claim": "Factual project claims need primary evidence.",
+  "confidence": "low",
+  "evidence": [],
+  "assumptions": [],
+  "risks": [
+    "Evidence agent did not return a valid completed result."
+  ],
+  "missing": [
+    "EVIDENCE_AGENT_INVALID_JSON: Unexpected token 'I', \"I've compl\"... is not valid JSON"
+  ],
+  "recommendation": "block",
+  "result": {
+    "verdict": "blocked",
+    "error_code": "EVIDENCE_AGENT_INVALID_JSON",
+    "provider": "claude",
+    "exit_code": 0,
+    "timed_out": false,
+    "raw_output_excerpt": "I've completed my exploration of the YOLO demand evidence dispatch system. I found comprehensive evidence that the system implements:\n\n1. **Boundary Audit with Snapshot Comparison**: Lines 97-120 in `src/demand/evidence-dispatch.ts` implement cryptographic file digest snapshots before/after agent execution, detecting any project mutations.\n\n2. **Project Path Citation Requirements**: Lines 513-530 in `src/demand/router.ts` enforce that existing-project facts require project-scoped evidence with concrete repo-relative paths.\n\n3. **Evidence Scope Enforcement**: Multiple validation layers ensure evidence records declare `scope: project|external|user|unknown` and block PRD readiness when missing.\n\n4. **Readiness Blocking on Mutations**: Lines 564-569 in `src/demand/evidence-dispatch.ts` convert boundary violations into `BOUNDARY_PROJECT_MUTATION` blockers.\n\n5. **Cross-Check Agent Requirements**: Lines 709-727 in `src/demand/router.ts` verify all three agents (explorer, cross-checker, verifier) complete before PRD readiness.\n\n6. **Agent Conflict Resolution**: Lines 776-801 in `src/demand/router.ts` prevent conflicts from being averaged away by converting disagreements to blockers.\n\nThe claim is verified with **high confidence**. I need permission to write the evidence result to the artifact directory."
+  }
+}

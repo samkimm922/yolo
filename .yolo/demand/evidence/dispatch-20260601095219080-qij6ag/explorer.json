@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements boundary audit that detects tracked and untracked target-project mutations in git-backed and non-git projects via git ls-files and filesystem walk fallback.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot combines git ls-files output with recursive filesystem walk and excludes allowed artifact roots.",
+      "why": "Core boundary snapshot implementation that covers both git-backed and non-git projects."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles runs git ls-files -co --exclude-standard -z to get tracked, cached, and other untracked non-excluded files.",
+      "why": "Git-backed file discovery covers tracked, cached, and untracked files."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles recursively walks filesystem while excluding .git, node_modules, dist, coverage, .next, .cache directories.",
+      "why": "Non-git fallback ensures coverage even without git or for files outside git index."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "100",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Combines git files and walk files when git is available: git ? [...new Set([...git, ...walkFiles(projectRoot)])] : walkFiles(projectRoot).",
+      "why": "Union of git-tracked and walked files ensures complete coverage for git-backed projects."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "53-56",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "isWithin checks if a path is within a root by resolving relative path and ensuring it does not start with .. and is not absolute.",
+      "why": "Path containment logic used to exclude artifact roots from mutation detection."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after SHA256 digests and returns added, modified, and deleted file changes.",
+      "why": "Change detection logic that identifies mutations between snapshots."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "590",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshot captured before agent execution: const boundaryBefore = buildBoundarySnapshot(plan.project_root, [plan.output_dir]);",
+      "why": "Pre-execution baseline allows detection of mutations during agent runs."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "640-646",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-execution boundary snapshot compared and stored in result.boundary with project_mutation status.",
+      "why": "Post-execution audit produces violation report for PRD readiness gating."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "577-613",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Git-backed boundary test creates untracked-mutation.txt and verifies boundary violation with added change detection.",
+      "why": "Test evidence that git untracked mutations are detected."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "615-653",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Gitignored boundary test creates .env file outside excluded dirs and verifies violation even though gitignored.",
+      "why": "Test evidence that gitignored files are still covered by boundary audit."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "654-694",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Non-git boundary test modifies src/existing.txt, writes agent-scratch.txt artifact, and verifies only project file mutation is detected.",
+      "why": "Test evidence that non-git projects use walkFiles fallback and correctly exclude allowed artifact roots."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "598-604",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent runtime directory configuration passes plan.output_dir as runtimeDir for artifact writes.",
+      "why": "Evidence that allowed artifact roots are derived from dispatch plan."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "659-670",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary mutations become BOUNDARY_PROJECT_MUTATION blockers in readiness with explicit path and change details.",
+      "why": "Evidence that boundary violations block PRD readiness."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Boundary audit may miss mutations in non-standard excluded directories if walkFiles excludedDir list does not cover all cases.",
+    "Race condition possible if multiple agents write concurrently between before/after snapshots.",
+    "Files created and deleted within the same agent execution may not be detected if snapshot timing only captures endpoints."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Boundary audit implementation is complete with git ls-files plus walkFiles fallback, correctly excludes artifact roots, and has test coverage for git-backed untracked, gitignored, and non-git scenarios. Acceptance criteria met."
+  }
+}

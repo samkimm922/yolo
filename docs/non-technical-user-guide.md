@@ -2,7 +2,7 @@
 
 这份说明只给不想记命令的人看。
 
-## 你只需要记一个入口
+## 不知道选哪个时的兜底入口
 
 如果你是在 Codex 或 Claude Code 里面用，不要双击文件。你跟 Codex / Claude Code 对话，它们再调用 YOLO。
 
@@ -16,11 +16,11 @@ docs/agent-native-integration.md
 最像 GSD / Superpowers 的方式，是先让 agent 帮你安装 YOLO skill/command：
 
 ```text
-请把 YOLO 安装到当前项目和我的 Agent 工具里。我要能直接用 /yolo、/yolo-brainstorm、/yolo-discuss、/yolo-discover、/yolo-plan、/yolo-check、/yolo-accept、/yolo-eval、/yolo-run、/yolo-doctor。执行前先告诉我会写哪些文件。
+请把 YOLO 安装到当前项目和我的 Agent 工具里。我要在 Codex 里只看到 /yolo 统一入口，由它自动判断需求、PRD、检查和执行阶段；Claude Code 可以保留 /yolo-demand、/yolo-prd、/yolo-check、/yolo-run 等真实 slash commands。执行前先告诉我会写哪些文件。
 YOLO 路径是：/Users/sippingroom/Developer/SamKimTest/scripts/yolo
 ```
 
-安装后，Claude Code 可以直接用 `/yolo`。Codex 也会获得和 GSD/GStack 类似的 `~/.agents/skills/yolo-*` 直接 slash skill；新开一个 Codex 会话后试 `/yolo`、`/yolo-brainstorm`、`/yolo-discuss`。还是不触发时，说“使用 source-command-yolo”或“使用 yolo skill 执行 /yolo”。
+安装后，Claude Code 可以直接用 `/yolo`，也可以用 `/yolo-demand`、`/yolo-prd`、`/yolo-check` 这类阶段命令。Codex 为了不让菜单出现一长串相似入口，只保留 `/yolo` 总入口；你把阶段写进同一句话里，比如 `/yolo 需求沟通：...`、`/yolo 生成 PRD：...`、`/yolo 检查 PRD：...`。还是不触发时，说“使用 source-command-yolo”或“使用 yolo skill 执行 /yolo”。
 
 如果你是在 Finder 里用，再双击下面这个入口。
 
@@ -108,10 +108,16 @@ YOLO 如果停下来，通常不是坏了，而是 gate 在保护项目。
 /yolo 我要实现一个小功能，先只生成计划，不要改代码。
 ```
 
+如果你想明确进入需求沟通阶段：
+
+```text
+/yolo-demand 我想把这个需求聊清楚，暂时不要生成 PRD。
+```
+
 如果你不知道当前项目有没有装好，就说：
 
 ```text
-/yolo-doctor 检查当前项目的 YOLO 是否装好、能不能用。
+/yolo 检查当前项目的 YOLO 是否装好、能不能用。
 ```
 
 最容易记的一句话入口：

@@ -1,0 +1,73 @@
+{
+  "iteration": 2,
+  "scenario": "ui-badge-with-adapter",
+  "expected": "executable",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0002-ui-badge-with-adapter",
+  "demand_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0002-ui-badge-with-adapter/.yolo/demand/DEMAND-0002-ui-badge-with-adapter",
+  "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0002-ui-badge-with-adapter/.yolo/prd-executability/ui-badge-with-adapter.prd.json",
+  "check_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0002-ui-badge-with-adapter/.yolo/prd-executability/ui-badge-with-adapter.check.json",
+  "blocked_path": null,
+  "yolo": {
+    "discuss_status": "success",
+    "prd_status": "success",
+    "prd_code": "DEMAND_PRD_READY",
+    "check_status": "pass",
+    "check_code": "YOLO_CHECK_PASS",
+    "blocker_codes": [],
+    "task_count": 1
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "executable": true,
+      "correctly_blocked": false,
+      "score": 92,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "NO_FAIL_POST_CONDITIONS",
+          "task_id": "DEMAND-REQ-001-0010101",
+          "path": null,
+          "message": "Task DEMAND-REQ-001-0010101 has only 1 FAIL-severity post_condition (target_file_modified). The acceptance_criteria post_condition is WARN, not FAIL. An executable PRD should have at least one behavioral FAIL post_condit"
+        },
+        {
+          "code": "VAGUE_THRESHOLD",
+          "task_id": "DEMAND-REQ-001-0010101",
+          "path": "src/pages/inventory-list.tsx",
+          "message": "The PRD says 'low-stock badge on affected SKUs' but never defines what 'low-stock' means (e.g., quantity < 5, or a configurable threshold). The target file src/pages/inventory-list.tsx currently renders raw quantities wi"
+        },
+        {
+          "code": "RESOLVER_UNKNOWN_ADAPTERS",
+          "task_id": null,
+          "path": null,
+          "message": "5 of 6 resolver slots resolved to unknown/custom (platform_adapter, stack_adapter, component_adapter, design_reference_pack, quality_rule_pack). Only acceptance_adapter resolved (local-browser). The agent will lack proje"
+        },
+        {
+          "code": "NO_COMPONENT_LIBRARY_HINT",
+          "task_id": "DEMAND-REQ-001-0010101",
+          "path": "src/pages/inventory-list.tsx",
+          "message": "The target file is a plain JSX function with no types, no imports, and no component library. The PRD does not specify whether to use CSS modules, Tailwind, inline styles, or a component library for the badge styling. An "
+        },
+        {
+          "code": "APPROVAL_TIMESTAMP_MISSING",
+          "task_id": null,
+          "path": null,
+          "message": "Demand approval has approved_by='user' but approved_at=null and reason=''. While approved=true, the missing timestamp weakens the audit trail for a demand that requires demand_contract."
+        }
+      ]
+    }
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T11:48:11.492Z",
+  "ended_at": "2026-06-01T11:49:05.357Z",
+  "duration_ms": 53865
+}

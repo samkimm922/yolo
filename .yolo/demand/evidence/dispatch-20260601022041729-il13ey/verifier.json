@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "blocked",
+  "completed": true,
+  "claim": "Explorer evidence is incomplete due to JSON parse error; cannot verify PRD readiness.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": null,
+      "scope": "external",
+      "source": "external",
+      "summary": "Explorer agent returned exit code 0 but evidence wrapper reported status=failed with EVIDENCE_AGENT_INVALID_JSON error at line 82 column 32 of raw output.",
+      "why": "JSON parse error means evidence cannot be fully trusted or verified."
+    },
+    {
+      "path": null,
+      "scope": "external",
+      "source": "external",
+      "summary": "Raw output excerpt shows explorer did return partial evidence including src/demand/evidence-dispatch.ts analysis at lines 58-60, 62-69, 71-85, 97-108.",
+      "why": "Partial evidence is available but incomplete due to truncation/parse error."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Explorer evidence may be missing critical verification data due to JSON parse failure.",
+    "Cannot confirm all required slots have valid evidence.",
+    "Cannot verify assumptions vs facts separation without complete parsed evidence."
+  ],
+  "missing": [
+    "Complete parsed evidence from explorer agent (truncated by JSON parse error).",
+    "Verification of all readiness slot values against project facts.",
+    "Confirmation that no untracked files escape git ls-files -co detection."
+  ],
+  "recommendation": "block",
+  "result": {
+    "verdict": "blocked",
+    "notes": "Explorer evidence failed JSON parse; raw output truncated at position 4223. Evidence exists but is incomplete. Need either: (a) re-run explorer with valid JSON, or (b) manually verify truncated evidence. Without complete evidence, cannot confirm PRD readiness blockers are resolved."
+  }
+}

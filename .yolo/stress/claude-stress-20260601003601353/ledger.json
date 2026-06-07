@@ -1,0 +1,368 @@
+{
+  "schema": "yolo.demand.claude_stress.v1",
+  "run_id": "claude-stress-20260601003601353",
+  "started_at": "2026-06-01T00:36:01.352Z",
+  "duration_ms": 10800000,
+  "timeout_ms": 300000,
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601003601353",
+  "iterations": [
+    {
+      "iteration": 1,
+      "scenario": "local-contract-boundary",
+      "started_at": "2026-06-01T00:36:01.353Z",
+      "ended_at": "2026-06-01T00:40:21.014Z",
+      "duration_ms": 259661,
+      "exit_code": 1,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601003601353/0001-local-contract-boundary.json",
+      "summary": {
+        "status": "blocked",
+        "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+        "prd_ready": false,
+        "boundary": "clean",
+        "blockers": [
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "explorer",
+            "message": "explorer reported unresolved missing evidence: Runtime verification with real Claude -p agents that boundary settings actually restrict tool usage in production; Integration tests showing provider isolation prevents cross-provider model lea"
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "cross-checker",
+            "message": "cross-checker reported unresolved missing evidence: Independent verification that CLAUDE_BOUNDARY_TOOLS matches Claude Code's current available tool set; Runtime logs showing real Claude agents respecting boundary settings (vs test mocks); "
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "verifier",
+            "message": "verifier reported unresolved missing evidence: Runtime verification with real Claude -p agents that boundary settings actually restrict tool usage in production; Independent verification that CLAUDE_BOUNDARY_TOOLS array matches Claude Code'"
+          }
+        ],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "cross_check",
+            "evidence_count": 24,
+            "missing_count": 6
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "cross_check",
+            "evidence_count": 14,
+            "missing_count": 6
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "cross_check",
+            "evidence_count": 6,
+            "missing_count": 6
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 2,
+      "scenario": "research-fetch-boundary",
+      "started_at": "2026-06-01T00:40:21.025Z",
+      "ended_at": "2026-06-01T00:42:06.799Z",
+      "duration_ms": 105774,
+      "exit_code": 1,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601003601353/0002-research-fetch-boundary.json",
+      "summary": {
+        "status": "blocked",
+        "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+        "prd_ready": false,
+        "boundary": "clean",
+        "blockers": [
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "explorer",
+            "message": "explorer reported unresolved missing evidence: Schema field to distinguish external research evidence from project file evidence; Validation preventing external source evidence from being cited as project fact; Agent prompt guidance explici"
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "cross-checker",
+            "message": "cross-checker reported unresolved missing evidence: Schema field or enum value to distinguish external research evidence (WebFetch/WebSearch) from project file evidence (Read/Grep/Glob); Validation layer preventing external source evidence "
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "verifier",
+            "message": "verifier reported unresolved missing evidence: Verification that all cited file paths currently exist and contain the cited code; Confirmation that line number references match the current working tree state; Validation that cross-checker o"
+          }
+        ],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "cross_check",
+            "evidence_count": 8,
+            "missing_count": 5
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "cross_check",
+            "evidence_count": 7,
+            "missing_count": 6
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 9,
+            "missing_count": 4
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 3,
+      "scenario": "readiness-missing-clarify",
+      "started_at": "2026-06-01T00:42:06.800Z",
+      "ended_at": "2026-06-01T00:43:30.334Z",
+      "duration_ms": 83534,
+      "exit_code": 1,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601003601353/0003-readiness-missing-clarify.json",
+      "summary": {
+        "status": "blocked",
+        "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+        "prd_ready": false,
+        "boundary": "clean",
+        "blockers": [
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "explorer",
+            "message": "explorer reported unresolved missing evidence: Clarification of whether this demand is requesting new feature implementation, fixing broken behavior, or modifying existing behavior semantics.; User confirmation that current blocking behavio"
+          },
+          {
+            "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+            "role": "explorer",
+            "message": "explorer returned clarify; keep PRD readiness blocked until resolved."
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "cross-checker",
+            "message": "cross-checker reported unresolved missing evidence: Clarification of what specific blocking behavior is missing or broken that justifies this demand.; User confirmation that current blocking behavior matches their expectation.; Evidence of "
+          },
+          {
+            "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+            "role": "cross-checker",
+            "message": "cross-checker returned clarify; keep PRD readiness blocked until resolved."
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "verifier",
+            "message": "verifier reported unresolved missing evidence: Clarification of whether this demand requests new feature implementation, fixes broken behavior, documents existing behavior, or stems from outdated understanding.; User confirmation that curre"
+          },
+          {
+            "code": "EVIDENCE_AGENT_CLARIFICATION_REQUIRED",
+            "role": "verifier",
+            "message": "verifier returned clarify; keep PRD readiness blocked until resolved."
+          }
+        ],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "clarify",
+            "evidence_count": 9,
+            "missing_count": 3
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "clarify",
+            "evidence_count": 7,
+            "missing_count": 4
+          },
+          {
+            "role": "verifier",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "clarify",
+            "evidence_count": 4,
+            "missing_count": 4
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "iteration": 4,
+      "scenario": "provider-profile-drift",
+      "started_at": "2026-06-01T00:43:30.338Z",
+      "ended_at": "2026-06-01T00:45:03.495Z",
+      "duration_ms": 93157,
+      "exit_code": 1,
+      "signal": null,
+      "output": "/Users/sippingroom/Developer/yolo/.yolo/stress/claude-stress-20260601003601353/0004-provider-profile-drift.json",
+      "summary": {
+        "status": "blocked",
+        "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+        "prd_ready": false,
+        "boundary": "clean",
+        "blockers": [
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "explorer",
+            "message": "explorer reported unresolved missing evidence: Codex and custom provider boundary enforcement is not tested with real provider execution (only mocked in tests).; Edge cases like concurrent file writes, rapid file changes during snapshot, or"
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "cross-checker",
+            "message": "cross-checker reported unresolved missing evidence: Test coverage for executionConfig() fall-through scenario (what happens when provider doesn't match any branch?).; Test coverage for untracked file mutations (boundary snapshot only covers"
+          },
+          {
+            "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+            "role": "verifier",
+            "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+          },
+          {
+            "code": "EVIDENCE_AGENT_MISSING",
+            "role": "verifier",
+            "message": "verifier reported unresolved missing evidence: ```json; {; \"schema_version\": \"1.0\",; \"schema\": \"yolo.demand.evidence_result.v1\",; \"role\": \"verifier\",; \"status\": \"completed\",; \"completed\": true,; \"claim\": \"Evidence gathered by explorer and c"
+          },
+          {
+            "code": "EVIDENCE_AGENT_BLOCKED",
+            "role": "verifier",
+            "message": "verifier returned block; keep PRD readiness blocked until resolved."
+          },
+          {
+            "code": "EVIDENCE_AGENT_CONFLICT",
+            "message": "Evidence agents disagree; keep the claim blocked until reconciled."
+          }
+        ],
+        "agent_results": [
+          {
+            "role": "explorer",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 12,
+            "missing_count": 3
+          },
+          {
+            "role": "cross-checker",
+            "status": "completed",
+            "completed": true,
+            "recommendation": "proceed",
+            "evidence_count": 16,
+            "missing_count": 4
+          },
+          {
+            "role": "verifier",
+            "status": "failed",
+            "completed": false,
+            "recommendation": "block",
+            "evidence_count": 0,
+            "missing_count": 1
+          }
+        ],
+        "provider_runs": [
+          {
+            "role": "explorer",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "cross-checker",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "role": "verifier",
+            "provider": "claude",
+            "success": true,
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ]
+      }
+    }
+  ],
+  "stopped_reason": null
+}

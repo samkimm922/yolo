@@ -12,6 +12,7 @@ export const NONTECHNICAL_UX_DOCTOR_SCHEMA_VERSION = "1.0";
 
 export const YOLO_ONE_SENTENCE_ENTRY = "/yolo 你的需求，先只生成计划，不要改代码。";
 export const YOLO_CODEX_FALLBACK_ENTRY = "使用 yolo skill 执行 /yolo：你的需求，先只生成计划，不要改代码。";
+export const YOLO_STAGE_COMMAND_CONTRACT = "If the user asks to talk through a requirement, use `/yolo-demand` as the single demand-stage entry instead of asking them to choose brainstorm/interview/discover/discuss.";
 
 function check(code, passed, message, extra = {}) {
   return { code, passed, message, ...extra };
@@ -56,7 +57,8 @@ export function buildNonTechnicalUxDoctorPlan(options = {}) {
     required_evidence: [
       "public docs expose one memorable Codex/Claude Code entry sentence",
       "native YOLO skill exposes the same one-sentence usage",
-      "Claude slash command, Codex direct slash skill, and Codex source-command artifacts tell agents not to ask users to memorize terminal commands",
+      "Codex bridge exposes clear stage commands while hiding internal workflow names",
+      "Claude slash command, Codex primary skill, and Codex source-command fallback tell agents not to ask users to memorize terminal commands",
       "doctor report returns plain-language next actions",
     ],
   };
@@ -90,16 +92,27 @@ export function runNonTechnicalUxDoctor(options = {}) {
     ),
     check(
       "NONTECH_UX_NATIVE_SKILL_ENTRY",
-      nativeSkill.includes(plan.one_sentence_entry) && nativeSkill.includes(plan.codex_fallback_entry),
-      "native YOLO skill must include one-sentence usage and Codex fallback wording",
+      nativeSkill.includes(plan.one_sentence_entry)
+        && nativeSkill.includes(plan.codex_fallback_entry)
+        && nativeSkill.includes(YOLO_STAGE_COMMAND_CONTRACT),
+      "native YOLO skill must include one-sentence usage, Codex fallback wording, and stage-command routing",
+    ),
+    check(
+      "NONTECH_UX_STAGE_COMMANDS_CLEAR",
+      bridgeBlock.includes("Primary fallback entrypoint")
+        && bridgeBlock.includes("single demand-stage entry")
+        && bridgeBlock.includes("compatibility alias for `/yolo-demand --stage <stage>`")
+        && bridgeBlock.includes("Do not expose internal workflow names")
+        && codexCommand.includes("explicit `/yolo-*` command")
+        && codexSlashCommand.includes("不确定该走哪一步时用"),
+      "Codex bridge and command artifacts must make /yolo a fallback router and /yolo-* commands clear stage entries",
     ),
     check(
       "NONTECH_UX_COMMANDS_CHAT_FIRST",
       claudeCommand.includes("do not ask the user to memorize terminal commands")
-        && codexSlashCommand.includes("do not ask the user to memorize terminal commands")
         && codexCommand.includes("do not ask the user to memorize terminal commands")
         && bridgeBlock.includes("Treat this chat as the user interface"),
-      "Claude/Codex command artifacts must keep chat as the UI",
+      "Claude/Codex entry artifacts must keep chat as the UI",
     ),
   ];
   const blockers = checks.filter((item) => item.passed !== true);
@@ -119,6 +132,8 @@ export function runNonTechnicalUxDoctor(options = {}) {
     },
     artifacts_sample: {
       native_skill_contains_entry: nativeSkill.includes(plan.one_sentence_entry),
+      native_skill_stage_command_contract: nativeSkill.includes(YOLO_STAGE_COMMAND_CONTRACT),
+      bridge_stage_commands_clear: bridgeBlock.includes("single demand-stage entry"),
       claude_command_chat_first: claudeCommand.includes("do not ask the user to memorize terminal commands"),
       codex_slash_command_chat_first: codexSlashCommand.includes("do not ask the user to memorize terminal commands"),
       codex_source_command_chat_first: codexCommand.includes("do not ask the user to memorize terminal commands"),

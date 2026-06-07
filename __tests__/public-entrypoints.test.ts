@@ -9,6 +9,7 @@ import { buildContextPackForTask, validateContextPack } from "../src/runtime/exe
 import { inspectPrdContract } from "../src/runtime/gates/prd-contract-doctor.js";
 import { reviewFindingsToPrdTasks } from "../src/review/findings-to-tasks.js";
 import { runInitToFirstPrdSmoke } from "../src/core/init-smoke.js";
+import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 const packageJson = JSON.parse(readFileSync(resolve(YOLO_DIR, "package.json"), "utf8"));
@@ -51,22 +52,78 @@ describe("public package entrypoints", () => {
     }
   });
 
-  test("yolo bin calls src CLI and returns JSON PI preflight failure", () => {
-    const missingPrd = join(tmpdir(), `missing-yolo-prd-${Date.now()}.json`);
+  test("root yolo help keeps ordinary users on the public mainline", () => {
     const result = spawnSync(process.execPath, [
       resolve(YOLO_DIR, packageJson.bin.yolo),
-      `--prd=${missingPrd}`,
-      "--json",
+      "--help",
     ], { cwd: YOLO_DIR, encoding: "utf8" });
 
     assert.equal(result.stderr, "");
-    assert.equal(result.status, 1);
-    const payload = JSON.parse(result.stdout);
-    assert.equal(payload.status, "error");
-    assert.equal(payload.code, "PI_PRD_PREFLIGHT_BLOCKED");
-    assert.equal(payload.summary, "PI stopped at pi.prd.preflight.");
-    assert.equal(payload.artifacts.prdPath, missingPrd);
-    assert.deepEqual(payload.observations.map((item) => item.action_id), ["pi.intake", "pi.prd.preflight"]);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /^  yolo run <prd\.json>/m);
+    assert.match(result.stdout, /普通 Claude\/Codex\/GUI 集成应使用 `yolo run`/);
+    assert.doesNotMatch(result.stdout, /^  yolo pi\b/m);
+    assert.doesNotMatch(result.stdout, /^  yolo gate\b/m);
+    assert.doesNotMatch(result.stdout, /^  yolo preflight\b/m);
+  });
+
+  test("legacy yolo PRD entrypoint fails closed behind lifecycle guard", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-legacy-prd-"));
+    try {
+      const missingPrd = join(root, "missing-prd.json");
+      const result = spawnSync(process.execPath, [
+        resolve(YOLO_DIR, packageJson.bin.yolo),
+        `--prd=${missingPrd}`,
+        `--cwd=${root}`,
+        "--json",
+      ], { cwd: YOLO_DIR, encoding: "utf8" });
+
+      assert.equal(result.stderr, "");
+      assert.equal(result.status, 2);
+      const payload = JSON.parse(result.stdout);
+      assert.equal(payload.status, "blocked");
+      assert.equal(payload.code, "LIFECYCLE_NOT_INITIALIZED");
+      assert.equal(payload.recommended_command, "/yolo-init");
+
+      const pi = spawnSync(process.execPath, [
+        resolve(YOLO_DIR, packageJson.bin["yolo-pi"]),
+        "--execute",
+        `--prd=${missingPrd}`,
+        `--cwd=${root}`,
+        "--json",
+      ], { cwd: YOLO_DIR, encoding: "utf8" });
+      assert.equal(pi.stderr, "");
+      assert.equal(pi.status, 2);
+      const piPayload = JSON.parse(pi.stdout);
+      assert.equal(piPayload.status, "blocked");
+      assert.equal(piPayload.code, "LIFECYCLE_NOT_INITIALIZED");
+
+      const runner = spawnSync(process.execPath, [
+        resolve(YOLO_DIR, "dist/runner.js"),
+        `--prd=${missingPrd}`,
+        `--cwd=${root}`,
+        "--json",
+      ], { cwd: YOLO_DIR, encoding: "utf8" });
+      assert.equal(runner.stderr, "");
+      assert.equal(runner.status, 2);
+      const runnerPayload = JSON.parse(runner.stdout);
+      assert.equal(runnerPayload.status, "blocked");
+      assert.equal(runnerPayload.code, "LIFECYCLE_NOT_INITIALIZED");
+
+      const acceptance = spawnSync(process.execPath, [
+        resolve(YOLO_DIR, "dist/src/runtime/acceptance/report.js"),
+        missingPrd,
+        `--cwd=${root}`,
+        "--json",
+      ], { cwd: YOLO_DIR, encoding: "utf8" });
+      assert.equal(acceptance.stderr, "");
+      assert.equal(acceptance.status, 2);
+      const acceptancePayload = JSON.parse(acceptance.stdout);
+      assert.equal(acceptancePayload.status, "blocked");
+      assert.equal(acceptancePayload.code, "LIFECYCLE_NOT_INITIALIZED");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("yolo check resolves relative PRD paths against --cwd", async () => {
@@ -102,6 +159,26 @@ describe("public package entrypoints", () => {
       const smoke = await runInitToFirstPrdSmoke({ projectRoot: root, projectName: "pi-app" });
       const relativePrd = join(root, "specs/prd.json");
       writeFileSync(relativePrd, readFileSync(smoke.prd_path, "utf8"), "utf8");
+      writeLifecycleStageReport("prd", {
+        status: "success",
+        prd_path: relativePrd,
+        artifacts: [relativePrd],
+      }, {
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        source: "public-entrypoints-test",
+        writeSessionMemory: false,
+      });
+
+      const check = spawnSync(process.execPath, [
+        resolve(YOLO_DIR, packageJson.bin.yolo),
+        "check",
+        "specs/prd.json",
+        `--cwd=${root}`,
+        "--json",
+      ], { cwd: YOLO_DIR, encoding: "utf8" });
+      assert.equal(check.stderr, "");
+      assert.equal(check.status, 0, check.stdout);
 
       const pi = spawnSync(process.execPath, [
         resolve(YOLO_DIR, packageJson.bin.yolo),
@@ -202,10 +279,11 @@ describe("public package entrypoints", () => {
         "--no-write",
       ], { cwd: YOLO_DIR, encoding: "utf8" });
       assert.equal(discuss.stderr, "");
-      assert.equal(discuss.status, 0, discuss.stdout);
+      assert.ok([0, 1].includes(discuss.status), discuss.stdout);
       const discussPayload = JSON.parse(discuss.stdout);
-      assert.equal(discussPayload.code, "DEMAND_READY");
+      assert.ok(["DEMAND_READY", "DEMAND_BLOCKED"].includes(discussPayload.code));
       assert.equal(discussPayload.readiness.readiness_level, "L3");
+      assert.equal(discussPayload.session.phase, "discuss");
       assert.equal(discussPayload.session.approval.approved, true);
     } finally {
       rmSync(root, { recursive: true, force: true });

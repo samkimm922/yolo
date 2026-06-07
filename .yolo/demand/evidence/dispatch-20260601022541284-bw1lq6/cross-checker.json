@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent verification confirms explorer claim: YOLO demand evidence dispatch API/schema correctly supports WebFetch/WebSearch as external evidence (scope=external) with proper separation from project-scoped facts (scope=project requiring path locators). All 12 explorer evidence points independently verified via direct file reads; no conflicts found.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES = new Set(['project', 'external', 'user', 'unknown']) defines four valid scopes with 'external' as a distinct first-class category separate from 'project'",
+      "why": "Foundational evidence that scope system explicitly supports external as separate category from project"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "273",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt conditional: toolProfile.includes('research') enables WebFetch/WebSearch with explicit instruction to mark those records as scope=external and not use them as project facts",
+      "why": "Direct confirmation that research profile allows external fetch tools and mandates scope=external marking"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "305-312",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence schema shape requires path field for project scope, allows url field for external scope, and scope field accepts 'project | external | user | unknown'",
+      "why": "Schema structure proves external scope has dedicated url field vs path field for project scope"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-157",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors function validates every evidence record declares scope as one of four valid values; missing or invalid scope generates error array",
+      "why": "Validation enforcement prevents evidence records without explicit scope declarations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "403-416",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult sets status='blocked', recommendation='block', and error_code='EVIDENCE_SCOPE_REQUIRED' when evidence lacks valid scope",
+      "why": "Runtime enforcement that evidence without proper scope cannot successfully complete"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "387-401",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function normalizes scope aliases including 'external', 'web', 'internet', 'research' to 'external', and source types like 'external_web', 'webfetch', 'websearch' to external",
+      "why": "Scope normalization supports multiple declaration methods for external evidence"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-529",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues generates BLOCKED status with PROJECT_EVIDENCE_PATH_REQUIRED or PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE when project facts lack project-scoped evidence with path locators",
+      "why": "Hard enforcement that existing-project facts cannot be proven by external/user/unknown evidence alone"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "44",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION field evidence states 'scope is project | external | user | unknown; project facts require project-scoped evidence'",
+      "why": "Schema contract explicitly separates project facts requiring project evidence from external evidence"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'external evidence can come from WebFetch/WebSearch or external docs, but only as background research, cannot alone prove target project existing fields/API/state machine/data flow'",
+      "why": "Product-level confirmation that external evidence is allowed but insufficient for project facts"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "329-365",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Unit test 'claude research profile labels research while keeping tools available' confirms agent_tool_profile='research' sets profile and tools remain available",
+      "why": "Test evidence that research profile enables external tools without removing other capabilities"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "447-459",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig normalizes agent_tool_profile: 'research', 'fetch', 'web', 'web-research', 'external-research' all map to 'research' for Claude provider",
+      "why": "Profile normalization shows multiple input aliases all enable research mode with external tool access"
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601012149104-v8la7n/explorer.json",
+      "line": "9-106",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Real explorer agent result with 14 evidence records all using scope='project' with exact paths, demonstrating proper project evidence structure in actual practice",
+      "why": "Operational evidence that evidence agents correctly structure project-scoped evidence with path locators"
+    }
+  ],
+  "assumptions": [
+    "WebFetch and WebSearch tools are actually provisioned in Claude Code agent environment when agent_tool_profile='research' is set in config",
+    "Agents can successfully fetch from https://example.com or other URLs when external research tools are enabled",
+    "Boundary snapshot mechanism does not flag external fetch cache artifacts as project mutations",
+    "External evidence records marked scope='external' with url field actually pass validation in normalizeAgentResult"
+  ],
+  "risks": [
+    "If WebFetch/WebSearch tools are not actually available in Claude Code despite research profile being set, external evidence gathering would fail silently",
+    "If external fetch operations write cache files to project directory that boundary snapshot detects, legitimate external research would be incorrectly blocked as mutations",
+    "If agents misinterpret scope field and mark external fetch results as scope='project', evidence would pass validation but violate separation principle",
+    "If research profile normalization in evidence-dispatch.ts:447-459 does not match actual Claude Code tool availability, agents may lack expected external tools"
+  ],
+  "missing": [
+    "Actual execution log or trace showing WebFetch or WebSearch being successfully used during demand evidence dispatch with scope='external' records",
+    "Test cases specifically validating external evidence scope handling with url field (all existing tests use project scope)",
+    "Documentation or examples showing proper structure of external evidence records with url field populated",
+    "Evidence that boundary snapshot mechanism correctly ignores or allows external fetch cache artifacts in allowed_write_roots",
+    "Confirmation that https://example.com or any specific external URL can be successfully fetched during evidence dispatch"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification complete: all 12 explorer evidence points confirmed via direct file reads. No conflicts found between explorer claim and source code/docs/tests/artifacts. Implementation correctly separates external research (scope=external with url) from project facts (scope=project with path), satisfying acceptance criteria."
+  }
+}

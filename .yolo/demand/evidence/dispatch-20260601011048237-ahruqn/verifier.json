@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verifier assessment: The gathered evidence from explorer and cross-checker is sufficient to support PRD readiness. No assumptions are presented as fact (both agents have empty assumptions arrays), all evidence paths are usable with concrete project locators, missing data is correctly reflected as empty arrays, and the acceptance criteria is satisfied through verified implementation of scope separation.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "380-404",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Verified: evidenceRecordScope() implements multi-layer scope classification. Both agents independently confirmed this is the core scope classification logic.",
+      "why": "This is the foundational implementation that separates external research from project facts."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "494-511",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Verified: projectEvidenceBlockingIssues() generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE and PROJECT_EVIDENCE_PATH_REQUIRED blockers. Cross-checker confirmed these are enforcement mechanisms.",
+      "why": "This is the validation logic that prevents external evidence from satisfying project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Verified: Test case 'external-only evidence cannot satisfy existing project facts' proves external evidence rejection. Both agents independently confirmed this behavioral test.",
+      "why": "This is the behavioral proof that the acceptance criteria is satisfied."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "269",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Verified: Agent prompts explicitly instruct 'WebFetch/WebSearch are allowed for external research; mark those records as scope=external'. Cross-checker independently verified this instruction.",
+      "why": "This confirms agents are explicitly instructed to separate WebFetch/WebSearch as external evidence."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "68",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Verified: Demand doctrine documents the evidence scope separation contract. Explorer provided this as documented evidence.",
+      "why": "This is the documented contract that defines the evidence scope requirements."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If verification is incomplete and evidence has gaps, PRD could proceed with insufficient factual basis, leading to incorrect implementation decisions",
+    "If evidence paths are invalid or unusable, downstream agents cannot verify the evidence independently"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verification complete. Explorer and cross-checker results agree: both have empty assumptions (no assumptions presented as fact), all 22 evidence records have concrete project locators with valid paths, missing arrays are empty (no unresolved missing data), and the cross-checker found 'no conflicts or discrepancies' with independent verification. The acceptance criteria 'Agents can discuss WebFetch/WebSearch capability and separate external evidence from project code evidence; external-only evidence cannot satisfy existing project facts' is satisfied through verified implementation in scope classification, validation logic, agent prompts, and behavioral tests."
+  }
+}

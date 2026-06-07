@@ -1,0 +1,207 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch system implements full provider-adapter boundary control for Claude/Codex/custom agents with post-execution snapshot auditing, comprehensive test coverage showing dual-gate execution authorization and provider isolation, and active runtime evidence generation in .yolo/demand/evidence/.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16-21",
+      "source": "code",
+      "summary": "CLAUDE_BOUNDARY_TOOLS defines complete tool allowlist including Write, Edit, Bash, Agent, TaskCreate, TaskUpdate. DEMAND_EVIDENCE_CLAUDE_BOUNDARY_SETTINGS sets permissions.allow to this array.",
+      "why": "Core boundary control mechanism - defines what tools evidence agents can access by default."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "102-113",
+      "source": "code",
+      "summary": "buildBoundarySnapshot walks project files (excluding .git, node_modules, dist) and computes SHA256 digests for change detection.",
+      "why": "Foundation for post-execution boundary audit - creates before/after snapshots for mutation detection."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "115-125",
+      "source": "code",
+      "summary": "diffBoundarySnapshots compares before/after snapshots and returns added, modified, deleted file changes.",
+      "why": "Implements the boundary violation detection logic that converts mutations to blockers."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "400-443",
+      "source": "code",
+      "summary": "runDemandEvidenceDispatchRuntime requires execute=true AND allowAgentDispatch=true for execution, builds boundary snapshot before agents, runs agents sequentially, then builds after snapshot and diffs for mutations.",
+      "why": "Core runtime implementing dual-gate execution policy and boundary auditing workflow."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "486-493",
+      "source": "code",
+      "summary": "After agent execution, boundary.mutation is set to 'violated' if changes detected, with BOUNDARY_PROJECT_MUTATION blockers added to readiness.",
+      "why": "Conversion of boundary violations to PRD readiness blockers - the enforcement mechanism."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "350-398",
+      "source": "code",
+      "summary": "executionConfig normalizes agentToolProfile to 'boundary' (default), 'research', or 'full' (requires allowFullAgentTools). For Claude, applies DEMAND_EVIDENCE_CLAUDE_BOUNDARY_SETTINGS, sets claude_tools=default, claude_allowed_tools=CLAUDE_BOUNDARY_TOOLS, claude_no_session_persistence=true.",
+      "why": "Provider-specific configuration logic showing how boundary settings are applied per provider type."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-109",
+      "source": "code",
+      "summary": "buildProviderInvocation for Claude constructs CLI: -p, --model, --permission-mode, --settings (JSON path), --tools, --allowedTools, --disallowedTools, --disable-slash-commands, --no-session-persistence, --max-budget-usd.",
+      "why": "Translation layer converting boundary config into actual Claude CLI arguments."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "111-203",
+      "source": "code",
+      "summary": "spawnProviderPrompt spawns Claude process with invocation args, pipes prompt to stdin, collects stdout/stderr, handles timeout, returns structured result.",
+      "why": "Process execution layer showing how evidence agents are spawned and their output captured."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52-75",
+      "source": "code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross_checker, verifier with objective, prompt, writes_code=false, result_schema, required_when conditions.",
+      "why": "Formal specification of evidence agent protocols showing read-only intent."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "626-646",
+      "source": "code",
+      "summary": "buildDemandEvidenceTasks creates agent task list based on evidence_policy: none=[], single_agent=[explorer, verifier], cross_check=[explorer, cross-checker, verifier].",
+      "why": "Routing logic showing how evidence policy determines which agents must run."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "384-406",
+      "source": "code",
+      "summary": "evidenceResultBlockingIssues converts missing[], recommendation in ['clarify','blocked','block'], verdict in ['blocked','block','fail'], status in ['blocked','failed','error'] into blockers.",
+      "why": "Evidence-to-blocker conversion showing how agent recommendations affect PRD readiness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "648-673",
+      "source": "code",
+      "summary": "inspectEvidenceAgreement groups results by claim, detects conflicts (block+proceed, or proceed+clarify), returns blocked status with EVIDENCE_AGENT_CONFLICT blockers.",
+      "why": "Conflict detection mechanism preventing averaging-away of disagreements between evidence agents."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "70-96",
+      "source": "test",
+      "summary": "Tests verify buildDemandEvidenceDispatchPlan creates ready status with explorer/cross-checker/verifier actions, dry-run doesn't spawn agents.",
+      "why": "Test evidence for planning and dry-run behavior."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "98-143",
+      "source": "test",
+      "summary": "Tests confirm execute mode requires both executeAgents AND allowAgentDispatch (dual-gate), CLI defaults to dry-run.",
+      "why": "Test evidence for dual-gate execution authorization."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "145-180",
+      "source": "test",
+      "summary": "Test runs full explorer→cross-checker→verifier workflow with fake agent outputs, verifies readiness.prd_ready=true on success.",
+      "why": "Test evidence for complete evidence workflow integration."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "182-216",
+      "source": "test",
+      "summary": "Test verifies codex dispatch preserves provider selection, doesn't inherit claude default model, allows unset sandbox defaults.",
+      "why": "Test evidence for provider-specific isolation."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "218-261",
+      "source": "test",
+      "summary": "Test verifies claude dispatch keeps tools available (default), relies on boundary enforcement, no-session-persistence, max-budget-usd passed through.",
+      "why": "Test evidence for Claude provider configuration and tool availability."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "263-331",
+      "source": "test",
+      "summary": "Tests verify full tool profile requires explicit allowFullAgentTools authorization, otherwise defaults to boundary profile.",
+      "why": "Test evidence for tool profile gating and default safety."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "333-374",
+      "source": "test",
+      "summary": "Test verifies research profile labels correctly, allows WebFetch/WebSearch alongside boundary tools.",
+      "why": "Test evidence for research tool profile handling."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "376-409",
+      "source": "test",
+      "summary": "Test simulates agent writing project file outside allowed root, verifies boundary.violated, readiness blocked with BOUNDARY_PROJECT_MUTATION.",
+      "why": "Critical test evidence for boundary enforcement preventing project mutation."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "411-453",
+      "source": "test",
+      "summary": "Test simulates explorer vs cross-checker conflict (proceed vs block), verifies EVIDENCE_AGENT_CONFLICT blocker keeps readiness blocked.",
+      "why": "Test evidence for conflict handling and blocker persistence."
+    },
+    {
+      "path": ".yolo/demand/evidence",
+      "line": "directory",
+      "source": "config",
+      "summary": "10+ dispatch directories (dispatch-YYYYMMDDHHMMSS-*) each containing explorer.json, cross-checker.json, verifier.json, dispatch.json artifacts.",
+      "why": "Runtime evidence showing system is actively generating evidence artifacts."
+    },
+    {
+      "path": "package.json",
+      "line": "1-131",
+      "source": "config",
+      "summary": "Package defines YOLO as automation pipeline with dependencies, exports demand router/evidence-dispatch, includes demand-* test scripts.",
+      "why": "Project context showing YOLO structure and demand system integration."
+    },
+    {
+      "path": "README.md",
+      "line": "1-100",
+      "source": "docs",
+      "summary": "README describes YOLO as lifecycle agent with gate/evidence boundaries, core flow from idea through discovery to ship/learn.",
+      "why": "Product documentation confirming boundary-first design philosophy."
+    }
+  ],
+  "assumptions": [
+    "CLAUDE_BOUNDARY_TOOLS array remains complete and current for Claude Code's actual tool set",
+    "Post-execution boundary snapshot detects all relevant mutation types (files, symlinks, permissions, metadata)",
+    "Provider isolation in executionConfig prevents cross-provider model/state leakage",
+    "Evidence agent outputs follow required JSON schema in production (not just in tests)",
+    "Real Claude -p agents respect claude_settings permissions.allow configuration as tested",
+    "Boundary snapshot excludes .git, node_modules, dist sufficiently to ignore non-project changes"
+  ],
+  "risks": [
+    "If CLAUDE_BOUNDARY_TOOLS is incomplete or outdated, agents may access unexpected tools",
+    "If boundary snapshot has false negatives (misses mutations), project files can be corrupted without triggering blockers",
+    "If provider isolation fails, cross-provider state leakage could cause unexpected behavior",
+    "If real Claude agents ignore boundary settings despite tests passing, project mutation could occur",
+    "If evidence agents return malformed JSON or don't follow schema, normalization may lose important data"
+  ],
+  "missing": [
+    "Runtime verification with real Claude -p agents that boundary settings actually restrict tool usage in production",
+    "Integration tests showing provider isolation prevents cross-provider model leakage",
+    "Evidence that CLAUDE_BOUNDARY_TOOLS matches Claude Code's current available tool set",
+    "Verification that boundary snapshot detects all mutation types (symlink, permissions, metadata, etc.)",
+    "Production evidence logs showing boundary violations caught and blocked",
+    "Cross-check of recent dispatch artifacts showing agent adherence to read-only protocol"
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Source code, tests, and runtime artifacts provide comprehensive evidence that demand evidence dispatch implements provider-adapter boundary control, post-execution snapshot auditing, dual-gate execution authorization, and conflict handling. All tests pass. However, key assumptions remain about production behavior: real Claude agents respecting boundary settings, snapshot detecting all mutation types, and CLAUDE_BOUNDARY_TOOLS completeness. Acceptance criteria for this demand specifically requires cross-check verification before PRD readiness."
+  }
+}

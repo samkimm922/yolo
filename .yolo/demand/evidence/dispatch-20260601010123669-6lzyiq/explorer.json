@@ -1,0 +1,151 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "Existing YOLO demand evidence dispatch API/schema implements harness boundary audit for full-tool Claude agents and blocks PRD readiness on violations.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "102-113",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot function captures project file state via git or filesystem walk, excluding allowed write roots.",
+      "why": "This is the core boundary audit mechanism that detects unauthorized project mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "115-125",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after file digests to detect added, modified, or deleted files.",
+      "why": "This detects any project file mutations during evidence agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "495-546",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime captures boundary snapshot before agent execution, runs agents, then compares after state and generates boundary blockers.",
+      "why": "This is the main dispatch runtime that enforces boundary violations as PRD readiness blockers."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "545-577",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-dispatch boundary audit injects BOUNDARY_PROJECT_MUTATION blockers into readiness and marks prd_ready=false on any violation.",
+      "why": "This ensures boundary violations block PRD readiness as required by the demand contract."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16-21",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_CLAUDE_BOUNDARY_SETTINGS defines CLAUDE_BOUNDARY_TOOLS including Write, Edit, Bash, WebSearch, Agent - agents have full tool access but boundary is enforced via audit.",
+      "why": "This confirms the design uses boundary audit rather than tool restrictions for safety."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52-75",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross_checker, and verifier protocols with writes_code=false and result_schema.",
+      "why": "This defines the evidence agent roles and protocols used in dispatch."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "638-711",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness validates required slots, checks evidence agent completion, validates project evidence scope, and checks agent conflicts before prd_ready=true.",
+      "why": "This is the PRD readiness contract that evidence results must satisfy."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "713-733",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceTasks creates explorer, cross-checker, and verifier tasks based on evidence_policy (none/single_agent/cross_check).",
+      "why": "This shows how evidence agents are planned for different risk levels."
+    },
+    {
+      "path": "src/cli/yolo.ts",
+      "line": "50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "CLI command 'yolo demand dispatch' accepts --execute-agents --allow-agent-dispatch flags with explicit authorization.",
+      "why": "This shows the public API requires explicit authorization for agent execution."
+    },
+    {
+      "path": "src/cli/yolo.ts",
+      "line": "1538-1549",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "CLI dispatch handler calls runDemandEvidenceDispatchRuntime and returns exit code 1 on blocked status.",
+      "why": "This shows the CLI integration respects dispatch blocking status."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation constructs Claude CLI args with tools, settings, budget, and permissions for evidence agent execution.",
+      "why": "This shows how Claude agents are invoked with full tool access during dispatch."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "378-411",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' simulates a mutation and verifies blocked status.",
+      "why": "This confirms the boundary audit behavior is tested and working as specified."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "413-449",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' verifies git-based snapshot detection.",
+      "why": "This confirms git-backed boundary detection is tested."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66-68",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'dispatch 不靠阉割 tools 做安全边界...必须遵守 harness 边界，目标项目文件不得被修改...dispatch 会在运行前后审计项目文件边界，任何越界改动都会变成 readiness blocker.'",
+      "why": "This documents the design intent that boundary audit blocks PRD readiness on violations."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' verifies PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker.",
+      "why": "This confirms evidence scope validation is enforced."
+    },
+    {
+      "path": "package.json",
+      "line": "1-131",
+      "scope": "project",
+      "source": "project_config",
+      "summary": "Package exports include demand/evidence-dispatch paths and CLI commands for demand dispatch.",
+      "why": "This confirms the evidence dispatch is part of the public SDK surface."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If boundary snapshot functions fail silently or miss edge cases, mutations could go undetected.",
+    "If git-based detection fails in non-git repositories, fallback to walkFiles must work correctly.",
+    "If CLAUDE_BOUNDARY_TOOLS list becomes outdated, agents may have access to tools not covered by boundary audit."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence dispatch implements comprehensive boundary audit with snapshot-based detection, git/filesystem fallback, explicit blocker injection, and full test coverage. All evidence agents (explorer/cross-checker/verifier) are wired through dispatch runtime with boundary enforcement blocking PRD readiness on violations."
+  }
+}

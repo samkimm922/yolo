@@ -1,0 +1,80 @@
+{
+  "iteration": 1,
+  "scenario": "real-ui-field-clarification",
+  "expected": "executable",
+  "status": "fail",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601130044099/fixtures/0001-real-ui-field-clarification",
+  "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601130044099/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.transcript.md",
+  "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601130044099/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.chain.json",
+  "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601130044099/fixtures/0001-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+  "blocked_path": null,
+  "yolo": {
+    "no_premature_prd": true,
+    "final_class_ok": true,
+    "check_status": "blocked",
+    "turn_count": 4,
+    "turn_expectations_met": 4,
+    "blocker_codes": [
+      "REFLECTION_PRESENT",
+      "INVESTIGATION_COMPLETE",
+      "REQUIREMENTS_PRESENT",
+      "ACCEPTANCE_SCENARIOS_PRESENT",
+      "SCENARIO_MATRIX_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "SCENARIO_SURFACES_PRESENT",
+      "SURFACE_SESSION_BUDGET_EXECUTABLE",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "REQUIREMENTS_PRESENT",
+      "ACCEPTANCE_SCENARIOS_PRESENT",
+      "SCENARIO_MATRIX_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "SCENARIO_SURFACES_PRESENT",
+      "SURFACE_SESSION_BUDGET_EXECUTABLE",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "USER_APPROVAL_PRESENT"
+    ]
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "correct_final_class": true,
+      "conversation_realistic": true,
+      "no_premature_prd": true,
+      "executable": true,
+      "score": 93,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "PRD_SCHEMA_TITLE_LENGTH",
+          "path": "real-ui-field-clarification-turn-4.prd.json:/tasks/0/title",
+          "message": "Task title exceeds 100-char schema max; YOLO check blocks execution on this cosmetic violation. The PRD content itself is sound."
+        }
+      ],
+      "dimensions": {
+        "clarification_quality": 9,
+        "project_fact_grounding": 10,
+        "stage_transition": 10,
+        "plan_convergence": 9,
+        "prd_executability": 9,
+        "deadlock_avoidance": 10,
+        "rework_risk": 9
+      }
+    },
+    "stdout": "",
+    "stderr": ""
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T13:00:44.100Z",
+  "ended_at": "2026-06-01T13:01:55.449Z",
+  "duration_ms": 71349
+}

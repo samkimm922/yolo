@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence is valid: all project claims are backed by source-cited evidence, assumptions are properly separated, and the acceptance criteria are verified by test coverage.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate exists and implements the described repair-on-fail logic with regex patterns for line ranges, escaping, and trailing commas",
+      "why": "Verifies explorer claim about repair implementation"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-396",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON error code when parsed is null, matching the fail-closed claim",
+      "why": "Verifies the explicit blocker mechanism for unrecoverable JSON"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "574-604",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Final status logic sets blocked state when prd_ready is false, ensuring readiness stays blocked on invalid evidence",
+      "why": "Verifies PRD readiness blocking behavior"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'repairs minor Claude JSON key drift' covers repair scenario and asserts json_repaired tracking",
+      "why": "Verifies test coverage for recoverable drift acceptance criteria"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'invalid agent JSON fails closed with explicit blocker code' covers unrecoverable JSON and asserts EVIDENCE_AGENT_INVALID_JSON error code",
+      "why": "Verifies test coverage for fail-closed acceptance criteria"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Assumption about regex coverage is reasonable but not proven for all drift variants; however, this is properly flagged as an assumption, not a fact."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer evidence is thorough and well-structured. All project claims cite exact paths and lines. Assumptions are clearly separated from facts. Test coverage directly validates acceptance criteria. No missing data. Ready to proceed."
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements provider-specific configuration isolation with boundary snapshot enforcement, but relies on explicit normalization and has gaps in cross-provider tool configuration cleanup.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "423-471",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig function implements provider-specific isolation: lines 450-463 for Claude clear settings/tools and set no_session_persistence; lines 447-449 for Codex clear Claude models; line 464 for custom sets sandbox.",
+      "why": "This is the core configuration isolation logic that prevents provider assumptions from leaking."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "451-455",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Tool profile normalization maps research/full/boundary profiles and only applies full profile when allowFullAgentTools is explicitly true.",
+      "why": "This controls agent capabilities and prevents unexpected tool access in evidence mode."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshot enforcement with buildBoundarySnapshot before agents and diffBoundarySnapshots after, detecting project mutations and blocking if files outside allowed_write_roots change.",
+      "why": "This provides runtime protection against evidence agents modifying target project files."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation implements provider-specific command building: Claude uses -p flag with permission modes; Codex uses exec with sandbox and output file; custom uses shell execution.",
+      "why": "This shows the actual provider invocation strategies are separated."
+    },
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "1-41",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "PROVIDER_ALIASES map (lines 1-9) and normalizeAgentProvider function (lines 37-41) normalize provider strings: anthropic/claude→claude, openai/codex→codex, shell/local→custom, returns null for auto.",
+      "why": "This provides the normalization foundation that prevents unnormalized provider strings from reaching isolation logic."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'codex dispatch does not inherit a claude default model' (lines 198-232) verifies that Codex provider does not inherit Claude-specific configuration when switching providers.",
+      "why": "This test validates the provider isolation claim with concrete evidence."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'claude dispatch does not pass tool restriction flags' (lines 234-273) verifies that Claude dispatch clears tool flags and relies on boundary enforcement.",
+      "why": "This test shows that Claude-specific isolation is intentionally minimal."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Tests 'boundary blocks project file mutation' (lines 381-414) and 'git-backed boundary detects untracked project mutations' (lines 416-452) verify boundary enforcement detects mutations and blocks readiness.",
+      "why": "These tests validate that the boundary system actually prevents and detects project mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "462",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Line 462 sets ai.agent_tool_profile which is an internal field not recognized by external providers (Codex/custom), potentially causing parameter rejection.",
+      "why": "This identifies a potential cross-provider compatibility issue."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "437-439",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Provider override logic (lines 437-439) sets ai.provider and ai.executor directly from input without normalization validation before executionConfig.",
+      "why": "This shows a potential path for unnormalized provider strings to bypass isolation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "457-459",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude tool restrictions are cleared (lines 457-459) but Codex/custom tool restrictions are not explicitly cleared, leaving potential for cross-provider tool leakage.",
+      "why": "This shows incomplete cleanup of provider-specific configuration."
+    }
+  ],
+  "assumptions": [
+    "The agent_tool_profile internal field is ignored rather than rejected by external providers.",
+    "Provider detection logic in runDemandEvidenceDispatchRuntime (line 529) always calls normalizeAgentProvider before building config.",
+    "Tool restrictions for Codex/custom providers are either not set or handled correctly by those providers.",
+    "The boundary snapshot system correctly identifies all project mutations including gitignored files."
+  ],
+  "risks": [
+    "A provider-specific configuration assumption (like agent_tool_profile) could silently weaken dispatch or cause provider failures.",
+    "Cross-provider tool restriction leakage could break agent capabilities or security boundaries.",
+    "Unnormalized provider strings could bypass isolation logic if input validation fails."
+  ],
+  "missing": [],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Provider isolation is implemented with explicit normalization and boundary enforcement, but cross-provider configuration cleanup gaps warrant cross-check verification."
+  }
+}

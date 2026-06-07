@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "The YOLO demand router schema already implements blocking logic that prevents PRD readiness when evidence agents report missing, clarify, block, or failed status.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "481-511",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues function checks agent recommendation, verdict, status, and missing fields",
+      "why": "Core blocking logic for evidence agent results that determines PRD readiness blockers."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "678-752",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness calls evidenceResultBlockingIssues for each evidence agent result and returns prd_ready: blockers.length === 0",
+      "why": "PRD readiness calculation that incorporates evidence agent blockers."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "709-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Router iterates through required evidence agent roles, calls evidenceResultBlockingIssues, and adds blockers for each result",
+      "why": "Integration point where evidence agent blocking issues are added to PRD readiness blockers list."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "246-286",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'evidence agent missing data and clarify recommendations block PRD readiness' verifies the blocking behavior",
+      "why": "Executable test specification proving missing/clarify recommendations become blockers."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "740",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "prd_ready is computed as blockers.length === 0",
+      "why": "Final determination that any blocker including evidence agent blockers prevents PRD readiness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "496-502",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "If result.missing has actionable items, blocker with code EVIDENCE_AGENT_MISSING is added",
+      "why": "Specific handling of missing field that creates blockers."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "503-509",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "If recommendation is clarify/blocked/block or verdict is blocked/fail or status is blocked/failed/error, a blocker is added",
+      "why": "Comprehensive status field checking that creates blockers for negative recommendations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-420",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult converts agent provider failure or invalid JSON into a blocker result with recommendation: block",
+      "why": "Agent dispatch layer ensures failed provider runs produce block recommendations."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If this claim is wrong, the system might allow incomplete evidence to produce PRD-ready status, violating the evidence-based readiness contract."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The router already implements complete blocking logic for missing/clarify/block/failed evidence agent status. Lines 481-511 define evidenceResultBlockingIssues, which checks recommendation, verdict, status, and missing fields. Lines 709-727 integrate these checks into PRD readiness blockers. Test at lines 246-286 confirms this works. The demand being considered is already satisfied by the existing implementation."
+  }
+}

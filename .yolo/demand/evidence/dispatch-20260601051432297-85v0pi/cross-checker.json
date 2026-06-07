@@ -1,0 +1,159 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence system already implements scope distinction (project | external | user | unknown) in schema, protocols, readiness contract, and tests.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION documents evidence structure with explicit scope field requirement: scope is project | external | user | unknown; project facts require project-scoped evidence.",
+      "why": "Core schema definition establishes the four scope categories and project evidence requirements."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES Set contains exactly four values: project, external, user, unknown.",
+      "why": "Enforces that only these four scope categories are valid."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines three agent roles: explorer, cross_checker, and verifier, each with writes_code: false and result_schema: DEMAND_EVIDENCE_RESULT_SCHEMA.",
+      "why": "Establishes evidence agent contract with read-only boundary and result schema requirement."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function classifies evidence by checking explicit scope field, then inferring from path patterns, url patterns, and source field values.",
+      "why": "Implements scope detection logic that routes evidence to project, external, user, or unknown categories."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope validates that record explicitly declares a scope present in VALID_EVIDENCE_SCOPES Set.",
+      "why": "Enforces that all evidence records must declare one of the four valid scopes."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "414-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasProjectLocator checks project-scope evidence has a non-URL path field.",
+      "why": "Validates that project evidence includes concrete repo-relative paths."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues generates EVIDENCE_SCOPE_REQUIRED blocker when agent evidence records lack valid scope declarations.",
+      "why": "Readiness enforcement that blocks PRD when scope is not declared."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues generates PROJECT_EVIDENCE_PATH_REQUIRED or PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blockers when project facts lack project-scoped evidence with paths.",
+      "why": "Enforces existing-project claims must be backed by project-scoped evidence."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates external-only evidence cannot satisfy existing project facts; generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker.",
+      "why": "Confirms external evidence alone cannot prove existing-project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "387-431",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates project evidence without concrete path locator is blocked; generates PROJECT_EVIDENCE_PATH_REQUIRED blocker.",
+      "why": "Confirms project-scope evidence must include repo-relative paths."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "433-478",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates external URLs cannot be relabeled as project evidence; generates PROJECT_EVIDENCE_PATH_REQUIRED blocker.",
+      "why": "Confirms URLs cannot be used as project file locators."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "480-524",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates evidence records must declare explicit scope; generates EVIDENCE_SCOPE_REQUIRED blocker when scope field is missing.",
+      "why": "Confirms scope field is mandatory on all evidence records."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "526-566",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates non-missing status notes (like 'no missing data identified') do not block readiness; readiness stays true.",
+      "why": "Confirms distinction between status notes and actionable missing items."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates boundary blocks project file mutation even when agent results pass; generates BOUNDARY_PROJECT_MUTATION blocker.",
+      "why": "Confirms evidence dispatch boundary enforcement prevents target project modifications."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "605-640",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates agent evidence without explicit scope is blocked during normalization; generates EVIDENCE_SCOPE_REQUIRED error.",
+      "why": "Confirms dispatch runtime enforces scope declaration on agent results."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "58-66",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine defines three evidence agent protocols: explorer reads project facts, cross-checker validates high-risk facts, verifier checks evidence sufficiency. All operate with read-only boundary.",
+      "why": "Product documentation explains evidence agent roles and contracts."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states evidence records must declare scope: project | external | user | unknown; project evidence requires repo-relative path or file locator; external evidence can only serve as background.",
+      "why": "Product documentation defines scope distinction and project evidence requirements."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If evidenceRecordScope function edge cases misclassify certain evidence patterns, validation could be bypassed.",
+    "If boundary enforcement has false positives, legitimate evidence gathering could be blocked.",
+    "Stress probes against real Claude agents have not been verified independently."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer claim confirmed through independent file reads. Schema, protocols, validation functions, tests, and documentation all implement scope distinction between project, external, user, and unknown evidence. All four scope categories are explicitly defined and validated. Readiness contract enforces scope declaration and project locator requirements through blockers. Tests cover main validation paths including external-only evidence rejection, missing path requirements, URL relabeling prevention, and scope-less record blocking. No conflicts found between explorer claims and actual codebase state."
+  }
+}

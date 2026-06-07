@@ -1,0 +1,106 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch exists with JSON repair logic and EVIDENCE_AGENT_INVALID_JSON error handling, but has not been stress-tested against real Claude provider output.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "329-367",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate and extractJsonObject functions handle JSON parsing with fenced code block extraction and error collection",
+      "why": "Core JSON parsing logic that processes provider stdout"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "333-341",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "JSON repair regex fixes line number ranges, escaped backslashes, and duplicate double quotes in keys",
+      "why": "Minor recoverable JSON drift repair implementation"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "369-420",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON error code when parsed is null and sets missing field with parse error",
+      "why": "Error handling path for invalid agent JSON"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "496-532",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case repairs minor Claude JSON key drift and records the repair with json_repaired: true flag",
+      "why": "Test evidence that JSON repair is expected behavior"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "534-564",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case invalid agent JSON fails closed with explicit blocker code EVIDENCE_AGENT_INVALID_JSON",
+      "why": "Test evidence that invalid JSON should block PRD readiness"
+    },
+    {
+      "path": ".yolo/stress/claude-stress-20260601023010041/ledger.json",
+      "line": "30-38",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Stress test iteration failed with EVIDENCE_AGENT_INVALID_JSON after Claude returned 'I've compl' instead of valid JSON",
+      "why": "Real Claude provider failure evidence showing demand cannot currently handle prose responses"
+    },
+    {
+      "path": ".yolo/stress/claude-stress-20260601023010041/0001-local-contract-boundary.json",
+      "line": "267",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Agent result missing array contains 'EVIDENCE_AGENT_INVALID_JSON: Unexpected token 'I', \"I've compl\"... is not valid JSON'",
+      "why": "Concrete failure payload from real Claude provider"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "14-15",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES set defines project, external, user, and unknown as the only allowed evidence scopes",
+      "why": "Evidence scope validation constraint"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-157",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors function validates that each evidence record declares a valid scope",
+      "why": "Scope enforcement that triggers EVIDENCE_SCOPE_REQUIRED error"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "566-601",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case agent evidence without explicit scope is blocked during normalization with EVIDENCE_SCOPE_REQUIRED",
+      "why": "Test evidence that scope declaration is mandatory"
+    }
+  ],
+  "assumptions": [
+    "The stress test failure represents a real Claude -p agent response pattern that may recur in production",
+    "The existing JSON repair regex is sufficient to handle observed Claude JSON key drift patterns"
+  ],
+  "risks": [
+    "If Claude agents return prose responses instead of JSON, the dispatch blocks with EVIDENCE_AGENT_INVALID_JSON but may not provide clear user feedback",
+    "JSON repair regex may not handle all future Claude output variations",
+    "Boundary enforcement is tested but not verified against actual Claude agent tool usage"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence dispatch implementation exists with JSON repair and explicit error handling. Stress test revealed failure mode with Claude prose responses. Unit tests cover repair and invalid JSON paths. No additional evidence needed for stated acceptance criteria."
+  }
+}

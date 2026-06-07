@@ -1,0 +1,110 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "Existing YOLO harness boundary audit detects tracked and untracked target-project mutations in git-backed and non-git projects using git ls-files and filesystem walking fallbacks.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() creates SHA-256 digests of all project files using git ls-files for git repos and walkFiles() fallback for non-git repos, excluding allowed artifact roots.",
+      "why": "Core boundary detection implementation supporting both git and non-git projects."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after snapshots to detect added, modified, or deleted files by comparing SHA-256 digests.",
+      "why": "Change detection mechanism that identifies all mutations regardless of git tracking status."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() runs 'git ls-files -co --exclude-standard' to capture tracked, cached, and other files including untracked entries.",
+      "why": "Git-backed file discovery that includes untracked files in boundary audit."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles() provides filesystem walking fallback for non-git repos, reading directory entries recursively while excluding common ignored directories (.git, node_modules, dist).",
+      "why": "Non-git project support ensures boundary audit works without git repository."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' verifies boundary audit catches untracked files added by agents in git repositories.",
+      "why": "Test evidence confirming untracked file detection in git repos."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "454-491",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects gitignored project mutations outside excluded dirs' verifies boundary detects .gitignore file mutations when they are project files.",
+      "why": "Test evidence confirming gitignored files are detected when outside allowed roots."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'non-git boundary fallback detects modified project files and ignores artifacts' verifies filesystem walking detects mutations while excluding artifact directories from allowed_write_roots.",
+      "why": "Test evidence confirming non-git boundary detection with artifact exclusion."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "585-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations are converted to BOUNDARY_PROJECT_MUTATION blockers and merged into readiness, forcing prd_ready=false when any project mutation is detected.",
+      "why": "Blocking enforcement that prevents PRD readiness on boundary violations."
+    },
+    {
+      "path": ".yolo/stress/claude-stress-20260601022305001/0001-local-contract-boundary.json",
+      "line": "577-583",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Real stress test run shows boundary.project_mutation='clean' and changes=[] after full-tool Claude agent execution, confirming no project mutations occurred.",
+      "why": "Real-world evidence that boundary audit works correctly with actual Claude agents."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Demand doctrine states: 'dispatch会在运行前后审计项目文件边界，任何越界改动都会变成readiness blocker' and '边界快照和readiness blocker承担'.",
+      "why": "Product documentation confirming boundary audit design intent and enforcement."
+    }
+  ],
+  "assumptions": [
+    "SHA-256 digests provide sufficient detection for semantic file mutations even when file sizes remain similar.",
+    "Git ls-files --exclude-standard adequately covers common ignore patterns while still detecting project mutations.",
+    "Filesystem walking fallback provides equivalent coverage for non-git repositories without performance issues.",
+    "Transient mutations within the execution window (mutate and revert) would not be detected by snapshot diffing.",
+    "Concurrent filesystem changes from other processes during evidence execution could be incorrectly attributed to agents."
+  ],
+  "risks": [
+    "Boundary snapshot may produce false positives if temp/cache files are not properly excluded from allowed_write_roots.",
+    "Boundary snapshot may have false negatives for large binary files, git submodules, or symlinks that fileDigest() cannot read properly.",
+    "Transient file mutations within the execution window (mutate then revert) would escape detection by snapshot diffing.",
+    "Concurrent filesystem changes from IDEs, build tools, or other processes during agent execution could be misattributed to agents."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Boundary audit implementation is complete with git ls-files for tracked/untracked files, filesystem walking fallback for non-git repos, SHA-256 digest comparison for mutation detection, and blocker enforcement preventing PRD readiness on violations. Tests confirm detection across git untracked, gitignored, and non-git scenarios. Stress tests show clean boundaries with real Claude agents."
+  }
+}

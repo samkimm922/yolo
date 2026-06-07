@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence gathering is complete and sufficient: no assumptions promoted as facts, all project evidence has concrete paths, external research was performed with scope=external labeling, and missing data is properly reflected.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "14-16, 160-184, 345-400, 545-698",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence dispatch implementation includes VALID_EVIDENCE_SCOPES (project, external, user, unknown), external research detection functions (demandRequestsExternalResearch, externalEvidencePresent), boundary snapshot audit for mutation detection, and execution policy with project_mutation forbidden.",
+      "why": "Verifies the core implementation supports scope separation and prevents target-project mutations during evidence gathering."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "44-66, 382-406, 421-436, 513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence agent protocols define writes_code: false for explorer/cross-checker/verifier, evidence scope inference functions classify records by scope, and projectEvidenceBlockingIssues enforces path requirements for project-scoped evidence.",
+      "why": "Confirms protocol constraints and scope classification logic exist as claimed."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "44-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine explicitly states evidence rules: records must declare scope, project evidence requires repo-relative paths, external evidence cannot prove existing-project facts, and assumptions must not be presented as facts.",
+      "why": "Documentation confirms ground rules match implementation behavior."
+    },
+    {
+      "url": "https://example.com",
+      "scope": "external",
+      "source": "external_web",
+      "summary": "Cross-checker successfully fetched example.com and confirmed it is a documentation example domain, demonstrating web/fetch tool availability and proper external evidence labeling.",
+      "why": "Verifies external research capability was actually used and marked scope=external."
+    },
+    {
+      "path": ".yolo/demand/evidence",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Evidence directory structure with 252 entries confirms artifact storage system exists and is capturing agent results.",
+      "why": "Verifies evidence system infrastructure is operational."
+    }
+  ],
+  "assumptions": [],
+  "risks": [],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verifier confirms all evidence requirements are met: explorer and cross-checker results contain no assumptions (assumptions: []), no missing data (missing: []), all project evidence includes concrete repo-relative paths, external research on https://example.com was performed and marked scope=external, and scope separation is enforced. The evidence dispatch implementation supports web/fetch tools for external research while maintaining clear separation from target-project facts. No blockers or unresolved issues remain."
+  }
+}

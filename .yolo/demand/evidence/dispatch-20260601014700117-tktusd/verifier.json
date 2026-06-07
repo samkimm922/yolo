@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "All 8 evidence citations from the explorer are accurate: paths, line numbers, and summaries match the actual code and tests. The core boundary snapshot implementation (git ls-files for tracked/cached/other files, walkFiles fallback, allowedRoots exclusion, mutation detection, and test validation) is verified by project-scoped evidence.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VERIFIED: gitFiles() function at lines 62-69 uses 'git ls-files -co --exclude-standard -z' as claimed",
+      "why": "Confirms explorer's git-backed file discovery evidence is accurate"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VERIFIED: buildBoundarySnapshot() at lines 97-108 uses gitFiles() with walkFiles() fallback and excludes allowedRoots as claimed",
+      "why": "Confirms explorer's hybrid strategy and exclusion logic evidence is accurate"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VERIFIED: walkFiles() at lines 71-85 recursively scans directories as claimed",
+      "why": "Confirms explorer's non-git fallback coverage evidence is accurate"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "110-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VERIFIED: diffBoundarySnapshots() at lines 110-120 compares before/after maps to detect changes as claimed",
+      "why": "Confirms explorer's mutation detection logic evidence is accurate"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "511-567",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VERIFIED: runDemandEvidenceDispatchRuntime() at lines 511-567 captures before/after snapshots and injects BOUNDARY_PROJECT_MUTATION blockers as claimed",
+      "why": "Confirms explorer's boundary audit integration evidence is accurate"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "367-400",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "VERIFIED: Test at lines 367-400 writes unexpected-project-write.txt and expects blocked status with BOUNDARY_PROJECT_MUTATION as claimed",
+      "why": "Confirms explorer's tracked project file mutation test evidence is accurate"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "402-438",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "VERIFIED: Test at lines 402-438 inits git repo, writes untracked-mutation.txt, expects violation with change path as claimed",
+      "why": "Confirms explorer's untracked mutation test evidence is accurate"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "243-246",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VERIFIED: execution_policy.boundary at lines 243-246 sets project_mutation: 'forbidden' and allowed_write_roots as claimed",
+      "why": "Confirms explorer's policy contract evidence is accurate"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "git ls-files behavior may vary across git versions or platforms (not a blocker, noted by explorer)",
+    "walkFiles() fallback may miss platform-specific excluded patterns (not a blocker, noted by explorer)",
+    "Missing non-git fallback test coverage could allow regression (noted by explorer as gap)",
+    "Missing real agent stress-testing could miss production issues (noted by explorer as gap)"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All 8 explorer evidence citations are verified as accurate with correct paths, line numbers, and summaries. No assumptions promoted as facts. Missing items (non-git tests, stress testing) correctly identified in missing rather than claimed as facts. Core boundary audit implementation is sufficiently verified."
+  }
+}

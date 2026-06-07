@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "blocked",
+  "completed": false,
+  "claim": "Evidence collection failed - no factual evidence available to verify boundary audit claims for YOLO demand evidence-dispatch.",
+  "confidence": "low",
+  "evidence": [
+    {
+      "path": ".yolo/demand/session-state.json",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Demand session state shows explorer agent failed with EVIDENCE_AGENT_INVALID_JSON error",
+      "why": "Previous evidence collection did not return valid structured output for verification"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "File exists as claimed in scope_in but content not verified by failed explorer",
+      "why": "Cannot verify claimed functionality without reading implementation"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test file exists as claimed but coverage not verified",
+      "why": "Cannot verify acceptance criteria without test evidence"
+    }
+  ],
+  "assumptions": [
+    "src/demand/evidence-dispatch.ts implements boundary snapshot logic as claimed",
+    "Test coverage exists for the claimed acceptance criteria",
+    "Current dirty working tree indicates need for stress testing as stated in status_quo"
+  ],
+  "risks": [
+    "Explorer agent failure may indicate protocol or harness issues preventing evidence collection",
+    "No factual evidence exists to verify boundary audit functionality claims",
+    "Assumptions may be promoted to facts without proper evidence verification"
+  ],
+  "missing": [
+    "EVIDENCE_AGENT_FAILURE: Explorer agent returned invalid JSON instead of structured evidence",
+    "BOUNDARY_AUDIT_IMPLEMENTATION: Actual code implementation details not verified",
+    "TEST_COVERAGE_EVIDENCE: Test suite coverage for acceptance criteria not verified",
+    "GIT_TRACKING_BEHAVIOR: Evidence for git ls-files tracking behavior not collected",
+    "NON_GIT_FALLBACK: Evidence for non-git project fallback behavior not collected",
+    "ARTIFACT_EXCLUSION: Evidence that dispatch artifact root is properly excluded not collected"
+  ],
+  "recommendation": "block",
+  "result": {
+    "verdict": "blocked",
+    "notes": "Explorer agent failed with EVIDENCE_AGENT_INVALID_JSON, returning conversational text instead of required yolo.demand.evidence_result.v1 schema. No factual evidence available for verification. Either retry explorer agent with corrected protocol or conduct manual file reading to collect primary evidence before PRD can be considered ready."
+  }
+}

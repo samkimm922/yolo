@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent verification confirms the YOLO demand evidence dispatch system has robust scope separation enforcement: VALID_EVIDENCE_SCOPES defines the schema contract, evidenceScopeErrors() validates scope declarations, agent prompts instruct WebFetch/WebSearch usage with scope=external, evidenceRecordScope() provides automatic scope inference, projectEvidenceBlockingIssues() blocks external evidence for project facts, doctrine documents the requirement, and inspectDemandPrdReadiness() integrates these checks into PRD readiness.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES is correctly defined as new Set(['project', 'external', 'user', 'unknown']).",
+      "why": "Confirms the core schema contract for evidence scope classification."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors() correctly validates that each evidence record declares a valid scope from VALID_EVIDENCE_SCOPES.",
+      "why": "Verifies the validation function that enforces scope declaration requirements."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "275-276",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt instruction: 'If the demand explicitly asks for external research/fetch/search, actually use WebFetch/WebSearch when available and record those records as scope=external'.",
+      "why": "Confirms agents are explicitly instructed to use WebFetch/WebSearch and mark fetched records as scope=external."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() correctly classifies records with HTTP URLs as external and records with project_code, project_test, project_docs, project_config, project_log, or project_artifact source types as project.",
+      "why": "Verifies the automatic scope inference and normalization logic."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() correctly returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker when evidence is only external/user/unknown for existing-project facts.",
+      "why": "Confirms the critical boundary enforcement that project facts cannot be proven by external evidence alone."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'external evidence can only serve as background research and cannot independently prove target project existing fields, APIs, state machines, or data flows.'",
+      "why": "Product-level documentation confirming the scope separation requirement."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "678-758",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness() integrates evidenceScopeDeclarationIssues() and projectEvidenceBlockingIssues() into the PRD readiness check, preventing PRD readiness when scope requirements are not met.",
+      "why": "Verifies the integration of scope enforcement into the PRD readiness gate."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If evidence scope validation is weakened or bypassed in future modifications, external research could be mistakenly accepted as project implementation facts.",
+    "If WebFetch/WebSearch tools are unavailable but external research is explicitly requested by the demand, agents may put external requests in missing instead of attempting available alternatives."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms all explorer evidence claims are accurate. The implementation has multiple layers of scope separation enforcement: schema definition (VALID_EVIDENCE_SCOPES), validation (evidenceScopeErrors), agent instructions (prompts), automatic inference (evidenceRecordScope), blocking enforcement (projectEvidenceBlockingIssues), and PRD readiness integration (inspectDemandPrdReadiness). The doctrine and code are aligned on preventing external evidence from proving project implementation facts."
+  }
+}

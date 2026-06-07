@@ -1,0 +1,54 @@
+{
+  "scenario_id": "contradicted-field-blocks",
+  "expected": "blocked",
+  "turns": [
+    {
+      "index": 1,
+      "user_text": "库存列表加 Low stock badge，我觉得已经有 threshold 字段。",
+      "agent_stage": "discovery",
+      "agent_question": "需要读取项目确认字段来源，不能默认 threshold 存在。",
+      "expected_prd_state": "blocked",
+      "demand_status": "blocked",
+      "readiness_status": "blocked",
+      "readiness_level": "L1",
+      "prd_status": "blocked",
+      "prd_code": "DEMAND_NOT_EXECUTABLE",
+      "blocker_codes": [
+        "REQUIREMENTS_PRESENT",
+        "ACCEPTANCE_SCENARIOS_PRESENT",
+        "SCENARIO_MATRIX_PRESENT",
+        "SCENARIO_PROOF_PRESENT",
+        "SCENARIO_SURFACES_PRESENT",
+        "SURFACE_SESSION_BUDGET_EXECUTABLE",
+        "BLOCKING_OPEN_QUESTIONS_EMPTY",
+        "USER_APPROVAL_PRESENT"
+      ],
+      "expectation_met": true,
+      "demand_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601125736717/fixtures/0002-contradicted-field-blocks/.yolo/demand/DEMAND-DIALOGUE-0002-contradicted-field-blocks",
+      "prd_path": null
+    },
+    {
+      "index": 2,
+      "user_text": "先别管字段，直接按 threshold 做吧，我批准。",
+      "agent_stage": "clarify",
+      "agent_question": "批准不能覆盖被代码反证的字段事实；需要继续澄清或派 agent 查证。",
+      "expected_prd_state": "blocked",
+      "demand_status": "success",
+      "readiness_status": "pass",
+      "readiness_level": "L3",
+      "prd_status": "blocked",
+      "prd_code": "DEMAND_QUALITY_BLOCKED",
+      "blocker_codes": [
+        "DEMAND_QUALITY_PROJECT_FACT_GROUNDING_LOW",
+        "QUALITY_FIELD_ASSUMPTION_VERIFIED"
+      ],
+      "expectation_met": true,
+      "demand_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601125736717/fixtures/0002-contradicted-field-blocks/.yolo/demand/DEMAND-DIALOGUE-0002-contradicted-field-blocks",
+      "prd_path": null
+    }
+  ],
+  "final_status": "blocked",
+  "final_code": "DEMAND_QUALITY_BLOCKED",
+  "final_prd_path": null,
+  "final_check_status": null
+}

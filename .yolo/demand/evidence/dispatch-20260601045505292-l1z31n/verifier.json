@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "All 10 evidence records from the explorer have been verified against actual file contents; no assumptions were presented as facts, all paths are usable and accurate, and no missing data remains.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate function verified: contains regex replacements for line number format, backslash escapes, duplicate keys, and trailing commas.",
+      "why": "Direct verification of explorer claim about JSON repair logic."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "348-368",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "extractJsonObject function verified: implements fenced code block parsing and JSON boundary slicing.",
+      "why": "Direct verification of explorer claim about JSON extraction."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-421",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult function verified: line 372 returns EVIDENCE_AGENT_INVALID_JSON when parsed is null, lines 408-419 return EVIDENCE_SCOPE_REQUIRED on missing scope.",
+      "why": "Direct verification of explorer claim about fail-closed logic."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test repairs minor Claude JSON key drift verified: injects common drift patterns and asserts json_repaired is true.",
+      "why": "Direct verification of explorer claim about repair test coverage."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test invalid agent JSON fails closed verified: returns non-JSON output, asserts EVIDENCE_AGENT_INVALID_JSON in agent_results and readiness blockers.",
+      "why": "Direct verification of explorer claim about fail-closed test."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "605-640",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test agent evidence without explicit scope is blocked verified: removes scope field, asserts EVIDENCE_SCOPE_REQUIRED error code.",
+      "why": "Direct verification of explorer claim about scope validation test."
+    },
+    {
+      "path": ".yolo/stress/claude-stress-20260601023010041/ledger.json",
+      "line": "30-47",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Stress test ledger verified: iteration 1 shows explorer role with EVIDENCE_AGENT_INVALID_JSON blocker and Unexpected token error message.",
+      "why": "Direct verification of explorer claim about real-world stress test evidence."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-616",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime boundary snapshot logic verified: function creates before/after snapshots and detects violations.",
+      "why": "Cross-check of explorer claim about boundary enforcement."
+    },
+    {
+      "path": "git status",
+      "line": "untracked",
+      "scope": "project",
+      "source": "project_log",
+      "summary": "git status verified: src/demand/evidence-dispatch.ts and __tests__/demand-evidence-dispatch.test.ts appear in git status output as untracked files.",
+      "why": "Verification of explorer claim about dirty working tree status quo."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If JSON repair regex patterns become too permissive, severely malformed JSON could be accepted as valid",
+    "If EVIDENCE_AGENT_INVALID_JSON blocker is not propagated to readiness.blockers, PRD readiness could incorrectly pass"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All explorer evidence verified against actual file contents. No assumptions presented as facts. All line references accurate. Stress test artifact confirms real-world behavior matches implementation. No missing data remains. Claim is fully supported by project-scoped evidence."
+  }
+}

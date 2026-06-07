@@ -1,0 +1,76 @@
+{
+  "iteration": 2,
+  "scenario": "contradicted-field-blocks",
+  "expected": "blocked",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601130638191/fixtures/0002-contradicted-field-blocks",
+  "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601130638191/fixtures/0002-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.transcript.md",
+  "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601130638191/fixtures/0002-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.chain.json",
+  "prd_path": null,
+  "blocked_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601130638191/fixtures/0002-contradicted-field-blocks/.yolo/dialogue-stress/contradicted-field-blocks.blocked.json",
+  "yolo": {
+    "no_premature_prd": true,
+    "final_class_ok": true,
+    "check_status": null,
+    "turn_count": 2,
+    "turn_expectations_met": 2,
+    "blocker_codes": [
+      "REQUIREMENTS_PRESENT",
+      "ACCEPTANCE_SCENARIOS_PRESENT",
+      "SCENARIO_MATRIX_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "SCENARIO_SURFACES_PRESENT",
+      "SURFACE_SESSION_BUDGET_EXECUTABLE",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "DEMAND_QUALITY_PROJECT_FACT_GROUNDING_LOW",
+      "QUALITY_FIELD_ASSUMPTION_VERIFIED"
+    ]
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "correct_final_class": true,
+      "conversation_realistic": true,
+      "no_premature_prd": true,
+      "executable": true,
+      "score": 95,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "READINESS_L3_DESPITE_CONTRADICTED_FIELD",
+          "path": ".yolo/dialogue-stress/contradicted-field-blocks.chain.json",
+          "message": "Turn 2 readiness shows pass/L3 with USER_APPROVAL_PRESENT while the approved assumption (threshold field) is code-contradicted. Quality gate catches it, but readiness alone could mislead."
+        },
+        {
+          "code": "BLOCKER_LABEL_MISLEADING",
+          "path": ".yolo/dialogue-stress/contradicted-field-blocks.blocked.json",
+          "message": "DEMAND_QUALITY_PROJECT_FACT_GROUNDING_LOW blocker shows score=80 threshold=60 — score is above threshold, the real block is the failed QUALITY_FIELD_ASSUMPTION_VERIFIED check."
+        }
+      ],
+      "dimensions": {
+        "clarification_quality": 9,
+        "project_fact_grounding": 10,
+        "stage_transition": 9,
+        "plan_convergence": 9,
+        "prd_executability": 9,
+        "deadlock_avoidance": 9,
+        "rework_risk": 9
+      }
+    },
+    "stdout": "",
+    "stderr": ""
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T13:07:54.431Z",
+  "ended_at": "2026-06-01T13:09:02.953Z",
+  "duration_ms": 68522
+}

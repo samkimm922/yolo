@@ -11,7 +11,7 @@ import {
 describe("workflow registry", () => {
   test("listWorkflows exposes the composable lifecycle workflow set", () => {
     const ids = listWorkflows().map((workflow) => workflow.id).sort();
-    assert.deepEqual(ids, ["accept", "brainstorm", "check", "discover", "discuss", "doctor", "eval", "fix", "learn", "pi", "plan", "prd", "review", "ship"]);
+    assert.deepEqual(ids, ["accept", "brainstorm", "check", "demand", "discover", "discuss", "doctor", "eval", "fix", "interview", "learn", "pi", "plan", "prd", "review", "ship"]);
   });
 
   test("getWorkflow returns cloned workflow definitions", () => {
@@ -66,7 +66,7 @@ describe("workflow registry", () => {
 
   test("listWorkflowSkillDescriptors maps every workflow", () => {
     const descriptors = listWorkflowSkillDescriptors({ agent: "claude" });
-    assert.equal(descriptors.length, 14);
+    assert.equal(descriptors.length, 16);
     assert.ok(descriptors.every((descriptor) => descriptor.agent === "claude"));
   });
 });

@@ -34,7 +34,11 @@ function last(values = []) {
 }
 
 function reportStatus(taskResults = {}) {
-  return (taskResults.failed || []).length > 0 || (taskResults.blocked || []).length > 0 ? "error" : "success";
+  return (taskResults.failed || []).length > 0 ||
+    (taskResults.blocked || []).length > 0 ||
+    (taskResults.evidence_failure_count || 0) > 0
+    ? "error"
+    : "success";
 }
 
 function itemList(values = [], limit = 8) {
@@ -52,6 +56,21 @@ function readTaskLogs(taskLogsDir) {
   return readdirSync(taskLogsDir)
     .filter((file) => file.endsWith(".jsonl"))
     .flatMap((file) => readJsonl(join(taskLogsDir, file)).map((entry) => ({ log_file: file, ...entry })));
+}
+
+function filterTaskLogsForRun(entries = [], runId = null) {
+  if (!runId) {
+    return {
+      current: entries,
+      legacyUnscoped: [],
+      otherRun: [],
+    };
+  }
+  return {
+    current: entries.filter((entry) => entry.run_id === runId),
+    legacyUnscoped: entries.filter((entry) => !entry.run_id),
+    otherRun: entries.filter((entry) => entry.run_id && entry.run_id !== runId),
+  };
 }
 
 function summarizeGateEvidence({ stateEvents, taskLogEntries }) {
@@ -155,6 +174,29 @@ function summarizeSpecGovernance(stateEvents) {
   };
 }
 
+function evidenceFailureCount({
+  gates = {},
+  review = {},
+  fixtures = {},
+  specGovernance = {},
+  remediation = {},
+  failed = [],
+  blocked = [],
+} = {}) {
+  const representedTaskFailures = new Set([...failed, ...blocked]);
+  const gateTasks = unique(gates.failed_tasks || []);
+  const unrepresentedGateTasks = gateTasks.filter((id) => !representedTaskFailures.has(id)).length;
+  const unassignedGateFailures = (gates.failures || []).filter((failure) => !failure.task_id).length;
+  return unrepresentedGateTasks +
+    unassignedGateFailures +
+    (review.issue_count || 0) +
+    (review.error_count || 0) +
+    (fixtures.fail_count || 0) +
+    (specGovernance.blocked_count || 0) +
+    (remediation.human_required_count || 0) +
+    (remediation.unsafe_stop_count || 0);
+}
+
 function summarizeRemediation({ taskResults = {}, stateEvents = [] } = {}) {
   const fromTaskResults = (taskResults.remediation || []).map((entry) => ({
     source: "task-results",
@@ -211,8 +253,11 @@ export function buildRunReport({
   const runs = readJsonl(join(stateDir, "runs.jsonl"));
   const events = readJsonl(join(stateDir, "events.jsonl"));
   const runEvents = runId ? runs.filter((entry) => entry.run_id === runId) : runs;
-  const stateEvents = runId ? events.filter((entry) => !entry.run_id || entry.run_id === runId) : events;
-  const taskLogEntries = readTaskLogs(taskLogsDir || join(stateDir, "runtime", "task-logs"));
+  const stateEvents = runId ? events.filter((entry) => entry.run_id === runId) : events;
+  const legacyUnscopedStateEvents = runId ? events.filter((entry) => !entry.run_id) : [];
+  const allTaskLogEntries = readTaskLogs(taskLogsDir || join(stateDir, "runtime", "task-logs"));
+  const taskLogScope = filterTaskLogsForRun(allTaskLogEntries, runId);
+  const taskLogEntries = taskLogScope.current;
   const runStart = runEvents.find((entry) => entry.event === "run_start") || null;
   const runEnd = last(runEvents.filter((entry) => entry.event === "run_end"));
 
@@ -220,14 +265,29 @@ export function buildRunReport({
   const failed = unique(taskResults.failed || []);
   const skipped = unique(taskResults.skipped || []);
   const blocked = unique(taskResults.blocked || []);
-  const terminalCount = completed.length + failed.length;
-  const plannedCount = progressTotal ?? runStart?.tasks ?? terminalCount + skipped.length + blocked.length;
+  const terminalCount = completed.length + failed.length + blocked.length;
+  const plannedCount = progressTotal ?? runStart?.tasks ?? terminalCount + skipped.length;
   const duration = asNumber(durationSec ?? runEnd?.duration_sec);
+  const gates = summarizeGateEvidence({ stateEvents, taskLogEntries });
+  const remediation = summarizeRemediation({ taskResults, stateEvents });
+  const review = summarizeReviewEvidence(taskLogEntries);
+  const fixtures = summarizeFixtureEvidence(stateEvents);
+  const specGovernance = summarizeSpecGovernance(stateEvents);
+  const evidenceFailures = evidenceFailureCount({
+    gates,
+    review,
+    fixtures,
+    specGovernance,
+    remediation,
+    failed,
+    blocked,
+  });
+  const runRateDenominator = plannedCount == null ? plannedCount : plannedCount + evidenceFailures;
 
   return buildEvidenceArtifact("run.report", {
     run_id: runId || runStart?.run_id || runEnd?.run_id || null,
     prd: prdPath || runStart?.prd || runEnd?.prd || null,
-    status: reportStatus({ failed, blocked }),
+    status: reportStatus({ failed, blocked, evidence_failure_count: evidenceFailures }),
     started_at: startedAt || runStart?.ts || null,
     finished_at: finishedAt || runEnd?.ts || null,
     duration_sec: duration,
@@ -237,8 +297,9 @@ export function buildRunReport({
       failed: failed.length,
       skipped: skipped.length,
       blocked: blocked.length,
+      evidence_failures: evidenceFailures,
       task_success_rate: rate(completed.length, terminalCount),
-      run_success_rate: rate(completed.length, plannedCount),
+      run_success_rate: rate(completed.length, runRateDenominator),
     },
     tasks: {
       completed,
@@ -249,15 +310,19 @@ export function buildRunReport({
     ledger: {
       run_events: runEvents.length,
       state_events: stateEvents.length,
+      legacy_unscoped_events: legacyUnscopedStateEvents.length,
+      legacy_unscoped_state_events: legacyUnscopedStateEvents.length,
       task_log_events: taskLogEntries.length,
+      legacy_unscoped_task_log_events: taskLogScope.legacyUnscoped.length,
+      other_run_task_log_events: taskLogScope.otherRun.length,
       latest_run_event: runEnd?.event || last(runEvents)?.event || null,
       latest_state_event: last(stateEvents)?.event || null,
     },
-    gates: summarizeGateEvidence({ stateEvents, taskLogEntries }),
-    remediation: summarizeRemediation({ taskResults, stateEvents }),
-    review: summarizeReviewEvidence(taskLogEntries),
-    fixtures: summarizeFixtureEvidence(stateEvents),
-    spec_governance: summarizeSpecGovernance(stateEvents),
+    gates,
+    remediation,
+    review,
+    fixtures,
+    spec_governance: specGovernance,
     recent_events: stateEvents.slice(-20).map((entry) => ({
       ts: entry.ts,
       event: entry.event,
@@ -284,6 +349,7 @@ export function formatRunReportMarkdown(report) {
     `- Failed: ${summary.failed || 0}`,
     `- Skipped: ${summary.skipped || 0}`,
     `- Blocked: ${summary.blocked || 0}`,
+    `- Evidence failures: ${summary.evidence_failures || 0}`,
     `- Task success rate: ${summary.task_success_rate == null ? "N/A" : `${summary.task_success_rate}%`}`,
     `- Run success rate: ${summary.run_success_rate == null ? "N/A" : `${summary.run_success_rate}%`}`,
     "",
@@ -344,6 +410,7 @@ export function buildRunFinalAnswer(report = {}, options = {}) {
     ...(failed.length ? [`failed tasks: ${itemList(failed).join(", ")}`] : []),
     ...(blocked.length ? [`blocked tasks: ${itemList(blocked).join(", ")}`] : []),
     ...(gateFailures ? [`failed gates: ${gateFailures}`] : []),
+    ...(reviewIssues ? [`review issues: ${reviewIssues}`] : []),
     ...(reviewErrors ? [`review errors: ${reviewErrors}`] : []),
     ...(specBlocked ? [`spec governance blocked events: ${specBlocked}`] : []),
     ...(fixtureFailures ? [`fixture failures: ${fixtureFailures}`] : []),
@@ -369,7 +436,7 @@ export function buildRunFinalAnswer(report = {}, options = {}) {
     },
     {
       name: "review",
-      status: reviewErrors > 0 ? "fail" : (reviewIssues > 0 ? "warning" : "pass"),
+      status: reviewErrors > 0 || reviewIssues > 0 ? "fail" : "pass",
       detail: `issues=${reviewIssues} errors=${reviewErrors}`,
     },
     {
@@ -411,6 +478,7 @@ export function buildRunFinalAnswer(report = {}, options = {}) {
       failed: failed.length,
       skipped: skipped.length,
       blocked: blocked.length,
+      evidence_failures: summary.evidence_failures ?? null,
       task_success_rate: summary.task_success_rate ?? null,
       run_success_rate: summary.run_success_rate ?? null,
     },
@@ -445,6 +513,7 @@ export function formatRunFinalAnswerMarkdown(finalAnswerOrReport = {}, options =
     `- Failed: ${summary.failed || 0}`,
     `- Skipped: ${summary.skipped || 0}`,
     `- Blocked: ${summary.blocked || 0}`,
+    `- Evidence failures: ${summary.evidence_failures || 0}`,
     `- Task success rate: ${summary.task_success_rate == null ? "N/A" : `${summary.task_success_rate}%`}`,
     `- Run success rate: ${summary.run_success_rate == null ? "N/A" : `${summary.run_success_rate}%`}`,
     "",

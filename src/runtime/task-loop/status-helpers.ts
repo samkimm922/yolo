@@ -81,7 +81,11 @@ export function blockParentForChildFailure({
 }
 
 export function dependencyBlockers({ task, completedIds, tasks = [], taskCountsAsCompleted }) {
-  return (task.depends_on || []).filter((dependencyId) => {
+  const dependencies = [...new Set([
+    ...(task.depends_on || []),
+    ...(task.dependencies || []),
+  ].filter(Boolean))];
+  return dependencies.filter((dependencyId) => {
     if (completedIds.has(dependencyId)) return false;
     const dependencyTask = tasks.find((candidate) => candidate.id === dependencyId);
     return !taskCountsAsCompleted(dependencyTask);

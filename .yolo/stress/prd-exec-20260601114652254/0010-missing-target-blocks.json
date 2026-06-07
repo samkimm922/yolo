@@ -1,0 +1,51 @@
+{
+  "iteration": 10,
+  "scenario": "missing-target-blocks",
+  "expected": "blocked",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0010-missing-target-blocks",
+  "demand_dir": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0010-missing-target-blocks/.yolo/demand/DEMAND-0010-missing-target-blocks",
+  "prd_path": null,
+  "check_path": null,
+  "blocked_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/prd-exec-20260601114652254/fixtures/0010-missing-target-blocks/.yolo/prd-executability/missing-target-blocks.blocked.json",
+  "yolo": {
+    "discuss_status": "warning",
+    "prd_status": "blocked",
+    "prd_code": "DEMAND_NOT_EXECUTABLE",
+    "check_status": null,
+    "check_code": null,
+    "blocker_codes": [
+      "EXECUTION_SCOPE_PRESENT"
+    ],
+    "task_count": 0
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "executable": false,
+      "correctly_blocked": true,
+      "score": 100,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "READINESS_L1_NOT_L3",
+          "task_id": null,
+          "path": ".yolo/prd-executability/missing-target-blocks.blocked.json:39",
+          "message": "Readiness is L1, not L3. The blocker correctly identifies that execution cannot proceed without bounded scope, but the readiness gap (L1 vs L3) is a secondary signal that could be more explicit in next_actions."
+        }
+      ]
+    }
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T11:59:29.905Z",
+  "ended_at": "2026-06-01T12:00:11.791Z",
+  "duration_ms": 41886
+}

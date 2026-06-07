@@ -67,6 +67,7 @@ describe("YOLO command registry", () => {
       "yolo-accept",
       "yolo-ui-review",
       "yolo-eval",
+      "yolo-release-candidate",
       "yolo-ship",
       "yolo-learn",
       "yolo-doctor",
@@ -95,6 +96,29 @@ describe("YOLO command registry", () => {
     assert.equal(getYoloCommand("/yolo-prd").lifecycle_stage, "prd");
     assert.equal(getYoloCommand("/yolo-interview").alias_for, "yolo-demand");
     assert.throws(() => getYoloCommand("wat"), /Unknown YOLO command/);
+  });
+
+  test("public mainline excludes implementation engines from recommended commands", () => {
+    const names = listYoloCommands({ recommended: true }).map((command) => command.name);
+    const engineNames = ["runner", "pi", "gate", "preflight", "yolo-runner", "yolo-pi", "yolo-gate", "yolo-prd-preflight"];
+
+    assert.deepEqual(names.slice(0, 6), [
+      "yolo",
+      "yolo-demand",
+      "yolo-init",
+      "yolo-setup",
+      "yolo-plan",
+      "yolo-prd",
+    ]);
+    assert.equal(names.includes("yolo-check"), true);
+    assert.equal(names.includes("yolo-run"), true);
+    for (const name of names) assert.match(name, /^yolo(?:-|$)/);
+    for (const name of engineNames) assert.equal(names.includes(name), false, `${name} must stay out of the public mainline`);
+
+    const run = getYoloCommand("yolo-run");
+    assert.equal(run.writes_code, true);
+    assert.equal(run.requires_confirmation, true);
+    assert.match(run.safety, /checked PRD/);
   });
 
   test("demand command defaults to one-question interview before PRD", () => {

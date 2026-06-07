@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand router prd_readiness already creates blockers when evidence agents report missing, clarify, block, or failed status; missing and clarify recommendations cannot produce prd_ready true.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "481-511",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues creates EVIDENCE_AGENT_MISSING blocker when missing.length > 0 (lines 496-502), and creates EVIDENCE_AGENT_CLARIFICATION_REQUIRED or EVIDENCE_AGENT_BLOCKED blocker when recommendation is clarify/blocked/block or verdict is blocked/failed (lines 503-509).",
+      "why": "Core logic that converts evidence agent recommendations into blockers."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "717-733",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness iterates required roles, checks completion status, and calls evidenceResultBlockingIssues for each complete result (lines 717-733). Line 727 adds all blocking issues to blockerList.",
+      "why": "Confirms blocking issues from evidence agents are propagated to PRD readiness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "756",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "prd_ready is set to blockers.length === 0, meaning any blocker prevents PRD readiness from being true.",
+      "why": "Final gatekeeper condition that prevents PRD readiness when blockers exist."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "313-353",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies cross-checker with missing data and clarify recommendation results in prd_ready false and blockers including EVIDENCE_AGENT_MISSING and EVIDENCE_AGENT_CLARIFICATION_REQUIRED.",
+      "why": "Proves the implementation matches intended behavior for missing/clarify cases."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "144-202",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies only explorer completing (missing cross-checker and verifier) results in prd_ready false, while all three agents completing with proceed results in prd_ready true.",
+      "why": "Proves required evidence agents must complete before PRD readiness can be true."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "98-110",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "actionableMissingItems filters out non-actionable status notes using isNonMissingStatusItem which matches patterns like 'no missing data identified' and 'all required evidence tasks completed'.",
+      "why": "Explains how status notes are distinguished from actual missing data."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "593-633",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies status notes like 'No missing data identified', '100% agreement', and 'All required evidence tasks completed' do not block PRD readiness (prd_ready is true).",
+      "why": "Confirms non-missing status notes are correctly filtered out."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "475-479",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "requiredEvidenceRoles returns ['explorer', 'cross-checker', 'verifier'] for cross_check policy, and ['explorer', 'verifier'] for single_agent policy.",
+      "why": "Defines required evidence agents based on evidence policy."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "710-716",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "If any evidence agent recommends cross_check, required roles are expanded to include explorer, cross-checker, and verifier via unique array merge.",
+      "why": "Shows dynamic upgrade of required agents when cross_check is recommended."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If this claim is incorrect, a PRD could be generated from incomplete evidence without blockers."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification confirms all explorer evidence records. The implementation correctly blocks PRD readiness when evidence agents report missing, clarify, block, or failed status. Tests confirm this behavior works as intended."
+  }
+}

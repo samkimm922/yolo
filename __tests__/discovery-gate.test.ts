@@ -29,6 +29,23 @@ describe("discovery readiness gate", () => {
     assert.deepEqual(brief.constraints, ["keep imports unchanged."]);
   });
 
+  test("keeps Chinese punctuation inside acceptance phrases", () => {
+    const brief = buildDiscoveryBrief({
+      idea: "为运营人员改进看板页面，范围是 src/board.tsx。",
+      users: "运营人员",
+      success_criteria: [
+        "看板包含 Todo、Doing、Done 三列。",
+        "- 新增列表、新增卡片、编辑、移动、归档、刷新持久化在一次验收中完成。",
+      ],
+      files: "src/board.tsx",
+    });
+
+    assert.deepEqual(brief.success_criteria, [
+      "看板包含 Todo、Doing、Done 三列。",
+      "新增列表、新增卡片、编辑、移动、归档、刷新持久化在一次验收中完成。",
+    ]);
+  });
+
   test("blocks vague ideas before PI creates PRD or runner actions", () => {
     const result = inspectDiscoveryReadiness("Build inventory alerts");
 

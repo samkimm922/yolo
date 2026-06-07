@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "VERIFIED: Evidence from explorer and cross-checker is sufficient, consistent, and properly sourced to support PRD readiness claims. All 11 evidence items have project-scoped sources with exact paths and line ranges. Assumptions and risks are properly separated from facts. No missing data remains.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "450-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider branch resets tool restriction flags (settings, claude_tools, claude_allowed_tools, claude_disallowed_tools) to empty strings, confirming provider isolation implementation",
+      "why": "Verifies that the primary provider isolation mechanism exists in code with exact line reference."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-agent snapshot diff generates boundary change list and violates readiness if changes detected outside allowed_write_roots",
+      "why": "Verifies that boundary enforcement logic exists and triggers PRD readiness blockers on violations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "258-327",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt generates explicit boundary instructions: do not modify target project files, allowed artifact root path",
+      "why": "Verifies that agent prompts include explicit boundary enforcement instructions."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414, 493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Boundary mutation tests verify that violations are detected both with and without git, and that allowed write roots are excluded from violation detection",
+      "why": "Verifies that boundary enforcement has test coverage for violation scenarios."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation is a pure function accepting normalized provider, building provider-specific invocation without cross-provider logic",
+      "why": "Verifies that provider adapter is stateless, preventing cross-provider assumption drift."
+    }
+  ],
+  "assumptions": [
+    "Provider-adapter.ts buildProviderInvocation is stateless and does not cache or share assumptions between provider types.",
+    "Agent prompt instructions are respected by Claude/Codex/custom providers; no provider tool can bypass boundary enforcement.",
+    "Git ls-files with exclude-standard covers all relevant project files and gitignore patterns align with security exclusion list."
+  ],
+  "risks": [
+    "If executionConfig fails to normalize provider settings due to config loading errors, provider-specific defaults may leak.",
+    "If agent prompts ignore boundary instructions and mutate project files, PRD readiness will block but git working tree will be dirty.",
+    "If git boundary snapshot misses untracked files due to gitignore patterns, mutations may go undetected."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker evidence is consistent, with all claims backed by project-scoped sources (code and tests) at exact paths and line ranges. Cross-checker independently verified all 11 evidence items with zero conflicts. Assumptions are properly separated from facts and not presented as verified claims. Risks are clearly articulated and reflect actual implementation concerns. All three required scope_in files (src/demand/evidence-dispatch.ts, src/runtime/execution/provider-adapter.ts, __tests__/demand-evidence-dispatch.test.ts) have evidence coverage. No missing data remains; evidence is sufficient to unblock PRD readiness."
+  }
+}

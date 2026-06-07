@@ -92,7 +92,7 @@ export function buildAgentIntegrationDoctorPlan(options = {}) {
     executes_billable_provider: false,
     required_evidence: [
       "Codex and/or Claude native YOLO skill artifacts exist",
-      `slash-command or source-command aliases exist for ${commandList}`,
+      `Codex exposes one /yolo entry while Claude slash commands and internal workflow descriptors remain separate for ${commandList}`,
       "workflow skill descriptors are installed for the requested scope",
       "the host session was restarted or refreshed after user-level skill installation",
     ],

@@ -1,0 +1,151 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent cross-check confirms: YOLO demand evidence dispatch system exists with complete scope distinction between project, external, user, and unknown evidence scopes across router, dispatch, and tests.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines evidence contract requiring scope field with four valid values.",
+      "why": "This is the schema contract that enforces scope declaration."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES Set constrains scope to project, external, user, or unknown.",
+      "why": "This establishes the validation boundary for scope values."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function classifies records into project/external/user/unknown using field analysis.",
+      "why": "This is the core logic that maps evidence fields to scope categories."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE and PROJECT_EVIDENCE_PATH_REQUIRED blockers.",
+      "why": "This enforces that existing-project claims require project evidence with concrete file paths."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "710-726",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness requires all evidence agents for cross_check policy before PRD readiness.",
+      "why": "This is the readiness gate that enforces evidence requirements."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates that each evidence record declares a valid scope.",
+      "why": "This is the dispatch-level validation that filters invalid scopes."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "208-252",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceDispatchPlan sets boundary.project_mutation to forbidden.",
+      "why": "This establishes the boundary controls preventing project file mutations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "258-327",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt tells agents to declare scope and distinguish evidence types.",
+      "why": "This is the prompt that communicates scope requirements to evidence agents."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "398-421",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult blocks evidence without scope with EVIDENCE_SCOPE_REQUIRED.",
+      "why": "This is the post-processing normalization that rejects incomplete evidence."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-617",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime builds before/after snapshots and detects boundary violations.",
+      "why": "This is the boundary audit system that detects unauthorized mutations."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves external-only evidence blocks PRD readiness with PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE.",
+      "why": "This validates that external research cannot satisfy existing-project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "454-498",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves project evidence without path locator blocks with PROJECT_EVIDENCE_PATH_REQUIRED.",
+      "why": "This validates that project evidence requires concrete file paths."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "500-545",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves external URLs relabeled as project evidence block with PROJECT_EVIDENCE_PATH_REQUIRED.",
+      "why": "This validates that URLs cannot be passed off as project locators."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "547-591",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves evidence without explicit scope blocks with EVIDENCE_SCOPE_REQUIRED.",
+      "why": "This validates the mandatory scope declaration requirement."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves boundary blocks project file mutation even when agent results pass.",
+      "why": "This validates the boundary audit detects mutations regardless of agent success."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "605-640",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves agent evidence without explicit scope is blocked during normalization.",
+      "why": "This validates the dispatch-level scope validation blocks invalid results."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Evidence agents could ignore scope prompts or hallucinate file paths",
+    "Boundary snapshot may miss mutations in very large repos or non-git filesystems",
+    "Cross-check agent could be influenced by explorer result instead of doing independent verification"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms all explorer findings. No conflicts detected. Evidence schema, router logic, dispatch system, and tests all implement scope distinction as claimed."
+  }
+}

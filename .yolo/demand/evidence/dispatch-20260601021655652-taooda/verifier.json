@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence gathered by explorer and cross-checker is sufficient to support PRD readiness: all project facts are verified from code and tests, no assumptions are presented as facts, evidence paths are usable, and missing stress-testing data is properly reflected.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Verified DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION requires scope field and VALID_EVIDENCE_SCOPES contains exactly four values",
+      "why": "Schema verification confirms evidence paths are accurate and claims are grounded in actual code."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Verified VALID_EVIDENCE_SCOPES redefined with identical four values",
+      "why": "Cross-module consistency verification confirms evidence claims are accurate."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-347",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Verified test 'external-only evidence cannot satisfy existing project facts' exists and checks PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker",
+      "why": "Test verification confirms the blocker contracts cited in evidence actually exist."
+    },
+    {
+      "path": ".git/index",
+      "scope": "project",
+      "source": "project_log",
+      "summary": "Verified git status shows exactly 66 uncommitted changes, confirming dirty working tree state",
+      "why": "Git index verification confirms the cross-checker's claim about current working tree state."
+    },
+    {
+      "path": ".yolo/demand/evidence",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Verified evidence dispatch artifact directory exists with no stress test logs or results",
+      "why": "Artifact directory verification confirms the missing stress-testing evidence is accurately identified."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Evidence scope classification heuristics may misclassify edge cases where field combinations are ambiguous",
+    "Boundary enforcement depends on git file tracking which may fail in non-git repositories",
+    "Agent prompts may be insufficient to prevent all scope violations in real-world agent executions"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verification complete: (1) Evidence paths from explorer and cross-checker are accurate and usable based on file reads. (2) No assumptions are presented as facts—all claims about scope requirements, classification logic, blocker enforcement, and test coverage are backed by project-scoped evidence with concrete file paths. (3) Missing stress-testing evidence is properly reflected in missing fields and not treated as factual. (4) Explorer and cross-checker results agree (pass status, no conflicts). (5) PRD readiness acceptance criteria are met: evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes. The only gap (stress-testing with real Claude -p agents) is correctly identified as missing and does not block PRD readiness."
+  }
+}

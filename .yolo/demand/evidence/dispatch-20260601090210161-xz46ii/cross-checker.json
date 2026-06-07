@@ -1,0 +1,119 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independently verified: YOLO demand evidence dispatch implements complete boundary mutation audit that blocks PRD readiness when full-tool agents modify target project files.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "87-95",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "fileDigest function creates SHA256 hash using Node.js crypto: createHash('sha256').update(readFileSync(path)).digest('hex')",
+      "why": "Cryptographic file hashing foundation for boundary detection; confirms explorer claim about SHA256 implementation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot walks all project files using walkFiles, excludes allowedRoots via isWithin check, builds Map of repo-relative paths to SHA256 digests via fileDigest",
+      "why": "Independent read confirms exact snapshot algorithm; validates explorer line numbers and implementation detail."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots iterates before/after Maps, detects deleted (missing in after), modified (digest mismatch), and added (missing in before) files, returns sorted changes array",
+      "why": "Confirms three-way change detection algorithm; validates explorer claim about added/modified/deleted detection."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "638-644",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-agent-execution: boundaryAfter = buildBoundarySnapshot(plan.project_root, [plan.output_dir]); boundaryChanges = diffBoundarySnapshots(boundaryBefore, boundaryAfter); result.boundary set with project_mutation status and changes array",
+      "why": "Independent read confirms boundary audit runs after all evidence agents complete; validates explorer claim about timing and result structure."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "657-676",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryBlockers maps changes to BOUNDARY_PROJECT_MUTATION blockers with path and change details; externalResearchBlockers adds EXTERNAL_RESEARCH_EVIDENCE_REQUIRED when needed; runtimeBlockers merged into finalReadiness with prd_ready=false when blockers exist",
+      "why": "Confirms boundary violations directly block PRD readiness via blocker merge; validates explorer claim about blocking mechanism."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer (writes_code=false), cross_checker (writes_code=false, required_when='cross_check'), and verifier (writes_code=false) with result_schema validation",
+      "why": "Independent read confirms protocols explicitly declare read-only enforcement; validates explorer claim about writes_code=false."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues returns PROJECT_EVIDENCE_PATH_REQUIRED blocker when project-scoped evidence lacks repo-relative path; returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker when evidence is non-project scopes only",
+      "why": "Confirms project facts require concrete file path locators; validates explorer claim about path validation blocking."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "678-758",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness checks evidence agent completion via evidenceResultComplete, validates scope via evidenceScopeDeclarationIssues, enforces project paths via projectEvidenceBlockingIssues, checks conflicts via inspectEvidenceAgreement, sets blockers and prd_ready",
+      "why": "Confirms central PRD readiness validation integrates all evidence checks; validates explorer claim about integration point."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation constructs Claude provider with --permission-mode (config.ai.claude_permission_mode or 'default'), --tools, --allowedTools, --disallowedTools, sandbox config, Codex provider with --sandbox and --cd, custom provider with shell command",
+      "why": "Independent read confirms configurable tool permissions and sandboxes; validates explorer claim about provider configuration."
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601085728333-qwl0e4/dispatch.json",
+      "line": "622-628",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Runtime boundary audit result: project_mutation='clean', allowed_write_roots='.yolo/demand/evidence/dispatch-20260601085728333-qwl0e4', changes=[]",
+      "why": "Actual dispatch artifact confirms boundary audit executed cleanly; validates explorer claim about runtime behavior."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "479-490",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult calls evidenceScopeErrors which validates each evidence record scope; invalid/missing scope sets status='blocked', recommendation='block', adds EVIDENCE_SCOPE_REQUIRED error to missing array",
+      "why": "Confirms scope validation prevents agents from submitting evidence without scope declaration; validates explorer claim about enforcement."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "325-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt generates hard rules: 'Boundary: do not modify target project files', 'Allowed artifact/scratch root', 'Every evidence record must include scope', 'Project facts require project-scoped evidence with repo-relative path'",
+      "why": "Confirms agent prompt generation enforces boundary constraints and evidence schema at protocol level; validates explorer claim."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If boundary snapshot only hashes git-indexed files, new untracked files could go undetected by fileDigest failure or exclusion",
+    "If provider agent ignores permission mode setting or tool restrictions, boundary audit may detect mutation but agent could already have polluted project state",
+    "If allowed_write_roots path matching logic has bugs, mutations outside artifact directories might not be caught"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification of all 10 explorer evidence claims confirms complete accuracy. Boundary mutation audit is fully implemented: SHA256 file hashing via fileDigest, snapshot building via buildBoundarySnapshot, three-way change detection via diffBoundarySnapshots, post-agent execution timing, blocker creation on mutations, and PRD readiness integration. Evidence agent protocols enforce writes_code=false. Project scope validation requires repo-relative paths. Provider adapter supports configurable tools and permissions. Runtime dispatch artifact confirms clean execution. No conflicts found between explorer claims and actual implementation."
+  }
+}

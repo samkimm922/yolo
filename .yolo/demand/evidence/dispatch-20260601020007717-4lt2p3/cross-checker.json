@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Cross-check confirms the explorer's claim: YOLO demand evidence dispatch API and schema correctly implement research/fetch style external evidence separated from target-project facts, with scope=external records and project-scoped path requirements enforced.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES defines exactly four scopes: project, external, user, unknown.",
+      "why": "Cross-check confirms this is the foundational scope type definition."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "270-273",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rules explicitly require scope declaration on every evidence record and forbid using external records as project facts.",
+      "why": "Cross-check confirms these are the core contract rules enforced at the agent level."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "304-312",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence result schema requires path for project scope, url for external scope, and mandatory scope field.",
+      "why": "Cross-check confirms the schema enforces separation between project facts (need paths) and external evidence (need URLs)."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "403-414",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors() generates blockers when evidence records lack explicit scope declaration.",
+      "why": "Cross-check confirms this is the runtime validation that catches missing scope declarations."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES constant in router defines identical four scopes for consistency.",
+      "why": "Cross-check confirms scope definitions are synchronized across dispatch and readiness layers."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() infers scope from URL vs path, source types, and explicit declarations with normalized output.",
+      "why": "Cross-check confirms this is the scope inference logic that normalizes inconsistent input."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE or PROJECT_EVIDENCE_PATH_REQUIRED blockers for evidence without project-scoped locators.",
+      "why": "Cross-check confirms this is the runtime validation that blocks external-only or locator-less evidence for project facts."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine explicitly states: 'External evidence can only be used as background research; project facts need project-scoped evidence with concrete project locator.'",
+      "why": "Cross-check confirms this is the product-level requirement that the code correctly implements."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'external-only evidence cannot satisfy existing project facts' proves external records generate PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blockers.",
+      "why": "Cross-check confirms this test validates the system blocks external-only evidence for project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "387-431",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'project evidence requires a concrete project locator' proves project-scoped evidence without path generates PROJECT_EVIDENCE_PATH_REQUIRED blockers.",
+      "why": "Cross-check confirms this test validates the system requires concrete locators for project evidence."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "433-478",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'external URLs cannot be relabeled as project evidence' proves URL-based records generate blockers even when mislabeled as scope=project.",
+      "why": "Cross-check confirms this test validates the system detects and blocks URL masquerading as project facts."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "480-524",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case 'evidence records must declare valid scope explicitly' proves missing scope declarations generate EVIDENCE_SCOPE_REQUIRED blockers.",
+      "why": "Cross-check confirms this test validates the system enforces mandatory scope declaration."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If evidence scope validation has edge cases in the inference logic, external evidence could incorrectly satisfy project fact requirements."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms all explorer evidence claims are accurate. The YOLO demand evidence dispatch system correctly implements the required separation between external research (scope=external) and project facts (scope=project with repo-relative paths). The validation chain from agent prompts through schema enforcement to runtime blockers is working and tested."
+  }
+}

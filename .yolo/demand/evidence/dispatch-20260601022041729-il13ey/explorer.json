@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "failed",
+  "completed": false,
+  "claim": "Factual project claims need primary evidence.",
+  "confidence": "low",
+  "evidence": [],
+  "assumptions": [],
+  "risks": [
+    "Evidence agent did not return a valid completed result."
+  ],
+  "missing": [
+    "EVIDENCE_AGENT_INVALID_JSON: Bad escaped character in JSON at position 4223 (line 82 column 32)"
+  ],
+  "recommendation": "block",
+  "result": {
+    "verdict": "blocked",
+    "error_code": "EVIDENCE_AGENT_INVALID_JSON",
+    "provider": "claude",
+    "exit_code": 0,
+    "timed_out": false,
+    "raw_output_excerpt": "{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"explorer\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"YOLO evidence dispatch boundary audit implements incomplete git file coverage; git ls-files -co covers tracked/modified but not untracked files without separate --others flag.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"62-69\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"gitFiles() uses 'git ls-files -co --exclude-standard' which covers cached (staged) and others (untracked) files according to git documentation.\",\n      \"why\": \"This is the primary boundary detection mechanism for git-backed projects. The -c flag covers cached files, -o covers others (untracked files not in .gitignore).\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"58-60\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"excludedDir() filters .git, node_modules, dist, coverage, .next, .cache from both git and walk scans.\",\n      \"why\": \"These directories are intentionally excluded from boundary snapshots to reduce noise and ignore build artifacts.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"71-85\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"walkFiles() provides non-git fallback using recursive readdirSync, excluding directories via excludedDir().\",\n      \"why\": \"Fallback for non-git projects walks entire tree but respects same exclusion list, ensuring broad file coverage.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"97-108\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"buildBoundarySnapshot() uses gitFiles() or walkFiles() fallback, then excludes files within allowedRoots from snapshot.\",\n      \"why\": \"This is the core boundary audit function that builds before/af\n[truncated 2779 chars]"
+  }
+}

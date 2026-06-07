@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence verification confirms that explorer and cross-checker claims are accurate, all evidence paths are valid and accessible, and the gathered evidence fully supports PRD readiness with acceptance criteria satisfied.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES set confirmed with exactly four scopes: project, external, user, unknown",
+      "why": "Foundational scope definition validates both agent evidence records."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors() function iterates evidence array and validates scope field presence",
+      "why": "Runtime validation logic confirms scope enforcement is implemented."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "275-276",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt explicitly requires WebFetch/WebSearch usage with scope=external marking and tool-profile-specific instructions",
+      "why": "Confirms external research tool permissions and scope marking requirements are in agent instructions."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() implements multi-layer automatic scope detection with explicit scope, URL, source type, and path fallback logic",
+      "why": "Automatic scope classification prevents external evidence from being misclassified as project-scoped."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope() and evidenceRecordHasProjectLocator() validate evidence record completeness",
+      "why": "Validation functions ensure project evidence requires concrete file locators."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() returns blockers when project facts lack project-scoped evidence or path locators",
+      "why": "Blocking logic prevents external evidence from satisfying existing-project fact requirements."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "408-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult() applies EVIDENCE_SCOPE_REQUIRED blocker when evidenceScopeErrors() returns issues",
+      "why": "Runtime enforcement confirms scope validation happens during agent result normalization."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine explicitly states external evidence from WebFetch/WebSearch can only serve as background research, not proof of project implementation facts",
+      "why": "Product-level documentation confirms external evidence cannot substitute for project evidence."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "605-640",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case removes scope field from evidence and verifies EVIDENCE_SCOPE_REQUIRED blocker is applied during normalization",
+      "why": "Test confirms scope enforcement is actually working at runtime."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "343-379",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case verifies research profile sets agent_tool_profile to research and keeps Claude tools unrestricted without --allowedTools restrictions",
+      "why": "Test validates research tool profile enables external tools while maintaining boundary control."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If external research tools are incorrectly used to fetch project-local files through file:// URLs or localhost endpoints, automatic scope detection could misclassify project content as external.",
+    "Agent effectiveness depends on provider compliance with scope marking instructions; non-compliant providers could bypass external/project separation before validation catches it."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All evidence paths verified and accessible. Explorer and cross-checker claims agree with no conflicts. All three parts of acceptance criteria satisfied: WebFetch/WebSearch supported, scope=external marking enforced, and project-scoped path evidence required for target-project facts. No assumptions presented as facts. Evidence agreement between agents is pass with zero conflicts. PRD readiness requirements met."
+  }
+}

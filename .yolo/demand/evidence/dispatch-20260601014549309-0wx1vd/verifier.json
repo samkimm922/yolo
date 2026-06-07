@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verified: The YOLO demand evidence dispatch implementation already handles minor Claude JSON key drift with repair tracking and fails closed with EVIDENCE_AGENT_INVALID_JSON on unrecoverable JSON, keeping PRD readiness blocked.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "326-341",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate function tracks repaired flag for JSON repair attempts",
+      "why": "Primary implementation evidence for recording recoverable drift."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "365-391",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON error code when parsed is null (unrecoverable JSON)",
+      "why": "Primary implementation evidence for explicit failure mode on unrecoverable JSON."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "379-381",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Invalid JSON populates missing array with errorCode and parse error message",
+      "why": "Evidence that PRD readiness stays blocked via missing data structure."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "440-475",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'repairs minor Claude JSON key drift and records the repair' asserts json_repaired === true",
+      "why": "Executable verification that repair recording works correctly."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "477-507",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'invalid agent JSON fails closed with explicit blocker code' asserts EVIDENCE_AGENT_INVALID_JSON error",
+      "why": "Executable verification that unrecoverable JSON produces explicit error code."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "503",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies readiness.blockers includes EVIDENCE_AGENT_INVALID_JSON error",
+      "why": "Executable verification that PRD readiness stays blocked on invalid JSON."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "553",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "provider_runs schema includes json_repaired boolean field",
+      "why": "Evidence of repair status tracking in data model."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If the evidence-dispatch tests do not run in CI, the implementation could regress silently."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All acceptance criteria verified: (1) recoverable drift recorded via json_repaired field (line 336, 553), (2) unrecoverable JSON receives EVIDENCE_AGENT_INVALID_JSON (line 368), (3) PRD readiness stays blocked via missing array (line 379-381). Tests confirm both behaviors at lines 440-475 and 477-507. No assumptions presented as facts. Evidence paths are exact and usable."
+  }
+}

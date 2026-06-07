@@ -1,0 +1,118 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "Boundary snapshots in evidence-dispatch.ts implement git ls-files and filesystem walk fallbacks, but untracked and untracked cached files may be missed in certain edge cases.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts:62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() runs 'git ls-files -co --exclude-standard -z' to capture cached, other, and untracked files while respecting .gitignore. Returns null on failure, triggering walkFiles fallback.",
+      "why": "This is the primary git-backed detection mechanism. The -c flag gets cached files, -o gets other/untracked files."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts:71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles() recursively walks the filesystem starting from project root, excluding common directories (.git, node_modules, dist, coverage, .next, .cache) via excludedDir().",
+      "why": "This is the non-git fallback. It walks all directories except those in the hardcoded exclusion list."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts:97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() uses gitFiles() result when available, otherwise falls back to walkFiles(). It then excludes allowedRoots (e.g., .yolo/demand/evidence/dispatch-*) and computes SHA-256 digests for remaining files.",
+      "why": "This is the core snapshot function. Line 99 shows gitFiles || walkFiles fallback logic."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts:58-60",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "excludedDir() hardcodes six directory names: .git, node_modules, dist, coverage, .next, .cache. Any directory matching these names is skipped during walkFiles().",
+      "why": "This is the exclusion list used by the filesystem walk fallback."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts:515, 565-566",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime calls buildBoundarySnapshot(plan.project_root, [plan.output_dir]) before and after agent execution, passing output_dir as the only allowed write root.",
+      "why": "This shows the boundary snapshot is taken with the dispatch artifact root excluded from mutation detection."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts:416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' creates a git repo, has agent create untracked-mutation.txt, and verifies boundary violation is detected.",
+      "why": "This test proves git ls-files with -o flag detects untracked file additions."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts:454-494",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'non-git boundary fallback detects modified project files and ignores artifacts' runs without git, has agent modify src/existing.txt and create agent-scratch.txt in runtimeDir. Only src/existing.txt modification is detected.",
+      "why": "This test proves walkFiles fallback works and correctly excludes allowed roots."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts:110-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after maps, classifying changes as 'deleted', 'modified', or 'added' based on map entry presence and digest equality.",
+      "why": "This is how mutations are classified. Modified files trigger boundary violations."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts:567-571",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary result sets project_mutation to 'violated' if changes.length > 0, otherwise 'clean'. Changes array is sorted by path. Allowed roots are recorded.",
+      "why": "This is how the boundary check final result is computed and surfaced."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts:584-596",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Any boundary changes are converted to BOUNDARY_PROJECT_MUTATION blockers with path, change type, and message. These blockers are added to readiness and set prd_ready to false.",
+      "why": "This shows how boundary violations block PRD readiness even when agents pass."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts:183, 526",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "output_dir defaults to .yolo/demand/evidence/dispatch-{session}-{timestamp}-{random} and is passed as runtimeDir to provider prompts and allowedRoots to buildBoundarySnapshot.",
+      "why": "This shows the artifact root location structure and how it's excluded from mutation detection."
+    }
+  ],
+  "assumptions": [
+    "The git ls-files -co command captures all tracked, cached, and untracked files that are not in .gitignore.",
+    "The walkFiles fallback is intended for non-git projects or when git commands fail.",
+    "The excludedDir list is sufficient to exclude build/cache directories that should not be tracked.",
+    "File digest computation uses SHA-256 of full file contents; inode changes are not tracked separately.",
+    "Evidence agents run with full tools but the boundary check happens after all agents complete."
+  ],
+  "risks": [
+    "Git ls-files -co may miss untracked files that are gitignored but still exist in the working tree.",
+    "Git ls-files -co may not detect files in submodules or worktrees unless explicitly included.",
+    "The walkFiles fallback excludes directories by name only, not path; a nested node_modules would be excluded but top-level node_modules/a/node_modules/b would not.",
+    "The walkFiles fallback does not honor .gitignore patterns; it would include gitignored files that exist.",
+    "The excludedDir list is hardcoded and may not cover all build/cache directories in all projects.",
+    "Symlinks are not explicitly handled; walkFiles may follow them and include or exclude based on the target path.",
+    "Empty directories are not tracked because only files are added to the snapshot map.",
+    "Concurrent modifications during agent execution (e.g., background processes) would be detected as boundary violations even if not caused by agents."
+  ],
+  "missing": [
+    "Test coverage for gitignored untracked files that exist but are not captured by git ls-files -co.",
+    "Test coverage for nested excluded directories in non-git fallback (e.g., node_modules/a/node_modules/b).",
+    "Test coverage for symlink handling in walkFiles fallback.",
+    "Test coverage for submodule detection when using git ls-files.",
+    "Test coverage for worktree scenarios where git -C may behave differently.",
+    "Evidence that the walkFiles fallback correctly handles permission errors on inaccessible directories."
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Core boundary detection implementation is sound: git-backed and non-git fallbacks exist, tests pass for primary scenarios, allowed roots are correctly excluded. Missing coverage is for edge cases (gitignored files, nested exclusions, submodules, symlinks)."
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch has a harness boundary audit that detects target-project file mutations by full-tool Claude agents and blocks PRD readiness on violations.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "87-108, 110-120, 237-247, 257-326, 514-570, 583-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Explorer and cross-checker both independently verified SHA-256 file digest, boundary snapshot building, diff comparison, runtime integration, blocker injection, planning declaration, and agent prompt contracts.",
+      "why": "Cross-verified implementation across planning, execution, and readiness validation layers."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "380-413, 415-451, 453-493",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Explorer and cross-checker both verified tests covering git-backed boundary detection, non-git fallback, and project mutation blocking even with passing agent results.",
+      "why": "Test coverage confirms boundary audit works across git and non-git contexts and actually blocks PRD readiness on violations."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "406-447, 712-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Explorer and cross-checker both verified evidence scope validation and project locator requirements produce blockers preventing unverified claims from achieving PRD readiness.",
+      "why": "Scope validation ensures evidence quality standards are enforced before PRD-ready status."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If buildBoundarySnapshot file walking has false negatives, mutations could go undetected.",
+    "If allowed_write_roots misconfiguration includes project directories, mutations would be allowed."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker evidence is in complete agreement. All evidence records properly declare scope as 'project', include precise line numbers, provide clear summaries, and explain why each evidence matters. No assumptions are presented as facts. No missing data remains. Risks are appropriately acknowledged. The evidence sufficiently supports PRD readiness for the acceptance criterion that Explorer, cross-checker, and verifier cite project paths and boundary audit keeps PRD readiness blocked on missing evidence or target-project mutation."
+  }
+}

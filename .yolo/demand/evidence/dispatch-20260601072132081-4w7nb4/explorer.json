@@ -1,0 +1,184 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements provider-specific configuration isolation with boundary mutation detection and cross-checker validation, preventing drift between Claude, Codex, and custom provider assumptions.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot uses git ls-files and filesystem walk to detect all project files, excluding standard directories like node_modules and .git",
+      "why": "Provides the baseline for detecting any project mutations during evidence agent execution"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after SHA-256 digests to detect added, modified, or deleted files",
+      "why": "Enables detection of any agent-side project mutations even in non-git repos"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-517",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime captures boundary snapshot before spawning agents and allows writes only to output_dir",
+      "why": "Establishes the clean baseline before any provider execution"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "After agent execution, boundary snapshot diff detects any project mutations and reports BOUNDARY_PROJECT_MUTATION blockers",
+      "why": "Post-execution boundary validation prevents silent project mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "423-471",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig normalizes provider-specific AI config, handling provider, model, agent_tool_profile, and provider-specific flags",
+      "why": "Provider configuration isolation prevents cross-provider leakage"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation has separate code paths for Claude, Codex, and custom providers with provider-specific argument construction",
+      "why": "Provider-specific invocation isolation prevents model drift"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "43-62",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider uses codex_sandbox, codex_approval, codex_model, and output file capture mode",
+      "why": "Codex-specific configuration does not leak into Claude or custom paths"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider uses permission-mode, settings, tools, max_budget_usd, and session persistence flags",
+      "why": "Claude-specific configuration is isolated from other providers"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "451-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider normalizes agent_tool_profile to research, full, or boundary based on availability and clears tool restriction flags",
+      "why": "Tool profile normalization prevents provider-specific tool assumptions"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "238-252",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceDispatchPlan execution_policy writes_business_code is false and agent_tool_profile controls boundary vs full tools",
+      "why": "Default boundary profile prevents full tool access unless explicitly authorized"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross-checker, and verifier roles with separate objectives and result schemas",
+      "why": "Evidence agent role separation prevents assumption promotion"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "782-807",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectEvidenceAgreement detects when agents recommend different actions (proceed vs block/clarify) and creates EVIDENCE_AGENT_CONFLICT blockers",
+      "why": "Cross-checker disagreement is surfaced instead of being averaged away"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Codex dispatch test verifies provider isolation: codex_sandbox, codex_approval, and model config do not inherit Claude defaults",
+      "why": "Test evidence confirms provider-specific configuration isolation"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "234-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Claude dispatch test verifies tool restriction flags are cleared and boundary enforcement relies on permission-mode and session persistence",
+      "why": "Test evidence confirms Claude tool handling under harness boundary"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "boundary blocks project file mutation test verifies that unexpected-project-write.txt triggers BOUNDARY_PROJECT_MUTATION blocker",
+      "why": "Test evidence confirms boundary violation detection works"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "git-backed boundary test verifies untracked and gitignored mutations are detected and blocked",
+      "why": "Test evidence confirms git-based boundary detection for untracked files"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "642-685",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "agent conflict test verifies that cross-checker disagreement creates EVIDENCE_AGENT_CONFLICT blocker and keeps PRD readiness blocked",
+      "why": "Test evidence confirms cross-checker conflict prevents assumption promotion"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "143-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "sanitizeMissing filters out non-missing status items like 'no missing data' from missing arrays",
+      "why": "Prevents false blockers when agents report completion status"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "isNonMissingStatusItem filters positive completion statements and negative 'no missing' patterns",
+      "why": "Distinguishes status reporting from actual missing evidence"
+    },
+    {
+      "path": "src/runtime/adapters/agent-contract.ts",
+      "line": "137-225",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectAgentAdapterContract validates sandbox safety, budget enforcement, and custom adapter warnings",
+      "why": "Provider contract validation prevents unsafe configuration drift"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Provider-specific model or sandbox configuration could be mis-specified in config.ai, causing silent behavior differences",
+    "Non-git repos may have slower boundary detection due to full filesystem walk",
+    "Custom provider commands could bypass boundary if they write directly to project files",
+    "Evidence agents could return false-positive project scope evidence without actual file paths"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence dispatch implements provider isolation, boundary detection, and cross-checker validation. Tests confirm provider-specific configuration handling and mutation detection. System is ready for real Claude -p agent stress testing."
+  }
+}

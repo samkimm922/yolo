@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand router implements evidence scope discrimination with project, external, user, and unknown categories; project facts require project-scoped evidence from code/tests/docs/config/logs/artifacts with repo-relative paths.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "52-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES defines four scope categories: project, external, user, unknown. DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross-checker, and verifier roles with writes_code=false and result_schema=yolo.demand.evidence_result.v1.",
+      "why": "Schema definitions establish the core evidence scope contract."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope infers scope from record fields; project scope requires path field or project_* source; external scope requires URL or external_* source.",
+      "why": "Scope inference logic validates evidence classification."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues blocks if project facts lack project-scoped evidence with concrete repo-relative paths; external-only evidence triggers PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker.",
+      "why": "Readiness enforces project evidence requirements."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "258-328",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt generates agent instructions with hard rules: boundary prohibits target project file modification, allowed artifact root, every evidence record must include scope, project facts require project-scoped evidence with repo-relative paths.",
+      "why": "Agent prompt contracts enforce evidence scope discipline."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots detect project file mutations; allowed write roots exclude project files; boundary violations become readiness blockers.",
+      "why": "Boundary audit prevents evidence agents from modifying target project files."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test external-only evidence cannot satisfy existing project facts; readiness blocks with PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE.",
+      "why": "Test validates external evidence cannot prove project state."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "454-498",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test project evidence requires concrete project locator; missing path triggers PROJECT_EVIDENCE_PATH_REQUIRED blocker.",
+      "why": "Test validates project evidence must have file locators."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "44-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Demand Router doctrine specifies hard triggers for careful route; evidence agent protocols distinguish explorer/cross-checker/verifier; evidence records must declare scope; project evidence requires repo-relative paths; external evidence is background only.",
+      "why": "Documentation codifies evidence scope philosophy and contract."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Evidence agents could misclassify scope or omit required paths, causing false blockers or allowing unverified claims.",
+    "Boundary snapshot mechanism could miss mutations in very large repos or when allowed roots overlap project paths."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence scope discrimination is implemented across schema, router, dispatch, tests, and docs. Project facts require project-scoped evidence with paths; external-only evidence is correctly blocked from satisfying existing-project claims. Boundary audit prevents mutations during evidence gathering."
+  }
+}

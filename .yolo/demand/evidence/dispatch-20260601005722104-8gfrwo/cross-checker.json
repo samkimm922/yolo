@@ -1,0 +1,95 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent cross-check confirms the explorer's claim: YOLO demand evidence dispatch implements harness boundary audit via SHA-256 file snapshots before and after full-tool Claude agents, converting any detected project mutations into BOUNDARY_PROJECT_MUTATION blockers that keep PRD readiness blocked.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "92-100",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "fileDigest() uses createHash('sha256').update(readFileSync(path)).digest('hex') to hash file contents",
+      "why": "This confirms SHA-256 is the hash algorithm used for file snapshots."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "102-113",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() walks all project files, skips allowed_write_roots, and creates SHA-256 digest map",
+      "why": "Independent verification that the snapshot mechanism correctly excludes artifact directory and hashes all other project files."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "469",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryBefore snapshot captured before agent loop execution begins",
+      "why": "Confirms the baseline snapshot timing."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "519-525",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryAfter snapshot captured after all agents complete; diffBoundarySnapshots() compares and assigns 'violated' status if changes detected",
+      "why": "Independent verification of the post-execution comparison and violation detection logic."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "538-550",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryBlockers array maps each change to BOUNDARY_PROJECT_MUTATION blocker; finalReadiness merges blockers and sets prd_ready=false if any exist",
+      "why": "Confirms the blocker conversion and PRD readiness enforcement mechanism."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16-21",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "CLAUDE_BOUNDARY_TOOLS array includes Write, Edit, MultiEdit, NotebookEdit, Bash - all mutation-capable tools; DEMAND_EVIDENCE_CLAUDE_BOUNDARY_SETTINGS.permissions.allow grants all these tools",
+      "why": "Independent confirmation that Claude agents have full tool access including file mutation tools."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "378-411",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' simulates agent writing unexpected-project-write.txt during execution, asserts blocked status and BOUNDARY_PROJECT_MUTATION blocker",
+      "why": "Independent test evidence that boundary detection works and blocks readiness even when agent output would otherwise pass."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "413-449",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' initializes git repo, creates untracked-mutation.txt, asserts boundary detects it as 'added' and blocks",
+      "why": "Independent verification that git-backed file tracking works and detects untracked file additions."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "466-476",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker when evidence has only non-project scopes",
+      "why": "Independent confirmation that brownfield project facts require project-scoped evidence."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If allowed_write_roots is misconfigured to include project directories, mutations could be excluded from boundary checks.",
+    "If git ls-files fails or walkFiles() has permission issues, files might be excluded from snapshots.",
+    "Time-of-check-to-time-of-use gap exists between snapshot creation and PRD readiness determination if other processes modify files."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Cross-check independently verified all 15 evidence claims from explorer. SHA-256 snapshots, before/after comparison, full-tool agent permissions, blocker conversion, and test coverage are all confirmed at cited line locations. No conflicts found. The boundary audit implementation matches the explorer's claim exactly."
+  }
+}

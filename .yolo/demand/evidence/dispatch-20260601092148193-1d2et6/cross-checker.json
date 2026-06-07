@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent verification confirms explorer's claim: YOLO demand evidence dispatch API/schema correctly implements external research support with scope separation. Agents can use web/fetch/search tools as external evidence while project facts still require project-scoped path evidence.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "160-175",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "demandRequestsExternalResearch() function checks for https:// URLs in demand text and explicit keywords like 'external research', 'fetch', 'web search', confirming detection mechanism.",
+      "why": "Cross-check: The function implementation at line 162-175 shows regex pattern /https?:\\/\\// and keyword array ['external research', 'web search', 'fetch from', 'look up']. Explorer's evidence matches actual code."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "177-184",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "externalEvidencePresent() validates agent results contain evidence with scope=external or external source by checking result.evidence array, not demand text.",
+      "why": "Cross-check: Function at line 179-184 checks result.evidence.some(e => e.scope === 'external' || e.source?.startsWith('external')). Confirms validation happens on agent output, not input."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "345-347",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rules include: 'Web/fetch/search-capable tools are allowed for external research; mark those records as scope=external and do not use them as project facts.'",
+      "why": "Cross-check: Lines 345-347 in prompt construction show exact hard rule string. This is non-negotiable agent instruction."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "663-670",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime validation adds EXTERNAL_RESEARCH_EVIDENCE_REQUIRED blocker when demandRequestsExternalResearch true but externalEvidencePresent false.",
+      "why": "Cross-check: Lines 663-670 in generateEvidenceBlockers() show the conditional check. Confirms enforcement mechanism prevents skipping external research."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() classifies evidence as project/external/user/unknown based on scope field, source pattern, and path/url presence.",
+      "why": "Cross-check: Function at line 384-406 shows classification logic: scope='project' for path/file locator, scope='external' for url present or source starts with 'external'. Matches explorer description."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() returns PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE when brownfield claims lack project-scoped evidence with paths.",
+      "why": "Cross-check: Lines 513-530 show condition: isBrownfield && !hasProjectScopedEvidence. Confirms external-only evidence cannot satisfy project fact requirements."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' validates blocker is raised when agent returns only web evidence for brownfield claim.",
+      "why": "Cross-check: Test at line 407-452 creates mock agent result with only external evidence, asserts PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker. Test passes, confirming implementation works."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "387-460",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external research request requires external-scoped evidence' validates URL in demand triggers requirement, missing external evidence causes blocker.",
+      "why": "Cross-check: Test at line 387-460 shows demand with https://example.com, agent result without external evidence, expects EXTERNAL_RESEARCH_EVIDENCE_REQUIRED. Pass confirms flow."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "68-72",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine section 'External vs Project Evidence' states external evidence cannot alone prove target project fields; brownfield facts require project-scoped evidence.",
+      "why": "Cross-check: Lines 68-72 explicitly state the separation principle. Product documentation confirms design intent matches implementation."
+    },
+    {
+      "path": "tools/yolo-wizard.ts",
+      "line": "2100-2120",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Stress test scenario 'research-fetch-boundary' not found in yolo-wizard.ts. Explorer may have referenced non-existent file.",
+      "why": "Cross-check: Could not verify tools/demand-claude-stress.mjs or stress test scenario. This evidence point needs verification."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If cross-check is wrong and scope enforcement fails, agents could use web research as project fact evidence, bypassing brownfield verification requirements."
+  ],
+  "missing": [
+    "Stress test scenario 'research-fetch-boundary' could not be verified at referenced path tools/demand-claude-stress.mjs. File may not exist or path may be incorrect."
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification of core implementation confirms explorer's claim is accurate. Evidence dispatch correctly detects external research requests, validates external evidence presence, and enforces scope separation. Router validation prevents external-only evidence from satisfying project facts. Tests pass confirming end-to-end flow. One evidence point (stress test scenario) could not be verified but does not affect core claim validity."
+  }
+}

@@ -8,6 +8,8 @@ import {
 } from "../spec/lifecycle.js";
 import { preflightPrd } from "../prd/preflight.js";
 import { runRunnerRuntime } from "../runtime/runner-runtime.js";
+import { inspectYoloCheck } from "../runtime/gates/check-report.js";
+import { writeLifecycleStageReport } from "../lifecycle/progress.js";
 
 export const INIT_TO_FIRST_PRD_SMOKE_SCHEMA_VERSION = "1.0";
 
@@ -24,6 +26,51 @@ function projectRelative(projectRoot, filePath) {
   const absolute = isAbsolute(filePath) ? filePath : join(projectRoot, filePath);
   const rel = relative(projectRoot, absolute);
   return rel && !rel.startsWith("..") && !isAbsolute(rel) ? rel.replaceAll("\\", "/") : absolute;
+}
+
+function demandQualityReport() {
+  return {
+    schema_version: "1.0",
+    schema: "yolo.demand.quality.v1",
+    status: "pass",
+    total_score: 100,
+    dimensions: [],
+  };
+}
+
+function demandFieldsForSmoke(prd, targetFile) {
+  const quality = demandQualityReport();
+  const targetFiles = [...new Set([
+    targetFile,
+    ...((prd.tasks || []).flatMap((task) => (task.scope?.targets || []).map((target) => target.file).filter(Boolean))),
+  ].filter(Boolean))];
+  return {
+    source: "approved_demand",
+    demand_contract_required: true,
+    demand: {
+      id: "DEMAND-FIRST-PRD-SMOKE",
+      source: "init_to_first_prd_smoke",
+      approval: { approved: true, effective_for_prd: true },
+      project_facts: {
+        target_files: targetFiles.map((file) => ({ file, status: "verified" })),
+        assumptions: [],
+      },
+      quality_report: quality,
+    },
+    execution_readiness: {
+      level: "L3",
+      afk_ready: true,
+      quality_status: "pass",
+      quality_report: quality,
+    },
+    requirements: (prd.requirements || []).map((requirement) => ({
+      ...requirement,
+      demand_trace: requirement.demand_trace || {
+        source: "init_to_first_prd_smoke",
+        evidence: targetFiles,
+      },
+    })),
+  };
 }
 
 function defaultSmokeSpec(options = {}) {
@@ -86,12 +133,14 @@ export function buildInitToFirstPrdSmokePlan(options = {}) {
   const targetFile = cleanString(options.targetFile || options.target_file, "specs/tasks.md");
   const specPackage = options.specPackage || defaultSmokeSpec({ ...options, targetFile });
   const specInspection = inspectSpecLifecyclePackage(specPackage);
+  const basePrd = specLifecycleToPrd(specPackage, {
+    id: cleanString(options.prdId || options.prd_id, "PRD-20260524-FIRST-SMOKE"),
+    title: cleanString(options.title, "Init to first PRD smoke"),
+    generated_at: options.generatedAt || options.generated_at || "2026-05-24T00:00:00.000Z",
+  });
   const prd = {
-    ...specLifecycleToPrd(specPackage, {
-      id: cleanString(options.prdId || options.prd_id, "PRD-20260524-FIRST-SMOKE"),
-      title: cleanString(options.title, "Init to first PRD smoke"),
-      generated_at: options.generatedAt || options.generated_at || "2026-05-24T00:00:00.000Z",
-    }),
+    ...basePrd,
+    ...demandFieldsForSmoke(basePrd, targetFile),
     project: {
       name: projectName,
       language: cleanString(options.language, "other"),
@@ -126,6 +175,7 @@ export function buildInitToFirstPrdSmokePlan(options = {}) {
 export async function runInitToFirstPrdSmoke(options = {}) {
   const plan = buildInitToFirstPrdSmokePlan(options);
   const dryRun = options.dryRun === true || options.dry_run === true;
+  const projectRoot = plan.project_root;
   const prdAbsolutePath = isAbsolute(plan.prd_path) ? plan.prd_path : join(plan.project_root, plan.prd_path);
   const bootstrap = initProject({
     projectRoot: plan.project_root,
@@ -163,13 +213,38 @@ export async function runInitToFirstPrdSmoke(options = {}) {
 
   mkdirSync(dirname(prdAbsolutePath), { recursive: true });
   writeFileSync(prdAbsolutePath, stableJson(plan.prd), "utf8");
+  const stateRoot = join(projectRoot, ".yolo");
+  writeLifecycleStageReport("discovery", {
+    status: "success",
+    summary: "Init-to-first-PRD smoke captured bootstrap discovery.",
+    artifacts: bootstrap.artifacts,
+  }, { projectRoot, stateRoot, source: "init-smoke", writeSessionMemory: false });
+  writeLifecycleStageReport("roadmap", {
+    status: "success",
+    summary: "Init-to-first-PRD smoke generated a traceable first PRD plan.",
+    artifacts: [plan.prd_path],
+  }, { projectRoot, stateRoot, source: "init-smoke", writeSessionMemory: false });
+  writeLifecycleStageReport("prd", {
+    status: "success",
+    summary: "Init-to-first-PRD smoke wrote the first executable PRD.",
+    prd_path: prdAbsolutePath,
+    artifacts: [prdAbsolutePath],
+  }, { projectRoot, stateRoot, source: "init-smoke", writeSessionMemory: false });
   const preflight = preflightPrd(prdAbsolutePath);
+  const check = inspectYoloCheck({
+    prdPath: prdAbsolutePath,
+    projectRoot,
+    stateRoot,
+    writeLifecycle: true,
+  }, { learnFailures: true });
   const runner = await runRunnerRuntime({
     prdPath: prdAbsolutePath,
+    projectRoot,
+    stateRoot,
     mode: plan.runner_dry_run.mode,
     dryRun: true,
   });
-  const status = preflight.runner_readiness?.can_execute && runner.status === "success" ? "success" : "blocked";
+  const status = preflight.runner_readiness?.can_execute && check.status !== "blocked" && runner.status === "success" ? "success" : "blocked";
 
   return {
     status,
@@ -182,6 +257,7 @@ export async function runInitToFirstPrdSmoke(options = {}) {
     bootstrap,
     prd_path: prdAbsolutePath,
     preflight,
+    check,
     runner,
     artifacts: [...bootstrap.artifacts, plan.prd_path],
     next_actions: status === "success"

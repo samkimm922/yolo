@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch has partial cross-provider model leakage protection (claude→codex) but lacks reverse protection (codex/custom→claude) and does not fully prevent cross-provider tool/sandbox assumption drift.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "445-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig prevents claude→codex model leakage by clearing ai.model if it contains 'claude' when provider is codex.",
+      "why": "This is one-directional protection only; no equivalent check exists for codex→claude or custom→claude model leakage."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "448-461",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider normalizes agent_tool_profile to 'research'|'full'|'boundary' and clears claude-specific tool flags.",
+      "why": "Tool profile normalization preserves full tool capability under harness boundary, but only for claude provider."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "462-464",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Custom provider sets custom_sandbox to 'boundary'.",
+      "why": "This enforces boundary for custom providers but does not validate or normalize tool settings."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "43-54",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex provider uses ai.codex_model or falls back to ai.model, with sandbox defaulting to 'workspace-write'.",
+      "why": "Codex defaults to permissive sandbox; if ai.model contains a claude model reference, evidence-dispatch.ts clears it, but provider-adapter.ts does not validate model namespace."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-79",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider uses ai.model directly without namespace validation.",
+      "why": "If ai.model contains a non-claude model (e.g., 'gpt-4'), it would pass through without validation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots detect project file mutations before/after agent execution.",
+      "why": "This is the primary boundary enforcement mechanism, but it only detects mutations after they occur; it does not prevent cross-provider config drift."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "197-231",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test verifies codex dispatch does not inherit claude default model or force read-only sandbox.",
+      "why": "This test covers the claude→codex protection path but no equivalent test exists for reverse leakage scenarios."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "274-378",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Tests verify claude tool profile normalization (boundary/research/full) with and without allowFullAgentTools.",
+      "why": "Tool profile normalization is well-tested for claude provider but no equivalent tests exist for codex or custom provider tool settings."
+    }
+  ],
+  "assumptions": [
+    "Model namespace validation (e.g., claude/* for claude provider, gpt-* for codex provider) is handled externally or not required.",
+    "Codex 'workspace-write' sandbox is acceptable default for evidence agents.",
+    "Cross-provider config inheritance other than model is handled correctly by provider-specific logic blocks.",
+    "Custom providers are trusted to respect 'boundary' sandbox setting."
+  ],
+  "risks": [
+    "If config.ai.model contains a non-claude model (e.g., 'gpt-4') and provider is 'claude', the model would pass without validation.",
+    "If config switches from codex to claude without clearing ai.model, a codex model reference could leak into claude invocation.",
+    "Codex sandbox default 'workspace-write' allows project writes; if boundary snapshot detection fails or is bypassed, mutations go undetected.",
+    "Custom providers may ignore custom_sandbox='boundary' setting without validation.",
+    "Tool configuration drift between providers could weaken harness boundary enforcement."
+  ],
+  "missing": [
+    "Equivalent model leakage protection for codex→claude, custom→claude, custom→codex directions.",
+    "Model namespace validation in provider-adapter.ts to ensure model matches provider namespace.",
+    "Sandbox default validation (codex defaults to 'workspace-write' instead of 'boundary').",
+    "Tests for reverse cross-provider model leakage scenarios.",
+    "Validation that custom providers respect sandbox='boundary' setting."
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "blocked",
+    "notes": "Partial cross-provider protection exists (claude→codex model leakage, claude tool profile normalization, boundary snapshot detection) but the system lacks comprehensive reverse-direction leakage protection, model namespace validation, and sandbox enforcement validation. Codex sandbox default is permissive ('workspace-write') and there are no tests for reverse leakage scenarios."
+  }
+}

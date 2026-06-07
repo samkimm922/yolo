@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Provider dispatch isolation and boundary enforcement is factually verified with project-scoped evidence. All required PRD slots have evidence support. Assumptions are properly separated from facts and reflect reasonable external dependencies.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation has three separate code paths (codex: 43-61, custom: 63-75, claude: 77-108) proving provider isolation.",
+      "why": "This is the architectural foundation for the claim that provider dispatch does not drift between providers."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "447-448",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Explicit anti-leakage logic: if (provider is codex and model contains claude) ai.model = '' prevents cross-provider model inheritance.",
+      "why": "Direct evidence that the demand concern (cross-provider leakage) is explicitly addressed in code."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "456-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude evidence mode clears tool restriction flags (claude_tools, claude_allowed_tools, claude_disallowed_tools) to preserve full tool capability.",
+      "why": "Evidence that acceptance criteria (tool capability preservation under boundary) is implemented."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot and diffBoundarySnapshots implement provider-agnostic mutation detection using SHA256 digests.",
+      "why": "Evidence that boundary enforcement applies equally to all providers regardless of implementation."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test suite covers provider isolation, cross-leakage prevention, tool capability preservation, and boundary enforcement.",
+      "why": "Executable evidence that all claims are validated by automated tests."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "515-565",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime integrates boundary snapshots before/after agent execution and converts violations into readiness blockers.",
+      "why": "Evidence that boundary violations become hard blockers preventing PRD readiness."
+    }
+  ],
+  "assumptions": [
+    "Git ls-files behavior is consistent across versions for boundary snapshot creation",
+    "Provider CLI flags (-p for claude, exec for codex) maintain stable semantics",
+    "SHA256 digests reliably detect content changes for mutation detection"
+  ],
+  "risks": [
+    "If provider CLIs change flag behavior, provider-specific isolation could weaken",
+    "If git ls-files behavior changes, boundary snapshot might miss files",
+    "Race conditions between snapshot creation and agent execution could miss mutations"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker evidence agrees completely. All project claims are backed by verifiable code and test evidence with precise paths and line numbers. Assumptions are properly disclosed and reflect reasonable external dependencies on git and provider CLI behavior. No missing data. All acceptance criteria (provider isolation, cross-leakage prevention, tool capability preservation, boundary enforcement) have direct implementation evidence and test coverage. PRD readiness requirements are satisfied."
+  }
+}

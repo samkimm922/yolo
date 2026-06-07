@@ -1,0 +1,133 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verification confirms the gathered evidence is sufficient to support PRD readiness. Explorer and cross-checker results agree with no conflicts, all evidence records have proper scope declarations, no assumptions are presented as facts, and evidence paths are usable project-scoped locators.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION defines scope as required field and validates project facts require project-scoped evidence with repo-relative path",
+      "why": "Evidence that schema contract enforces scope separation."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES set constrains scope to exactly four values: project, external, user, unknown",
+      "why": "Evidence that scope is strictly bounded to four categories."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope() implements scope inference from explicit field, path/url patterns, and 15+ source type patterns",
+      "why": "Evidence that scope inference logic supports four-way separation."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues() generates EVIDENCE_SCOPE_REQUIRED blocker for records without declared scope",
+      "why": "Evidence that missing scope declaration is blocked at readiness check."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE and PROJECT_EVIDENCE_PATH_REQUIRED blockers for existing-project facts lacking project-scoped evidence",
+      "why": "Evidence that project facts require concrete project evidence with path."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "268-328",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt() hard-codes rules requiring scope declaration and project-scoped evidence for project facts",
+      "why": "Evidence that agent protocol enforces scope separation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "151-158",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors() validates each evidence record has valid scope from VALID_EVIDENCE_SCOPES",
+      "why": "Evidence that runtime validation enforces valid scope values."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "408-420",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult() calls evidenceScopeErrors() and sets EVIDENCE_SCOPE_REQUIRED blocker with verdict blocked when scope validation fails",
+      "why": "Evidence that dispatch blocks agents returning invalid scope."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates external-only evidence cannot satisfy existing project facts via PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker",
+      "why": "Evidence that tests enforce external evidence cannot substitute project evidence."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "387-431",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates project evidence requires concrete project locator via PROJECT_EVIDENCE_PATH_REQUIRED blocker",
+      "why": "Evidence that tests enforce project scope requires path locator."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "433-478",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates external URLs cannot be relabeled as project evidence via PROJECT_EVIDENCE_PATH_REQUIRED blocker",
+      "why": "Evidence that tests prevent URL-as-project-evidence."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "480-524",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates evidence records must declare valid scope explicitly via EVIDENCE_SCOPE_REQUIRED blocker",
+      "why": "Evidence that tests enforce scope declaration requirement."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "605-640",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates agent evidence without explicit scope is blocked during normalization via EVIDENCE_SCOPE_REQUIRED blocker",
+      "why": "Evidence that dispatch blocks scope-less agent output."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "526-566",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates non-missing status notes in missing arrays do not block readiness, filtering phrases like no missing data identified",
+      "why": "Evidence that status notes are correctly excluded from blocking arrays."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If verification is wrong and evidence is insufficient, the demand could proceed to PRD with inadequate evidence separation, risking incorrect readiness decisions for existing projects."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker evidence agree with no conflicts. All 16 evidence records have proper scope declarations, usable project paths, and cover schema, router logic, dispatch protocol, and test validation. No assumptions presented as facts. No unresolved missing data. Evidence is sufficient to support the acceptance criterion that evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes."
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "iteration": 3,
+  "scenario": "brainstorm-to-plan-with-deferred-scope",
+  "expected": "executable",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131052137/fixtures/0003-brainstorm-to-plan-with-deferred-scope",
+  "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131052137/fixtures/0003-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.transcript.md",
+  "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131052137/fixtures/0003-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope.chain.json",
+  "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601131052137/fixtures/0003-brainstorm-to-plan-with-deferred-scope/.yolo/dialogue-stress/brainstorm-to-plan-with-deferred-scope-turn-3.prd.json",
+  "blocked_path": null,
+  "yolo": {
+    "no_premature_prd": true,
+    "final_class_ok": true,
+    "check_status": "pass",
+    "turn_count": 3,
+    "turn_expectations_met": 3,
+    "blocker_codes": [
+      "REFLECTION_PRESENT",
+      "INVESTIGATION_COMPLETE",
+      "REQUIREMENTS_PRESENT",
+      "ACCEPTANCE_SCENARIOS_PRESENT",
+      "SCENARIO_MATRIX_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "SCENARIO_SURFACES_PRESENT",
+      "SURFACE_SESSION_BUDGET_EXECUTABLE",
+      "OUT_OF_SCOPE_PRESENT",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "USER_APPROVAL_PRESENT"
+    ]
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "correct_final_class": true,
+      "conversation_realistic": true,
+      "no_premature_prd": true,
+      "executable": true,
+      "score": 92,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "RESOLVER_UNKNOWN_CONTEXT",
+          "path": "brainstorm-to-plan-with-deferred-scope.check.json:resolver",
+          "message": "All project adapters resolved to unknown/custom — expected for stress fixture but means a real project would need adapter manifests before execution."
+        },
+        {
+          "code": "BLOCKER_CODE_NAMING_CONFUSION",
+          "path": "brainstorm-to-plan-with-deferred-scope.chain.json:turns[0].blocker_codes",
+          "message": "Turn 1 blocker_codes list gate names like REQUIREMENTS_PRESENT which read as 'present' but actually mean 'missing'. Confusing but functionally correct."
+        }
+      ],
+      "dimensions": {
+        "clarification_quality": 9,
+        "project_fact_grounding": 9,
+        "stage_transition": 10,
+        "plan_convergence": 9,
+        "prd_executability": 9,
+        "deadlock_avoidance": 10,
+        "rework_risk": 9
+      }
+    },
+    "stdout": "",
+    "stderr": ""
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T13:13:34.425Z",
+  "ended_at": "2026-06-01T13:14:58.129Z",
+  "duration_ms": 83704
+}

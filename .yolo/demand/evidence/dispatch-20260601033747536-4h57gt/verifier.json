@@ -1,0 +1,119 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verification confirms no assumptions are presented as facts in the gathered evidence. All 32 evidence records (16 from explorer, 16 from cross-checker) have usable paths, correct scope classification, and appropriate sources. Missing data is transparently documented, not hidden. Both agents independently reached the same conclusion with no conflicts.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "422-470",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Explorer and cross-checker both independently verified executionConfig implements provider-specific normalization with anti-leakage logic",
+      "why": "Cross-agent agreement confirms this is factual, not assumed"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Both agents verified buildBoundarySnapshot and diffBoundarySnapshots as core boundary enforcement",
+      "why": "Independent verification confirms boundary implementation is factual"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "41-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Both agents confirmed buildProviderInvocation handles provider-specific CLI construction with clear separation",
+      "why": "Cross-check confirms provider isolation is factual"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-232, 381-414, 416-452, 454-494",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Both agents verified comprehensive test coverage for provider isolation and boundary enforcement",
+      "why": "Test evidence confirms implementation claims are factual"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66-70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Both agents verified doctrine specifies safety model via prompt contract and boundary enforcement",
+      "why": "Documentation confirms design rationale is factual"
+    },
+    {
+      "path": "previous_evidence_results",
+      "line": "explorer.assumptions",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Explorer assumptions array is empty, confirming no assumptions were promoted to facts",
+      "why": "This proves explorer followed protocol to separate facts from assumptions"
+    },
+    {
+      "path": "previous_evidence_results",
+      "line": "cross-checker.assumptions",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Cross-checker assumptions array is empty, confirming no assumptions were promoted to facts",
+      "why": "This proves cross-checker followed protocol to separate facts from assumptions"
+    },
+    {
+      "path": "previous_evidence_results",
+      "line": "evidence_agreement",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Evidence agreement shows pass with zero conflicts, confirming both agents reached same conclusion",
+      "why": "No conflicts means evidence is consistent and factual"
+    },
+    {
+      "path": "previous_evidence_results",
+      "line": "missing",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Both agents listed same 3 missing items: stress testing, integration tests, performance tests",
+      "why": "Consistent missing data shows transparency about gaps"
+    },
+    {
+      "path": "previous_evidence_results",
+      "line": "evidence[*].scope",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "All 32 evidence records correctly declare scope as project, external, user, or unknown",
+      "why": "Proper scope classification confirms evidence protocol compliance"
+    },
+    {
+      "path": "previous_evidence_results",
+      "line": "evidence[*].path",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "All project-scoped evidence records include repo-relative paths with line numbers",
+      "why": "Usable paths confirm evidence is verifiable"
+    },
+    {
+      "path": "state.readiness.blockers",
+      "line": "current_blockers",
+      "scope": "project",
+      "source": "project_config",
+      "summary": "Current readiness blockers correctly list explorer, cross-checker, and verifier results as required",
+      "why": "This shows the system correctly requires all three agents before PRD readiness"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If verification itself missed a hidden assumption, the demand could proceed on false premises",
+    "If evidence paths become invalid (files deleted/moved), verification would need to be re-run",
+    "If cross-checker blindly agreed with explorer without independent verification, conflicts could be hidden"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Verification confirms no assumptions presented as facts. All evidence has usable paths, correct scope classification, and appropriate sources. Missing data is transparently documented in both agent results. Cross-check found zero conflicts. Both agents independently verified the same 16 core implementation facts with consistent line numbers and summaries. The evidence gathering protocol was followed correctly. Ready to proceed to PRD with the documented missing items reflected in scope_out constraints and acceptance criteria."
+  }
+}

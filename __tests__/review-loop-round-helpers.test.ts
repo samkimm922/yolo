@@ -139,12 +139,12 @@ describe("review-loop round helpers", () => {
       skipped: ["C"],
     })], ["A", "B", "C"]);
 
-    const taskResults = { completed: ["A"], failed: [], skipped: [] };
+    const taskResults = { completed: ["A"], failed: [], skipped: [], blocked: [] };
     assert.equal(mergeReviewResults({
       taskResults,
-      reviewResults: { completed: ["A", "B"], failed: ["C"], skipped: ["D"] },
+      reviewResults: { completed: ["A", "B"], failed: ["C"], skipped: ["D"], blocked: ["E"] },
     }), taskResults);
-    assert.deepEqual(taskResults, { completed: ["A", "B"], failed: ["C"], skipped: ["D"] });
+    assert.deepEqual(taskResults, { completed: ["A", "B"], failed: ["C"], skipped: ["D"], blocked: ["E"] });
   });
 
   test("pendingReviewTasks returns pending review task ids only", () => {

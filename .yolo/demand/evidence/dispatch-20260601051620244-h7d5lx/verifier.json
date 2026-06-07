@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence is sufficient to verify the PRD claim: parseJsonCandidate repairs recoverable JSON drift and normalizeAgentResult fails closed with EVIDENCE_AGENT_INVALID_JSON for unrecoverable JSON, with PRD readiness correctly propagating blockers.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate implements four regex repairs: line range quoting, backslash escaping, key name space removal, and trailing comma cleanup.",
+      "why": "Primary evidence for repair behavior implementation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-396",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult checks if parsed is null and returns EVIDENCE_AGENT_INVALID_JSON with parseError context.",
+      "why": "Primary evidence for fail-closed behavior on invalid JSON."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test suite covers both repair success path (lines 535-571) and invalid JSON failure path (lines 573-603).",
+      "why": "Test evidence validates both acceptance criteria: repair tracking and explicit blocker codes."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "558",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "json_repaired field in provider_run output tracks whether repair occurred.",
+      "why": "Evidence that repair incidents are recorded for observability."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "598-599",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Final result status and code reflect PRD readiness blockage when agent_results contain EVIDENCE_AGENT_INVALID_JSON.",
+      "why": "Evidence that blockers correctly propagate to PRD readiness state."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Regex repairs could accept malformed JSON that should fail, leading to silent data corruption.",
+    "Test fixtures may not cover all possible Claude JSON drift patterns."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer evidence is complete and verifiable. All claims are grounded in project code or test files with exact line references. No assumptions promoted to facts. Blockers correctly propagate to PRD readiness state. Both repair and failure paths have test coverage."
+  }
+}

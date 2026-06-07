@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "failed",
+  "completed": false,
+  "claim": "Factual project claims need primary evidence.",
+  "confidence": "low",
+  "evidence": [],
+  "assumptions": [],
+  "risks": [
+    "Evidence agent did not return a valid completed result."
+  ],
+  "missing": [
+    "EVIDENCE_AGENT_INVALID_JSON: Unexpected token 'T', \"This is th\"... is not valid JSON"
+  ],
+  "recommendation": "block",
+  "result": {
+    "verdict": "blocked",
+    "error_code": "EVIDENCE_AGENT_INVALID_JSON",
+    "provider": "claude",
+    "exit_code": 0,
+    "timed_out": false,
+    "raw_output_excerpt": "This is the start of our conversation — there's no prior history for me to learn from yet.\n\nI'm ready to help with the YOLO project. What would you like to work on?"
+  }
+}

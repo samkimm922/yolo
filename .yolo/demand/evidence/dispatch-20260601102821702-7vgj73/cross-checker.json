@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Cross-check confirms: YOLO demand router schema correctly implements evidence missing and clarify blocker logic. All explorer claims verified with independent reads.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "496-501",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues generates EVIDENCE_AGENT_MISSING blocker when missing.length > 0, with message listing unresolved missing items",
+      "why": "Core blocker generation for missing evidence claims"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "503-508",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues generates EVIDENCE_AGENT_CLARIFICATION_REQUIRED blocker when recommendation is 'clarify', blocking PRD readiness until resolved",
+      "why": "Core blocker generation for clarification recommendations"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "726-732",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness iterates evidence agent results and calls evidenceResultBlockingIssues for each, aggregating all blockers into blockerList",
+      "why": "Integration point where individual evidence blockers affect readiness assessment"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "756",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "prd_ready computed as blockers.length === 0, ensuring any evidence blocker prevents readiness",
+      "why": "Final gating logic that guarantees blockers prevent PRD readiness"
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "337-353",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates missing: ['Need product owner confirmation...'] with recommendation: 'clarify' generates both EVIDENCE_AGENT_MISSING and EVIDENCE_AGENT_CLARIFICATION_REQUIRED blockers, and asserts prd_ready is false",
+      "why": "Test coverage validates blocker behavior and readiness gating"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "149",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "sanitizeMissing filters items using isNonMissingStatusItem, preventing status notes from triggering false positive blockers",
+      "why": "Prevents non-actionable status items from becoming blockers"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "98-106",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "isNonMissingStatusItem recognizes patterns like 'no missing data identified' and 'all required evidence tasks completed' as status notes, not actual missing items",
+      "why": "Supports sanitizeMissing by identifying status note patterns"
+    }
+  ],
+  "assumptions": [],
+  "risks": [],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All explorer claims independently verified. The implementation correctly generates blockers for missing evidence and clarify recommendations, tests validate the behavior, and prd_ready gating works as specified. No conflicts or discrepancies found."
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Evidence schema, prompt, readiness contract, and tests all distinguish project, external, user, and unknown evidence scopes.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601081932582-qooaum/explorer_result.json",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Explorer result: 12 project-scoped evidence records with concrete paths/lines, all four components validate scope distinction, no assumptions, recommendation proceed.",
+      "why": "Explorer independently verified all evidence is project-scoped with concrete paths, no assumptions, and full coverage of schema/prompt/contract/tests."
+    },
+    {
+      "path": ".yolo/demand/evidence/dispatch-20260601081932582-qooaum/cross-checker_result.json",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Cross-checker result: 12 project-scoped evidence records with independent verification, identical conclusion, no assumptions, recommendation proceed.",
+      "why": "Cross-checker independently confirmed same findings without conflicts, validating evidence reliability."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "37-50",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Verified: DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION explicitly defines four scope values and project-evidence requirement.",
+      "why": "Schema foundation exists and is correctly implemented."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "407-591",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Verified: Four test cases validate scope distinction, path requirements, and external-vs-project separation.",
+      "why": "Test coverage validates all scope validation paths."
+    }
+  ],
+  "assumptions": [],
+  "risks": [],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence verification complete. Explorer and cross-checker independently verified the claim with high confidence using 12 project-scoped evidence records each, all with concrete paths and line numbers. No assumptions presented as facts. No unresolved missing data. All four components (schema, prompt, readiness contract, tests) explicitly distinguish the four evidence scopes. Evidence paths are verifiable and usable. PRD readiness acceptance criteria satisfied."
+  }
+}

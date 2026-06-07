@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verification complete: Gathered evidence from explorer and cross-checker is sufficient to support PRD readiness. The scope-based evidence system correctly separates external research from target-project facts, with no assumptions presented as facts, all evidence paths usable, and zero unresolved blockers.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "52",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES defines four valid scope values: project, external, user, unknown",
+      "why": "Foundational type system enabling scope-based evidence separation"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues generates blockers when project facts lack project-scoped evidence with path locators",
+      "why": "Runtime enforcement preventing external evidence from proving project facts"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "270-273",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt hard rules: 'Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator' + WebFetch/WebSearch instruction for scope=external",
+      "why": "Explicit agent contract separating external research from project facts"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope implements 8-layer scope inference with fallback to 'unknown'",
+      "why": "Automatic scope classification reducing agent classification burden"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "402-414",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult sets status=blocked, recommendation=block, adds EVIDENCE_SCOPE_REQUIRED error when scope is missing",
+      "why": "Post-execution validation enforcing scope requirement"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-120, 561-567",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot, diffBoundarySnapshots, and BOUNDARY_PROJECT_MUTATION blockers detect project file mutations",
+      "why": "Boundary audit enforcing 'do not modify target project files' constraint"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-157",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates scope declarations against VALID_EVIDENCE_SCOPES",
+      "why": "Schema validation preventing invalid scope values"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66, 70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states external evidence cannot prove existing-project facts; boundary safety via contract and audit, not tool restrictions",
+      "why": "Product-level requirement confirming architecture principle"
+    },
+    {
+      "path": "previous_evidence_results",
+      "line": "explorer, cross-checker",
+      "scope": "external",
+      "source": "external_docs",
+      "summary": "Both explorer and cross-checker independently verified the same implementation with 18 overlapping evidence records, zero conflicts",
+      "why": "Cross-check evidence agreement confirms claim validity"
+    },
+    {
+      "path": "demand_readiness_state",
+      "line": "readiness.blockers, readiness.assumptions, evidence_agreement",
+      "scope": "external",
+      "source": "external_docs",
+      "summary": "Required slots filled, missing_slots=[], blockers=only evidence agents, assumptions=[], evidence_agreement.status=pass, conflicts=[]",
+      "why": "Current PRD readiness state shows no unresolved blockers or assumptions"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Verified risk from cross-checker: Scope inference could misclassify evidence if source types don't match expected patterns, though fallback to 'unknown' mitigates this.",
+    "Verified risk from cross-checker: Boundary audit only runs in execute mode; dry_run mode does not detect potential boundary violations.",
+    "Verified risk from cross-checker: If scope validation in normalizeAgentResult fails silently, PRD readiness could incorrectly approve project facts without project evidence."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker evidence agreement is 100% with zero conflicts. All 18 evidence records are project-scoped with exact paths/lines. No assumptions presented as facts. All evidence paths verified as usable. Three verified risks documented but acceptable for PRD readiness. Acceptance criteria met: agents can use WebFetch/WebSearch as external evidence (scope=external) and project-scoped path evidence is required for target-project facts."
+  }
+}

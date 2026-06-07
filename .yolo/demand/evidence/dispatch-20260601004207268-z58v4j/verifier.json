@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "The evidence gathered by explorer and cross-checker is sufficient, verifiable, and correctly separates facts from assumptions. Both agents independently confirmed that YOLO demand router already implements PRD readiness blocking for missing evidence, clarify recommendations, and failed evidence agent status. The demand's objective describes existing functionality as a requirement, creating a fundamental ambiguity that must be resolved before PRD generation.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "384-406",
+      "source": "code",
+      "summary": "evidenceResultBlockingIssues function creates blockers for missing evidence (EVIDENCE_AGENT_MISSING) and clarify/block recommendations or failed status (EVIDENCE_AGENT_CLARIFICATION_REQUIRED, EVIDENCE_AGENT_BLOCKED).",
+      "why": "Core blocking logic that converts evidence agent findings into PRD readiness blockers."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "586-610",
+      "source": "code",
+      "summary": "Integration where required evidence roles are checked, evidenceResultBlockingIssues is called, conflicts added, and final prd_ready computed as blockers.length === 0.",
+      "why": "Shows complete flow from evidence collection to PRD readiness decision."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "234-274",
+      "source": "test",
+      "summary": "Test asserts prd_ready is false and blockers include EVIDENCE_AGENT_MISSING and EVIDENCE_AGENT_CLARIFICATION_REQUIRED when evidence is missing.",
+      "why": "Executable verification that blocking behavior works as specified."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "43-65",
+      "source": "docs",
+      "summary": "Demand doctrine confirms that evidence agents are dispatched for careful routes and any blocker prevents prd_ready=true.",
+      "why": "Documentation confirms intended behavior matches implementation."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Generating a PRD from this demand without clarification would create requirements that duplicate existing functionality, causing confusion about implementation status.",
+    "Treating the demand objective as a new feature request could waste resources on already-implemented behavior.",
+    "The ambiguity between existing implementation and demand objective suggests a communication gap or outdated understanding that could mislead downstream PRD consumers."
+  ],
+  "missing": [
+    "Clarification of whether this demand requests new feature implementation, fixes broken behavior, documents existing behavior, or stems from outdated understanding.",
+    "User confirmation that current blocking behavior matches their expectation for missing/clarify/failed evidence.",
+    "Specification of what different blocking semantics (if any) are desired beyond current implementation.",
+    "Evidence of production failures or test failures if this is a bug report about broken blocking behavior."
+  ],
+  "recommendation": "clarify",
+  "result": {
+    "verdict": "blocked",
+    "notes": "Evidence verification confirms the explorer and cross-checker findings are accurate and well-supported. The blocking logic exists and is tested. However, fundamental ambiguity remains: the demand objective states as a requirement what is already implemented. This cannot be treated as a simple new feature request. Proceeding to PRD generation would create requirements duplicating existing functionality. The demand requires clarification about intent before PRD readiness can be achieved."
+  }
+}

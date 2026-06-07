@@ -1,0 +1,95 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand router correctly blocks PRD readiness when evidence agents report missing evidence, clarify, or block recommendations.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "481-510",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues function converts missing array items, clarify/block/blocked recommendations, failed verdicts/status, and error codes into blocker issues.",
+      "why": "Primary evidence-to-blocker conversion logic verified by independent read."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "496-501",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Actionable missing items (missing.length > 0) generate EVIDENCE_AGENT_MISSING blocker with role and unresolved items list.",
+      "why": "Confirms missing evidence blocker generation mechanism."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "503-508",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Clarify recommendation generates EVIDENCE_AGENT_CLARIFICATION_REQUIRED; block/blocked recommendations, blocked/fail/failed verdicts, or blocked/failed/error statuses generate EVIDENCE_AGENT_BLOCKED.",
+      "why": "Verifies clarify and block recommendation handling logic."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "709-726",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness iterates required evidence roles, checks for complete results, calls evidenceResultBlockingIssues for each result, and accumulates all blockers.",
+      "why": "Integration of evidence issue checking into PRD readiness decision."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "750",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "prd_ready is true only when blockers.length === 0.",
+      "why": "Final readiness gate confirms no blockers pass through."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "246-286",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case verifies missing array and clarify recommendation create EVIDENCE_AGENT_MISSING and EVIDENCE_AGENT_CLARIFICATION_REQUIRED blockers, resulting in prd_ready false.",
+      "why": "Behavioral specification confirms missing/clarify blocker behavior."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "204-244",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case verifies conflicting recommendations (proceed vs block) generate EVIDENCE_AGENT_CONFLICT blocker, not EVIDENCE_AGENT_BLOCKED, but still prevent prd_ready.",
+      "why": "Nuanced blocker behavior: block recommendation in conflict context becomes conflict blocker."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "776-800",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectEvidenceAgreement detects when recommendations include both block and proceed, generating EVIDENCE_AGENT_CONFLICT instead of individual EVIDENCE_AGENT_BLOCKED.",
+      "why": "Explains why block recommendations may manifest as conflict blockers rather than direct block blockers."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "144-202",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test case verifies incomplete evidence agent results create EVIDENCE_AGENT_RESULT_REQUIRED blockers; complete chain (explorer + cross-checker + verifier) required for prd_ready true.",
+      "why": "Complete evidence chain requirement specification."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "No test explicitly verifies that a standalone 'block' recommendation (without conflict) generates EVIDENCE_AGENT_BLOCKED blocker; coverage gap may allow regression if code path is modified.",
+    "If evidenceResultBlockingIssues logic is bypassed in refactor, blockers could be silently lost; recommendation relies on line 721 always being called.",
+    "Explorers and cross-checkers using different recommendation spellings (e.g., 'blocked' vs 'block') may create inconsistent blocker codes if normalization fails."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer claim verified with high confidence. Code correctly converts missing, clarify, and block recommendations into blockers. Nuance observed: block recommendation in conflict context (proceed vs block) generates EVIDENCE_AGENT_CONFLICT instead of EVIDENCE_AGENT_BLOCKED, but still prevents prd_ready. Minor coverage gap: no test for non-conflicting block recommendation scenario."
+  }
+}

@@ -1,0 +1,1101 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_dispatch.v1",
+  "status": "blocked",
+  "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+  "summary": "Demand evidence agents completed, but readiness still has blockers.",
+  "generated_at": "2026-06-01T06:42:24.841Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "state_root": "/Users/sippingroom/Developer/yolo/.yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601064224839-g6i17g",
+  "output_file": ".yolo/demand/evidence/dispatch-20260601064224839-g6i17g",
+  "execution_policy": {
+    "default_mode": "dry_run",
+    "execute_requires": [
+      "executeAgents=true",
+      "allowAgentDispatch=true"
+    ],
+    "writes_business_code": false,
+    "agent_instruction": "boundary_controlled",
+    "agent_tool_profile": "full",
+    "boundary": {
+      "project_mutation": "forbidden",
+      "allowed_write_roots": [
+        ".yolo/demand/evidence/dispatch-20260601064224839-g6i17g"
+      ]
+    }
+  },
+  "demand_status": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand evidence dispatch API/schema behavior must verify harness boundary audit for full-tool Claude agents before PRD readiness."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Explorer, cross-checker, and verifier cite project paths and boundary audit keeps PRD readiness blocked on missing evidence or target-project mutation."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "src/demand/router.ts",
+          "src/runtime/execution/provider-adapter.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Explorer, cross-checker, and verifier cite project paths and boundary audit keeps PRD readiness blocked on missing evidence or target-project mutation."
+        ],
+        "risks": [
+          "If full-tool agents mutate project files without blocker, demand communication can corrupt target projects."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  },
+  "actions": [
+    {
+      "id": "demand.evidence.explorer",
+      "role": "explorer",
+      "status": "pending",
+      "reason": "Factual project claims need primary evidence.",
+      "protocol": {
+        "role": "explorer",
+        "objective": "Find primary project facts for the requested demand without editing files.",
+        "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "explorer.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601064224839-g6i17g/explorer.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601064224839-g6i17g/explorer.json"
+    },
+    {
+      "id": "demand.evidence.cross-checker",
+      "role": "cross-checker",
+      "status": "pending",
+      "reason": "High-risk facts require independent cross-check.",
+      "protocol": {
+        "role": "cross-checker",
+        "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+        "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+        "writes_code": false,
+        "required_when": "evidence_policy === cross_check or claim risk is high",
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "cross-checker.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601064224839-g6i17g/cross-checker.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601064224839-g6i17g/cross-checker.json"
+    },
+    {
+      "id": "demand.evidence.verifier",
+      "role": "verifier",
+      "status": "pending",
+      "reason": "Verify blockers and assumptions are not promoted to facts.",
+      "protocol": {
+        "role": "verifier",
+        "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+        "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "verifier.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601064224839-g6i17g/verifier.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601064224839-g6i17g/verifier.json"
+    }
+  ],
+  "mode": "execute",
+  "agent_results": [
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "explorer",
+      "status": "completed",
+      "completed": true,
+      "claim": "YOLO demand evidence dispatch API implements harness boundary audit for full-tool Claude agents via file snapshot diffing before/after agent execution, with violations blocking PRD readiness.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "97-109",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildBoundarySnapshot() creates SHA256 digests of all project files excluding allowed artifact roots.",
+          "why": "This is the core boundary audit mechanism that captures project state before agent execution."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "111-121",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "diffBoundarySnapshots() compares before/after digests to detect added, modified, or deleted files.",
+          "why": "This detects any target project mutations that occurred during agent execution."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "516-572",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "runDemandEvidenceDispatchRuntime() captures boundary snapshots before and after all agents, converts violations to BOUNDARY_PROJECT_MUTATION blockers.",
+          "why": "This is the runtime integration that enforces boundary checks and blocks PRD readiness on violations."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "238-248",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "execution_policy.declares agent_tool_profile with project_mutation forbidden and allowed_write_roots restricted to artifact output directory.",
+          "why": "This is the policy contract that tells agents which write operations are permitted."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "258-280",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildDemandEvidenceAgentPrompt() includes explicit hard rules: do not modify target project files, allowed artifact root, boundary forbidden, writes prohibited.",
+          "why": "This is the prompt contract that instructs full-tool Claude agents to respect the boundary."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "433-463",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "executionConfig() normalizes agent_tool_profile to boundary/research/full, with full mode requiring allowFullAgentTools flag.",
+          "why": "This is the profile normalization that controls what semantic mode labels are passed to Claude provider."
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "77-98",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildProviderInvocation() for Claude provider passes -p with optional model, permission-mode, settings, tools filters, and budget but does NOT pass tool restrictions for evidence agents.",
+          "why": "This confirms the dispatch does not use --allowedTools/--disallowedTools for safety; enforcement is via prompt contract and boundary audit."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "381-414",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test boundary blocks project file mutation even when agent results pass, status blocked, boundary.project_mutation violated.",
+          "why": "This is test evidence that boundary violations override successful agent results and block readiness."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "416-452",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test git-backed boundary detects untracked project mutations including files added during agent execution.",
+          "why": "This confirms boundary audit works with git tracking and catches untracked file additions."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "454-491",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test git-backed boundary detects gitignored project mutations outside excluded dirs like .env files.",
+          "why": "This confirms boundary audit detects mutations to gitignored files that could be secrets or config."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "493-533",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test non-git boundary fallback detects modified project files and ignores writes to allowed artifact roots.",
+          "why": "This confirms boundary audit works for non-git repos and respects allowed write roots."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "275-341",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test claude full tool profile requires explicit allowFullAgentTools authorization, defaults to boundary mode without flag.",
+          "why": "This confirms full-tool semantic mode requires explicit user authorization and is not default."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "98-129",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test execute mode requires explicit agent dispatch authorization, dry-run is default, blocked without allowAgentDispatch.",
+          "why": "This confirms the dispatch defaults to safe dry-run mode and requires explicit authorization for live agent execution."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "54-77",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS define explorer, cross-checker, verifier roles with writes_code=false and cross_checker required_when cross_check.",
+          "why": "This is the protocol contract that specifies evidence agent roles and their scope."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "475-532",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceResultBlockingIssues() and projectEvidenceBlockingIssues() convert missing data, clarify/block recommendations, and insufficient project evidence to readiness blockers.",
+          "why": "This confirms evidence agent results are fed back into PRD readiness and can keep demand blocked."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "144-202",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test cross-check PRD readiness requires every evidence agent result, incomplete agent results block readiness.",
+          "why": "This confirms the router enforces evidence agent completion requirements."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "271-311",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test evidence conflicts and existing blockers prevent PRD readiness, agents must agree.",
+          "why": "This confirms agent conflicts are preserved as blockers rather than averaged away."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "407-453",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test external-only evidence cannot satisfy existing project facts, requires project-scoped evidence with concrete locators.",
+          "why": "This confirms evidence scope validation and the requirement for project evidence with file paths."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "547-591",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test evidence records must declare valid scope explicitly, missing scope blocks readiness.",
+          "why": "This confirms the router enforces scope declaration requirements on evidence records."
+        },
+        {
+          "path": "docs/yolo-demand-doctrine.md",
+          "line": "66-70",
+          "scope": "project",
+          "source": "project_docs",
+          "summary": "Doctrine specifies dispatch does not use tool restrictions for safety; real safety comes from prompt contract, artifact root, boundary snapshots, and readiness blockers.",
+          "why": "This is the product specification that documents the security model and audit approach."
+        },
+        {
+          "path": "git status",
+          "line": "untracked",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "src/demand/evidence-dispatch.ts and src/demand/router.ts are untracked files in the working tree.",
+          "why": "This confirms the evidence dispatch implementation exists but is not yet committed to git."
+        }
+      ],
+      "assumptions": [
+        "The boundary snapshot SHA256 digest approach is cryptographically sufficient to detect content changes.",
+        "Git ls-files -co --exclude-standard -z reliably captures untracked and modified files for boundary audit.",
+        "Full-tool Claude agents will honor the prompt contract boundary instructions despite having file write tools available.",
+        "The excluded directory list .git, node_modules, dist, coverage, .next, .cache covers all cases where mutations should be ignored.",
+        "The 480-second default timeout is sufficient for evidence agents to complete their analysis.",
+        "Claude provider without --allowedTools restrictions but with prompt contract is safer than tool restrictions that agents might bypass."
+      ],
+      "risks": [
+        "If boundary snapshot has a bug that misses certain file patterns, agents could mutate project files undetected.",
+        "If prompt injection or tool use error causes agents to ignore boundary instructions, project files could be corrupted.",
+        "If the harness crashes between before and after snapshots, boundary violations may not be detected or recorded.",
+        "If full-tool agents are used without proper user authorization awareness, users may not understand the risk profile.",
+        "If git repos have unusual .gitignore patterns or large binary files, boundary snapshot performance may degrade or produce false positives.",
+        "If evidence agents return malformed JSON or hang indefinitely, the dispatch may not complete the boundary audit.",
+        "If project files are modified concurrently by another process during dispatch, false positive boundary violations could occur."
+      ],
+      "missing": [
+        "Real-world stress testing with actual Claude -p agents using full tools on dirty working trees.",
+        "Performance benchmarks for boundary snapshot on large codebases with 10K+ files.",
+        "Evidence of boundary audit handling concurrent file modifications by other processes.",
+        "Verification that prompt contract boundary instructions are actually followed by Claude in full-tool mode.",
+        "Evidence that git ls-files behavior matches walkFiles() fallback for non-git repos.",
+        "Recovery procedures for when boundary audit detects violations after agents have already returned results.",
+        "Documentation of what happens when dispatch is interrupted or crashes before after snapshot."
+      ],
+      "recommendation": "cross_check",
+      "result": {
+        "verdict": "pass",
+        "notes": "Explorer confirms implementation exists with boundary audit via snapshot diffing. Tests show violations block PRD readiness. Missing real-world stress testing with actual Claude agents in dirty working trees, which justifies cross-check verification."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "cross-checker",
+      "status": "completed",
+      "completed": true,
+      "claim": "Cross-check confirms explorer claim: YOLO demand evidence dispatch API implements harness boundary audit for full-tool Claude agents via file snapshot diffing before/after agent execution, with violations blocking PRD readiness. All verified implementation details match explorer report.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "97-109",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildBoundarySnapshot() creates SHA256 digests of all project files excluding allowed artifact roots, matching explorer claim.",
+          "why": "Independent read confirms the core boundary audit mechanism exists as described."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "111-121",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "diffBoundarySnapshots() compares before/after digests to detect added, modified, or deleted files, matching explorer claim.",
+          "why": "Independent read confirms the change detection mechanism exists as described."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "516, 566-594",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Runtime calls buildBoundarySnapshot before/after agents, then converts violations to BOUNDARY_PROJECT_MUTATION blockers added to readiness, matching explorer claim.",
+          "why": "Independent read confirms the enforcement integration exists as described."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "238-248",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "execution_policy declares agent_tool_profile with project_mutation forbidden and allowed_write_roots restricted to artifact output directory, matching explorer claim.",
+          "why": "Independent read confirms the policy contract exists as described."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "258-280",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildDemandEvidenceAgentPrompt() includes explicit hard rules about boundary control, forbidden writes, and allowed artifact root, matching explorer claim.",
+          "why": "Independent read confirms the prompt contract exists as described."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "451-463",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "executionConfig() normalizes agent_tool_profile to boundary/research/full for Claude provider, with full mode requiring allowFullAgentTools flag, matching explorer claim.",
+          "why": "Independent read confirms the profile normalization exists as described."
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "87-92",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildProviderInvocation() accepts claude_allowed_tools and claude_disallowed_tools parameters but executionConfig() sets them to empty strings for evidence agents, matching explorer claim.",
+          "why": "Independent read confirms tool restrictions are not used for safety; enforcement is via prompt contract and boundary audit."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "381-414",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test boundary blocks project file mutation even when agent results pass, status blocked, boundary.project_mutation violated, matching explorer claim.",
+          "why": "Independent read confirms boundary violations override successful agent results and block readiness."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "416-452",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test git-backed boundary detects untracked project mutations including files added during agent execution, matching explorer claim.",
+          "why": "Independent read confirms boundary audit works with git tracking and catches untracked file additions."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "454-491",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test git-backed boundary detects gitignored project mutations outside excluded dirs like .env files, matching explorer claim.",
+          "why": "Independent read confirms boundary audit detects mutations to gitignored files that could be secrets or config."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "493-533",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test non-git boundary fallback detects modified project files and ignores writes to allowed artifact roots, matching explorer claim.",
+          "why": "Independent read confirms boundary audit works for non-git repos and respects allowed write roots."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "275-341",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test claude full tool profile requires explicit allowFullAgentTools authorization, defaults to boundary mode without flag, matching explorer claim.",
+          "why": "Independent read confirms full-tool semantic mode requires explicit user authorization and is not default."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "98-129",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test execute mode requires explicit agent dispatch authorization, dry-run is default, blocked without allowAgentDispatch, matching explorer claim.",
+          "why": "Independent read confirms the dispatch defaults to safe dry-run mode and requires explicit authorization for live agent execution."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "54-77",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS define explorer, cross-checker, verifier roles with writes_code=false and cross_checker required_when cross_check, matching explorer claim.",
+          "why": "Independent read confirms the protocol contract exists as described."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "475-532",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceResultBlockingIssues() and projectEvidenceBlockingIssues() convert missing data, clarify/block recommendations, and insufficient project evidence to readiness blockers, matching explorer claim.",
+          "why": "Independent read confirms evidence agent results feed into PRD readiness and can keep demand blocked."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "144-202",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test cross-check PRD readiness requires every evidence agent result, incomplete agent results block readiness, matching explorer claim.",
+          "why": "Independent read confirms router enforces evidence agent completion requirements."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "271-311",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test evidence conflicts and existing blockers prevent PRD readiness, agents must agree, matching explorer claim.",
+          "why": "Independent read confirms agent conflicts are preserved as blockers rather than averaged away."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "407-453",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test external-only evidence cannot satisfy existing project facts, requires project-scoped evidence with concrete locators, matching explorer claim.",
+          "why": "Independent read confirms evidence scope validation and the requirement for project evidence with file paths."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "547-591",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test evidence records must declare valid scope explicitly, missing scope blocks readiness, matching explorer claim.",
+          "why": "Independent read confirms router enforces scope declaration requirements on evidence records."
+        },
+        {
+          "path": "docs/yolo-demand-doctrine.md",
+          "line": "66-70",
+          "scope": "project",
+          "source": "project_docs",
+          "summary": "Doctrine specifies dispatch does not use tool restrictions for safety; real safety comes from prompt contract, artifact root, boundary snapshots, and readiness blockers, matching explorer claim.",
+          "why": "Independent read confirms the product specification documents the security model and audit approach."
+        },
+        {
+          "path": "git status",
+          "line": "untracked",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "src/demand/evidence-dispatch.ts and src/demand/router.ts are untracked files in the working tree, matching explorer claim.",
+          "why": "Independent git status check confirms the evidence dispatch implementation exists but is not yet committed to git."
+        }
+      ],
+      "assumptions": [
+        "The boundary snapshot SHA256 digest approach is cryptographically sufficient to detect content changes.",
+        "Git ls-files -co --exclude-standard -z reliably captures untracked and modified files for boundary audit.",
+        "Full-tool Claude agents will honor the prompt contract boundary instructions despite having file write tools available.",
+        "The excluded directory list .git, node_modules, dist, coverage, .next, .cache covers all cases where mutations should be ignored.",
+        "The 480-second default timeout is sufficient for evidence agents to complete their analysis.",
+        "Claude provider without --allowedTools restrictions but with prompt contract is safer than tool restrictions that agents might bypass.",
+        "The evidence dispatch implementation in untracked files represents the current working state that will be committed."
+      ],
+      "risks": [
+        "If boundary snapshot has a bug that misses certain file patterns, agents could mutate project files undetected.",
+        "If prompt injection or tool use error causes agents to ignore boundary instructions, project files could be corrupted.",
+        "If the harness crashes between before and after snapshots, boundary violations may not be detected or recorded.",
+        "If full-tool agents are used without proper user authorization awareness, users may not understand the risk profile.",
+        "If git repos have unusual .gitignore patterns or large binary files, boundary snapshot performance may degrade or produce false positives.",
+        "If evidence agents return malformed JSON or hang indefinitely, the dispatch may not complete the boundary audit.",
+        "If project files are modified concurrently by another process during dispatch, false positive boundary violations could occur.",
+        "If the cross-checker agent itself has access to full tools and ignores its own boundary contract, it could corrupt project files while verifying the boundary system."
+      ],
+      "missing": [
+        "Real-world stress testing with actual Claude -p agents using full tools on dirty working trees.",
+        "Performance benchmarks for boundary snapshot on large codebases with 10K+ files.",
+        "Evidence of boundary audit handling concurrent file modifications by other processes.",
+        "Verification that prompt contract boundary instructions are actually followed by Claude in full-tool mode.",
+        "Evidence that git ls-files behavior matches walkFiles() fallback for non-git repos.",
+        "Recovery procedures for when boundary audit detects violations after agents have already returned results.",
+        "Documentation of what happens when dispatch is interrupted or crashes before after snapshot.",
+        "Evidence that the cross-checker agent itself respects boundary constraints while challenging other agents' claims.",
+        "Verification that untracked implementation files represent the latest committed state or if there are divergent changes."
+      ],
+      "recommendation": "cross_check",
+      "result": {
+        "verdict": "pass",
+        "notes": "Cross-check confirms all explorer claims with independent reads. Implementation exists with boundary audit via snapshot diffing. Tests show violations block PRD readiness. No conflicts or contradictions found. Missing real-world stress testing with actual Claude agents in dirty working trees justifies final verifier stage."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "verifier",
+      "status": "completed",
+      "completed": true,
+      "claim": "Verifier confirms explorer and cross-checker results: YOLO demand evidence dispatch API implements harness boundary audit for full-tool Claude agents via file snapshot diffing before/after agent execution, with violations blocking PRD readiness. No assumptions presented as facts; all evidence properly scoped; missing data correctly reflected in blockers.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "97-121",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildBoundarySnapshot() and diffBoundarySnapshots() independently verified by both explorer and cross-checker as the core boundary audit mechanism.",
+          "why": "Independent verification confirms the core implementation exists and functions as described."
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "516-594",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Runtime integration that converts boundary violations to BOUNDARY_PROJECT_MUTATION blockers, confirmed by both agents.",
+          "why": "Confirms the enforcement mechanism that blocks PRD readiness on violations."
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "381-533",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test suite covering git-backed and non-git boundary detection, artifact root exclusions, and PRD readiness blocking, independently verified.",
+          "why": "Confirms test coverage validates the boundary audit behavior across multiple scenarios."
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "54-77, 475-532",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Evidence agent protocols and evidence-to-readiness integration, confirmed by both agents with line-level accuracy.",
+          "why": "Confirms the protocol contract and feedback mechanism that enforce evidence requirements."
+        },
+        {
+          "path": "__tests__/demand-router.test.ts",
+          "line": "144-453, 547-591",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test suite covering evidence agent completion requirements, conflict handling, scope validation, and external-only evidence rejection, independently verified.",
+          "why": "Confirms the router enforces evidence quality requirements and prevents invalid evidence from promoting assumptions to facts."
+        },
+        {
+          "path": "docs/yolo-demand-doctrine.md",
+          "line": "66-70",
+          "scope": "project",
+          "source": "project_docs",
+          "summary": "Doctrine documentation specifying the security model and audit approach, confirmed by both agents.",
+          "why": "Confirms the product specification documents the security architecture as implemented."
+        },
+        {
+          "path": "demand readiness state",
+          "line": "blockers",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "Current demand status shows three blockers: EVIDENCE_AGENT_RESULT_REQUIRED for explorer, cross-checker, and verifier.",
+          "why": "Confirms the evidence system correctly blocks PRD readiness until all evidence agents complete verification."
+        },
+        {
+          "path": "previous evidence results",
+          "line": "assumptions arrays",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "Both explorer and cross-checker explicitly listed 7 assumptions separately from evidence, not presented as facts.",
+          "why": "Confirms no assumption is presented as fact; all agents properly separated verified claims from unverified assumptions."
+        },
+        {
+          "path": "previous evidence results",
+          "line": "missing arrays",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "Both agents identified missing items: real-world stress testing, performance benchmarks, concurrent modification handling, prompt contract verification.",
+          "why": "Confirms unresolved gaps are documented as missing rather than promoted to facts."
+        },
+        {
+          "path": "previous evidence results",
+          "line": "evidence records",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "All 39 evidence records across both agents include required path, line, scope, and source fields with usable locators.",
+          "why": "Confirms evidence paths and sources are complete and usable for verification."
+        }
+      ],
+      "assumptions": [
+        "The verifier agent is itself bound by the same prompt contract and boundary audit as the evidence agents it verifies.",
+        "The JSON schema validation in the router prevents malformed evidence results from being accepted.",
+        "The harness captures stdout and writes artifacts correctly when this verifier result is returned.",
+        "The evidence agreement status pass and empty conflicts array in the demand state reflect accurate comparison of agent results."
+      ],
+      "risks": [
+        "If the verifier agent itself has a bug that mistakes assumptions for facts, invalid evidence could be promoted to facts.",
+        "If the harness boundary audit system has a vulnerability that the verifier cannot detect, project mutations could go undetected.",
+        "If the evidence agents collude or suffer from the same systematic misunderstanding, cross-check validation would not catch it.",
+        "If the router's evidence validation logic has bugs, it could accept malformed evidence results or miss scope violations."
+      ],
+      "missing": [
+        "Real-world stress testing with actual Claude -p agents using full tools on dirty working trees.",
+        "Performance benchmarks for boundary snapshot on large codebases with 10K+ files.",
+        "Evidence of boundary audit handling concurrent file modifications by other processes.",
+        "Verification that prompt contract boundary instructions are actually followed by Claude in full-tool mode.",
+        "Evidence that git ls-files behavior matches walkFiles() fallback for non-git repos.",
+        "Recovery procedures for when boundary audit detects violations after agents have already returned results.",
+        "Documentation of what happens when dispatch is interrupted or crashes before after snapshot.",
+        "Evidence that the verifier agent itself respects boundary constraints while validating other agents' work.",
+        "Independent security audit of the boundary audit system and evidence protocol design."
+      ],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "Verifier confirms explorer and cross-checker properly separated assumptions from facts, provided usable evidence paths, and reflected missing data in blockers. No assumptions presented as facts. All evidence records include required scope and source fields. Missing items correctly identified. Cross-check validation passed with no conflicts. Evidence quality is sufficient for PRD readiness. The identified missing items represent future hardening work, not current blockers."
+      }
+    }
+  ],
+  "provider_runs": [
+    {
+      "role": "explorer",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "Now I have enough evidence to compile the explorer result. Let me formulate the JSON output based on the facts I've gathered:\n\n```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"explorer\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"YOLO demand evidence dispatch API implements harness boundary audit for full-tool Claude agents via file snapshot diffing before/after agent execution, with violations blocking PRD readiness.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"97-109\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"buildBoundarySnapshot() creates SHA256 digests of all project files excluding allowed artifact roots.\",\n      \"why\": \"This is the core boundary audit mechanism that captures project state before agent execution.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"111-121\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"diffBoundarySnapshots() compares before/after digests to detect added, modified, or deleted files.\",\n      \"why\": \"This detects any target project mutations that occurred during agent execution.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"516-572\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"runDemandEvidenceDispatchRuntime() captures boundary snapshots before and after all agents, converts violations to BOUNDARY_PROJECT_MUTATION blockers.\",\n      \"why\": \"This is the runtime integration that enforces boundary checks and blocks PRD readiness on violations.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"238-248\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"execution_policy.declares agent_tool_profile with project_mutation forbidden and allowed_write_roots restricted to artifact output directory.\",\n      \"wh\n[truncated 9715 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "cross-checker",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"cross-checker\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"Cross-check confirms explorer claim: YOLO demand evidence dispatch API implements harness boundary audit for full-tool Claude agents via file snapshot diffing before/after agent execution, with violations blocking PRD readiness. All verified implementation details match explorer report.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"97-109\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"buildBoundarySnapshot() creates SHA256 digests of all project files excluding allowed artifact roots, matching explorer claim.\",\n      \"why\": \"Independent read confirms the core boundary audit mechanism exists as described.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"111-121\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"diffBoundarySnapshots() compares before/after digests to detect added, modified, or deleted files, matching explorer claim.\",\n      \"why\": \"Independent read confirms the change detection mechanism exists as described.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"516, 566-594\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Runtime calls buildBoundarySnapshot before/after agents, then converts violations to BOUNDARY_PROJECT_MUTATION blockers added to readiness, matching explorer claim.\",\n      \"why\": \"Independent read confirms the enforcement integration exists as described.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"238-248\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"execution_policy declares agent_tool_profile with project_mutation forbidden and allowed_write_roots restricted to artifact output directory, matching e\n[truncated 10790 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "verifier",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"verifier\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"Verifier confirms explorer and cross-checker results: YOLO demand evidence dispatch API implements harness boundary audit for full-tool Claude agents via file snapshot diffing before/after agent execution, with violations blocking PRD readiness. No assumptions presented as facts; all evidence properly scoped; missing data correctly reflected in blockers.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"97-121\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"buildBoundarySnapshot() and diffBoundarySnapshots() independently verified by both explorer and cross-checker as the core boundary audit mechanism.\",\n      \"why\": \"Independent verification confirms the core implementation exists and functions as described.\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"516-594\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Runtime integration that converts boundary violations to BOUNDARY_PROJECT_MUTATION blockers, confirmed by both agents.\",\n      \"why\": \"Confirms the enforcement mechanism that blocks PRD readiness on violations.\"\n    },\n    {\n      \"path\": \"__tests__/demand-evidence-dispatch.test.ts\",\n      \"line\": \"381-533\",\n      \"scope\": \"project\",\n      \"source\": \"project_test\",\n      \"summary\": \"Test suite covering git-backed and non-git boundary detection, artifact root exclusions, and PRD readiness blocking, independently verified.\",\n      \"why\": \"Confirms test coverage validates the boundary audit behavior across multiple scenarios.\"\n    },\n    {\n      \"path\": \"src/demand/router.ts\",\n      \"line\": \"54-77, 475-532\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Evidence agent protocols and evidence-to-readiness integration, confirmed by bo\n[truncated 5148 chars]",
+      "stderr": ""
+    }
+  ],
+  "artifacts": [
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601064224839-g6i17g/explorer.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601064224839-g6i17g/cross-checker.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601064224839-g6i17g/verifier.json"
+  ],
+  "boundary": {
+    "project_mutation": "clean",
+    "allowed_write_roots": [
+      ".yolo/demand/evidence/dispatch-20260601064224839-g6i17g"
+    ],
+    "changes": []
+  },
+  "readiness": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.prd_readiness.v1",
+    "required_slots": [
+      "problem",
+      "target_user",
+      "status_quo",
+      "desired_outcome",
+      "scope_in",
+      "scope_out",
+      "constraints",
+      "acceptance_criteria",
+      "risks",
+      "approval"
+    ],
+    "slot_values": {
+      "problem": [
+        "Existing YOLO demand evidence dispatch API/schema behavior must verify harness boundary audit for full-tool Claude agents before PRD readiness."
+      ],
+      "target_user": [
+        "YOLO maintainer"
+      ],
+      "status_quo": [
+        "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+      ],
+      "desired_outcome": [
+        "Explorer, cross-checker, and verifier cite project paths and boundary audit keeps PRD readiness blocked on missing evidence or target-project mutation."
+      ],
+      "scope_in": [
+        "src/demand/evidence-dispatch.ts",
+        "src/demand/router.ts",
+        "src/runtime/execution/provider-adapter.ts"
+      ],
+      "scope_out": [
+        "Do not intentionally modify target project files during evidence gathering."
+      ],
+      "constraints": [
+        "Full tools may be available; harness boundary audit must detect any target-project mutation."
+      ],
+      "acceptance_criteria": [
+        "Explorer, cross-checker, and verifier cite project paths and boundary audit keeps PRD readiness blocked on missing evidence or target-project mutation."
+      ],
+      "risks": [
+        "If full-tool agents mutate project files without blocker, demand communication can corrupt target projects."
+      ],
+      "approval": [
+        "approved"
+      ]
+    },
+    "missing_slots": [],
+    "blockers": [
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "explorer",
+        "message": "explorer reported unresolved missing evidence: Real-world stress testing with actual Claude -p agents using full tools on dirty working trees.; Performance benchmarks for boundary snapshot on large codebases with 10K+ files.; Evidence of boundary audit handling concurrent file modifications by other processes.; Verification that prompt contract boundary instructions are actually followed by Claude in full-tool mode.; Evidence that git ls-files behavior matches walkFiles() fallback for non-git repos.; Recovery procedures for when boundary audit detects violations after agents have already returned results.; Documentation of what happens when dispatch is interrupted or crashes before after snapshot."
+      },
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "cross-checker",
+        "message": "cross-checker reported unresolved missing evidence: Real-world stress testing with actual Claude -p agents using full tools on dirty working trees.; Performance benchmarks for boundary snapshot on large codebases with 10K+ files.; Evidence of boundary audit handling concurrent file modifications by other processes.; Verification that prompt contract boundary instructions are actually followed by Claude in full-tool mode.; Evidence that git ls-files behavior matches walkFiles() fallback for non-git repos.; Recovery procedures for when boundary audit detects violations after agents have already returned results.; Documentation of what happens when dispatch is interrupted or crashes before after snapshot.; Evidence that the cross-checker agent itself respects boundary constraints while challenging other agents' claims.; Verification that untracked implementation files represent the latest committed state or if there are divergent changes."
+      },
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "verifier",
+        "message": "verifier reported unresolved missing evidence: Real-world stress testing with actual Claude -p agents using full tools on dirty working trees.; Performance benchmarks for boundary snapshot on large codebases with 10K+ files.; Evidence of boundary audit handling concurrent file modifications by other processes.; Verification that prompt contract boundary instructions are actually followed by Claude in full-tool mode.; Evidence that git ls-files behavior matches walkFiles() fallback for non-git repos.; Recovery procedures for when boundary audit detects violations after agents have already returned results.; Documentation of what happens when dispatch is interrupted or crashes before after snapshot.; Evidence that the verifier agent itself respects boundary constraints while validating other agents' work.; Independent security audit of the boundary audit system and evidence protocol design."
+      }
+    ],
+    "assumptions": [],
+    "required_evidence_agents": [
+      "explorer",
+      "cross-checker",
+      "verifier"
+    ],
+    "evidence_agreement": {
+      "status": "pass",
+      "conflicts": []
+    },
+    "prd_ready": false
+  },
+  "demand_status_after_dispatch": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO demand evidence dispatch API/schema behavior must verify harness boundary audit for full-tool Claude agents before PRD readiness."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Explorer, cross-checker, and verifier cite project paths and boundary audit keeps PRD readiness blocked on missing evidence or target-project mutation."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "src/demand/router.ts",
+          "src/runtime/execution/provider-adapter.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Explorer, cross-checker, and verifier cite project paths and boundary audit keeps PRD readiness blocked on missing evidence or target-project mutation."
+        ],
+        "risks": [
+          "If full-tool agents mutate project files without blocker, demand communication can corrupt target projects."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "explorer",
+          "message": "explorer reported unresolved missing evidence: Real-world stress testing with actual Claude -p agents using full tools on dirty working trees.; Performance benchmarks for boundary snapshot on large codebases with 10K+ files.; Evidence of boundary audit handling concurrent file modifications by other processes.; Verification that prompt contract boundary instructions are actually followed by Claude in full-tool mode.; Evidence that git ls-files behavior matches walkFiles() fallback for non-git repos.; Recovery procedures for when boundary audit detects violations after agents have already returned results.; Documentation of what happens when dispatch is interrupted or crashes before after snapshot."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "cross-checker",
+          "message": "cross-checker reported unresolved missing evidence: Real-world stress testing with actual Claude -p agents using full tools on dirty working trees.; Performance benchmarks for boundary snapshot on large codebases with 10K+ files.; Evidence of boundary audit handling concurrent file modifications by other processes.; Verification that prompt contract boundary instructions are actually followed by Claude in full-tool mode.; Evidence that git ls-files behavior matches walkFiles() fallback for non-git repos.; Recovery procedures for when boundary audit detects violations after agents have already returned results.; Documentation of what happens when dispatch is interrupted or crashes before after snapshot.; Evidence that the cross-checker agent itself respects boundary constraints while challenging other agents' claims.; Verification that untracked implementation files represent the latest committed state or if there are divergent changes."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "verifier",
+          "message": "verifier reported unresolved missing evidence: Real-world stress testing with actual Claude -p agents using full tools on dirty working trees.; Performance benchmarks for boundary snapshot on large codebases with 10K+ files.; Evidence of boundary audit handling concurrent file modifications by other processes.; Verification that prompt contract boundary instructions are actually followed by Claude in full-tool mode.; Evidence that git ls-files behavior matches walkFiles() fallback for non-git repos.; Recovery procedures for when boundary audit detects violations after agents have already returned results.; Documentation of what happens when dispatch is interrupted or crashes before after snapshot.; Evidence that the verifier agent itself respects boundary constraints while validating other agents' work.; Independent security audit of the boundary audit system and evidence protocol design."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "explorer",
+          "message": "explorer reported unresolved missing evidence: Real-world stress testing with actual Claude -p agents using full tools on dirty working trees.; Performance benchmarks for boundary snapshot on large codebases with 10K+ files.; Evidence of boundary audit handling concurrent file modifications by other processes.; Verification that prompt contract boundary instructions are actually followed by Claude in full-tool mode.; Evidence that git ls-files behavior matches walkFiles() fallback for non-git repos.; Recovery procedures for when boundary audit detects violations after agents have already returned results.; Documentation of what happens when dispatch is interrupted or crashes before after snapshot."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "cross-checker",
+          "message": "cross-checker reported unresolved missing evidence: Real-world stress testing with actual Claude -p agents using full tools on dirty working trees.; Performance benchmarks for boundary snapshot on large codebases with 10K+ files.; Evidence of boundary audit handling concurrent file modifications by other processes.; Verification that prompt contract boundary instructions are actually followed by Claude in full-tool mode.; Evidence that git ls-files behavior matches walkFiles() fallback for non-git repos.; Recovery procedures for when boundary audit detects violations after agents have already returned results.; Documentation of what happens when dispatch is interrupted or crashes before after snapshot.; Evidence that the cross-checker agent itself respects boundary constraints while challenging other agents' claims.; Verification that untracked implementation files represent the latest committed state or if there are divergent changes."
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "verifier",
+          "message": "verifier reported unresolved missing evidence: Real-world stress testing with actual Claude -p agents using full tools on dirty working trees.; Performance benchmarks for boundary snapshot on large codebases with 10K+ files.; Evidence of boundary audit handling concurrent file modifications by other processes.; Verification that prompt contract boundary instructions are actually followed by Claude in full-tool mode.; Evidence that git ls-files behavior matches walkFiles() fallback for non-git repos.; Recovery procedures for when boundary audit detects violations after agents have already returned results.; Documentation of what happens when dispatch is interrupted or crashes before after snapshot.; Evidence that the verifier agent itself respects boundary constraints while validating other agents' work.; Independent security audit of the boundary audit system and evidence protocol design."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  }
+}

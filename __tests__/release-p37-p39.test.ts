@@ -12,6 +12,7 @@ import {
 } from "../src/release/experience-pack-audit.js";
 import {
   runNonTechnicalUxDoctor,
+  YOLO_STAGE_COMMAND_CONTRACT,
   YOLO_ONE_SENTENCE_ENTRY,
 } from "../src/release/nontechnical-ux-doctor.js";
 
@@ -86,6 +87,10 @@ describe("P37-P39 dogfood, experience, and non-technical UX gates", () => {
     assert.equal(result.report.one_sentence_entry, YOLO_ONE_SENTENCE_ENTRY);
     assert.match(result.report.user_visible_next_step, /\/yolo /);
     assert.equal(result.artifacts_sample.native_skill_contains_entry, true);
+    assert.equal(result.artifacts_sample.native_skill_stage_command_contract, true);
+    assert.equal(result.artifacts_sample.bridge_stage_commands_clear, true);
+    assert.equal(result.checks.find((item) => item.code === "NONTECH_UX_STAGE_COMMANDS_CLEAR")?.passed, true);
+    assert.equal(YOLO_STAGE_COMMAND_CONTRACT, "If the user asks to talk through a requirement, use `/yolo-demand` as the single demand-stage entry instead of asking them to choose brainstorm/interview/discover/discuss.");
     assert.equal(result.guarantees.provider_execution, false);
   });
 

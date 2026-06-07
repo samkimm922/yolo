@@ -4,11 +4,13 @@ YOLO 是面向 Codex / Claude Code 的项目生命周期 Team Agent 和公开 SD
 
 ## 核心流程
 
-用户在 Codex / Claude Code 里只需要说：
+用户在 Codex / Claude Code 里可以先用兜底入口：
 
 ```text
 /yolo 我有一个想法，帮我从零开始规划这个项目，先不要改代码。
 ```
+
+如果已经知道阶段，Claude Code 可以直接用 `/yolo-demand`、`/yolo-prd`、`/yolo-check`、`/yolo-run`。Codex 菜单只暴露 `/yolo` 总入口，阶段意图写进同一句话里，例如“需求沟通”“生成 PRD”“检查 PRD”“执行已检查 PRD”。旧的 `/yolo-brainstorm`、`/yolo-interview`、`/yolo-discover`、`/yolo-discuss` 仍保留为兼容路由，但不再要求用户记这些入口。
 
 YOLO 的主线是：
 
@@ -26,13 +28,13 @@ idea
   -> learn
 ```
 
-默认不会改业务代码。只有用户明确确认执行、PRD/spec 检查通过、gate 可运行、范围清楚时，`/yolo-run` 或 `/yolo-fix` 才能进入写代码路径。
+默认不会改业务代码。`/yolo-demand`、需求兼容别名、`/yolo-plan`、`/yolo-prd`、`/yolo-check` 都是阶段停止点：完成本阶段后必须停住，只报告产物、缺口和下一步建议。只有用户明确确认执行、PRD/spec 检查通过、gate 可运行、范围清楚时，`/yolo-run` 或 `/yolo-fix` 才能进入写代码路径。
 
 ## 产品形态
 
 | 层 | 作用 |
 |---|---|
-| Agent 入口 | Claude Code slash commands、Codex skills、source-command fallback，让用户在聊天里使用 `/yolo` |
+| Agent 入口 | Claude Code slash commands、Codex 单一 `/yolo` skill、source-command fallback，让用户在聊天里描述阶段意图而不是从一串菜单里挑 |
 | PI / Team Agent | 由 PI 负责 lifecycle routing，按阶段调度 discovery、planner、spec、implementer、reviewer、QA、release、learning |
 | Gate / Evidence | PRD preflight、spec governance、adapter readiness、review/fix、acceptance、parallel merge gate 和 final evidence |
 | SDK | `createYoloSdk()` 暴露 project、lifecycle、commands、doctor、pi、spec、runtime、review、acceptance、packs、eval、parallel、release |
@@ -67,14 +69,14 @@ scripts/yolo/
 
 ### Codex / Claude Code 用户
 
-先让 agent 安装 YOLO skill/command 集成：
+先让 agent 安装 YOLO skill/command 集成。Codex 只需要 `/yolo` 一个入口自动判断阶段；Claude Code 可以继续用 `/yolo-demand`、`/yolo-prd`、`/yolo-check` 等真实 slash commands：
 
 ```text
-请把 YOLO 安装到当前项目和我的 Agent 工具里。我要能直接用 /yolo-discover、/yolo-plan、/yolo-check、/yolo-accept、/yolo-eval、/yolo-run、/yolo-doctor。执行前先告诉我会写哪些文件。
+请把 YOLO 安装到当前项目和我的 Agent 工具里。我要在 Codex 里只看到 /yolo 统一入口，由它自动判断需求、PRD、检查和执行阶段；Claude Code 可以保留 /yolo-demand、/yolo-prd、/yolo-check、/yolo-run 等真实 slash commands。执行前先告诉我会写哪些文件。
 YOLO 路径是 <你的 YOLO 安装目录>。
 ```
 
-安装后你只需要在 Codex / Claude Code 里说：
+安装后，如果你不确定该走哪一步，就在 Codex / Claude Code 里说：
 
 ```text
 /yolo 我要给库存系统增加低库存预警，先只生成计划，不要改代码。
@@ -86,13 +88,19 @@ YOLO 路径是 <你的 YOLO 安装目录>。
 /yolo 你的需求，先只生成计划，不要改代码。
 ```
 
+Codex 需求阶段也走同一个入口：
+
+```text
+/yolo 需求沟通：我想把这个需求聊清楚，暂时不要生成 PRD。
+```
+
 不知道当前项目是否装好时：
 
 ```text
-/yolo-doctor 检查当前项目的 YOLO 是否装好、能不能用。
+/yolo 检查当前项目的 YOLO 是否装好、能不能用。
 ```
 
-Claude Code 会得到真实 `.claude/commands/yolo*.md` slash commands；Codex 会得到 `.codex/skills/yolo`、`~/.agents/skills/yolo` 和 `~/.agents/skills/source-command-yolo*` 入口。详细说明见 [docs/agent-chat-usage.md](docs/agent-chat-usage.md) 和 [docs/agent-native-integration.md](docs/agent-native-integration.md)。
+Claude Code 会得到真实 `.claude/commands/yolo*.md` slash commands；Codex 只会得到 `/yolo` 总入口和单个 `source-command-yolo` fallback。内部 workflow 名称如 `yolo.pi`、`yolo.prd` 不会作为用户菜单暴露。详细说明见 [docs/agent-chat-usage.md](docs/agent-chat-usage.md) 和 [docs/agent-native-integration.md](docs/agent-native-integration.md)。
 
 ### 不懂命令行的本地菜单
 
@@ -139,8 +147,8 @@ node dist/bin/yolo-prompt.js --prd <prd-file>
 # PI agent：默认只生成计划，不执行模型/改代码
 node dist/bin/yolo-pi.js --requirement="加一个库存预警功能"
 
-# 显式执行完整链路：PM -> PRD -> preflight -> runner -> review -> final gate -> acceptance -> ship -> learn
-node dist/bin/yolo-pi.js --requirement="加一个库存预警功能" --execute
+# 显式执行必须使用已完成 discover/plan/prd/check 的 PRD，防止跳过生命周期 guard
+node dist/bin/yolo.js run <prd-file> --json
 
 # 检查旧 PRD 是否需要补 target coverage gates（默认不写盘）
 node dist/bin/yolo-prd-migrate-gates.js data/example-prd.json --json

@@ -1,0 +1,122 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements boundary audit with git ls-files for tracked/untracked files plus fallback walks, excluding artifact roots, but the dirty working tree indicates real stress-testing is needed.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() combines git ls-files output with fallback walkFiles() and excludes allowed write roots like artifact directories",
+      "why": "Core boundary audit implementation that combines git-backed detection with fallback coverage"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "62-69",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "gitFiles() runs 'git ls-files -co --exclude-standard -z' covering cached, other (untracked), and non-excluded files",
+      "why": "Git-backed file discovery covers tracked, cached, and untracked files while respecting .gitignore"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "71-85",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "walkFiles() recursively walks directories excluding .git, node_modules, dist, coverage, .next, .cache",
+      "why": "Fallback file walk ensures coverage for non-git projects or when git commands fail"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "87-95",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "fileDigest() computes SHA256 hash of file contents for change detection",
+      "why": "Cryptographic digests enable precise mutation detection before and after agent execution"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after digests to detect added, modified, and deleted files",
+      "why": "Change detection logic identifies all boundary violations during agent execution"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-517",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshots captured before and after agent execution with artifact root excluded",
+      "why": "Runtime enforcement captures baseline state and detects any project mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "567-591",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations converted to blockers and added to readiness assessment",
+      "why": "Violations block PRD readiness with explicit BOUNDARY_PROJECT_MUTATION error codes"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Git-backed boundary test verifies detection of untracked file mutations",
+      "why": "Test confirms git ls-files coverage includes untracked files outside excluded directories"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "454-491",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Gitignored boundary test verifies detection of .gitignore-excluded mutations",
+      "why": "Test confirms boundary detects mutations even when files are gitignored"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Non-git boundary test verifies fallback walk detects modifications while excluding artifact root",
+      "why": "Test confirms fallback coverage for non-git projects and proper artifact exclusion"
+    },
+    {
+      "path": ".yolo/demand/evidence/",
+      "line": "dispatch directories",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Multiple evidence dispatch artifacts exist from previous runs (dispatch-20260531233706363-3z1qa6 through dispatch-20260601003207087-u35u8d)",
+      "why": "Artifact evidence shows dispatch system has been executed but dirty working tree indicates need for stress-testing"
+    },
+    {
+      "path": "git status",
+      "line": "working tree",
+      "scope": "project",
+      "source": "project_log",
+      "summary": "Git status shows 60+ modified files including core source, tests, and documentation",
+      "why": "Dirty working tree confirms the status quo claim that demand evidence dispatch must be stress-tested"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Boundary audit implementation has not been stress-tested with real Claude -p agents in production",
+    "Edge cases may exist in non-git projects with deep directory structures or large file counts"
+  ],
+  "missing": [
+    "Evidence of real Claude -p agent stress testing with boundary violations attempted",
+    "Performance benchmarks for large repositories with thousands of files",
+    "Edge case coverage for symlink handling, permission errors, or concurrent modifications"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Core boundary audit implementation is complete with git ls-files coverage, fallback walks, artifact exclusion, and comprehensive tests. Dirty working tree confirms need for stress-testing but does not block readiness."
+  }
+}

@@ -7,6 +7,11 @@ import { prdSearchDirs, resolvePrdPath } from "../core/paths.js";
 import { runYoloDoctorCli } from "../runtime/devtools/doctor.js";
 import { buildAcceptanceReport, formatAcceptanceReportText } from "../runtime/acceptance/report.js";
 import { runYoloBenchmarkCli } from "../eval/benchmark.js";
+import { buildDogfoodMatrixReport } from "../release/dogfood-matrix.js";
+import { buildPackageInstallSmokePlan } from "../release/pack-smoke.js";
+import { runReleaseCandidateGate } from "../release/decision-gate.js";
+import { readReleaseCandidateChangeManifest } from "../release/change-provenance.js";
+import { runCleanEnvironmentVerify } from "../release/clean-environment-verify.js";
 import { formatYoloCheckText, inspectYoloCheck } from "../runtime/gates/check-report.js";
 import { refreshMemoryCenter } from "../runtime/memory/center.js";
 import { buildProgressDashboardUiEvidence } from "../runtime/progress/ui-evidence.js";
@@ -64,15 +69,17 @@ export function usage() {
     "  yolo prd [--discovery <discovery.json>|--demand <session.json|dir>] [--output <prd.json>] [--json]",
     "  yolo next [--cwd <dir>] [--json]",
     "  yolo doctor [path] [--target codex|claude|both] [--scope project|user|both] [--json]",
-    "  yolo check <prd.json> [--json] [--no-write]",
+    "  yolo check <prd.json> [--json] [--no-write] [--strict|--release]",
     "  yolo review [path] [--json]",
-    "  yolo accept <prd.json> [--json] [--no-write] [--collect-evidence] [--execute-adapter] [--allow-adapter-commands]",
+    "  yolo accept <prd.json> [--json] [--no-write] [--collect-evidence] [--execute-adapter] [--allow-adapter-commands] [--ship|--release]",
     "  yolo ship <prd.json> [--json]",
     "  yolo learn [lesson] [--json]",
     "  yolo run <prd.json> [--json] [--dry-run] [--executor claude|codex|custom|auto] [--model <model>] [--agent-command <cmd>]",
     "  yolo runner <prd.json> [--json] [--dry-run] [--engine-only]",
     "  yolo progress-ui-evidence [path] [--json] [--output <file>] [--no-write]",
     "  yolo eval [--results <benchmark-results.json>] [--baseline <report.json>] [--min-score 80] [--json] [--no-write]",
+    "  yolo release-candidate [--mode rc|publish] [--dry-run] [--allow-untracked] [--allow-unknown] [--json]",
+    "  yolo release-gate [--mode rc|publish] [--dry-run] [--allow-untracked] [--allow-unknown] [--json]",
     "  yolo memory refresh [path] [--dry-run] [--json] [--no-retention] [--no-learning-migration]",
     "  yolo [prd.json] [--mode=dev|fix] [--json]",
     "  yolo --prd <prd.json> [--mode=dev|fix] [--json]",
@@ -92,6 +99,7 @@ export function usage() {
     "`yolo progress-ui-evidence` 会生成 progress dashboard 的 UI/UX evidence，可被 yolo run/accept 的 adapter bridge 消费。",
     "`yolo accept` 会在交付前检查功能、运行、review、UI 和证据完整度；需要真实 adapter 采集时显式加 --collect-evidence --execute-adapter --allow-adapter-commands。",
     "`yolo ship` 会基于 acceptance report 给出 ship/no-ship verdict；不会发布。",
+    "`yolo release-candidate` / `yolo release-gate` 是 generic RC gate 操作入口，不是 Trello replay；默认 fail closed，只输出可解析 gate contract，真实底层 gate 可由 releaseCandidateRunner 注入。",
     "`yolo learn` 会把一次交付或人工 lesson 写入有界学习账本。",
     "`yolo eval` 会用固定 benchmark fixture 和 rubric 评估 discovery/PRD/UI acceptance/agent command 质量；缺真实结果时 fail closed。",
     "`yolo memory refresh` 会刷新记忆中心，迁移旧学习经验，并先把超限 ledger 归档到 state/archive/jsonl/YYYY-MM/；关键生命周期命令成功写入时会自动刷新项目记忆体。",
@@ -357,6 +365,45 @@ export function parseYoloMemoryArgs(argv = []) {
   return { input, options };
 }
 
+export function parseYoloReleaseCandidateArgs(argv = []) {
+  const input = {};
+  const options = {
+    json: false,
+    help: false,
+    dryRun: false,
+    allowUntracked: false,
+    allowUnknown: false,
+  };
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--json") {
+      options.json = true;
+    } else if (arg === "--help" || arg === "-h") {
+      options.help = true;
+    } else if (arg === "--dry-run") {
+      options.dryRun = true;
+    } else if (arg === "--allow-untracked") {
+      options.allowUntracked = true;
+    } else if (arg === "--allow-unknown") {
+      options.allowUnknown = true;
+    } else if (arg === "--mode" || arg.startsWith("--mode=")) {
+      const read = readArgValue(argv, i, "--mode");
+      input.mode = read.value;
+      i += read.consumed;
+    } else if (arg === "--cwd" || arg.startsWith("--cwd=")) {
+      const read = readArgValue(argv, i, "--cwd");
+      input.cwd = read.value;
+      i += read.consumed;
+    } else if (!arg.startsWith("--") && !input.scope) {
+      input.scope = arg;
+    }
+  }
+
+  input.mode = input.mode || "rc";
+  return { input, options };
+}
+
 export function parseYoloProgressUiEvidenceArgs(argv = []) {
   const input = {};
   const options = { json: false, help: false, writeArtifacts: true };
@@ -403,6 +450,24 @@ export function parseYoloCheckArgs(argv = []) {
       options.executeAdapter = true;
     } else if (arg === "--allow-adapter-commands") {
       options.allowAdapterCommands = true;
+    } else if (arg === "--strict") {
+      input.mode = "strict";
+      input.strictExecution = true;
+    } else if (arg === "--release") {
+      input.mode = "release";
+      input.strictExecution = true;
+    } else if (arg === "--ship") {
+      input.mode = "ship";
+    } else if (arg === "--verify") {
+      input.mode = "verify";
+    } else if (arg === "--mode" || arg.startsWith("--mode=")) {
+      const read = readArgValue(argv, i, "--mode");
+      input.mode = read.value;
+      i += read.consumed;
+    } else if (arg === "--approval-artifact" || arg.startsWith("--approval-artifact=") || arg === "--approval" || arg.startsWith("--approval=")) {
+      const read = readArgValue(argv, i, arg.startsWith("--approval=") ? "--approval" : "--approval-artifact");
+      input.approvalArtifact = read.value;
+      i += read.consumed;
     } else if (arg === "--prd" || arg.startsWith("--prd=")) {
       const read = readArgValue(argv, i, "--prd");
       input.prdPath = read.value;
@@ -1198,6 +1263,382 @@ export function formatMemoryText(result) {
   return lines.join("\n");
 }
 
+export const RELEASE_CANDIDATE_RESULT_SCHEMA = "yolo.release_candidate_cli_result.v1";
+export const RELEASE_CANDIDATE_REQUIRED_GATES = [
+  {
+    id: "verify",
+    label: "verify",
+    required: true,
+    status: "pending",
+    command: "npm run verify",
+    description: "Run the project verify suite before any release claim.",
+  },
+  {
+    id: "prd-preflight",
+    label: "prd preflight",
+    required: true,
+    status: "pending",
+    command: "npm run preflight",
+    description: "Run PRD dependency and contract preflight.",
+  },
+  {
+    id: "package-smoke",
+    label: "package smoke",
+    required: true,
+    status: "pending",
+    description: "Smoke test the packed package and public CLI surface.",
+  },
+  {
+    id: "clean-env",
+    label: "clean env",
+    required: true,
+    status: "pending",
+    description: "Prove the candidate in a clean environment or clean clone.",
+  },
+  {
+    id: "dogfood-matrix",
+    label: "dogfood matrix",
+    required: true,
+    status: "pending",
+    description: "Run the required dogfood matrix and capture evidence.",
+  },
+  {
+    id: "change-provenance",
+    label: "change provenance",
+    required: true,
+    status: "pending",
+    description: "Account for release-relevant changes and artifact provenance.",
+  },
+  {
+    id: "review-findings",
+    label: "review findings",
+    required: true,
+    status: "pending",
+    description: "Block on unresolved release-relevant review findings.",
+  },
+];
+
+const RELEASE_CANDIDATE_REPORT_BY_GATE = {
+  verify: "verify",
+  "prd-preflight": "prdPreflight",
+  "package-smoke": "packageSmoke",
+  "clean-env": "cleanEnvironment",
+  "dogfood-matrix": "dogfoodMatrix",
+  "change-provenance": "changeManifest",
+  "review-findings": "reviewFindings",
+};
+
+function cloneReleaseCandidateGates() {
+  return RELEASE_CANDIDATE_REQUIRED_GATES.map((gate) => ({ ...gate }));
+}
+
+function normalizeReleaseCandidateStatus(status) {
+  if (status === "pass" || status === "ready" || status === "success") return "pass";
+  if (status === "error" || status === "failed") return "error";
+  return "blocked";
+}
+
+function releaseCandidateExitCode(result = {}) {
+  return normalizeReleaseCandidateStatus(result.status) === "pass" ? 0 : 2;
+}
+
+function releaseCandidateBaseResult({ command, input = {}, options = {}, projectRoot }) {
+  return {
+    schema: RELEASE_CANDIDATE_RESULT_SCHEMA,
+    status: "blocked",
+    code: "RELEASE_CANDIDATE_GATE_NOT_EXECUTED",
+    command,
+    mode: input.mode || "rc",
+    dry_run: options.dryRun === true,
+    fail_closed: true,
+    project_root: projectRoot,
+    scope: input.scope || "workspace",
+    allowances: {
+      untracked: options.allowUntracked === true,
+      unknown: options.allowUnknown === true,
+    },
+    gate_kind: "generic_rc_gate",
+    not_trello_replay: true,
+    summary: "Generic release-candidate gate contract is exposed, but no concrete gate runner was provided.",
+    gates: cloneReleaseCandidateGates(),
+    blockers: [{
+      code: "RELEASE_CANDIDATE_RUNNER_MISSING",
+      message: "No releaseCandidateRunner was injected, so the command fails closed instead of claiming RC readiness.",
+    }],
+    next_actions: [
+      "Run the generic RC gate; do not use Trello replay as the next release step.",
+      "Provide a releaseCandidateRunner implementation that executes verify, PRD preflight, package smoke, clean env, dogfood matrix, change provenance, and review findings.",
+    ],
+  };
+}
+
+function releaseCandidateReport({ status = "blocked", source, blockerCode, blockerMessage, blockers = [], warnings = [], approvals = [], ...extra }) {
+  const normalizedBlockers = blockerCode
+    ? [{ code: blockerCode, message: blockerMessage || blockerCode }, ...blockers]
+    : blockers;
+  return {
+    status,
+    provenance: { source, id: `${source}-local` },
+    blockers: normalizedBlockers,
+    warnings,
+    approvals,
+    ...extra,
+  };
+}
+
+export function buildDefaultReleaseCandidateReports(input = {}) {
+  const yoloRoot = resolve(input.yoloRoot || input.yolo_root || input.projectRoot || process.cwd());
+  const projectRoot = resolve(input.projectRoot || yoloRoot);
+  const packageSmokePlan = buildPackageInstallSmokePlan({ yoloRoot });
+  const cleanEnvironment = runCleanEnvironmentVerify({ yoloRoot, dryRun: true });
+  const dogfoodMatrix = buildDogfoodMatrixReport({ yoloRoot, projectRoot });
+  const changeManifest = readReleaseCandidateChangeManifest({
+    rootDir: yoloRoot,
+    allowUntracked: input.allowUntracked === true,
+    allowUnknown: input.allowUnknown === true,
+    currentRoundFiles: input.currentRoundFiles || null,
+  });
+
+  return {
+    verify: releaseCandidateReport({
+      source: "verify",
+      blockerCode: "RELEASE_VERIFY_NOT_EXECUTED",
+      blockerMessage: "npm run verify evidence is required and was not provided to the release candidate gate.",
+    }),
+    prdPreflight: releaseCandidateReport({
+      source: "prd-preflight",
+      blockerCode: "RELEASE_PRD_PREFLIGHT_NOT_EXECUTED",
+      blockerMessage: "PRD preflight evidence is required and was not provided to the release candidate gate.",
+    }),
+    packageSmoke: releaseCandidateReport({
+      source: "package-smoke",
+      blockerCode: "RELEASE_PACKAGE_SMOKE_NOT_EXECUTED",
+      blockerMessage: "Package smoke must execute before release readiness can pass; dry-run only produced a plan.",
+      plan: packageSmokePlan,
+    }),
+    cleanEnvironment: releaseCandidateReport({
+      source: "clean-environment",
+      blockerCode: "RELEASE_CLEAN_ENVIRONMENT_NOT_EXECUTED",
+      blockerMessage: "Clean environment verification must execute before release readiness can pass; dry-run only produced a plan.",
+      plan: cleanEnvironment.plan,
+      dry_run: cleanEnvironment,
+    }),
+    dogfoodMatrix: releaseCandidateReport({
+      source: "dogfood-matrix",
+      status: dogfoodMatrix.status,
+      blockers: dogfoodMatrix.blocked_reasons || [],
+      warnings: dogfoodMatrix.warnings || [],
+      scenarios: dogfoodMatrix.scenarios || [],
+      report: dogfoodMatrix,
+    }),
+    changeManifest: releaseCandidateReport({
+      source: "change-manifest",
+      status: changeManifest.status,
+      blockers: changeManifest.blockers || [],
+      warnings: changeManifest.contains_possible_non_round_changes ? [{
+        code: "CHANGE_MANIFEST_POSSIBLE_NON_ROUND_CHANGES",
+        message: "Change manifest contains files not bound to the current release-candidate round.",
+      }] : [],
+      manifest: changeManifest,
+    }),
+    reviewFindings: releaseCandidateReport({
+      source: "review-findings",
+      blockerCode: "RELEASE_REVIEW_FINDINGS_NOT_PROVIDED",
+      blockerMessage: "Release-relevant review findings evidence is required and was not provided.",
+      findings: [],
+    }),
+  };
+}
+
+export async function runDefaultReleaseCandidateRunner(input = {}) {
+  const yoloRoot = resolve(input.yoloRoot || input.yolo_root || input.projectRoot || process.cwd());
+  const projectRoot = resolve(input.projectRoot || yoloRoot);
+  const reports = input.reports || buildDefaultReleaseCandidateReports({
+    yoloRoot,
+    projectRoot,
+    allowUntracked: input.allowUntracked,
+    allowUnknown: input.allowUnknown,
+    currentRoundFiles: input.currentRoundFiles,
+  });
+  const gate = runReleaseCandidateGate({
+    mode: input.mode || "rc",
+    reports,
+    now: input.now,
+  });
+  const gateReports = gate.reports || {};
+  const gates = (input.requiredGates || cloneReleaseCandidateGates()).map((gateItem) => {
+    const reportName = RELEASE_CANDIDATE_REPORT_BY_GATE[gateItem.id];
+    const report = reportName ? gateReports[reportName] : null;
+    return {
+      ...gateItem,
+      status: report?.status || "blocked",
+      blocker_count: report?.blocker_count ?? 0,
+      warning_count: report?.warning_count ?? 0,
+    };
+  });
+  const status = normalizeReleaseCandidateStatus(gate.status);
+  return {
+    schema: RELEASE_CANDIDATE_RESULT_SCHEMA,
+    status,
+    code: status === "pass" ? "RELEASE_CANDIDATE_GATE_PASS" : "RELEASE_CANDIDATE_GATE_BLOCKED",
+    command: input.command || "release-candidate",
+    mode: input.mode || "rc",
+    dry_run: input.dryRun === true,
+    fail_closed: true,
+    yolo_root: yoloRoot,
+    project_root: projectRoot,
+    scope: input.scope || "workspace",
+    allowances: {
+      untracked: input.allowUntracked === true,
+      unknown: input.allowUnknown === true,
+    },
+    gate_kind: "generic_rc_gate",
+    not_trello_replay: true,
+    summary: status === "pass"
+      ? "Generic release-candidate gate passed."
+      : "Generic release-candidate gate blocked missing, failed, or untrusted release evidence.",
+    gates,
+    blockers: gate.blockers || [],
+    warnings: gate.warnings || [],
+    issue_codes: gate.issue_codes || [],
+    reports: gate.reports || {},
+    gate_result: gate,
+    next_actions: status === "pass"
+      ? ["Proceed to human release authorization; publishing remains a separate controlled operation."]
+      : ["Provide passing evidence for verify, PRD preflight, package smoke, clean env, dogfood matrix, change provenance, and review findings."],
+  };
+}
+
+function normalizeReleaseCandidateResult(raw = {}, context = {}) {
+  const base = releaseCandidateBaseResult(context);
+  const merged = {
+    ...base,
+    ...raw,
+    schema: raw.schema || base.schema,
+    command: raw.command || base.command,
+    mode: raw.mode || base.mode,
+    dry_run: raw.dry_run ?? base.dry_run,
+    fail_closed: true,
+    project_root: raw.project_root || base.project_root,
+    allowances: raw.allowances || base.allowances,
+    gate_kind: raw.gate_kind || base.gate_kind,
+    not_trello_replay: raw.not_trello_replay ?? true,
+    gates: Array.isArray(raw.gates) ? raw.gates : base.gates,
+    blockers: Array.isArray(raw.blockers) ? raw.blockers : base.blockers,
+    next_actions: Array.isArray(raw.next_actions) ? raw.next_actions : base.next_actions,
+  };
+  merged.status = normalizeReleaseCandidateStatus(merged.status);
+  const consistencyBlockers = merged.status === "pass"
+    ? releaseCandidateConsistencyBlockers(merged)
+    : [];
+  if (consistencyBlockers.length > 0) {
+    merged.status = "blocked";
+    merged.code = "RELEASE_CANDIDATE_RESULT_INCONSISTENT";
+    merged.blockers = [
+      ...merged.blockers,
+      ...consistencyBlockers.filter((blocker) =>
+        !merged.blockers.some((existing) => existing.code === blocker.code)
+      ),
+    ];
+    merged.issue_codes = [...new Set([
+      ...(Array.isArray(merged.issue_codes) ? merged.issue_codes : []),
+      ...merged.blockers.map((blocker) => blocker.code).filter(Boolean),
+    ])];
+    merged.summary = "Release candidate runner returned an internally inconsistent pass result.";
+    merged.next_actions = [
+      "Fix the release candidate runner so blockers, gates, dry-run state, and aggregate gate_result agree before claiming pass.",
+    ];
+  }
+  return merged;
+}
+
+function releaseCandidateErrorResult(error, context = {}, code = "RELEASE_CANDIDATE_GATE_ERROR") {
+  const base = releaseCandidateBaseResult(context);
+  return {
+    ...base,
+    status: "error",
+    code,
+    summary: "Generic release-candidate gate failed before producing a passable result.",
+    error: error?.message || String(error),
+    blockers: [{
+      code,
+      message: error?.message || String(error),
+    }],
+    next_actions: ["Inspect the RC gate runner error, fix the failing contract, then rerun yolo release-candidate --json."],
+  };
+}
+
+function releaseCandidateConsistencyBlockers(result = {}) {
+  const blockers = [];
+  if (Array.isArray(result.blockers) && result.blockers.length > 0) {
+    blockers.push({
+      code: "RELEASE_CANDIDATE_BLOCKERS_PRESENT",
+      message: "release candidate runner cannot pass while blockers are present",
+    });
+  }
+  if (result.dry_run === true) {
+    blockers.push({
+      code: "RELEASE_CANDIDATE_DRY_RUN_RESULT",
+      message: "dry-run release candidate output cannot be promoted as passing release evidence",
+    });
+  }
+  const requiredGates = Array.isArray(result.gates)
+    ? result.gates.filter((gate) => gate.required !== false)
+    : [];
+  const nonPassingGate = requiredGates.find((gate) => normalizeReleaseCandidateStatus(gate.status) !== "pass");
+  if (requiredGates.length === 0 || nonPassingGate) {
+    blockers.push({
+      code: "RELEASE_CANDIDATE_GATE_NOT_PASSING",
+      message: "every required release candidate gate must be present and passing",
+      gate_id: nonPassingGate?.id || null,
+      gate_status: nonPassingGate?.status || null,
+    });
+  }
+  const gateResult = result.gate_result || result.gateResult;
+  if (!gateResult || typeof gateResult !== "object") {
+    blockers.push({
+      code: "RELEASE_CANDIDATE_GATE_RESULT_MISSING",
+      message: "passing release candidate results must include the aggregate release candidate gate_result",
+    });
+  } else if (
+    gateResult.schema !== "yolo.release.release_candidate_gate_result.v1"
+    || normalizeReleaseCandidateStatus(gateResult.status) !== "pass"
+    || (Array.isArray(gateResult.blockers) && gateResult.blockers.length > 0)
+  ) {
+    blockers.push({
+      code: "RELEASE_CANDIDATE_GATE_RESULT_NOT_PASSING",
+      message: "aggregate release candidate gate_result must be schema-valid, passing, and blocker-free",
+      gate_result_status: gateResult.status || null,
+    });
+  }
+  return blockers;
+}
+
+export function formatReleaseCandidateText(result = {}) {
+  const lines = [`[yolo ${result.command || "release-candidate"}] ${result.status}: ${result.summary}`];
+  lines.push(`mode: ${result.mode || "rc"}`);
+  lines.push(`gate: ${result.gate_kind || "generic_rc_gate"} (not Trello replay)`);
+  lines.push(`fail_closed: ${result.fail_closed === true}`);
+  lines.push(`allow_untracked: ${result.allowances?.untracked === true}`);
+  lines.push(`allow_unknown: ${result.allowances?.unknown === true}`);
+  if (Array.isArray(result.gates) && result.gates.length) {
+    lines.push("gates:");
+    for (const gate of result.gates) lines.push(`  - ${gate.id} ${gate.status || "pending"}`);
+  }
+  if (Array.isArray(result.blockers) && result.blockers.length) {
+    lines.push("blockers:");
+    for (const blocker of result.blockers) lines.push(`  - ${blocker.code || "BLOCKER"} ${blocker.message || ""}`.trimEnd());
+  }
+  if (Array.isArray(result.issue_codes) && result.issue_codes.length) {
+    lines.push(`issue_codes: ${result.issue_codes.join(", ")}`);
+  }
+  if (Array.isArray(result.next_actions) && result.next_actions.length) {
+    lines.push("next:");
+    for (const action of result.next_actions) lines.push(`  - ${action}`);
+  }
+  return lines.join("\n");
+}
+
 export async function runYoloInitCli(argv = [], io = {}) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
@@ -1354,6 +1795,67 @@ export async function runYoloMemoryCli(argv = [], io = {}) {
   }
 }
 
+export async function runYoloReleaseCandidateCli(argv = [], io = {}) {
+  const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
+  const { input, options } = parseYoloReleaseCandidateArgs(argv);
+  const command = io.releaseCandidateCommand || "release-candidate";
+
+  if (options.help) {
+    stdout.write(`${usage()}\n`);
+    return 0;
+  }
+
+  const mode = cleanCliText(input.mode || "rc").toLowerCase();
+  const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+  const yoloRoot = resolve(io.yoloRoot || defaultYoloRoot);
+  const context = {
+    command,
+    input: { ...input, mode },
+    options,
+    projectRoot,
+    yoloRoot,
+  };
+
+  function emit(result) {
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else (result.status === "pass" ? stdout : stderr).write(`${formatReleaseCandidateText(result)}\n`);
+    return releaseCandidateExitCode(result);
+  }
+
+  if (!["rc", "publish"].includes(mode)) {
+    return emit(releaseCandidateErrorResult(
+      new Error(`Invalid release-candidate mode "${input.mode}". Expected rc or publish.`),
+      context,
+      "INVALID_RELEASE_CANDIDATE_MODE",
+    ));
+  }
+
+  try {
+    const runner = typeof io.releaseCandidateRunner === "function"
+      ? io.releaseCandidateRunner
+      : runDefaultReleaseCandidateRunner;
+    const raw = await runner({
+      projectRoot,
+      stateRoot: join(projectRoot, ".yolo"),
+      yoloRoot,
+      command,
+      mode,
+      dryRun: options.dryRun,
+      allowUntracked: options.allowUntracked,
+      allowUnknown: options.allowUnknown,
+      failClosed: true,
+      gateKind: "generic_rc_gate",
+      notTrelloReplay: true,
+      requiredGates: cloneReleaseCandidateGates(),
+      scope: input.scope || "workspace",
+    });
+    return emit(normalizeReleaseCandidateResult(raw, context));
+  } catch (error) {
+    return emit(releaseCandidateErrorResult(error, context));
+  }
+}
+
 export async function runYoloCheckCli(argv = [], io = {}) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
@@ -1373,6 +1875,8 @@ export async function runYoloCheckCli(argv = [], io = {}) {
   let report = inspectYoloCheck({
     prdPath,
     projectRoot,
+    mode: input.mode,
+    strictExecution: input.strictExecution,
     writeLifecycle: options.writeLifecycle,
   }, { learnFailures: true });
   report = withMemoryRefresh(report, { projectRoot, options, source: "yolo-check" });
@@ -1799,6 +2303,8 @@ export async function runYoloAcceptCli(argv = [], io = {}) {
   let report = buildAcceptanceReport({
     prdPath,
     projectRoot,
+    mode: input.mode,
+    approvalArtifact: input.approvalArtifact,
     writeLifecycle: options.writeLifecycle,
     collectEvidence: options.collectEvidence,
     executeAdapter: options.executeAdapter,
@@ -2132,6 +2638,9 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
   }
   if (argv[0] === "eval") {
     return runYoloBenchmarkCli(argv.slice(1), io);
+  }
+  if (argv[0] === "release-candidate" || argv[0] === "release-gate") {
+    return runYoloReleaseCandidateCli(argv.slice(1), { ...io, releaseCandidateCommand: argv[0] });
   }
   if (argv[0] === "memory") {
     return runYoloMemoryCli(argv.slice(1), io);

@@ -1,0 +1,119 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "The YOLO demand evidence dispatch API/schema fully supports research/fetch style evidence with proper scope separation between external and project facts. WebFetch/WebSearch are explicitly allowed and must be marked scope=external. Project facts require project-scoped evidence with repo-relative paths. Multiple validation layers enforce these constraints, including scope validation, project evidence requirements, boundary auditing, and agent protocol definitions.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": 16,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES defines four valid scopes: project, external, user, unknown",
+      "why": "Foundational scope taxonomy that the explorer cited is accurate"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "257-276",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt construction includes explicit rules: evidence records must declare scope, project facts require project-scoped evidence with paths, WebFetch/WebSearch should be marked scope=external and not used as project facts",
+      "why": "Confirms the behavioral contract is correctly implemented in the actual prompt generation code"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-157",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors function validates that each evidence record declares valid scope",
+      "why": "Runtime validation enforcement confirmed at the exact lines cited"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot uses gitFiles and walkFiles to collect project file inventory, excluding allowed write roots",
+      "why": "Independent verification of boundary detection implementation details"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "110-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after digests to detect added, modified, deleted files",
+      "why": "Boundary violation detection algorithm is correctly implemented"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "565-590",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Post-execution boundary diff creates BOUNDARY_PROJECT_MUTATION blockers for any detected changes outside allowed artifact roots",
+      "why": "Runtime enforcement converting boundary violations to blockers is implemented"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": 52,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES constant same set: project, external, user, unknown",
+      "why": "Consistent scope definition across router and dispatch modules"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope implements scope detection with multiple heuristics: explicit scope field, URL patterns, source field prefixes, path presence",
+      "why": "Sophisticated scope inference logic is correctly implemented"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues blocks when project evidence lacks path or only non-project scopes exist for project facts",
+      "why": "Core enforcement preventing external evidence from substituting project facts"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross-checker, verifier protocols with writes_code: false",
+      "why": "Agent role definitions and behavioral contracts confirmed"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "475-479",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "requiredEvidenceRoles maps cross_check policy to [explorer, cross-checker, verifier] and single_agent to [explorer, verifier]",
+      "why": "Evidence agent orchestration supports different rigor levels"
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66-71",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine confirms dispatch runs boundary audits, converts violations to blockers, requires project-scoped path evidence for facts, external evidence only background",
+      "why": "Product documentation validates the implementation behavior matches intended design"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "External evidence might be mistakenly promoted to project facts if scope validation has implementation bugs",
+    "Boundary detection could miss file changes if git repository state is corrupted or file walking fails",
+    "WebFetch/WebSearch tools might be unavailable in some provider environments causing external research to fail silently"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent verification confirms all explorer claims. The YOLO demand evidence dispatch implementation correctly supports research/fetch style evidence with proper scope separation. All cited evidence is accurate: scope taxonomy exists, agent prompts enforce scope rules, validation functions check scope declarations, boundary auditing detects mutations, and documentation confirms the design. Multiple independent validation layers (scope errors, project evidence blockers, boundary violations) enforce constraints."
+  }
+}

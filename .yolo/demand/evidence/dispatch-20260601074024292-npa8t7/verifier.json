@@ -1,0 +1,79 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer evidence is verified: YOLO demand evidence dispatch correctly implements multi-layer JSON repair with recoverable drift recording and fail-closed behavior for unrecoverable JSON via EVIDENCE_AGENT_INVALID_JSON, with PRD readiness remaining blocked during failures.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-346",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate implements three-stage JSON repair: direct parse, regex-based repair of four Claude drift patterns, then error capture with repaired flag.",
+      "why": "Verified core JSON repair logic handles recoverable drift patterns: line ranges, escape sequences, duplicate quotes, trailing commas."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "371-372",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult returns EVIDENCE_AGENT_INVALID_JSON error code when parsed is null before provider failed check.",
+      "why": "Verified fail-closed behavior for unrecoverable JSON triggers explicit error code."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "558-559",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Provider run tracking exposes json_repaired boolean flag and parse_error truncation in result structure.",
+      "why": "Verified that drift repair status is tracked and surfaced for diagnostics."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "575-603",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime calls inspectDemandPrdReadiness, propagates blockers, and sets final result.status based on prd_ready flag.",
+      "why": "Verified PRD readiness stays blocked when agents return errors, and final status reflects readiness."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "535-571",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test repairs minor Claude JSON drift and asserts json_repaired flag is set and result.status is pass.",
+      "why": "Verified repair logic is tested for drift patterns with successful PRD readiness."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "573-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test validates invalid agent JSON produces EVIDENCE_AGENT_INVALID_JSON in agent_results and readiness.blockers with blocked status.",
+      "why": "Verified fail-closed behavior is tested and enforced with explicit blocker codes."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshot before/after detects target project mutations and reports BOUNDARY_PROJECT_MUTATION blockers.",
+      "why": "Verified boundary audit prevents evidence agents from modifying target project files."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If JSON repair regex patterns are too permissive, they might incorrectly repair malicious or malformed output that should fail.",
+    "If Claude introduces new drift patterns beyond the four regex patterns, valid output could fail with EVIDENCE_AGENT_INVALID_JSON.",
+    "The dirty working tree state mentioned in scope_in could affect boundary snapshot behavior if uncommitted changes exist in evidence dispatch files."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All explorer evidence verified against source code and tests. Implementation correctly handles recoverable JSON drift with explicit tracking and fails closed with EVIDENCE_AGENT_INVALID_JSON for unrecoverable cases. PRD readiness remains blocked during agent failures. Boundary audit detects target project mutations. Test coverage confirms success and failure paths. No assumptions promoted as facts."
+  }
+}

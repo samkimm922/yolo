@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectDiscoveryReadiness } from "../discovery/gate.js";
 import { createLifecycleStateSnapshot } from "../lifecycle/schema.js";
+import { inspectLifecycleGuard } from "../lifecycle/guard.js";
 import { buildTeamDispatchPlan } from "./team-contracts.js";
 
 const DEFAULT_YOLO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -250,6 +251,8 @@ export function createPiRunPlan(input = {}, context = {}) {
         requirementFile: artifacts.requirementFile,
         outputFile: artifacts.findingsPath,
         projectRoot: artifacts.projectRoot,
+        stateRoot: artifacts.stateRoot,
+        writeLifecycle: true,
       },
       timeout_ms: context.pmTimeoutMs || 300000,
     }));
@@ -266,6 +269,8 @@ export function createPiRunPlan(input = {}, context = {}) {
         output: artifacts.prdPath,
         title,
         projectRoot: artifacts.projectRoot,
+        stateRoot: artifacts.stateRoot,
+        writeLifecycle: true,
       },
       timeout_ms: context.prdTimeoutMs || 120000,
     }));
@@ -277,7 +282,12 @@ export function createPiRunPlan(input = {}, context = {}) {
       phase: "prd_contract",
       summary: "Validate PRD schema, contract, migration advice, and runner readiness before implementation.",
       runtime: "prd.preflight",
-      params: { prdPath: executablePrdPath },
+      params: {
+        prdPath: executablePrdPath,
+        projectRoot: artifacts.projectRoot,
+        stateRoot: artifacts.stateRoot,
+        writeLifecycle: true,
+      },
       timeout_ms: context.preflightTimeoutMs || context.schemaTimeoutMs || 30000,
     }),
     runtimeAction({
@@ -448,6 +458,39 @@ export async function runPiAgent(input = {}, options = {}) {
   writeState("running", "PI execution started.");
 
   for (const action of plan.actions) {
+    if (action.id === "pi.execute.runner") {
+      const guard = inspectLifecycleGuard({
+        command: "yolo-run",
+        projectRoot: plan.artifacts.projectRoot,
+        stateRoot: plan.artifacts.stateRoot,
+        prdPath: action.params?.prdPath || plan.artifacts.prdPath,
+      });
+      if (guard.status !== "pass") {
+        const observation = {
+          action_id: action.id,
+          status: "error",
+          summary: guard.summary,
+          code: guard.code || "LIFECYCLE_GUARD_BLOCKED",
+          lifecycle_guard: guard,
+          blockers: guard.blockers || [],
+          next_actions: guard.next_actions || ["Run /yolo-next before starting implementation."],
+        };
+        observations.push(observation);
+        writeState("error", observation.summary);
+        return {
+          status: "error",
+          summary: "PI stopped before implementation because lifecycle prerequisites failed.",
+          code: observation.code,
+          next_actions: observation.next_actions,
+          artifacts: plan.artifacts,
+          plan,
+          observations,
+          lifecycle_guard: guard,
+          stop_condition: "lifecycle_guard",
+        };
+      }
+    }
+
     if (action.kind === "observe") {
       observations.push({
         action_id: action.id,

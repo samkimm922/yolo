@@ -1,0 +1,231 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence system implements four-scope evidence separation with router validation, boundary enforcement, and three-role agent protocols.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/router.ts",
+      "line": "52-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES set declares four evidence scopes: project, external, user, unknown.",
+      "why": "Primary evidence scope contract definition."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "382-406",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordScope function classifies evidence by scope, path, url, and source fields with explicit fallback logic.",
+      "why": "Core evidence scope classification implementation."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "408-419",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceRecordHasDeclaredScope checks VALID_EVIDENCE_SCOPES.has; evidenceRecordHasProjectLocator validates path presence.",
+      "why": "Evidence validation functions for scope and project locators."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues blocks when records lack valid scope declaration with EVIDENCE_SCOPE_REQUIRED error.",
+      "why": "Blocker generation for missing scope declarations."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues enforces project locator requirements; generates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE and PROJECT_EVIDENCE_PATH_REQUIRED blockers.",
+      "why": "Core project evidence enforcement logic."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "709-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness iterates required evidence roles and runs evidenceResultBlockingIssues, evidenceScopeDeclarationIssues, and projectEvidenceBlockingIssues.",
+      "why": "PRD readiness validation calls evidence scope checks."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "16",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "VALID_EVIDENCE_SCOPES set mirrors router definition with same four scopes.",
+      "why": "Cross-module scope contract consistency."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "150-157",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeErrors validates each evidence record scope against VALID_EVIDENCE_SCOPES; returns specific error messages.",
+      "why": "Dispatch-level evidence scope validation."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "257-327",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildDemandEvidenceAgentPrompt includes explicit scope rules in agent instructions: 'Every evidence record must include scope: project, external, user, or unknown.' and 'Project facts require project-scoped evidence...with a repo-relative path or file locator.'",
+      "why": "Evidence agent prompt contract includes scope requirements."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot captures project file state before dispatch using git or filesystem walk.",
+      "why": "Boundary enforcement mechanism before agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "110-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after snapshots to detect added, modified, or deleted files.",
+      "why": "Boundary violation detection logic."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "565-571",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "After agent execution, boundary snapshot comparison generates project_mutation status and changes list.",
+      "why": "Post-execution boundary audit."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "584-590",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations generate BOUNDARY_PROJECT_MUTATION blockers and override prd_ready to false.",
+      "why": "Boundary violations block PRD readiness."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross_checker, and verifier roles with objectives and result_schema.",
+      "why": "Three-role evidence agent protocol definition."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "475-479",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "requiredEvidenceRoles returns ['explorer', 'cross-checker', 'verifier'] for cross_check policy and ['explorer', 'verifier'] for single_agent.",
+      "why": "Evidence role requirements by policy."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "340-385",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external-only evidence cannot satisfy existing project facts' validates PROJECT_FACT_REQUIRES_PROJECT_EVIDENCE blocker.",
+      "why": "Test coverage for external vs project evidence separation."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "387-431",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'project evidence requires a concrete project locator' validates PROJECT_EVIDENCE_PATH_REQUIRED blocker.",
+      "why": "Test coverage for project locator requirements."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "433-478",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'external URLs cannot be relabeled as project evidence' validates PROJECT_EVIDENCE_PATH_REQUIRED blocker for URLs.",
+      "why": "Test coverage for URL vs project path distinction."
+    },
+    {
+      "path": "__tests__/demand-router.test.ts",
+      "line": "480-524",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'evidence records must declare valid scope explicitly' validates EVIDENCE_SCOPE_REQUIRED blocker.",
+      "why": "Test coverage for explicit scope declaration requirement."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "566-601",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'agent evidence without explicit scope is blocked during normalization' validates EVIDENCE_SCOPE_REQUIRED error code.",
+      "why": "Dispatch-level scope validation test coverage."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' validates BOUNDARY_PROJECT_MUTATION blocker.",
+      "why": "Boundary enforcement test coverage."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' validates git-based boundary detection.",
+      "why": "Git boundary detection test coverage."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "70",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine explicitly states: '证据记录必须声明 scope: project | external | user | unknown。project 证据来自目标项目的 code、tests、docs、config、logs 或 artifacts，并且必须带 repo-relative path 或 file locator；external 证据可以来自 WebFetch/WebSearch 或外部文档，但只能作为背景研究，不能单独证明目标项目已有字段、API、状态机或数据流。'",
+      "why": "Product documentation for evidence scope requirements."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "66",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine states: 'dispatch 会在运行前后审计项目文件边界，任何越界改动都会变成 readiness blocker。'",
+      "why": "Product documentation for boundary enforcement."
+    },
+    {
+      "path": "docs/yolo-demand-doctrine.md",
+      "line": "58-63",
+      "scope": "project",
+      "source": "project_docs",
+      "summary": "Doctrine defines three agent roles: explorer reads project facts, cross-checker independently verifies high-risk facts, verifier checks evidence adequacy and prevents assumptions from masquerading as facts.",
+      "why": "Product documentation for three-role protocol."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "776-801",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectEvidenceAgreement compares agent recommendations by claim; generates EVIDENCE_AGENT_CONFLICT blocker when agents disagree.",
+      "why": "Evidence conflict detection prevents averaging disagreements."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If evidence scope classification logic has bugs, external research could be accepted as project facts.",
+    "If boundary snapshot comparison misses file changes in non-git repos, project mutations could go undetected.",
+    "If agent prompts do not consistently enforce scope requirements, agents may return malformed evidence."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence scope separation is implemented in router, validated in readiness, enforced in dispatch boundary, and tested across multiple scenarios. Four-scope model (project, external, user, unknown) is consistent across code, tests, and documentation."
+  }
+}

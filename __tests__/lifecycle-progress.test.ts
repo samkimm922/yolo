@@ -34,6 +34,8 @@ describe("lifecycle progress", () => {
 
       const status = JSON.parse(readFileSync(join(stateRoot, "lifecycle/status.json"), "utf8"));
       assert.equal(status.current_stage, "run");
+      assert.equal(status.stages.find((stage) => stage.id === "idea").status, "pending");
+      assert.equal(status.stages.find((stage) => stage.id === "discovery").status, "pending");
       assert.equal(status.stages.find((stage) => stage.id === "check").status, "completed");
       assert.equal(status.stages.find((stage) => stage.id === "run").status, "active");
     } finally {

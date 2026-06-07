@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "blocked",
+  "completed": true,
+  "claim": "The explorer and cross-checker produced directly contradictory evidence about the same file state; one agent examined a stale or non-existent version while the other examined the actual file, creating an unresolvable factual conflict that blocks PRD readiness.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "1-12",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Cross-checker read lines 1-12 showing actual imports; line 4 is 'import { dirname, isAbsolute, join, relative, resolve } from 'node:path'",
+      "why": "This is the actual current file state that contradicts the explorer's claim"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "4",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Explorer claimed line 4 imports from '../adapters/agent-contract.js' but cross-checker shows it imports from 'node:path'",
+      "why": "Direct contradiction requires resolution before any claim can be treated as fact"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "617",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Complete file is 617 lines with no reference to normalizeAgentProvider or any adapters directory import",
+      "why": "Full file read confirms the explorer's claimed import does not exist anywhere"
+    },
+    {
+      "path": "git status output",
+      "line": null,
+      "scope": "project",
+      "source": "project_log",
+      "summary": "Git status shows src/demand/evidence-dispatch.ts as modified (M), indicating recent changes that may explain state divergence",
+      "why": "File modification explains how evidence agents could examine different file states"
+    },
+    {
+      "path": "src/adapters/",
+      "line": null,
+      "scope": "project",
+      "source": "project_code",
+      "summary": "The src/adapters/ directory does not exist; ls returns 'No such file or directory'",
+      "why": "Even if the import existed, the target directory would not exist"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "7-11",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test imports from evidence-dispatch.js would fail at module load time if the explorer's claimed broken import actually existed",
+      "why": "This is indirect evidence that the import is not actually broken in current state"
+    }
+  ],
+  "assumptions": [
+    "One evidence agent examined a stale or cached version of the file while the other examined the current working tree state",
+    "The git modification (M status) indicates the file changed after one agent's examination",
+    "Previous evidence results from dispatch-20260601033747536-4h57gt may reflect yet another file state",
+    "The explorer's evidence contains file path claims but no actual file read content, only summaries and references"
+  ],
+  "risks": [
+    "Proceeding with PRD based on contradictory evidence would embed false claims as project facts",
+    "The explorer's high confidence on a false claim suggests they examined a different file state than the cross-checker",
+    "If the import was recently fixed, runtime behavior may still be untested regardless of import correctness",
+    "The evidence disagreement pattern suggests deeper reproducibility or state management issues in the dispatch system"
+  ],
+  "missing": [
+    "No evidence of which file state is actually current: the explorer's claimed broken import or the cross-checker's working import",
+    "No verification that either agent's examined file state represents the actual committed or staged version",
+    "No timestamp or git commit hash associating evidence with a specific file revision",
+    "No runtime test results showing the dispatch actually executes without errors in the current file state",
+    "No evidence that provider isolation logic has been validated against real Claude/Codex provider binaries",
+    "No evidence that the cross-checker's file read occurred after the file modification that git status reports"
+  ],
+  "recommendation": "block",
+  "result": {
+    "verdict": "blocked",
+    "notes": "Critical evidence conflict detected. Explorer claims line 4 of src/demand/evidence-dispatch.ts contains a broken import from '../adapters/agent-contract.js'; cross-checker shows line 4 imports from 'node:path' and the full 617-line file contains no such import. Git status shows the file is modified (M), explaining possible state divergence between agent examinations. The evidence is fundamentally contradictory and cannot support PRD readiness. One agent likely examined a stale or different file state. Missing: timestamps/commit hashes for evidence collection, verification of which file state is actually current, and any runtime test of the actual dispatch execution. The evidence conflict itself is a blocker that prevents treating any project claim as fact."
+  }
+}

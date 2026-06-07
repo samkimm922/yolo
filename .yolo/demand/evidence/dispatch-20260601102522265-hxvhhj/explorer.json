@@ -1,0 +1,109 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "The YOLO demand evidence dispatch system implements JSON drift repair and fail-closed validation as specified in the problem statement and acceptance criteria.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "403-420",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "parseJsonCandidate function implements JSON repair logic for minor Claude key drift",
+      "why": "This function is the core repair mechanism that handles common Claude JSON formatting issues."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "407-412",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Repairs line range format (42-88 → quoted string), escape sequences, and removes extra quotes in keys",
+      "why": "These specific repair patterns address common Claude JSON output issues while tracking whether repair occurred."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "422-442",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "extractJsonObject function provides multiple fallback strategies for JSON extraction from provider output",
+      "why": "This ensures JSON is found even when embedded in markdown fences or surrounded by other text."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "444-495",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "normalizeAgentResult function handles invalid JSON with EVIDENCE_AGENT_INVALID_JSON error code and prevents completion",
+      "why": "This is the fail-closed logic that blocks PRD readiness when agent JSON is unrecoverable."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "446",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Assigns EVIDENCE_AGENT_INVALID_JSON error code when parsed is null",
+      "why": "This is the explicit blocker code required by the acceptance criteria."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "617-623",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime extracts JSON from provider output and normalizes the result, recording repair status",
+      "why": "This connects the repair logic to the actual agent execution flow and tracks json_repaired."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "650-680",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime inspects PRD readiness after agent execution and merges blockers including EVIDENCE_AGENT_INVALID_JSON",
+      "why": "This ensures PRD readiness stays blocked when invalid JSON occurs, meeting the acceptance criteria."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "739-776",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'repairs minor Claude JSON key drift and records the repair' validates the repair behavior",
+      "why": "This test confirms the system records repairs and continues processing for recoverable JSON drift."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "778-808",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'invalid agent JSON fails closed with explicit blocker code' validates the fail-closed behavior",
+      "why": "This test confirms that EVIDENCE_AGENT_INVALID_JSON blocks PRD readiness when JSON is unrecoverable."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "754-755",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test simulates Claude JSON drift with line ranges, escape sequences, and extra quotes",
+      "why": "This demonstrates the exact drift patterns the system is designed to handle."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "803-804",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test asserts that every agent result has error_code EVIDENCE_AGENT_INVALID_JSON when JSON is invalid",
+      "why": "This confirms the explicit blocker requirement from the acceptance criteria."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If Claude introduces new JSON drift patterns beyond the current repair logic, agents might fail with EVIDENCE_AGENT_INVALID_JSON more frequently"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "The implementation exactly matches the specified behavior: minor recoverable JSON drift is repaired and recorded, unrecoverable JSON receives EVIDENCE_AGENT_INVALID_JSON, and PRD readiness stays blocked."
+  }
+}

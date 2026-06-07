@@ -1,0 +1,73 @@
+{
+  "iteration": 10,
+  "scenario": "real-ui-field-clarification",
+  "expected": "executable",
+  "status": "pass",
+  "project_root": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601160628265/fixtures/0010-real-ui-field-clarification",
+  "transcript_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601160628265/fixtures/0010-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.transcript.md",
+  "chain_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601160628265/fixtures/0010-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification.chain.json",
+  "prd_path": "/Users/sippingroom/Developer/yolo/.yolo/stress/demand-dialogue-20260601160628265/fixtures/0010-real-ui-field-clarification/.yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+  "blocked_path": null,
+  "yolo": {
+    "no_premature_prd": true,
+    "final_class_ok": true,
+    "check_status": "pass",
+    "turn_count": 4,
+    "turn_expectations_met": 4,
+    "blocker_codes": [
+      "REQUIREMENTS_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "EXECUTION_SCOPE_PRESENT",
+      "PROJECT_FACTS_GROUNDED",
+      "REQUIREMENTS_PRESENT",
+      "SCENARIO_PROOF_PRESENT",
+      "BLOCKING_OPEN_QUESTIONS_EMPTY",
+      "USER_APPROVAL_PRESENT",
+      "PROJECT_FACTS_GROUNDED",
+      "USER_APPROVAL_PRESENT"
+    ]
+  },
+  "claude": {
+    "success": true,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "parse_error": "",
+    "review": {
+      "verdict": "pass",
+      "correct_final_class": true,
+      "conversation_realistic": true,
+      "no_premature_prd": true,
+      "executable": true,
+      "score": 95,
+      "hard_failures": [],
+      "warnings": [
+        {
+          "code": "TRANSCRIPT_QA_MISALIGNMENT",
+          "path": ".yolo/dialogue-stress/real-ui-field-clarification-turn-4.prd.json",
+          "message": "Turn question/answer assignments in the question_trace are swapped: Q01.answer is the user's original demand text while Q01.question is the agent's discovery response. The trace preserves the conversation content but the fields are inverted"
+        }
+      ],
+      "dimensions": {
+        "clarification_quality": 95,
+        "project_fact_grounding": 95,
+        "stage_transition": 100,
+        "plan_convergence": 95,
+        "prd_executability": 95,
+        "deadlock_avoidance": 95,
+        "rework_risk": 90
+      }
+    },
+    "stdout": "",
+    "stderr": ""
+  },
+  "reviewer_boundary": {
+    "project_mutation": "clean",
+    "changes": []
+  },
+  "started_at": "2026-06-01T16:17:09.309Z",
+  "ended_at": "2026-06-01T16:18:24.904Z",
+  "duration_ms": 75595
+}

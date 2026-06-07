@@ -1,0 +1,14 @@
+{
+  "approved": true,
+  "approved_by": "user",
+  "approved_at": "2026-06-01T16:39:54.751Z",
+  "reason": "",
+  "note": "",
+  "effective_for_prd": false,
+  "blocked_by": [
+    {
+      "code": "PROJECT_FACTS_GROUNDED",
+      "message": "Executable PRD requires project facts, field assumptions, and UI specs to be grounded before approval can proceed."
+    }
+  ]
+}

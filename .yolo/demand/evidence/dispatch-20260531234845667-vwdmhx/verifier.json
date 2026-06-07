@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Explorer and cross-checker evidence is sufficient to support the claim that YOLO demand evidence dispatch and router system implements brownfield PRD readiness with cross_check evidence policy and read-only evidence agents (explorer, cross-checker, verifier).",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "99-137",
+      "source": "code",
+      "summary": "buildDemandEvidenceDispatchPlan returns execution_policy with default_mode: 'dry_run', writes_business_code: false, agent_instruction: 'read_only'.",
+      "why": "Primary dispatch implementation confirms read-only default policy."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "52-75",
+      "source": "code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross_checker, and verifier with writes_code: false.",
+      "why": "Protocol definitions confirm read-only agent constraints."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "505-551",
+      "source": "code",
+      "summary": "inspectDemandTriage assigns cross_check evidence policy for brownfield demands.",
+      "why": "Triage logic confirms cross_check policy applies to current brownfield demand."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "145-180, 218-260",
+      "source": "test",
+      "summary": "Tests verify cross-check agent sequence and conflict detection result in PRD readiness blockers.",
+      "why": "Test evidence validates cross-check flow and conflict handling."
+    },
+    {
+      "path": "explorer evidence result",
+      "line": "1",
+      "source": "evidence",
+      "summary": "Explorer provided 17 evidence items with file paths, lines, and sources; 4 assumptions properly labeled; 4 missing items identified.",
+      "why": "Explorer properly separated facts from assumptions and identified gaps."
+    },
+    {
+      "path": "cross-checker evidence result",
+      "line": "1",
+      "source": "evidence",
+      "summary": "Cross-checker independently verified 16 claims through direct file reads; found no contradictions; properly labeled assumptions and missing items.",
+      "why": "Cross-checker confirmed explorer claims with independent verification."
+    },
+    {
+      "path": ".yolo/demand/session-state.json",
+      "line": "1",
+      "source": "state",
+      "summary": "Current demand state shows all 9 required PRD slots filled; 3 evidence agent blockers pending; 0 assumptions.",
+      "why": "Session state confirms PRD slot completion and evidence agent requirements."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If evidence dispatch is bypassed in production, unverified assumptions could be promoted to facts in PRD."
+  ],
+  "missing": [
+    "Provider adapter implementation (spawnProviderPrompt) was not examined by any agent.",
+    "End-to-end integration tests with real provider agents do not exist in the test suite.",
+    "Actual usage logs or state files from .yolo/demand/ directories showing real-world evidence dispatch runs."
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer and cross-checker evidence is comprehensive and internally consistent. Both agents properly separated facts from assumptions, provided verifiable file paths and line numbers, and identified missing data. No contradictions or blocking conflicts found. Missing items (provider adapter, integration tests, usage logs) are properly documented in missing arrays and do not block the current PRD readiness claim about evidence dispatch implementation. Evidence agents have completed their roles; PRD readiness can now be re-evaluated."
+  }
+}

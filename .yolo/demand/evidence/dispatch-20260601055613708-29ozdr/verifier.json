@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Verified that YOLO demand evidence dispatch implements JSON drift repair with closed-loop failure handling. All evidence paths exist and the implementation matches acceptance criteria: minor drift is repaired, unrecoverable JSON receives EVIDENCE_AGENT_INVALID_JSON, and PRD readiness stays blocked.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "330-397",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Verified parseJsonCandidate(), extractJsonObject(), and normalizeAgentResult() implementation exists and matches the repair and failure handling behavior",
+      "why": "Code inspection confirms the three core functions are implemented and handle drift repair with explicit failure codes."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "535-603",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Verified test coverage for both drift repair success and invalid JSON failure paths",
+      "why": "Test inspection confirms validation of json_repaired recording and EVIDENCE_AGENT_INVALID_JSON assignment."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "370-397",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Verified normalizeAgentResult() returns blocked verdict and EVIDENCE_AGENT_INVALID_JSON on parse failure",
+      "why": "Code inspection confirms closed-loop failure: unrecoverable JSON triggers explicit blocker and blocks PRD readiness."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "Explorers risk note acknowledged: malformed provider output not covered by current repair patterns could be silently accepted or produce unclear blockers."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "All evidence verified. Paths exist, implementation matches acceptance criteria, and no assumptions were promoted to facts. Both success and failure paths are covered by tests."
+  }
+}

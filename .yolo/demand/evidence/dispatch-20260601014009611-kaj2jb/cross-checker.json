@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent cross-check confirms the explorer's verified claim: YOLO demand evidence dispatch enforces harness boundary audit through post-execution SHA256 snapshot diff, not pre-execution tool prevention. Full-tool Claude agents execute freely between snapshots, and any project mutations detected post-execution generate BOUNDARY_PROJECT_MUTATION blockers that keep PRD readiness blocked.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "87-95",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "fileDigest uses createHash('sha256').update(readFileSync(path)).digest('hex') to hash file contents",
+      "why": "Confirms SHA256 hashing mechanism for boundary detection"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot excludes allowed_write_roots and hashes all git-tracked or walked files",
+      "why": "Confirms snapshot construction excludes artifact directory"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "110-120",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots compares before/after Map entries to detect deleted, modified, and added files",
+      "why": "Confirms diff algorithm for mutation detection"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "238-247",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy.boundary.project_mutation='forbidden' and allowed_write_roots restricts mutations to artifact directory only",
+      "why": "Confirms policy declaration for mutation restrictions"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "511",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryBefore = buildBoundarySnapshot(plan.project_root, [plan.output_dir]) captures SHA256 hashes BEFORE agent execution loop",
+      "why": "Confirms pre-execution snapshot timing"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "514-560",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "for (const action of plan.actions) agent loop spawns providers with no boundary checks during execution",
+      "why": "Confirms agents execute freely without real-time enforcement"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "561-567",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryAfter = buildBoundarySnapshot(...) and boundaryChanges = diffBoundarySnapshots(boundaryBefore, boundaryAfter) detect mutations AFTER agent loop completes",
+      "why": "Confirms post-execution detection timing, not pre-execution prevention"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "580-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "boundaryBlockers map creates BOUNDARY_PROJECT_MUTATION blockers and finalReadiness sets prd_ready=false when mutations detected",
+      "why": "Confirms mutation-to-blocker conversion that blocks PRD readiness"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "445-458",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "executionConfig normalizes agent_tool_profile to 'boundary' by default, setting claude_allowed_tools='' (empty string allows all tools)",
+      "why": "Confirms default tool permission allows all tools in boundary mode"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-98",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation for claude only adds --allowedTools arg when claude_allowed_tools is non-empty; empty string means no restriction",
+      "why": "Confirms provider adapter behavior: no claude_allowed_tools flag means all tools allowed"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "709-727",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness calls evidenceResultBlockingIssues and projectEvidenceBlockingIssues for each completed evidence agent result",
+      "why": "Confirms PRD readiness validation checks evidence agent blockers"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "367-400",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Unit test simulates project file mutation via writeFileSync during agent execution and asserts BOUNDARY_PROJECT_MUTATION blocker",
+      "why": "Confirms test coverage for boundary detection mechanism"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "402-438",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Unit test with git init confirms git ls-files integration detects untracked file mutations",
+      "why": "Confirms git-backed boundary detection works for new files"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If agents mutate files within allowed_write_roots (artifact directory), they could corrupt evidence artifacts or dispatch state",
+    "If evidence agents coordinate to revert mutations before post-execution snapshot, temporary mutations could occur undetected",
+    "If Claude Code CLI ignores or bypasses tool restriction flags when passed via command-line args, agents could have unrestricted access regardless of configuration"
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms explorer's verified claim. All 13 evidence paths cited are accurate: buildBoundarySnapshot uses SHA256 (lines 87-108), diffBoundarySnapshots compares hashes (110-120), execution_policy declares project_mutation='forbidden' (238-247), snapshot timing is pre-execution (511) and post-execution (561-567), agent loop runs freely (514-560), mutations become blockers (580-597), tool profile defaults to boundary mode with all tools allowed (445-458), provider adapter confirms no claude_allowed_tools flag means unrestricted (77-98), router validates evidence blockers (709-727), and tests confirm detection (367-438). Boundary is post-execution detection, not pre-execution prevention. Acceptance criteria met."
+  }
+}

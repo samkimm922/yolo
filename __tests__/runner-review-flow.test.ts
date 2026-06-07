@@ -153,6 +153,7 @@ describe("runner review fix execution flow", () => {
     assert.match(worktreeSessionSource, /existsSync\(join\(wtPath,\s*targetPath\)\)/);
     assert.match(runnerSource, /runTaskCommitFlow\(\{/);
     assert.match(executionCommitFlowSource, /buildDryRunOutOfScopeBlock\(\{/);
+    assert.match(executionCommitFlowSource, /buildOutOfScopeBlock\(\{/);
     assert.match(executionCommitFlowSource, /buildCommitSkipDecision\(\{/);
     assert.match(executionCommitFlowSource, /task\.task_kind !== "dry_run_artifact" \|\| outOfScope\.length === 0/);
     assert.match(executionCommitFlowSource, /dry-run artifact 已写入工作区/);

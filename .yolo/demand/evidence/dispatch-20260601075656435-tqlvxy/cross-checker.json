@@ -1,0 +1,110 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "Independent cross-check confirms the explorer's claim: YOLO demand evidence dispatch implements boundary snapshot audit that theoretically detects project file mutations and blocks PRD readiness, but stress testing with real full-tool Claude agents has not been performed.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() function captures SHA256 hashes of all project files except those in allowed_write_roots, using git ls-files when available and falling back to filesystem walk.",
+      "why": "This is the core before/after snapshot mechanism that establishes the baseline for mutation detection."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "111-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after snapshots and returns array of changes with path and change type (added/modified/deleted).",
+      "why": "This function detects any mutations that occurred during agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime calls buildBoundarySnapshot(plan.project_root, [plan.output_dir]) before executing any evidence agents to establish baseline.",
+      "why": "Establishes the before-state before agents can potentially mutate files."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "566-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime calls buildBoundarySnapshot after all agents complete, then diffs snapshots and populates result.boundary with project_mutation status, allowed_write_roots, and changes array.",
+      "why": "Detects and reports any file mutations that occurred during agent execution."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "585-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations are mapped to BOUNDARY_PROJECT_MUTATION blockers, extended into readiness.blockers array, and force prd_ready=false when changes exist.",
+      "why": "Violations automatically block PRD readiness regardless of agent results."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "381-414",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' simulates agent writing unexpected-project-write.txt and verifies blocked status with BOUNDARY_PROJECT_MUTATION blocker.",
+      "why": "Test confirms boundary audit blocks PRD readiness when mutations occur."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "416-452",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'git-backed boundary detects untracked project mutations' verifies git ls-files integration detects untracked files written by agents.",
+      "why": "Test confirms boundary audit works with git repositories."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "493-533",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'non-git boundary fallback detects modified project files and ignores artifacts' verifies file walker fallback excludes allowed_write_roots from mutation detection.",
+      "why": "Test confirms boundary audit works without git and respects allowed_write_roots."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "456-462",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude agent configuration sets claude_tools, claude_allowed_tools, claude_disallowed_tools to empty strings and claude_no_session_persistence to true, avoiding tool restrictions.",
+      "why": "Evidence dispatch relies on boundary audit for enforcement, not Claude tool allowlists."
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "678-750",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandPrdReadiness function validates evidence agent results, processes blockers, and integrates with readiness assessment.",
+      "why": "Router integrates boundary violations into final readiness assessment."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If buildBoundarySnapshot fails to enumerate all project files due to permissions, symlinks, or filesystem errors, mutations could go undetected.",
+    "If agents modify files during execution then revert before the after-snapshot, mutations would not be detected by the boundary audit.",
+    "If allowed_write_roots is misconfigured to include project directories, legitimate project writes would not be detected as violations.",
+    "The boundary audit has only been tested with simulated file writes via spawnProviderPrompt callbacks, not with actual full-tool Claude agents."
+  ],
+  "missing": [
+    "Stress test evidence of boundary audit with real full-tool Claude agents executing with actual write tools enabled (Bash Edit Write) instead of simulated file writes.",
+    "Runtime evidence that boundary violations are properly surfaced to users and prevent PRD generation in real-world usage.",
+    "Evidence that buildBoundarySnapshot correctly handles edge cases (large files, binary files, permission errors, symlinks, etc.).",
+    "Evidence that agents cannot bypass detection by modifying files then reverting before snapshot.",
+    "Evidence that the boundary audit does not produce false positives with allowed_write_roots artifact writes."
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent code review confirms all implementation details cited by the explorer. The boundary snapshot audit is correctly implemented: before/after snapshots, diff logic, blocker generation, and PRD readiness blocking all exist and are tested. However, the demand explicitly requests stress-testing with real full-tool Claude agents, which has not been performed. All tests use simulated file writes via spawnProviderPrompt callbacks, not actual unrestricted Claude agents with Bash/Edit/Write tools. The implementation is theoretically correct but lacks runtime validation with the actual threat model: full-tool Claude agents that could attempt real project mutations."
+  }
+}

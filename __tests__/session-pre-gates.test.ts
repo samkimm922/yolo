@@ -68,6 +68,26 @@ describe("session pre-gate checks", () => {
     assert.equal(logs.transitions[0].prd_update.phase, "provider_budget");
   });
 
+  test("provider preflight blockers are not retried as ordinary provider failures", async () => {
+    const logs = recorder();
+    const result = await inspectSessionPreGateChecks(baseOptions(logs, {
+      providerRun: {
+        success: false,
+        blocked: true,
+        reason: "claude_settings_missing",
+        stdout: "",
+        stderr: "Claude settings file not found: /repo/missing-settings.json",
+        exitCode: null,
+      },
+      providerName: "claude",
+      maxRetryForProvider: 3,
+    }));
+
+    assert.deepEqual(result, { action: "return", result: { status: "blocked", reason: "claude_settings_missing" } });
+    assert.equal(logs.progress.some((entry) => String(entry[2] || "").includes("重试")), false);
+    assert.equal(logs.transitions[0].prd_update.phase, "provider_preflight");
+  });
+
   test("diff quality failures update retry context before retrying", async () => {
     const logs = recorder();
     const result = await inspectSessionPreGateChecks(baseOptions(logs, {

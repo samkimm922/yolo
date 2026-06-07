@@ -19,6 +19,22 @@ export function scannerStdoutFromError(error) {
   return (error?.stdout || "").trim();
 }
 
+export function scannerFailureDiagnostic(error) {
+  const stdout = scannerStdoutFromError(error);
+  const stderr = (error?.stderr || "").trim();
+  const message = error?.message || "scanner failed";
+  return {
+    message,
+    stdout_sample: stdout.slice(0, 300),
+    stderr_sample: stderr.slice(0, 300),
+    detail: [
+      message,
+      stdout ? `stdout: ${stdout.slice(0, 300)}` : "",
+      stderr ? `stderr: ${stderr.slice(0, 300)}` : "",
+    ].filter(Boolean).join("\n"),
+  };
+}
+
 export function parseReviewFindings(scanResult) {
   const parsed = JSON.parse(scanResult);
   const findings = Array.isArray(parsed) ? parsed : (parsed?.findings || []);

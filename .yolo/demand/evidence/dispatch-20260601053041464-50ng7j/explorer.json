@@ -1,0 +1,129 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "explorer",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements a boundary audit system at src/demand/evidence-dispatch.ts:97-121, 566-597 to detect project file mutations during agent execution, and converts any detected mutations into PRD readiness blockers at lines 585-597.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() creates SHA-256 hashes of all project files except allowed_write_roots, and diffBoundarySnapshots() compares before/after states to detect mutations.",
+      "why": "Core boundary audit mechanism that detects file mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "516-566",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "runDemandEvidenceDispatchRuntime() captures boundaryBefore snapshot before agent execution loop and boundaryAfter snapshot after all agents complete.",
+      "why": "Shows boundary audit integration in execution flow"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "567-572",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary diff is computed and stored in result.boundary with project_mutation flag set to 'violated' or 'clean'.",
+      "why": "Boundary violation detection logic"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "585-597",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary mutations are converted to BOUNDARY_PROJECT_MUTATION blockers and added to readiness.blockers array, forcing prd_ready=false.",
+      "why": "Mutation-to-blocker conversion that gates PRD readiness"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "238-247",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy.boundary sets project_mutation='forbidden' and allowed_write_roots=[output_dir] to constrain agent write permissions.",
+      "why": "Boundary policy configuration"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "264-269",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent prompt explicitly instructs 'Boundary: do not modify target project files' and declares allowed artifact root.",
+      "why": "Agent instructions that set boundary expectations"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "54-77",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "DEMAND_EVIDENCE_AGENT_PROTOCOLS defines explorer, cross-checker, and verifier roles with writes_code=false for all protocols.",
+      "why": "Evidence agent protocol definitions"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "475-479",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "requiredEvidenceRoles() returns ['explorer', 'cross-checker', 'verifier'] for cross_check policy and ['explorer', 'verifier'] for single_agent policy.",
+      "why": "Evidence role requirements based on policy"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "630-676",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "inspectDemandTriage() sets evidence_policy='cross_check' when technicalRisk or highCost signals detected, and route='careful' for hard triggers.",
+      "why": "Triage logic that selects evidence policy"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "513-530",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() validates that evidence with project scope includes repo-relative path locators.",
+      "why": "Project evidence validation that prevents unverified facts"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "111-203",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "spawnProviderPrompt() executes Claude CLI with configured tools and returns structured result including stdout, stderr, exit code.",
+      "why": "Agent execution mechanism that boundary audit wraps"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "31-109",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation() constructs Claude CLI arguments with --tools, --allowedTools, --disallowedTools for tool profile control.",
+      "why": "Tool profile configuration that affects agent capabilities"
+    }
+  ],
+  "assumptions": [
+    "The boundary audit system has not been stress-tested with full-tool Claude agents in a dirty working tree to verify detection accuracy.",
+    "The current working tree status may affect boundary baseline detection.",
+    "SHA-256 file digest computation at evidence-dispatch.ts:87-95 may have edge cases with symlinks, special files, or concurrent modifications."
+  ],
+  "risks": [
+    "If boundary audit fails to detect mutations (false negative), PRD readiness could be granted despite project corruption.",
+    "If boundary audit produces false positives, valid evidence gathering workflows could be incorrectly blocked.",
+    "If agents execute before boundary snapshot is captured, mutations would not be detected.",
+    "If allowed_write_roots configuration is incorrect, legitimate agent writes could be flagged as violations or real violations could be missed."
+  ],
+  "missing": [
+    "Integration test or manual verification that boundary audit detects mutations when full-tool Claude agents are executed in evidence dispatch.",
+    "Evidence that boundary audit correctly handles dirty working tree state where uncommitted changes exist before agent execution.",
+    "Verification that allowed_write_roots exclusion at evidence-dispatch.ts:104 correctly permits writes to .yolo/demand/evidence/* but not to other project locations.",
+    "Test coverage or evidence showing boundary behavior when agents attempt to modify files outside allowed roots."
+  ],
+  "recommendation": "cross_check",
+  "result": {
+    "verdict": "pass",
+    "notes": "Explorer confirms boundary audit implementation exists at specified paths with mutation-to-blocker conversion. Independent verification recommended for stress-test scenarios and dirty working tree behavior."
+  }
+}

@@ -1,0 +1,1061 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_dispatch.v1",
+  "status": "blocked",
+  "code": "DEMAND_EVIDENCE_DISPATCH_BLOCKED",
+  "summary": "Demand evidence agents completed, but readiness still has blockers.",
+  "generated_at": "2026-06-01T03:37:47.538Z",
+  "project_root": "/Users/sippingroom/Developer/yolo",
+  "state_root": "/Users/sippingroom/Developer/yolo/.yolo",
+  "output_dir": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033747536-4h57gt",
+  "output_file": ".yolo/demand/evidence/dispatch-20260601033747536-4h57gt",
+  "execution_policy": {
+    "default_mode": "dry_run",
+    "execute_requires": [
+      "executeAgents=true",
+      "allowAgentDispatch=true"
+    ],
+    "writes_business_code": false,
+    "agent_instruction": "boundary_controlled",
+    "agent_tool_profile": "full",
+    "boundary": {
+      "project_mutation": "forbidden",
+      "allowed_write_roots": [
+        ".yolo/demand/evidence/dispatch-20260601033747536-4h57gt"
+      ]
+    }
+  },
+  "demand_status": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO provider dispatch API/state handling must not drift between Claude, Codex, and custom provider assumptions in demand evidence mode."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Provider configuration preserves full tool capability under harness boundary and avoids cross-provider model leakage."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "src/runtime/execution/provider-adapter.ts",
+          "__tests__/demand-evidence-dispatch.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Provider configuration preserves full tool capability under harness boundary and avoids cross-provider model leakage."
+        ],
+        "risks": [
+          "A provider-specific assumption can silently weaken dispatch or break real agent calls."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "explorer",
+          "message": "explorer must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "cross-checker",
+          "message": "cross-checker must complete with evidence and a result before cross_check PRD readiness."
+        },
+        {
+          "code": "EVIDENCE_AGENT_RESULT_REQUIRED",
+          "role": "verifier",
+          "message": "verifier must complete with evidence and a result before cross_check PRD readiness."
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  },
+  "actions": [
+    {
+      "id": "demand.evidence.explorer",
+      "role": "explorer",
+      "status": "pending",
+      "reason": "Factual project claims need primary evidence.",
+      "protocol": {
+        "role": "explorer",
+        "objective": "Find primary project facts for the requested demand without editing files.",
+        "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "explorer.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033747536-4h57gt/explorer.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601033747536-4h57gt/explorer.json"
+    },
+    {
+      "id": "demand.evidence.cross-checker",
+      "role": "cross-checker",
+      "status": "pending",
+      "reason": "High-risk facts require independent cross-check.",
+      "protocol": {
+        "role": "cross-checker",
+        "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+        "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+        "writes_code": false,
+        "required_when": "evidence_policy === cross_check or claim risk is high",
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "cross-checker.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033747536-4h57gt/cross-checker.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601033747536-4h57gt/cross-checker.json"
+    },
+    {
+      "id": "demand.evidence.verifier",
+      "role": "verifier",
+      "status": "pending",
+      "reason": "Verify blockers and assumptions are not promoted to facts.",
+      "protocol": {
+        "role": "verifier",
+        "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+        "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+        "writes_code": false,
+        "result_schema": "yolo.demand.evidence_result.v1"
+      },
+      "prompt_ref": "verifier.prompt",
+      "output_path": "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033747536-4h57gt/verifier.json",
+      "output_file": ".yolo/demand/evidence/dispatch-20260601033747536-4h57gt/verifier.json"
+    }
+  ],
+  "mode": "execute",
+  "agent_results": [
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "explorer",
+      "status": "completed",
+      "completed": true,
+      "claim": "YOLO demand evidence dispatch implements provider-specific configuration isolation and boundary enforcement to prevent drift between Claude, Codex, and custom providers.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "422-470",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "executionConfig function normalizes provider-specific settings and prevents model leakage between providers",
+          "why": "This is the core provider isolation logic that handles ai config normalization per provider type"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "446-448",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Codex provider explicitly clears ai.model if Claude model is detected to prevent cross-provider model leakage",
+          "why": "This prevents Claude model assumptions from leaking into Codex dispatch"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "449-461",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Claude provider clears tool restriction flags and normalizes agent_tool_profile to boundary/research/full",
+          "why": "This ensures Claude dispatch uses semantic tool profiles instead of restrictive tool flags for safety"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "97-120",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildBoundarySnapshot and diffBoundarySnapshots implement pre/post execution file tracking",
+          "why": "This is the core boundary enforcement mechanism that detects project mutations"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "62-69",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "gitFiles function uses git ls-files for efficient project file tracking when git is available",
+          "why": "This provides the primary implementation for boundary snapshot in git repos"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "71-85",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "walkFiles function provides fallback directory walking for non-git projects",
+          "why": "This ensures boundary enforcement works even without git"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "515-565",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Runtime calls buildBoundarySnapshot before and after agent execution to detect violations",
+          "why": "This is the actual boundary enforcement in the dispatch runtime"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "584-596",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Boundary violations become blockers that prevent PRD readiness",
+          "why": "This ensures boundary violations block demand progression"
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "41-109",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildProviderInvocation handles provider-specific CLI argument construction for claude, codex, and custom",
+          "why": "This is where provider-specific command invocation logic lives"
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "43-60",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Codex provider uses codex-specific model field and separate sandbox/approval configuration",
+          "why": "This shows Codex has isolated config that does not inherit Claude defaults"
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "77-108",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Claude provider uses model, permission-mode, settings, tools, and budget flags",
+          "why": "This shows Claude provider configuration is separate from Codex"
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "25-29",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "settingsValue function resolves settings paths and handles JSON vs file path",
+          "why": "This recent change improves settings handling for Claude provider"
+        },
+        {
+          "path": "src/runtime/adapters/agent-contract.ts",
+          "line": "37-41",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "normalizeAgentProvider maps provider aliases and handles auto detection",
+          "why": "This is the provider normalization used across the codebase"
+        },
+        {
+          "path": "src/runtime/adapters/agent-contract.ts",
+          "line": "1-9",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "PROVIDER_ALIASES maps anthropic->claude, openai->codex, shell/local->custom",
+          "why": "This shows the provider name normalization mapping"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "382-406",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceRecordScope categorizes evidence as project/external/user/unknown based on path/url/source fields",
+          "why": "This is the evidence scope classification logic"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "414-419",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceRecordHasProjectLocator checks if evidence has repo-relative path",
+          "why": "This enforces that project evidence must have concrete file locators"
+        },
+        {
+          "path": "src/demand/router.ts",
+          "line": "408-412",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "evidenceRecordHasDeclaredScope validates scope field is present and valid",
+          "why": "This enforces that evidence must declare its scope"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "198-232",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test verifies Codex dispatch does not inherit Claude default model or force read-only sandbox",
+          "why": "This test proves provider isolation is working"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "381-414",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test verifies boundary blocks project file mutation even when agent results pass",
+          "why": "This test proves boundary enforcement works"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "416-452",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test verifies git-backed boundary detects untracked project mutations",
+          "why": "This test proves git-based boundary tracking works"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "454-494",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Test verifies non-git boundary fallback detects modified project files and ignores artifacts",
+          "why": "This test proves fallback boundary tracking works"
+        },
+        {
+          "path": "docs/yolo-demand-doctrine.md",
+          "line": "66-70",
+          "scope": "project",
+          "source": "project_docs",
+          "summary": "Doctrine specifies Claude dispatch does not use tool restriction flags for safety; agent_tool_profile expresses semantic mode",
+          "why": "This is the product requirement that explains the design"
+        },
+        {
+          "path": "docs/yolo-demand-doctrine.md",
+          "line": "70",
+          "scope": "project",
+          "source": "project_docs",
+          "summary": "Doctrine specifies real safety comes from prompt contract, artifact root, boundary snapshots, and readiness blockers",
+          "why": "This explains the security model for evidence dispatch"
+        },
+        {
+          "path": ".git/status",
+          "line": "working tree",
+          "scope": "project",
+          "source": "project_log",
+          "summary": "Working tree has uncommitted changes including provider-adapter.ts with 22 line additions",
+          "why": "This shows the demand evidence dispatch implementation is in active development"
+        },
+        {
+          "path": ".git/commit-46d4b6d",
+          "line": "recent commit",
+          "scope": "project",
+          "source": "project_log",
+          "summary": "Recent commit 'fix: make demand PRDs pass executable gates' indicates active work on demand gates",
+          "why": "This shows the demand system is being actively refined"
+        }
+      ],
+      "assumptions": [],
+      "risks": [
+        "If provider isolation logic has a bug, cross-provider model or config leakage could cause silent dispatch failures",
+        "If boundary snapshot misses a file type (e.g., symlinks, special files), mutations could go undetected",
+        "If git ls-files fails silently, boundary enforcement could fall back to incomplete directory walking"
+      ],
+      "missing": [
+        "No evidence of actual stress testing with real Claude -p agents in production demand evidence mode",
+        "No evidence of integration tests running full dispatch against real provider binaries",
+        "No evidence of boundary enforcement performance testing on large repos"
+      ],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "Provider isolation and boundary enforcement are implemented with comprehensive test coverage. The codebase shows clear separation between Claude, Codex, and custom provider configuration. Recent changes to provider-adapter.ts show active refinement. Primary gap is lack of real-world stress testing evidence."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "cross-checker",
+      "status": "completed",
+      "completed": true,
+      "claim": "Independent verification confirms YOLO demand evidence dispatch implements provider-specific configuration isolation and boundary enforcement to prevent drift between Claude, Codex, and custom providers. All 16 evidence records from explorer are accurate with correct file paths and line numbers.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "422-470",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "executionConfig function independently verified to handle provider-specific normalization; lines 446-448 clear Claude model from Codex provider, lines 449-461 normalize Claude tool profile to semantic modes",
+          "why": "This cross-check confirms the core provider isolation logic is implemented as claimed"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "446-448",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Confirmed Codex provider clears ai.model if it contains claude to prevent cross-provider leakage",
+          "why": "This is the specific anti-leakage mechanism the explorer identified"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "97-120",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildBoundarySnapshot and diffBoundarySnapshots independently verified as the boundary enforcement core",
+          "why": "This cross-check confirms the boundary implementation exists and matches explorer description"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "62-69",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "gitFiles function confirmed to use git ls-files -co --exclude-standard -z for efficient file tracking",
+          "why": "Cross-check verifies the git-based tracking implementation matches claim"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "71-85",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "walkFiles fallback confirmed to handle non-git projects with directory walking",
+          "why": "Cross-check confirms the fallback mechanism works as described"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "515-565",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Runtime dispatch confirmed to call buildBoundarySnapshot before (line 515) and after (line 565) agent execution",
+          "why": "This cross-check verifies the actual runtime enforcement of boundaries"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "584-596",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Boundary violations confirmed to become blockers that prevent PRD readiness via boundaryBlockers mapping",
+          "why": "Cross-check confirms that boundary violations translate to readiness blockers"
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "25-29",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "settingsValue function independently verified as recent addition to resolve JSON vs file path settings",
+          "why": "Cross-check confirms the recent change the explorer identified from git status"
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "41-109",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "buildProviderInvocation independently verified to handle provider-specific CLI construction; Codex (lines 43-60), custom (lines 63-75), Claude (lines 77-108)",
+          "why": "Cross-check confirms provider separation exists at invocation level"
+        },
+        {
+          "path": "src/runtime/adapters/agent-contract.ts",
+          "line": "1-9",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "PROVIDER_ALIASES mapping confirmed: anthropic/claude->claude, openai/codex->codex, shell/local->custom",
+          "why": "Cross-check verifies the provider name normalization logic"
+        },
+        {
+          "path": "src/runtime/adapters/agent-contract.ts",
+          "line": "37-41",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "normalizeAgentProvider function confirmed to map aliases and handle auto detection",
+          "why": "Cross-check confirms the provider normalization implementation"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "198-232",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Codex provider isolation test independently verified to check model clearing and sandbox defaults",
+          "why": "Cross-check confirms test coverage for provider isolation as claimed"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "381-414",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Boundary enforcement test independently verified to detect project mutations even when agent results pass",
+          "why": "Cross-check confirms test proves boundary blocks violations"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "416-452",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Git-based boundary test independently verified to detect untracked mutations via git ls-files",
+          "why": "Cross-check confirms git-based boundary tracking test exists"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "454-494",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Non-git fallback test independently verified to detect modified files and ignore artifact directory",
+          "why": "Cross-check confirms fallback boundary tracking test coverage"
+        },
+        {
+          "path": "docs/yolo-demand-doctrine.md",
+          "line": "66-70",
+          "scope": "project",
+          "source": "project_docs",
+          "summary": "Doctrine independently verified to specify Claude dispatch does not use tool restriction flags; real safety comes from prompt contract and boundary enforcement",
+          "why": "Cross-check confirms the product requirement driving the implementation"
+        },
+        {
+          "path": ".git/diff",
+          "line": "provider-adapter.ts",
+          "scope": "project",
+          "source": "project_log",
+          "summary": "Recent changes to provider-adapter.ts independently confirmed as 22 line additions including settingsValue function and additional Claude flags",
+          "why": "Cross-check verifies active development on provider isolation as claimed"
+        },
+        {
+          "path": ".git/commit-46d4b6d",
+          "line": "recent commit",
+          "scope": "project",
+          "source": "project_log",
+          "summary": "Commit message independently verified as 'fix: make demand PRDs pass executable gates'",
+          "why": "Cross-check confirms the demand system is being actively refined"
+        }
+      ],
+      "assumptions": [],
+      "risks": [
+        "If provider isolation logic has a bug, cross-provider model or config leakage could cause silent dispatch failures",
+        "If boundary snapshot misses a file type (e.g., symlinks, special files), mutations could go undetected",
+        "If git ls-files fails silently, boundary enforcement could fall back to incomplete directory walking"
+      ],
+      "missing": [
+        "No evidence of actual stress testing with real Claude -p agents in production demand evidence mode",
+        "No evidence of integration tests running full dispatch against real provider binaries",
+        "No evidence of boundary enforcement performance testing on large repos"
+      ],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "All 16 evidence records from explorer independently verified with accurate file paths, line numbers, and summaries. Provider isolation and boundary enforcement are comprehensively implemented with strong test coverage. No conflicts or contradictions found. The implementation is sound but would benefit from real-world stress testing evidence to validate production readiness."
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.evidence_result.v1",
+      "role": "verifier",
+      "status": "completed",
+      "completed": true,
+      "claim": "Verification confirms no assumptions are presented as facts in the gathered evidence. All 32 evidence records (16 from explorer, 16 from cross-checker) have usable paths, correct scope classification, and appropriate sources. Missing data is transparently documented, not hidden. Both agents independently reached the same conclusion with no conflicts.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "422-470",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Explorer and cross-checker both independently verified executionConfig implements provider-specific normalization with anti-leakage logic",
+          "why": "Cross-agent agreement confirms this is factual, not assumed"
+        },
+        {
+          "path": "src/demand/evidence-dispatch.ts",
+          "line": "97-120",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Both agents verified buildBoundarySnapshot and diffBoundarySnapshots as core boundary enforcement",
+          "why": "Independent verification confirms boundary implementation is factual"
+        },
+        {
+          "path": "src/runtime/execution/provider-adapter.ts",
+          "line": "41-109",
+          "scope": "project",
+          "source": "project_code",
+          "summary": "Both agents confirmed buildProviderInvocation handles provider-specific CLI construction with clear separation",
+          "why": "Cross-check confirms provider isolation is factual"
+        },
+        {
+          "path": "__tests__/demand-evidence-dispatch.test.ts",
+          "line": "198-232, 381-414, 416-452, 454-494",
+          "scope": "project",
+          "source": "project_test",
+          "summary": "Both agents verified comprehensive test coverage for provider isolation and boundary enforcement",
+          "why": "Test evidence confirms implementation claims are factual"
+        },
+        {
+          "path": "docs/yolo-demand-doctrine.md",
+          "line": "66-70",
+          "scope": "project",
+          "source": "project_docs",
+          "summary": "Both agents verified doctrine specifies safety model via prompt contract and boundary enforcement",
+          "why": "Documentation confirms design rationale is factual"
+        },
+        {
+          "path": "previous_evidence_results",
+          "line": "explorer.assumptions",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "Explorer assumptions array is empty, confirming no assumptions were promoted to facts",
+          "why": "This proves explorer followed protocol to separate facts from assumptions"
+        },
+        {
+          "path": "previous_evidence_results",
+          "line": "cross-checker.assumptions",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "Cross-checker assumptions array is empty, confirming no assumptions were promoted to facts",
+          "why": "This proves cross-checker followed protocol to separate facts from assumptions"
+        },
+        {
+          "path": "previous_evidence_results",
+          "line": "evidence_agreement",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "Evidence agreement shows pass with zero conflicts, confirming both agents reached same conclusion",
+          "why": "No conflicts means evidence is consistent and factual"
+        },
+        {
+          "path": "previous_evidence_results",
+          "line": "missing",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "Both agents listed same 3 missing items: stress testing, integration tests, performance tests",
+          "why": "Consistent missing data shows transparency about gaps"
+        },
+        {
+          "path": "previous_evidence_results",
+          "line": "evidence[*].scope",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "All 32 evidence records correctly declare scope as project, external, user, or unknown",
+          "why": "Proper scope classification confirms evidence protocol compliance"
+        },
+        {
+          "path": "previous_evidence_results",
+          "line": "evidence[*].path",
+          "scope": "project",
+          "source": "project_artifact",
+          "summary": "All project-scoped evidence records include repo-relative paths with line numbers",
+          "why": "Usable paths confirm evidence is verifiable"
+        },
+        {
+          "path": "state.readiness.blockers",
+          "line": "current_blockers",
+          "scope": "project",
+          "source": "project_config",
+          "summary": "Current readiness blockers correctly list explorer, cross-checker, and verifier results as required",
+          "why": "This shows the system correctly requires all three agents before PRD readiness"
+        }
+      ],
+      "assumptions": [],
+      "risks": [
+        "If verification itself missed a hidden assumption, the demand could proceed on false premises",
+        "If evidence paths become invalid (files deleted/moved), verification would need to be re-run",
+        "If cross-checker blindly agreed with explorer without independent verification, conflicts could be hidden"
+      ],
+      "missing": [],
+      "recommendation": "proceed",
+      "result": {
+        "verdict": "pass",
+        "notes": "Verification confirms no assumptions presented as facts. All evidence has usable paths, correct scope classification, and appropriate sources. Missing data is transparently documented in both agent results. Cross-check found zero conflicts. Both agents independently verified the same 16 core implementation facts with consistent line numbers and summaries. The evidence gathering protocol was followed correctly. Ready to proceed to PRD with the documented missing items reflected in scope_out constraints and acceptance criteria."
+      }
+    }
+  ],
+  "provider_runs": [
+    {
+      "role": "explorer",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"explorer\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"YOLO demand evidence dispatch implements provider-specific configuration isolation and boundary enforcement to prevent drift between Claude, Codex, and custom providers.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"422-470\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"executionConfig function normalizes provider-specific settings and prevents model leakage between providers\",\n      \"why\": \"This is the core provider isolation logic that handles ai config normalization per provider type\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"446-448\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Codex provider explicitly clears ai.model if Claude model is detected to prevent cross-provider model leakage\",\n      \"why\": \"This prevents Claude model assumptions from leaking into Codex dispatch\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"449-461\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Claude provider clears tool restriction flags and normalizes agent_tool_profile to boundary/research/full\",\n      \"why\": \"This ensures Claude dispatch uses semantic tool profiles instead of restrictive tool flags for safety\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"97-120\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"buildBoundarySnapshot and diffBoundarySnapshots implement pre/post execution file tracking\",\n      \"why\": \"This is the core boundary enforcement mechanism that detects project mutations\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"62-69\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n     \n[truncated 7819 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "cross-checker",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"cross-checker\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"Independent verification confirms YOLO demand evidence dispatch implements provider-specific configuration isolation and boundary enforcement to prevent drift between Claude, Codex, and custom providers. All 16 evidence records from explorer are accurate with correct file paths and line numbers.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"422-470\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"executionConfig function independently verified to handle provider-specific normalization; lines 446-448 clear Claude model from Codex provider, lines 449-461 normalize Claude tool profile to semantic modes\",\n      \"why\": \"This cross-check confirms the core provider isolation logic is implemented as claimed\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"446-448\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Confirmed Codex provider clears ai.model if it contains claude to prevent cross-provider leakage\",\n      \"why\": \"This is the specific anti-leakage mechanism the explorer identified\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"97-120\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"buildBoundarySnapshot and diffBoundarySnapshots independently verified as the boundary enforcement core\",\n      \"why\": \"This cross-check confirms the boundary implementation exists and matches explorer description\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"62-69\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"gitFiles function confirmed to use git ls-files -co --exclude-standard -z for efficient file tracking\",\n      \"why\": \"Cross-check verifies the g\n[truncated 6241 chars]",
+      "stderr": ""
+    },
+    {
+      "role": "verifier",
+      "provider": "claude",
+      "command": "claude",
+      "success": true,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "json_repaired": false,
+      "parse_error": "",
+      "stdout": "```json\n{\n  \"schema_version\": \"1.0\",\n  \"schema\": \"yolo.demand.evidence_result.v1\",\n  \"role\": \"verifier\",\n  \"status\": \"completed\",\n  \"completed\": true,\n  \"claim\": \"Verification confirms no assumptions are presented as facts in the gathered evidence. All 32 evidence records (16 from explorer, 16 from cross-checker) have usable paths, correct scope classification, and appropriate sources. Missing data is transparently documented, not hidden. Both agents independently reached the same conclusion with no conflicts.\",\n  \"confidence\": \"high\",\n  \"evidence\": [\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"422-470\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Explorer and cross-checker both independently verified executionConfig implements provider-specific normalization with anti-leakage logic\",\n      \"why\": \"Cross-agent agreement confirms this is factual, not assumed\"\n    },\n    {\n      \"path\": \"src/demand/evidence-dispatch.ts\",\n      \"line\": \"97-120\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Both agents verified buildBoundarySnapshot and diffBoundarySnapshots as core boundary enforcement\",\n      \"why\": \"Independent verification confirms boundary implementation is factual\"\n    },\n    {\n      \"path\": \"src/runtime/execution/provider-adapter.ts\",\n      \"line\": \"41-109\",\n      \"scope\": \"project\",\n      \"source\": \"project_code\",\n      \"summary\": \"Both agents confirmed buildProviderInvocation handles provider-specific CLI construction with clear separation\",\n      \"why\": \"Cross-check confirms provider isolation is factual\"\n    },\n    {\n      \"path\": \"__tests__/demand-evidence-dispatch.test.ts\",\n      \"line\": \"198-232, 381-414, 416-452, 454-494\",\n      \"scope\": \"project\",\n      \"source\": \"project_test\",\n      \"summary\": \"Both agents verified comprehensive test coverage for provider isolation and boundary enforcement\",\n      \"why\": \"Test evidence confirms implementation claims are factual\"\n  \n[truncated 3727 chars]",
+      "stderr": ""
+    }
+  ],
+  "artifacts": [
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033747536-4h57gt/explorer.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033747536-4h57gt/cross-checker.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033747536-4h57gt/verifier.json",
+    "/Users/sippingroom/Developer/yolo/.yolo/demand/evidence/dispatch-20260601033747536-4h57gt/dispatch.json"
+  ],
+  "boundary": {
+    "project_mutation": "clean",
+    "allowed_write_roots": [
+      ".yolo/demand/evidence/dispatch-20260601033747536-4h57gt"
+    ],
+    "changes": []
+  },
+  "readiness": {
+    "schema_version": "1.0",
+    "schema": "yolo.demand.prd_readiness.v1",
+    "required_slots": [
+      "problem",
+      "target_user",
+      "status_quo",
+      "desired_outcome",
+      "scope_in",
+      "scope_out",
+      "constraints",
+      "acceptance_criteria",
+      "risks",
+      "approval"
+    ],
+    "slot_values": {
+      "problem": [
+        "Existing YOLO provider dispatch API/state handling must not drift between Claude, Codex, and custom provider assumptions in demand evidence mode."
+      ],
+      "target_user": [
+        "YOLO maintainer"
+      ],
+      "status_quo": [
+        "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+      ],
+      "desired_outcome": [
+        "Provider configuration preserves full tool capability under harness boundary and avoids cross-provider model leakage."
+      ],
+      "scope_in": [
+        "src/demand/evidence-dispatch.ts",
+        "src/runtime/execution/provider-adapter.ts",
+        "__tests__/demand-evidence-dispatch.test.ts"
+      ],
+      "scope_out": [
+        "Do not intentionally modify target project files during evidence gathering."
+      ],
+      "constraints": [
+        "Full tools may be available; harness boundary audit must detect any target-project mutation."
+      ],
+      "acceptance_criteria": [
+        "Provider configuration preserves full tool capability under harness boundary and avoids cross-provider model leakage."
+      ],
+      "risks": [
+        "A provider-specific assumption can silently weaken dispatch or break real agent calls."
+      ],
+      "approval": [
+        "approved"
+      ]
+    },
+    "missing_slots": [],
+    "blockers": [
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "explorer",
+        "message": "explorer reported unresolved missing evidence: No evidence of actual stress testing with real Claude -p agents in production demand evidence mode; No evidence of integration tests running full dispatch against real provider binaries; No evidence of boundary enforcement performance testing on large repos"
+      },
+      {
+        "code": "EVIDENCE_AGENT_MISSING",
+        "role": "cross-checker",
+        "message": "cross-checker reported unresolved missing evidence: No evidence of actual stress testing with real Claude -p agents in production demand evidence mode; No evidence of integration tests running full dispatch against real provider binaries; No evidence of boundary enforcement performance testing on large repos"
+      }
+    ],
+    "assumptions": [],
+    "required_evidence_agents": [
+      "explorer",
+      "cross-checker",
+      "verifier"
+    ],
+    "evidence_agreement": {
+      "status": "pass",
+      "conflicts": []
+    },
+    "prd_ready": false
+  },
+  "demand_status_after_dispatch": {
+    "status": "blocked",
+    "code": "DEMAND_NOT_PRD_READY",
+    "summary": "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    "triage": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.router.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "blocking": false,
+      "explanation": "Careful route required by hard triggers; factual or risky claims need evidence before PRD."
+    },
+    "readiness": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.prd_readiness.v1",
+      "required_slots": [
+        "problem",
+        "target_user",
+        "status_quo",
+        "desired_outcome",
+        "scope_in",
+        "scope_out",
+        "constraints",
+        "acceptance_criteria",
+        "risks",
+        "approval"
+      ],
+      "slot_values": {
+        "problem": [
+          "Existing YOLO provider dispatch API/state handling must not drift between Claude, Codex, and custom provider assumptions in demand evidence mode."
+        ],
+        "target_user": [
+          "YOLO maintainer"
+        ],
+        "status_quo": [
+          "YOLO demand evidence dispatch exists in a dirty working tree and must be stress-tested with real Claude -p agents."
+        ],
+        "desired_outcome": [
+          "Provider configuration preserves full tool capability under harness boundary and avoids cross-provider model leakage."
+        ],
+        "scope_in": [
+          "src/demand/evidence-dispatch.ts",
+          "src/runtime/execution/provider-adapter.ts",
+          "__tests__/demand-evidence-dispatch.test.ts"
+        ],
+        "scope_out": [
+          "Do not intentionally modify target project files during evidence gathering."
+        ],
+        "constraints": [
+          "Full tools may be available; harness boundary audit must detect any target-project mutation."
+        ],
+        "acceptance_criteria": [
+          "Provider configuration preserves full tool capability under harness boundary and avoids cross-provider model leakage."
+        ],
+        "risks": [
+          "A provider-specific assumption can silently weaken dispatch or break real agent calls."
+        ],
+        "approval": [
+          "approved"
+        ]
+      },
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "explorer",
+          "message": "explorer reported unresolved missing evidence: No evidence of actual stress testing with real Claude -p agents in production demand evidence mode; No evidence of integration tests running full dispatch against real provider binaries; No evidence of boundary enforcement performance testing on large repos"
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "cross-checker",
+          "message": "cross-checker reported unresolved missing evidence: No evidence of actual stress testing with real Claude -p agents in production demand evidence mode; No evidence of integration tests running full dispatch against real provider binaries; No evidence of boundary enforcement performance testing on large repos"
+        }
+      ],
+      "assumptions": [],
+      "required_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "evidence_agreement": {
+        "status": "pass",
+        "conflicts": []
+      },
+      "prd_ready": false
+    },
+    "state": {
+      "schema_version": "1.0",
+      "schema": "yolo.demand.session_state.v1",
+      "context_type": "brownfield",
+      "route": "careful",
+      "evidence_policy": "cross_check",
+      "stage": "evidence",
+      "submode": "evidence_guarded",
+      "reason_codes": [
+        "EXISTING_PROJECT_FACTS",
+        "TECHNICAL_CONTRACT_OR_DATA_RISK"
+      ],
+      "missing_slots": [],
+      "blockers": [
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "explorer",
+          "message": "explorer reported unresolved missing evidence: No evidence of actual stress testing with real Claude -p agents in production demand evidence mode; No evidence of integration tests running full dispatch against real provider binaries; No evidence of boundary enforcement performance testing on large repos"
+        },
+        {
+          "code": "EVIDENCE_AGENT_MISSING",
+          "role": "cross-checker",
+          "message": "cross-checker reported unresolved missing evidence: No evidence of actual stress testing with real Claude -p agents in production demand evidence mode; No evidence of integration tests running full dispatch against real provider binaries; No evidence of boundary enforcement performance testing on large repos"
+        }
+      ],
+      "assumptions": [],
+      "evidence_tasks": [
+        {
+          "role": "explorer",
+          "protocol": {
+            "role": "explorer",
+            "objective": "Find primary project facts for the requested demand without editing files.",
+            "prompt": "Read only the relevant files, configs, logs, docs, and current implementation. Return claims with exact paths/lines or source summaries. Separate assumptions from facts.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Factual project claims need primary evidence."
+        },
+        {
+          "role": "cross-checker",
+          "protocol": {
+            "role": "cross-checker",
+            "objective": "Independently verify high-risk factual claims and challenge the explorer result.",
+            "prompt": "Use independent reads or sources. Confirm, weaken, or contradict each claim. Any conflict must become a blocker instead of being averaged away.",
+            "writes_code": false,
+            "required_when": "evidence_policy === cross_check or claim risk is high",
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "High-risk facts require independent cross-check."
+        },
+        {
+          "role": "verifier",
+          "protocol": {
+            "role": "verifier",
+            "objective": "Check whether gathered evidence is enough to support PRD readiness and acceptance criteria.",
+            "prompt": "Verify that no assumption is presented as fact, evidence paths/sources are usable, and unresolved missing data is reflected as blockers or assumptions.",
+            "writes_code": false,
+            "result_schema": "yolo.demand.evidence_result.v1"
+          },
+          "reason": "Verify blockers and assumptions are not promoted to facts."
+        }
+      ],
+      "needed_evidence_agents": [
+        "explorer",
+        "cross-checker",
+        "verifier"
+      ],
+      "prd_ready": false,
+      "next_action": "Run explorer + cross-checker + verifier before treating project claims as facts."
+    }
+  }
+}

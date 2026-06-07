@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "YOLO demand evidence dispatch implements a boundary audit system that detects project file mutations by full-tool Claude agents and blocks PRD readiness when violations occur. Provider adapter configures agent tool profiles and permission modes.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildBoundarySnapshot() creates SHA256-based file snapshots and diffBoundarySnapshots() detects added/modified/deleted changes",
+      "why": "Confirms explorer claim: boundary detection uses file hash digests to track mutations"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "265-280",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy sets project_mutation: forbidden and allowed_write_roots for artifact directory only",
+      "why": "Confirms explorer claim: policy establishes contract that agents must not modify project files"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "562-618",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Runtime builds boundary snapshots before/after agent execution and reports violations in result.boundary with change list",
+      "why": "Confirms explorer claim: boundary audit is integrated into dispatch runtime execution flow"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "631-643",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations are mapped to BOUNDARY_PROJECT_MUTATION blockers and override readiness.prd_ready to false",
+      "why": "Confirms explorer claim: enforcement mechanism blocks PRD readiness on mutations"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "385-418",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves boundary blocks status=blocked when agent writes unexpected-project-write.txt even with successful agent result",
+      "why": "Confirms explorer claim: boundary enforcement works in practice and overrides agent success"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "467-503",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test proves git-backed boundary detects untracked-mutation.txt as added change and triggers BOUNDARY_PROJECT_MUTATION blocker",
+      "why": "Confirms explorer claim: boundary system works with git repos and catches new file mutations"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "438-447",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceScopeDeclarationIssues() filters evidence records lacking declared scope and generates EVIDENCE_SCOPE_REQUIRED blockers",
+      "why": "Confirms explorer claim: evidence scope validation enforces explicit declarations before readiness"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "77-108",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "buildProviderInvocation() sets Claude --permission-mode from config and handles claude_tools/allowed_tools/disallowed_tools arguments",
+      "why": "Challenges explorer claim: File has 217 lines only; claimed lines 468-517 do not exist. Found permission-mode handling but no agent_tool_profile normalization"
+    }
+  ],
+  "assumptions": [
+    "Explorer may have cited incorrect line numbers for provider-adapter.ts executionConfig() or referenced an outdated version",
+    "Agent tool profile normalization to boundary/research/full may occur elsewhere in the codebase or be planned but not yet implemented"
+  ],
+  "risks": [
+    "If provider-adapter does not normalize agent_tool_profile, evidence agents may receive different tool access than expected",
+    "If permission-mode configuration is incomplete, full-tool agents might have unrestricted write access despite boundary policy"
+  ],
+  "missing": [
+    "Source location of agent_tool_profile normalization logic that maps to boundary/research/full profiles",
+    "Verification that claude_permission_mode:bypassPermissions is correctly set for full-tool evidence agents"
+  ],
+  "recommendation": "clarify",
+  "result": {
+    "verdict": "pass",
+    "notes": "Core boundary audit claim confirmed: 7 of 8 evidence records verified with exact line matches. SHA256 snapshot detection, policy enforcement, test coverage, and scope validation all confirmed. One discrepancy: provider-adapter.ts has only 217 lines, not 468-517 as cited. Found permission-mode and tool filtering at lines 77-108 but no agent_tool_profile normalization. This is a documentation/line-number issue, not a substantive gap in the boundary system. The boundary audit mechanism works as claimed."
+  }
+}

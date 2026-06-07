@@ -182,6 +182,34 @@ describe("demand interview", () => {
     assert.equal(demandSession.interview.coverage.follow_up_plan.status, "clear");
   }));
 
+  test("keeps Chinese enumeration phrases as one demand item", () => withRoot((root) => {
+    const session = newSession(root);
+    const criterion = "看板包含 Todo、Doing、Done 三列，卡片可在列之间移动。";
+    const proof = "验收时完成新增列表、新增卡片、编辑、移动、归档、刷新持久化并刷新后仍保留。";
+
+    answer(session, "success_criteria", criterion);
+    answer(session, "success_proof", proof);
+
+    assert.deepEqual(session.answers.success_criteria.normalized.items, [criterion]);
+    assert.deepEqual(session.answers.success_proof.normalized.items, [proof]);
+
+    const input = demandInterviewToDemandInput(session);
+    assert.deepEqual(input.success_criteria, [criterion]);
+    assert.deepEqual(input.proof, [proof]);
+
+    const demandSession = buildDemandSession({
+      objective: "让产品负责人使用中文看板管理任务状态。",
+      target_users: "产品负责人",
+      status_quo: "现在靠表格维护任务状态。",
+      success_criteria: criterion,
+      proof: "新增列表、新增卡片、编辑、移动、归档、刷新持久化",
+    }, { now: "2026-05-29T13:00:00.000Z" });
+
+    assert.equal(demandSession.requirements.active.length, 1);
+    assert.equal(demandSession.requirements.active[0].text, criterion);
+    assert.deepEqual(demandSession.prd_intake.success_proof, ["新增列表、新增卡片、编辑、移动、归档、刷新持久化"]);
+  }));
+
   test("preserves follow-up warnings and quality metadata during PRD conversion", () => withRoot((root) => {
     const session = answerAllRequired(newSession(root));
     answer(session, "target_users", "API");

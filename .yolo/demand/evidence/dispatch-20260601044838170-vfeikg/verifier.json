@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "verifier",
+  "status": "completed",
+  "completed": true,
+  "claim": "Previous evidence agent results correctly separate facts from assumptions, provide usable evidence paths, and have no unresolved missing data. The gathered evidence is sufficient to support PRD readiness.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "456-462",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Evidence mode clears Claude tool restriction flags: settings='', claude_tools='', claude_allowed_tools='', claude_disallowed_tools='', claude_no_session_persistence=true.",
+      "why": "Primary evidence that cross-provider tool flag leakage is prevented by explicit clearing."
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "43-75",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Codex and custom providers have no tool restriction parameters in their CLI contracts.",
+      "why": "Supports evidence claim that provider configuration uses provider-specific patterns without tool flags."
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "198-273",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Tests verify provider isolation, tool flag clearing, and boundary enforcement across Claude and Codex.",
+      "why": "Test evidence confirms implementation matches claimed behavior."
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "97-121",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Provider-agnostic boundary enforcement using git-backed snapshot detection with allowed roots exclusion.",
+      "why": "Evidence that mutation detection works regardless of provider used."
+    },
+    {
+      "path": "explorer_result.json",
+      "line": "1",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Explorer evidence result: 13 evidence records, 4 assumptions, 3 risks, missing=[], verdict=pass.",
+      "why": "Explorer completed with structured evidence and clear assumption separation."
+    },
+    {
+      "path": "cross_checker_result.json",
+      "line": "1",
+      "scope": "project",
+      "source": "project_artifact",
+      "summary": "Cross-checker evidence result: 10 evidence records independently verifying explorer claim, missing=[], verdict=pass.",
+      "why": "Cross-checker independently confirmed explorer findings with no conflicts."
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If a provider other than Claude gains tool restriction flags, the current clearing logic would not apply to them.",
+    "If git is not available or repository state is dirty, boundary detection may have false positives or miss changes.",
+    "Model value clearing for Codex uses string matching 'claude' which could be overly aggressive or miss other patterns."
+  ],
+  "missing": [],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Evidence verification complete: explorer and cross-checker both correctly separated facts from assumptions, provided usable project-scoped evidence paths, and independently confirmed the claim. No missing data remains. All PRD slots are populated. Acceptance criteria supported by code and test evidence. Risks are documented but not blockers."
+  }
+}

@@ -38,6 +38,7 @@ export function appendScopeAuditRecord({
   outOfScope = [],
   targetFiles = [],
   modified = [],
+  required = true,
   appendFileSync = defaultAppendFileSync,
   nowIso,
 } = {}) {
@@ -49,7 +50,13 @@ export function appendScopeAuditRecord({
     appendFileSync(auditPath, `${JSON.stringify(record)}\n`);
     return { written: true, record };
   } catch (error) {
-    return { written: false, record, error: error.message };
+    return {
+      written: false,
+      record,
+      reason: "scope_audit_write_failed",
+      error: error.message,
+      blocked: required !== false,
+    };
   }
 }
 
@@ -90,6 +97,7 @@ export function applyScopeAudit({
   outOfScope = [],
   targetFiles = [],
   modified = [],
+  required = true,
   log = () => {},
   appendRecord = appendScopeAuditRecord,
 } = {}) {
@@ -98,8 +106,17 @@ export function applyScopeAudit({
     log(entry.id, entry.marker, entry.message);
   }
   const auditResult = decision.audit
-    ? appendRecord({ auditPath, ...decision.audit })
+    ? appendRecord({ auditPath, ...decision.audit, required })
     : { written: false, skipped: true, reason: "no_out_of_scope" };
+  if (auditResult?.error) {
+    if (required !== false) {
+      log(task.id, "!!", `scope audit write failed: ${auditResult.error}`);
+      const error = new Error(`scope_audit_write_failed: ${auditResult.error}`);
+      error.auditResult = auditResult;
+      throw error;
+    }
+    log(task.id, "WARN", `scope audit skipped: ${auditResult.error}`);
+  }
   return { decision, auditResult };
 }
 
@@ -120,6 +137,28 @@ export function buildDryRunOutOfScopeBlock({
     blockReason: `out_of_scope_files: ${outOfScope.join(", ")}`,
     outOfScope,
   };
+}
+
+export function buildOutOfScopeBlock({
+  hasRealCode = false,
+  businessFiles = [],
+  metadataFiles = [],
+  outOfScope = [],
+} = {}) {
+  if (outOfScope.length === 0) return null;
+  return {
+    committed: false,
+    hasRealCode,
+    businessFiles,
+    metadataFiles,
+    blocked: true,
+    blockReason: `out_of_scope_files: ${outOfScope.join(", ")}`,
+    outOfScope,
+  };
+}
+
+function uniqueFiles(files = []) {
+  return [...new Set(files.filter(Boolean))];
 }
 
 export function buildCommitSkipDecision({
@@ -176,6 +215,7 @@ export async function updateDocsBeforeCommit({
   task = {},
   modifiedFiles = [],
   status = "PASS",
+  required = true,
   updateDocs,
   importDocUpdater = () => import("./doc-updater.js"),
 } = {}) {
@@ -190,12 +230,22 @@ export async function updateDocsBeforeCommit({
   } catch (error) {
     return {
       updated: false,
-      skipped: true,
+      skipped: required === false,
+      ...(required === false ? { warning: true } : { blocked: true }),
       reason: "doc_update_failed",
       error: error?.message || String(error),
       payload,
     };
   }
+}
+
+function buildCommitFailureRecord({ commitResult = {}, result = {} } = {}) {
+  const reason = commitResult.reason || commitResult.commitWarning || "commit_failed";
+  return {
+    ...result,
+    commitFailure: reason,
+    ...(commitResult.error ? { commitError: commitResult.error } : {}),
+  };
 }
 
 export function buildCommitResultDecision({
@@ -222,28 +272,6 @@ export function buildCommitResultDecision({
       result: { ...result, committed: true },
     };
   }
-  if (commitResult.nonBlocking === true) {
-    const reason = commitResult.reason || "commit_failed";
-    return {
-      status: "commit_warning",
-      logs: [{
-        id: task.id,
-        marker: "WARN",
-        message: `commit 未完成但不阻塞已通过 gate 的合并: ${reason}`,
-      }],
-      events: [{
-        event: "task_commit_warning",
-        data: { task: task.id, reason, error: commitResult.error || null },
-      }],
-      refreshBaselines: false,
-      result: {
-        ...result,
-        commitWarning: reason,
-        commitError: commitResult.error,
-        nonBlocking: true,
-      },
-    };
-  }
   if (commitResult.reason === "doc_retry_failed") {
     return {
       status: "doc_retry_failed",
@@ -254,19 +282,20 @@ export function buildCommitResultDecision({
       }],
       events: [],
       refreshBaselines: false,
-      result,
+      result: buildCommitFailureRecord({ commitResult, result }),
     };
   }
+  const failureReason = commitResult.reason || commitResult.commitWarning || "commit_failed";
   return {
-    status: "commit_failed",
+    status: failureReason === "git_add_failed" ? "git_add_failed" : "commit_failed",
     logs: [{
       id: task.id,
       marker: "!!",
-      message: "commit 失败，worktree 已 merge，跳过 rollback",
+      message: `commit 失败，worktree 已 merge，跳过 rollback: ${failureReason}`,
     }],
     events: [],
     refreshBaselines: false,
-    result,
+    result: buildCommitFailureRecord({ commitResult, result }),
   };
 }
 
@@ -278,6 +307,7 @@ export async function runTaskCommitFlow({
   businessFiles = [],
   metadataFiles = [],
   outOfScope = [],
+  docUpdateRequired = true,
   mode = "fix",
   log = () => {},
   emitEvent = () => {},
@@ -286,25 +316,55 @@ export async function runTaskCommitFlow({
   importDocUpdater,
   commitChanges = commitTaskChanges,
 } = {}) {
+  const effectiveOutOfScope = uniqueFiles(outOfScope);
   const dryRunOutOfScopeBlock = buildDryRunOutOfScopeBlock({
     task,
     hasRealCode,
     businessFiles,
     metadataFiles,
-    outOfScope,
+    outOfScope: effectiveOutOfScope,
   });
   if (dryRunOutOfScopeBlock) {
     return { status: "blocked", result: dryRunOutOfScopeBlock };
+  }
+
+  const outOfScopeBlock = buildOutOfScopeBlock({
+    task,
+    hasRealCode,
+    businessFiles,
+    metadataFiles,
+    outOfScope: effectiveOutOfScope,
+  });
+  if (outOfScopeBlock) {
+    return { status: "blocked", result: outOfScopeBlock };
   }
 
   const docsResult = await updateDocsBeforeCommit({
     rootDir,
     task,
     modifiedFiles: code,
+    required: docUpdateRequired,
     updateDocs,
     importDocUpdater,
   });
   if (docsResult.reason === "doc_update_failed") {
+    if (docsResult.blocked) {
+      const blockReason = `doc_update_failed: ${docsResult.error}`;
+      log(task.id, "!!", `doc update failed: ${docsResult.error}`);
+      return {
+        status: "blocked",
+        docsResult,
+        result: {
+          committed: false,
+          hasRealCode,
+          businessFiles,
+          metadataFiles,
+          blocked: true,
+          blockReason,
+          outOfScope: effectiveOutOfScope,
+        },
+      };
+    }
     log(task.id, "WARN", `doc update skipped: ${docsResult.error}`);
   }
   const skipDecision = buildCommitSkipDecision({
@@ -313,7 +373,7 @@ export async function runTaskCommitFlow({
     hasRealCode,
     businessFiles,
     metadataFiles,
-    outOfScope,
+    outOfScope: effectiveOutOfScope,
   });
   if (skipDecision) {
     log(skipDecision.log.id, skipDecision.log.marker, skipDecision.log.message);
@@ -400,7 +460,6 @@ export function commitTaskChanges({
       committed: false,
       retried: false,
       reason: "git_add_failed",
-      nonBlocking: true,
       error: describeGitError(error),
     };
   }
@@ -428,7 +487,6 @@ export function commitTaskChanges({
           committed: false,
           retried: true,
           reason: "doc_retry_failed",
-          nonBlocking: true,
           error: describeGitError(error),
         };
       }
@@ -439,7 +497,6 @@ export function commitTaskChanges({
       committed: false,
       retried: false,
       reason: "commit_failed",
-      nonBlocking: true,
       error: describeGitError(error),
     };
   }

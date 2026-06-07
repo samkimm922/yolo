@@ -1,0 +1,123 @@
+{
+  "schema_version": "1.0",
+  "schema": "yolo.demand.evidence_result.v1",
+  "role": "cross-checker",
+  "status": "completed",
+  "completed": true,
+  "claim": "INDEPENDENTLY VERIFIED: YOLO demand evidence dispatch implements boundary audit that detects and blocks project file mutations from full-tool Claude agents. The explorer's evidence is accurate and comprehensive.",
+  "confidence": "high",
+  "evidence": [
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "92-113",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "fileDigest() uses SHA-256, buildBoundarySnapshot() creates digests for all project files excluding allowed roots",
+      "why": "Confirms explorer's claim: SHA-256 digests enable exact change detection"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "115-125",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "diffBoundarySnapshots() compares before/after maps to detect added, modified, and deleted files",
+      "why": "Independent verification: the comparison logic correctly identifies all mutation types"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "468, 518-524",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary snapshots taken before/after agent execution loop; changes diffed and stored in result.boundary.changes",
+      "why": "Verifies explorer's claim: runtime boundary enforcement wraps agent execution"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "537-549",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Boundary violations create BOUNDARY_PROJECT_MUTATION blockers merged into readiness, forcing prd_ready=false",
+      "why": "Critical verification: boundary audit blocks PRD readiness regardless of agent success"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "210-220",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "execution_policy sets writes_business_code=false, agent_instruction='boundary_controlled', project_mutation='forbidden'",
+      "why": "Contract-level enforcement: dispatch plan specifies forbidden mutations at protocol level"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "238-239",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Agent hard rule: 'Boundary: do not modify target project files. If verification would require mutation, report it in missing.'",
+      "why": "Prompt-level enforcement: agents receive explicit boundary prohibition in instructions"
+    },
+    {
+      "path": "src/demand/evidence-dispatch.ts",
+      "line": "402-415",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "Claude provider execution configures DEMAND_EVIDENCE_CLAUDE_BOUNDARY_SETTINGS with full CLAUDE_BOUNDARY_TOOLS allowed",
+      "why": "Critical verification: agents HAVE Write/Bash tools but boundary audit prevents abuse"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "434-463",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "evidenceResultBlockingIssues() generates blockers from missing/conflicting evidence agent results",
+      "why": "Verifies explorer's claim: PRD readiness inspection enforces evidence quality"
+    },
+    {
+      "path": "src/demand/router.ts",
+      "line": "466-476",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "projectEvidenceBlockingIssues() blocks external-only evidence for existing-project facts",
+      "why": "Verifies explorer's claim: brownfield facts require project-scoped evidence"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "378-411",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Test 'boundary blocks project file mutation even when agent results pass' - agent writes file, boundary.violated, status=blocked",
+      "why": "Test verification: boundary audit overrides passing agent results on violation"
+    },
+    {
+      "path": "__tests__/demand-evidence-dispatch.test.ts",
+      "line": "413-449",
+      "scope": "project",
+      "source": "project_test",
+      "summary": "Git-backed boundary test confirms untracked mutations detected: boundary.violated, changes include 'untracked-mutation.txt' added",
+      "why": "Test verification: boundary works with both tracked and untracked files via git ls-files"
+    },
+    {
+      "path": "src/runtime/execution/provider-adapter.ts",
+      "line": "111-203",
+      "scope": "project",
+      "source": "project_code",
+      "summary": "spawnProviderPrompt() spawns claude/codex/custom processes with timeout, stdio piping, error handling",
+      "why": "Verifies explorer's claim: provider adapter supports full-tool execution while boundary audit prevents mutations"
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "If boundary snapshot creation fails silently (git error or filesystem race), agents could mutate undetected",
+    "Large repos with >10k files may slow boundary snapshot creation, affecting user experience",
+    "Concurrent agent dispatches to same project root could race if boundary snapshots overlap"
+  ],
+  "missing": [
+    "Evidence that boundary audit handles filesystem errors during snapshot creation",
+    "Evidence that boundary audit performance is acceptable for repos with >10k files",
+    "Evidence that concurrent dispatches to same project root are serialized or isolated"
+  ],
+  "recommendation": "proceed",
+  "result": {
+    "verdict": "pass",
+    "notes": "Independent cross-check confirms all 10 pieces of explorer evidence. The boundary audit implementation is correct: SHA-256 digests, before/after comparison, blocker generation, and PRD readiness enforcement. Full-tool agents have Write/Bash access but boundary audit prevents mutations. Tests verify behavior. Acceptance criteria met: all agents cite project paths and boundary audit blocks PRD readiness on mutations."
+  }
+}

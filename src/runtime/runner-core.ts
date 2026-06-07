@@ -105,8 +105,7 @@ const MAX_REVIEW_ROUNDS = 5;
 const MAX_REVIEW_TASKS_PER_ROUND = config.runner.max_review_tasks_per_round ?? 5;
 const startTime = Date.now();
 const progress = { total: 0, done: 0, failed: 0 };
-let CURRENT_RUN_FILE = runnerContext.currentRunFile, EXPANDED_TASKS_FILE = runnerContext.expandedTasksFile;
-let OUTPUT_LOG = runnerContext.outputLog;
+let CURRENT_RUN_FILE = runnerContext.currentRunFile, EXPANDED_TASKS_FILE = runnerContext.expandedTasksFile, OUTPUT_LOG = runnerContext.outputLog, activeRunId = null;
 process.env.YOLO_LOOP = "1";
 
 function applyRunnerContext(options = {}) {
@@ -129,6 +128,7 @@ function applyRunnerContext(options = {}) {
 
 const runnerLedgerWriters = createRunnerLedgerWriters({
   getStateDir: () => STATE_DIR,
+  getRunId: () => activeRunId,
   appendStateEvent,
   appendRunEvent,
 });
@@ -291,7 +291,11 @@ function updatePrdTaskStatus(prdPath, taskId, update) {
 }
 
 function writeTaskResult(record) {
-  return appendTaskResult(RESULTS_FILE, record);
+  return appendTaskResult(RESULTS_FILE, record, {
+    runId: activeRunId,
+    workspaceRoot: ROOT,
+    allowInitialAttempt: true,
+  });
 }
 
 function recordTaskTransition(prdPath, transition) {
@@ -500,68 +504,72 @@ export async function run(prdPath, options = {}) {
   if (options.mode) globalMode = options.mode;
   // Generate run_id for this session
   const runId = options.runId || options.run_id || generateRunId();
+  activeRunId = runId;
+  try {
+    runPreExecutionGates(prdPath, { exitOnFailure: exitOnComplete });
 
-  runPreExecutionGates(prdPath, { exitOnFailure: exitOnComplete });
+    const resumeCompleted = prepareRunStartup({
+      runId,
+      prdPath,
+      paths: {
+        stateDir: STATE_DIR,
+        runtimeDir: RUNTIME_DIR,
+        expandedTasksFile: EXPANDED_TASKS_FILE,
+        resultsFile: RESULTS_FILE,
+      },
+      config,
+      rootDir: ROOT,
+      yoloRoot: STATE_ROOT,
+      exitOnComplete,
+      taskCountsAsCompleted,
+      initTaskLogs,
+      writeCurrentRun,
+      startProgressApiServer: options.startProgressServer === false ? () => {} : startEmbeddedProgressServer,
+      initializeBaselines: options.initializeBaselines !== false,
+      logProgress: logP,
+      runnerError,
+    });
 
-  const resumeCompleted = prepareRunStartup({
-    runId,
-    prdPath,
-    paths: {
+    return await runTaskPipeline({
+      runId,
+      prdPath,
+      resumeCompleted,
+      exitOnComplete,
+      sessionTimeoutHours: config.runner.session_timeout_h,
+      maxReviewRounds: MAX_REVIEW_ROUNDS,
+      maxReviewTasksPerRound: MAX_REVIEW_TASKS_PER_ROUND,
+      projectRoot: ROOT,
+      stateRoot: STATE_ROOT,
+      toolsRoot: PACKAGE_ROOT,
       stateDir: STATE_DIR,
       runtimeDir: RUNTIME_DIR,
       expandedTasksFile: EXPANDED_TASKS_FILE,
-      resultsFile: RESULTS_FILE,
-    },
-    config,
-    rootDir: ROOT,
-    yoloRoot: STATE_ROOT,
-    exitOnComplete,
-    taskCountsAsCompleted,
-    initTaskLogs,
-    writeCurrentRun,
-    startProgressApiServer: options.startProgressServer === false ? () => {} : startEmbeddedProgressServer,
-    initializeBaselines: options.initializeBaselines !== false,
-    logProgress: logP,
-    runnerError,
-  });
-
-  return runTaskPipeline({
-    runId,
-    prdPath,
-    resumeCompleted,
-    exitOnComplete,
-    sessionTimeoutHours: config.runner.session_timeout_h,
-    maxReviewRounds: MAX_REVIEW_ROUNDS,
-    maxReviewTasksPerRound: MAX_REVIEW_TASKS_PER_ROUND,
-    projectRoot: ROOT,
-    stateRoot: STATE_ROOT,
-    toolsRoot: PACKAGE_ROOT,
-    stateDir: STATE_DIR,
-    runtimeDir: RUNTIME_DIR,
-    expandedTasksFile: EXPANDED_TASKS_FILE,
-    progress,
-    startTimeMs: startTime,
-    progressServerProc,
-    loadPRD,
-    mainLoop,
-    taskPostconditionsPass,
-    updateTaskStatus: (id, update) => updatePrdTaskStatus(prdPath, id, update),
-    appendUnique,
-    normalizeRepoPath: (filePath) => normalizeRepoPathForRoot(filePath, { rootDir: ROOT }),
-    setGlobalTimeout: _setGlobalTimeout,
-    logRun,
-    logProgress: logP,
-    writeStateSnapshot,
-    writeRunReport,
-    archiveCurrentRun,
-    execFileSync,
-    processExecPath: process.execPath,
-    logReviewStart,
-    logReviewGate,
-    logReviewIssue,
-    logReviewDone,
-    logReviewError,
-  });
+      progress,
+      startTimeMs: startTime,
+      progressServerProc,
+      loadPRD,
+      mainLoop,
+      taskPostconditionsPass,
+      updateTaskStatus: (id, update) => updatePrdTaskStatus(prdPath, id, update),
+      appendUnique,
+      normalizeRepoPath: (filePath) => normalizeRepoPathForRoot(filePath, { rootDir: ROOT }),
+      setGlobalTimeout: _setGlobalTimeout,
+      logRun,
+      logProgress: logP,
+      writeStateSnapshot,
+      writeRunReport,
+      archiveCurrentRun,
+      execFileSync,
+      processExecPath: process.execPath,
+      logReviewStart,
+      logReviewGate,
+      logReviewIssue,
+      logReviewDone,
+      logReviewError,
+    });
+  } finally {
+    if (activeRunId === runId) activeRunId = null;
+  }
 }
 
 export async function runCli(argv = process.argv) {
@@ -589,8 +597,4 @@ export async function runCli(argv = process.argv) {
       execSync,
     });
   }
-}
-
-if (isMain) {
-  runCli();
 }
