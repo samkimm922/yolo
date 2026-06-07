@@ -236,7 +236,7 @@ assert.equal(typeof sdk.eval.buildBenchmarkPlan, "function");
 assert.equal(typeof sdk.provider.inspectProviderRuntimeMatrix, "function");
 assert.equal(typeof sdk.provider.inspectProviderCliDryRunMatrix, "function");
 const providerMatrix = sdk.provider.inspectProviderRuntimeMatrix({
-  commandExists: (command) => ["claude", "codex", "cat"].includes(command),
+  commandExists: (command) => ["claude", "codex", "cat", "sh"].includes(command),
   now: () => 123,
   random: () => 0.5,
   providerConfigs: {
@@ -251,7 +251,7 @@ assert.equal(
   join(projectRoot, ".yolo", "state", "runtime", "codex-output-123-8.txt")
 );
 const providerCliDryRun = sdk.provider.inspectProviderCliDryRunMatrix({
-  commandExists: (command) => ["claude", "codex", "cat"].includes(command),
+  commandExists: (command) => ["claude", "codex", "cat", "sh"].includes(command),
   now: () => 123,
   random: () => 0.5,
   providerConfigs: {

@@ -170,6 +170,16 @@ function modifiedFileCondition(taskId, index, file) {
   };
 }
 
+function draftDemandQualityReport() {
+  return {
+    schema_version: "1.0",
+    schema: "yolo.demand.quality.v1",
+    status: "blocked",
+    total_score: 0,
+    dimensions: [],
+  };
+}
+
 export function buildProjectContext(brief = {}, input = {}, options = {}) {
   const now = nowIso(options);
   const idea = clean(brief.idea || input.idea || input.objective || input.requirement);
@@ -353,6 +363,7 @@ export function buildPrdFromDiscovery(discovery = {}, input = {}, options = {}) 
 
   const title = clean(input.title || discovery.project?.title || discovery.brief?.idea || "Discovery PRD").slice(0, 120);
   const prdId = input.prd_id || input.prdId || `PRD-${idDate(now)}-${slug(title)}`;
+  const draftQuality = draftDemandQualityReport();
   const tasks = requirements.map((requirement, index) => {
     const taskId = `DISC-${requirement.id}-${String(index + 1).padStart(3, "0")}`;
     return {
@@ -361,7 +372,7 @@ export function buildPrdFromDiscovery(discovery = {}, input = {}, options = {}) 
       description: requirement.text,
       priority: input.priority || "P1",
       type: input.task_type || input.taskType || "feature",
-      status: "pending",
+      status: "needs_contract_review",
       task_kind: "discovery_requirement",
       source_finding_ids: [requirement.id],
       depends_on: [],
@@ -388,7 +399,11 @@ export function buildPrdFromDiscovery(discovery = {}, input = {}, options = {}) 
   return {
     schema: DISCOVERY_PRD_SCHEMA,
     schema_version: "1.0",
-    status: discovery.status === "warning" ? "warning" : "success",
+    status: "draft",
+    executable: false,
+    draft_reason: discovery.ready_for_prd === true
+      ? "Discovery PRDs require approved demand and runner preflight before execution."
+      : "Discovery readiness is not a clean PRD pass; this artifact is a non-executable draft.",
     prd: {
       $schema: "https://yolo.dev/schemas/prd-v2.schema.json",
       version: "2.0",
@@ -407,7 +422,30 @@ export function buildPrdFromDiscovery(discovery = {}, input = {}, options = {}) 
       generated_by: "yolo-review-agent",
       generated_at: now,
       base_commit: readBaseCommit(options),
-      source: "discovery",
+      source: "discovery_draft",
+      execution_mode: "draft",
+      demand_contract_required: true,
+      demand: {
+        id: discovery.id,
+        source: "discovery",
+        approval: {
+          approved: false,
+          effective_for_prd: false,
+          approval_source: "pending_human_approval",
+        },
+        quality_report: draftQuality,
+        execution_readiness: {
+          quality_report: draftQuality,
+        },
+      },
+      execution_readiness: {
+        level: "draft",
+        afk_ready: false,
+        source: "discovery_draft",
+        atomic_tasks: false,
+        quality_status: "blocked",
+        quality_report: draftQuality,
+      },
       requirements: requirements.map((requirement) => ({
         id: requirement.id,
         text: requirement.text,
@@ -430,6 +468,9 @@ export function buildPrdFromDiscovery(discovery = {}, input = {}, options = {}) 
       target_files: targetFiles,
     },
     warnings: discovery.readiness?.warnings || [],
-    next_actions: ["Run yolo check on the compiled PRD before executing PI/runner."],
+    next_actions: [
+      "Convert this draft through approved demand before execution.",
+      "Run runner preflight only after demand approval and demand contract are present.",
+    ],
   };
 }

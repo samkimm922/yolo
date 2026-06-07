@@ -10,7 +10,7 @@ YOLO 是面向 Codex / Claude Code 的项目生命周期 Team Agent 和公开 SD
 /yolo 我有一个想法，帮我从零开始规划这个项目，先不要改代码。
 ```
 
-如果已经知道阶段，Claude Code 可以直接用 `/yolo-demand`、`/yolo-prd`、`/yolo-check`、`/yolo-run`。Codex 菜单只暴露 `/yolo` 总入口，阶段意图写进同一句话里，例如“需求沟通”“生成 PRD”“检查 PRD”“执行已检查 PRD”。旧的 `/yolo-brainstorm`、`/yolo-interview`、`/yolo-discover`、`/yolo-discuss` 仍保留为兼容路由，但不再要求用户记这些入口。
+如果已经知道阶段，Claude Code 可以直接用 8 个稳定入口：`/yolo-status`、`/yolo-demand`、`/yolo-spec`、`/yolo-tasks`、`/yolo-check`、`/yolo-run`、`/yolo-review`、`/yolo-release`。Codex 菜单只暴露 `/yolo` 总入口，阶段意图写进同一句话里，例如“需求沟通”“生成 PRD/spec”“检查 PRD”“执行已检查 PRD”。旧的 brainstorm/interview/discover/discuss/plan/prd/accept/ship 等入口只保留为隐藏兼容路由，不再作为默认菜单。
 
 YOLO 的主线是：
 
@@ -28,7 +28,7 @@ idea
   -> learn
 ```
 
-默认不会改业务代码。`/yolo-demand`、需求兼容别名、`/yolo-plan`、`/yolo-prd`、`/yolo-check` 都是阶段停止点：完成本阶段后必须停住，只报告产物、缺口和下一步建议。只有用户明确确认执行、PRD/spec 检查通过、gate 可运行、范围清楚时，`/yolo-run` 或 `/yolo-fix` 才能进入写代码路径。
+默认不会改业务代码。`/yolo-demand`、`/yolo-spec`、`/yolo-tasks`、`/yolo-check` 都是阶段停止点：完成本阶段后必须停住，只报告产物、缺口和下一步建议。只有用户明确确认执行、PRD/spec 检查通过、gate 可运行、范围清楚时，`/yolo-run` 才能进入写代码路径。
 
 ## 产品形态
 
@@ -69,23 +69,23 @@ scripts/yolo/
 
 ### Codex / Claude Code 用户
 
-先让 agent 安装 YOLO skill/command 集成。Codex 只需要 `/yolo` 一个入口自动判断阶段；Claude Code 可以继续用 `/yolo-demand`、`/yolo-prd`、`/yolo-check` 等真实 slash commands：
+先让 agent 安装 YOLO skill/command 集成。Codex 只需要 `/yolo` 一个入口自动判断阶段；Claude Code 可以使用 `/yolo` 加 8 个稳定 slash commands：
 
 ```text
-请把 YOLO 安装到当前项目和我的 Agent 工具里。我要在 Codex 里只看到 /yolo 统一入口，由它自动判断需求、PRD、检查和执行阶段；Claude Code 可以保留 /yolo-demand、/yolo-prd、/yolo-check、/yolo-run 等真实 slash commands。执行前先告诉我会写哪些文件。
+请把 YOLO 安装到当前项目和我的 Agent 工具里。我要在 Codex 里只看到 /yolo 统一入口，由它自动判断需求、PRD、检查和执行阶段；Claude Code 只生成 /yolo 加 /yolo-status、/yolo-demand、/yolo-spec、/yolo-tasks、/yolo-check、/yolo-run、/yolo-review、/yolo-release 这些稳定 slash commands。执行前先告诉我会写哪些文件。
 YOLO 路径是 <你的 YOLO 安装目录>。
 ```
 
 安装后，如果你不确定该走哪一步，就在 Codex / Claude Code 里说：
 
 ```text
-/yolo 我要给库存系统增加低库存预警，先只生成计划，不要改代码。
+/yolo 我要给库存系统增加低库存预警，先读状态并选择安全阶段，不要改代码。
 ```
 
 最容易记的一句话入口：
 
 ```text
-/yolo 你的需求，先只生成计划，不要改代码。
+/yolo 你的需求，先读状态并选择安全阶段，不要改代码。
 ```
 
 Codex 需求阶段也走同一个入口：

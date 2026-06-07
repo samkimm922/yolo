@@ -198,4 +198,155 @@ describe("runner runtime final verdict", () => {
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
+
+  test("returns error when mocked runner reports non-clean status with exit code 0", async () => {
+    for (const status of ["warning", "dry_run", "not_run", "ready"]) {
+      const projectRoot = tempProject();
+      const stateRoot = join(projectRoot, ".yolo");
+      const prdPath = join(stateRoot, "data/prd/current/runtime.json");
+      try {
+        writeFileSync(join(projectRoot, "README.md"), "# runner runtime\n", "utf8");
+        writeRunnablePrd(prdPath);
+        const check = prepareLifecycle(projectRoot, stateRoot, prdPath);
+        assert.notEqual(check.status, "blocked", JSON.stringify(check.blockers, null, 2));
+
+        const result = await runRunnerRuntime({
+          prdPath,
+          projectRoot,
+          stateRoot,
+          startProgressServer: false,
+          initializeBaselines: false,
+        }, {
+          runner: {
+            run: async () => ({
+              status,
+              summary: "runner did not produce clean execution status",
+              exit_code: 0,
+              run_id: "run-mock",
+              prd: prdPath,
+              completed: ["FIX-RUNTIME-001"],
+              failed: [],
+              skipped: [],
+              blocked: [],
+              contractReview: [],
+              report: {
+                status: "success",
+                summary: { failed: 0, blocked: 0, evidence_failures: 0 },
+              },
+            }),
+          },
+        });
+
+        assert.equal(result.status, "error", status);
+        assert.equal(result.exit_code, 1, status);
+        assert.ok(result.final_verdict.issues.some((issue) => issue.code === "RUNNER_RESULT_STATUS_ERROR"), status);
+      } finally {
+        rmSync(projectRoot, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("returns error when mocked runner claims success without run report artifacts", async () => {
+    const projectRoot = tempProject();
+    const stateRoot = join(projectRoot, ".yolo");
+    const prdPath = join(stateRoot, "data/prd/current/runtime.json");
+    try {
+      writeFileSync(join(projectRoot, "README.md"), "# runner runtime\n", "utf8");
+      writeRunnablePrd(prdPath);
+      const check = prepareLifecycle(projectRoot, stateRoot, prdPath);
+      assert.notEqual(check.status, "blocked", JSON.stringify(check.blockers, null, 2));
+
+      const result = await runRunnerRuntime({
+        prdPath,
+        projectRoot,
+        stateRoot,
+        startProgressServer: false,
+        initializeBaselines: false,
+      }, {
+        runner: {
+          run: async () => ({
+            status: "success",
+            summary: "runner completed without evidence artifacts",
+            exit_code: 0,
+            run_id: "run-mock",
+            prd: prdPath,
+            completed: ["FIX-RUNTIME-001"],
+            failed: [],
+            skipped: [],
+            blocked: [],
+            contractReview: [],
+            report: {
+              status: "success",
+              summary: { failed: 0, blocked: 0, evidence_failures: 0 },
+            },
+            final_answer: {
+              status: "success",
+              outcome: "success",
+              checks: [{ name: "tasks", status: "pass" }],
+              blockers: [],
+            },
+          }),
+        },
+      });
+
+      assert.equal(result.status, "error");
+      assert.equal(result.exit_code, 1);
+      assert.ok(result.final_verdict.issues.some((issue) => issue.code === "RUN_REPORT_ARTIFACT_MISSING"));
+      assert.ok(result.final_verdict.issues.some((issue) => issue.code === "FINAL_ANSWER_ARTIFACT_MISSING"));
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("returns error when mocked runner claims success with dryRun flag", async () => {
+    const projectRoot = tempProject();
+    const stateRoot = join(projectRoot, ".yolo");
+    const prdPath = join(stateRoot, "data/prd/current/runtime.json");
+    try {
+      writeFileSync(join(projectRoot, "README.md"), "# runner runtime\n", "utf8");
+      writeRunnablePrd(prdPath);
+      const check = prepareLifecycle(projectRoot, stateRoot, prdPath);
+      assert.notEqual(check.status, "blocked", JSON.stringify(check.blockers, null, 2));
+
+      const result = await runRunnerRuntime({
+        prdPath,
+        projectRoot,
+        stateRoot,
+        startProgressServer: false,
+        initializeBaselines: false,
+      }, {
+        runner: {
+          run: async () => ({
+            status: "success",
+            summary: "runner dry-run result",
+            exit_code: 0,
+            dryRun: true,
+            run_id: "run-mock",
+            prd: prdPath,
+            completed: ["FIX-RUNTIME-001"],
+            failed: [],
+            skipped: [],
+            blocked: [],
+            contractReview: [],
+            report: {
+              status: "success",
+              summary: { failed: 0, blocked: 0, evidence_failures: 0 },
+            },
+            final_answer: {
+              status: "success",
+              outcome: "success",
+              checks: [{ name: "tasks", status: "pass" }],
+              blockers: [],
+            },
+          }),
+        },
+      });
+
+      assert.equal(result.status, "error");
+      assert.equal(result.exit_code, 1);
+      assert.ok(result.final_verdict.issues.some((issue) => issue.code === "RUNNER_RESULT_DRY_RUN"));
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
 });

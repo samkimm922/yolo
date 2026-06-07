@@ -204,7 +204,9 @@ describe("progress dashboard UI evidence", () => {
         writeLifecycle: false,
       });
 
-      assert.equal(result.status, "success");
+      assert.equal(result.status, "dry_run");
+      assert.equal(result.code, "RUNNER_DRY_RUN_READY");
+      assert.equal(result.exit_code, 2);
       assert.equal(result.adapter_evidence.status, "pass");
       assert.equal(result.adapter_evidence.ui_evidence.required_state_present, true);
       assert.equal(existsSync(join(stateRoot, "state/events.jsonl")), true);

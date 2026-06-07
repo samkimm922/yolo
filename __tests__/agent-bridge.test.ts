@@ -72,12 +72,12 @@ describe("agent bridge installer", () => {
     assert.doesNotMatch(block, /Your protocol:/);
     assert.doesNotMatch(block, /Return one JSON object only to stdout/);
     assert.match(block, /compatibility alias for `\/yolo-demand --stage <stage>`/);
-    assert.match(block, /honor that stage and enforce its safety rules/);
+    assert.match(block, /route it to the matching stable command/);
     assert.match(block, /A stage command is terminal for the current turn/);
     assert.match(block, /User approval of a demand discussion, plan, PRD, or check means permission to move to the next stage, not permission to edit code/);
     assert.match(block, /legacy internal names such as `\/Yolo\.brainstorm`/);
     assert.match(block, /Treat this chat as the user interface/);
-    assert.match(block, /先只生成计划，不要改代码/);
+    assert.match(block, /先读状态并选择安全阶段，不要改代码/);
   });
 
   test("mergeAgentBridgeBlock appends or replaces the managed block", () => {
@@ -92,12 +92,13 @@ describe("agent bridge installer", () => {
   });
 
   test("buildClaudeSlashCommand renders a real Claude Code slash command contract", () => {
-    const command = buildClaudeSlashCommand("yolo-plan", { yoloRoot: "/tmp/yolo" });
+    const command = buildClaudeSlashCommand("yolo-tasks", { yoloRoot: "/tmp/yolo" });
 
-    assert.match(command, /^---\nname: yolo-plan/m);
-    assert.match(command, /# \/yolo-plan/);
+    assert.match(command, /^---\nname: yolo-tasks/m);
+    assert.match(command, /# \/yolo-tasks/);
     assert.match(command, /YOLO root: \/tmp\/yolo/);
-    assert.match(command, /Plan-only\. Stop after plan artifacts/);
+    assert.match(command, /Planning\/task-breakdown only/);
+    assert.match(command, /yolo tasks --discovery/);
     assert.match(command, /not execution approval/);
   });
 
@@ -114,7 +115,7 @@ describe("agent bridge installer", () => {
   });
 
   test("Claude slash command tools are read-only for no-code stages and writable for execution/setup stages", () => {
-    assert.deepEqual(allowedTools(buildClaudeSlashCommand("yolo-plan", { yoloRoot: "/tmp/yolo" })), [
+    assert.deepEqual(allowedTools(buildClaudeSlashCommand("yolo-tasks", { yoloRoot: "/tmp/yolo" })), [
       "Read",
       "Bash",
       "Glob",
@@ -144,13 +145,23 @@ describe("agent bridge installer", () => {
     assert.match(skill, /^---\nname: yolo/m);
     assert.match(skill, /How To Choose/);
     assert.match(skill, /Recommended user commands/);
-    assert.match(skill, /Compatibility aliases for older demand-stage commands/);
+    assert.match(skill, /Hidden demand compatibility aliases/);
+    assert.match(skill, /\/yolo-status/);
     assert.match(skill, /\/yolo-demand/);
-    assert.match(skill, /\/yolo-plan/);
+    assert.match(skill, /\/yolo-spec/);
+    assert.match(skill, /\/yolo-tasks/);
+    assert.match(skill, /\/yolo-run/);
+    assert.match(skill, /\/yolo-check/);
+    assert.match(skill, /\/yolo-review/);
+    assert.match(skill, /\/yolo-release/);
     assert.match(skill, /\/yolo-interview/);
     assert.match(skill, /\/yolo-discover/);
     assert.match(skill, /\/yolo-discuss/);
-    assert.match(skill, /\/yolo-doctor/);
+    assert.match(skill, /\/office-hours/);
+    assert.doesNotMatch(skill, /^- `\/yolo-plan` ->/m);
+    assert.doesNotMatch(skill, /^- `\/yolo-prd` ->/m);
+    assert.doesNotMatch(skill, /^- `\/yolo-ship` ->/m);
+    assert.doesNotMatch(skill, /\/yolo-doctor/);
     assert.match(skill, /one-question mode/);
     assert.match(skill, /next_question/);
     assert.match(skill, /do not output long recommendation lists/);
@@ -166,7 +177,7 @@ describe("agent bridge installer", () => {
     const skill = buildCodexSourceCommandSkill("yolo", { yoloRoot: "/tmp/yolo" });
 
     assert.match(skill, /^---\nname: "source-command-yolo"/m);
-    assert.match(skill, /\/yolo plan/);
+    assert.match(skill, /\/yolo status/);
     assert.match(skill, /YOLO root: \/tmp\/yolo/);
     assert.match(skill, /legacy demand subcommand/);
     assert.match(skill, /ask one `next_question`/);
@@ -177,7 +188,7 @@ describe("agent bridge installer", () => {
     assert.match(skill, /another explicit `\/yolo-\*` command/);
     assert.match(skill, /must still stop at that stage/);
     assert.match(skill, /not execution approval/);
-    assert.match(skill, /Default to plan-only/);
+    assert.match(skill, /Default to `\/yolo-status` or a no-code demand\/tasks stage/);
   });
 
   test("buildCodexSlashCommandSkill follows direct Codex slash skill convention", () => {
@@ -221,13 +232,22 @@ describe("agent bridge installer", () => {
       ".codex/skills/yolo/SKILL.md",
       ".claude/skills/yolo/SKILL.md",
     ]);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-plan.md"), true);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-interview.md"), true);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-discuss.md"), true);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-discover.md"), true);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-doctor.md"), true);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-plan.md"), true);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-prd.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-status.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-demand.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-spec.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-tasks.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-run.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-check.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-review.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-release.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-plan.md"), false);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-doctor.md"), false);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/office-hours.md"), false);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-tasks.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-spec.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-plan.md"), false);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-prd.md"), false);
     assert.deepEqual(plan.source_command_files.map((file) => file.relative_path), [".codex/skills/source-command-yolo/SKILL.md"]);
     assert.equal(plan.legacy_cleanup_files.some((file) => file.relative_path === ".codex/skills/source-command-yolo-plan"), true);
     assert.equal(plan.legacy_cleanup_files.some((file) => file.relative_path === ".codex/skills/source-command-yolo"), false);
@@ -259,10 +279,23 @@ describe("agent bridge installer", () => {
     assert.equal(result.status, "success");
     assert.equal(result.overwritten.includes("AGENTS.md"), true);
     assert.equal(result.written.includes("CLAUDE.md"), true);
-    assert.equal(result.written.includes(".claude/commands/yolo-plan.md"), true);
-    assert.equal(result.written.includes(".claude/commands/yolo-interview.md"), true);
-    assert.equal(result.written.includes(".claude/commands/yolo-doctor.md"), true);
+    assert.equal(result.written.includes(".claude/commands/yolo.md"), true);
+    assert.equal(result.written.includes(".claude/commands/yolo-status.md"), true);
+    assert.equal(result.written.includes(".claude/commands/yolo-demand.md"), true);
+    assert.equal(result.written.includes(".claude/commands/yolo-spec.md"), true);
+    assert.equal(result.written.includes(".claude/commands/yolo-tasks.md"), true);
+    assert.equal(result.written.includes(".claude/commands/yolo-run.md"), true);
+    assert.equal(result.written.includes(".claude/commands/yolo-check.md"), true);
+    assert.equal(result.written.includes(".claude/commands/yolo-review.md"), true);
+    assert.equal(result.written.includes(".claude/commands/yolo-release.md"), true);
+    assert.equal(result.written.includes(".claude/commands/yolo-plan.md"), false);
+    assert.equal(result.written.includes(".claude/commands/yolo-interview.md"), false);
+    assert.equal(result.written.includes(".claude/commands/yolo-doctor.md"), false);
+    assert.equal(result.written.includes(".claude/commands/office-hours.md"), false);
     assert.equal(result.written.includes(".codex/skills/yolo/SKILL.md"), true);
+    assert.equal(result.written.includes(".codex/skills/yolo/commands/yolo-tasks.md"), true);
+    assert.equal(result.written.includes(".codex/skills/yolo/commands/yolo-spec.md"), true);
+    assert.equal(result.written.includes(".codex/skills/yolo/commands/yolo-plan.md"), false);
     assert.equal(result.written.includes(".codex/skills/source-command-yolo/SKILL.md"), true);
     assert.equal(result.written.includes(".codex/skills/source-command-yolo-plan/SKILL.md"), false);
     assert.equal(existsSync(join(projectRoot, ".codex/skills/source-command-yolo-plan")), false);
@@ -317,7 +350,10 @@ describe("agent bridge installer", () => {
     assert.equal(result.planned.includes("AGENTS.md"), true);
     assert.equal(result.planned.includes(".codex/skills/yolo/SKILL.md"), true);
     assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-run.md"), true);
-    assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-doctor.md"), true);
+    assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-status.md"), true);
+    assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-release.md"), true);
+    assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-doctor.md"), false);
+    assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-plan.md"), false);
     assert.equal(result.planned.includes(".codex/skills/source-command-yolo/SKILL.md"), true);
     assert.equal(result.planned.includes(".codex/skills/source-command-yolo-check/SKILL.md"), false);
     assert.equal(result.legacy_cleanup_planned.includes(".codex/skills/source-command-yolo-check"), true);
@@ -351,8 +387,16 @@ describe("agent bridge installer", () => {
     assert.deepEqual(result.scopes, ["user"]);
     assert.equal(existsSync(join(projectRoot, "AGENTS.md")), false);
     assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/SKILL.md")), true);
-    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-plan.md")), true);
-    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-doctor.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-status.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-demand.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-spec.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-tasks.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-run.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-check.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-review.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-release.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-plan.md")), false);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-doctor.md")), false);
     assert.equal(existsSync(join(homeDir, ".agents/skills/source-command-yolo/SKILL.md")), true);
     assert.equal(existsSync(join(homeDir, ".agents/skills/source-command-yolo-run/SKILL.md")), false);
     assert.equal(existsSync(join(homeDir, ".agents/skills/yolo-brainstorm/SKILL.md")), false);

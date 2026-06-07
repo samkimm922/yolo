@@ -48,16 +48,32 @@ describe("fixture execution harness", () => {
     }
   });
 
-  test("runFixtureHarness supports no-tests degraded smoke command", () => {
+  test("runFixtureHarness reports no-tests smoke as degraded instead of pass", () => {
     const result = runFixtureHarness("no-tests", {
       yoloRoot: YOLO_DIR,
       keepWorkspace: true,
     });
     try {
-      assert.equal(result.status, "pass");
+      assert.equal(result.status, "degraded");
       assert.equal(result.commands[0].command, "node src/index.ts");
       assert.match(result.commands[0].stdout_tail, /ok/);
       assert.equal(result.evidence.fixture.fixture_type, "no-tests");
+      assert.equal(result.evidence.degraded_reason, "project_has_no_test_script");
+    } finally {
+      rmSync(result.workspace, { recursive: true, force: true });
+    }
+  });
+
+  test("runFixtureHarness blocks no-tests for release gates", () => {
+    const result = runFixtureHarness("no-tests", {
+      yoloRoot: YOLO_DIR,
+      keepWorkspace: true,
+      mode: "release",
+    });
+    try {
+      assert.equal(result.status, "blocked");
+      assert.ok(result.blocking_failures.some((failure) => failure.failure_type === "degraded_fixture_not_release_eligible"));
+      assert.equal(result.evidence.status, "blocked");
     } finally {
       rmSync(result.workspace, { recursive: true, force: true });
     }
@@ -78,6 +94,84 @@ describe("fixture execution harness", () => {
       assert.equal(result.status, "fail");
       assert.deepEqual(result.evidence.missing_expected_artifacts, ["state/evidence/FIX-NODE-001/extra-required.json"]);
       assert.equal(result.evidence.schema_check.ok, true);
+    } finally {
+      rmSync(result.workspace, { recursive: true, force: true });
+    }
+  });
+
+  test("runFixtureHarness returns structured command-not-found failures", () => {
+    const fixture = {
+      ...getFixtureDefinition("node-basic", { yoloRoot: YOLO_DIR }),
+      run: {
+        mode: "dry-run",
+        supports_dry_run: true,
+        commands: ["definitely-not-a-yolo-command"],
+      },
+    };
+    const result = runFixtureHarness(fixture, { keepWorkspace: true });
+    try {
+      assert.equal(result.status, "blocked");
+      assert.equal(result.commands[0].failure.failure_type, "command_not_found");
+      assert.ok(result.blocking_failures.some((failure) => failure.code === "FIXTURE_COMMAND_NOT_FOUND"));
+    } finally {
+      rmSync(result.workspace, { recursive: true, force: true });
+    }
+  });
+
+  test("runFixtureHarness returns structured timeout failures", () => {
+    const fixture = {
+      ...getFixtureDefinition("node-basic", { yoloRoot: YOLO_DIR }),
+      run: {
+        mode: "dry-run",
+        supports_dry_run: true,
+        commands: ["node -e \"setTimeout(() => {}, 1000)\""],
+      },
+    };
+    const result = runFixtureHarness(fixture, { keepWorkspace: true, timeout_ms: 20 });
+    try {
+      assert.equal(result.status, "blocked");
+      assert.equal(result.commands[0].failure.failure_type, "timeout");
+      assert.ok(result.blocking_failures.some((failure) => failure.code === "FIXTURE_COMMAND_TIMEOUT"));
+    } finally {
+      rmSync(result.workspace, { recursive: true, force: true });
+    }
+  });
+
+  test("runFixtureHarness returns structured nonzero exit failures", () => {
+    const fixture = {
+      ...getFixtureDefinition("node-basic", { yoloRoot: YOLO_DIR }),
+      run: {
+        mode: "dry-run",
+        supports_dry_run: true,
+        commands: ["node -e \"process.exit(7)\""],
+      },
+    };
+    const result = runFixtureHarness(fixture, { keepWorkspace: true });
+    try {
+      assert.equal(result.status, "blocked");
+      assert.equal(result.commands[0].failure.failure_type, "nonzero_exit");
+      assert.equal(result.commands[0].exit_code, 7);
+      assert.ok(result.blocking_failures.some((failure) => failure.code === "FIXTURE_COMMAND_NONZERO_EXIT"));
+    } finally {
+      rmSync(result.workspace, { recursive: true, force: true });
+    }
+  });
+
+  test("runFixtureHarness returns structured external dependency failures", () => {
+    const fixture = {
+      ...getFixtureDefinition("node-basic", { yoloRoot: YOLO_DIR }),
+      run: {
+        mode: "dry-run",
+        supports_dry_run: true,
+        external_dependencies: ["definitely-missing-yolo-tool"],
+        commands: ["node -e \"process.exit(0)\""],
+      },
+    };
+    const result = runFixtureHarness(fixture, { keepWorkspace: true });
+    try {
+      assert.equal(result.status, "blocked");
+      assert.equal(result.commands[0].status, "pass");
+      assert.ok(result.blocking_failures.some((failure) => failure.failure_type === "external_dependency_unavailable"));
     } finally {
       rmSync(result.workspace, { recursive: true, force: true });
     }

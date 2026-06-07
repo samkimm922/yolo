@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { inspectPrdContract } from "../runtime/gates/prd-contract-doctor.js";
 import { createPrdMigrationAdvice, findPrdFiles } from "./migration.js";
 import { inspectSpecGovernanceGate, specGovernancePolicy } from "../runtime/gates/spec-governance-gate.js";
-import { validatePrdPath } from "./validate.js";
+import { validatePrdObject, validatePrdPath } from "./validate.js";
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 const STRICT_WARNING_MODES = new Set(["verify", "runner", "release", "strict", "ship"]);
@@ -194,21 +194,21 @@ export function defaultSpecGovernancePolicy(options = {}) {
   return specGovernancePolicy(options);
 }
 
-export function preflightPrd(prdPath, options = {}) {
-  const read = readPrd(prdPath);
-  const schema = validatePrdPath(prdPath, options.schemaOptions || {});
+function inspectPreflightReadiness(read, schema, options = {}) {
   let contract = null;
   let migration = null;
   let specGovernance = null;
 
   if (read.ok) {
+    const requireDemandContract = options.requireDemandContract ?? options.require_demand_contract ?? true;
+    const strictExecution = options.strictExecution ?? options.strict_execution ?? true;
     contract = inspectPrdContract(read.prd, {
       mode: options.mode || options.executionMode || options.execution_mode || "verify",
-      strictExecution: options.strictExecution ?? options.strict_execution,
-      requireDemandContract: options.requireDemandContract ?? options.require_demand_contract,
+      strictExecution,
+      requireDemandContract,
       projectRoot: options.projectRoot || options.project_root || dirname(read.file),
     });
-    migration = createPrdMigrationAdvice(read.prd, prdPath);
+    migration = createPrdMigrationAdvice(read.prd, read.file);
     specGovernance = inspectSpecGovernanceGate({
       prd: read.prd,
       policyOptions: options.specGovernance || {},
@@ -255,9 +255,45 @@ export function preflightPrd(prdPath, options = {}) {
   };
 }
 
+export function preflightPrdDocument(prd, options = {}) {
+  const file = options.file || options.prdPath || options.prd_path || "<memory>";
+  const read = {
+    ok: true,
+    file,
+    prd,
+  };
+  const schema = validatePrdObject(prd, options.schemaOptions || {});
+  return inspectPreflightReadiness(read, schema, options);
+}
+
+export function preflightPrd(prdPath, options = {}) {
+  const read = readPrd(prdPath);
+  const schema = validatePrdPath(prdPath, options.schemaOptions || {});
+  return inspectPreflightReadiness(read, schema, options);
+}
+
 export function preflightAllPrds(options = {}) {
   const files = findPrdFiles(options.dirs);
   const results = files.map((file) => preflightPrd(file, options));
+  if (files.length === 0) {
+    return {
+      status: "blocked",
+      code: "PRD_PREFLIGHT_NO_FILES",
+      generated_at: nowIso(),
+      file_count: 0,
+      pass_count: 0,
+      warning_count: 0,
+      blocked_count: 1,
+      advisory_warning_count: 0,
+      blocking_warning_count: 0,
+      blocked_reasons: [{
+        source: "prd-preflight",
+        code: "PRD_PREFLIGHT_NO_FILES",
+        detail: "No PRD JSON files were found; preflight cannot pass without validating at least one PRD.",
+      }],
+      results,
+    };
+  }
   return {
     status: results.some((result) => result.status === "blocked") ? "blocked" : results.some((result) => result.status === "warning") ? "warning" : "pass",
     generated_at: nowIso(),
@@ -275,7 +311,7 @@ function usage() {
   return [
     "用法:",
     "  yolo-prd-preflight <prd.json> [--json] [--verify|--strict|--release]",
-    "  yolo-prd-preflight --check-all [--json] [--verify|--strict|--release]",
+    "  yolo-prd-preflight --check-all [--json] [--verify|--strict|--release] [--dir <path>...]",
     "",
     "Preflight 会汇总 schema、contract、migration advice 和 runner readiness，不修改 PRD。",
   ].join("\n");
@@ -301,6 +337,9 @@ function printSingle(result) {
 
 function printAll(result) {
   console.log(`[prd-preflight] ${result.status} files=${result.file_count} pass=${result.pass_count} warning=${result.warning_count} blocked=${result.blocked_count}`);
+  for (const reason of (result.blocked_reasons || []).slice(0, 3)) {
+    console.log(`  blocked ${reason.source}:${reason.code}: ${reason.detail}`);
+  }
   for (const item of result.results.filter((entry) => entry.status !== "pass")) {
     console.log(`  ${item.status} ${item.file}`);
     for (const reason of item.blocked_reasons.slice(0, 3)) {
@@ -316,6 +355,11 @@ function parseCliArgs(argv = process.argv.slice(2)) {
     const arg = argv[i];
     if (arg === "--json") options.json = true;
     else if (arg === "--check-all") options.checkAll = true;
+    else if (arg === "--dir" || arg === "--dirs" || arg.startsWith("--dir=") || arg.startsWith("--dirs=")) {
+      const value = arg.includes("=") ? arg.split("=").slice(1).join("=") : argv[++i];
+      const dirs = String(value || "").split(",").map((item) => item.trim()).filter(Boolean);
+      if (dirs.length > 0) options.dirs = [...(options.dirs || []), ...dirs];
+    }
     else if (arg === "--strict") {
       options.mode = "strict";
       options.strictExecution = true;
@@ -347,7 +391,7 @@ function main() {
       const result = preflightAllPrds(options);
       if (json) console.log(JSON.stringify(result, null, 2));
       else printAll(result);
-      process.exit(result.status === "blocked" ? 1 : 0);
+      process.exit(result.status === "pass" ? 0 : result.status === "warning" ? 2 : 1);
     }
 
     if (!fileArg) {
@@ -358,12 +402,12 @@ function main() {
     const result = preflightPrd(fileArg, options);
     if (json) console.log(JSON.stringify(result, null, 2));
     else printSingle(result);
-    process.exit(result.status === "blocked" ? 1 : 0);
+    process.exit(result.status === "pass" ? 0 : result.status === "warning" ? 2 : 1);
   } catch (error) {
     const payload = { status: "error", error: error.message };
     if (json) console.error(JSON.stringify(payload, null, 2));
     else console.error(`[prd-preflight] ${error.message}`);
-    process.exit(2);
+    process.exit(1);
   }
 }
 

@@ -33,10 +33,14 @@ describe("PRD spec compiler", () => {
       generated_at: "2026-05-25T00:00:00.000Z",
     });
 
-    assert.equal(result.status, "pass");
+    assert.equal(result.status, "draft");
+    assert.equal(result.executable, false);
     assert.equal(result.validation.blocks_execution, false);
     assert.equal(result.spec.requirements[0].id, "REQ-001");
     assert.equal(result.prd.tasks[0].requirement_ids[0], "REQ-001");
+    assert.equal(result.prd.tasks[0].status, "needs_contract_review");
+    assert.equal(result.prd.demand.approval.approved, false);
+    assert.equal(result.prd.execution_readiness.afk_ready, false);
     assert.equal(result.guarantees.provider_execution, false);
   });
 

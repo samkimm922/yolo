@@ -5,9 +5,12 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildAgentBridgeInstallPlan } from "../../../tools/install-agent-bridge.js";
 import {
+  DEFAULT_YOLO_PUBLIC_COMMAND_NAMES,
   buildYoloCommandRegistry,
+  inspectYoloCommandRegistry,
   listYoloCommandNames,
   listYoloCommands,
+  YOLO_COMMAND_SURFACE_BUDGET,
 } from "../../workflows/command-registry.js";
 import {
   lifecycleStatusPath,
@@ -125,6 +128,7 @@ export function buildYoloDoctorReport(options = {}) {
   const lifecycle = lifecycleInspection(projectRoot);
   const commandRegistry = buildYoloCommandRegistry();
   const commandNames = listYoloCommandNames();
+  const commandRegistryInspection = inspectYoloCommandRegistry(commandRegistry);
   const bridgePlan = buildAgentBridgeInstallPlan({
     projectRoot,
     yoloRoot,
@@ -166,13 +170,18 @@ export function buildYoloDoctorReport(options = {}) {
     check(
       "YOLO_DOCTOR_COMMAND_REGISTRY_READY",
       "error",
-      commandRegistry.commands.length === commandNames.length
-        && commandNames.includes("yolo")
-        && commandNames.includes("yolo-discover")
-        && commandNames.includes("yolo-prd")
-        && commandNames.includes("yolo-doctor"),
-      "command registry must expose the full lifecycle command set from one source of truth",
-      { command_count: commandNames.length, commands: commandNames },
+      commandRegistryInspection.valid === true
+        && commandRegistry.surface_budget === YOLO_COMMAND_SURFACE_BUDGET
+        && commandNames.length === DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.length
+        && commandNames.join("\n") === DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.join("\n"),
+      "command registry must expose the 8 stable lifecycle commands from one source of truth",
+      {
+        command_count: commandNames.length,
+        commands: commandNames,
+        expected_commands: DEFAULT_YOLO_PUBLIC_COMMAND_NAMES,
+        surface_budget: commandRegistry.surface_budget,
+        inspection: commandRegistryInspection,
+      },
     ),
     check(
       "YOLO_DOCTOR_AGENT_BRIDGE_INSTALLED",
@@ -228,10 +237,10 @@ export function buildYoloDoctorReport(options = {}) {
       billable_provider_execution: false,
     },
     next_actions: status === "blocked"
-      ? ["Ask the agent to run /yolo-init for this project, then run /yolo-doctor again."]
+      ? ["Ask the agent to run yolo setup for this project, then run yolo status again."]
       : status === "warning"
-        ? ["Ask the agent to run /yolo-install for the desired Codex/Claude scope, then restart or refresh the host."]
-        : ["YOLO project lifecycle and agent entrypoints are ready; start with /yolo-discover or /yolo-plan."],
+        ? ["Ask the agent to run yolo install for the desired Codex/Claude scope, then restart or refresh the host."]
+        : ["YOLO project lifecycle and agent entrypoints are ready; start with yolo status or yolo demand."],
   };
 }
 
@@ -299,7 +308,7 @@ export function runYoloDoctorCli(argv = [], io = {}) {
   });
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else stdout.write(`${formatYoloDoctorText(report)}\n`);
-  return report.status === "blocked" ? 1 : 0;
+  return report.status === "pass" ? 0 : report.status === "warning" ? 2 : 1;
 }
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));

@@ -16,17 +16,25 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
   const scanScope = params.scan_scope || taskScope?.scan_scope;
   let targets =
     params.targets ||
+    params.files ||
+    (params.file ? [params.file] : null) ||
     (taskScope?.targets || []).map((t) => t.file).filter(Boolean);
 
   if (targets.length === 0 && scanScope === "diff") {
     const diffFiles = exec("git diff --name-only");
-    if (diffFiles.ok && diffFiles.out) {
+    if (!diffFiles.ok) {
+      return { passed: false, status: "indeterminate", detail: "无法获取 diff，无法验证禁用模式", type: "no_forbidden_patterns" };
+    }
+    if (diffFiles.out) {
       targets = diffFiles.out.split("\n").filter(
         (f) => f && /\.(ts|tsx|js|jsx)$/.test(f) && !f.includes("node_modules"),
       );
     }
     const untracked = exec("git ls-files --others --exclude-standard");
-    if (untracked.ok && untracked.out) {
+    if (!untracked.ok) {
+      return { passed: false, status: "indeterminate", detail: "无法获取未跟踪文件列表，无法验证禁用模式", type: "no_forbidden_patterns" };
+    }
+    if (untracked.out) {
       const utFiles = untracked.out.split("\n").filter(
         (f) => f && /\.(ts|tsx|js|jsx)$/.test(f) && !f.includes("node_modules"),
       );
@@ -34,13 +42,18 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
     }
   }
 
-  if (targets.length === 0) return { passed: true, detail: "无目标文件，跳过禁用模式检查" };
+  if (targets.length === 0) {
+    return { passed: false, status: "not_run", detail: "无目标文件，无法验证禁用模式", type: "no_forbidden_patterns" };
+  }
 
   const violations = [];
   for (const file of targets) {
     if (!existsSync(resolve(ROOT, file))) continue;
     const diff = exec(`git diff -- "${file}"`);
-    if (!diff.ok || !diff.out) continue;
+    if (!diff.ok) {
+      return { passed: false, status: "indeterminate", detail: `无法获取 ${file} 的 diff，无法验证禁用模式`, type: "no_forbidden_patterns" };
+    }
+    if (!diff.out) continue;
 
     const addedLines = diff.out
       .split("\n")
@@ -70,8 +83,10 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
   }
 
   if (violations.length > 0) {
+    const warningOnly = violations.every((v) => v.severity === "WARN");
     return {
-      passed: violations.every((v) => v.severity === "WARN"),
+      passed: false,
+      status: warningOnly ? "warning" : "fail",
       detail: violations
         .map((v) => `${v.description ? v.description + " — " : ""}[${v.severity}] ${v.file}: ${v.pattern}`)
         .join("; "),
@@ -283,6 +298,11 @@ export function evalNoNewDeadCode(params = {}, _taskScope, ROOT) {
     if (hasBaseline) {
       return { passed: false, detail: "knip 执行失败但 baseline 存在，死代码检测不可用", type: "no_new_dead_code" };
     }
-    return { passed: true, warn: true, detail: "knip 不可用且无 baseline，跳过（首次运行？）", type: "no_new_dead_code" };
+    return {
+      passed: false,
+      status: "indeterminate",
+      detail: "knip 不可用且无 baseline，无法验证死代码",
+      type: "no_new_dead_code",
+    };
   }
 }

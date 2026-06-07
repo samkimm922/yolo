@@ -73,11 +73,11 @@ function plannedPathsFromDryRun(result = {}) {
 function commandForMode(mode) {
   if (mode === "idea") return "/yolo";
   if (mode === "discovery") return "/yolo-demand";
-  if (mode === "plan") return "/yolo-plan";
-  if (mode === "prd") return "/yolo-prd";
+  if (mode === "plan") return "/yolo-tasks";
+  if (mode === "prd") return "/yolo-spec";
   if (mode === "check") return "/yolo-check";
   if (mode === "review") return "/yolo-review";
-  if (mode === "accept") return "/yolo-accept";
+  if (mode === "accept") return "/yolo-release";
   if (mode === "controlled_run") return "/yolo-run";
   return `/yolo-${mode.replace(/_/g, "-")}`;
 }
@@ -89,7 +89,7 @@ export function inspectAgentBridgeDryRunDoctor({ plan = {}, dryRunResult = {} } 
   const commandSet = new Set(expected.map((item) => item.command).filter(Boolean));
   const roles = new Set(expected.map((item) => item.role).filter(Boolean));
 
-  const requiredCommands = listYoloCommandNames();
+  const requiredCommands = ["yolo", ...listYoloCommandNames().map((command) => `yolo-${command}`)];
   const checks = [
     check(
       "AGENT_BRIDGE_DRY_RUN_DOCTOR_NO_WRITES",
@@ -203,7 +203,27 @@ function dogfoodEvidence({ mode, projectRoot, now, payload = {}, status = "pass"
   };
 }
 
-function buildNoCodeDogfoodArtifacts({ projectRoot, now }) {
+function dogfoodPrdEvidencePayload(compiled = {}) {
+  const blockers = unique([
+    ...(compiled.blockers || []).map((blocker) => blocker.code || blocker.message || "SPEC_COMPILER_BLOCKER"),
+    ...((compiled.validation?.blockers || []).map((blocker) => blocker.code || blocker.message || "SPEC_VALIDATION_BLOCKER")),
+  ]);
+  const validationStatus = compiled.validation?.status || (compiled.validation?.blocks_execution === false ? "pass" : null);
+  const status = compiled.prd && validationStatus === "pass" && blockers.length === 0 ? "pass" : "blocked";
+  return {
+    ...compiled,
+    dogfood_prd_evidence: {
+      status,
+      compiler_status: compiled.status || null,
+      validation_status: validationStatus,
+      prd_generated: Boolean(compiled.prd),
+      blocker_count: blockers.length,
+      blockers,
+    },
+  };
+}
+
+function buildNoCodeDogfoodArtifacts({ projectRoot, now, compiledRaw: injectedCompiledRaw = null }) {
   const stateRoot = join(projectRoot, ".yolo");
   const discoveryInput = {
     id: "DISCOVERY-DOGFOOD-001",
@@ -245,7 +265,7 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now }) {
       },
     ],
   };
-  const compiledRaw = compileDiscoveryPlanToSpec({
+  const compiledRaw = injectedCompiledRaw || compileDiscoveryPlanToSpec({
     discovery: discovery.brief,
     plan,
   }, {
@@ -299,6 +319,7 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now }) {
               approved_by: "real-project-dogfood-pack",
               approved_at: now,
               note: "Synthetic no-code dogfood demand approved for release evidence.",
+              effective_for_prd: true,
             },
             readiness_level: "L3",
             quality_score: 100,
@@ -343,7 +364,6 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now }) {
       : null,
   };
   const specPath = writeJson(join(projectRoot, ".yolo/lifecycle/spec.json"), compiled.spec);
-  const prdPath = writeJson(join(projectRoot, ".yolo/lifecycle/prd.json"), compiled.prd);
   const ideaPath = writeJson(join(projectRoot, ".yolo/lifecycle/idea.json"), {
     schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
     schema: "yolo.lifecycle.idea_dogfood.v1",
@@ -353,6 +373,71 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now }) {
   });
   const discoveryPath = writeJson(join(projectRoot, ".yolo/lifecycle/discovery.json"), discovery);
   const planPath = writeJson(join(projectRoot, ".yolo/lifecycle/roadmap.json"), plan);
+  const prdEvidencePayload = dogfoodPrdEvidencePayload(compiled);
+  const prdReady = Boolean(compiled.prd && Array.isArray(compiled.prd.tasks));
+
+  if (!prdReady) {
+    const blockedPayload = {
+      schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
+      status: "blocked",
+      code: "DOGFOOD_PRD_NOT_EXECUTABLE",
+      summary: "Dogfood PRD compilation did not produce an executable PRD; downstream check, acceptance, and controlled run were not executed.",
+      blockers: prdEvidencePayload.dogfood_prd_evidence.blockers,
+      compiler_status: compiled.status || null,
+    };
+    const checkReport = { ...blockedPayload, schema: "yolo.release.real_project_dogfood_pack_check_report.v1" };
+    const reviewReport = { ...blockedPayload, schema: "yolo.release.real_project_dogfood_pack_review_report.v1" };
+    const runReport = { ...blockedPayload, schema: "yolo.release.real_project_dogfood_pack_run_report.v1" };
+    const acceptanceReport = { ...blockedPayload, schema: "yolo.release.real_project_dogfood_pack_acceptance_report.v1" };
+    const controlledRun = {
+      ...blockedPayload,
+      schema: "yolo.release.real_project_dogfood_pack_controlled_run.v1",
+      provider_execution: false,
+      code_edited: false,
+    };
+    const checkPath = writeJson(join(projectRoot, ".yolo/lifecycle/check-report.json"), checkReport);
+    const reviewPath = writeJson(join(projectRoot, ".yolo/lifecycle/review-report.json"), reviewReport);
+    const runPath = writeJson(join(projectRoot, ".yolo/lifecycle/run-report.json"), runReport);
+    const acceptPath = writeJson(join(projectRoot, ".yolo/lifecycle/acceptance-report.json"), acceptanceReport);
+    const controlledRunPath = writeJson(join(projectRoot, ".yolo/lifecycle/controlled-run-report.json"), controlledRun);
+    const evidence = {
+      idea: dogfoodEvidence({ mode: "idea", projectRoot, now, payload: { status: "pass", idea: DOGFOOD_IDEA }, linkedArtifacts: [ideaPath] }),
+      discovery: dogfoodEvidence({ mode: "discovery", projectRoot, now, payload: discovery, status: discovery.status === "blocked" ? "blocked" : "pass", linkedArtifacts: [discoveryPath] }),
+      plan: dogfoodEvidence({ mode: "plan", projectRoot, now, payload: plan, linkedArtifacts: [planPath] }),
+      prd: dogfoodEvidence({ mode: "prd", projectRoot, now, payload: prdEvidencePayload, status: prdEvidencePayload.dogfood_prd_evidence.status, linkedArtifacts: [specPath] }),
+      check: dogfoodEvidence({ mode: "check", projectRoot, now, payload: checkReport, status: "blocked", linkedArtifacts: [checkPath] }),
+      review: dogfoodEvidence({ mode: "review", projectRoot, now, payload: reviewReport, status: "blocked", linkedArtifacts: [reviewPath] }),
+      accept: dogfoodEvidence({ mode: "accept", projectRoot, now, payload: acceptanceReport, status: "blocked", linkedArtifacts: [acceptPath] }),
+      controlled_run: dogfoodEvidence({ mode: "controlled_run", projectRoot, now, payload: controlledRun, status: "blocked", linkedArtifacts: [controlledRunPath] }),
+    };
+    const dogfoodReportPath = writeJson(join(projectRoot, ".yolo/state/reports/dogfood/report.json"), {
+      schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
+      schema: "yolo.release.real_project_dogfood_pack_report.v2",
+      status: "blocked",
+      modes: DOGFOOD_MODES,
+      evidence_files: unique(Object.values(evidence).flatMap((item) => item.evidence_files)),
+      guarantees: {
+        code_edited: false,
+        provider_execution: false,
+        billable_provider_execution: false,
+        package_root_mutated: false,
+      },
+    });
+    return {
+      discovery,
+      plan,
+      compiled,
+      check_report: checkReport,
+      review_report: reviewReport,
+      run_report: runReport,
+      acceptance_report: acceptanceReport,
+      controlled_run: controlledRun,
+      report_path: dogfoodReportPath,
+      evidence,
+    };
+  }
+
+  const prdPath = writeJson(join(projectRoot, ".yolo/lifecycle/prd.json"), compiled.prd);
 
   const checkReport = inspectYoloCheck({
     prdPath,
@@ -374,7 +459,7 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now }) {
   const runReport = {
     schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
     schema: "yolo.release.real_project_dogfood_pack_run_report.v1",
-    status: "pass",
+    status: "dry_run",
     mode: "controlled_run_plan_only",
     dry_run: true,
     summary: { completed: 1, failed: 0, blocked: 0 },
@@ -411,7 +496,9 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now }) {
   const controlledRun = {
     schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
     schema: "yolo.release.real_project_dogfood_pack_controlled_run.v1",
-    status: parallelPlan.status === "pass" && mergeGate.status === "pass" && parallelEvidence.status === "pass" ? "pass" : "blocked",
+    status: "blocked",
+    code: "REAL_PROJECT_DOGFOOD_CONTROLLED_RUN_DRY_RUN_ONLY",
+    summary: "Controlled run only planned dry-run evidence; real execution evidence is required before pass.",
     parallel_plan: parallelPlan,
     merge_gate: mergeGate,
     evidence_merge: parallelEvidence,
@@ -424,7 +511,7 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now }) {
     idea: dogfoodEvidence({ mode: "idea", projectRoot, now, payload: { status: "pass", idea: DOGFOOD_IDEA }, linkedArtifacts: [ideaPath] }),
     discovery: dogfoodEvidence({ mode: "discovery", projectRoot, now, payload: discovery, status: discovery.status === "blocked" ? "blocked" : "pass", linkedArtifacts: [discoveryPath] }),
     plan: dogfoodEvidence({ mode: "plan", projectRoot, now, payload: plan, linkedArtifacts: [planPath] }),
-    prd: dogfoodEvidence({ mode: "prd", projectRoot, now, payload: compiled, status: compiled.status === "pass" ? "pass" : "blocked", linkedArtifacts: [specPath, prdPath] }),
+    prd: dogfoodEvidence({ mode: "prd", projectRoot, now, payload: prdEvidencePayload, status: prdEvidencePayload.dogfood_prd_evidence.status, linkedArtifacts: [specPath, prdPath] }),
     check: dogfoodEvidence({ mode: "check", projectRoot, now, payload: checkReport, status: checkReport.status === "pass" ? "pass" : "blocked", linkedArtifacts: [checkPath] }),
     review: dogfoodEvidence({ mode: "review", projectRoot, now, payload: reviewReport, linkedArtifacts: [reviewPath] }),
     accept: dogfoodEvidence({ mode: "accept", projectRoot, now, payload: acceptanceReport, status: acceptanceReport.status === "pass" ? "pass" : "blocked", linkedArtifacts: [acceptPath] }),
@@ -498,7 +585,11 @@ export function runRealProjectDogfoodPack(options = {}) {
     dryRun: true,
   });
   const dryRunDoctor = inspectAgentBridgeDryRunDoctor({ plan: bridgePlan, dryRunResult: bridgeDryRun });
-  const dogfoodLifecycle = buildNoCodeDogfoodArtifacts({ projectRoot, now });
+  const dogfoodLifecycle = buildNoCodeDogfoodArtifacts({
+    projectRoot,
+    now,
+    compiledRaw: options.compiledRaw || options.compiled_raw || null,
+  });
   const evidence = dogfoodLifecycle.evidence;
   const dogfoodGate = runRealProjectDogfoodGate({
     yoloRoot,
@@ -515,8 +606,8 @@ export function runRealProjectDogfoodPack(options = {}) {
     check("REAL_PROJECT_DOGFOOD_PACK_DRY_RUN_DOCTOR", dryRunDoctor.status === "pass", "skill/command dry-run doctor must pass"),
     check("REAL_PROJECT_DOGFOOD_PACK_LIFECYCLE", dogfoodLifecycle.report_path && Object.values(evidence).every((item) => item.status === "pass"), "idea/discovery/plan/PRD/check/review/accept/controlled-run evidence must pass"),
     check("REAL_PROJECT_DOGFOOD_PACK_CHECK", dogfoodLifecycle.check_report.status === "pass", "dogfood /yolo-check report must pass"),
-    check("REAL_PROJECT_DOGFOOD_PACK_ACCEPTANCE", dogfoodLifecycle.acceptance_report.status === "pass", "dogfood /yolo-accept report must pass"),
-    check("REAL_PROJECT_DOGFOOD_PACK_CONTROLLED_RUN", dogfoodLifecycle.controlled_run.status === "pass", "controlled run plan and merge gate must pass without executing providers"),
+    check("REAL_PROJECT_DOGFOOD_PACK_ACCEPTANCE", dogfoodLifecycle.acceptance_report.status === "pass", "dogfood /yolo-release acceptance report must pass"),
+    check("REAL_PROJECT_DOGFOOD_PACK_CONTROLLED_RUN", dogfoodLifecycle.controlled_run.status === "pass", "controlled run must include real non-dry-run evidence before it can pass"),
     check("REAL_PROJECT_DOGFOOD_PACK_GATE", dogfoodGate.status === "pass", "full lifecycle dogfood gate must pass"),
   ];
   const blockers = checks.filter((item) => item.passed !== true);

@@ -13,6 +13,7 @@ import {
   rotateTaskResults,
   truncateJsonlFile,
 } from "../src/runtime/run-lifecycle/startup.js";
+import { baselineArtifactHash } from "../src/runtime/execution/baselines.js";
 
 function tempDir() {
   return mkdtempSync(join(tmpdir(), "yolo-run-startup-"));
@@ -171,8 +172,42 @@ describe("run lifecycle startup helpers", () => {
       ["tsc", ["src/a.ts:1:TS1000"]],
       ["eslint", ["src/a.ts:2:semi"]],
     ]);
-    assert.deepEqual(JSON.parse(writes.get("/repo/state/runtime/eslint-baseline.json")).keys, ["src/a.ts:2:semi"]);
+    const eslintBaseline = JSON.parse(writes.get("/repo/state/runtime/eslint-baseline.json"));
+    assert.deepEqual(eslintBaseline.keys, ["src/a.ts:2:semi"]);
+    assert.equal(eslintBaseline.meta.command, "eslint .");
+    assert.equal(eslintBaseline.meta.exit_code, 0);
+    assert.equal(eslintBaseline.meta.artifact_hash, baselineArtifactHash(eslintBaseline));
     assert.match(logs.at(-1)[2], /eslint baseline: 1 个条目/);
+  });
+
+  test("initializeMissingBaselines records blocked required baseline command failures", () => {
+    const writes = new Map();
+    const result = initializeMissingBaselines({
+      runtimeDir: "/repo/state/runtime",
+      rootDir: "/repo",
+      config: { build: { type_check: "missing-tsc", lint: "eslint ." } },
+      existsSync: () => false,
+      writeFileSync: (file, content) => writes.set(file, content),
+      execFileSync: (_bin, args) => {
+        if (args[1].startsWith("missing-tsc")) {
+          const error = new Error("missing-tsc: command not found");
+          error.status = 127;
+          error.stderr = "missing-tsc: command not found\n";
+          throw error;
+        }
+        return "[]";
+      },
+      log: () => {},
+      nowIso: () => "2026-05-24T00:00:00.000Z",
+    });
+
+    assert.equal(result[0].tool, "tsc");
+    assert.equal(result[0].blocked, true);
+    const baseline = JSON.parse(writes.get("/repo/state/runtime/tsc-baseline.json"));
+    assert.equal(baseline.meta.status, "blocked");
+    assert.equal(baseline.meta.exit_code, 127);
+    assert.equal(baseline.meta.reason, "baseline_command_unavailable");
+    assert.equal(baseline.meta.artifact_hash, baselineArtifactHash(baseline));
   });
 
   test("cleanupRetryRoundFiles deletes stale retry PRDs but keeps the current PRD", () => {

@@ -428,13 +428,21 @@ export async function defaultPiExecutor(action, context = {}) {
   };
 }
 
+function isDryRunObservation(observation = {}) {
+  return observation.dry_run === true ||
+    observation.dryRun === true ||
+    observation.code === "RUNNER_DRY_RUN_READY";
+}
+
 export async function runPiAgent(input = {}, options = {}) {
   const plan = createPiRunPlan(input, options);
   if (plan.status !== "success") return plan;
 
   if (options.execute !== true) {
     return {
-      status: "success",
+      status: "not_run",
+      code: "PI_PLAN_NOT_EXECUTED",
+      exit_code: 2,
       summary: "PI plan created; execution was not started.",
       next_actions: ["Pass execute=true or use yolo-pi --execute to run the plan."],
       artifacts: plan.artifacts,
@@ -505,6 +513,21 @@ export async function runPiAgent(input = {}, options = {}) {
 
     const observation = await executor(action, { plan, input, options });
     observations.push({ action_id: action.id, ...observation });
+    if (isDryRunObservation(observation)) {
+      writeState("dry_run", `PI dry-run stopped at ${action.id}.`);
+      return {
+        status: "dry_run",
+        summary: `PI dry-run stopped at ${action.id}.`,
+        code: "PI_DRY_RUN_READY",
+        exit_code: 2,
+        next_actions: observation.next_actions || ["Run without dryRun to continue execution."],
+        artifacts: plan.artifacts,
+        plan,
+        observations,
+        stop_condition: action.id === "pi.execute.runner" ? "dry_run_after_runner" : "dry_run_action",
+        dry_run: true,
+      };
+    }
     writeState(observation.status === "success" ? "running" : "error", observation.summary);
     if (observation.status !== "success") {
       return {
@@ -516,19 +539,6 @@ export async function runPiAgent(input = {}, options = {}) {
         plan,
         observations,
         stop_condition: "first_failed_action",
-      };
-    }
-    if (action.id === "pi.execute.runner" && (observation.dry_run === true || observation.code === "RUNNER_DRY_RUN_READY")) {
-      writeState("success", "PI dry-run stopped after runner readiness passed.");
-      return {
-        status: "success",
-        summary: "PI dry-run stopped after runner readiness passed.",
-        next_actions: observation.next_actions || ["Run without dryRun to start implementation."],
-        artifacts: plan.artifacts,
-        plan,
-        observations,
-        stop_condition: "dry_run_after_runner",
-        dry_run: true,
       };
     }
   }

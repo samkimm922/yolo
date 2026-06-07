@@ -149,9 +149,10 @@ describe("evalCodeContains", () => {
     expect(r.detail).toContain("缺少");
   });
 
-  test("no file → pass skip", () => {
+  test("no file → not_run", () => {
     const r = cc({ text: "console.error" });
-    expect(r.passed).toBe(true);
+    expect(r.passed).toBe(false);
+    expect(r.status).toBe("not_run");
   });
 
   test("non-existent file → fail", () => {
@@ -295,12 +296,13 @@ describe("file_lines_max", () => {
     expect(r.results[0].detail).toContain("限制 3 行");
   });
 
-  test("no files/targets → PASS", () => {
+  test("no files/targets → not_run", () => {
     const r = pre([{
       id: "c1", type: "file_lines_max", severity: "FAIL",
       params: { max: 150 }, message: "",
     }]);
-    expect(r.results[0].passed).toBe(true);
+    expect(r.results[0].passed).toBe(false);
+    expect(r.results[0].status).toBe("not_run");
   });
 });
 
@@ -385,10 +387,10 @@ describe("evaluatePreConditions", () => {
     expect(r.allPass).toBe(false);
   });
 
-  test("WARN only → allPass true (WARN doesn't block)", () => {
+  test("WARN only → allPass false", () => {
     const r = pre([{ id: "w1", type: "code_contains", severity: "WARN",
       params: { text: "DOES_NOT_EXIST", file: fileA }, message: "" }]);
-    expect(r.allPass).toBe(true);
+    expect(r.allPass).toBe(false);
   });
 
   test("empty pre_conditions → allPass true", () => {

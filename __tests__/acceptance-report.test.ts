@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildAcceptanceReport, runYoloAcceptCli } from "../src/runtime/acceptance/report.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+import { runYoloCli } from "../src/cli/yolo.js";
 
 function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-acceptance-report-"));
@@ -341,6 +342,145 @@ describe("acceptance report", () => {
     }
   });
 
+  test("runYoloAcceptCli exits 2 for approved acceptance warnings", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    let stdout = "";
+    let stderr = "";
+    try {
+      const prdPath = join(root, "prd.json");
+      const approvalPath = join(stateRoot, "lifecycle/acceptance-approval.json");
+      writeJson(prdPath, prd());
+      writeJson(join(stateRoot, "adapters/local-browser.manifest.json"), {
+        schema: "yolo.manifest.v1",
+        id: "local-browser",
+        kind: "acceptance_adapter",
+        description: "Local browser adapter",
+        inputs: ["url"],
+        outputs: ["report"],
+        commands: [{ command: "npm run accept" }],
+        evidence: ["screenshot"],
+        capabilities: ["page_reachable", "screenshot"],
+      });
+      writeJson(join(stateRoot, "state/evidence/adapters/local-browser-latest.json"), {
+        status: "pass",
+        artifact_path: join(stateRoot, "state/evidence/adapters/local-browser-latest.json"),
+        ui_evidence: {
+          page_reachable: true,
+          critical_path_passed: true,
+          required_state_present: true,
+          screenshots: ["state/evidence/ui.png"],
+          polish_notes: ["Spacing should get a final human polish pass."],
+        },
+      });
+      writeJson(approvalPath, {
+        approved: true,
+        approver: "release-owner",
+        approved_at: "2026-06-06T00:00:00.000Z",
+        prd_path: prdPath,
+        mode: "release",
+        warning_count: 1,
+      });
+      writeLifecycleStageReport("run", {
+        status: "success",
+        summary: "run passed",
+        evidence: [{ path: "state/run/run-report.json" }],
+      }, lifecycleOptions(root));
+      writeLifecycleStageReport("review-fix", {
+        status: "success",
+        summary: "review passed",
+        findings: [],
+        evidence: [{ path: "state/review/review-report.json" }],
+      }, lifecycleOptions(root));
+
+      const exitCode = runYoloAcceptCli(["--cwd", root, "prd.json", "--release", "--approval", approvalPath, "--json", "--no-write"], {
+        cwd: root,
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      const report = JSON.parse(stdout);
+
+      assert.equal(exitCode, 2);
+      assert.equal(stderr, "");
+      assert.equal(report.status, "warning");
+      assert.equal(report.code, "ACCEPTANCE_WARNING");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("root yolo accept and yolo release accept exit 2 for approved acceptance warnings", async () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      const prdPath = join(root, "prd.json");
+      const approvalPath = join(stateRoot, "lifecycle/acceptance-approval.json");
+      writeJson(prdPath, prd());
+      writeJson(join(stateRoot, "adapters/local-browser.manifest.json"), {
+        schema: "yolo.manifest.v1",
+        id: "local-browser",
+        kind: "acceptance_adapter",
+        description: "Local browser adapter",
+        inputs: ["url"],
+        outputs: ["report"],
+        commands: [{ command: "npm run accept" }],
+        evidence: ["screenshot"],
+        capabilities: ["page_reachable", "screenshot"],
+      });
+      writeJson(join(stateRoot, "state/evidence/adapters/local-browser-latest.json"), {
+        status: "pass",
+        artifact_path: join(stateRoot, "state/evidence/adapters/local-browser-latest.json"),
+        ui_evidence: {
+          page_reachable: true,
+          critical_path_passed: true,
+          required_state_present: true,
+          screenshots: ["state/evidence/ui.png"],
+          polish_notes: ["Spacing should get a final human polish pass."],
+        },
+      });
+      writeJson(approvalPath, {
+        approved: true,
+        approver: "release-owner",
+        approved_at: "2026-06-06T00:00:00.000Z",
+        prd_path: prdPath,
+        mode: "release",
+        warning_count: 1,
+      });
+      writeLifecycleStageReport("run", {
+        status: "success",
+        summary: "run passed",
+        evidence: [{ path: "state/run/run-report.json" }],
+      }, lifecycleOptions(root));
+      writeLifecycleStageReport("review-fix", {
+        status: "success",
+        summary: "review passed",
+        findings: [],
+        evidence: [{ path: "state/review/review-report.json" }],
+      }, lifecycleOptions(root));
+
+      for (const argv of [
+        ["accept", "prd.json", "--release", "--approval", approvalPath, "--cwd", root, "--json", "--no-write"],
+        ["release", "accept", "prd.json", "--release", "--approval", approvalPath, "--cwd", root, "--json", "--no-write"],
+      ]) {
+        let stdout = "";
+        let stderr = "";
+        const exitCode = await runYoloCli(argv, {
+          cwd: root,
+          stdout: { write: (chunk) => { stdout += chunk; } },
+          stderr: { write: (chunk) => { stderr += chunk; } },
+        });
+        const report = JSON.parse(stdout);
+
+        assert.equal(exitCode, 2, argv.join(" "));
+        assert.equal(stderr, "");
+        assert.equal(report.status, "warning");
+        assert.equal(report.code, "ACCEPTANCE_WARNING");
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("can collect UI evidence through an authorized adapter bridge", () => {
     const root = tempProject();
     const stateRoot = join(root, ".yolo");
@@ -567,6 +707,142 @@ describe("acceptance report", () => {
       const issue = report.issues.find((item) => item.code === "RUN_REPORT_NOT_CLEAN");
       assert.equal(issue.gate_failures, 1);
       assert.equal(issue.evidence_failures, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks warning dry-run and nested non-pass run reports", () => {
+    const root = tempProject();
+    try {
+      for (const runReportFixture of [
+        { status: "warning", summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 } },
+        { status: "dry_run", summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 } },
+        { status: "success", dry_run: true, summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 } },
+        { status: "success", summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 }, report: { status: "warning" } },
+        { status: "success", summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 }, task_results: [{ task_id: "FIX-1", status: "failed" }] },
+        { status: "success", summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 }, results: [{ report: { result: { run_report: { items: [{ status: "failed" }] } } } }] },
+        { status: "success", summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 }, custom_groups: [{ metadata: { dryRun: true } }] },
+        { status: "success", summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 }, fixtures: { status: "not_run", run_count: 0 } },
+      ]) {
+        const report = buildAcceptanceReport({
+          prd: prd({ scope: { targets: [{ file: "src/services/inventory.ts" }] } }),
+          runReport: runReportFixture,
+          reviewReport: { findings: [] },
+          projectRoot: root,
+          stateRoot: join(root, ".yolo"),
+        });
+
+        assert.equal(report.status, "blocked");
+        const issue = report.issues.find((item) => item.code === "RUN_REPORT_NOT_CLEAN");
+        assert.ok(issue, JSON.stringify(report.issues, null, 2));
+        assert.equal(issue.non_pass_statuses.length > 0 || issue.dry_run_flags.length > 0, true);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks adapter evidence that is not pass or success", () => {
+    const root = tempProject();
+    try {
+      for (const status of ["warning", "dry_run", "not_run", "ready", "fail", "failed", undefined]) {
+        const report = buildAcceptanceReport({
+          prd: prd({ scope: { targets: [{ file: "src/pages/inventory.tsx" }] } }),
+          runReport: {
+            status: "success",
+            summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 },
+          },
+          reviewReport: { findings: [] },
+          adapterEvidence: {
+            status,
+            adapter: { id: "local-browser" },
+          },
+          uiEvidence: {
+            page_reachable: true,
+            critical_path_passed: true,
+            required_state_present: true,
+            screenshots: ["state/evidence/ui.png"],
+          },
+          resolver: { selected: { acceptance_adapter: { id: "local-browser" } }, blockers: [] },
+          projectRoot: root,
+          stateRoot: join(root, ".yolo"),
+        });
+
+        assert.equal(report.status, "blocked", String(status));
+        const expectedCode = ["failed", "fail"].includes(String(status)) ? "ADAPTER_EVIDENCE_BLOCKED" : "ADAPTER_EVIDENCE_NOT_CLEAN";
+        assert.ok(report.issues.some((issue) => issue.code === expectedCode), JSON.stringify(report.issues, null, 2));
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks run reports with broken evidence ledger integrity", () => {
+    const root = tempProject();
+    try {
+      const report = buildAcceptanceReport({
+        prd: prd({ scope: { targets: [{ file: "src/services/inventory.ts" }] } }),
+        runReport: {
+          status: "success",
+          summary: {
+            completed: 1,
+            failed: 0,
+            blocked: 0,
+            evidence_failures: 0,
+          },
+          ledger: {
+            integrity: {
+              status: "fail",
+              error_count: 1,
+            },
+          },
+          fixtures: { fail_count: 0 },
+        },
+        uiEvidence: {
+          page_reachable: true,
+          critical_path_passed: true,
+          required_state_present: true,
+          screenshots: ["state/evidence/ui.png"],
+        },
+        resolver: { selected: { acceptance_adapter: { id: "local-browser" } }, blockers: [] },
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+      });
+
+      assert.equal(report.status, "blocked");
+      const issue = report.issues.find((item) => item.code === "RUN_REPORT_NOT_CLEAN");
+      assert.equal(issue.ledger_integrity_errors, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks release acceptance when only degraded fixture evidence is present", () => {
+    const root = tempProject();
+    try {
+      const report = buildAcceptanceReport({
+        prd: prd({ scope: { targets: [{ file: "src/services/inventory.ts" }] } }),
+        runReport: {
+          status: "success",
+          summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 },
+          fixtures: { fail_count: 0, degraded_count: 1 },
+        },
+        reviewReport: { findings: [] },
+        uiEvidence: {
+          page_reachable: true,
+          critical_path_passed: true,
+          required_state_present: true,
+          screenshots: ["state/evidence/ui.png"],
+        },
+        resolver: { selected: { acceptance_adapter: { id: "local-browser" } }, blockers: [] },
+        mode: "release",
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+      });
+
+      assert.equal(report.status, "blocked");
+      assert.ok(report.issues.some((issue) => issue.code === "DEGRADED_FIXTURE_RELEASE_BLOCKED"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

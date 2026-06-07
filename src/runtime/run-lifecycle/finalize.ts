@@ -1,11 +1,13 @@
 import {
+  cpSync as defaultCpSync,
   existsSync as defaultExistsSync,
+  mkdirSync as defaultMkdirSync,
   readdirSync as defaultReaddirSync,
   rmSync as defaultRmSync,
   unlinkSync as defaultUnlinkSync,
 } from "node:fs";
 import { spawnSync as defaultSpawnSync } from "node:child_process";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const PERSIST_RUNTIME_FILES = new Set([
   "learn-stats.json",
@@ -15,6 +17,11 @@ const PERSIST_RUNTIME_FILES = new Set([
   "task-results.jsonl",
   "task-logs",
 ]);
+
+const RAW_STATE_LOG_FILES = [
+  "yolo-output.log",
+  "review-log.jsonl",
+];
 
 function isSafeWorktreeRoot(worktreeRoot) {
   if (!worktreeRoot) return false;
@@ -66,6 +73,47 @@ export function cleanDirByPattern({
   return removed;
 }
 
+function archiveStamp(now = new Date()) {
+  return now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+export function archiveRawRunEvidence({
+  stateDir,
+  runtimeDir,
+  completionStatus = "unknown",
+  now = new Date(),
+  existsSync = defaultExistsSync,
+  readdirSync = defaultReaddirSync,
+  mkdirSync = defaultMkdirSync,
+  cpSync = defaultCpSync,
+} = {}) {
+  if (completionStatus !== "success") {
+    return { archived: false, reason: "non_success_run", archived_count: 0 };
+  }
+  const archiveDir = join(stateDir, "archive", "raw-runtime", archiveStamp(now));
+  let archivedCount = 0;
+  const copy = (src, dst) => {
+    if (!existsSync(src)) return;
+    mkdirSync(dirname(dst), { recursive: true });
+    cpSync(src, dst, { recursive: true });
+    archivedCount++;
+  };
+
+  if (runtimeDir && existsSync(runtimeDir)) {
+    for (const file of readdirSync(runtimeDir)) {
+      copy(join(runtimeDir, file), join(archiveDir, "runtime", file));
+    }
+  }
+  for (const file of RAW_STATE_LOG_FILES) {
+    copy(join(stateDir, file), join(archiveDir, "state", file));
+  }
+
+  if (archivedCount === 0) {
+    return { archived: false, reason: "no_raw_evidence", archived_count: 0, archive_dir: archiveDir };
+  }
+  return { archived: true, archived_count: archivedCount, archive_dir: archiveDir };
+}
+
 export function cleanupRunArtifacts({
   yoloRoot,
   toolsRoot = yoloRoot,
@@ -78,13 +126,29 @@ export function cleanupRunArtifacts({
   normalizeRepoPath = (value) => value,
   existsSync = defaultExistsSync,
   readdirSync = defaultReaddirSync,
+  mkdirSync = defaultMkdirSync,
+  cpSync = defaultCpSync,
   rmSync = defaultRmSync,
   unlinkSync = defaultUnlinkSync,
   spawnSync = defaultSpawnSync,
   consoleLog = (...args) => console.log(...args),
+  now = new Date(),
 } = {}) {
   consoleLog("\n[cleanup] 自动清理临时文件...");
   let cleanedCount = 0;
+  const rawEvidenceArchive = archiveRawRunEvidence({
+    stateDir,
+    runtimeDir,
+    completionStatus,
+    now,
+    existsSync,
+    readdirSync,
+    mkdirSync,
+    cpSync,
+  });
+  if (rawEvidenceArchive.archived) {
+    consoleLog(`[cleanup] 原始运行证据已归档: ${rawEvidenceArchive.archive_dir}`);
+  }
   const removePath = (filePath) => {
     try {
       if (!existsSync(filePath)) return false;
@@ -144,7 +208,7 @@ export function cleanupRunArtifacts({
   try {
     const cleanupScript = join(toolsRoot, "noise-cleanup.js");
     if (!existsSync(cleanupScript)) {
-      return { cleanedCount, worktreeCleanup };
+    return { cleanedCount, worktreeCleanup, rawEvidenceArchive };
     }
     const cleanup = spawnSync("node", [
       cleanupScript,
@@ -162,11 +226,13 @@ export function cleanupRunArtifacts({
     consoleLog(`[cleanup] noise-cleanup 非阻断异常: ${error.message}`);
   }
 
-  return { cleanedCount, worktreeCleanup };
+  return { cleanedCount, worktreeCleanup, rawEvidenceArchive };
 }
 
+const RUN_CLEAN_STATUSES = new Set(["pass", "success"]);
+const RUN_CLEAN_FINAL_OUTCOMES = new Set(["pass", "success"]);
 const RUN_ERROR_STATUSES = new Set(["blocked", "error", "failed", "fail"]);
-const RUN_ATTENTION_STATUSES = new Set(["needs_attention", ...RUN_ERROR_STATUSES]);
+const STATUS_FIELDS = new Set(["status", "verdict", "outcome"]);
 
 function cleanStatus(value) {
   return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
@@ -197,21 +263,56 @@ function pushIssue(issues, code, detail, count = 1) {
   issues.push({ code, count, detail });
 }
 
-function reportStatusValues(report = {}) {
-  return [
-    report.status,
-    report.verdict,
-    report.outcome,
-    report.result?.status,
-    report.report?.status,
-    report.report?.verdict,
-    report.report?.outcome,
-    report.report?.result?.status,
-  ].map(cleanStatus).filter(Boolean);
+function collectStatusEntries(value, field = "", depth = 0, seen = new Set()) {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      collectStatusEntries(item, field ? `${field}.${index}` : String(index), depth + 1, seen),
+    );
+  }
+  if (!value || typeof value !== "object" || depth > 20 || seen.has(value)) return [];
+  seen.add(value);
+  const entries = [];
+  for (const [key, child] of Object.entries(value)) {
+    const nextField = field ? `${field}.${key}` : key;
+    if (STATUS_FIELDS.has(key)) {
+      const status = cleanStatus(child);
+      const wrapperStatus = key === "status" &&
+        ["completed", "done"].includes(status) &&
+        Boolean(value.report || value.result || value.run_report || value.runReport);
+      if (status && !wrapperStatus) entries.push({ field: nextField, status });
+    }
+    if (child && typeof child === "object") {
+      entries.push(...collectStatusEntries(child, nextField, depth + 1, seen));
+    }
+  }
+  return entries;
 }
 
-function reportHasErrorStatus(report = {}) {
-  return reportStatusValues(report).some((status) => RUN_ERROR_STATUSES.has(status));
+function collectDryRunFlags(value, field = "", depth = 0, seen = new Set()) {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      collectDryRunFlags(item, field ? `${field}.${index}` : String(index), depth + 1, seen),
+    );
+  }
+  if (!value || typeof value !== "object" || depth > 20 || seen.has(value)) return [];
+  seen.add(value);
+  const flags = [];
+  for (const [key, child] of Object.entries(value)) {
+    const nextField = field ? `${field}.${key}` : key;
+    if ((key === "dry_run" || key === "dryRun") && child === true) flags.push({ field: nextField });
+    if (child && typeof child === "object") {
+      flags.push(...collectDryRunFlags(child, nextField, depth + 1, seen));
+    }
+  }
+  return flags;
+}
+
+function reportStatusValues(report = {}) {
+  return collectStatusEntries(report).map((entry) => entry.status);
+}
+
+function reportHasNonCleanStatus(report = {}) {
+  return reportStatusValues(report).some((status) => !RUN_CLEAN_STATUSES.has(status));
 }
 
 function pathCount(value) {
@@ -220,8 +321,9 @@ function pathCount(value) {
 
 function collectTaskResultStatusIssues(result = {}) {
   const issues = [];
-  const statusValues = reportStatusValues(result);
-  pushIssue(issues, "RUNNER_RESULT_STATUS_ERROR", "runner result status is not clean", statusValues.some((status) => RUN_ERROR_STATUSES.has(status)) ? 1 : 0);
+  const statusEntries = collectStatusEntries(result);
+  pushIssue(issues, "RUNNER_RESULT_STATUS_ERROR", "runner result status is not clean", statusEntries.filter((entry) => !RUN_CLEAN_STATUSES.has(entry.status)).length);
+  pushIssue(issues, "RUNNER_RESULT_DRY_RUN", "runner result contains dry-run evidence", collectDryRunFlags(result).length);
   pushIssue(issues, "RUNNER_RESULT_ERRORS", "runner result contains errors", countItems(result.error) + countItems(result.errors));
   return issues;
 }
@@ -249,7 +351,9 @@ function collectRunReportIssues(runReportResult = {}, { requireArtifacts = false
   }
 
   if (report) {
-    pushIssue(issues, "RUN_REPORT_STATUS_ERROR", "run report status is not clean", reportHasErrorStatus(report) ? 1 : 0);
+    const statusEntries = collectStatusEntries(report);
+    pushIssue(issues, "RUN_REPORT_STATUS_ERROR", "run report status is not clean", statusEntries.filter((entry) => !RUN_CLEAN_STATUSES.has(entry.status)).length);
+    pushIssue(issues, "RUN_REPORT_DRY_RUN", "run report contains dry-run evidence", collectDryRunFlags(report).length);
     pushIssue(issues, "RUN_REPORT_ERRORS", "run report contains errors", countItems(report.errors) + countItems(report.error));
     pushIssue(issues, "EVIDENCE_FAILURES", "run report contains evidence failures", positiveNumber(report.summary?.evidence_failures ?? report.evidence_failure_count ?? report.evidence_failures));
     pushIssue(issues, "REVIEW_ISSUES", "run report contains review issues", positiveNumber(report.review?.issue_count));
@@ -266,14 +370,17 @@ function collectRunReportIssues(runReportResult = {}, { requireArtifacts = false
   if (finalAnswer) {
     const status = cleanStatus(finalAnswer.status);
     const outcome = cleanStatus(finalAnswer.outcome);
-    pushIssue(issues, "FINAL_ANSWER_STATUS_ERROR", "final answer status is not clean", RUN_ERROR_STATUSES.has(status) ? 1 : 0);
-    pushIssue(issues, "FINAL_ANSWER_NEEDS_ATTENTION", "final answer outcome needs attention", RUN_ATTENTION_STATUSES.has(outcome) ? 1 : 0);
+    const finalAnswerStatusEntries = collectStatusEntries(finalAnswer);
+    pushIssue(issues, "FINAL_ANSWER_STATUS_ERROR", "final answer status is not clean", status && !RUN_CLEAN_STATUSES.has(status) ? 1 : 0);
+    pushIssue(issues, "FINAL_ANSWER_NEEDS_ATTENTION", "final answer outcome needs attention", outcome && !RUN_CLEAN_FINAL_OUTCOMES.has(outcome) ? 1 : 0);
+    pushIssue(issues, "FINAL_ANSWER_NESTED_STATUS_ERROR", "final answer contains nested non-clean status", finalAnswerStatusEntries.filter((entry) => !RUN_CLEAN_STATUSES.has(entry.status) && entry.field !== "outcome").length);
+    pushIssue(issues, "FINAL_ANSWER_DRY_RUN", "final answer contains dry-run evidence", collectDryRunFlags(finalAnswer).length);
     pushIssue(issues, "FINAL_ANSWER_BLOCKERS", "final answer contains blockers", countItems(finalAnswer.blockers));
     pushIssue(
       issues,
       "FINAL_ANSWER_CHECK_FAILURES",
-      "final answer contains failed checks",
-      asArray(finalAnswer.checks).filter((check) => RUN_ERROR_STATUSES.has(cleanStatus(check?.status))).length,
+      "final answer contains non-pass checks",
+      asArray(finalAnswer.checks).filter((check) => !RUN_CLEAN_STATUSES.has(cleanStatus(check?.status))).length,
     );
   }
 

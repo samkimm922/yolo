@@ -60,8 +60,20 @@ describe("public package entrypoints", () => {
 
     assert.equal(result.stderr, "");
     assert.equal(result.status, 0);
+    assert.match(result.stdout, /^  yolo status\b/m);
+    assert.match(result.stdout, /^  yolo demand\b/m);
+    assert.match(result.stdout, /^  yolo spec\b/m);
+    assert.match(result.stdout, /^  yolo tasks\b/m);
     assert.match(result.stdout, /^  yolo run <prd\.json>/m);
-    assert.match(result.stdout, /普通 Claude\/Codex\/GUI 集成应使用 `yolo run`/);
+    assert.match(result.stdout, /^  yolo check\b/m);
+    assert.match(result.stdout, /^  yolo review\b/m);
+    assert.match(result.stdout, /^  yolo release\b/m);
+    assert.match(result.stdout, /普通 Claude\/Codex\/GUI 集成只展示 8 个稳定入口/);
+    assert.doesNotMatch(result.stdout, /^  yolo prd\b/m);
+    assert.doesNotMatch(result.stdout, /^  yolo plan\b/m);
+    assert.doesNotMatch(result.stdout, /^  yolo next\b/m);
+    assert.doesNotMatch(result.stdout, /^  yolo office-hours\b/m);
+    assert.doesNotMatch(result.stdout, /^  yolo release-candidate\b/m);
     assert.doesNotMatch(result.stdout, /^  yolo pi\b/m);
     assert.doesNotMatch(result.stdout, /^  yolo gate\b/m);
     assert.doesNotMatch(result.stdout, /^  yolo preflight\b/m);
@@ -189,9 +201,9 @@ describe("public package entrypoints", () => {
         "--json",
       ], { cwd: YOLO_DIR, encoding: "utf8" });
       assert.equal(pi.stderr, "");
-      assert.equal(pi.status, 0, pi.stdout);
+      assert.equal(pi.status, 2, pi.stdout);
       const piPayload = JSON.parse(pi.stdout);
-      assert.equal(piPayload.status, "success");
+      assert.equal(piPayload.status, "dry_run");
       assert.equal(piPayload.dry_run, true);
       assert.equal(piPayload.stop_condition, "dry_run_after_runner");
       assert.ok(piPayload.plan.actions.some((action) => action.id === "pi.acceptance"));
@@ -211,8 +223,9 @@ describe("public package entrypoints", () => {
         "--json",
       ], { cwd: YOLO_DIR, encoding: "utf8" });
       assert.equal(runner.stderr, "");
-      assert.equal(runner.status, 0, runner.stdout);
+      assert.equal(runner.status, 2, runner.stdout);
       const runnerPayload = JSON.parse(runner.stdout);
+      assert.equal(runnerPayload.status, "dry_run");
       assert.equal(runnerPayload.code, "RUNNER_DRY_RUN_READY");
       assert.equal(runnerPayload.dry_run, true);
       assert.equal(runnerPayload.artifacts[0], relativePrd);
@@ -262,9 +275,9 @@ describe("public package entrypoints", () => {
         "--no-write",
       ], { cwd: YOLO_DIR, encoding: "utf8" });
       assert.equal(brainstorm.stderr, "");
-      assert.equal(brainstorm.status, 0, brainstorm.stdout);
       const brainstormPayload = JSON.parse(brainstorm.stdout);
-      assert.equal(brainstormPayload.code, "DEMAND_READY");
+      assert.ok(["DEMAND_READY", "DEMAND_WARNING"].includes(brainstormPayload.code));
+      assert.equal(brainstorm.status, brainstormPayload.code === "DEMAND_READY" ? 0 : 2);
       assert.equal(brainstormPayload.session.schema, "yolo.demand.session.v1");
       assert.equal(brainstormPayload.guarantees.writes_business_code, false);
 
@@ -291,16 +304,20 @@ describe("public package entrypoints", () => {
   });
 
   test("yolo-pi bin calls src CLI without changing output shape", () => {
-    const output = execFileSync(process.execPath, [
+    const result = spawnSync(process.execPath, [
       resolve(YOLO_DIR, packageJson.bin["yolo-pi"]),
       "--prd",
       "data/prd/current/prd-yolo-p40-progress-dashboard.json",
       "--json",
     ], { cwd: YOLO_DIR, encoding: "utf8" });
-    const result = JSON.parse(output);
+    assert.equal(result.stderr, "");
+    assert.equal(result.status, 2);
+    const payload = JSON.parse(result.stdout);
 
-    assert.equal(result.plan.input_source, "prd");
-    assert.ok(result.plan.actions.some((action) => action.id === "pi.execute.runner"));
+    assert.equal(payload.status, "not_run");
+    assert.equal(payload.code, "PI_PLAN_NOT_EXECUTED");
+    assert.equal(payload.plan.input_source, "prd");
+    assert.ok(payload.plan.actions.some((action) => action.id === "pi.execute.runner"));
   });
 
   test("yolo-prd-preflight bin calls src CLI and returns JSON", () => {
@@ -318,13 +335,15 @@ describe("public package entrypoints", () => {
   });
 
   test("yolo-prd-migrate-gates bin calls src CLI and returns dry-run JSON", () => {
-    const output = execFileSync(process.execPath, [
+    const proc = spawnSync(process.execPath, [
       resolve(YOLO_DIR, packageJson.bin["yolo-prd-migrate-gates"]),
       "data/prd/current/prd-yolo-p40-progress-dashboard.json",
       "--json",
     ], { cwd: YOLO_DIR, encoding: "utf8" });
-    const result = JSON.parse(output);
+    const result = JSON.parse(proc.stdout);
 
+    assert.equal(proc.stderr, "");
+    assert.ok([0, 1].includes(proc.status));
     assert.equal(result.dry_run, true);
     assert.equal(result.file.endsWith("data/prd/current/prd-yolo-p40-progress-dashboard.json"), true);
     assert.ok(["success", "blocked"].includes(result.status));

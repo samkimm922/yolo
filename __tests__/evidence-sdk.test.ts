@@ -9,7 +9,9 @@ import {
   createEvidenceLedger,
   EVIDENCE_ARTIFACT_SCHEMA,
   EVIDENCE_SCHEMA_VERSION,
+  evidenceArtifactDigest,
   LEDGER_EVENT_SCHEMA,
+  ledgerRecordHash,
 } from "../src/evidence/ledger.js";
 
 describe("public evidence ledger facade", () => {
@@ -19,14 +21,17 @@ describe("public evidence ledger facade", () => {
       const filePath = join(root, "events.jsonl");
       const payload = appendJsonlRecord(filePath, { event: "spec.checked" }, { now: "2026-05-24T00:00:00.000Z" });
 
-      assert.deepEqual(payload, {
+      assert.deepEqual({ ...payload, record_hash: "<hash>" }, {
         schema_version: EVIDENCE_SCHEMA_VERSION,
         schema: LEDGER_EVENT_SCHEMA,
         ts: "2026-05-24T00:00:00.000Z",
         ledger: "state",
         event: "spec.checked",
         source: "yolo",
+        prev_hash: null,
+        record_hash: "<hash>",
       });
+      assert.equal(payload.record_hash, ledgerRecordHash(payload));
       assert.equal(readFileSync(filePath, "utf8"), `${JSON.stringify(payload)}\n`);
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -46,6 +51,7 @@ describe("public evidence ledger facade", () => {
       assert.match(readFileSync(join(stateDir, "runs.jsonl"), "utf8"), /"event":"run.done"/);
       assert.equal(artifact.schema_version, EVIDENCE_SCHEMA_VERSION);
       assert.equal(artifact.schema, EVIDENCE_ARTIFACT_SCHEMA);
+      assert.equal(artifact.artifact_digest, evidenceArtifactDigest(artifact));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -60,6 +66,7 @@ describe("public evidence ledger facade", () => {
 
     assert.equal(artifact.schema_version, EVIDENCE_SCHEMA_VERSION);
     assert.equal(artifact.artifact_type, "sdk.sample");
+    assert.equal(artifact.artifact_digest, evidenceArtifactDigest(artifact));
   });
 
   test("createEvidenceLedger requires an explicit stateDir", () => {

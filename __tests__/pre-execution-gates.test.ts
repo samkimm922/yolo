@@ -221,6 +221,35 @@ describe("pre-execution gates", () => {
     }
   });
 
+  test("blocks contract warnings instead of entering runner execution", () => {
+    const paths = makePaths();
+    try {
+      const prd = strictPrd();
+      prd.tasks[0].post_conditions.push({
+        id: "POST-MANUAL",
+        type: "acceptance_criteria",
+        severity: "FAIL",
+        params: { text: "Human review is still required." },
+      });
+
+      const result = inspectPreExecutionGates({
+        prd,
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+      });
+
+      assert.equal(result.status, "blocked");
+      assert.equal(result.stage, "contract");
+      assert.equal(result.code, "PRD_CONTRACT_WARNING_BLOCKED");
+      assert.equal(result.exit_code, 2);
+      assert.equal(result.contract.status, "warning");
+      assert.ok(result.contract.doctor.warnings.some((warning) => warning.code === "MANUAL_FAIL_CONDITION"));
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("passes when contract and spec gates both pass", () => {
     const paths = makePaths();
     try {

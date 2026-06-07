@@ -277,14 +277,23 @@ export function buildGateRemediationPlan({
     decisionAction,
     gateFailureDecision,
   }));
-  const aggregateResult = aggregate(items);
   const warningCount = asArray(warnings).length;
+  const aggregateResult = items.length === 0 && warningCount > 0
+    ? {
+      status: "human_required",
+      action: GATE_REMEDIATION_ACTIONS.ASK_HUMAN,
+      automation_can_continue: false,
+      requires_human: true,
+      unsafe_stop: false,
+      blocks_ship: true,
+    }
+    : aggregate(items);
   return {
     schema_version: GATE_REMEDIATION_SCHEMA_VERSION,
     schema: GATE_REMEDIATION_SCHEMA,
     source,
     gate_strength: "strict",
-    policy: "strong_gate_non_blocking_remediation",
+    policy: "strong_gate_fail_closed_remediation",
     status: aggregateResult.status,
     action: aggregateResult.action,
     automation_can_continue: aggregateResult.automation_can_continue,
@@ -301,7 +310,7 @@ export function buildGateRemediationPlan({
       items.length
         ? "Strict gate produced remediation work; ship remains blocked until it passes."
         : warningCount
-          ? "Strict gate passed with warnings; warnings do not block automation."
+          ? "Strict gate produced warnings; automation is blocked until the warnings are reviewed or remediated."
           : "Strict gate passed."
     ),
     items,

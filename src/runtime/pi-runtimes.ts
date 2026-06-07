@@ -109,6 +109,10 @@ function runPrdGenerateRuntime(params = {}) {
     output,
     title: params.title,
     cwd: params.projectRoot,
+    approvedDemandContract: params.approvedDemandContract
+      || params.approved_demand_contract
+      || params.demandContract
+      || params.demand_contract,
   });
 
   if (!result.ok) {

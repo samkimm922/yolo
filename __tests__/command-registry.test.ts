@@ -7,8 +7,11 @@ import { initProject } from "../src/core/bootstrap.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
 import { runYoloCli } from "../src/cli/yolo.js";
 import {
+  DEFAULT_YOLO_PUBLIC_COMMAND_NAMES,
+  YOLO_COMMAND_SURFACE_BUDGET,
   buildYoloCommandRegistry,
   getYoloCommand,
+  inspectYoloCommandRegistry,
   listYoloBridgeWorkflowIds,
   listYoloCommandNames,
   listYoloCommands,
@@ -47,83 +50,58 @@ function runnablePrd(id = "FIX-CLI-001") {
 }
 
 describe("YOLO command registry", () => {
-  test("lists the full lifecycle command set from one source of truth", () => {
-    assert.deepEqual(listYoloCommandNames(), [
-      "yolo",
-      "yolo-brainstorm",
-      "yolo-demand",
-      "yolo-interview",
-      "yolo-discover",
-      "yolo-discuss",
-      "yolo-init",
-      "yolo-setup",
-      "yolo-plan",
-      "yolo-prd",
-      "yolo-check",
-      "yolo-next",
-      "yolo-run",
-      "yolo-review",
-      "yolo-fix",
-      "yolo-accept",
-      "yolo-ui-review",
-      "yolo-eval",
-      "yolo-release-candidate",
-      "yolo-ship",
-      "yolo-learn",
-      "yolo-doctor",
-      "yolo-install",
+  test("lists the 8 stable user-facing commands by default", () => {
+    assert.equal(YOLO_COMMAND_SURFACE_BUDGET, 8);
+    assert.deepEqual(DEFAULT_YOLO_PUBLIC_COMMAND_NAMES, [
+      "status",
+      "demand",
+      "spec",
+      "tasks",
+      "run",
+      "check",
+      "review",
+      "release",
     ]);
+    assert.deepEqual(listYoloCommandNames(), DEFAULT_YOLO_PUBLIC_COMMAND_NAMES);
+    assert.ok(listYoloCommandNames({ includeHidden: true }).length > DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.length);
   });
 
   test("classifies no-code and code-writing commands", () => {
     assert.deepEqual(listYoloCommands({ writesCode: true }).map((command) => command.name), [
-      "yolo-run",
+      "run",
       "yolo-fix",
+      "runner",
     ]);
-    assert.equal(listYoloCommands({ noCode: true }).some((command) => command.name === "yolo-doctor"), true);
-    assert.deepEqual(listYoloCommands({ recommended: true }).map((command) => command.name).slice(0, 3), [
-      "yolo",
-      "yolo-demand",
-      "yolo-init",
-    ]);
-    assert.deepEqual(listYoloCommands({ compatibilityAliases: true }).map((command) => command.name), [
-      "yolo-brainstorm",
-      "yolo-interview",
-      "yolo-discover",
-      "yolo-discuss",
-    ]);
-    assert.equal(getYoloCommand("/yolo-setup").lifecycle_stage, "setup");
-    assert.equal(getYoloCommand("/yolo-prd").lifecycle_stage, "prd");
-    assert.equal(getYoloCommand("/yolo-interview").alias_for, "yolo-demand");
+    assert.equal(listYoloCommands({ noCode: true }).some((command) => command.name === "doctor"), true);
+    assert.deepEqual(listYoloCommands({ recommended: true }).map((command) => command.name), DEFAULT_YOLO_PUBLIC_COMMAND_NAMES);
+    assert.ok(listYoloCommands({ compatibilityAliases: true }).every((command) => command.stability === "compat"));
+    assert.equal(getYoloCommand("/yolo-setup").stability, "internal");
+    assert.equal(getYoloCommand("/yolo-prd").alias_for, "spec");
+    assert.equal(getYoloCommand("/yolo-interview").alias_for, "demand");
+    assert.equal(getYoloCommand("yolo demand").name, "demand");
     assert.throws(() => getYoloCommand("wat"), /Unknown YOLO command/);
   });
 
-  test("public mainline excludes implementation engines from recommended commands", () => {
+  test("public mainline excludes compatibility aliases and implementation engines", () => {
     const names = listYoloCommands({ recommended: true }).map((command) => command.name);
-    const engineNames = ["runner", "pi", "gate", "preflight", "yolo-runner", "yolo-pi", "yolo-gate", "yolo-prd-preflight"];
+    const hiddenNames = ["office-hours", "runner", "pi", "gate", "preflight", "yolo-runner", "yolo-pi", "yolo-gate", "yolo-prd-preflight", "yolo-release-candidate"];
 
-    assert.deepEqual(names.slice(0, 6), [
-      "yolo",
-      "yolo-demand",
-      "yolo-init",
-      "yolo-setup",
-      "yolo-plan",
-      "yolo-prd",
-    ]);
-    assert.equal(names.includes("yolo-check"), true);
-    assert.equal(names.includes("yolo-run"), true);
-    for (const name of names) assert.match(name, /^yolo(?:-|$)/);
-    for (const name of engineNames) assert.equal(names.includes(name), false, `${name} must stay out of the public mainline`);
+    assert.deepEqual(names, DEFAULT_YOLO_PUBLIC_COMMAND_NAMES);
+    assert.equal(names.length, 8);
+    assert.equal(names.includes("check"), true);
+    assert.equal(names.includes("run"), true);
+    for (const name of hiddenNames) assert.equal(names.includes(name), false, `${name} must stay out of the public mainline`);
 
-    const run = getYoloCommand("yolo-run");
+    const run = getYoloCommand("run");
     assert.equal(run.writes_code, true);
     assert.equal(run.requires_confirmation, true);
     assert.match(run.safety, /checked PRD/);
   });
 
   test("demand command defaults to one-question interview before PRD", () => {
-    const demand = getYoloCommand("yolo-demand");
+    const demand = getYoloCommand("demand");
     const interview = getYoloCommand("yolo-interview");
+    const officeHours = getYoloCommand("office-hours");
     const demandText = [demand.description, demand.objective, demand.safety, demand.usage].join("\n");
     const interviewText = [interview.description, interview.objective, interview.safety, interview.usage].join("\n");
 
@@ -137,18 +115,29 @@ describe("YOLO command registry", () => {
     assert.equal(demand.writes_code, false);
     assert.equal(demand.requires_confirmation, false);
 
-    assert.equal(interview.alias_for, "yolo-demand");
+    assert.equal(interview.alias_for, "demand");
     assert.match(interviewText, /same one-question demand interview host contract/);
     assert.match(interviewText, /next_question/);
     assert.match(interviewText, /不输出大段建议/);
     assert.match(interviewText, /不进入 PRD/);
     assert.match(interviewText, /不改代码/);
+    assert.equal(officeHours.alias_for, "demand");
+    assert.equal(officeHours.visibility, "hidden");
+    assert.match(officeHours.usage, /yolo demand --mode office-hours/);
   });
 
-  test("registry includes bridge workflows and command usage examples", () => {
+  test("registry includes bridge workflows, surface budget, and command usage examples", () => {
     const registry = buildYoloCommandRegistry();
+    const inspection = inspectYoloCommandRegistry(registry);
 
     assert.equal(registry.schema, "yolo.workflow.command_registry.v1");
+    assert.equal(registry.schema_version, "1.1");
+    assert.equal(registry.surface_budget, 8);
+    assert.equal(inspection.status, "pass");
+    assert.equal(inspection.collisions.length, 0);
+    assert.deepEqual(registry.commands.map((command) => command.name), DEFAULT_YOLO_PUBLIC_COMMAND_NAMES);
+    assert.equal(registry.default_surface.length, 8);
+    assert.ok(registry.all_commands.length > registry.commands.length);
     assert.deepEqual(listYoloBridgeWorkflowIds(), [
       "brainstorm",
       "demand",
@@ -167,10 +156,31 @@ describe("YOLO command registry", () => {
       "learn",
       "doctor",
     ]);
-    assert.match(renderYoloCommandUsage("yolo-doctor"), /\/yolo-doctor/);
-    assert.match(renderYoloCommandUsage("yolo-demand"), /聊清楚/);
-    assert.match(renderYoloCommandUsage("yolo-demand"), /--stage dispatch/);
-    assert.match(renderYoloCommandUsage("yolo-interview"), /一问一答/);
+    assert.match(renderYoloCommandUsage("status"), /yolo status/);
+    assert.match(renderYoloCommandUsage("demand"), /office-hours/);
+    assert.match(renderYoloCommandUsage("yolo-prd"), /yolo spec/);
+    assert.match(renderYoloCommandUsage("yolo-interview"), /--stage interview/);
+  });
+
+  test("status/spec/tasks/release stable routes are present", async () => {
+    const root = tempProject("yolo-stable-routes-");
+    try {
+      const { io, stdout, stderr } = captureIo(root);
+      const exitCode = await runYoloCli(["status", "--cwd", root, "--json"], io);
+      const payload = JSON.parse(stdout.text);
+
+      assert.equal(stderr.text, "");
+      assert.equal(exitCode, 0);
+      assert.equal(payload.code, "YOLO_NEXT_READY");
+      assert.deepEqual(["status", "spec", "tasks", "release"].map((name) => getYoloCommand(name).stability), [
+        "stable",
+        "stable",
+        "stable",
+        "stable",
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("root CLI dispatches yolo-install through the registered install handler", async () => {
@@ -259,22 +269,24 @@ describe("YOLO command registry", () => {
       "Scope: src/inventory/alerts.ts",
     ].join(". ");
     try {
-      const aliases = listYoloCommands({ compatibilityAliases: true });
+      const aliases = listYoloCommands({ compatibilityAliases: true }).filter((command) => command.alias_for === "demand");
       assert.deepEqual(aliases.map((command) => [command.name, command.alias_for, command.demand_stage]), [
-        ["yolo-brainstorm", "yolo-demand", "brainstorm"],
-        ["yolo-interview", "yolo-demand", "interview"],
-        ["yolo-discover", "yolo-demand", "discover"],
-        ["yolo-discuss", "yolo-demand", "discuss"],
+        ["yolo-brainstorm", "demand", "brainstorm"],
+        ["yolo-interview", "demand", "interview"],
+        ["yolo-discover", "demand", "discover"],
+        ["yolo-discuss", "demand", "discuss"],
+        ["office-hours", "demand", undefined],
       ]);
       const prdCommand = getYoloCommand("yolo-prd");
-      assert.equal(prdCommand.alias_for, undefined);
-      assert.doesNotMatch(prdCommand.description, /Compatibility alias/);
+      assert.equal(prdCommand.alias_for, "spec");
+      assert.equal(prdCommand.visibility, "hidden");
 
       const checks = [
-        { stage: "brainstorm", argv: ["demand", "--stage", "brainstorm", demandText, "--cwd", root, "--json", "--no-write"], code: "DEMAND_READY" },
+        { stage: "brainstorm", argv: ["demand", "--stage", "brainstorm", demandText, "--cwd", root, "--json", "--no-write"], codes: ["DEMAND_READY", "DEMAND_WARNING"] },
         { stage: "interview", argv: ["demand", "--stage", "interview", "Need low stock alerts", "--cwd", root, "--json", "--no-write"], code: "INTERVIEW_OK" },
         { stage: "discover", argv: ["demand", "--stage", "discover", "Inventory alerts need clearer success criteria", "--cwd", root, "--json", "--no-write"], code: "DISCOVERY_BLOCKED" },
         { stage: "discuss", argv: ["demand", "--stage", "discuss", demandText, "--approve", "--cwd", root, "--json", "--no-write"], code: "DEMAND_BLOCKED" },
+        { stage: "office-hours", argv: ["office-hours", "Need low stock alerts", "--cwd", root, "--json", "--no-write"], codes: ["DEMAND_BLOCKED", "DEMAND_STATUS_READY", "OFFICE_HOURS_CHOICE_REQUIRED"] },
       ];
 
       for (const check of checks) {
@@ -285,9 +297,25 @@ describe("YOLO command registry", () => {
         assert.equal(stderr.text, "", check.stage);
         assert.notEqual(payload.code, "UNKNOWN_DEMAND_COMMAND", check.stage);
         assert.notEqual(payload.code, "UNKNOWN_DEMAND_STAGE", check.stage);
-        assert.equal(payload.code, check.code, check.stage);
-        assert.ok([0, 1].includes(exitCode), check.stage);
+        if (check.codes) assert.ok(check.codes.includes(payload.code), `${check.stage}: ${payload.code}`);
+        else assert.equal(payload.code, check.code, check.stage);
+        assert.equal(exitCode, payload.status === "warning" ? 2 : payload.status === "blocked" || payload.status === "error" ? 1 : 0, check.stage);
       }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("public yolo demand status exits nonzero when demand evidence is missing", async () => {
+    const root = tempProject("yolo-demand-status-missing-");
+    try {
+      const { io, stdout, stderr } = captureIo(root);
+      const exitCode = await runYoloCli(["demand", "status", "--demand", "missing-session.json", "--cwd", root, "--json", "--no-write"], io);
+      const payload = JSON.parse(stdout.text);
+
+      assert.equal(stderr.text, "");
+      assert.notEqual(exitCode, 0);
+      assert.equal(payload.status, "blocked");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

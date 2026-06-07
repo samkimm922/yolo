@@ -12,6 +12,7 @@ import {
 import { execFileSync as defaultExecFileSync, execSync as defaultExecSync } from "node:child_process";
 import { basename, join, resolve } from "node:path";
 import {
+  buildBaselineArtifact,
   parseEslintBaselineErrorKeys,
   parseTscBaselineKeys,
 } from "../execution/baselines.js";
@@ -158,21 +159,63 @@ export function initializeMissingBaselines({
     if (existsSync(baselinePath)) continue;
     log("BASELINE", "init", `初始化 ${tool} baseline...`);
     try {
-      const command = tool === "tsc"
-        ? `${config.build.type_check} 2>&1 || true`
-        : `${config.build.lint} 2>&1 || true`;
-      const output = execFileSync("sh", ["-c", command], { cwd: rootDir, encoding: "utf8", timeout: 120000 });
+      const rawCommand = tool === "tsc" ? config.build.type_check : config.build.lint;
+      const command = `${rawCommand} 2>&1`;
+      let output = "";
+      let stderr = "";
+      let exitCode = 0;
+      let status = "pass";
+      let reason = null;
+      try {
+        output = execFileSync("sh", ["-c", command], { cwd: rootDir, encoding: "utf8", timeout: 120000 });
+      } catch (error) {
+        output = `${error?.stdout || ""}${error?.stderr || ""}`;
+        stderr = String(error?.stderr || "");
+        exitCode = Number.isInteger(error?.status) ? error.status : 1;
+        const blocked = Boolean(error?.signal) ||
+          exitCode === 127 ||
+          /\bnot found\b|is not recognized|command not found/i.test(output) ||
+          !output.trim();
+        if (blocked) {
+          status = "blocked";
+          reason = error?.signal ? "baseline_command_timeout_or_signal" : "baseline_command_unavailable";
+        }
+      }
       const keys = tool === "tsc"
         ? parseTscBaselineKeys(output)
         : parseEslintBaselineErrorKeys(output, rootDir);
-      writeFileSync(baselinePath, JSON.stringify({
+      const createdAt = nowIso();
+      const baseline = buildBaselineArtifact({
+        tool,
         keys,
-        meta: { created_at: nowIso(), updated_at: nowIso(), tool },
-      }, null, 2), "utf8");
-      log("BASELINE", "init", `${tool} baseline: ${keys.length} 个条目`);
-      initialized.push({ tool, keys });
+        command: rawCommand,
+        exitCode,
+        stdout: output,
+        stderr,
+        status,
+        reason,
+        createdAt,
+        updatedAt: createdAt,
+      });
+      writeFileSync(baselinePath, JSON.stringify(baseline, null, 2), "utf8");
+      log("BASELINE", status === "blocked" ? "BLOCK" : "init", `${tool} baseline: ${keys.length} 个条目`);
+      initialized.push({ tool, keys, status, blocked: status === "blocked", baseline });
     } catch (error) {
-      log("BASELINE", "WARN", `${tool} baseline 初始化失败: ${error.message}，跳过`);
+      const createdAt = nowIso();
+      const baseline = buildBaselineArtifact({
+        tool,
+        keys: [],
+        command: tool === "tsc" ? config.build.type_check : config.build.lint,
+        exitCode: 1,
+        stderr: error?.message || String(error),
+        status: "blocked",
+        reason: "baseline_capture_exception",
+        createdAt,
+        updatedAt: createdAt,
+      });
+      try { writeFileSync(baselinePath, JSON.stringify(baseline, null, 2), "utf8"); } catch (_) {}
+      log("BASELINE", "BLOCK", `${tool} baseline 初始化失败: ${error.message}`);
+      initialized.push({ tool, keys: [], status: "blocked", blocked: true, error: error.message, baseline });
     }
   }
   return initialized;
@@ -316,7 +359,14 @@ export function prepareRunStartup({
   truncateJsonlFile({ filePath: join(paths.stateDir, "session-memory.jsonl"), maxLines: config.state.max_session_memory || 200, archiveDir, log: logProgress });
   try { defaultWriteFileSync(join(paths.runtimeDir, "learn-stats.json"), "{}", "utf8"); } catch (_) {}
   if (initializeBaselines) {
-    initializeMissingBaselines({ runtimeDir: paths.runtimeDir, rootDir, config, log: logProgress });
+    const baselineResults = initializeMissingBaselines({ runtimeDir: paths.runtimeDir, rootDir, config, log: logProgress });
+    const blockedBaselines = baselineResults.filter((result) => result.blocked);
+    if (blockedBaselines.length > 0) {
+      throw runnerError("Required baseline initialization failed", 1, {
+        code: "BASELINE_INITIALIZATION_BLOCKED",
+        baselines: blockedBaselines.map(({ tool, status, error }) => ({ tool, status, error: error || null })),
+      });
+    }
   }
   const reviewLogPath = join(paths.stateDir, "review-log.jsonl");
   if (defaultExistsSync(reviewLogPath)) {

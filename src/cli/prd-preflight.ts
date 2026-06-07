@@ -4,7 +4,7 @@ export function usage() {
   return [
     "用法:",
     "  yolo-prd-preflight <prd.json> [--json]",
-    "  yolo-prd-preflight --check-all [--json]",
+    "  yolo-prd-preflight --check-all [--json] [--dir <path>...]",
     "",
     "Preflight 会汇总 schema、contract、migration advice 和 runner readiness，不修改 PRD。",
   ].join("\n");
@@ -28,6 +28,9 @@ function formatSingle(result) {
 
 function formatAll(result) {
   const lines = [`[prd-preflight] ${result.status} files=${result.file_count} pass=${result.pass_count} warning=${result.warning_count} blocked=${result.blocked_count}`];
+  for (const reason of (result.blocked_reasons || []).slice(0, 3)) {
+    lines.push(`  blocked ${reason.source}:${reason.code}: ${reason.detail}`);
+  }
   for (const item of result.results.filter((entry) => entry.status !== "pass")) {
     lines.push(`  ${item.status} ${item.file}`);
     for (const reason of item.blocked_reasons.slice(0, 3)) {
@@ -42,13 +45,37 @@ export function runPrdPreflightCli(argv = process.argv.slice(2), io = {}) {
   const stderr = io.stderr || process.stderr;
   const json = argv.includes("--json");
   const checkAll = argv.includes("--check-all");
-  const fileArg = argv.find((arg) => !arg.startsWith("--"));
+  const options = {};
+  let fileArg = "";
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+    if (arg === "--mode" || arg.startsWith("--mode=")) {
+      options.mode = arg.includes("=") ? arg.split("=").slice(1).join("=") : argv[++index];
+    } else if (arg === "--dir" || arg === "--dirs" || arg.startsWith("--dir=") || arg.startsWith("--dirs=")) {
+      const value = arg.includes("=") ? arg.split("=").slice(1).join("=") : argv[++index];
+      const dirs = String(value || "").split(",").map((item) => item.trim()).filter(Boolean);
+      if (dirs.length > 0) options.dirs = [...(options.dirs || []), ...dirs];
+    } else if (arg === "--strict") {
+      options.mode = "strict";
+      options.strictExecution = true;
+      options.strictWarnings = true;
+    } else if (arg === "--release") {
+      options.mode = "release";
+      options.strictExecution = true;
+      options.strictWarnings = true;
+    } else if (arg === "--verify") {
+      options.mode = "verify";
+      options.strictWarnings = true;
+    } else if (!arg.startsWith("--") && !fileArg) {
+      fileArg = arg;
+    }
+  }
 
   try {
     if (checkAll) {
-      const result = preflightAllPrds();
+      const result = preflightAllPrds(options);
       stdout.write(json ? `${JSON.stringify(result, null, 2)}\n` : `${formatAll(result)}\n`);
-      return result.status === "blocked" ? 1 : 0;
+      return result.status === "pass" ? 0 : result.status === "warning" ? 2 : 1;
     }
 
     if (!fileArg) {
@@ -56,12 +83,12 @@ export function runPrdPreflightCli(argv = process.argv.slice(2), io = {}) {
       return 2;
     }
 
-    const result = preflightPrd(fileArg);
+    const result = preflightPrd(fileArg, options);
     stdout.write(json ? `${JSON.stringify(result, null, 2)}\n` : `${formatSingle(result)}\n`);
-    return result.status === "blocked" ? 1 : 0;
+    return result.status === "pass" ? 0 : result.status === "warning" ? 2 : 1;
   } catch (error) {
     const payload = { status: "error", error: error.message };
     stderr.write(json ? `${JSON.stringify(payload, null, 2)}\n` : `[prd-preflight] ${error.message}\n`);
-    return 2;
+    return 1;
   }
 }

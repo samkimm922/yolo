@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 
 import {
+  buildBaselineArtifact,
   parseEslintBaselineKeys,
   parseTscBaselineKeys,
 } from "./baselines.js";
@@ -241,20 +242,58 @@ function writeWorktreeBaselines({
 }) {
   const wtBaselineDir = join(wtPath, "scripts", "yolo", "state", "runtime");
   if (!existsSync(wtBaselineDir)) mkdirSync(wtBaselineDir, { recursive: true });
+  const run = (command, timeout) => {
+    try {
+      const output = execFileSync("sh", ["-c", `cd ${shellQuote(wtPath)} && ${command} 2>&1`], {
+        encoding: "utf8",
+        timeout,
+      });
+      return { output, stderr: "", exitCode: 0, status: "pass", reason: null };
+    } catch (error) {
+      const output = `${error?.stdout || ""}${error?.stderr || ""}`;
+      const exitCode = Number.isInteger(error?.status) ? error.status : 1;
+      const blocked = Boolean(error?.signal) ||
+        exitCode === 127 ||
+        /\bnot found\b|is not recognized|command not found/i.test(output) ||
+        !output.trim();
+      return {
+        output,
+        stderr: String(error?.stderr || ""),
+        exitCode,
+        status: blocked ? "blocked" : "pass",
+        reason: blocked ? (error?.signal ? "baseline_command_timeout_or_signal" : "baseline_command_unavailable") : null,
+      };
+    }
+  };
   try {
-    const tscResult = execFileSync("sh", ["-c", `cd ${shellQuote(wtPath)} && ${config.build.type_check} 2>&1 || true`], {
-      encoding: "utf8",
-      timeout: 120000,
-    });
-    writeFileSync(join(wtBaselineDir, "tsc-baseline.json"), JSON.stringify({ keys: parseTscBaselineKeys(tscResult) }, null, 2), "utf8");
+    const result = run(config.build.type_check, 120000);
+    const keys = parseTscBaselineKeys(result.output);
+    writeFileSync(join(wtBaselineDir, "tsc-baseline.json"), JSON.stringify(buildBaselineArtifact({
+      tool: "tsc",
+      keys,
+      command: config.build.type_check,
+      exitCode: result.exitCode,
+      stdout: result.output,
+      stderr: result.stderr,
+      commit: null,
+      status: result.status,
+      reason: result.reason,
+    }), null, 2), "utf8");
   } catch {}
   try {
-    const eslintResult = execFileSync("sh", ["-c", `cd ${shellQuote(wtPath)} && ${config.build.lint} 2>&1 || true`], {
-      encoding: "utf8",
-      timeout: 90000,
-    });
+    const result = run(config.build.lint, 90000);
     writeFileSync(join(wtBaselineDir, "eslint-baseline.json"), JSON.stringify({
-      keys: parseEslintBaselineKeys(eslintResult, wtPath),
+      ...buildBaselineArtifact({
+        tool: "eslint",
+        keys: parseEslintBaselineKeys(result.output, wtPath),
+        command: config.build.lint,
+        exitCode: result.exitCode,
+        stdout: result.output,
+        stderr: result.stderr,
+        commit: null,
+        status: result.status,
+        reason: result.reason,
+      }),
     }, null, 2), "utf8");
   } catch {}
 }

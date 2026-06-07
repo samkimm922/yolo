@@ -134,32 +134,96 @@ function demandQualityReport(status = "pass") {
   };
 }
 
-function buildGeneratedDemandContract({ tasks = [], source = "audit" } = {}) {
-  const targetFiles = [...new Set(tasks.flatMap((task) =>
+function uniqueTaskTargetFiles(tasks = []) {
+  return [...new Set(tasks.flatMap((task) =>
     (task.scope?.targets || []).map((target) => target.file).filter(Boolean)
   ))];
-  const quality = demandQualityReport("pass");
+}
+
+function cloneJson(value) {
+  return value ? JSON.parse(JSON.stringify(value)) : value;
+}
+
+function explicitDemandContractOption(options = {}) {
+  return options.approvedDemandContract
+    || options.approved_demand_contract
+    || options.demandContract
+    || options.demand_contract
+    || options.approvedDemand
+    || options.approved_demand
+    || null;
+}
+
+function requireApprovedDemandContract(input, tasks = []) {
+  if (!input) return null;
+  const contract = cloneJson(input);
+  const demand = contract.demand || null;
+  const readiness = contract.execution_readiness || null;
+  const qualityStatuses = [
+    demand?.quality_report?.status,
+    demand?.execution_readiness?.quality_report?.status,
+    demand?.execution_readiness?.quality_status,
+    readiness?.quality_report?.status,
+    readiness?.quality_status,
+  ].filter(Boolean);
+  const taskTargets = uniqueTaskTargetFiles(tasks);
+  const verifiedTargets = new Set(
+    (demand?.project_facts?.target_files || [])
+      .filter((fact) => fact?.status === "verified")
+      .map((fact) => fact.file)
+      .filter(Boolean),
+  );
+  const missingVerifiedTargets = taskTargets.filter((file) => !verifiedTargets.has(file));
+
+  if (!demand?.id) {
+    throw new Error("approved demand contract requires demand.id");
+  }
+  if (demand?.approval?.approved !== true || demand?.approval?.effective_for_prd !== true) {
+    throw new Error("approved demand contract requires approval.approved=true and effective_for_prd=true");
+  }
+  if (readiness?.level !== "L3" || readiness?.afk_ready !== true) {
+    throw new Error("approved demand contract requires execution_readiness level=L3 and afk_ready=true");
+  }
+  if (!qualityStatuses.length || qualityStatuses.some((status) => status !== "pass")) {
+    throw new Error("approved demand contract requires passing demand quality reports");
+  }
+  if (missingVerifiedTargets.length > 0) {
+    throw new Error(`approved demand contract is missing verified target facts: ${missingVerifiedTargets.join(", ")}`);
+  }
+
   return {
-    source: "approved_demand",
+    source: contract.source || "approved_demand",
+    demand_contract_required: true,
+    demand,
+    execution_readiness: readiness,
+  };
+}
+
+function buildGeneratedDemandContract({ tasks = [], source = "audit" } = {}) {
+  const targetFiles = uniqueTaskTargetFiles(tasks);
+  const quality = demandQualityReport("blocked");
+  return {
+    source: "audit_generated",
     demand_contract_required: true,
     demand: {
       id: `DEMAND-${Date.now()}-AUTO`,
       source,
       approval: {
-        approved: true,
-        effective_for_prd: true,
-        approval_source: "generated_from_structured_findings",
+        approved: false,
+        effective_for_prd: false,
+        approval_source: "audit_generated_pending_human_approval",
       },
       project_facts: {
-        target_files: targetFiles.map((file) => ({ file, status: "verified" })),
+        target_files: targetFiles.map((file) => ({ file, status: "candidate", source: "audit_generated", needs_verification: true })),
         assumptions: [],
       },
       quality_report: quality,
     },
     execution_readiness: {
-      level: "L3",
-      afk_ready: true,
-      quality_status: "pass",
+      level: "draft",
+      afk_ready: false,
+      source: "audit_generated_pending_approval",
+      quality_status: "blocked",
       quality_report: quality,
     },
   };
@@ -250,6 +314,8 @@ export function buildPrdFromFindings(findings, options = {}) {
   for (const [, group] of groups.mechanical) tasks.push(buildTask("mechanical", group, ++taskIndex));
   for (const [, group] of groups.atomic_fix) tasks.push(buildTask("atomic_fix", group, ++taskIndex));
   for (const finding of groups.atomic_feature) tasks.push(buildTask("atomic_feature", [finding], ++taskIndex));
+  const explicitDemandContract = requireApprovedDemandContract(explicitDemandContractOption(options), tasks);
+  for (const task of tasks) task.status = explicitDemandContract ? "pending" : "needs_contract_review";
   const requirements = tasks.map((task) => ({
     id: task.requirement_ids[0],
     text: task.description || task.title,
@@ -277,7 +343,7 @@ export function buildPrdFromFindings(findings, options = {}) {
   }
 
   const source = options.source || "audit";
-  const demandContract = buildGeneratedDemandContract({ tasks, source });
+  const demandContract = explicitDemandContract || buildGeneratedDemandContract({ tasks, source });
   return {
     prd: {
       version: "2.0",
@@ -330,7 +396,18 @@ export function convertAuditToPrd(input, options = {}) {
   }
 
   const source = typeof input === "string" ? input : options.source || "audit";
-  const built = buildPrdFromFindings(findings, { ...options, source });
+  let built;
+  try {
+    built = buildPrdFromFindings(findings, { ...options, source });
+  } catch (error) {
+    return {
+      ok: false,
+      error: error.message,
+      prd: null,
+      output: null,
+      counts: { tasks: 0, mechanical: 0, atomic_fix: 0, atomic_feature: 0 },
+    };
+  }
   const output = options.output ? resolve(options.output) : null;
 
   if (output) {

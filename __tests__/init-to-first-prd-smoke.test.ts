@@ -53,6 +53,7 @@ describe("init-to-first-PRD smoke", () => {
       assert.equal(result.preflight.status, "pass");
       assert.equal(result.preflight.runner_readiness.can_execute, true);
       assert.equal(result.runner.code, "RUNNER_DRY_RUN_READY");
+      assert.equal(result.runner.status, "dry_run");
       assert.equal(result.runner.dry_run, true);
       assert.equal(existsSync(join(root, ".yolo/config.json")), true);
       assert.equal(existsSync(join(root, "specs/requirements.md")), true);
@@ -93,7 +94,8 @@ describe("init-to-first-PRD smoke", () => {
         dryRun: true,
       });
 
-      assert.equal(result.status, "success");
+      assert.equal(result.status, "dry_run");
+      assert.equal(result.exit_code, 2);
       assert.equal(result.code, "RUNNER_DRY_RUN_READY");
       assert.equal(result.preflight.status, "pass");
       assert.deepEqual(result.next_actions, ["Run without dryRun to start implementation."]);

@@ -217,6 +217,11 @@ function agentToolProfile(input = {}, options = {}) {
   return clean(options.agentToolProfile || options.agent_tool_profile || options.toolProfile || options.tool_profile || input.agentToolProfile || input.agent_tool_profile || input.toolProfile || input.tool_profile || "boundary").toLowerCase();
 }
 
+function safeClaudePermissionMode(value) {
+  const mode = clean(value || "default");
+  return ["bypasspermissions", "dangerously-skip-permissions"].includes(mode.toLowerCase()) ? "default" : mode;
+}
+
 function safeRepoRelativePath(value) {
   const path = clean(value).replace(/\\/g, "/").replace(/^\/+/, "");
   if (!path || path === "." || path === ".." || path.startsWith("../") || path.includes("/../")) return "";
@@ -499,6 +504,7 @@ function executionConfig(input = {}, options = {}) {
   const ai = {
     ...(loaded.ai || {}),
   };
+  const mutationProbe = boundaryMutationProbe(input, options);
   const provider = clean(options.provider || input.provider || input.executor || ai.provider || ai.executor || "");
   const model = clean(options.model || input.model || "");
   const agentCommand = clean(options.agentCommand || options.agent_command || input.agentCommand || input.agent_command || input.customCommand || input.custom_command);
@@ -529,12 +535,14 @@ function executionConfig(input = {}, options = {}) {
         : "boundary";
     ai.settings = "";
     ai.claude_tools = "default";
-    ai.claude_allowed_tools = "";
-    ai.claude_disallowed_tools = "";
+    ai.claude_allowed_tools = mutationProbe?.enabled
+      ? "Read,Glob,Grep,Write,Edit,Bash"
+      : "Read,Glob,Grep,WebFetch,WebSearch";
+    ai.claude_disallowed_tools = mutationProbe?.enabled ? "" : "Write,Edit,Bash";
     ai.claude_disable_slash_commands = false;
     ai.claude_no_session_persistence = true;
-    ai.claude_permission_mode = "bypassPermissions";
-    ai.agent_tool_profile = normalizedProfile;
+    ai.claude_permission_mode = safeClaudePermissionMode(ai.claude_permission_mode);
+    ai.agent_tool_profile = mutationProbe?.enabled ? "boundary_probe" : normalizedProfile;
   }
   if ((ai.provider || ai.executor) === "custom") {
     ai.custom_sandbox = "boundary";

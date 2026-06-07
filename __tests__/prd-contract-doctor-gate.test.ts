@@ -131,7 +131,7 @@ describe("prd contract doctor gate", () => {
         demand_contract_required: true,
         demand: {
           id: "DEMAND-QUALITY",
-          approval: { approved: true },
+          approval: { approved: true, effective_for_prd: true },
           quality_report: {
             schema_version: "1.0",
             schema: "yolo.demand.quality.v1",
@@ -186,6 +186,47 @@ describe("prd contract doctor gate", () => {
 
       assert.equal(result.status, "blocked");
       assert.ok(result.doctor.failures.some((finding) => finding.code === "DEMAND_QUALITY_BLOCKED"));
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks approved-demand PRDs when approval is not effective for PRD execution", () => {
+    const paths = makePaths();
+    try {
+      const result = inspectPrdContractDoctorGate({
+        prd: {
+          version: "2.0",
+          id: "PRD-DEMAND-APPROVAL-NOT-EFFECTIVE",
+          ...strictDemandFields(),
+          demand: {
+            ...strictDemandFields().demand,
+            approval: { approved: true, effective_for_prd: false },
+          },
+          tasks: [{
+            id: "FIX-GATE-APPROVAL-001",
+            title: "Strict task",
+            priority: "P1",
+            type: "bugfix",
+            status: "pending",
+            requirement_ids: ["REQ-GATE-1"],
+            scope: { targets: [{ file: "src/a.ts" }] },
+            acceptance_criteria: ["Target file is changed."],
+            post_conditions: [{
+              id: "POST-TARGET",
+              type: "target_file_modified",
+              severity: "FAIL",
+              params: { file: "src/a.ts" },
+            }],
+          }],
+        },
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+      });
+
+      assert.equal(result.status, "blocked");
+      assert.ok(result.doctor.failures.some((finding) => finding.code === "DEMAND_APPROVAL_NOT_EFFECTIVE_FOR_PRD" && finding.human_needed === true));
     } finally {
       rmSync(paths.projectRoot, { recursive: true, force: true });
     }

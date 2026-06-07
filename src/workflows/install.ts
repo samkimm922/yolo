@@ -203,6 +203,10 @@ function renderSkillMarkdown(descriptor) {
     `Schema: ${descriptor.schema}`,
     `Workflow: ${descriptor.workflow}`,
     `Agent: ${descriptor.agent}`,
+    `Surface: ${descriptor.surface || "internal"}`,
+    `Stability: ${descriptor.stability || "internal"}`,
+    `Visibility: ${descriptor.visibility || "hidden"}`,
+    descriptor.alias_for ? `Alias for: ${descriptor.alias_for}` : null,
     "",
     "## Purpose",
     "",
@@ -243,7 +247,7 @@ function renderSkillMarkdown(descriptor) {
     "- Fail closed when a required verification hook cannot run.",
     "- Do not assume one model; inspect provider capability before execution.",
     "",
-  ];
+  ].filter((line) => line !== null);
   return lines.join("\n");
 }
 
@@ -263,6 +267,10 @@ function buildWorkflowSkillTriggerIndex(targetInfo, descriptors, markdownFile = 
           cli: descriptor.entrypoints?.cli || null,
           skill: descriptor.entrypoints?.skill || descriptor.id,
         },
+        surface: descriptor.surface || "internal",
+        stability: descriptor.stability || "internal",
+        visibility: descriptor.visibility || "hidden",
+        alias_for: descriptor.alias_for || null,
       });
     }
   }
@@ -306,6 +314,8 @@ function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex, markdo
     "",
     "- Start a workflow only when the current user intent, CLI event, or automation event matches a listed trigger.",
     "- Route the trigger to exactly one listed skill unless a caller explicitly selects multiple workflows.",
+    "- Default user-facing commands are limited to: status, demand, spec, tasks, run, check, review, release.",
+    "- Hidden compatibility and internal workflow descriptors may exist, but they must keep alias_for, stability, and visibility metadata.",
     `- Re-read the selected \`skill.json\` before execution and use \`${markdownFile}\` only for agent-readable guidance.`,
     "",
     "## Gate Policy",
@@ -389,6 +399,10 @@ export function buildWorkflowSkillInstallPlan(options = {}) {
         id: descriptor.id,
         workflow: descriptor.workflow,
         agent: descriptor.agent,
+        surface: descriptor.surface || "internal",
+        stability: descriptor.stability || "internal",
+        visibility: descriptor.visibility || "hidden",
+        alias_for: descriptor.alias_for || null,
         path: `${targetInfo.relative_dir}/${skillFolderName(descriptor.id)}/skill.json`,
       })),
     }),

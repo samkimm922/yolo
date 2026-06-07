@@ -472,9 +472,11 @@ function runPreExecutionGates(prdPath, options = {}) {
     stateDir: STATE_DIR,
     projectRoot: ROOT,
   });
-  if (gate.status === "blocked") {
-    console.error(gate.messages.join("\n"));
-    if (exitOnFailure) process.exit(1);
+  if (gate.status !== "pass") {
+    const output = gate.messages.join("\n");
+    if (gate.status === "warning") console.warn(output);
+    else console.error(output);
+    if (exitOnFailure) process.exit(gate.exit_code || 1);
     const details = gate.stage === "contract"
       ? {
           code: gate.code,
@@ -487,9 +489,6 @@ function runPreExecutionGates(prdPath, options = {}) {
           spec_governance: gate.spec.result,
         };
     throw runnerError(gate.message, gate.exit_code, details);
-  }
-  if (gate.status === "warning") {
-    console.warn(gate.messages.join("\n"));
   }
 }
 

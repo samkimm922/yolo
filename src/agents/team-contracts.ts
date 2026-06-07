@@ -112,6 +112,46 @@ function clean(value) {
   return String(value ?? "").trim();
 }
 
+function asArray(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (value == null || value === "") return [];
+  return [value];
+}
+
+function runtimeBindings(options = {}) {
+  const raw = options.runtimeBindings || options.runtime_bindings || {};
+  if (Array.isArray(raw)) {
+    return Object.fromEntries(raw
+      .filter((binding) => binding?.agent_id || binding?.agentId || binding?.id)
+      .map((binding) => [clean(binding.agent_id || binding.agentId || binding.id), binding]));
+  }
+  return raw && typeof raw === "object" ? raw : {};
+}
+
+function evidenceOnlyRoles(options = {}, selected = []) {
+  const explicit = asArray(options.evidenceOnlyRoles || options.evidence_only_roles).map(clean);
+  if (explicit.length > 0) return new Set(explicit);
+  const executable = options.executable === true || clean(options.mode || options.executionMode || options.execution_mode) === "execute";
+  return executable ? new Set() : new Set(selected.map((agent) => agent.id));
+}
+
+function normalizeRuntimeBinding(agent, bindings = {}) {
+  const binding = bindings[agent.id] || bindings[agent.label] || null;
+  if (!binding) return null;
+  if (typeof binding === "string") {
+    return {
+      runtime: binding,
+      provider: null,
+      evidence_output: null,
+    };
+  }
+  return {
+    runtime: clean(binding.runtime || binding.adapter || binding.command || binding.provider || "external"),
+    provider: clean(binding.provider || ""),
+    evidence_output: clean(binding.evidence_output || binding.evidenceOutput || ""),
+  };
+}
+
 export function listTeamAgentContracts() {
   return TEAM_AGENT_CONTRACTS.map(clone);
 }
@@ -159,17 +199,44 @@ export function buildTeamDispatchPlan(options = {}) {
   const agents = agentsForLifecycleStage(currentStage);
   const pi = getTeamAgentContract("pi-agent");
   const selected = agents.some((agent) => agent.id === pi.id) ? agents : [pi, ...agents];
-  return {
-    schema_version: TEAM_AGENT_CONTRACT_SCHEMA_VERSION,
-    schema: TEAM_DISPATCH_PLAN_SCHEMA,
-    objective,
-    current_stage: currentStage,
-    agents: selected.map((agent) => ({
+  const executableRequested = options.executable === true || clean(options.mode || options.executionMode || options.execution_mode) === "execute";
+  const bindings = runtimeBindings(options);
+  const evidenceOnly = evidenceOnlyRoles(options, selected);
+  const resolvedAgents = selected.map((agent) => {
+    const runtimeBinding = normalizeRuntimeBinding(agent, bindings);
+    const isEvidenceOnly = evidenceOnly.has(agent.id);
+    return {
       id: agent.id,
       label: agent.label,
       may_edit_code: agent.may_edit_code,
       owns: agent.owns,
       stop_conditions: agent.stop_conditions,
+      runtime_binding: runtimeBinding,
+      evidence_only: isEvidenceOnly,
+      binding_status: runtimeBinding ? "bound" : isEvidenceOnly ? "evidence_only" : "unresolved",
+      executable: executableRequested && Boolean(runtimeBinding) && !isEvidenceOnly,
+    };
+  });
+  const unresolved = resolvedAgents.filter((agent) => agent.binding_status === "unresolved");
+  const executableAgents = resolvedAgents.filter((agent) => agent.executable);
+  return {
+    schema_version: TEAM_AGENT_CONTRACT_SCHEMA_VERSION,
+    schema: TEAM_DISPATCH_PLAN_SCHEMA,
+    status: unresolved.length > 0 ? "blocked" : executableRequested ? "pass" : "evidence_only",
+    executable: executableRequested && unresolved.length === 0,
+    objective,
+    current_stage: currentStage,
+    agents: resolvedAgents,
+    executable_agents: executableAgents.map((agent) => agent.id),
+    unresolved_roles: unresolved.map((agent) => ({
+      agent_id: agent.id,
+      label: agent.label,
+      reason: "runtime_binding_or_explicit_evidence_only_required",
+    })),
+    blockers: unresolved.map((agent) => ({
+      code: "TEAM_AGENT_RUNTIME_BINDING_REQUIRED",
+      agent_id: agent.id,
+      message: "Executable team dispatch requires each role to have a runtime binding or explicit evidence_only status.",
     })),
     handoffs: selected.map((agent, index) => ({
       order: index + 1,
@@ -178,8 +245,9 @@ export function buildTeamDispatchPlan(options = {}) {
       produces: agent.outputs,
     })),
     edit_authority: {
-      code_writing_agents: selected.filter((agent) => agent.may_edit_code).map((agent) => agent.id),
-      requires_explicit_user_confirmation: selected.some((agent) => agent.may_edit_code),
+      code_writing_agents: executableAgents.filter((agent) => agent.may_edit_code).map((agent) => agent.id),
+      potential_code_writing_agents: selected.filter((agent) => agent.may_edit_code).map((agent) => agent.id),
+      requires_explicit_user_confirmation: executableAgents.some((agent) => agent.may_edit_code),
     },
   };
 }

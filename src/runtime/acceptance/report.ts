@@ -172,6 +172,53 @@ function summarizeIssues(issues = []) {
   };
 }
 
+const RUN_REPORT_PASS_STATUSES = new Set(["pass", "success"]);
+const STATUS_FIELDS = new Set(["status", "verdict", "outcome"]);
+
+function collectReportStatuses(report, depth = 0, field = "", seen = new Set()) {
+  if (Array.isArray(report)) {
+    return report.flatMap((item, index) =>
+      collectReportStatuses(item, depth + 1, field ? `${field}.${index}` : String(index), seen),
+    );
+  }
+  if (!report || typeof report !== "object" || depth > 20 || seen.has(report)) return [];
+  seen.add(report);
+  const statuses = [];
+  for (const [key, value] of Object.entries(report)) {
+    const nextField = field ? `${field}.${key}` : key;
+    if (STATUS_FIELDS.has(key)) {
+      const status = clean(value).toLowerCase();
+      const wrapperStatus = key === "status" &&
+        ["completed", "done"].includes(status) &&
+        Boolean(report.report || report.result || report.run_report || report.runReport);
+      if (status && !wrapperStatus) statuses.push({ field: nextField, status });
+    }
+    if (value && typeof value === "object") {
+      statuses.push(...collectReportStatuses(value, depth + 1, nextField, seen));
+    }
+  }
+  return statuses;
+}
+
+function collectReportFlags(report, flagNames = [], depth = 0, field = "", seen = new Set()) {
+  if (Array.isArray(report)) {
+    return report.flatMap((item, index) =>
+      collectReportFlags(item, flagNames, depth + 1, field ? `${field}.${index}` : String(index), seen),
+    );
+  }
+  if (!report || typeof report !== "object" || depth > 20 || seen.has(report)) return [];
+  seen.add(report);
+  const flags = [];
+  for (const [key, value] of Object.entries(report)) {
+    const nextField = field ? `${field}.${key}` : key;
+    if (flagNames.includes(key) && value === true) flags.push({ field: nextField, value: true });
+    if (value && typeof value === "object") {
+      flags.push(...collectReportFlags(value, flagNames, depth + 1, nextField, seen));
+    }
+  }
+  return flags;
+}
+
 function acceptanceCriteriaIssues(prd, issues) {
   const tasks = asArray(prd?.tasks);
   if (tasks.length === 0) {
@@ -186,12 +233,15 @@ function acceptanceCriteriaIssues(prd, issues) {
   }
 }
 
-function runtimeEvidenceIssues(runReport, issues) {
+function runtimeEvidenceIssues(runReport, issues, { releaseMode = false } = {}) {
   if (!runReport) {
     pushIssue(issues, "P1", "RUN_REPORT_MISSING", "Acceptance requires run evidence or an explicit degraded/manual record.");
     return;
   }
   const status = clean(runReport.status).toLowerCase();
+  const statusEntries = collectReportStatuses(runReport);
+  const nonPassStatuses = statusEntries.filter((entry) => !RUN_REPORT_PASS_STATUSES.has(entry.status));
+  const dryRunFlags = collectReportFlags(runReport, ["dry_run", "dryRun"]);
   const failed = Number(runReport.summary?.failed || asArray(runReport.failed).length || 0);
   const blocked = Number(runReport.summary?.blocked || asArray(runReport.blocked).length || 0);
   const evidenceFailures = Number(runReport.summary?.evidence_failures || 0);
@@ -199,9 +249,15 @@ function runtimeEvidenceIssues(runReport, issues) {
   const reviewIssues = Number(runReport.review?.issue_count || 0);
   const reviewErrors = Number(runReport.review?.error_count || 0);
   const fixtureFailures = Number(runReport.fixtures?.fail_count || 0);
+  const fixtureBlocked = Number(runReport.fixtures?.blocked_count || 0);
+  const fixtureDegraded = Number(runReport.fixtures?.degraded_count || 0);
+  const fixtureStatus = clean(runReport.fixtures?.status).toLowerCase();
   const specBlocked = Number(runReport.spec_governance?.blocked_count || 0);
+  const ledgerIntegrityErrors = Number(runReport.ledger?.integrity?.error_count || runReport.evidence_integrity?.error_count || 0);
   if (
-    ["error", "failed", "blocked"].includes(status) ||
+    statusEntries.length === 0 ||
+    nonPassStatuses.length > 0 ||
+    dryRunFlags.length > 0 ||
     failed > 0 ||
     blocked > 0 ||
     evidenceFailures > 0 ||
@@ -209,9 +265,16 @@ function runtimeEvidenceIssues(runReport, issues) {
     reviewIssues > 0 ||
     reviewErrors > 0 ||
     fixtureFailures > 0 ||
-    specBlocked > 0
+    fixtureBlocked > 0 ||
+    (fixtureStatus && !RUN_REPORT_PASS_STATUSES.has(fixtureStatus)) ||
+    specBlocked > 0 ||
+    ledgerIntegrityErrors > 0
   ) {
-    pushIssue(issues, "P1", "RUN_REPORT_NOT_CLEAN", "Run report has failed, blocked, or failing evidence.", {
+    pushIssue(issues, "P1", "RUN_REPORT_NOT_CLEAN", "Run report must be pass/success and contain no failed, blocked, or failing evidence.", {
+      status,
+      status_entries: statusEntries,
+      non_pass_statuses: nonPassStatuses,
+      dry_run_flags: dryRunFlags,
       failed,
       blocked,
       evidence_failures: evidenceFailures,
@@ -219,7 +282,15 @@ function runtimeEvidenceIssues(runReport, issues) {
       review_issues: reviewIssues,
       review_errors: reviewErrors,
       fixture_failures: fixtureFailures,
+      fixture_blocked: fixtureBlocked,
+      fixture_status: fixtureStatus || null,
       spec_blocked: specBlocked,
+      ledger_integrity_errors: ledgerIntegrityErrors,
+    });
+  }
+  if (releaseMode && fixtureDegraded > 0) {
+    pushIssue(issues, "P1", "DEGRADED_FIXTURE_RELEASE_BLOCKED", "Release acceptance cannot use degraded fixture evidence as a pass.", {
+      fixture_degraded: fixtureDegraded,
     });
   }
 }
@@ -227,8 +298,10 @@ function runtimeEvidenceIssues(runReport, issues) {
 function adapterEvidenceIssues(adapterEvidence, issues) {
   if (!adapterEvidence) return;
   const status = clean(adapterEvidence.status).toLowerCase();
-  if (["blocked", "failed", "error"].includes(status)) {
-    pushIssue(issues, "P1", "ADAPTER_EVIDENCE_BLOCKED", "Adapter evidence is blocked or failed.", {
+  if (!RUN_REPORT_PASS_STATUSES.has(status)) {
+    const issueCode = ["blocked", "failed", "fail", "error"].includes(status) ? "ADAPTER_EVIDENCE_BLOCKED" : "ADAPTER_EVIDENCE_NOT_CLEAN";
+    pushIssue(issues, "P1", issueCode, "Adapter evidence must be pass/success before acceptance can pass.", {
+      adapter_status: status || null,
       adapter_code: adapterEvidence.code || null,
       adapter_id: adapterEvidence.adapter?.id || null,
       required_platform: adapterEvidence.required_platform || null,
@@ -325,6 +398,7 @@ export function buildAcceptanceReport(input = {}, options = {}) {
   const adapterEvidencePath = input.adapterEvidencePath || input.adapter_evidence_path || options.adapterEvidencePath || options.adapter_evidence_path || defaultAdapterEvidencePath({ stateRoot, resolver });
   const runReport = input.runReport || input.run_report || readJsonMaybe(runReportPath);
   const reviewReport = input.reviewReport || input.review_report || readJsonMaybe(reviewReportPath);
+  const releaseMode = RELEASE_ACCEPTANCE_MODES.has(mode);
   let uiEvidence = input.uiEvidence || input.ui_evidence || readJsonMaybe(uiEvidencePath);
   const adapterEvidence = input.adapterEvidence || input.adapter_evidence || (
     (input.collectEvidence || input.collect_evidence || options.collectEvidence || options.collect_evidence)
@@ -352,7 +426,7 @@ export function buildAcceptanceReport(input = {}, options = {}) {
   } else {
     acceptanceCriteriaIssues(prd, issues);
   }
-  runtimeEvidenceIssues(runReport, issues);
+  runtimeEvidenceIssues(runReport, issues, { releaseMode });
   adapterEvidenceIssues(adapterEvidence, issues);
   evidenceLineageIssues({ prdPath, runReport, reviewReport }, issues);
   reviewIssues(reviewReport, runReport, issues);
@@ -363,7 +437,6 @@ export function buildAcceptanceReport(input = {}, options = {}) {
 
   let summary = summarizeIssues(issues);
   const approvalPath = approvalArtifactPath({ input, options, stateRoot });
-  const releaseMode = RELEASE_ACCEPTANCE_MODES.has(mode);
   const releaseWarnings = issues.filter((issue) => issue.level === "P2" || issue.level === "human_review");
   const warningApproval = approvalFromArtifact(approvalPath, {
     prd_path: prdPath ? resolve(prdPath) : "",
@@ -491,7 +564,7 @@ export function runYoloAcceptCli(argv = process.argv.slice(2), io = {}) {
   }, { learnFailures: true });
   if (json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else stdout.write(`${formatAcceptanceReportText(report)}\n`);
-  return report.status === "blocked" ? 1 : 0;
+  return report.status === "pass" ? 0 : report.status === "warning" ? 2 : 1;
 }
 
 if (isMain) {

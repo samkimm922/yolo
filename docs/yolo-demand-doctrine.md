@@ -43,6 +43,12 @@ YOLO 不是把用户一句话立刻变成代码，而是把一句话需求先变
 
 这个门禁和现有 readiness 语义对齐：L0 是模糊想法，L1 有愿景和证据/假设，L2 需求和阻塞问题已收敛，L3 才能生成可执行 PRD。
 
+可执行 PRD 只有一个口径：`source: approved_demand`、`approval.approved === true`、`approval.effective_for_prd === true`、demand quality 为 `pass`，并且 runner preflight 在 schema、demand contract、spec governance 和 warning policy 下返回 `pass`。`warning`、`blocked`、`draft`、`not_run`、`indeterminate` 或缺 validator 都不是可执行状态。
+
+Discovery、Spec lifecycle、module-deep-dive 和 audit-to-prd 默认只能生成 draft/pending approval 产物。它们可以保留 trace、任务草案和 handoff，但不得把任务标成可直接执行，也不得伪造 human-approved L3。Discovery `ready_for_prd !== true` 时尤其不能输出 executable PRD 或用 exit 0 宣称已可执行。
+
+`interview to-demand` 只负责把访谈转换成 demand session。转换后的 `demand_result.status` 如果是 `blocked` 或 `warning`，CLI 结果也必须是阻塞/警告并返回非 0；不能包装成 `INTERVIEW_DEMAND_CREATED`。
+
 ## Demand Router
 
 统一只读入口是 `yolo demand status`。它不写 `.yolo` 状态、不生成 PRD、不改业务代码，只回答当前需求阶段应该怎么走：
@@ -64,6 +70,8 @@ PRD readiness contract 至少需要这些 slots：`problem`、`target_user`、`s
 - `verifier`: 检查证据是否足够支撑 PRD readiness，确认假设没有伪装成事实。
 
 如果 agent 结论冲突，Demand Router 必须把冲突保留为 blocker，而不是取平均或选择性采信。
+
+Lean office-hours profile 是 `yolo demand` 下的轻量模式，不是 PRD 或代码入口。`yolo demand office-hours`、`--profile office-hours|startup|builder` 或 `--mode startup|builder` 只产一个 draft brief：一条 `next_question`、一个 premise challenge、2-3 个 alternatives、显式用户 choice 和 handoff 建议。没有 choice 时保持 blocked；有 choice 时也只交给正常 demand intake，`prd_execution=false`、`provider_execution=false`、`writes_business_code=false`。
 
 `yolo demand dispatch` 是 evidence agent 的显式执行入口。它默认只做 dry-run 计划；只有同时传 `--execute-agents --allow-agent-dispatch` 才会调用配置的 agent provider。dispatch 不靠阉割 tools 做安全边界：agent 可以拥有审计、检索、fetch、命令和子任务等能力，但必须遵守 harness 边界，目标项目文件不得被修改；只允许写入本次 `.yolo/demand/evidence/<dispatch-id>/` artifact。dispatch 会在运行前后审计项目文件边界，任何越界改动都会变成 readiness blocker。dispatch 返回的 explorer / cross-checker / verifier 结果会重新喂给 PRD readiness contract；如果缺任一 required role、证据不足、agent 冲突或边界违规，仍然保持 blocked。
 

@@ -65,3 +65,22 @@ Agent presets must not own low-level behavior directly. They should compose SDK 
 - `workflows`
 
 This keeps YOLO usable for different project types, different models, and different execution hosts.
+
+## Runtime Contracts
+
+Real provider execution goes through `spawnProviderPrompt(...)`. Before a provider process is spawned, YOLO runs:
+
+1. `inspectAgentAdapterContract(...)` for AgentAdapterContract v1.1.
+2. `buildProviderInvocation(...)`.
+3. `inspectProviderInvocationPreflight(...)`.
+4. `commandExists(...)` checks for the adapter command and invocation command.
+
+AgentAdapterContract v1.1 includes timeout, retry policy, budget enforcement, output/evidence schema, failure codes, allowed roots, and permission/sandbox/root policy. Unsafe Claude bypass permission modes, Codex `danger-full-access`, unavailable commands, and configured but unenforceable budgets block before spawn.
+
+Demand evidence dispatch no longer defaults Claude to `bypassPermissions`. Normal evidence agents use `default` permission mode with write tools disallowed. Only an explicit boundary mutation probe opens a narrow write-capable tool set, and the boundary diff must still block the run.
+
+Review clean passes require scanner coverage when findings are empty. Empty findings without `scanner_version`, `scanned_files`, `rules`, `expected_scope`, and complete `coverage_status` are blocked. Review finding conversion failures preserve the original findings as blocking review evidence instead of dropping them.
+
+Parallel planning separates structural plan validity from executable state. A later wave has a `start_gate` and cannot start until prior wave merge evidence is terminal pass; task dependencies must have completed/pass evidence and are not satisfied by merely being planned.
+
+Team dispatch plans are evidence-only by default. Executable dispatch requires every selected role to have a runtime binding or be explicitly marked `evidence_only`; unresolved roles block the executable plan.

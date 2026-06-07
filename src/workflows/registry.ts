@@ -1,6 +1,31 @@
 export const WORKFLOW_SKILL_DESCRIPTOR_SCHEMA_VERSION = "1.0";
 export const WORKFLOW_SKILL_DESCRIPTOR_SCHEMA = "yolo.workflow.skill_descriptor.v1";
 
+export const STABLE_WORKFLOW_COMMAND_SURFACES = {
+  status: ["doctor"],
+  demand: ["demand"],
+  spec: ["prd"],
+  tasks: ["plan"],
+  run: ["pi", "fix"],
+  check: ["check"],
+  review: ["review"],
+  release: ["accept", "ship", "eval"],
+};
+
+const WORKFLOW_SURFACE_BY_ID = Object.fromEntries(
+  Object.entries(STABLE_WORKFLOW_COMMAND_SURFACES).flatMap(([surface, ids]) =>
+    ids.map((id) => [id, surface])
+  )
+);
+
+const WORKFLOW_ALIAS_FOR = {
+  brainstorm: "demand",
+  interview: "demand",
+  discover: "demand",
+  discuss: "demand",
+  learn: "release",
+};
+
 const WORKFLOWS = {
   demand: {
     id: "demand",
@@ -280,8 +305,33 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function workflowSurfaceMetadata(id) {
+  const surface = WORKFLOW_SURFACE_BY_ID[id] || null;
+  if (surface) {
+    return {
+      surface,
+      stability: "stable",
+      visibility: "default",
+      alias_for: null,
+    };
+  }
+  return {
+    surface: WORKFLOW_ALIAS_FOR[id] || "internal",
+    stability: WORKFLOW_ALIAS_FOR[id] ? "compat" : "internal",
+    visibility: "hidden",
+    alias_for: WORKFLOW_ALIAS_FOR[id] || null,
+  };
+}
+
+function cloneWorkflow(workflow) {
+  return {
+    ...clone(workflow),
+    ...workflowSurfaceMetadata(workflow.id),
+  };
+}
+
 export function listWorkflows() {
-  return Object.values(WORKFLOWS).map(clone);
+  return Object.values(WORKFLOWS).map(cloneWorkflow);
 }
 
 export function getWorkflow(id = "pi") {
@@ -289,7 +339,14 @@ export function getWorkflow(id = "pi") {
   if (!workflow) {
     throw new Error(`Unknown YOLO workflow "${id}". Available workflows: ${Object.keys(WORKFLOWS).join(", ")}`);
   }
-  return clone(workflow);
+  return cloneWorkflow(workflow);
+}
+
+export function listWorkflowCommandSurfaces() {
+  return Object.entries(STABLE_WORKFLOW_COMMAND_SURFACES).map(([command, workflows]) => ({
+    command,
+    workflows: [...workflows],
+  }));
 }
 
 export function createWorkflowPlan(input = {}) {
@@ -300,6 +357,10 @@ export function createWorkflowPlan(input = {}) {
     label: workflow.label,
     objective,
     preset: workflow.preset,
+    surface: workflow.surface,
+    stability: workflow.stability,
+    visibility: workflow.visibility,
+    alias_for: workflow.alias_for,
     sdk_namespaces: workflow.sdk_namespaces,
     entrypoints: workflow.entrypoints,
     steps: workflow.phases.map((phase, index) => ({
@@ -321,6 +382,10 @@ export function workflowToSkillDescriptor(workflowInput, options = {}) {
     name: workflow.label,
     workflow: workflow.id,
     agent,
+    surface: workflow.surface,
+    stability: workflow.stability,
+    visibility: workflow.visibility,
+    alias_for: workflow.alias_for,
     purpose: workflow.purpose,
     trigger: workflow.triggers,
     inputs: workflow.inputs,

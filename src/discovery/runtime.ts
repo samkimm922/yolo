@@ -222,25 +222,34 @@ export function runDiscoveryPrdRuntime(input = {}, options = {}) {
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
   const artifacts = [];
   if (shouldWrite && compiled.prd) artifacts.push(writeJson(outputFile, compiled.prd));
+  const executable = compiled.status === "success" || compiled.executable === true;
 
   const result = {
     status: compiled.status,
-    code: compiled.status === "blocked" ? "DISCOVERY_PRD_BLOCKED" : "DISCOVERY_PRD_READY",
+    code: compiled.status === "blocked"
+      ? "DISCOVERY_PRD_BLOCKED"
+      : executable
+        ? "DISCOVERY_PRD_READY"
+        : "DISCOVERY_PRD_DRAFT",
     summary: compiled.status === "blocked"
       ? "Discovery is not ready for PRD compilation."
-      : "Discovery PRD artifact compiled.",
+      : executable
+        ? "Discovery PRD artifact compiled."
+        : "Discovery draft PRD artifact compiled; it is not executable until approved demand and runner preflight pass.",
     project_root: projectRoot,
     state_root: stateRoot,
     discovery_path: discoveryPath,
     compiled,
-    prd: compiled.prd || null,
+    prd: executable ? compiled.prd : null,
+    draft_prd: executable ? null : compiled.prd || null,
+    executable,
     blockers: compiled.blockers || [],
     warnings: compiled.warnings || [],
     artifacts,
-    outputs: artifacts.map((path) => ({ path, type: "prd" })),
+    outputs: artifacts.map((path) => ({ path, type: executable ? "prd" : "draft_prd" })),
     next_actions: compiled.next_actions || [],
   };
-  const lifecycle = shouldWrite ? lifecycleFor("prd", result, {
+  const lifecycle = shouldWrite && executable ? lifecycleFor("prd", result, {
     projectRoot,
     stateRoot,
     source: input.source || "yolo-prd",

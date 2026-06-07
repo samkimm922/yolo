@@ -190,6 +190,48 @@ describe("lifecycle guard", () => {
     }
   });
 
+  test("blocks run when check lifecycle artifact wraps a warning report", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    const prdPath = join(root, "specs", "prd.json");
+    try {
+      writeJson(prdPath, { schema: "test.prd" });
+      initLifecycleState({ projectRoot: root });
+      writeLifecycleStageReport("discovery", { status: "success" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+      });
+      writeLifecycleStageReport("roadmap", { status: "success" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+      });
+      const checkWrite = writeLifecycleStageReport("check", {
+        status: "completed",
+        summary: "check wrapper completed",
+        prd_path: prdPath,
+        report: {
+          status: "warning",
+          prd_path: prdPath,
+          warnings: [{ code: "DEMAND_CONTRACT_MISSING" }],
+        },
+      }, {
+        projectRoot: root,
+        stateRoot,
+        source: "unit",
+        writeSessionMemory: false,
+      });
+
+      const guard = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, stateRoot, prdPath });
+      assert.equal(checkWrite.report.status, "completed");
+      assert.equal(guard.status, "blocked");
+      assert.deepEqual(guard.missing_required_stages, ["check"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("blocks acceptance until review-fix evidence exists", () => {
     const root = tempProject();
     const stateRoot = join(root, ".yolo");
@@ -232,7 +274,14 @@ describe("lifecycle guard", () => {
       });
       assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-plan");
 
-      writeLifecycleStageReport("roadmap", { status: "warning", summary: "plan has nonblocking warnings" }, {
+      writeLifecycleStageReport("roadmap", { status: "warning", summary: "plan has warnings" }, {
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        writeSessionMemory: false,
+      });
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-plan");
+
+      writeLifecycleStageReport("roadmap", { status: "success", summary: "plan passed" }, {
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         writeSessionMemory: false,

@@ -5,6 +5,7 @@ import { buildAgentBridgeInstallPlan } from "../../tools/install-agent-bridge.js
 import { listYoloCommandNames } from "../workflows/command-registry.js";
 
 export const AGENT_INTEGRATION_DOCTOR_SCHEMA_VERSION = "1.0";
+const DEFAULT_HOST_DISCOVERY_FRESHNESS_MS = 30 * 60 * 1000;
 
 function check(code, passed, message, extra = {}) {
   return { code, passed, message, ...extra };
@@ -48,6 +49,101 @@ function expectedArtifacts(bridgePlan = {}) {
     ...(bridgePlan.codex_slash_command_files || []),
     ...skillPlanFiles(bridgePlan.skill_plans || []),
   ];
+}
+
+function clean(value) {
+  return String(value ?? "").trim();
+}
+
+function asArray(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (value == null || value === "") return [];
+  return [value];
+}
+
+function timestampMs(value) {
+  const time = Date.parse(clean(value));
+  return Number.isFinite(time) ? time : null;
+}
+
+function hostDiscoveryEvidence(options = {}, plan = {}) {
+  return options.hostDiscoveryEvidence
+    || options.host_discovery_evidence
+    || plan.host_discovery_evidence
+    || plan.components?.host_discovery_evidence
+    || null;
+}
+
+function inspectHostDiscoveryEvidence(options = {}, plan = {}) {
+  const evidence = hostDiscoveryEvidence(options, plan);
+  const nowMs = Number(options.nowMs || options.now_ms) || (typeof options.now === "function" ? options.now() : Date.now());
+  const freshnessMs = Number(options.hostDiscoveryFreshnessMs || options.host_discovery_freshness_ms) || DEFAULT_HOST_DISCOVERY_FRESHNESS_MS;
+  const blockers = [];
+  if (!evidence || typeof evidence !== "object") {
+    blockers.push({
+      code: "AGENT_INTEGRATION_DOCTOR_HOST_DISCOVERY_MISSING",
+      message: "fresh host discovery evidence is required before native agent integration can pass",
+    });
+    return {
+      status: "blocked",
+      fresh: false,
+      evidence: null,
+      checked_at: new Date(nowMs).toISOString(),
+      freshness_ms: freshnessMs,
+      blockers,
+    };
+  }
+
+  const discoveredTargets = new Set(asArray(evidence.targets || evidence.discovered_targets || evidence.target).map(clean));
+  const requestedTargets = asArray(plan.targets).map(clean);
+  const missingTargets = requestedTargets.filter((target) => !discoveredTargets.has(target));
+  if (missingTargets.length > 0) {
+    blockers.push({
+      code: "AGENT_INTEGRATION_DOCTOR_HOST_DISCOVERY_TARGET_MISSING",
+      message: "host discovery evidence does not cover every requested target",
+      missing_targets: missingTargets,
+    });
+  }
+
+  const status = clean(evidence.status || evidence.discovery_status || "").toLowerCase();
+  if (!["pass", "passed", "discovered", "ready"].includes(status)) {
+    blockers.push({
+      code: "AGENT_INTEGRATION_DOCTOR_HOST_DISCOVERY_NOT_PASS",
+      message: "host discovery evidence must have pass/discovered status",
+      discovery_status: evidence.status || evidence.discovery_status || null,
+    });
+  }
+
+  const discoveredAtMs = timestampMs(evidence.discovered_at || evidence.generated_at || evidence.checked_at || evidence.created_at);
+  if (discoveredAtMs === null) {
+    blockers.push({
+      code: "AGENT_INTEGRATION_DOCTOR_HOST_DISCOVERY_TIMESTAMP_MISSING",
+      message: "host discovery evidence must include discovered_at, generated_at, checked_at, or created_at",
+    });
+  } else if (nowMs - discoveredAtMs > freshnessMs || discoveredAtMs - nowMs > freshnessMs) {
+    blockers.push({
+      code: "AGENT_INTEGRATION_DOCTOR_HOST_DISCOVERY_STALE",
+      message: "host discovery evidence is stale or from the future",
+      age_ms: nowMs - discoveredAtMs,
+      freshness_ms: freshnessMs,
+    });
+  }
+
+  if (!clean(evidence.discovery_run_id || evidence.host_session_id || evidence.session_id)) {
+    blockers.push({
+      code: "AGENT_INTEGRATION_DOCTOR_HOST_DISCOVERY_RUN_ID_MISSING",
+      message: "host discovery evidence must include discovery_run_id or host_session_id",
+    });
+  }
+
+  return {
+    status: blockers.length > 0 ? "blocked" : "pass",
+    fresh: blockers.length === 0,
+    evidence,
+    checked_at: new Date(nowMs).toISOString(),
+    freshness_ms: freshnessMs,
+    blockers,
+  };
 }
 
 export function buildAgentIntegrationDoctorPlan(options = {}) {
@@ -94,15 +190,16 @@ export function buildAgentIntegrationDoctorPlan(options = {}) {
       "Codex and/or Claude native YOLO skill artifacts exist",
       `Codex exposes one /yolo entry while Claude slash commands and internal workflow descriptors remain separate for ${commandList}`,
       "workflow skill descriptors are installed for the requested scope",
-      "the host session was restarted or refreshed after user-level skill installation",
+      "fresh host discovery evidence proves the current Codex/Claude host can discover the installed integration",
     ],
     stop_conditions: [
       "any requested skill, command, source-command, or workflow artifact is missing",
       "artifacts exist only in the YOLO repository but not in the requested project/user scope",
-      "the operator expects current Codex/Claude session discovery without restarting after installation",
+      "the operator expects current Codex/Claude session discovery without fresh host discovery evidence",
     ],
     components: {
       bridge_install_plan: bridgePlan,
+      host_discovery_evidence: options.hostDiscoveryEvidence || options.host_discovery_evidence || null,
     },
   };
 }
@@ -124,6 +221,7 @@ export function runAgentIntegrationDoctor(options = {}) {
   });
   const artifactStatuses = plan.expected_artifacts.map(artifactStatus);
   const missingArtifacts = artifactStatuses.filter((artifact) => !artifact.exists || !artifact.non_empty);
+  const hostDiscovery = inspectHostDiscoveryEvidence(options, plan);
 
   const checks = [
     check(
@@ -160,6 +258,12 @@ export function runAgentIntegrationDoctor(options = {}) {
       "all expected native skill, command, source-command, and workflow artifacts must exist and be non-empty",
       { missing_artifacts: missingArtifacts },
     ),
+    check(
+      "AGENT_INTEGRATION_DOCTOR_HOST_DISCOVERY_FRESH",
+      hostDiscovery.status === "pass",
+      "fresh host discovery evidence must prove the current host can discover requested YOLO integration",
+      { host_discovery: hostDiscovery },
+    ),
   ];
   const blockers = checks.filter((item) => item.passed !== true);
 
@@ -175,6 +279,7 @@ export function runAgentIntegrationDoctor(options = {}) {
     artifact_count: artifactStatuses.length,
     artifacts_present: artifactStatuses.length - missingArtifacts.length,
     missing_artifacts: missingArtifacts,
+    host_discovery: hostDiscovery,
     checks,
     blockers,
     artifacts: artifactStatuses,
@@ -186,15 +291,15 @@ export function runAgentIntegrationDoctor(options = {}) {
       credential_access: false,
       provider_execution: false,
       billable_provider_execution: false,
-      host_session_restarted: options.hostSessionRestarted === true || options.host_session_restarted === true,
+      host_discovery_fresh: hostDiscovery.status === "pass",
     },
     next_actions: blockers.length === 0
       ? [
-          "Restart or refresh Codex/Claude if the host discovers skills only at startup.",
+          "Keep the host discovery evidence attached to the release bundle.",
           "Dogfood /yolo-plan, /yolo-check, and /yolo-review from chat, not from a raw terminal-only flow.",
         ]
       : [
-          "Run the agent bridge installer for the missing scope/target, then restart or refresh the host.",
+          "Run the agent bridge installer for the missing scope/target, then restart or refresh the host and capture discovery evidence.",
           "Re-run this doctor before claiming native /yolo or skill integration is usable.",
         ],
   };

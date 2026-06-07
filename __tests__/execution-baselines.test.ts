@@ -1,6 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  baselineArtifactHash,
   captureExecutionBaselines,
   parseEslintBaselineErrorKeys,
   parseEslintBaselineKeys,
@@ -82,7 +83,14 @@ describe("execution baseline helpers", () => {
       if (command === "git status --porcelain") return " M src/a.ts\n";
       if (command === "git stash create") return "stash-ref\n";
       if (command === "git stash apply stash-ref") return "";
-      if (command.startsWith("tsc")) return "src/a.ts(1,1): error TS1000: bad\n";
+      if (command === "git rev-parse HEAD") return "abc123\n";
+      if (command.startsWith("tsc")) {
+        const error = new Error("tsc failed");
+        error.status = 2;
+        error.stdout = "src/a.ts(1,1): error TS1000: bad\n";
+        error.stderr = "typecheck stderr\n";
+        throw error;
+      }
       if (command.startsWith("eslint")) {
         return JSON.stringify([{ filePath: "/repo/src/a.ts", messages: [{ line: 2, ruleId: "semi" }] }]);
       }
@@ -99,13 +107,58 @@ describe("execution baseline helpers", () => {
       writeFileSync,
     });
 
+    assert.equal(result.status, "pass");
+    assert.equal(result.blocks_execution, false);
     assert.equal(result.stash_ref, "stash-ref");
     assert.equal(result.restored, true);
     assert.deepEqual(result.tsc_keys, ["src/a.ts:1:TS1000"]);
     assert.deepEqual(result.eslint_keys, ["src/a.ts:2:semi"]);
-    assert.deepEqual(JSON.parse(writes.get("/repo/state/tsc.json")), { keys: ["src/a.ts:1:TS1000"] });
-    assert.deepEqual(JSON.parse(writes.get("/repo/state/eslint.json")), { keys: ["src/a.ts:2:semi"] });
+    const tscBaseline = JSON.parse(writes.get("/repo/state/tsc.json"));
+    const eslintBaseline = JSON.parse(writes.get("/repo/state/eslint.json"));
+    assert.deepEqual(tscBaseline.keys, ["src/a.ts:1:TS1000"]);
+    assert.equal(tscBaseline.meta.command, "tsc");
+    assert.equal(tscBaseline.meta.exit_code, 2);
+    assert.equal(tscBaseline.meta.stderr_tail, "typecheck stderr\n");
+    assert.equal(tscBaseline.meta.commit, "abc123");
+    assert.equal(tscBaseline.meta.artifact_hash, baselineArtifactHash(tscBaseline));
+    assert.deepEqual(eslintBaseline.keys, ["src/a.ts:2:semi"]);
+    assert.equal(eslintBaseline.meta.command, "eslint");
+    assert.equal(eslintBaseline.meta.exit_code, 0);
+    assert.equal(eslintBaseline.meta.commit, "abc123");
+    assert.equal(eslintBaseline.meta.artifact_hash, baselineArtifactHash(eslintBaseline));
     assert.ok(commands.includes("git stash apply stash-ref"));
+  });
+
+  test("captureExecutionBaselines blocks when a required baseline command cannot run", () => {
+    const writes = new Map();
+    const execSync = (command) => {
+      if (command === "git status --porcelain") return "";
+      if (command === "git rev-parse HEAD") return "abc123\n";
+      if (command.startsWith("missing-tsc")) {
+        const error = new Error("missing-tsc: command not found");
+        error.status = 127;
+        error.stderr = "missing-tsc: command not found\n";
+        throw error;
+      }
+      return "[]";
+    };
+
+    const result = captureExecutionBaselines({
+      rootDir: "/repo",
+      config: { build: { type_check: "missing-tsc", lint: "eslint" } },
+      tscBaselinePath: "/repo/state/tsc.json",
+      eslintBaselinePath: "/repo/state/eslint.json",
+      execSync,
+      writeFileSync: (file, content) => writes.set(file, content),
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.blocks_execution, true);
+    assert.deepEqual(result.blockers.map((blocker) => blocker.tool), ["tsc"]);
+    const tscBaseline = JSON.parse(writes.get("/repo/state/tsc.json"));
+    assert.equal(tscBaseline.meta.status, "blocked");
+    assert.equal(tscBaseline.meta.exit_code, 127);
+    assert.equal(tscBaseline.meta.reason, "baseline_command_unavailable");
   });
 
   test("refreshBaselineAfterCommit prunes resolved tsc and eslint baseline keys", () => {
@@ -165,16 +218,17 @@ describe("execution baseline helpers", () => {
       { tool: "eslint", skipped: false, before: 2, after: 1, removed: 1 },
     ]);
     assert.equal(commands.length, 2);
-    assert.deepEqual(JSON.parse(writes.get("/repo/state/runtime/tsc-baseline.json")), {
-      keys: ["src/a.ts:1:TS1000"],
-      meta: {
-        created_at: "2026-01-01T00:00:00.000Z",
-        updated_at: "2026-05-24T00:00:00.000Z",
-      },
-    });
-    assert.deepEqual(JSON.parse(writes.get("/repo/state/runtime/eslint-baseline.json")), {
-      keys: ["src/a.ts:2:semi"],
-      meta: { updated_at: "2026-05-24T00:00:00.000Z" },
-    });
+    const refreshedTsc = JSON.parse(writes.get("/repo/state/runtime/tsc-baseline.json"));
+    const refreshedEslint = JSON.parse(writes.get("/repo/state/runtime/eslint-baseline.json"));
+    assert.deepEqual(refreshedTsc.keys, ["src/a.ts:1:TS1000"]);
+    assert.equal(refreshedTsc.meta.created_at, "2026-01-01T00:00:00.000Z");
+    assert.equal(refreshedTsc.meta.updated_at, "2026-05-24T00:00:00.000Z");
+    assert.equal(refreshedTsc.meta.command, "tsc");
+    assert.equal(refreshedTsc.meta.exit_code, 0);
+    assert.equal(refreshedTsc.meta.artifact_hash, baselineArtifactHash(refreshedTsc));
+    assert.deepEqual(refreshedEslint.keys, ["src/a.ts:2:semi"]);
+    assert.equal(refreshedEslint.meta.updated_at, "2026-05-24T00:00:00.000Z");
+    assert.equal(refreshedEslint.meta.command, "eslint");
+    assert.equal(refreshedEslint.meta.artifact_hash, baselineArtifactHash(refreshedEslint));
   });
 });

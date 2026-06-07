@@ -2,12 +2,23 @@ import {
   execFileSync as defaultExecFileSync,
   execSync as defaultExecSync,
 } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync as defaultExistsSync,
   readFileSync as defaultReadFileSync,
   writeFileSync as defaultWriteFileSync,
 } from "node:fs";
 import { join } from "node:path";
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (!value || typeof value !== "object") return JSON.stringify(value);
+  return `{${Object.keys(value).sort().filter((key) => value[key] !== undefined).map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+}
+
+function sha256(value) {
+  return createHash("sha256").update(stableJson(value)).digest("hex");
+}
 
 export function parseTscBaselineKeys(output = "") {
   return [...new Set(
@@ -80,13 +91,128 @@ export function pruneResolvedBaselineKeys(baselineKeys = [], currentKeys = [], r
     });
 }
 
-function writeBaseline(filePath, keys, writeFileSync = defaultWriteFileSync) {
-  writeFileSync(filePath, JSON.stringify({ keys }, null, 2), "utf8");
-  return keys;
+function tail(value = "", limit = 4000) {
+  return String(value || "").slice(-limit);
 }
 
 function commandOutput(error) {
   return (error?.stdout || "") + (error?.stderr || "");
+}
+
+function commandStderr(error) {
+  return String(error?.stderr || "");
+}
+
+function commandStdout(error) {
+  return String(error?.stdout || "");
+}
+
+function commandExitCode(error) {
+  if (Number.isInteger(error?.status)) return error.status;
+  if (Number.isInteger(error?.code)) return error.code;
+  return 1;
+}
+
+function currentCommit(rootDir, execSync = defaultExecSync) {
+  try {
+    return execSync("git rev-parse HEAD", {
+      cwd: rootDir,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+export function baselineArtifactHash(baseline = {}) {
+  const meta = { ...(baseline.meta || {}) };
+  delete meta.artifact_hash;
+  return sha256({ ...baseline, meta });
+}
+
+export function buildBaselineArtifact({
+  tool,
+  keys = [],
+  command = "",
+  exitCode = 0,
+  stdout = "",
+  stderr = "",
+  commit = null,
+  status = "pass",
+  reason = null,
+  createdAt = new Date().toISOString(),
+  updatedAt = createdAt,
+} = {}) {
+  const baseline = {
+    keys,
+    meta: {
+      schema: "yolo.execution.baseline.v1",
+      tool,
+      command,
+      exit_code: exitCode,
+      status,
+      reason,
+      stderr_tail: tail(stderr),
+      stdout_tail: tail(stdout),
+      commit,
+      created_at: createdAt,
+      updated_at: updatedAt,
+    },
+  };
+  baseline.meta.artifact_hash = baselineArtifactHash(baseline);
+  return baseline;
+}
+
+function writeBaseline(filePath, baseline, writeFileSync = defaultWriteFileSync) {
+  writeFileSync(filePath, JSON.stringify(baseline, null, 2), "utf8");
+  return baseline;
+}
+
+export function runBaselineCommand({
+  rootDir,
+  command,
+  execSync = defaultExecSync,
+  timeout = 60000,
+} = {}) {
+  try {
+    const stdout = execSync(`${command} 2>&1`, {
+      cwd: rootDir,
+      encoding: "utf8",
+      timeout,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    return {
+      command,
+      exit_code: 0,
+      stdout,
+      stderr: "",
+      output: stdout,
+      signal: null,
+      error: null,
+      status: "pass",
+    };
+  } catch (error) {
+    const stdout = commandStdout(error);
+    const stderr = commandStderr(error);
+    const output = commandOutput(error);
+    const exitCode = commandExitCode(error);
+    const blocked = Boolean(error?.signal) ||
+      exitCode === 127 ||
+      /\bnot found\b|is not recognized|command not found/i.test(output) ||
+      (!output.trim() && exitCode !== 0);
+    return {
+      command,
+      exit_code: exitCode,
+      stdout,
+      stderr,
+      output,
+      signal: error?.signal || null,
+      error: error?.message || String(error),
+      status: blocked ? "blocked" : "pass",
+      reason: blocked ? (error?.signal ? "baseline_command_timeout_or_signal" : "baseline_command_unavailable") : null,
+    };
+  }
 }
 
 export function createDirtyWorktreeSnapshot({ rootDir, execSync = defaultExecSync } = {}) {
@@ -128,19 +254,24 @@ export function captureTscBaseline({
   baselinePath,
   execSync = defaultExecSync,
   writeFileSync = defaultWriteFileSync,
+  nowIso = () => new Date().toISOString(),
 } = {}) {
-  let output = "";
-  try {
-    output = execSync(`${command} 2>&1 || true`, {
-      cwd: rootDir,
-      encoding: "utf8",
-      timeout: 60000,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-  } catch (error) {
-    output = commandOutput(error);
-  }
-  return writeBaseline(baselinePath, parseTscBaselineKeys(output), writeFileSync);
+  const run = runBaselineCommand({ rootDir, command, execSync, timeout: 60000 });
+  const keys = parseTscBaselineKeys(run.output);
+  const baseline = buildBaselineArtifact({
+    tool: "tsc",
+    keys,
+    command,
+    exitCode: run.exit_code,
+    stdout: run.stdout || run.output,
+    stderr: run.stderr,
+    commit: currentCommit(rootDir, execSync),
+    status: run.status,
+    reason: run.reason,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  });
+  return writeBaseline(baselinePath, baseline, writeFileSync);
 }
 
 export function captureEslintBaseline({
@@ -149,19 +280,24 @@ export function captureEslintBaseline({
   baselinePath,
   execSync = defaultExecSync,
   writeFileSync = defaultWriteFileSync,
+  nowIso = () => new Date().toISOString(),
 } = {}) {
-  let output = "";
-  try {
-    output = execSync(`${command} 2>&1 || true`, {
-      cwd: rootDir,
-      encoding: "utf8",
-      timeout: 60000,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-  } catch (error) {
-    output = commandOutput(error);
-  }
-  return writeBaseline(baselinePath, parseEslintBaselineKeys(output, rootDir), writeFileSync);
+  const run = runBaselineCommand({ rootDir, command, execSync, timeout: 60000 });
+  const keys = parseEslintBaselineKeys(run.output, rootDir);
+  const baseline = buildBaselineArtifact({
+    tool: "eslint",
+    keys,
+    command,
+    exitCode: run.exit_code,
+    stdout: run.stdout || run.output,
+    stderr: run.stderr,
+    commit: currentCommit(rootDir, execSync),
+    status: run.status,
+    reason: run.reason,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  });
+  return writeBaseline(baselinePath, baseline, writeFileSync);
 }
 
 export function captureExecutionBaselines({
@@ -171,28 +307,48 @@ export function captureExecutionBaselines({
   eslintBaselinePath,
   execSync = defaultExecSync,
   writeFileSync = defaultWriteFileSync,
+  nowIso = () => new Date().toISOString(),
 } = {}) {
   const stashRef = createDirtyWorktreeSnapshot({ rootDir, execSync });
-  const tscKeys = captureTscBaseline({
+  const tscBaseline = captureTscBaseline({
     rootDir,
     command: config.build.type_check,
     baselinePath: tscBaselinePath,
     execSync,
     writeFileSync,
+    nowIso,
   });
-  const eslintKeys = captureEslintBaseline({
+  const eslintBaseline = captureEslintBaseline({
     rootDir,
     command: config.build.lint,
     baselinePath: eslintBaselinePath,
     execSync,
     writeFileSync,
+    nowIso,
   });
   const restored = restoreDirtyWorktreeSnapshot(stashRef, { rootDir, execSync });
+  const baselineResults = [
+    { tool: "tsc", baseline: tscBaseline },
+    { tool: "eslint", baseline: eslintBaseline },
+  ];
+  const blocked = baselineResults
+    .filter((result) => result.baseline.meta?.status === "blocked")
+    .map((result) => ({
+      tool: result.tool,
+      reason: result.baseline.meta?.reason || "baseline_capture_failed",
+      command: result.baseline.meta?.command || "",
+      exit_code: result.baseline.meta?.exit_code ?? null,
+    }));
   return {
+    status: blocked.length > 0 ? "blocked" : "pass",
+    blocks_execution: blocked.length > 0,
+    blockers: blocked,
     stash_ref: stashRef,
     restored,
-    tsc_keys: tscKeys,
-    eslint_keys: eslintKeys,
+    tsc_keys: tscBaseline.keys,
+    eslint_keys: eslintBaseline.keys,
+    tsc_baseline: tscBaseline,
+    eslint_baseline: eslintBaseline,
   };
 }
 
@@ -229,7 +385,11 @@ export function refreshBaselineAfterCommit({
       const oldKeys = baseline.keys || [];
       baseline.keys = pruneResolvedBaselineKeys(oldKeys, currentKeys, rootDir);
       baseline.meta = baseline.meta || {};
+      baseline.meta.command = command.replace(/\s+2>&1\s+\|\|\s+true$/, "");
+      baseline.meta.exit_code = 0;
+      baseline.meta.commit = currentCommit(rootDir);
       baseline.meta.updated_at = nowIso();
+      baseline.meta.artifact_hash = baselineArtifactHash(baseline);
       writeFileSync(baselinePath, JSON.stringify(baseline, null, 2));
       results.push({
         tool,

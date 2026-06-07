@@ -1,36 +1,27 @@
 #!/bin/bash
-# YOLO 一键启动：progress-server + runner
-# 用法: bash scripts/yolo/start.sh [prd.json] [--mode=fix]
+# YOLO root compatibility launcher.
+# Prefer the stable 8-entry CLI: status, demand, spec, tasks, run, check, review, release.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PORT=3456
 
-# 启动 progress-server（如果未运行）
-if ! lsof -i :$PORT -t >/dev/null 2>&1; then
-  echo "[start] 启动 progress-server (port $PORT)..."
-  node "$SCRIPT_DIR/src/runtime/progress/server.mjs" --port=$PORT &
-  PS_PID=$!
-  sleep 2
-  if kill -0 $PS_PID 2>/dev/null; then
-    echo "[start] progress-server 已启动 (PID $PS_PID)"
-    echo "[start] 看板地址: http://localhost:$PORT"
-  else
-    echo "[start] ⚠️ progress-server 启动失败，runner 仍可正常运行"
-  fi
+if [ -f "$SCRIPT_DIR/dist/bin/yolo.js" ]; then
+  YOLO=(node "$SCRIPT_DIR/dist/bin/yolo.js")
 else
-  echo "[start] progress-server 已在运行 (port $PORT)"
+  YOLO=(node --import tsx "$SCRIPT_DIR/bin/yolo.ts")
 fi
 
-# 启动 runner
-echo "[start] 启动 runner..."
-node "$SCRIPT_DIR/runner.mjs" "$@"
-RUNNER_EXIT=$?
-
-# runner 退出后关闭 progress-server（只关本次启动的）
-if [ -n "$PS_PID" ] && kill -0 $PS_PID 2>/dev/null; then
-  echo "[start] runner 退出，关闭 progress-server..."
-  kill $PS_PID 2>/dev/null || true
+if [ "$#" -eq 0 ]; then
+  echo "[start] No command provided; showing current YOLO status."
+  exec "${YOLO[@]}" status
 fi
 
-exit $RUNNER_EXIT
+case "$1" in
+  status|demand|spec|tasks|run|check|review|release)
+    exec "${YOLO[@]}" "$@"
+    ;;
+  *)
+    echo "[start] Compatibility mode: routing arguments to 'yolo run'."
+    exec "${YOLO[@]}" run "$@"
+    ;;
+esac

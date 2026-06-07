@@ -738,7 +738,7 @@ describe("demand runtime", () => {
     }
   });
 
-  test("approved demand compiles scenario surfaces into session-sized atomic tasks", () => {
+  test("approved demand compiles scenario surfaces but blocks investigate-first tasks before executable write", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-atomic-"));
     try {
       seedDemandTargetFiles(root, ["src/services/inventory-alerts.ts", "src/pages/inventory-list.tsx", "src/services/inventory-alerts.test.ts"]);
@@ -770,43 +770,48 @@ describe("demand runtime", () => {
         writeArtifacts: false,
       });
 
-      assert.equal(prd.status, "success");
-      assert.equal(prd.prd.tasks.length >= 3, true);
-      assert.equal(prd.prd.tasks.every((task) => task.task_kind === "demand_atomic_task"), true);
-      assert.equal(prd.prd.tasks.every((task) => task.scope.max_files <= 2), true);
-      assert.equal(prd.prd.tasks.every((task) => Boolean(task.handoff.proof)), true);
-      assert.equal(prd.prd.demand.approval.approved_at !== null, true);
-      assert.ok(prd.prd.demand.deferred_scope.includes("Forecasting and supplier ordering remain later demands."));
-      assert.equal(prd.prd.demand.deferred_scope_confirmation.confirmed, true);
-      assert.equal(prd.prd.demand.deferred_follow_up.required, true);
-      assert.ok(prd.prd.demand.deferred_follow_up.next_session_prompt.includes("Forecasting and supplier ordering"));
-      assert.ok(prd.prd.tasks.every((task) => task.handoff.deferred_scope.includes("Forecasting and supplier ordering remain later demands.")));
-      assert.ok(prd.prd.tasks.every((task) => task.handoff.deferred_scope_confirmation.confirmed === true));
-      assert.ok(prd.prd.tasks.every((task) => task.handoff.deferred_follow_up.required === true));
-      assert.equal(prd.prd.tasks.some((task) => task.handoff.surface.kind === "ui"), true);
-      assert.equal(prd.prd.tasks.some((task) => task.handoff.surface.kind === "service"), true);
-      assert.equal(prd.prd.tasks.some((task) => task.handoff.surface.kind === "test"), true);
-      const serviceTask = prd.prd.tasks.find((task) => task.handoff.surface.kind === "service");
-      const testTask = prd.prd.tasks.find((task) => task.handoff.surface.kind === "test");
+      assert.equal(prd.status, "blocked");
+      assert.equal(prd.code, "DEMAND_PRD_PREFLIGHT_BLOCKED");
+      assert.equal(prd.prd, null);
+      assert.deepEqual(prd.artifacts, []);
+      assert.ok(prd.blockers.some((blocker) => blocker.code === "ATOMICITY_INVESTIGATE_FIRST"));
+      const compiledPrd = prd.compiled.prd;
+      assert.equal(compiledPrd.tasks.length >= 3, true);
+      assert.equal(compiledPrd.tasks.every((task) => task.task_kind === "demand_atomic_task"), true);
+      assert.equal(compiledPrd.tasks.every((task) => task.scope.max_files <= 2), true);
+      assert.equal(compiledPrd.tasks.every((task) => Boolean(task.handoff.proof)), true);
+      assert.equal(compiledPrd.demand.approval.approved_at !== null, true);
+      assert.ok(compiledPrd.demand.deferred_scope.includes("Forecasting and supplier ordering remain later demands."));
+      assert.equal(compiledPrd.demand.deferred_scope_confirmation.confirmed, true);
+      assert.equal(compiledPrd.demand.deferred_follow_up.required, true);
+      assert.ok(compiledPrd.demand.deferred_follow_up.next_session_prompt.includes("Forecasting and supplier ordering"));
+      assert.ok(compiledPrd.tasks.every((task) => task.handoff.deferred_scope.includes("Forecasting and supplier ordering remain later demands.")));
+      assert.ok(compiledPrd.tasks.every((task) => task.handoff.deferred_scope_confirmation.confirmed === true));
+      assert.ok(compiledPrd.tasks.every((task) => task.handoff.deferred_follow_up.required === true));
+      assert.equal(compiledPrd.tasks.some((task) => task.handoff.surface.kind === "ui"), true);
+      assert.equal(compiledPrd.tasks.some((task) => task.handoff.surface.kind === "service"), true);
+      assert.equal(compiledPrd.tasks.some((task) => task.handoff.surface.kind === "test"), true);
+      const serviceTask = compiledPrd.tasks.find((task) => task.handoff.surface.kind === "service");
+      const testTask = compiledPrd.tasks.find((task) => task.handoff.surface.kind === "test");
       assert.ok(testTask.depends_on.includes(serviceTask.id));
       assert.ok(testTask.handoff.read_first.includes("src/services/inventory-alerts.ts"));
       assert.ok(testTask.post_conditions.some((condition) => condition.type === "tests_pass" && condition.severity === "FAIL"));
-      assert.equal(prd.prd.tasks.every((task) => task.post_conditions.some((condition) => condition.severity === "FAIL" && condition.type !== "acceptance_criteria")), true);
-      for (const task of prd.prd.tasks) {
-        assertTaskSessionPlan(task, prd.prd.demand.id);
+      assert.equal(compiledPrd.tasks.every((task) => task.post_conditions.some((condition) => condition.severity === "FAIL" && condition.type !== "acceptance_criteria")), true);
+      for (const task of compiledPrd.tasks) {
+        assertTaskSessionPlan(task, compiledPrd.demand.id);
       }
-      const handoffStats = prd.prd.execution_readiness.session_handoff;
+      const handoffStats = compiledPrd.execution_readiness.session_handoff;
       assert.equal(handoffStats.planned, true);
-      assert.equal(handoffStats.task_count, prd.prd.tasks.length);
-      assert.equal(handoffStats.session_count, prd.prd.tasks.length);
-      assert.equal(handoffStats.tasks_with_session_plan, prd.prd.tasks.length);
-      assert.equal(handoffStats.state_paths.length, prd.prd.tasks.length);
-      assert.equal(handoffStats.handoff_paths.length, prd.prd.tasks.length);
-      assert.equal(handoffStats.evidence_paths.length, prd.prd.tasks.length);
+      assert.equal(handoffStats.task_count, compiledPrd.tasks.length);
+      assert.equal(handoffStats.session_count, compiledPrd.tasks.length);
+      assert.equal(handoffStats.tasks_with_session_plan, compiledPrd.tasks.length);
+      assert.equal(handoffStats.state_paths.length, compiledPrd.tasks.length);
+      assert.equal(handoffStats.handoff_paths.length, compiledPrd.tasks.length);
+      assert.equal(handoffStats.evidence_paths.length, compiledPrd.tasks.length);
       assert.equal(handoffStats.memory_update_paths.includes(".yolo/memory/CURRENT_HANDOFF.md"), true);
       assert.equal(handoffStats.memory_update_paths.includes(".yolo/state/session-memory.jsonl"), true);
       assert.equal(handoffStats.progress_update_paths.includes(".yolo/memory/PROGRESS.md"), true);
-      assert.deepEqual(prd.prd.demand.atomicity_contract.session_handoff, handoffStats);
+      assert.deepEqual(compiledPrd.demand.atomicity_contract.session_handoff, handoffStats);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -873,10 +878,14 @@ describe("demand runtime", () => {
         writeArtifacts: false,
       });
 
-      assert.equal(prd.status, "success");
-      assert.equal(prd.prd.tasks.some((task) => task.requirement_ids.includes("REQ-003-S02")), true);
-      assert.equal(prd.prd.tasks.every((task) => !(/编辑/.test(task.description) && /移动/.test(task.description))), true);
-      assert.match(prd.prd.demand.atomicity_contract.rule, /one user-visible story/);
+      assert.equal(prd.status, "blocked");
+      assert.equal(prd.code, "DEMAND_PRD_PREFLIGHT_BLOCKED");
+      assert.equal(prd.prd, null);
+      assert.ok(prd.blockers.some((blocker) => blocker.code === "ATOMICITY_INVESTIGATE_FIRST"));
+      const compiledPrd = prd.compiled.prd;
+      assert.equal(compiledPrd.tasks.some((task) => task.requirement_ids.includes("REQ-003-S02")), true);
+      assert.equal(compiledPrd.tasks.every((task) => !(/编辑/.test(task.description) && /移动/.test(task.description))), true);
+      assert.match(compiledPrd.demand.atomicity_contract.rule, /one user-visible story/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

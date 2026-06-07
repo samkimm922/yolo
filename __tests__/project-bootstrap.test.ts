@@ -273,9 +273,10 @@ describe("project bootstrap", () => {
       ], { cwd: YOLO_DIR, encoding: "utf8" });
 
       assert.equal(result.stderr, "");
-      assert.equal(result.status, 0, result.stdout);
+      assert.equal(result.status, 2, result.stdout);
       const payload = JSON.parse(result.stdout);
-      assert.equal(payload.code, "DEMAND_READY");
+      assert.equal(payload.status, "warning");
+      assert.equal(payload.code, "DEMAND_WARNING");
       assert.equal(payload.memory_refresh.status, "ok");
       assert.equal(payload.memory_refresh.memory_dir, join(root, ".yolo/memory"));
       assert.match(readFileSync(join(root, ".yolo/memory/CURRENT_STATUS.md"), "utf8"), /## Project Brain/);

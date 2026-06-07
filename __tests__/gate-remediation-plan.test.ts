@@ -85,4 +85,17 @@ describe("gate remediation plan", () => {
     assert.equal(plan.automation_can_continue, true);
     assert.equal(plan.requires_human, false);
   });
+
+  test("warning-only plans fail closed instead of reporting automation can continue", () => {
+    const plan = buildGateRemediationPlan({
+      source: "yolo-check",
+      warnings: [{ code: "DEMAND_CONTRACT_MISSING", message: "Demand contract missing in advisory mode." }],
+    });
+
+    assert.equal(plan.action, GATE_REMEDIATION_ACTIONS.ASK_HUMAN);
+    assert.equal(plan.automation_can_continue, false);
+    assert.equal(plan.requires_human, true);
+    assert.equal(plan.blocks_ship, true);
+    assert.match(plan.summary, /automation is blocked/);
+  });
 });

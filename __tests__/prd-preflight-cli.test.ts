@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { runPrdPreflightCli } from "../src/cli/prd-preflight.js";
 
 function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-prd-preflight-cli-"));
@@ -87,6 +88,33 @@ function prdWithWarning() {
 }
 
 describe("prd preflight CLI warning policy", () => {
+  test("check-all blocks when no PRD files are available", () => {
+    const root = tempProject();
+    const previousCwd = process.cwd();
+    let stdout = "";
+    let stderr = "";
+    try {
+      const emptyDir = join(root, "empty-prds");
+      mkdirSync(emptyDir, { recursive: true });
+      process.chdir(root);
+      const exitCode = runPrdPreflightCli(["--check-all", "--dir", emptyDir, "--json"], {
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      const payload = JSON.parse(stdout);
+
+      assert.equal(stderr, "");
+      assert.equal(exitCode, 1);
+      assert.equal(payload.status, "blocked");
+      assert.equal(payload.code, "PRD_PREFLIGHT_NO_FILES");
+      assert.equal(payload.file_count, 0);
+      assert.ok(payload.blocked_reasons.some((reason) => reason.code === "PRD_PREFLIGHT_NO_FILES"));
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("default verify blocks warning PRDs instead of returning success", () => {
     const root = tempProject();
     try {
@@ -108,6 +136,42 @@ describe("prd preflight CLI warning policy", () => {
       assert.equal(payload.warning_policy.mode, "verify");
       assert.equal(payload.blocking_warning_count > 0, true);
       assert.ok(payload.blocked_reasons.some((reason) => reason.code === "MANUAL_FAIL_CONDITION"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("advisory warning PRDs exit 2 in direct and wrapper preflight CLIs", () => {
+    const root = tempProject();
+    let stdout = "";
+    let stderr = "";
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, prdWithWarning());
+
+      const direct = spawnSync(process.execPath, [
+        "--import",
+        "tsx",
+        resolve("src/prd/preflight.ts"),
+        prdPath,
+        "--mode=advisory",
+        "--json",
+      ], { cwd: resolve("."), encoding: "utf8" });
+      const directPayload = JSON.parse(direct.stdout);
+
+      assert.equal(direct.stderr, "");
+      assert.equal(direct.status, 2);
+      assert.equal(directPayload.status, "warning");
+
+      const wrapperExit = runPrdPreflightCli([prdPath, "--mode=advisory", "--json"], {
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      const wrapperPayload = JSON.parse(stdout);
+
+      assert.equal(stderr, "");
+      assert.equal(wrapperExit, 2);
+      assert.equal(wrapperPayload.status, "warning");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

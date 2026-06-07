@@ -28,7 +28,7 @@ describe("YOLO release-candidate CLI", () => {
       const payload = JSON.parse(stdout.text);
 
       assert.equal(stderr.text, "");
-      assert.equal(exitCode, 2);
+      assert.equal(exitCode, 1);
       assert.equal(payload.schema, "yolo.release_candidate_cli_result.v1");
       assert.equal(payload.status, "blocked");
       assert.equal(payload.code, "RELEASE_CANDIDATE_GATE_BLOCKED");
@@ -62,6 +62,10 @@ describe("YOLO release-candidate CLI", () => {
     try {
       const { io, stdout } = captureIo(root, {
         releaseCandidateRunner(input) {
+          assert.equal(input.command, "release");
+          assert.equal(input.stage, "release-gate");
+          assert.equal(input.gateId, "release-gate");
+          assert.equal(input.internal_gate_id, "release-gate");
           assert.equal(input.mode, "publish");
           assert.equal(input.dryRun, false);
           assert.equal(input.allowUntracked, true);
@@ -104,7 +108,7 @@ describe("YOLO release-candidate CLI", () => {
 
       assert.equal(exitCode, 0);
       assert.equal(payload.status, "pass");
-      assert.equal(payload.command, "release-gate");
+      assert.equal(payload.command, "release");
       assert.equal(payload.mode, "publish");
       assert.equal(payload.dry_run, false);
       assert.equal(payload.fail_closed, true);
@@ -134,7 +138,7 @@ describe("YOLO release-candidate CLI", () => {
       const payload = JSON.parse(stdout.text);
 
       assert.equal(stderr.text, "");
-      assert.equal(exitCode, 2);
+      assert.equal(exitCode, 1);
       assert.equal(payload.status, "blocked");
       assert.equal(payload.code, "RELEASE_CANDIDATE_RESULT_INCONSISTENT");
       assert.ok(payload.blockers.some((blocker) => blocker.code === "INNER_BLOCKED"));
@@ -157,7 +161,7 @@ describe("YOLO release-candidate CLI", () => {
       const payload = JSON.parse(stdout.text);
 
       assert.equal(stderr.text, "");
-      assert.equal(exitCode, 2);
+      assert.equal(exitCode, 1);
       assert.equal(payload.status, "error");
       assert.equal(payload.code, "RELEASE_CANDIDATE_GATE_ERROR");
       assert.match(payload.error, /boom from rc runner/);
@@ -175,11 +179,40 @@ describe("YOLO release-candidate CLI", () => {
       const payload = JSON.parse(stdout.text);
 
       assert.equal(stderr.text, "");
-      assert.equal(exitCode, 2);
+      assert.equal(exitCode, 1);
       assert.equal(payload.status, "error");
       assert.equal(payload.code, "INVALID_RELEASE_CANDIDATE_MODE");
       assert.equal(payload.fail_closed, true);
       assert.equal(payload.not_trello_replay, true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("does not normalize injected ready status into release pass", async () => {
+    const root = tempProject();
+    try {
+      const { io, stdout } = captureIo(root, {
+        releaseCandidateRunner(input) {
+          return {
+            status: "ready",
+            summary: "Gate evidence is ready for operator review, not approved.",
+            gates: input.requiredGates.map((gate) => ({ ...gate, status: "pass" })),
+            blockers: [],
+            gate_result: {
+              schema: "yolo.release.release_candidate_gate_result.v1",
+              status: "pass",
+              blockers: [],
+              issue_codes: [],
+            },
+          };
+        },
+      });
+      const exitCode = await runYoloCli(["release-candidate", "--json"], io);
+      const payload = JSON.parse(stdout.text);
+
+      assert.equal(exitCode, 2);
+      assert.equal(payload.status, "ready");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

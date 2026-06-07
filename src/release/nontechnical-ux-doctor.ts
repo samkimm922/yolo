@@ -10,8 +10,8 @@ import {
 
 export const NONTECHNICAL_UX_DOCTOR_SCHEMA_VERSION = "1.0";
 
-export const YOLO_ONE_SENTENCE_ENTRY = "/yolo 你的需求，先只生成计划，不要改代码。";
-export const YOLO_CODEX_FALLBACK_ENTRY = "使用 yolo skill 执行 /yolo：你的需求，先只生成计划，不要改代码。";
+export const YOLO_ONE_SENTENCE_ENTRY = "/yolo 你的需求，先读状态并选择安全阶段，不要改代码。";
+export const YOLO_CODEX_FALLBACK_ENTRY = "使用 yolo skill 执行 /yolo：你的需求，先读状态并选择安全阶段，不要改代码。";
 export const YOLO_STAGE_COMMAND_CONTRACT = "If the user asks to talk through a requirement, use `/yolo-demand` as the single demand-stage entry instead of asking them to choose brainstorm/interview/discover/discuss.";
 
 function check(code, passed, message, extra = {}) {
@@ -104,7 +104,7 @@ export function runNonTechnicalUxDoctor(options = {}) {
         && bridgeBlock.includes("compatibility alias for `/yolo-demand --stage <stage>`")
         && bridgeBlock.includes("Do not expose internal workflow names")
         && codexCommand.includes("explicit `/yolo-*` command")
-        && codexSlashCommand.includes("不确定该走哪一步时用"),
+        && codexSlashCommand.includes("不确定该走哪一步时先读状态"),
       "Codex bridge and command artifacts must make /yolo a fallback router and /yolo-* commands clear stage entries",
     ),
     check(

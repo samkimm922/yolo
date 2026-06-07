@@ -1,322 +1,522 @@
-export const YOLO_COMMAND_REGISTRY_SCHEMA_VERSION = "1.0";
+export const YOLO_COMMAND_REGISTRY_SCHEMA_VERSION = "1.1";
 export const YOLO_COMMAND_REGISTRY_SCHEMA = "yolo.workflow.command_registry.v1";
+export const YOLO_COMMAND_SURFACE_BUDGET = 8;
+
+export const DEFAULT_YOLO_PUBLIC_COMMAND_NAMES = [
+  "status",
+  "demand",
+  "spec",
+  "tasks",
+  "run",
+  "check",
+  "review",
+  "release",
+];
+
+function stableCommand(command) {
+  return {
+    surface: "stable",
+    stability: "stable",
+    visibility: "default",
+    ...command,
+  };
+}
+
+function compatibilityCommand(command) {
+  return {
+    surface: "compat",
+    stability: "compat",
+    visibility: "hidden",
+    ...command,
+  };
+}
+
+function internalCommand(command) {
+  return {
+    surface: "internal",
+    stability: "internal",
+    visibility: "hidden",
+    ...command,
+  };
+}
 
 export const YOLO_COMMANDS = [
-  {
-    name: "yolo",
-    lifecycle_stage: "idea",
-    workflow: "pi",
-    description: "Route a plain-language request to the safest YOLO workflow in Codex or Claude Code.",
-    argumentHint: "<requirement, PRD path, or what you want YOLO to do>",
-    objective: "Act as the YOLO dispatcher. Use yolo-next when lifecycle state is unclear, otherwise pick brainstorm, interview, discuss, discover, plan, PRD, check, run, review, accept, ship, learn, doctor, or install based on the user's intent; default to no-code discovery or plan when intent is ambiguous.",
-    mode: "dispatch",
-    writes_code: false,
-    requires_confirmation: false,
-    safety: "Do not edit code unless the user explicitly asks to execute with /yolo-run or /yolo-fix and the PRD/preflight is ready.",
-    usage: "/yolo 增加低库存预警，先判断应该走发现、计划、检查还是执行",
-  },
-  {
-    name: "yolo-brainstorm",
-    lifecycle_stage: "idea",
-    workflow: "brainstorm",
-    description: "Compatibility alias for /yolo-demand --stage brainstorm; explores an early idea before discovery.",
-    argumentHint: "<plain-language idea>",
-    objective: "Create a demand artifact pack with VISION, REFLECTION, INVESTIGATION, initial REQUIREMENTS, CONTEXT, ROADMAP, and readiness gaps without writing business code.",
-    mode: "brainstorm",
-    alias_for: "yolo-demand",
-    demand_stage: "brainstorm",
-    visibility: "compatibility_alias",
-    writes_code: false,
-    requires_confirmation: false,
-    safety: "Brainstorm-only. Stop after brainstorm artifacts and next-stage recommendation. Do not generate executable PRD or modify source files.",
-    usage: "/yolo-brainstorm 我想做一个库存预警产品，但还没确定用户和切入口",
-  },
-  {
-    name: "yolo-demand",
-    lifecycle_stage: "idea",
-    workflow: "demand",
-    description: "Unified demand-stage interview host: route brainstorm, interview, discovery, discussion, evidence dispatch, and PRD readiness while defaulting to one-question clarification.",
-    argumentHint: "[--stage brainstorm|interview|discover|discuss|prd|status|dispatch|evidence] <idea or --demand session.json>",
-    objective: "Act as the YOLO demand interview facilitator, not a general advice agent. Run one user-facing conversation that routes internally between brainstorm, interview, discovery, discussion, status, evidence dispatch, and PRD readiness; default to one-question mode. When required slots are missing, ask exactly one next_question in plain language, stop, and wait for the answer. Do not output long recommendation lists, do not enter PRD, keep assumptions separate from verified facts, require project evidence for factual claims, cross-check risky facts, and only recommend the next stage after the demand slots are complete.",
-    mode: "demand",
-    recommended: true,
-    writes_code: false,
-    requires_confirmation: false,
-    safety: "Demand-stage only. 不改代码, do not edit business code, and do not compile executable PRD in the same turn. 缺槽位时只返回一个 next_question, 不输出大段建议, 不进入 PRD. 批准最后: demand approval is collected only after required slots are concrete, and execution authorization is separate. Evidence dispatch defaults to dry-run and only executes provider agents with explicit --execute-agents --allow-agent-dispatch; agent tools stay capable, while harness boundary audits block any target-project mutation outside evidence artifacts.",
-    usage: "/yolo-demand 我想把库存预警需求聊清楚；缺槽位时请 one-question 只问一个 next_question，暂时不要生成 PRD，不改代码；/yolo-demand --stage dispatch --execute-agents --allow-agent-dispatch 执行 evidence agents",
-  },
-  {
-    name: "yolo-interview",
-    lifecycle_stage: "discovery",
-    workflow: "interview",
-    description: "Compatibility alias for /yolo-demand --stage interview; uses the same one-question demand interview host contract.",
-    argumentHint: "<plain-language idea, interview session, or answer>",
-    objective: "Use the unified /yolo-demand protocol in interview mode. Collect non-technical answers one question at a time, return exactly one next_question when slots are missing, track coverage, preserve question/answer handoff state, and convert the interview into demand artifacts only when enough facts are present.",
-    mode: "interview",
-    alias_for: "yolo-demand",
-    demand_stage: "interview",
-    visibility: "compatibility_alias",
-    writes_code: false,
-    requires_confirmation: false,
-    safety: "Interview-only. Ask one clear question at a time, preserve answers, stop with handoff state, 不输出大段建议, 不进入 PRD, 不改代码. 批准最后; converting or approving interview output is not execution authorization.",
-    usage: "/yolo-interview 我想做库存预警，请 one-question 一问一答把需求问清楚；缺槽位时只返回一个 next_question，不改代码",
-  },
-  {
-    name: "yolo-discover",
-    lifecycle_stage: "discovery",
-    workflow: "discover",
-    description: "Compatibility alias for /yolo-demand --stage discover; clarifies a vague requirement before planning.",
-    argumentHint: "<plain-language idea or unclear requirement>",
-    objective: "Create a discovery brief with problem, target user, success criteria, constraints, unknowns, risks, and whether the idea is ready for PRD.",
-    mode: "discover",
-    alias_for: "yolo-demand",
-    demand_stage: "discover",
-    visibility: "compatibility_alias",
-    writes_code: false,
-    requires_confirmation: false,
-    safety: "Discovery-only. Stop after discovery readiness and next-stage recommendation. Do not create executable tasks or modify source files.",
-    usage: "/yolo-discover 我想给库存系统做一个预警能力，但细节还不清楚",
-  },
-  {
-    name: "yolo-discuss",
-    lifecycle_stage: "discovery",
-    workflow: "discuss",
-    description: "Compatibility alias for /yolo-demand --stage discuss; runs a deeper demand discussion loop before PRD.",
-    argumentHint: "<idea or demand session>",
-    objective: "Close vision, reflection, investigation, questioning rounds, depth verification, requirements confirmation, and approval into REQUIREMENTS.md, CONTEXT.md, ROADMAP.md, and APPROVAL.json.",
-    mode: "discuss",
-    alias_for: "yolo-demand",
-    demand_stage: "discuss",
-    visibility: "compatibility_alias",
-    writes_code: false,
-    requires_confirmation: false,
-    safety: "Discussion-only. Stop after requirements/context/roadmap/approval artifacts. Do not compile executable PRD until a later PRD stage is explicitly selected.",
-    usage: "/yolo-discuss 库存预警需求，继续追问灰区并确认 REQUIREMENTS/CONTEXT/ROADMAP",
-  },
-  {
-    name: "yolo-init",
-    lifecycle_stage: "setup",
+  stableCommand({
+    name: "status",
+    lifecycle_stage: "status",
     workflow: "doctor",
-    description: "Initialize YOLO project memory, lifecycle, specs, and governance files.",
-    argumentHint: "<project path or project name>",
-    objective: "Bootstrap the target project with .yolo lifecycle, memory, state ledgers, templates, and specs without touching application code.",
-    mode: "init",
-    writes_code: false,
-    requires_confirmation: true,
-    safety: "Only write YOLO project scaffolding. Do not overwrite existing files unless force is explicitly approved.",
-    usage: "/yolo-init 当前项目，生成 YOLO 记忆和生命周期骨架",
-  },
-  {
-    name: "yolo-setup",
-    lifecycle_stage: "setup",
-    workflow: "doctor",
-    description: "Safely set up YOLO for a new, partial, or already-initialized project.",
-    argumentHint: "<project path>",
-    objective: "Classify the target project, initialize only missing YOLO scaffolding, install project-scope Codex/Claude entrypoints, run doctor, and report remaining factual gaps without inventing project context.",
-    mode: "setup",
-    writes_code: false,
-    requires_confirmation: true,
-    safety: "Setup may write YOLO scaffolding and agent bridge files, but must not overwrite existing files by default or generate business-status onboarding content.",
-    usage: "/yolo-setup 当前项目，自动判断项目状态并安全安装 YOLO",
-  },
-  {
-    name: "yolo-plan",
-    lifecycle_stage: "roadmap",
-    workflow: "plan",
-    description: "Turn a clarified requirement into an implementation plan without changing code.",
-    argumentHint: "<plain-language requirement>",
-    objective: "Create or inspect a YOLO implementation plan from the user's requirement; route back to discovery when the requirement is too vague.",
-    mode: "plan",
-    writes_code: false,
-    requires_confirmation: false,
-    safety: "Plan-only. Stop after plan artifacts and next-stage recommendation. Do not modify source files, configs, migrations, or tests.",
-    usage: "/yolo-plan 我要给库存系统增加低库存预警",
-  },
-  {
-    name: "yolo-prd",
-    lifecycle_stage: "prd",
-    workflow: "prd",
-    description: "Compile approved discovery and plan artifacts into an executable PRD/spec.",
-    argumentHint: "<approved plan, discovery brief, or PRD draft path>",
-    objective: "Generate or validate an executable PRD with atomic tasks, preconditions, postconditions, acceptance checks, and traceability.",
-    mode: "prd",
-    writes_code: false,
-    requires_confirmation: false,
-    safety: "Spec-generation only. Stop after PRD/spec artifacts and next-stage recommendation. Block when requirements, task scope, acceptance checks, or traceability are weak.",
-    usage: "/yolo-prd 把这个已确认计划转成可执行 PRD",
-  },
-  {
-    name: "yolo-check",
-    lifecycle_stage: "check",
-    workflow: "check",
-    description: "Check whether a PRD, plan, or project state is ready to execute.",
-    argumentHint: "<PRD path, plan path, or project path>",
-    objective: "Run YOLO readiness checks, PRD/preflight validation, product readiness, adapter readiness, and gate analysis before implementation.",
-    mode: "check",
-    writes_code: false,
-    requires_confirmation: false,
-    safety: "Validation-only. Stop after readiness report and next-stage recommendation. Report blockers instead of pushing through weak specs.",
-    usage: "/yolo-check specs/prd-low-stock-alert.json",
-  },
-  {
-    name: "yolo-next",
-    lifecycle_stage: "check",
-    workflow: "doctor",
-    description: "Inspect YOLO lifecycle state and report the only safe next stage without changing code.",
-    argumentHint: "<project path or current project>",
-    objective: "Read .yolo/lifecycle/status.json, enforce lifecycle guard boundaries, and recommend the next allowed /yolo-* command instead of letting the agent jump stages.",
-    mode: "next",
+    description: "Read YOLO project state and report the only safe next action.",
+    argumentHint: "[--cwd <dir>] [--json]",
+    objective: "Inspect lifecycle state, command registry health, and current blockers without changing files; return one safe next command.",
+    mode: "status",
+    aliases: ["yolo status", "yolo-status"],
     writes_code: false,
     requires_confirmation: false,
     safety: "Read-only. Do not advance lifecycle, generate downstream artifacts, or modify source files.",
-    usage: "/yolo-next 当前项目应该安全地做哪一步",
-  },
-  {
-    name: "yolo-run",
+    usage: "yolo status --json",
+  }),
+  stableCommand({
+    name: "demand",
+    lifecycle_stage: "idea",
+    workflow: "demand",
+    description: "Clarify an idea through one-question demand status, office-hours mode, evidence dispatch, and approval readiness.",
+    argumentHint: "[status|dispatch|--mode office-hours|--stage brainstorm|interview|discover|discuss|prd] <idea>",
+    objective: "Act as the YOLO demand facilitator. Ask exactly one next_question when required slots are missing, keep assumptions separate from verified facts, do not enter PRD, and do not enter spec generation or code execution in the same turn.",
+    mode: "demand",
+    aliases: ["yolo demand", "yolo-demand"],
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Demand-stage only. 不改代码, do not edit business code, and do not compile executable PRD in the same turn. 缺槽位时只返回一个 next_question, 不输出大段建议, 不进入 PRD. 批准最后: demand approval is not execution authorization.",
+    usage: "yolo demand --mode office-hours \"我想把库存预警需求聊清楚\"",
+  }),
+  stableCommand({
+    name: "spec",
+    lifecycle_stage: "spec",
+    workflow: "prd",
+    description: "Compile approved demand, discovery, or plan artifacts into an executable PRD/spec.",
+    argumentHint: "[--discovery <discovery.json>|--demand <session.json|dir>] [--output <prd.json>] [--json]",
+    objective: "Generate or validate an executable spec with atomic tasks, preconditions, postconditions, acceptance checks, and traceability.",
+    mode: "prd",
+    aliases: ["yolo spec", "yolo-spec"],
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Spec-generation only. Stop after spec artifacts and next-stage recommendation. Block when requirements, task scope, acceptance checks, or traceability are weak.",
+    usage: "yolo spec --demand .yolo/demand/DEMAND-123/session.json --output specs/prd.json",
+  }),
+  stableCommand({
+    name: "tasks",
+    lifecycle_stage: "tasks",
+    workflow: "plan",
+    description: "Split clarified demand or discovery into task-ready implementation steps without changing code.",
+    argumentHint: "[--discovery <discovery.json>] [--json]",
+    objective: "Produce ordered, atomic task planning with scope, risk, gate, and handoff information before execution.",
+    mode: "tasks",
+    aliases: ["yolo tasks", "yolo-tasks"],
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Planning/task-breakdown only. Do not modify source files, configs, migrations, or tests.",
+    usage: "yolo tasks --discovery .yolo/discovery/discovery.json --json",
+  }),
+  stableCommand({
+    name: "run",
     lifecycle_stage: "run",
-    workflow: "fix",
-    description: "Execute an approved and checked YOLO PRD with gates, review, fixes, and evidence.",
-    argumentHint: "<approved PRD path>",
-    objective: "Execute an already checked PRD through YOLO implementation, review, fix, and final gate flow.",
+    workflow: "pi",
+    description: "Execute an approved and checked PRD/task through the YOLO harness.",
+    argumentHint: "<approved PRD path> [--dry-run] [--executor claude|codex|custom|auto] [--json]",
+    objective: "Execute an already checked PRD through implementation, review hooks, gates, and evidence capture.",
     mode: "run",
+    aliases: ["yolo run", "yolo-run"],
     writes_code: true,
     requires_confirmation: true,
     safety: "Requires explicit user confirmation and a checked PRD. Stop on any gate failure.",
-    usage: "/yolo-run 我确认执行 specs/prd-low-stock-alert.json",
-  },
-  {
-    name: "yolo-review",
-    lifecycle_stage: "review-fix",
+    usage: "yolo run specs/prd-low-stock-alert.json --dry-run --json",
+  }),
+  stableCommand({
+    name: "check",
+    lifecycle_stage: "check",
+    workflow: "check",
+    description: "Validate spec, product readiness, adapter readiness, tests, and execution gates before edits.",
+    argumentHint: "<PRD path, plan path, or project path> [--strict|--release] [--json]",
+    objective: "Run YOLO readiness checks, PRD/preflight validation, product readiness, adapter readiness, and gate analysis before implementation.",
+    mode: "check",
+    aliases: ["yolo check", "yolo-check"],
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Validation-only. Stop after readiness report and next-stage recommendation. Report blockers instead of pushing through weak specs.",
+    usage: "yolo check specs/prd-low-stock-alert.json --strict --json",
+  }),
+  stableCommand({
+    name: "review",
+    lifecycle_stage: "review",
     workflow: "review",
-    description: "Review implementation quality and produce scoped fix tasks.",
-    argumentHint: "<changed files, PRD path, or review scope>",
+    description: "Review implementation quality and produce scoped findings or fix tasks.",
+    argumentHint: "[changed files, PRD path, or review scope] [--json]",
     objective: "Review scoped code against the PRD/spec, classify findings, and produce fix tasks or blockers.",
     mode: "review",
+    aliases: ["yolo review", "yolo-review"],
     writes_code: false,
     requires_confirmation: false,
-    safety: "Review first. Do not auto-fix unless the user explicitly asks for fixes.",
-    usage: "/yolo-review 按 PRD 检查这次改动",
-  },
-  {
+    safety: "Review first. Do not auto-fix unless the user explicitly asks for execution through yolo run after checks pass.",
+    usage: "yolo review src/inventory/alerts.ts --json",
+  }),
+  stableCommand({
+    name: "release",
+    lifecycle_stage: "release",
+    workflow: "ship",
+    description: "Run acceptance, package, dogfood, public SDK, and release-candidate gates without publishing.",
+    argumentHint: "[candidate|accept|ship] [--mode rc|publish] [--dry-run] [--json]",
+    objective: "Fail closed before any release claim on weak spec, broken gates, missing evidence, package smoke gaps, dogfood gaps, or open findings.",
+    mode: "release",
+    aliases: ["yolo release", "yolo-release"],
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Do not publish, deploy, tag, or mark a release ready when any required gate is missing, unknown, or unparseable.",
+    usage: "yolo release --mode rc --dry-run --json",
+  }),
+  compatibilityCommand({
+    name: "yolo",
+    alias_for: "status",
+    lifecycle_stage: "status",
+    workflow: "doctor",
+    description: "Compatibility dispatcher for historical freeform /yolo usage; prefer yolo status plus the 8 stable subcommands.",
+    argumentHint: "<freeform request>",
+    objective: "Route legacy freeform requests to the safest stable YOLO command; use status when lifecycle state is unclear.",
+    mode: "dispatch",
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Do not edit code unless routed to yolo run with an approved and checked PRD.",
+    usage: "/yolo 当前项目下一步应该做什么",
+  }),
+  compatibilityCommand({
+    name: "yolo-brainstorm",
+    alias_for: "demand",
+    lifecycle_stage: "idea",
+    workflow: "brainstorm",
+    description: "Compatibility alias for yolo demand --stage brainstorm.",
+    argumentHint: "<plain-language idea>",
+    objective: "Explore an early idea inside the unified demand command surface.",
+    mode: "brainstorm",
+    demand_stage: "brainstorm",
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Brainstorm-only. Stop after demand artifacts and next-stage recommendation. Do not modify source files.",
+    usage: "yolo demand --stage brainstorm \"库存预警产品想法\"",
+  }),
+  compatibilityCommand({
+    name: "yolo-interview",
+    alias_for: "demand",
+    lifecycle_stage: "discovery",
+    workflow: "interview",
+    description: "Compatibility alias for yolo demand --stage interview; uses the same one-question demand interview host contract.",
+    argumentHint: "<plain-language idea, interview session, or answer>",
+    objective: "Collect non-technical answers one question at a time through the unified demand command; return exactly one next_question when a slot is missing.",
+    mode: "interview",
+    demand_stage: "interview",
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Interview-only. Ask one clear question at a time, preserve answers, stop with handoff state, 不输出大段建议, 不进入 PRD, 不改代码.",
+    usage: "yolo demand --stage interview \"我想做库存预警\"",
+  }),
+  compatibilityCommand({
+    name: "yolo-discover",
+    alias_for: "demand",
+    lifecycle_stage: "discovery",
+    workflow: "discover",
+    description: "Compatibility alias for yolo demand --stage discover.",
+    argumentHint: "<plain-language idea or unclear requirement>",
+    objective: "Clarify a vague requirement inside the unified demand command surface.",
+    mode: "discover",
+    demand_stage: "discover",
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Discovery-only. Stop after readiness and next-stage recommendation. Do not modify source files.",
+    usage: "yolo demand --stage discover \"库存系统需要预警，但细节不清楚\"",
+  }),
+  compatibilityCommand({
+    name: "yolo-discuss",
+    alias_for: "demand",
+    lifecycle_stage: "discovery",
+    workflow: "discuss",
+    description: "Compatibility alias for yolo demand --stage discuss.",
+    argumentHint: "<idea or demand session>",
+    objective: "Close demand discussion inside the unified demand command surface.",
+    mode: "discuss",
+    demand_stage: "discuss",
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Discussion-only. Stop after demand artifacts. Do not compile executable PRD until yolo spec is explicitly selected.",
+    usage: "yolo demand --stage discuss \"库存预警需求\" --approve",
+  }),
+  compatibilityCommand({
+    name: "office-hours",
+    alias_for: "demand",
+    lifecycle_stage: "idea",
+    workflow: "demand",
+    description: "Compatibility shim for yolo demand --mode office-hours; hidden from default help.",
+    argumentHint: "<plain-language idea>",
+    objective: "Run the lean office-hours demand profile through the demand command instead of exposing a separate top-level command.",
+    mode: "office-hours",
+    demand_mode: "office-hours",
+    aliases: ["yolo office-hours", "yolo-office-hours"],
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Demand-only. Ask one next_question, keep facts separate from assumptions, and do not edit code.",
+    usage: "yolo demand --mode office-hours \"这个产品方向值得做吗\"",
+  }),
+  compatibilityCommand({
+    name: "yolo-next",
+    alias_for: "status",
+    lifecycle_stage: "status",
+    workflow: "doctor",
+    description: "Compatibility alias for yolo status.",
+    argumentHint: "[--cwd <dir>] [--json]",
+    objective: "Read lifecycle state and recommend the next stable command.",
+    mode: "next",
+    aliases: ["next", "yolo next"],
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Read-only.",
+    usage: "yolo status --json",
+  }),
+  compatibilityCommand({
+    name: "yolo-plan",
+    alias_for: "tasks",
+    lifecycle_stage: "tasks",
+    workflow: "plan",
+    description: "Compatibility alias for yolo tasks.",
+    argumentHint: "<plain-language requirement>",
+    objective: "Route historical plan requests to the stable tasks command.",
+    mode: "plan",
+    aliases: ["plan", "yolo plan"],
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Task planning only. Do not modify source files.",
+    usage: "yolo tasks --discovery .yolo/discovery/discovery.json",
+  }),
+  compatibilityCommand({
+    name: "yolo-prd",
+    alias_for: "spec",
+    lifecycle_stage: "spec",
+    workflow: "prd",
+    description: "Compatibility alias for yolo spec.",
+    argumentHint: "<approved plan, discovery brief, or PRD draft path>",
+    objective: "Route historical PRD requests to the stable spec command.",
+    mode: "prd",
+    aliases: ["prd", "yolo prd"],
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Spec-generation only. Stop after PRD/spec artifacts.",
+    usage: "yolo spec --demand .yolo/demand/DEMAND-123/session.json",
+  }),
+  compatibilityCommand({
     name: "yolo-fix",
-    lifecycle_stage: "review-fix",
+    alias_for: "run",
+    lifecycle_stage: "run",
     workflow: "fix",
-    description: "Apply approved fix tasks from review findings with gates and evidence.",
+    description: "Compatibility alias for approved fix execution through yolo run.",
     argumentHint: "<approved fix task, PRD path, or review finding path>",
-    objective: "Execute scoped fixes for approved review findings, then rerun the relevant gates and evidence capture.",
+    objective: "Execute scoped fixes only after approval and checks.",
     mode: "fix",
+    aliases: ["fix", "yolo fix"],
     writes_code: true,
     requires_confirmation: true,
-    safety: "Requires explicit approval of fix scope. Do not widen the diff beyond the listed findings.",
-    usage: "/yolo-fix 我确认修复 review 报告里的阻塞项",
-  },
-  {
+    safety: "Requires explicit approval of fix scope. Do not widen the diff beyond listed findings.",
+    usage: "yolo run specs/prd.json --mode fix",
+  }),
+  compatibilityCommand({
     name: "yolo-accept",
-    lifecycle_stage: "acceptance",
+    alias_for: "release",
+    lifecycle_stage: "release",
     workflow: "accept",
-    description: "Collect acceptance evidence after implementation and review/fix loops.",
-    argumentHint: "<PRD path, acceptance manifest, or implemented feature>",
-    objective: "Verify product acceptance criteria, runtime evidence, UI/accessibility/visual evidence when relevant, and unresolved blocker state.",
+    description: "Compatibility alias for yolo release accept.",
+    argumentHint: "<PRD path> [--json]",
+    objective: "Run acceptance evidence as a release submode.",
     mode: "accept",
+    aliases: ["accept", "yolo accept"],
     writes_code: false,
     requires_confirmation: false,
-    safety: "Evidence-only. Do not mark accepted when required product or UI evidence is missing.",
-    usage: "/yolo-accept 检查这个功能是否达到验收标准",
-  },
-  {
+    safety: "Evidence-only. Do not mark accepted when required evidence is missing.",
+    usage: "yolo release accept specs/prd.json --json",
+  }),
+  compatibilityCommand({
     name: "yolo-ui-review",
-    lifecycle_stage: "acceptance",
+    alias_for: "release",
+    lifecycle_stage: "release",
     workflow: "accept",
-    description: "Review UI readiness, accessibility, runtime errors, and visual evidence for frontend tasks.",
+    description: "Compatibility alias for yolo release accept --collect-evidence.",
     argumentHint: "<URL, PRD path, or UI surface>",
-    objective: "Collect UI-specific acceptance evidence including state coverage, runtime errors, accessibility, and visual review notes.",
+    objective: "Run UI acceptance evidence as a release submode.",
     mode: "ui-review",
+    aliases: ["ui-review", "yolo ui-review"],
     writes_code: false,
     requires_confirmation: false,
-    safety: "Review-only. Do not edit UI code unless the user explicitly asks for a fix task.",
-    usage: "/yolo-ui-review 检查这个页面是否符合 PRD 和 UI 验收",
-  },
-  {
-    name: "yolo-eval",
-    lifecycle_stage: "check",
-    workflow: "eval",
-    description: "Run YOLO benchmark fixtures and rubric scoring before public readiness claims.",
-    argumentHint: "<benchmark results path or release evidence>",
-    objective: "Score discovery, PRD, UI acceptance, evidence, runner compatibility, and non-technical command quality against fixed benchmark fixtures.",
-    mode: "eval",
-    writes_code: false,
-    requires_confirmation: false,
-    safety: "Evaluation-only. Do not fabricate results; fail closed when benchmark evidence is missing or below threshold.",
-    usage: "/yolo-eval 用 benchmark 结果检查 YOLO 质量是否达到公开准备度",
-  },
-  {
-    name: "yolo-release-candidate",
-    lifecycle_stage: "delivery",
-    workflow: "release-candidate",
-    description: "Expose the generic release-candidate gate surface for RC or publish readiness.",
-    argumentHint: "[--mode rc|publish] [--dry-run] [--allow-untracked] [--allow-unknown]",
-    objective: "Run or describe the generic RC gate, not Trello replay. Require verify, PRD preflight, package smoke, clean env, dogfood matrix, change provenance, and review findings evidence before any publish-ready claim.",
-    mode: "release-candidate",
-    writes_code: false,
-    requires_confirmation: false,
-    safety: "Fail closed by default. Do not publish, tag, replay Trello, or mark a release ready when any required gate is missing, unknown, or unparseable.",
-    usage: "/yolo-release-candidate --mode rc --json",
-  },
-  {
+    safety: "Review-only. Do not edit UI code.",
+    usage: "yolo release accept specs/prd.json --collect-evidence",
+  }),
+  compatibilityCommand({
     name: "yolo-ship",
-    lifecycle_stage: "delivery",
+    alias_for: "release",
+    lifecycle_stage: "release",
     workflow: "ship",
-    description: "Fail closed before release on weak spec, broken gates, missing evidence, or open findings.",
+    description: "Compatibility alias for yolo release ship.",
     argumentHint: "<PRD path, run id, or release scope>",
-    objective: "Produce a ship/no-ship verdict with release evidence, remaining blockers, rollback notes, and handoff paths.",
+    objective: "Produce ship/no-ship readiness through the stable release command.",
     mode: "ship",
+    aliases: ["ship", "yolo ship"],
     writes_code: false,
     requires_confirmation: false,
-    safety: "Do not publish, deploy, or tag a release; only report readiness unless separately authorized.",
-    usage: "/yolo-ship 判断这个功能是否可以交付",
-  },
-  {
-    name: "yolo-learn",
-    lifecycle_stage: "learn",
-    workflow: "learn",
-    description: "Promote useful lessons, pitfalls, and recovery patterns into YOLO memory.",
-    argumentHint: "<run report, review report, failure, or lesson>",
-    objective: "Record reusable lessons in bounded model-agnostic memory and avoid injecting unrelated context into future prompts.",
-    mode: "learn",
+    safety: "Do not publish, deploy, or tag a release.",
+    usage: "yolo release ship specs/prd.json --json",
+  }),
+  compatibilityCommand({
+    name: "yolo-release-candidate",
+    alias_for: "release",
+    lifecycle_stage: "release",
+    workflow: "ship",
+    description: "Compatibility alias for yolo release candidate.",
+    argumentHint: "[--mode rc|publish] [--dry-run] [--json]",
+    objective: "Run generic RC gates through the stable release command.",
+    mode: "release-candidate",
+    aliases: ["release-candidate", "yolo release-candidate"],
     writes_code: false,
     requires_confirmation: false,
-    safety: "Learning-only. Advisory lessons must not become blocking gates until repeated and machine-verifiable.",
-    usage: "/yolo-learn 记录这次踩坑，之后遇到类似问题提醒我",
-  },
-  {
-    name: "yolo-doctor",
-    lifecycle_stage: "check",
+    safety: "Fail closed by default. Do not publish, tag, replay Trello, or claim readiness on missing evidence.",
+    usage: "yolo release candidate --mode rc --json",
+  }),
+  compatibilityCommand({
+    name: "yolo-release-gate",
+    alias_for: "release",
+    lifecycle_stage: "release",
+    workflow: "ship",
+    description: "Compatibility alias for yolo release candidate.",
+    argumentHint: "[--mode rc|publish] [--dry-run] [--json]",
+    objective: "Run generic RC gates through the stable release command.",
+    mode: "release-gate",
+    aliases: ["release-gate", "yolo release-gate"],
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Fail closed by default. Do not publish, tag, replay Trello, or claim readiness on missing evidence.",
+    usage: "yolo release candidate --mode rc --json",
+  }),
+  internalCommand({
+    name: "init",
+    alias_for: "status",
+    lifecycle_stage: "setup",
     workflow: "doctor",
-    description: "Inspect YOLO project state, lifecycle files, command registry, and agent integration readiness.",
-    argumentHint: "<project path or install scope>",
-    objective: "Explain whether YOLO is initialized and integrated in this project, what is missing, and what the next safe action is.",
+    description: "Internal setup utility; hidden from default help.",
+    argumentHint: "[path] [--name <name>] [--force] [--dry-run] [--json]",
+    objective: "Bootstrap YOLO scaffolding for a target project.",
+    mode: "init",
+    aliases: ["yolo init", "yolo-init"],
+    writes_code: false,
+    requires_confirmation: true,
+    safety: "Only write YOLO project scaffolding. Do not overwrite existing files unless force is explicitly approved.",
+    usage: "yolo init . --dry-run --json",
+  }),
+  internalCommand({
+    name: "setup",
+    alias_for: "status",
+    lifecycle_stage: "setup",
+    workflow: "doctor",
+    description: "Internal setup utility; hidden from default help.",
+    argumentHint: "[path] [--target codex|claude|both] [--scope project|user|both] [--dry-run] [--json]",
+    objective: "Classify the target project and safely install missing YOLO scaffolding.",
+    mode: "setup",
+    aliases: ["yolo setup", "yolo-setup"],
+    writes_code: false,
+    requires_confirmation: true,
+    safety: "Setup may write YOLO scaffolding and agent bridge files, but must not overwrite existing files by default.",
+    usage: "yolo setup . --dry-run --json",
+  }),
+  internalCommand({
+    name: "install",
+    alias_for: "status",
+    lifecycle_stage: "setup",
+    workflow: "doctor",
+    description: "Internal install utility; hidden from default help.",
+    argumentHint: "[path] [--target codex|claude|both] [--scope project|user|both] [--dry-run] [--json]",
+    objective: "Install YOLO bridge instructions, native skills, workflow descriptors, and command files.",
+    mode: "install",
+    aliases: ["yolo install", "yolo-install"],
+    writes_code: false,
+    requires_confirmation: true,
+    safety: "Explain files that will be written before changing project or user-level agent directories.",
+    usage: "yolo install . --dry-run --json",
+  }),
+  internalCommand({
+    name: "doctor",
+    alias_for: "status",
+    lifecycle_stage: "status",
+    workflow: "doctor",
+    description: "Internal diagnostic utility; hidden from default help.",
+    argumentHint: "[path] [--json]",
+    objective: "Inspect YOLO project state, lifecycle files, command registry, and agent integration readiness.",
     mode: "doctor",
+    aliases: ["yolo doctor", "yolo-doctor"],
     writes_code: false,
     requires_confirmation: false,
     safety: "Inspect-only. Do not install, edit, publish, or execute providers.",
-    usage: "/yolo-doctor 检查当前项目的 YOLO 是否装好、能不能用",
-  },
-  {
-    name: "yolo-install",
-    lifecycle_stage: "setup",
-    workflow: "doctor",
-    description: "Install or update YOLO agent skills and commands into the current project or user agent environment.",
-    argumentHint: "<project path or install scope>",
-    objective: "Install YOLO bridge instructions, native skills, workflow descriptors, and command files so the user can call YOLO from chat.",
-    mode: "install",
+    usage: "yolo doctor . --json",
+  }),
+  internalCommand({
+    name: "eval",
+    alias_for: "check",
+    lifecycle_stage: "check",
+    workflow: "eval",
+    description: "Internal benchmark/eval workflow; hidden from default help.",
+    argumentHint: "[--results <benchmark-results.json>] [--baseline <report.json>] [--json]",
+    objective: "Score YOLO quality against benchmark fixtures before public readiness claims.",
+    mode: "eval",
+    aliases: ["yolo eval", "yolo-eval"],
     writes_code: false,
+    requires_confirmation: false,
+    safety: "Evaluation-only. Do not fabricate results; fail closed when benchmark evidence is missing.",
+    usage: "yolo eval --json",
+  }),
+  internalCommand({
+    name: "runner",
+    alias_for: "run",
+    lifecycle_stage: "run",
+    workflow: "fix",
+    description: "Internal engine-only runner; hidden from default help.",
+    argumentHint: "<PRD path> [--dry-run] [--json]",
+    objective: "Debug the lower-level runner behind yolo run.",
+    mode: "runner",
+    aliases: ["yolo runner", "yolo-runner"],
+    writes_code: true,
     requires_confirmation: true,
-    safety: "Explain the files that will be written before changing project or user-level agent directories.",
-    usage: "/yolo-install 把 YOLO 装到当前项目和 Claude/Codex",
-  },
+    safety: "Engine-only. Prefer yolo run unless debugging runner internals.",
+    usage: "yolo runner specs/prd.json --dry-run --json",
+  }),
+  internalCommand({
+    name: "progress-ui-evidence",
+    alias_for: "release",
+    lifecycle_stage: "release",
+    workflow: "accept",
+    description: "Internal UI evidence helper; hidden from default help.",
+    argumentHint: "[path] [--output <file>] [--json]",
+    objective: "Generate progress dashboard UI/UX evidence for acceptance flows.",
+    mode: "progress-ui-evidence",
+    aliases: ["ui-evidence", "yolo ui-evidence", "yolo progress-ui-evidence"],
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Evidence-only. Do not edit UI code.",
+    usage: "yolo progress-ui-evidence . --json",
+  }),
+  internalCommand({
+    name: "memory",
+    alias_for: "status",
+    lifecycle_stage: "learn",
+    workflow: "learn",
+    description: "Internal memory maintenance utility; hidden from default help.",
+    argumentHint: "refresh [path] [--dry-run] [--json]",
+    objective: "Refresh YOLO memory center and bounded learning artifacts.",
+    mode: "memory",
+    aliases: ["yolo memory", "yolo-memory"],
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Memory-only. Do not alter business source files.",
+    usage: "yolo memory refresh . --dry-run --json",
+  }),
+  internalCommand({
+    name: "learn",
+    alias_for: "release",
+    lifecycle_stage: "learn",
+    workflow: "learn",
+    description: "Internal learning workflow; hidden from default help.",
+    argumentHint: "[lesson] [--json]",
+    objective: "Promote useful lessons, pitfalls, and recovery patterns into bounded YOLO memory.",
+    mode: "learn",
+    aliases: ["yolo learn", "yolo-learn"],
+    writes_code: false,
+    requires_confirmation: false,
+    safety: "Learning-only. Advisory lessons must not become blocking gates until repeated and machine-verifiable.",
+    usage: "yolo learn \"记录这次踩坑\" --json",
+  }),
 ];
 
-export const DEFAULT_YOLO_COMMAND_NAMES = YOLO_COMMANDS.map((command) => command.name);
+export const DEFAULT_YOLO_COMMAND_NAMES = [...DEFAULT_YOLO_PUBLIC_COMMAND_NAMES];
+export const ALL_YOLO_COMMAND_NAMES = YOLO_COMMANDS.map((command) => command.name);
 export const DEFAULT_YOLO_BRIDGE_WORKFLOW_IDS = [
   "brainstorm",
   "demand",
@@ -345,16 +545,37 @@ function clean(value) {
 }
 
 function normalizeCommandName(name = "") {
-  return clean(name).replace(/^\//, "").toLowerCase();
+  return clean(name)
+    .replace(/^\//, "")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function commandMatches(command, normalizedName) {
+  if (normalizeCommandName(command.name) === normalizedName) return true;
+  return (command.aliases || []).some((alias) => normalizeCommandName(alias) === normalizedName);
 }
 
 export function listYoloCommands(options = {}) {
   const commands = YOLO_COMMANDS.map(clone);
-  if (options.recommended === true || options.recommended_only === true) {
-    return commands.filter((command) => command.visibility !== "compatibility_alias");
+  if (options.all === true || options.includeHidden === true || options.include_hidden === true) return commands;
+  if (options.stable === true || options.defaultSurface === true || options.default_surface === true || options.recommended === true || options.recommended_only === true) {
+    return commands.filter((command) => command.stability === "stable" && command.visibility === "default");
   }
-  if (options.compatibilityAliases === true || options.compatibility_aliases === true) {
-    return commands.filter((command) => command.visibility === "compatibility_alias");
+  if (options.compatibilityAliases === true || options.compatibility_aliases === true || options.compat === true) {
+    return commands.filter((command) => command.stability === "compat");
+  }
+  if (options.internal === true) {
+    return commands.filter((command) => command.stability === "internal");
+  }
+  if (options.visibility) {
+    return commands.filter((command) => command.visibility === options.visibility);
+  }
+  if (options.stability) {
+    return commands.filter((command) => command.stability === options.stability);
+  }
+  if (options.surface) {
+    return commands.filter((command) => command.surface === options.surface);
   }
   if (options.writesCode === true || options.writes_code === true) {
     return commands.filter((command) => command.writes_code === true);
@@ -362,18 +583,18 @@ export function listYoloCommands(options = {}) {
   if (options.noCode === true || options.no_code === true) {
     return commands.filter((command) => command.writes_code !== true);
   }
-  return commands;
+  return commands.filter((command) => command.stability === "stable" && command.visibility === "default");
 }
 
 export function listYoloCommandNames(options = {}) {
   return listYoloCommands(options).map((command) => command.name);
 }
 
-export function getYoloCommand(name = "yolo") {
+export function getYoloCommand(name = "status") {
   const commandName = normalizeCommandName(name);
-  const command = YOLO_COMMANDS.find((item) => item.name === commandName);
+  const command = YOLO_COMMANDS.find((item) => commandMatches(item, commandName));
   if (!command) {
-    throw new Error(`Unknown YOLO command "${name}". Available commands: ${DEFAULT_YOLO_COMMAND_NAMES.join(", ")}`);
+    throw new Error(`Unknown YOLO command "${name}". Available stable commands: ${DEFAULT_YOLO_COMMAND_NAMES.join(", ")}`);
   }
   return clone(command);
 }
@@ -387,11 +608,87 @@ export function listYoloBridgeWorkflowIds() {
   return [...DEFAULT_YOLO_BRIDGE_WORKFLOW_IDS];
 }
 
+function collisionRows(commands = YOLO_COMMANDS) {
+  const seen = new Map();
+  const collisions = [];
+  for (const command of commands) {
+    for (const raw of [command.name, ...(command.aliases || [])]) {
+      const key = normalizeCommandName(raw);
+      if (!key) continue;
+      const existing = seen.get(key);
+      if (existing) {
+        collisions.push({ key, first: existing, second: command.name });
+      } else {
+        seen.set(key, command.name);
+      }
+    }
+  }
+  return collisions;
+}
+
+export function inspectYoloCommandRegistry(registry = buildYoloCommandRegistry()) {
+  const commands = registry.all_commands || registry.commands || [];
+  const stable = commands.filter((command) => command.stability === "stable" && command.visibility === "default");
+  const nonStable = commands.filter((command) => command.stability !== "stable");
+  const errors = [];
+  const warnings = [];
+  const collisions = collisionRows(commands);
+
+  if (registry.schema !== YOLO_COMMAND_REGISTRY_SCHEMA) {
+    errors.push({ code: "COMMAND_REGISTRY_SCHEMA_MISMATCH", message: "command registry schema is not supported" });
+  }
+  if (stable.length > YOLO_COMMAND_SURFACE_BUDGET) {
+    errors.push({ code: "COMMAND_SURFACE_BUDGET_EXCEEDED", count: stable.length, budget: YOLO_COMMAND_SURFACE_BUDGET });
+  }
+  if (stable.map((command) => command.name).join("\n") !== DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.join("\n")) {
+    errors.push({ code: "COMMAND_SURFACE_ORDER_CHANGED", expected: DEFAULT_YOLO_PUBLIC_COMMAND_NAMES, actual: stable.map((command) => command.name) });
+  }
+  if (collisions.length > 0) {
+    errors.push({ code: "COMMAND_ALIAS_COLLISION", collisions });
+  }
+  for (const command of nonStable) {
+    if (!command.alias_for) {
+      errors.push({ code: "COMMAND_ALIAS_FOR_MISSING", command: command.name });
+    }
+    if (!["compat", "internal"].includes(command.stability)) {
+      errors.push({ code: "COMMAND_STABILITY_INVALID", command: command.name, stability: command.stability });
+    }
+    if (command.visibility !== "hidden") {
+      errors.push({ code: "COMMAND_VISIBILITY_INVALID", command: command.name, visibility: command.visibility });
+    }
+  }
+  for (const command of stable) {
+    if (command.visibility !== "default") {
+      warnings.push({ code: "STABLE_COMMAND_NOT_DEFAULT_VISIBLE", command: command.name });
+    }
+  }
+
+  return {
+    status: errors.length > 0 ? "blocked" : (warnings.length > 0 ? "warning" : "pass"),
+    valid: errors.length === 0,
+    surface_budget: YOLO_COMMAND_SURFACE_BUDGET,
+    stable_count: stable.length,
+    stable_commands: stable.map((command) => command.name),
+    compat_count: commands.filter((command) => command.stability === "compat").length,
+    internal_count: commands.filter((command) => command.stability === "internal").length,
+    collisions,
+    errors,
+    warnings,
+  };
+}
+
 export function buildYoloCommandRegistry() {
+  const commands = listYoloCommands({ defaultSurface: true });
+  const allCommands = YOLO_COMMANDS.map(clone);
   return {
     schema_version: YOLO_COMMAND_REGISTRY_SCHEMA_VERSION,
     schema: YOLO_COMMAND_REGISTRY_SCHEMA,
-    commands: listYoloCommands(),
+    surface_budget: YOLO_COMMAND_SURFACE_BUDGET,
+    default_surface: DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.map((name) => getYoloCommand(name)),
+    commands,
+    all_commands: allCommands,
+    compatibility_aliases: listYoloCommands({ compatibilityAliases: true }),
+    internal_commands: listYoloCommands({ internal: true }),
     workflows: listYoloBridgeWorkflowIds(),
   };
 }

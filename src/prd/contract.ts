@@ -112,24 +112,59 @@ function createEvaluators(root) {
     code_matches: (params, ts) => evalCodeContains({ ...params, is_regex: true }, ts, root),
     target_file_modified: (params, ts) => {
       const targetFile = params.file || ts?.targets?.[0]?.file;
-      if (!targetFile) return { passed: true, detail: "无目标文件指定，跳过检查" };
+      if (!targetFile) {
+        return {
+          passed: false,
+          status: "not_run",
+          detail: "无目标文件指定，无法验证目标文件是否修改",
+        };
+      }
       const r = exec("git diff --name-only HEAD", { timeout: 10000 });
-      if (!r.ok) return { passed: true, detail: "无法获取 git diff，跳过检查" };
+      if (!r.ok) {
+        return {
+          passed: false,
+          status: "indeterminate",
+          detail: "无法获取 git diff，无法验证目标文件是否修改",
+        };
+      }
       const modified = r.out.split("\n").filter(Boolean);
       const found = modified.some((f) => f === targetFile || f.endsWith(targetFile));
       return { passed: found, detail: found ? `目标文件 ${targetFile} 已修改` : `目标文件 ${targetFile} 未在修改列表中`, found: found ? 1 : 0 };
     },
     required_imports_present: (params, ts) => {
-      const files = params.files || params.file ? [params.file || params.files].flat() : ts?.targets?.map((t) => t.file) || [];
-      if (!files.length) return { passed: true, detail: "无文件指定，跳过检查" };
+      const files = params.files || params.file
+        ? [params.file || params.files].flat()
+        : ts?.targets?.map((t) => t.file) || [];
+      if (!files.length) {
+        return {
+          passed: false,
+          status: "not_run",
+          detail: "无文件指定，无法验证 required_imports_present",
+        };
+      }
       const importPath = params.import_path;
       if (!importPath) return { passed: false, detail: "缺少 import_path 参数" };
+      const missingFiles = [];
+      const checkedFiles = [];
       for (const f of files) {
         const absPath = resolve(root, f);
-        if (!existsSync(absPath)) continue;
+        if (!existsSync(absPath)) {
+          missingFiles.push(f);
+          continue;
+        }
+        checkedFiles.push(f);
         const content = readFileSync(absPath, "utf8");
         const re = new RegExp(`import\\b.*from\\s*['"]${importPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}['"]`);
         if (!re.test(content)) return { passed: false, detail: `${f} 缺少导入: ${importPath}` };
+      }
+      if (missingFiles.length > 0) {
+        return {
+          passed: false,
+          status: "indeterminate",
+          detail: `指定文件不存在，无法验证导入 ${importPath}: ${missingFiles.join(", ")}`,
+          checked_files: checkedFiles,
+          missing_files: missingFiles,
+        };
       }
       return { passed: true, detail: `所有文件已导入: ${importPath}` };
     },
@@ -144,6 +179,19 @@ export function supportedConditionTypes() {
  * 评估单个条件
  * @returns {{ id, type, passed, severity, detail, ... }}
  */
+const NON_PASS_STATUSES = new Set(["fail", "warning", "not_run", "indeterminate", "blocked", "error"]);
+const INVERTIBLE_STATUSES = new Set(["pass", "fail"]);
+
+function normalizeEvaluatorStatus(result = {}) {
+  if (result.status === "pass" || NON_PASS_STATUSES.has(result.status)) return result.status;
+  if (result.error) return "error";
+  if (result.blocked) return "blocked";
+  if (result.indeterminate) return "indeterminate";
+  if (result.not_run) return "not_run";
+  if (result.warn) return "warning";
+  return result.passed ? "pass" : "fail";
+}
+
 function evaluateCondition(condition, taskScope, options = {}) {
   const { id, type, params = {}, severity = "FAIL", invert = false } =
     condition;
@@ -161,12 +209,18 @@ function evaluateCondition(condition, taskScope, options = {}) {
 
   try {
     const result = fn(params, taskScope);
-    const passed = invert ? !result.passed : result.passed;
-    const { passed: _p, ...rest } = result;
+    let status = normalizeEvaluatorStatus(result);
+    let passed = status === "pass";
+    if (invert && INVERTIBLE_STATUSES.has(status)) {
+      status = status === "pass" ? "fail" : "pass";
+      passed = status === "pass";
+    }
+    const { passed: _p, status: _status, ...rest } = result;
     return {
       id,
       type,
       passed,
+      status,
       severity,
       detail: result.detail || "",
       invert,
@@ -177,6 +231,7 @@ function evaluateCondition(condition, taskScope, options = {}) {
       id,
       type,
       passed: false,
+      status: "error",
       severity,
       detail: `评估异常: ${e.message}`,
       error: true,
@@ -190,15 +245,19 @@ function evaluateCondition(condition, taskScope, options = {}) {
  */
 function evaluateConditions(conditions, taskScope, options = {}) {
   const results = conditions.map((c) => evaluateCondition(c, taskScope, options));
+  const nonPassConditions = results.filter((r) => r.status !== "pass" || r.passed !== true);
   const failConditions = results.filter(
-    (r) => !r.passed && r.severity === "FAIL" && !r.unknown,
+    (r) => (r.status !== "pass" || r.passed !== true) &&
+      (r.severity === "FAIL" || (r.status !== "warning" && r.status !== "pass")) &&
+      !r.unknown,
   );
   const warnConditions = results.filter(
-    (r) => !r.passed && r.severity === "WARN",
+    (r) => (r.status !== "pass" || r.passed !== true) &&
+      (r.severity === "WARN" || r.status === "warning"),
   );
-  const allPass = failConditions.length === 0;
+  const allPass = nonPassConditions.length === 0;
 
-  return { allPass, failConditions, warnConditions, results };
+  return { allPass, failConditions, warnConditions, nonPassConditions, results };
 }
 
 // ── 主要 API ────────────────────────────────────────────────────
@@ -219,7 +278,7 @@ function loadTask(prdPath, taskId) {
 export function evaluatePreConditions(task, prd, options = {}) {
   const conditions = task.pre_conditions || [];
   if (conditions.length === 0) {
-    return { allPass: true, failConditions: [], warnConditions: [], results: [] };
+    return { allPass: true, failConditions: [], warnConditions: [], nonPassConditions: [], results: [] };
   }
   return evaluateConditions(conditions, task.scope, options);
 }
@@ -306,6 +365,7 @@ export function toGateFormat(result) {
     gates.push({
       name: r.id,
       passed: r.passed,
+      status: r.status || (r.passed ? "pass" : "fail"),
       severity: r.severity,
       detail: r.detail || "",
       type: r.type,
@@ -313,9 +373,9 @@ export function toGateFormat(result) {
   }
 
   const failHigh = gates.some(
-    (g) => !g.passed && g.severity === "FAIL",
+    (g) => g.status !== "pass" && (g.severity === "FAIL" || g.status !== "warning"),
   );
-  const allPass = gates.every((g) => g.passed);
+  const allPass = gates.every((g) => g.status === "pass" && g.passed === true);
 
   return {
     allPass,

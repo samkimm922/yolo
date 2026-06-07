@@ -80,13 +80,16 @@ Experimental 表示当前可用，但 API shape、返回字段或执行语义仍
 | `yolo/release/pack-smoke` | npm pack/install smoke 可在临时外部项目安装 tarball、import public exports、调用 `.bin/yolo --help`；release workflow 仍是 experimental。 |
 | `yolo/release/hardening-drill` | public beta hardening drill 可串起 readiness、pack/install、fixture registry、API/docs、provider CLI dry-run 和 workflow target smoke；该 drill 不发布、不改 `private=true`、不读凭证、不执行 provider。 |
 | `yolo/release/decision-gate` | controlled beta release decision gate 可在 P5 drill 通过后校验人工决策记录；移除 `private=true`、真实 publish、凭证或 billable provider action 都必须显式批准，函数本身仍不执行这些动作。 |
+| `yolo/release/change-provenance` | release candidate change provenance 会把 release 相关变更、evidence 链接和 dirty workspace blocker 写成 manifest；它只读状态，不批准发布。 |
+| `yolo/release/clean-environment-verify` | clean-environment verification 会规划并可在显式授权下执行外部干净环境 install/build/test smoke；当前仍是 release candidate 证据，不代表 release-ready。 |
+| `yolo/release/dogfood-matrix` | dogfood matrix 会生成 dogfood scenario plan、evidence 和 fail-closed report；缺证据或安全保证时阻断 release candidate。 |
 | `yolo/release/operator-state` | operator-approved release-state mutation helper 可在 decision gate ready 后 dry-run 或显式 apply package `private` removal；即使 apply，也不 publish、不读凭证、不执行 provider。 |
 | `yolo/release/operator-runbook` | operator release runbook gate 会校验 applied release state、publish 授权、credential/billable 授权和 public dogfood report 证据，只产出人工命令，不执行 publish、凭证读取、provider 或报告发布。 |
 | `yolo/release/post-release-audit` | post-release audit gate 会校验人工外部发布记录、发布后 hardening、package install smoke 和 dogfood audit 证据；它只审计证据，不执行 publish/token/provider/report 操作。 |
 | `yolo/release/stable-graduation` | stable graduation gate 会在 post-release audit 通过后校验 public readiness、root entrypoint budget、稳定性 review、runtime API freeze 和公开 dogfood 证据；当前 root budget 与 runtime implementation 已达标，但通过前仍不能把 SDK 声明为 stable。 |
 | `yolo/release/manual-external-release` | manual external release evidence gate 会校验人工外部 publish、credential、billable provider、public dogfood、post-release audit 和 stable graduation 证据；它只验收 P11 证据包，不执行这些敏感动作。 |
 | `yolo/release/agent-integration-doctor` | native agent integration doctor 会校验 Codex/Claude YOLO skill、slash/source command 和 workflow artifacts 是否存在；它只读文件状态，不安装、不改 host。 |
-| `yolo/release/real-project-dogfood` | real-project dogfood gate 会校验外部真实项目里的 `/yolo-plan`、`/yolo-check`、`/yolo-review` 证据；它不编辑代码、不执行 provider。 |
+| `yolo/release/real-project-dogfood` | real-project dogfood gate 会校验外部真实项目里的稳定 YOLO 入口证据（`/yolo-demand`、`/yolo-tasks`、`/yolo-spec`、`/yolo-check`、`/yolo-review`、`/yolo-release`、`/yolo-run`）；它不编辑代码、不执行 provider。 |
 | `yolo/release/pi-execution-drill` | PI execution drill gate 会校验 PI mock/dry-run 或人工授权的 controlled billable evidence；SDK gate 本身不执行 provider 或 billable action。 |
 | `yolo/release/runtime-boundary-decision` | runtime boundary decision gate 会校验 `./runtime` 从 experimental 晋级 stable 的人工批准记录和 rollback plan；它不修改 API boundary。 |
 | `yolo/release/public-beta-evidence` | public beta evidence gate 会聚合 native agent、真实项目 dogfood、PI drill、runtime decision 和可选 manual external release 证据；它只产出 public beta/operator evidence 状态。 |
@@ -113,7 +116,7 @@ Experimental 表示当前可用，但 API shape、返回字段或执行语义仍
 | `sdk.progress.*` | progress dashboard UI/UX evidence façade，可 build/inspect/run 本地 snapshot evidence，并能被 adapter bridge / acceptance evidence 消费。 |
 | `sdk.pi.*` | PI lifecycle façade，等价组合 `createPiAgent()`、`createPiRunPlan()` 和 `runPiAgent()`；保持 experimental，避免把 PI 误声明为唯一 stable 入口。 |
 | `sdk.fixtures.*` | fixture registry 和 `runFixtureHarness()` 可用，但还没有完整跨项目执行矩阵。 |
-| `sdk.release.*` | release readiness 可以 fail-closed，并提供 package install smoke、public beta hardening drill、controlled beta release decision gate、operator release-state mutation helper、operator runbook gate、post-release audit gate、stable graduation gate、manual external release evidence gate、agent integration doctor、real-project dogfood gate、PI execution drill gate、runtime boundary decision gate、public beta evidence gate、real-project dogfood pack、experience-pack audit 与 non-technical UX doctor；发布前仍需要人工 release 决策，不能自动移除 `private=true` 或执行 publish/token/provider/report 操作。 |
+| `sdk.release.*` | release readiness 可以 fail-closed，并提供 change provenance、clean-environment verify、dogfood matrix、release candidate gate、package install smoke、public beta hardening drill、controlled beta release decision gate、operator release-state mutation helper、operator runbook gate、post-release audit gate、stable graduation gate、manual external release evidence gate、agent integration doctor、real-project dogfood gate、PI execution drill gate、runtime boundary decision gate、public beta evidence gate、real-project dogfood pack、experience-pack audit 与 non-technical UX doctor；发布前仍需要人工 release 决策，不能自动移除 `private=true` 或执行 publish/token/provider/report 操作。 |
 | `sdk.runtime.*` | runner execution stateRoot 已有 smoke；runtime implementation 已 freeze-ready，但 SDK runtime namespace 仍未获得 stable-boundary approval。 |
 | `sdk.provider.*` adapter helpers | `detectModelProvider()` stable；capability/budget/sandbox contract helpers、provider/runtime matrix 和 provider CLI dry-run matrix 当前 experimental。 |
 | `sdk.project.*` | project bootstrap 可生成 `.yolo/` 和 `specs/` 基础结构，并能运行 init-to-first-PRD smoke；初始化模板仍会随 spec lifecycle 演进。 |

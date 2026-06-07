@@ -48,6 +48,10 @@
 - [ ] Task 27: gate 失败要返回 code、message、source 和下一步，不允许只给“失败了”。
 - [ ] Task 28: review 或 evidence 缺失时不能宣称完成；必须留下可复查产物。
 
+当前硬化口径：可执行 PRD 必须来自 approved demand，并在写入前通过 runner preflight、demand contract、spec governance 和 warning policy。Discovery/spec/module-deep-dive/audit-to-prd 只生成 draft/pending approval；`interview to-demand` 传播 blocked/warning 状态和非 0 exit；WARN-only acceptance 不能满足 executable acceptance。
+
+Lean office-hours profile：`yolo demand office-hours` / `--profile office-hours|startup|builder` / `--mode startup|builder` 只做 startup/builder 一问一答，输出 premise challenge、2-3 alternatives、显式 choice 和 draft brief handoff，不生成 PRD、不执行 provider、不写业务代码。
+
 ## Memory 与文档验证
 
 - [ ] Task 29: `CURRENT_STATUS.md` 汇总当前需求 session、readiness、风险和最新进展。

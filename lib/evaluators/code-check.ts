@@ -96,7 +96,11 @@ export function evalCodeContains(params, taskScope, ROOT) {
 
   if (!text) return { passed: false, detail: "缺少 text/pattern 参数" };
   if (!targetFiles.length) {
-    return { passed: true, detail: `无文件指定，跳过检查: "${text.slice(0, 60)}"` };
+    return {
+      passed: false,
+      status: "not_run",
+      detail: `无文件指定，无法验证: "${text.slice(0, 60)}"`,
+    };
   }
 
   let allPassed = true;
@@ -277,6 +281,15 @@ export function evalAstFindByProperty(params, _taskScope, ROOT) {
 export function evalCodeNotContains(params, taskScope, ROOT) {
   const text = params.text || params.pattern;
   const targetFiles = params.files || (params.file ? [params.file] : []);
+  if (!text) return { passed: false, detail: "缺少 text/pattern 参数" };
+  if (!targetFiles.length) {
+    return {
+      passed: false,
+      status: "not_run",
+      detail: "无文件指定，无法验证 code_not_contains",
+      found: 0,
+    };
+  }
 
   const existingFiles = targetFiles.filter((file) => {
     const absPath = resolve(ROOT, file);
@@ -285,8 +298,9 @@ export function evalCodeNotContains(params, taskScope, ROOT) {
 
   if (existingFiles.length === 0) {
     return {
-      passed: true,
-      detail: `${targetFiles.join(", ")} 不存在（视为不包含）`,
+      passed: false,
+      status: "indeterminate",
+      detail: `指定文件均不存在，无法验证 code_not_contains: ${targetFiles.join(", ")}`,
       found: 0,
     };
   }

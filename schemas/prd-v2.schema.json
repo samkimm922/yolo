@@ -924,7 +924,7 @@
             "WARN",
             "FAIL"
           ],
-          "description": "FAIL blocks task completion, WARN logs but allows"
+          "description": "FAIL blocks task completion. WARN is advisory for manual review and cannot satisfy executable acceptance."
         },
         "is_regex": {
           "type": "boolean",
@@ -1035,7 +1035,7 @@
             "WARN"
           ],
           "default": "FAIL",
-          "description": "WARN failures are logged but do not block task completion"
+          "description": "WARN failures are recorded as non-pass and cannot satisfy executable acceptance."
         }
       }
     },

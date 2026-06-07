@@ -8,9 +8,28 @@ import { createYoloSdk } from "../sdk.js";
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 const packageJson = JSON.parse(readFileSync(resolve(YOLO_DIR, "package.json"), "utf8"));
 const boundary = JSON.parse(readFileSync(resolve(YOLO_DIR, "docs/public-sdk-api-boundary.json"), "utf8"));
+const RELEASE_CANDIDATE_EXPORTS = [
+  "./release/change-provenance",
+  "./release/clean-environment-verify",
+  "./release/dogfood-matrix",
+];
+const RELEASE_CANDIDATE_SDK_SURFACES = [
+  "buildReleaseCandidateChangeManifest",
+  "readReleaseCandidateChangeManifest",
+  "buildCleanEnvironmentVerifyPlan",
+  "runCleanEnvironmentVerify",
+  "buildDogfoodMatrixPlan",
+  "buildDogfoodMatrixReport",
+  "buildDogfoodMatrixEvidence",
+  "runReleaseCandidateGate",
+];
 
 function sorted(values) {
   return [...values].sort();
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function flattenTierGroups(groups) {
@@ -99,5 +118,25 @@ describe("public SDK API boundary", () => {
 
     assert.match(contract, /public-sdk-api-boundary\.json/);
     assert.match(contract, /## Version Policy/);
+  });
+
+  test("release candidate exports are classified and documented", () => {
+    const apiReference = readFileSync(resolve(YOLO_DIR, "docs/api-reference.md"), "utf8");
+    const contract = readFileSync(resolve(YOLO_DIR, "docs/public-sdk-contract.md"), "utf8");
+    const byExport = new Map(boundary.package_exports.map((entry) => [entry.export, entry]));
+
+    for (const exportName of RELEASE_CANDIDATE_EXPORTS) {
+      assert.ok(Object.hasOwn(packageJson.exports, exportName), `${exportName} must stay exported`);
+      assert.equal(byExport.get(exportName)?.target, packageJson.exports[exportName], `${exportName} boundary target must match package.json`);
+      assert.equal(byExport.get(exportName)?.tier, "experimental", `${exportName} must stay experimental until release evidence is complete`);
+
+      const publicImport = `yolo/${exportName.slice(2)}`;
+      assert.match(apiReference, new RegExp(escapeRegExp(publicImport)), `${publicImport} must be in docs/api-reference.md`);
+      assert.match(contract, new RegExp(escapeRegExp(publicImport)), `${publicImport} must be in docs/public-sdk-contract.md`);
+    }
+
+    for (const surfaceName of RELEASE_CANDIDATE_SDK_SURFACES) {
+      assert.match(apiReference, new RegExp(escapeRegExp(`${surfaceName}()`)), `${surfaceName} must be in docs/api-reference.md`);
+    }
   });
 });

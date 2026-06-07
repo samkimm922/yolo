@@ -8,16 +8,34 @@ import { existsSync } from 'node:fs';
 const YOLO_DIR = resolve(import.meta.dirname, '..');
 const LOG_CHANGE = join(YOLO_DIR, 'dist/src/runtime/evidence/log-change.js');
 
+function blockMandatoryHook(stage, error) {
+  console.error(JSON.stringify({
+    status: "blocked",
+    code: "MANDATORY_HOOK_FAILED",
+    hook: "pre-tool-task-log",
+    classification: "mandatory",
+    stage,
+    message: error?.message || String(error || "hook failed"),
+  }));
+  process.exit(1);
+}
+
 // 不在 yolo 环境中时静默退出
 if (!existsSync(LOG_CHANGE)) process.exit(0);
 
 let input = '';
 process.stdin.on('data', (chunk) => { input += chunk; });
 process.stdin.on('end', () => {
+  let data;
   try {
-    const data = JSON.parse(input);
-    const toolName = data.tool_name || '';
+    data = JSON.parse(input);
+  } catch (error) {
+    blockMandatoryHook("parse_input", error);
+    return;
+  }
 
+  const toolName = data.tool_name || '';
+  try {
     if (toolName === 'TaskCreate') {
       const subject = data.tool_input?.subject || '未命名任务';
       const description = data.tool_input?.description || '';
@@ -41,7 +59,7 @@ process.stdin.on('end', () => {
         ], { stdio: 'pipe', cwd: YOLO_DIR });
       }
     }
-  } catch (e) {
-    // Silently ignore — hooks must not break tool execution
+  } catch (error) {
+    blockMandatoryHook("log_change", error);
   }
 });

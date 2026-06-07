@@ -4,10 +4,17 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { evalFileLinesMax, evalFilesModifiedMax } from "../lib/evaluators/file-check.js";
+import { evalCodeContains } from "../lib/evaluators/code-check.js";
+import { evalNoNewDeadCode } from "../lib/evaluators/quality-check.js";
+import { evaluatePreConditions } from "../src/prd/contract.js";
 import { evalBusinessCodeMin } from "../lib/evaluators/runtime-check.js";
 
 function fakeExec(outputs) {
   return (cmd) => ({ ok: true, out: outputs[cmd] || "" });
+}
+
+function fakeFailExec() {
+  return () => ({ ok: false, out: "", err: "git unavailable" });
 }
 
 describe("files_modified_max scope filtering", () => {
@@ -46,6 +53,19 @@ describe("files_modified_max scope filtering", () => {
     assert.equal(result.found, 2);
     assert.deepEqual(result.target_files, ["src/a.ts"]);
     assert.deepEqual(result.out_of_scope_files, ["src/b.ts"]);
+  });
+
+  test("fails closed when git diff is unavailable", () => {
+    const result = evalFilesModifiedMax(
+      { max: 2 },
+      { targets: [{ file: "src/a.ts" }] },
+      "/repo",
+      fakeFailExec(),
+    );
+
+    assert.equal(result.passed, false);
+    assert.equal(result.status, "indeterminate");
+    assert.match(result.detail, /无法获取 diff/);
   });
 });
 
@@ -91,6 +111,106 @@ describe("file_lines_max target existence", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("evaluator cannot-verify states", () => {
+  test("code_contains with an empty target set is not_run instead of pass", () => {
+    const result = evalCodeContains({ text: "needle" }, {}, "/repo");
+
+    assert.equal(result.passed, false);
+    assert.equal(result.status, "not_run");
+  });
+
+  test("target_file_modified without a target is not_run and blocks allPass", () => {
+    const result = evaluatePreConditions({
+      id: "T",
+      pre_conditions: [{
+        id: "PRE-TARGET",
+        type: "target_file_modified",
+        severity: "FAIL",
+        params: {},
+      }],
+    }, {}, { root: "/repo" });
+
+    assert.equal(result.allPass, false);
+    assert.equal(result.results[0].status, "not_run");
+    assert.equal(result.results[0].passed, false);
+  });
+
+  test("target_file_modified with unavailable git diff is indeterminate", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-target-diff-"));
+    try {
+      const result = evaluatePreConditions({
+        id: "T",
+        scope: { targets: [{ file: "src/a.ts" }] },
+        pre_conditions: [{
+          id: "PRE-TARGET",
+          type: "target_file_modified",
+          severity: "FAIL",
+          params: { file: "src/a.ts" },
+        }],
+      }, {}, { root });
+
+      assert.equal(result.allPass, false);
+      assert.equal(result.results[0].status, "indeterminate");
+      assert.match(result.results[0].detail, /无法获取 git diff/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("required_imports_present fails closed when target files are missing", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-imports-"));
+    try {
+      const result = evaluatePreConditions({
+        id: "T",
+        pre_conditions: [{
+          id: "PRE-IMPORT",
+          type: "required_imports_present",
+          severity: "FAIL",
+          params: { files: ["src/missing.ts"], import_path: "./dep" },
+        }],
+      }, {}, { root });
+
+      assert.equal(result.allPass, false);
+      assert.equal(result.results[0].status, "indeterminate");
+      assert.deepEqual(result.results[0].missing_files, ["src/missing.ts"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("no_new_dead_code without a runnable tool or baseline is indeterminate", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-knip-"));
+    try {
+      const result = evalNoNewDeadCode({
+        command: `"${process.execPath}" -e "process.exit(7)"`,
+        timeout_ms: 1000,
+      }, {}, root);
+
+      assert.equal(result.passed, false);
+      assert.equal(result.status, "indeterminate");
+      assert.match(result.detail, /无法验证死代码/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("warning-only conditions are non-pass for contract allPass", () => {
+    const result = evaluatePreConditions({
+      id: "T",
+      pre_conditions: [{
+        id: "PRE-WARN",
+        type: "code_contains",
+        severity: "WARN",
+        params: { text: "missing" },
+      }],
+    }, {}, { root: "/repo" });
+
+    assert.equal(result.allPass, false);
+    assert.equal(result.warnConditions.length, 1);
+    assert.equal(result.results[0].status, "not_run");
   });
 });
 

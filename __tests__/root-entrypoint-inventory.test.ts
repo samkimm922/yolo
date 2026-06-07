@@ -101,4 +101,15 @@ describe("root entrypoint inventory", () => {
       assert.equal(existsSync(resolve(YOLO_DIR, entry.target)), true, `${entry.file} shim target is missing: ${entry.target}`);
     }
   });
+
+  test("root shell launchers point at current yolo CLI instead of stale .mjs targets", () => {
+    const start = readFileSync(resolve(YOLO_DIR, "start.sh"), "utf8");
+    const startHere = readFileSync(resolve(YOLO_DIR, "START_HERE.command"), "utf8");
+
+    assert.doesNotMatch(start, /runner\.mjs|server\.mjs/);
+    assert.doesNotMatch(startHere, /runner\.mjs|server\.mjs|yolo-wizard/);
+    assert.match(start, /dist\/bin\/yolo\.js/);
+    assert.match(startHere, /dist\/bin\/yolo\.js/);
+    assert.match(startHere, /status \| demand \| spec \| tasks \| run \| check \| review \| release/);
+  });
 });

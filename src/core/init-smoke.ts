@@ -151,6 +151,7 @@ export function buildInitToFirstPrdSmokePlan(options = {}) {
     base_commit: cleanString(options.baseCommit || options.base_commit, "0000000"),
     execution_mode: "dry_run",
     review_policy: { mode: "disabled" },
+    tasks: (basePrd.tasks || []).map((task) => ({ ...task, status: "pending" })),
   };
 
   return {
@@ -244,7 +245,8 @@ export async function runInitToFirstPrdSmoke(options = {}) {
     mode: plan.runner_dry_run.mode,
     dryRun: true,
   });
-  const status = preflight.runner_readiness?.can_execute && check.status !== "blocked" && runner.status === "success" ? "success" : "blocked";
+  const runnerDryRunReady = runner.status === "dry_run" && runner.code === "RUNNER_DRY_RUN_READY";
+  const status = preflight.runner_readiness?.can_execute && check.status !== "blocked" && runnerDryRunReady ? "success" : "blocked";
 
   return {
     status,

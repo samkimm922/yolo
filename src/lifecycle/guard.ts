@@ -9,8 +9,8 @@ export const LIFECYCLE_GUARD_SCHEMA = "yolo.lifecycle.guard.v1";
 const SETUP_COMMANDS = new Set(["yolo-init", "yolo-install", "yolo-doctor"]);
 const EARLY_COMMANDS = new Set(["yolo", "yolo-next", "yolo-brainstorm", "yolo-interview", "yolo-discover", "yolo-discuss"]);
 const WRITE_COMMANDS = new Set(["yolo-run", "yolo-fix", "yolo-init", "yolo-install"]);
-const WARNING_READY_STAGES = new Set(["discovery", "roadmap", "prd", "check"]);
-const BLOCKING_REPORT_STATUSES = new Set(["blocked", "error", "failed", "fail"]);
+const WARNING_READY_STAGES = new Set();
+const BLOCKING_REPORT_STATUSES = new Set(["blocked", "error", "failed", "fail", "warning", "draft", "not_run", "indeterminate"]);
 const PENDING_REPORT_STATUSES = new Set(["pending", "active", "running", "in_progress", "todo", "open"]);
 
 const MAIN_NEXT_STAGES = [
@@ -93,16 +93,15 @@ function normalizeReportStatus(value) {
   return clean(value).toLowerCase().replace(/\s+/g, "_");
 }
 
-function reportStatusValues(report = {}) {
+function reportStatusValues(report = {}, depth = 0) {
+  if (!report || typeof report !== "object" || depth > 4) return [];
   return [
     report.status,
     report.verdict,
     report.outcome,
     report.result?.status,
-    report.report?.status,
-    report.report?.verdict,
-    report.report?.outcome,
-    report.report?.result?.status,
+    ...reportStatusValues(report.report, depth + 1),
+    ...reportStatusValues(report.result?.report, depth + 1),
   ].map(normalizeReportStatus).filter(Boolean);
 }
 

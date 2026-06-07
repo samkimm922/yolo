@@ -132,5 +132,5 @@ export async function runPiCli(argv = process.argv.slice(2), io = {}) {
   if (json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatPiText(result)}\n`);
 
-  return result.status === "success" ? 0 : 1;
+  return result.exit_code ?? (result.status === "success" ? 0 : 1);
 }

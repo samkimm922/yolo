@@ -200,13 +200,55 @@ export function inspectSpecLifecyclePackage(specPackage = {}) {
   };
 }
 
+function draftDemandQualityReport() {
+  return {
+    schema_version: "1.0",
+    schema: "yolo.demand.quality.v1",
+    status: "blocked",
+    total_score: 0,
+    dimensions: [],
+  };
+}
+
 export function specLifecycleToPrd(specPackage = {}, options = {}) {
+  const executable = options.executable === true;
+  const draftQuality = draftDemandQualityReport();
   return {
     version: "2.0",
     id: cleanText(options.id || `PRD-${specPackage.id || "SPEC-LIFECYCLE"}`),
     title: cleanText(options.title || specPackage.title || "Spec lifecycle PRD"),
-    generated_by: "yolo.spec.lifecycle",
+    project: options.project || {
+      name: cleanText(options.projectName || options.project_name || "project"),
+      language: cleanText(options.language || "other"),
+      framework: cleanText(options.framework || "generic"),
+    },
+    generated_by: "other",
     generated_at: options.generated_at || "1970-01-01T00:00:00.000Z",
+    base_commit: cleanText(options.base_commit || options.baseCommit || "0000000"),
+    source: executable ? "approved_demand" : "spec_lifecycle_draft",
+    execution_mode: executable ? "default" : "draft",
+    demand_contract_required: true,
+    demand: executable ? options.demand : {
+      id: specPackage.id || "SPEC-LIFECYCLE",
+      source: "spec_lifecycle",
+      approval: {
+        approved: false,
+        effective_for_prd: false,
+        approval_source: "pending_human_approval",
+      },
+      quality_report: draftQuality,
+      execution_readiness: {
+        quality_report: draftQuality,
+      },
+    },
+    execution_readiness: executable ? options.execution_readiness : {
+      level: "draft",
+      afk_ready: false,
+      source: "spec_lifecycle_draft",
+      atomic_tasks: false,
+      quality_status: "blocked",
+      quality_report: draftQuality,
+    },
     requirements: asArray(specPackage.requirements).map((requirement) => ({
       id: requirement.id,
       text: requirement.text || requirement.title || "",
@@ -220,7 +262,7 @@ export function specLifecycleToPrd(specPackage = {}, options = {}) {
       title: task.title,
       type: task.type,
       priority: task.priority,
-      status: task.status,
+      status: executable ? task.status : "needs_contract_review",
       requirement_ids: uniqueStrings(task.requirement_ids),
       design_ids: uniqueStrings(task.design_ids),
       scope: task.scope,

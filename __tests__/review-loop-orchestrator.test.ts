@@ -17,6 +17,17 @@ function emptyTaskResults() {
   };
 }
 
+function emptyCoveredScan() {
+  return JSON.stringify({
+    scanner_version: "test-review-scanner@1",
+    scanned_files: ["src/app.js"],
+    rules: ["R-test"],
+    expected_scope: ["src/app.js"],
+    coverage_status: "complete",
+    findings: [],
+  });
+}
+
 test("runReviewLoop skips dry-run PRDs before scanner execution", async () => {
   const logs = [];
   const prd = {
@@ -69,7 +80,7 @@ test("runReviewLoop exits cleanly when scanner has no findings", async () => {
     rootDir: YOLO_DIR,
     progress: { total: 1, done: 0, failed: 0 },
     maxReviewRounds: 2,
-    execFileSync: () => JSON.stringify([]),
+    execFileSync: () => emptyCoveredScan(),
     mainLoop: async () => {
       throw new Error("mainLoop should not run");
     },
@@ -80,6 +91,40 @@ test("runReviewLoop exits cleanly when scanner has no findings", async () => {
 
   assert.deepEqual(result.failed, []);
   assert.ok(reviewDone.some(([status]) => status === "pass"));
+});
+
+test("runReviewLoop blocks empty findings without scanner coverage artifact", async () => {
+  const prd = {
+    id: "PRD-REVIEW-CLEAN-NO-COVERAGE",
+    tasks: [{
+      id: "FIX-1",
+      type: "bugfix",
+      task_kind: "bugfix",
+      scope: { targets: [{ file: "src/app.js" }] },
+    }],
+  };
+
+  const result = await runReviewLoop({
+    prd,
+    prdPath: "/tmp/clean-no-coverage-prd.json",
+    taskResults: emptyTaskResults(),
+    runId: "run-test",
+    yoloRoot: YOLO_DIR,
+    rootDir: YOLO_DIR,
+    progress: { total: 1, done: 0, failed: 0 },
+    maxReviewRounds: 1,
+    execFileSync: () => JSON.stringify([]),
+    mainLoop: async () => {
+      throw new Error("mainLoop should not run");
+    },
+    loadPRD: () => prd,
+    normalizeRepoPath: (value) => value,
+  });
+
+  assert.deepEqual(result.failed, ["REVIEW-SCANNER-COVERAGE-MISSING"]);
+  assert.deepEqual(result.blocked, ["REVIEW-SCANNER-COVERAGE-MISSING"]);
+  assert.equal(result.review_outcome.status, "blocked");
+  assert.equal(result.review_outcome.reason, "scanner_coverage_missing");
 });
 
 test("runReviewLoop fails closed after three scanner exec failures", async () => {
@@ -329,6 +374,70 @@ test("runReviewLoop fails closed when review fixes return only blocked tasks", a
     assert.deepEqual(result.failed, ["REVIEW-FIX-BLOCKED"]);
     assert.deepEqual(result.blocked, ["FIX-R1-001", "REVIEW-FIX-BLOCKED"]);
     assert.equal(result.review_outcome.status, "blocked");
+    assert.equal(result.review_outcome.reason, "review_fix_blocked");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runReviewLoop preserves original findings when review-to-prd conversion fails", async () => {
+  const root = mkdtempSync(resolve(tmpdir(), "yolo-review-conversion-fail-"));
+  const fakeYoloRoot = resolve(root, "missing-yolo-root");
+  const prdPath = resolve(root, "prd.json");
+  const prd = {
+    id: "PRD-REVIEW-CONVERSION-FAIL",
+    tasks: [{
+      id: "FIX-1",
+      type: "bugfix",
+      status: "pending",
+      scope: { targets: [{ file: "src/app.js" }] },
+    }],
+  };
+  const finding = {
+    finding_id: "F-CONVERSION",
+    scanner_id: "R-conversion",
+    severity: "HIGH",
+    fix_type: "CLAUDE_FIX",
+    dimension: "code",
+    file: "src/app.js",
+    line: 7,
+    match: "unsafe",
+    description: "Preserve this finding when converter fails.",
+    must_fix_before_ship: true,
+    evidence: [{ file: "src/app.js", line: 7 }],
+  };
+
+  try {
+    writeFileSync(prdPath, JSON.stringify(prd, null, 2), "utf8");
+
+    const result = await runReviewLoop({
+      prd,
+      prdPath,
+      taskResults: emptyTaskResults(),
+      runId: "run-test",
+      yoloRoot: fakeYoloRoot,
+      rootDir: YOLO_DIR,
+      progress: { total: 1, done: 0, failed: 0 },
+      maxReviewRounds: 1,
+      maxReviewTasksPerRound: 5,
+      execFileSync: () => JSON.stringify({ findings: [finding] }),
+      mainLoop: async () => ({
+        completed: [],
+        failed: [],
+        skipped: [],
+        blocked: ["FIX-R1-CONVERSION-FAILED"],
+        contractReview: [],
+      }),
+      loadPRD: (path) => JSON.parse(readFileSync(path, "utf8")),
+      normalizeRepoPath: (value) => value,
+    });
+
+    const written = JSON.parse(readFileSync(prdPath, "utf8"));
+    const preserved = written.tasks.find((task) => task.id === "FIX-R1-CONVERSION-FAILED");
+    assert.equal(preserved.blocks_ship, true);
+    assert.equal(preserved.review_conversion_failed.preserved_finding_count, 1);
+    assert.equal(preserved.source_findings[0].finding_id, "F-CONVERSION");
+    assert.deepEqual(result.failed, ["REVIEW-FIX-BLOCKED"]);
     assert.equal(result.review_outcome.reason, "review_fix_blocked");
   } finally {
     rmSync(root, { recursive: true, force: true });

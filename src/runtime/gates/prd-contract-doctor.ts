@@ -248,6 +248,16 @@ export function inspectPrdContract(prd, options = {}) {
         code: "DEMAND_APPROVAL_MISSING",
         detail: "approved-demand PRD must include approved demand approval",
       });
+    } else if (demand && demand.approval?.effective_for_prd !== true) {
+      failures.push({
+        task_id: null,
+        condition_id: null,
+        condition_type: null,
+        severity: "FAIL",
+        code: "DEMAND_APPROVAL_NOT_EFFECTIVE_FOR_PRD",
+        detail: "approved-demand PRD approval must be explicitly effective for PRD execution",
+        human_needed: true,
+      });
     }
     if (prd?.execution_readiness?.level !== "L3" || prd?.execution_readiness?.afk_ready !== true) {
       failures.push({

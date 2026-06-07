@@ -8,11 +8,12 @@ if ! command -v node >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ -f dist/tools/yolo-wizard.js ]; then
-  node dist/tools/yolo-wizard.js
+if [ -f dist/bin/yolo.js ]; then
+  node dist/bin/yolo.js status
 else
-  node --import tsx tools/yolo-wizard.ts
+  node --import tsx bin/yolo.ts status
 fi
 
 echo
+echo "稳定入口: yolo status | demand | spec | tasks | run | check | review | release"
 read "?按回车关闭窗口..."

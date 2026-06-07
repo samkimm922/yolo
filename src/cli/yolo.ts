@@ -27,6 +27,7 @@ import {
 import {
   runDemandBrainstormRuntime,
   runDemandDiscussRuntime,
+  runDemandOfficeHoursRuntime,
   runDemandPrdRuntime,
   runDemandStatusRuntime,
 } from "../demand/runtime.js";
@@ -52,57 +53,26 @@ const defaultYoloRoot = resolve(__dirname, "../..");
 export function usage() {
   return [
     "用法:",
-    "  yolo init [path] [--name <name>] [--force] [--dry-run] [--json]",
-    "  yolo setup [path] [--name <name>] [--target codex|claude|both] [--scope project|user|both] [--dry-run] [--force] [--json]",
-    "  yolo install [path] [--target codex|claude|both] [--scope project|user|both] [--dry-run] [--force] [--json]",
-    "  yolo brainstorm [idea] [--user <user>] [--status-quo <text>] [--evidence <text>] [--json]",
-    "  yolo demand status [idea|--demand <session.json|dir>] [--json]",
-    "  yolo demand dispatch [idea|--demand <session.json|dir>] [--execute-agents --allow-agent-dispatch] [--agent-tool-profile boundary|research|full --allow-full-agent-tools] [--max-budget-usd <amount>] [--json]",
-    "  yolo interview start|answer|status|to-demand [options]",
-    "  yolo interview start [idea] [--cwd <dir>] [--id <id>] [--title <title>] [--json] [--no-write]",
-    "  yolo interview answer --session <path|dir> --question <id> --answer <text> [--json] [--no-write]",
-    "  yolo interview status --session <path|dir> [--json]",
-    "  yolo interview to-demand --session <path|dir> [--approve] [--json] [--no-write]",
-    "  yolo discover [text-or-path] [--success <criteria>] [--target <file>] [--json]",
-    "  yolo discuss [idea] [--decision <text>] [--approve] [--json]",
-    "  yolo plan [--discovery <discovery.json>] [--json]",
-    "  yolo prd [--discovery <discovery.json>|--demand <session.json|dir>] [--output <prd.json>] [--json]",
-    "  yolo next [--cwd <dir>] [--json]",
-    "  yolo doctor [path] [--target codex|claude|both] [--scope project|user|both] [--json]",
+    "  yolo status [--cwd <dir>] [--json]",
+    "  yolo demand [status|dispatch] [idea|--demand <session.json|dir>] [--mode office-hours] [--json]",
+    "  yolo demand --stage brainstorm|interview|discover|discuss|prd <idea-or-session> [--json]",
+    "  yolo spec [--discovery <discovery.json>|--demand <session.json|dir>] [--output <prd.json>] [--json]",
+    "  yolo tasks [--discovery <discovery.json>] [--json]",
     "  yolo check <prd.json> [--json] [--no-write] [--strict|--release]",
-    "  yolo review [path] [--json]",
-    "  yolo accept <prd.json> [--json] [--no-write] [--collect-evidence] [--execute-adapter] [--allow-adapter-commands] [--ship|--release]",
-    "  yolo ship <prd.json> [--json]",
-    "  yolo learn [lesson] [--json]",
     "  yolo run <prd.json> [--json] [--dry-run] [--executor claude|codex|custom|auto] [--model <model>] [--agent-command <cmd>]",
-    "  yolo runner <prd.json> [--json] [--dry-run] [--engine-only]",
-    "  yolo progress-ui-evidence [path] [--json] [--output <file>] [--no-write]",
-    "  yolo eval [--results <benchmark-results.json>] [--baseline <report.json>] [--min-score 80] [--json] [--no-write]",
-    "  yolo release-candidate [--mode rc|publish] [--dry-run] [--allow-untracked] [--allow-unknown] [--json]",
-    "  yolo release-gate [--mode rc|publish] [--dry-run] [--allow-untracked] [--allow-unknown] [--json]",
-    "  yolo memory refresh [path] [--dry-run] [--json] [--no-retention] [--no-learning-migration]",
-    "  yolo [prd.json] [--mode=dev|fix] [--json]",
-    "  yolo --prd <prd.json> [--mode=dev|fix] [--json]",
+    "  yolo review [path] [--json]",
+    "  yolo release [candidate|accept|ship] [--mode rc|publish] [--dry-run] [--allow-untracked] [--allow-unknown] [--json]",
     "",
-    "`yolo init` 会在目标项目生成 .yolo/、.yolo/memory/、.yolo/state/*.jsonl 和 specs/ 基础结构。",
-    "`yolo setup` 会自动判断 new/partial/initialized/risky，安全组合 init、project-scope agent bridge install 和 doctor；不会自动补录业务现状。",
-    "`yolo demand status` 是需求阶段只读入口，会输出 context_type、route、evidence_policy、missing_slots、blockers、assumptions、needed_evidence_agents、prd_ready 和 next_action。",
+    "`yolo status` 会读取 .yolo/lifecycle/status.json，告诉 agent 当前唯一安全的下一步。",
+    "`yolo demand` 是需求阶段只读/访谈入口，会输出 context_type、route、evidence_policy、missing_slots、blockers、assumptions、needed_evidence_agents、prd_ready 和 next_action。",
     "`yolo demand dispatch` 会把 evidence agent 协议接到实际 agent provider；默认 dry-run，只有同时传 --execute-agents 和 --allow-agent-dispatch 才执行。",
-    "`yolo brainstorm/discuss` 会生成需求端 VISION/REFLECTION/INVESTIGATION/REQUIREMENTS/CONTEXT/ROADMAP/APPROVAL 产物，不改业务代码。",
-    "`yolo interview` 会用一问一答收集非技术需求，默认状态写入 .yolo/demand-interviews/<id>/interview.json，可转换为 demand session 后继续 prd。",
-    "`yolo discover/plan/prd` 会生成 discovery、plan、PRD 产物；discover/plan 不改业务代码，prd 只写 PRD JSON。",
-    "`yolo next` 会读取 .yolo/lifecycle/status.json，告诉 agent 当前唯一安全的下一步。",
-    "`yolo doctor` 会只读检查 .yolo/lifecycle、命令注册表和 Codex/Claude agent 集成状态。",
+    "`yolo demand --mode office-hours` 是精简 office-hours profile；`yolo office-hours` 仅保留为隐藏兼容 shim。",
+    "`yolo spec` 会生成 PRD/spec 产物；只写 spec JSON，不改业务代码。",
+    "`yolo tasks` 会生成 discovery/plan/task-breakdown 产物；不改业务代码。",
     "`yolo check` 会在改代码前检查 PRD、产品准备度、UI 验收准备度、任务原子性、adapter 和 evidence plan。",
     "`yolo run` 会走 PI 主线执行 PRD，并在 runner 阶段用 --executor 选择 claude -p、codex exec 或 custom shell agent。",
-    "`yolo runner` / `yolo run --engine-only` 是底层 runner 调试入口；普通 Claude/Codex/GUI 集成应使用 `yolo run`。",
-    "`yolo progress-ui-evidence` 会生成 progress dashboard 的 UI/UX evidence，可被 yolo run/accept 的 adapter bridge 消费。",
-    "`yolo accept` 会在交付前检查功能、运行、review、UI 和证据完整度；需要真实 adapter 采集时显式加 --collect-evidence --execute-adapter --allow-adapter-commands。",
-    "`yolo ship` 会基于 acceptance report 给出 ship/no-ship verdict；不会发布。",
-    "`yolo release-candidate` / `yolo release-gate` 是 generic RC gate 操作入口，不是 Trello replay；默认 fail closed，只输出可解析 gate contract，真实底层 gate 可由 releaseCandidateRunner 注入。",
-    "`yolo learn` 会把一次交付或人工 lesson 写入有界学习账本。",
-    "`yolo eval` 会用固定 benchmark fixture 和 rubric 评估 discovery/PRD/UI acceptance/agent command 质量；缺真实结果时 fail closed。",
-    "`yolo memory refresh` 会刷新记忆中心，迁移旧学习经验，并先把超限 ledger 归档到 state/archive/jsonl/YYYY-MM/；关键生命周期命令成功写入时会自动刷新项目记忆体。",
+    "`yolo release` 是 acceptance/ship/release-candidate 的稳定入口，不是 Trello replay；默认 fail closed，只输出可解析 gate contract。",
+    "普通 Claude/Codex/GUI 集成只展示 8 个稳定入口：status、demand、spec、tasks、run、check、review、release。",
     "未传 PRD 时，只会在目标项目 .yolo/data/prd/current、.yolo/data/prd/archive 和 .yolo/data 中寻找 PRD JSON。",
   ].join("\n");
 }
@@ -572,6 +542,10 @@ export function parseYoloWorkflowArgs(argv = []) {
       const read = readArgValue(argv, i, arg.split("=")[0]);
       input.provider = read.value;
       i += read.consumed;
+    } else if (arg === "--mode" || arg.startsWith("--mode=")) {
+      const read = readArgValue(argv, i, "--mode");
+      input.mode = read.value;
+      i += read.consumed;
     } else if (arg === "--model" || arg.startsWith("--model=")) {
       const read = readArgValue(argv, i, "--model");
       input.model = read.value;
@@ -597,6 +571,18 @@ export function parseYoloWorkflowArgs(argv = []) {
     } else if (arg === "--stage" || arg.startsWith("--stage=")) {
       const read = readArgValue(argv, i, "--stage");
       input.stage = read.value;
+      i += read.consumed;
+    } else if (arg === "--profile" || arg.startsWith("--profile=")) {
+      const read = readArgValue(argv, i, "--profile");
+      input.profile = read.value;
+      i += read.consumed;
+    } else if (arg === "--mode" || arg.startsWith("--mode=")) {
+      const read = readArgValue(argv, i, "--mode");
+      input.mode = read.value;
+      i += read.consumed;
+    } else if (arg === "--choice" || arg === "--choose" || arg === "--selection" || arg.startsWith("--choice=") || arg.startsWith("--choose=") || arg.startsWith("--selection=")) {
+      const read = readArgValue(argv, i, arg.split("=")[0]);
+      input.choice = read.value;
       i += read.consumed;
     } else if (arg === "--boundary-mutation-probe" || arg.startsWith("--boundary-mutation-probe=")) {
       const read = readArgValue(argv, i, "--boundary-mutation-probe");
@@ -800,9 +786,13 @@ export function formatDiscoveryRuntimeText(label, result = {}) {
 export function formatDemandRuntimeText(label, result = {}) {
   const lines = [`[yolo ${label}] ${result.status}: ${result.summary}`];
   if (result.code) lines.push(`code: ${result.code}`);
+  if (result.profile) lines.push(`profile: ${result.profile}`);
+  if (result.mode) lines.push(`mode: ${result.mode}`);
   if (result.demand_id) lines.push(`demand: ${result.demand_id}`);
   if (result.demand_dir) lines.push(`demand_dir: ${result.demand_dir}`);
   if (result.prd?.id) lines.push(`prd: ${result.prd.id}`);
+  if (result.draft_brief?.id) lines.push(`draft_brief: ${result.draft_brief.id}`);
+  if (result.next_question?.text) lines.push(`next_question: ${result.next_question.text}`);
   if (result.readiness?.readiness_level) {
     lines.push(`readiness: ${result.readiness.readiness_level} score=${result.readiness.quality_score}`);
   }
@@ -1333,13 +1323,18 @@ function cloneReleaseCandidateGates() {
 }
 
 function normalizeReleaseCandidateStatus(status) {
-  if (status === "pass" || status === "ready" || status === "success") return "pass";
-  if (status === "error" || status === "failed") return "error";
+  const normalized = cleanCliText(status).toLowerCase();
+  if (normalized === "pass" || normalized === "success") return "pass";
+  if (["warning", "draft", "dry_run", "not_run", "indeterminate", "ready", "ready_for_operator"].includes(normalized)) return normalized;
+  if (normalized === "error" || normalized === "failed") return "error";
   return "blocked";
 }
 
 function releaseCandidateExitCode(result = {}) {
-  return normalizeReleaseCandidateStatus(result.status) === "pass" ? 0 : 2;
+  const status = normalizeReleaseCandidateStatus(result.status);
+  if (status === "pass") return 0;
+  if (["warning", "draft", "dry_run", "not_run", "indeterminate", "ready", "ready_for_operator"].includes(status)) return 2;
+  return 1;
 }
 
 function releaseCandidateBaseResult({ command, input = {}, options = {}, projectRoot }) {
@@ -1800,6 +1795,7 @@ export async function runYoloReleaseCandidateCli(argv = [], io = {}) {
   const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloReleaseCandidateArgs(argv);
   const command = io.releaseCandidateCommand || "release-candidate";
+  const stage = io.releaseCandidateStage || io.release_candidate_stage || (command === "release" ? "release-candidate" : command);
 
   if (options.help) {
     stdout.write(`${usage()}\n`);
@@ -1811,7 +1807,7 @@ export async function runYoloReleaseCandidateCli(argv = [], io = {}) {
   const yoloRoot = resolve(io.yoloRoot || defaultYoloRoot);
   const context = {
     command,
-    input: { ...input, mode },
+    input: { ...input, mode, stage },
     options,
     projectRoot,
     yoloRoot,
@@ -1840,6 +1836,9 @@ export async function runYoloReleaseCandidateCli(argv = [], io = {}) {
       stateRoot: join(projectRoot, ".yolo"),
       yoloRoot,
       command,
+      stage,
+      gateId: stage,
+      internal_gate_id: stage,
       mode,
       dryRun: options.dryRun,
       allowUntracked: options.allowUntracked,
@@ -1882,7 +1881,7 @@ export async function runYoloCheckCli(argv = [], io = {}) {
   report = withMemoryRefresh(report, { projectRoot, options, source: "yolo-check" });
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else (report.status === "error" ? stderr : stdout).write(`${formatYoloCheckText(report)}\n`);
-  return report.status === "blocked" || report.status === "error" ? 1 : 0;
+  return report.status === "pass" ? 0 : report.status === "warning" ? 2 : 1;
 }
 
 export async function runYoloNextCli(argv = [], io = {}) {
@@ -2055,16 +2054,26 @@ export async function runYoloInterviewCli(argv = [], io = {}) {
         decisionLedger,
         ...(demandResult.artifacts || []),
       ].filter(Boolean);
-      return emit("to-demand", interviewResult("to-demand", state, {
-        status: "success",
-        code: "INTERVIEW_DEMAND_CREATED",
-        summary: writeArtifacts ? "Demand artifacts generated from interview." : "Demand artifact preview generated from interview.",
+      const blocked = isBlockingWorkflowStatus(demandResult.status);
+      const status = demandResult.status === "warning" ? "warning" : blocked ? "blocked" : "success";
+      const code = demandResult.status === "warning"
+        ? "INTERVIEW_DEMAND_WARNING"
+        : blocked
+          ? "INTERVIEW_DEMAND_BLOCKED"
+          : "INTERVIEW_DEMAND_CREATED";
+      const result = interviewResult("to-demand", state, {
+        status,
+        code,
+        summary: blocked
+          ? "Demand artifacts generated from interview are not PRD-ready."
+          : writeArtifacts ? "Demand artifacts generated from interview." : "Demand artifact preview generated from interview.",
         artifacts,
         outputs: demandResult.outputs || [],
         demand_dir: demandResult.demand_dir,
         demand_result: demandResult,
         runtime_next_actions: demandResult.next_actions || [],
-      }));
+      });
+      return emit("to-demand", result, workflowExitCode(result));
     }
 
     return error(command, "UNKNOWN_INTERVIEW_COMMAND", `Unknown interview command: ${command || "(missing)"}`);
@@ -2103,7 +2112,7 @@ export async function runYoloBrainstormCli(argv = [], io = {}) {
   result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-brainstorm" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDemandRuntimeText("brainstorm", result)}\n`);
-  return result.status === "blocked" ? 1 : 0;
+  return workflowExitCode(result);
 }
 
 function normalizeDemandStage(value = "") {
@@ -2111,8 +2120,20 @@ function normalizeDemandStage(value = "") {
   if (!stage) return "";
   if (stage === "discovery") return "discover";
   if (stage === "discussion") return "discuss";
+  if (stage === "office" || stage === "office-hours" || stage === "office_hours") return "office-hours";
   if (stage === "evidence-dispatch") return "dispatch";
   return stage;
+}
+
+function isBlockingWorkflowStatus(status = "") {
+  return ["blocked", "error", "warning", "draft"].includes(cleanCliText(status).toLowerCase());
+}
+
+function workflowExitCode(result = {}) {
+  const status = cleanCliText(result.status).toLowerCase();
+  if (status === "pass" || status === "success") return 0;
+  if (status === "warning" || status === "draft" || status === "dry_run" || status === "not_run" || status === "indeterminate" || status === "ready" || status === "ready_for_operator") return 2;
+  return isBlockingWorkflowStatus(status) ? 1 : 1;
 }
 
 async function runYoloDemandStageCli(stage, input = {}, options = {}, io = {}) {
@@ -2121,6 +2142,20 @@ async function runYoloDemandStageCli(stage, input = {}, options = {}, io = {}) {
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
   const stateRoot = join(projectRoot, ".yolo");
   const stageLabel = normalizeDemandStage(stage);
+
+  if (stageLabel === "office-hours") {
+    let result = runDemandOfficeHoursRuntime({
+      ...input,
+      projectRoot,
+      stateRoot,
+      objective: input.objective,
+      writeArtifacts: options.writeLifecycle,
+    });
+    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-demand:office-hours" });
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stdout.write(`${formatDemandRuntimeText("office-hours", result)}\n`);
+    return workflowExitCode(result);
+  }
 
   if (stageLabel === "brainstorm") {
     let result = runDemandBrainstormRuntime({
@@ -2133,7 +2168,7 @@ async function runYoloDemandStageCli(stage, input = {}, options = {}, io = {}) {
     result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-demand:brainstorm" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDemandRuntimeText("brainstorm", result)}\n`);
-    return result.status === "blocked" ? 1 : 0;
+    return workflowExitCode(result);
   }
 
   if (stageLabel === "interview") {
@@ -2158,7 +2193,7 @@ async function runYoloDemandStageCli(stage, input = {}, options = {}, io = {}) {
     result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-demand:discover" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDiscoveryRuntimeText("discover", result)}\n`);
-    return result.status === "blocked" ? 1 : 0;
+    return workflowExitCode(result);
   }
 
   if (stageLabel === "discuss") {
@@ -2172,7 +2207,7 @@ async function runYoloDemandStageCli(stage, input = {}, options = {}, io = {}) {
     result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-demand:discuss" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDemandRuntimeText("discuss", result)}\n`);
-    return result.status === "blocked" ? 1 : 0;
+    return workflowExitCode(result);
   }
 
   if (stageLabel === "prd") {
@@ -2200,7 +2235,7 @@ async function runYoloDemandStageCli(stage, input = {}, options = {}, io = {}) {
       const text = input.demandPath ? formatDemandRuntimeText("prd", result) : formatDiscoveryRuntimeText("prd", result);
       stdout.write(`${text}\n`);
     }
-    return result.status === "blocked" ? 1 : 0;
+    return workflowExitCode(result);
   }
 
   const result = {
@@ -2217,7 +2252,7 @@ async function runYoloDemandStageCli(stage, input = {}, options = {}, io = {}) {
 export async function runYoloDemandCli(argv = [], io = {}) {
   const stdout = io.stdout || process.stdout;
   const commandNames = new Set(["status", "dispatch", "evidence"]);
-  const stageNames = new Set(["brainstorm", "interview", "discover", "discovery", "discuss", "discussion", "prd"]);
+  const stageNames = new Set(["brainstorm", "interview", "office-hours", "office_hours", "office", "discover", "discovery", "discuss", "discussion", "prd"]);
   const first = argv[0] && !argv[0].startsWith("--") ? normalizeDemandStage(argv[0]) : "";
   let command = commandNames.has(first) ? first : "status";
   let args = commandNames.has(first) ? argv.slice(1) : argv;
@@ -2230,6 +2265,14 @@ export async function runYoloDemandCli(argv = [], io = {}) {
   }
 
   const stage = normalizeDemandStage(input.stage);
+  const profile = cleanCliText(input.profile).toLowerCase();
+  const demandMode = cleanCliText(input.mode).toLowerCase();
+  if (!stage && (
+    ["office-hours", "office_hours", "office", "startup", "builder"].includes(profile)
+    || ["office-hours", "office_hours", "office", "startup", "builder"].includes(demandMode)
+  )) {
+    return runYoloDemandStageCli("office-hours", input, options, io);
+  }
   if (commandNames.has(stage)) {
     command = stage;
   } else if (stage) {
@@ -2248,7 +2291,7 @@ export async function runYoloDemandCli(argv = [], io = {}) {
     });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDemandDispatchText(result)}\n`);
-    return result.status === "blocked" ? 1 : 0;
+    return workflowExitCode(result);
   }
   const result = runDemandStatusRuntime({
     ...input,
@@ -2258,7 +2301,7 @@ export async function runYoloDemandCli(argv = [], io = {}) {
   });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDemandStatusText(result)}\n`);
-  return 0;
+  return workflowExitCode(result);
 }
 
 export async function runYoloDiscussCli(argv = [], io = {}) {
@@ -2281,7 +2324,7 @@ export async function runYoloDiscussCli(argv = [], io = {}) {
   result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-discuss" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDemandRuntimeText("discuss", result)}\n`);
-  return result.status === "blocked" ? 1 : 0;
+  return workflowExitCode(result);
 }
 
 export async function runYoloAcceptCli(argv = [], io = {}) {
@@ -2313,7 +2356,7 @@ export async function runYoloAcceptCli(argv = [], io = {}) {
   report = withMemoryRefresh(report, { projectRoot, options, source: "yolo-accept" });
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else stdout.write(`${formatAcceptanceReportText(report)}\n`);
-  return report.status === "blocked" ? 1 : 0;
+  return workflowExitCode(report);
 }
 
 export async function runYoloDiscoverCli(argv = [], io = {}) {
@@ -2338,7 +2381,7 @@ export async function runYoloDiscoverCli(argv = [], io = {}) {
   result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-discover" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDiscoveryRuntimeText("discover", result)}\n`);
-  return result.status === "blocked" ? 1 : 0;
+  return workflowExitCode(result);
 }
 
 export async function runYoloPlanCli(argv = [], io = {}) {
@@ -2366,7 +2409,7 @@ export async function runYoloPlanCli(argv = [], io = {}) {
   result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-plan" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDiscoveryRuntimeText("plan", result)}\n`);
-  return result.status === "blocked" ? 1 : 0;
+  return workflowExitCode(result);
 }
 
 export async function runYoloPrdCli(argv = [], io = {}) {
@@ -2392,7 +2435,7 @@ export async function runYoloPrdCli(argv = [], io = {}) {
     result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-prd" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDemandRuntimeText("prd", result)}\n`);
-    return result.status === "blocked" ? 1 : 0;
+    return workflowExitCode(result);
   }
 
   let result = runDiscoveryPrdRuntime({
@@ -2407,7 +2450,7 @@ export async function runYoloPrdCli(argv = [], io = {}) {
   result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-prd" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDiscoveryRuntimeText("prd", result)}\n`);
-  return result.status === "blocked" ? 1 : 0;
+  return workflowExitCode(result);
 }
 
 export async function runYoloWorkflowPlanCli(workflow, argv = [], io = {}) {
@@ -2601,10 +2644,40 @@ export async function runYoloLearnCli(argv = [], io = {}) {
   return result.status === "success" ? 0 : 1;
 }
 
+export async function runYoloReleaseCli(argv = [], io = {}) {
+  const first = argv[0] && !argv[0].startsWith("--") ? cleanCliText(argv[0]).toLowerCase() : "";
+  if (first === "accept" || first === "ui-review") {
+    return runYoloAcceptCli(argv.slice(1), io);
+  }
+  if (first === "ship") {
+    return runYoloShipCli(argv.slice(1), io);
+  }
+  if (first === "candidate" || first === "gate" || first === "release-candidate" || first === "release-gate") {
+    const releaseCandidateStage = first === "gate" || first === "release-gate" ? "release-gate" : "release-candidate";
+    return runYoloReleaseCandidateCli(argv.slice(1), { ...io, releaseCandidateCommand: "release", releaseCandidateStage });
+  }
+  if (first === "rc" || first === "publish") {
+    return runYoloReleaseCandidateCli(["--mode", first, ...argv.slice(1)], { ...io, releaseCandidateCommand: "release", releaseCandidateStage: "release-candidate" });
+  }
+  return runYoloReleaseCandidateCli(argv, { ...io, releaseCandidateCommand: "release", releaseCandidateStage: "release-candidate" });
+}
+
 export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const yoloRoot = io.yoloRoot || defaultYoloRoot;
+  if (argv[0] === "status") {
+    return runYoloNextCli(argv.slice(1), io);
+  }
+  if (argv[0] === "spec") {
+    return runYoloPrdCli(argv.slice(1), io);
+  }
+  if (argv[0] === "tasks") {
+    return runYoloPlanCli(argv.slice(1), io);
+  }
+  if (argv[0] === "release") {
+    return runYoloReleaseCli(argv.slice(1), io);
+  }
   if (argv[0] === "init") {
     return runYoloInitCli(argv.slice(1), io);
   }
@@ -2617,7 +2690,8 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
   if (argv[0] === "doctor") {
     return runYoloDoctorCli(argv.slice(1), io);
   }
-  if (argv[0] === "brainstorm" || argv[0] === "office-hours") return runYoloBrainstormCli(argv.slice(1), io);
+  if (argv[0] === "office-hours") return runYoloDemandCli(["--mode", "office-hours", ...argv.slice(1)], io);
+  if (argv[0] === "brainstorm") return runYoloBrainstormCli(argv.slice(1), io);
   if (argv[0] === "demand") return runYoloDemandCli(argv.slice(1), io);
   if (argv[0] === "interview") return runYoloInterviewCli(argv.slice(1), io);
   if (argv[0] === "discover") return runYoloDiscoverCli(argv.slice(1), io);
@@ -2640,7 +2714,7 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
     return runYoloBenchmarkCli(argv.slice(1), io);
   }
   if (argv[0] === "release-candidate" || argv[0] === "release-gate") {
-    return runYoloReleaseCandidateCli(argv.slice(1), { ...io, releaseCandidateCommand: argv[0] });
+    return runYoloReleaseCli([argv[0], ...argv.slice(1)], io);
   }
   if (argv[0] === "memory") {
     return runYoloMemoryCli(argv.slice(1), io);
@@ -2712,7 +2786,7 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
     result = withMemoryRefresh(result, { projectRoot: cliProjectRoot, options, source: "yolo-run" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatPiRuntimeText("run", result)}\n`);
-    return result.status === "success" ? 0 : 1;
+    return workflowExitCode(result);
   }
 
   const executor = input.executor || input.provider || (input.agentCommand ? "custom" : undefined);

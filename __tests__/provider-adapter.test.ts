@@ -46,6 +46,7 @@ function spawnOptions(overrides = {}) {
     config: { ai: { model: "claude-sonnet-4" } },
     rootDir: "/repo",
     runtimeDir: "/repo/.yolo/state/runtime",
+    commandExists: () => true,
     ...overrides,
   };
 }
@@ -152,6 +153,7 @@ describe("provider execution adapter", () => {
       },
       rootDir: "/repo",
       runtimeDir: "/repo/.yolo/state/runtime",
+      commandExists: () => true,
       existsSync: () => false,
       spawnImpl: () => {
         spawned = true;
@@ -168,6 +170,25 @@ describe("provider execution adapter", () => {
     assert.match(run.stderr, /Claude settings file not found: \/repo\/missing-settings\.json/);
     assert.equal(run.preflight.status, "blocked");
     assert.equal(run.attempt_ledger[0].status, "blocked");
+  });
+
+  test("spawnProviderPrompt fails closed before spawning when commandExists rejects provider command", async () => {
+    let spawned = false;
+    const run = await spawnProviderPrompt("prompt", spawnOptions({
+      commandExists: () => false,
+      spawnImpl: () => {
+        spawned = true;
+        throw new Error("spawn should not be called");
+      },
+    }));
+
+    assert.equal(spawned, false);
+    assert.equal(run.success, false);
+    assert.equal(run.status, "blocked");
+    assert.equal(run.reason, "agent_command_unavailable");
+    assert.equal(run.adapter_contract_inspection.blocks_execution, true);
+    assert.ok(run.adapter_contract_inspection.blockers.some((blocker) => blocker.code === "AGENT_COMMAND_UNAVAILABLE"));
+    assert.ok(run.preflight.blockers.some((blocker) => blocker.code === "PROVIDER_INVOCATION_COMMAND_UNAVAILABLE"));
   });
 
   test("spawnProviderPrompt marks completed provider output explicitly", async () => {

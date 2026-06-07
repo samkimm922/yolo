@@ -10,7 +10,6 @@ import {
 import {
   getYoloCommand,
   listYoloBridgeWorkflowIds,
-  listYoloCommandNames,
   listYoloCommands,
   renderYoloCommandUsage,
 } from "../src/workflows/command-registry.js";
@@ -20,7 +19,6 @@ const DEFAULT_YOLO_ROOT = resolve(__dirname, "..");
 const BRIDGE_START = "<!-- yolo-agent-bridge:start -->";
 const BRIDGE_END = "<!-- yolo-agent-bridge:end -->";
 const DEFAULT_WORKFLOWS = listYoloBridgeWorkflowIds();
-const DEFAULT_COMMANDS = listYoloCommandNames();
 const CODEX_DIRECT_SLASH_COMMANDS = [];
 
 function unique(values) {
@@ -129,23 +127,23 @@ export function buildAgentBridgeBlock({ agent, yoloRoot = DEFAULT_YOLO_ROOT } = 
     "",
     "Primary fallback entrypoint when the user is unsure:",
     "",
-    "> /yolo 你的需求，先只生成计划，不要改代码。",
+    "> /yolo 你的需求，先读状态并选择安全阶段，不要改代码。",
     "",
     "When the user asks for YOLO, yolo流程, 从需求到落地, 自动开发, PRD落地, review/fix, 高质量迭代, or sends text starting with `/yolo`:",
     "",
     "1. Treat this chat as the user interface. Do not ask the user to memorize terminal commands.",
     "2. Read YOLO docs first when needed: `docs/agent-chat-usage.md`, `docs/non-technical-user-guide.md`, and `docs/public-sdk-contract.md` under the YOLO root.",
-    "3. If the user invokes `/yolo ...`, route it yourself: choose brainstorm, interview, discovery, discussion, planning, PRD, check, run, review, accept, ship, learn, doctor, or install from the user's words.",
-    "4. Treat `/yolo-demand` as the single demand-stage entry and user-facing demand interview host. Route brainstorm, interview, discovery, discussion, evidence dispatch, and PRD-readiness questions inside that demand stage.",
+    "3. If the user invokes `/yolo ...`, route it yourself through the stable surface: status, demand, spec, tasks, run, check, review, or release.",
+    "4. Treat `/yolo-demand` as the single demand-stage entry and user-facing demand interview host. Route brainstorm, interview, discovery, discussion, office-hours, evidence dispatch, and spec-readiness questions inside that demand stage.",
     "5. Default `/yolo-demand` to one-question mode: when required slots are missing, ask exactly one `next_question` in plain language and stop. Do not output long recommendation lists, do not enter PRD, and do not edit code.",
     "6. Keep audiences separated: this user-facing chat prompt must not include evidence agent JSON role contracts. Evidence dispatch prompts are only for provider sub-agents spawned by `yolo demand dispatch`.",
-    "7. If the user invokes a legacy demand subcommand such as `/yolo-brainstorm`, `/yolo-interview`, `/yolo-discover`, or `/yolo-discuss`, treat it as a compatibility alias for `/yolo-demand --stage <stage>` and enforce the same demand-stage protocol.",
-    "8. If the user invokes a post-demand explicit stage command such as `/yolo-plan`, `/yolo-prd`, `/yolo-check`, or `/yolo-run`, honor that stage and enforce its safety rules.",
+    "7. If the user invokes a legacy demand subcommand such as `/yolo-brainstorm`, `/yolo-interview`, `/yolo-discover`, `/yolo-discuss`, or `/office-hours`, treat it as a hidden compatibility alias for `/yolo-demand --stage <stage>` or `yolo demand --mode office-hours` and enforce the same demand-stage protocol.",
+    "8. If the user invokes a legacy post-demand command such as `/yolo-plan`, `/yolo-prd`, `/yolo-accept`, or `/yolo-ship`, route it to the matching stable command (`/yolo-tasks`, `/yolo-spec`, or `/yolo-release`) and enforce that stage's safety rules.",
     "9. A stage command is terminal for the current turn unless it is `/yolo-run` or `/yolo-fix`: finish only that stage, report artifacts/blockers, and suggest the next `/yolo-*` command.",
-    "10. For `/yolo-demand`, demand aliases, `/yolo-plan`, `/yolo-prd`, and `/yolo-check`, do not continue into downstream stages in the same response, even if the user says the result looks good.",
+    "10. For `/yolo-demand`, demand aliases, `/yolo-tasks`, `/yolo-spec`, and `/yolo-check`, do not continue into downstream stages in the same response, even if the user says the result looks good.",
     "11. User approval of a demand discussion, plan, PRD, or check means permission to move to the next stage, not permission to edit code. 批准最后: demand approval comes after slots are concrete, and execution approval remains separate.",
-    "12. When unsure, run `/yolo-next` first and follow the lifecycle guard recommendation instead of choosing a downstream stage yourself.",
-    "13. Before real edits, verify the project is initialized, `/yolo-check` passed through the lifecycle guard, and the user explicitly approved execution.",
+    "12. When unsure, run `/yolo-status` first and follow the lifecycle guard recommendation instead of choosing a downstream stage yourself.",
+    "13. Before real edits, verify the project is initialized, `/yolo-check` passed through the lifecycle guard, and the user explicitly approved `/yolo-run` execution.",
     "14. Use the YOLO CLI/SDK yourself from the YOLO root only for the currently selected stage; the user should only describe the goal in chat.",
     "15. If the host still exposes legacy internal names such as `/Yolo.brainstorm` or `yolo.brainstorm`, treat them only as compatibility aliases for the matching demand stage and apply the same stage-stop rules.",
     "16. Do not expose internal workflow names such as `yolo.pi` or `yolo.prd` as choices for the user.",
@@ -203,17 +201,60 @@ function asScopes(options = {}) {
 }
 
 function commandDefinitions() {
-  return listYoloCommands();
+  return listYoloCommands({ recommended: true });
 }
 
 function renderCommandUsage(commandInput) {
   return renderYoloCommandUsage(commandInput);
 }
 
+function primarySlashNameForCommand(command = {}) {
+  if (command.name === "yolo") return "yolo";
+  if (command.stability === "stable") return `yolo-${command.name}`;
+  if (command.name === "office-hours") return "office-hours";
+  if (String(command.name || "").startsWith("yolo-")) return command.name;
+  return `yolo-${command.name}`;
+}
+
+function slashNamesForCommand(command = {}) {
+  const names = new Set([primarySlashNameForCommand(command)]);
+  for (const alias of command.aliases || []) {
+    const normalized = String(alias || "").trim().replace(/^\//, "").toLowerCase();
+    if (!normalized || normalized.includes(" ")) continue;
+    if (normalized === "office-hours" || normalized.startsWith("yolo-")) names.add(normalized);
+  }
+  return [...names].filter(Boolean);
+}
+
+function installableSlashCommands() {
+  return [
+    { ...getYoloCommand("yolo"), slash_name: "yolo" },
+    ...listYoloCommands({ recommended: true }).map((command) => ({
+      ...command,
+      slash_name: primarySlashNameForCommand(command),
+    })),
+  ];
+}
+
+function legacyCodexCommandNames() {
+  return unique(
+    listYoloCommands({ includeHidden: true })
+      .flatMap((command) => slashNamesForCommand(command))
+      .filter((name) => name !== "yolo")
+  ).sort();
+}
+
 function codexMenuDescription(command = {}) {
   const descriptions = {
-    yolo: "不确定该走哪一步时用：自动判断需求挖掘、计划、PRD、检查、执行、review、验收或交付；默认不改代码。",
-    "yolo-demand": "统一需求访谈主持入口：缺槽位时 one-question 只问一个 next_question；不输出大段建议、不进 PRD、不改代码。",
+    yolo: "兼容兜底入口：不确定该走哪一步时先读状态，再路由到 8 个稳定命令；默认不改代码。",
+    status: "读取 YOLO 项目状态和唯一安全下一步；不改代码。",
+    demand: "统一需求访谈主持入口：缺槽位时 one-question 只问一个 next_question；不输出大段建议、不进 PRD、不改代码。",
+    spec: "把已批准的需求、发现或任务材料编译成可执行 spec/PRD；不改代码。",
+    tasks: "把澄清后的需求拆成可执行任务和计划；不改代码。",
+    run: "执行已批准且已检查通过的 PRD/任务；可能改代码，必须有明确批准。",
+    check: "执行前检查 spec、范围、gate、adapter 和证据计划；不改代码。",
+    review: "审查实现质量、风险、回归和缺失测试；默认不改代码。",
+    release: "运行验收、打包、dogfood 和 release-candidate gate；不发布。",
     "yolo-brainstorm": "兼容别名：等同于 /yolo-demand --stage brainstorm；想法很早期时用，不改代码。",
     "yolo-interview": "兼容别名：等同于 /yolo-demand --stage interview；沿用 one-question/next_question 访谈主持规则，不改代码。",
     "yolo-discover": "兼容别名：等同于 /yolo-demand --stage discover；需求模糊时用，不改代码。",
@@ -239,22 +280,48 @@ function codexMenuDescription(command = {}) {
 }
 
 function isDemandCompatibilityAlias(command = {}) {
-  return command.alias_for === "yolo-demand" && command.visibility === "compatibility_alias";
+  return command.alias_for === "demand"
+    && command.stability === "compat"
+    && Boolean(command.demand_stage || command.demand_mode);
+}
+
+function isDemandHostCommand(command = {}) {
+  return command.name === "demand" || isDemandCompatibilityAlias(command);
+}
+
+function demandAliasSlashRoute(command = {}) {
+  if (!isDemandCompatibilityAlias(command)) return "";
+  if (command.demand_mode) return `/yolo-demand --mode ${command.demand_mode}`;
+  return `/yolo-demand --stage ${command.demand_stage || command.mode}`;
 }
 
 function demandAliasRoute(command = {}) {
-  return isDemandCompatibilityAlias(command)
-    ? `/yolo-demand --stage ${command.demand_stage || command.mode}`
-    : "";
+  if (!isDemandCompatibilityAlias(command)) return "";
+  if (command.demand_mode) return `yolo demand --mode ${command.demand_mode}`;
+  return `yolo demand --stage ${command.demand_stage || command.mode}`;
+}
+
+function compatibilityAliasRoute(command = {}) {
+  if (isDemandCompatibilityAlias(command)) return demandAliasRoute(command);
+  const routes = {
+    yolo: "yolo status",
+    "yolo-next": "yolo status",
+    "yolo-plan": "yolo tasks",
+    "yolo-prd": "yolo spec",
+    "yolo-fix": "yolo run --mode fix",
+    "yolo-accept": "yolo release accept",
+    "yolo-ui-review": "yolo release accept --collect-evidence",
+    "yolo-ship": "yolo release ship",
+    "yolo-release-candidate": "yolo release candidate",
+    "yolo-release-gate": "yolo release candidate",
+  };
+  return routes[command.name] || command.usage || "";
 }
 
 function isWriteCommand(command = {}) {
   return command.writes_code === true
-    || command.name === "yolo-run"
-    || command.name === "yolo-fix"
-    || command.name === "yolo-init"
-    || command.name === "yolo-setup"
-    || command.name === "yolo-install";
+    || ["run", "fix", "runner", "init", "setup", "install"].includes(command.name)
+    || ["run", "fix", "runner", "init", "setup", "install"].includes(command.mode);
 }
 
 function allowedToolsForCommand(command = {}) {
@@ -269,20 +336,23 @@ function stageStopRule(command = {}) {
   if (command.name === "yolo") {
     return "- `/yolo` may route to the safest current stage, but it must still stop at that stage unless the user explicitly invoked `/yolo-run` or `/yolo-fix` with a checked PRD.";
   }
-  if (command.name === "yolo-demand") {
-    return "- `/yolo-demand` is the unified demand-stage interview host. Route internally between brainstorm, interview, discover, discuss, status, evidence dispatch, and PRD-readiness. If slots are missing, ask exactly one `next_question` and stop; do not enter `/yolo-prd` in the same response.";
+  if (command.name === "demand") {
+    return "- `/yolo-demand` is the unified demand-stage interview host. Route internally between brainstorm, interview, discover, discuss, office-hours, status, evidence dispatch, and spec-readiness. If slots are missing, ask exactly one `next_question` and stop; do not enter `/yolo-spec` in the same response.";
   }
   if (isDemandCompatibilityAlias(command)) {
-    return `- Compatibility alias: treat this command as \`${demandAliasRoute(command)}\` and use the unified /yolo-demand protocol. Finish only that demand sub-stage; if slots are missing, ask one \`next_question\` and stop with handoff state.`;
+    return `- Compatibility alias: treat this command as \`${demandAliasSlashRoute(command)}\` (CLI: \`${demandAliasRoute(command)}\`) and use the unified /yolo-demand protocol. Finish only that demand sub-stage; if slots are missing, ask one \`next_question\` and stop with handoff state.`;
+  }
+  if (["init", "setup", "install"].includes(command.name) || ["init", "setup", "install"].includes(command.mode)) {
+    return "- This setup/install stage may write YOLO scaffolding or agent bridge files. Start only after explicit user approval for the target scope; do not modify business source code.";
   }
   if (isWriteCommand(command)) {
     return "- This is a write-capable stage. Start only after explicit user approval, a checked PRD/fix scope, and passing gates; stop on the first blocker.";
   }
-  return "- Stage stop: complete only this command's stage, then stop with artifacts, blockers, and the next recommended `/yolo-*` command. Do not advance to plan, PRD, check, run, fix, or source-code edits in the same response.";
+  return "- Stage stop: complete only this command's stage, then stop with artifacts, blockers, and the next recommended `/yolo-*` command. Do not advance to tasks, spec, check, run, fix, or source-code edits in the same response.";
 }
 
 function demandHostRules(command = {}) {
-  if (command.name !== "yolo-demand" && !isDemandCompatibilityAlias(command)) return [];
+  if (!isDemandHostCommand(command)) return [];
   return [
     "- Demand host default: run one-question mode. If required slots are missing, return exactly one `next_question` and wait for the user's answer.",
     "- Do not output long recommendation lists, do not compile or enter PRD, and do not edit code during demand-stage conversation.",
@@ -328,7 +398,7 @@ export function buildClaudeSlashCommand(commandName, { yoloRoot = DEFAULT_YOLO_R
     "- Use YOLO CLI/SDK yourself from the YOLO root only for this command's permitted stage.",
     "- Keep requirement, PRD/spec, tasks, review findings, fixes, gates, and evidence traceable.",
     isDemandCompatibilityAlias(command)
-      ? `- This command is a compatibility alias for \`${demandAliasRoute(command)}\`; use the unified demand-stage protocol.`
+      ? `- This command is a compatibility alias for \`${demandAliasSlashRoute(command)}\` (CLI: \`${demandAliasRoute(command)}\`); use the unified demand-stage protocol.`
       : "- Follow this command's declared stage and lifecycle boundary.",
     ...demandHostRules(command),
     stageStopRule(command),
@@ -349,7 +419,8 @@ export function buildClaudeSlashCommand(commandName, { yoloRoot = DEFAULT_YOLO_R
 export function buildYoloNativeSkill({ agent = "codex", yoloRoot = DEFAULT_YOLO_ROOT } = {}) {
   const label = agent === "claude" ? "Claude Code" : "Codex";
   const recommendedCommands = listYoloCommands({ recommended: true });
-  const demandAliases = listYoloCommands({ compatibilityAliases: true });
+  const demandAliases = listYoloCommands({ compatibilityAliases: true })
+    .filter((command) => isDemandCompatibilityAlias(command));
   return [
     "---",
     "name: yolo",
@@ -369,11 +440,11 @@ export function buildYoloNativeSkill({ agent = "codex", yoloRoot = DEFAULT_YOLO_
     "",
     "If the user is not sure which stage to use, start here:",
     "",
-    "> /yolo 你的需求，先只生成计划，不要改代码。",
+    "> /yolo 你的需求，先读状态并选择安全阶段，不要改代码。",
     "",
     "Codex fallback when slash routing is not active:",
     "",
-    "> 使用 yolo skill 执行 /yolo：你的需求，先只生成计划，不要改代码。",
+    "> 使用 yolo skill 执行 /yolo：你的需求，先读状态并选择安全阶段，不要改代码。",
     "",
     "If the user asks to talk through a requirement, use `/yolo-demand` as the single demand-stage entry instead of asking them to choose brainstorm/interview/discover/discuss.",
     "",
@@ -382,23 +453,25 @@ export function buildYoloNativeSkill({ agent = "codex", yoloRoot = DEFAULT_YOLO_
     "Recommended user commands:",
     "",
     ...recommendedCommands.map((command) =>
-      `- \`/${command.name}\`: ${codexMenuDescription(command)}`
+      `- \`/${primarySlashNameForCommand(command)}\`: ${codexMenuDescription(command)}`
     ),
     "",
-    "Compatibility aliases for older demand-stage commands:",
+    "Hidden demand compatibility aliases (not installed as default command files):",
     "",
     ...demandAliases.map((command) =>
-      `- \`/${command.name}\` -> \`${demandAliasRoute(command)}\`: ${codexMenuDescription(command)}`
+      `- \`/${primarySlashNameForCommand(command)}\` -> \`${compatibilityAliasRoute(command)}\`: ${codexMenuDescription(command)}`
     ),
     "",
     "## Execution Contract",
     "",
     "- Treat chat as the UI. The user describes goals; the agent invokes YOLO.",
     "- Read project instructions and YOLO docs before acting when context is missing.",
-    "- Stage commands are stop points: after `/yolo-demand`, any demand compatibility alias, `/yolo-plan`, `/yolo-prd`, or `/yolo-check`, report artifacts and ask for the next stage instead of continuing automatically.",
+    "- Stage commands are stop points: after `/yolo-demand`, any demand compatibility alias, `/yolo-tasks`, `/yolo-spec`, or `/yolo-check`, report artifacts and ask for the next stage instead of continuing automatically.",
     "- `/yolo-brainstorm`, `/yolo-interview`, `/yolo-discover`, and `/yolo-discuss` are compatibility aliases; apply the same one-question, next_question, evidence, assumption, verification, and stage-stop rules as `/yolo-demand`.",
+    "- `/office-hours` is a hidden compatibility shim for `yolo demand --mode office-hours`; do not present it as a separate top-level command.",
+    "- If the host still exposes legacy non-demand aliases such as `/yolo-plan`, `/yolo-prd`, `/yolo-accept`, or `/yolo-ship`, route them to the matching stable command without presenting them as menu choices.",
     "- Keep audience separation: user-facing demand chat must not include evidence agent JSON role contracts; evidence dispatch prompts are only for provider sub-agents spawned by `yolo demand dispatch`.",
-    "- When unsure, use `/yolo-next` to read lifecycle state and follow the guard recommendation before selecting any downstream command.",
+    "- When unsure, use `/yolo-status` to read lifecycle state and follow the guard recommendation before selecting any downstream command.",
     "- Confirming a brainstorm, discussion, plan, PRD, or check is not permission to edit code; execution still requires `/yolo-run` or `/yolo-fix` with a checked PRD/fix scope.",
     "- Keep all changes scoped to the user's target project, not the YOLO package root.",
     "- Require explicit confirmation before code edits or user-level installs.",
@@ -432,12 +505,12 @@ function buildGenericCommandMarkdown(commandName, { yoloRoot = DEFAULT_YOLO_ROOT
     "- Use the `yolo` skill and installed workflow skills.",
     "- Do not ask the user to run terminal commands manually.",
     isDemandCompatibilityAlias(command)
-      ? `- This command is a compatibility alias for \`${demandAliasRoute(command)}\`; use the unified demand-stage protocol.`
+      ? `- This command is a compatibility alias for \`${demandAliasSlashRoute(command)}\` (CLI: \`${demandAliasRoute(command)}\`); use the unified demand-stage protocol.`
       : "- Follow this command's declared stage and lifecycle boundary.",
     ...demandHostRules(command),
     stageStopRule(command),
     executionApprovalRule(command),
-    "- Start plan-only unless this command explicitly requires checking or execution.",
+    "- Start with the selected no-code stage unless this command explicitly requires checking or execution.",
     `- ${command.safety}`,
     "- Stop and report blockers when a gate cannot pass.",
     "",
@@ -447,7 +520,7 @@ function buildGenericCommandMarkdown(commandName, { yoloRoot = DEFAULT_YOLO_ROOT
 export function buildCodexSourceCommandSkill(commandName, { yoloRoot = DEFAULT_YOLO_ROOT } = {}) {
   const command = getYoloCommand(commandName);
   const aliases = commandName === "yolo"
-    ? "`/yolo`, `/yolo plan`, `/yolo check`, `/yolo run`, or `/yolo review`"
+    ? "`/yolo`, `/yolo status`, `/yolo demand`, `/yolo tasks`, `/yolo check`, `/yolo run`, or `/yolo review`"
     : `\`/${commandName}\``;
 
   return [
@@ -475,15 +548,15 @@ export function buildCodexSourceCommandSkill(commandName, { yoloRoot = DEFAULT_Y
     "",
     "- Treat Codex chat as the user interface; do not ask the user to memorize terminal commands.",
     "- Use the `yolo` skill and installed YOLO workflow descriptors when they are available.",
-    "- If this is `/yolo` with freeform arguments, run `/yolo-next` when the safe stage is unclear; otherwise dispatch to `/yolo-demand`, `/yolo-plan`, `/yolo-prd`, `/yolo-check`, `/yolo-run`, `/yolo-review`, `/yolo-accept`, `/yolo-ship`, `/yolo-learn`, `/yolo-doctor`, or `/yolo-install` by intent.",
+    "- If this is `/yolo` with freeform arguments, run `/yolo-status` when the safe stage is unclear; otherwise dispatch to `/yolo-demand`, `/yolo-spec`, `/yolo-tasks`, `/yolo-check`, `/yolo-run`, `/yolo-review`, or `/yolo-release` by intent.",
     "- When routing to `/yolo-demand`, act as a demand interview host: if slots are missing, ask one `next_question`, do not output long recommendation lists, do not enter PRD, and do not edit code.",
-    "- If this is a legacy demand subcommand (`/yolo-brainstorm`, `/yolo-interview`, `/yolo-discover`, `/yolo-discuss`), treat it as `/yolo-demand --stage <stage>`.",
+    "- If this is a legacy demand subcommand (`/yolo-brainstorm`, `/yolo-interview`, `/yolo-discover`, `/yolo-discuss`, or `/office-hours`), treat it as `/yolo-demand --stage <stage>` or `yolo demand --mode office-hours`.",
     "- Keep user-facing demand chat separate from evidence dispatch: evidence agent JSON role contracts belong only in provider sub-agent prompts spawned by `yolo demand dispatch`.",
     "- If this is another explicit `/yolo-*` command, honor that stage and enforce that command's safety rules.",
     ...demandHostRules(command),
     stageStopRule(command),
     executionApprovalRule(command),
-    "- Default to plan-only, or `/yolo-next` when lifecycle state is unclear, when the user intent is ambiguous.",
+    "- Default to `/yolo-status` or a no-code demand/tasks stage when lifecycle state or user intent is ambiguous.",
     `- Safety: ${command.safety}`,
     "- Require explicit user confirmation before code edits, user-level installs, publishing, credentials, or billable provider execution.",
     "- Stop and report blockers when PRD, scope, tests, provider, or gates are weak or unavailable.",
@@ -531,7 +604,7 @@ export function buildCodexSlashCommandSkill(commandName, { yoloRoot = DEFAULT_YO
     commandName === "yolo"
       ? "- Treat `/yolo ...` as the fallback router when the user is not sure which stage to choose."
       : isDemandCompatibilityAlias(command)
-        ? `- Treat this as a compatibility alias for \`${demandAliasRoute(command)}\`; use the unified demand-stage protocol.`
+        ? `- Treat this as a compatibility alias for \`${demandAliasSlashRoute(command)}\` (CLI: \`${demandAliasRoute(command)}\`); use the unified demand-stage protocol.`
         : "- Treat this as an explicit stage command; explain the stage boundary before taking action.",
     ...demandHostRules(command),
     stageStopRule(command),
@@ -567,18 +640,21 @@ function nativeSkillFile({ projectRoot, homeDir, target, scope, yoloRoot }) {
 
 function commandFilesFor({ projectRoot, homeDir, target, scope, yoloRoot }) {
   const baseDir = scope === "user" ? homeDir : projectRoot;
+  const commands = installableSlashCommands();
   if (target === "claude") {
-    return DEFAULT_COMMANDS.map((command) => {
-      const path = join(baseDir, ".claude/commands", `${command}.md`);
+    return commands.map((command) => {
+      const commandName = command.slash_name;
+      const path = join(baseDir, ".claude/commands", `${commandName}.md`);
       return {
         target,
         scope,
         path,
         relative_path: displayRelativePath(baseDir, path, scope),
         role: "claude_slash_command",
-        command,
+        command: commandName,
+        registry_command: command.name,
         host_support: "native_claude_code_slash_command",
-        content: buildClaudeSlashCommand(command, { yoloRoot }),
+        content: buildClaudeSlashCommand(commandName, { yoloRoot }),
       };
     });
   }
@@ -586,17 +662,19 @@ function commandFilesFor({ projectRoot, homeDir, target, scope, yoloRoot }) {
   const commandDir = scope === "user"
     ? ".agents/skills/yolo/commands"
     : ".codex/skills/yolo/commands";
-  return DEFAULT_COMMANDS.map((command) => {
-    const path = join(baseDir, commandDir, `${command}.md`);
+  return commands.map((command) => {
+    const commandName = command.slash_name;
+    const path = join(baseDir, commandDir, `${commandName}.md`);
     return {
       target,
       scope,
       path,
       relative_path: displayRelativePath(baseDir, path, scope),
       role: "codex_skill_command_doc",
-      command,
+      command: commandName,
+      registry_command: command.name,
       host_support: "skill_discovery_command_alias",
-      content: buildGenericCommandMarkdown(command, { yoloRoot }),
+      content: buildGenericCommandMarkdown(commandName, { yoloRoot }),
     };
   });
 }
@@ -623,8 +701,7 @@ function legacyCodexCleanupFilesFor({ projectRoot, homeDir, scope }) {
   const baseDir = scope === "user" ? homeDir : projectRoot;
   const targetDir = scope === "user" ? ".agents/skills" : ".codex/skills";
   const backupRoot = codexBackupRootFor({ baseDir, scope });
-  return DEFAULT_COMMANDS
-    .filter((command) => command !== "yolo")
+  return legacyCodexCommandNames()
     .map((command) => {
       const relativePath = join(targetDir, `source-command-${command}`);
       return {
@@ -668,9 +745,7 @@ function legacyCodexDirectSlashSkillFilesFor({ projectRoot, homeDir, scope }) {
   const baseDir = scope === "user" ? homeDir : projectRoot;
   const targetDir = scope === "user" ? ".agents/skills" : ".codex/skills";
   const backupRoot = codexBackupRootFor({ baseDir, scope });
-  const directCommands = DEFAULT_COMMANDS.filter((command) =>
-    command !== "yolo" && !CODEX_DIRECT_SLASH_COMMANDS.includes(command)
-  );
+  const directCommands = legacyCodexCommandNames().filter((command) => !CODEX_DIRECT_SLASH_COMMANDS.includes(command));
   return directCommands.map((command) => {
     const relativePath = join(targetDir, command);
     return {

@@ -73,8 +73,20 @@ function collectAdapterEvidenceForRun({ prd, projectRoot, stateRoot, runId, inpu
       adapter_id: evidence.adapter?.id || null,
       artifact_file: evidence.artifact_file || null,
     }, { source: "runner-runtime" });
-  } catch {
-    // Preserve the adapter result even when optional ledger writing is unavailable.
+  } catch (error) {
+    evidence.status = "blocked";
+    evidence.code = "ADAPTER_EVIDENCE_LEDGER_WRITE_FAILED";
+    evidence.blockers = [
+      ...(Array.isArray(evidence.blockers) ? evidence.blockers : []),
+      {
+        code: "ADAPTER_EVIDENCE_LEDGER_WRITE_FAILED",
+        message: error?.message || "Adapter evidence ledger write failed.",
+      },
+    ];
+    evidence.next_actions = [
+      "Fix state ledger write permissions before treating adapter evidence as complete.",
+      ...(Array.isArray(evidence.next_actions) ? evidence.next_actions : []),
+    ];
   }
   return evidence;
 }
@@ -84,12 +96,28 @@ function numberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function runnerResultReport(result = {}) {
-  return result.run_report || result.runReport || result.report || null;
+function runnerResultReportArtifacts(result = {}) {
+  return {
+    json_path: result.report_file || result.report_json || result.reportJson || result.report_path || result.reportPath,
+    markdown_path: result.report_markdown || result.reportMarkdown || result.report_md || result.reportMd,
+    final_answer_json_path: result.final_answer_file || result.finalAnswerFile || result.final_answer_json || result.finalAnswerJson,
+    final_answer_markdown_path: result.final_answer_markdown || result.finalAnswerMarkdown || result.final_answer_md || result.finalAnswerMd,
+  };
 }
 
-function runnerResultFinalAnswer(result = {}) {
-  return result.final_answer || result.finalAnswer || null;
+function artifactJson(path, { projectRoot } = {}) {
+  if (!path) return null;
+  return readJsonMaybe(resolve(projectRoot || "", path));
+}
+
+function runnerResultReport(result = {}, context = {}) {
+  if (result.run_report || result.runReport || result.report) return result.run_report || result.runReport || result.report;
+  return artifactJson(runnerResultReportArtifacts(result).json_path, context);
+}
+
+function runnerResultFinalAnswer(result = {}, context = {}) {
+  if (result.final_answer || result.finalAnswer) return result.final_answer || result.finalAnswer;
+  return artifactJson(runnerResultReportArtifacts(result).final_answer_json_path, context);
 }
 
 function runnerResultExitCode(result = {}, verdict = {}) {
@@ -98,19 +126,22 @@ function runnerResultExitCode(result = {}, verdict = {}) {
   return verdict.status === "success" ? 0 : 1;
 }
 
-function normalizeRunnerResult(result = {}) {
+function normalizeRunnerResult(result = {}, context = {}) {
+  const artifacts = runnerResultReportArtifacts(result);
   const finalVerdict = buildRunFinalVerdict({
     taskResults: {
       ...result,
       contractReview: result.contractReview || result.contract_review || [],
     },
     runReportResult: {
-      report: runnerResultReport(result),
-      final_answer: runnerResultFinalAnswer(result),
+      ...artifacts,
+      report: runnerResultReport(result, context),
+      final_answer: runnerResultFinalAnswer(result, context),
       error: result.run_report_error || result.runReportError || result.report_error,
       errors: result.run_report_errors || result.runReportErrors || result.report_errors,
     },
     failOnSkippedIssues: true,
+    requireRunArtifacts: true,
   });
   const exitCode = runnerResultExitCode(result, finalVerdict);
   const status = exitCode === 0 && finalVerdict.status === "success" ? "success" : "error";
@@ -235,11 +266,11 @@ export async function runRunnerRuntime(input = {}, options = {}) {
       stateRoot,
       writeLifecycle,
     }, { learnFailures: true });
-    if (check.status === "blocked" || check.status === "error") {
+    if (check.status !== "pass") {
       return {
         status: "error",
         summary: check.summary,
-        exit_code: 1,
+        exit_code: check.status === "warning" ? 2 : 1,
         code: check.code || "YOLO_CHECK_BLOCKED",
         artifacts: check.artifacts || [resolvedPrdPath],
         preflight,
@@ -251,9 +282,9 @@ export async function runRunnerRuntime(input = {}, options = {}) {
 
     if (dryRun) {
       const response = {
-        status: "success",
+        status: "dry_run",
         summary: "runner dry-run preflight passed",
-        exit_code: 0,
+        exit_code: 2,
         code: "RUNNER_DRY_RUN_READY",
         dry_run: true,
         artifacts: [resolvedPrdPath],
@@ -287,7 +318,7 @@ export async function runRunnerRuntime(input = {}, options = {}) {
       initializeBaselines: input.initializeBaselines ?? input.initialize_baselines ?? options.initializeBaselines ?? options.initialize_baselines,
       exitOnComplete: false,
     });
-    const normalizedResult = normalizeRunnerResult(result);
+    const normalizedResult = normalizeRunnerResult(result, { projectRoot, stateRoot });
 
     const response = {
       status: normalizedResult.status,

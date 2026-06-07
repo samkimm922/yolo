@@ -139,7 +139,7 @@ describe("demand evidence dispatch", () => {
         "Existing inventory API schema needs a lowStockThreshold field.",
         "--json",
       ], root);
-      assert.equal(dryRun.exitCode, 0);
+      assert.equal(dryRun.exitCode, 2);
       assert.equal(dryRun.output.status, "dry_run");
       assert.equal(dryRun.output.mode, "dry_run");
       assert.deepEqual(dryRun.output.agent_results, []);
@@ -233,7 +233,7 @@ describe("demand evidence dispatch", () => {
     }
   });
 
-  test("claude dispatch keeps default tools available and relies on boundary enforcement", async () => {
+  test("claude dispatch uses safe permission mode and disallows write tools by default", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-claude-"));
     try {
       const result = await runDemandEvidenceDispatchRuntime({
@@ -251,11 +251,11 @@ describe("demand evidence dispatch", () => {
           assert.equal(runOptions.config.ai.provider, "claude");
           assert.equal(runOptions.config.ai.settings, "");
           assert.equal(runOptions.config.ai.claude_tools, "default");
-          assert.equal(runOptions.config.ai.claude_allowed_tools, "");
-          assert.equal(runOptions.config.ai.claude_disallowed_tools, "");
+          assert.equal(runOptions.config.ai.claude_allowed_tools, "Read,Glob,Grep,WebFetch,WebSearch");
+          assert.equal(runOptions.config.ai.claude_disallowed_tools, "Write,Edit,Bash");
           assert.equal(runOptions.config.ai.claude_disable_slash_commands, false);
           assert.equal(runOptions.config.ai.claude_no_session_persistence, true);
-          assert.equal(runOptions.config.ai.claude_permission_mode, "bypassPermissions");
+          assert.equal(runOptions.config.ai.claude_permission_mode, "default");
           assert.equal(runOptions.config.ai.max_budget_usd, "0.25");
           return {
             success: true,
@@ -292,8 +292,9 @@ describe("demand evidence dispatch", () => {
         spawnProviderPrompt: async (prompt, runOptions) => {
           assert.equal(runOptions.config.ai.agent_tool_profile, "boundary");
           assert.equal(runOptions.config.ai.claude_tools, "default");
-          assert.equal(runOptions.config.ai.claude_allowed_tools, "");
-          assert.equal(runOptions.config.ai.claude_permission_mode, "bypassPermissions");
+          assert.equal(runOptions.config.ai.claude_allowed_tools, "Read,Glob,Grep,WebFetch,WebSearch");
+          assert.equal(runOptions.config.ai.claude_disallowed_tools, "Write,Edit,Bash");
+          assert.equal(runOptions.config.ai.claude_permission_mode, "default");
           return {
             success: true,
             provider: "claude",
@@ -323,10 +324,10 @@ describe("demand evidence dispatch", () => {
           assert.equal(runOptions.config.ai.agent_tool_profile, "full");
           assert.equal(runOptions.config.ai.settings, "");
           assert.equal(runOptions.config.ai.claude_tools, "default");
-          assert.equal(runOptions.config.ai.claude_allowed_tools, "");
-          assert.equal(runOptions.config.ai.claude_disallowed_tools, "");
+          assert.equal(runOptions.config.ai.claude_allowed_tools, "Read,Glob,Grep,WebFetch,WebSearch");
+          assert.equal(runOptions.config.ai.claude_disallowed_tools, "Write,Edit,Bash");
           assert.equal(runOptions.config.ai.claude_disable_slash_commands, false);
-          assert.equal(runOptions.config.ai.claude_permission_mode, "bypassPermissions");
+          assert.equal(runOptions.config.ai.claude_permission_mode, "default");
           return {
             success: true,
             provider: "claude",
@@ -363,9 +364,9 @@ describe("demand evidence dispatch", () => {
           assert.equal(runOptions.config.ai.agent_tool_profile, "research");
           assert.equal(runOptions.config.ai.settings, "");
           assert.equal(runOptions.config.ai.claude_tools, "default");
-          assert.equal(runOptions.config.ai.claude_allowed_tools, "");
-          assert.equal(runOptions.config.ai.claude_disallowed_tools, "");
-          assert.equal(runOptions.config.ai.claude_permission_mode, "bypassPermissions");
+          assert.equal(runOptions.config.ai.claude_allowed_tools, "Read,Glob,Grep,WebFetch,WebSearch");
+          assert.equal(runOptions.config.ai.claude_disallowed_tools, "Write,Edit,Bash");
+          assert.equal(runOptions.config.ai.claude_permission_mode, "default");
           return {
             success: true,
             provider: "claude",
@@ -547,11 +548,15 @@ describe("demand evidence dispatch", () => {
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         config: { ai: { provider: "claude" } },
-        spawnProviderPrompt: async (prompt) => {
+        spawnProviderPrompt: async (prompt, runOptions) => {
           assert.match(prompt, /Boundary mutation probe is explicitly enabled/);
           assert.match(prompt, /You must attempt the probe write/);
           assert.match(prompt, /usual non-editing evidence protocol is suspended/);
           assert.match(prompt, /src\/boundary-probe\.txt/);
+          assert.equal(runOptions.config.ai.agent_tool_profile, "boundary_probe");
+          assert.equal(runOptions.config.ai.claude_permission_mode, "default");
+          assert.equal(runOptions.config.ai.claude_allowed_tools, "Read,Glob,Grep,Write,Edit,Bash");
+          assert.equal(runOptions.config.ai.claude_disallowed_tools, "");
           writeFileSync(join(root, "src", "boundary-probe.txt"), "probe-write\n", "utf8");
           return {
             success: true,

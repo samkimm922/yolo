@@ -222,8 +222,9 @@ describe("provider runtime matrix", () => {
       random: () => 0.5,
     });
 
-    assert.equal(result.blocks_execution, false);
-    assert.equal(result.status, "warning");
+    assert.equal(result.blocks_execution, true);
+    assert.equal(result.status, "blocked");
+    assert.ok(result.blockers.some((blocker) => blocker.code === "AGENT_BUDGET_NOT_ENFORCEABLE" && blocker.provider === "codex"));
     assert.equal(result.matrix.state_root, stateRoot);
     assert.equal(result.matrix.gate_log_dir, join(stateRoot, "state", "runtime"));
     assert.equal(result.matrix.providers.length, 3);
@@ -233,7 +234,8 @@ describe("provider runtime matrix", () => {
       now: () => 456,
       random: () => 0.5,
     });
-    assert.equal(dryRun.blocks_execution, false);
+    assert.equal(dryRun.blocks_execution, true);
+    assert.ok(dryRun.blockers.some((blocker) => blocker.code === "CLI_DRY_RUN_AGENT_BUDGET_NOT_ENFORCEABLE" && blocker.provider === "codex"));
     assert.equal(dryRun.matrix.state_root, stateRoot);
     assert.equal(dryRun.matrix.providers.find((entry) => entry.provider === "codex").will_spawn, false);
   });

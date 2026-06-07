@@ -11,7 +11,10 @@ import {
   buildLedgerRecord,
   EVIDENCE_ARTIFACT_SCHEMA,
   EVIDENCE_SCHEMA_VERSION,
+  evidenceArtifactDigest,
   LEDGER_EVENT_SCHEMA,
+  ledgerRecordHash,
+  validateLedgerChain,
   validateEvidenceArtifact,
   validateLedgerRecord,
   writeJsonArtifact,
@@ -38,15 +41,18 @@ describe("evidence ledger", () => {
         now: "2026-05-24T15:00:00.000Z",
       });
 
-      assert.deepEqual(payload, {
+      assert.deepEqual({ ...payload, record_hash: "<hash>" }, {
         schema_version: EVIDENCE_SCHEMA_VERSION,
         schema: LEDGER_EVENT_SCHEMA,
         ts: "2026-05-24T15:00:00.000Z",
         ledger: "state",
         event: "task_started",
         source: "yolo",
+        prev_hash: null,
         task_id: "FIX-P36-001",
+        record_hash: "<hash>",
       });
+      assert.equal(payload.record_hash, ledgerRecordHash(payload));
       assert.deepEqual(validateLedgerRecord(payload), { ok: true, errors: [] });
       assert.deepEqual(readJsonl(filePath), [payload]);
     } finally {
@@ -64,25 +70,33 @@ describe("evidence ledger", () => {
         now: "2026-05-24T15:00:01.000Z",
       });
 
-      assert.deepEqual(readJsonl(join(root, "events.jsonl")), [{
+      const stateEvents = readJsonl(join(root, "events.jsonl"));
+      const runEvents = readJsonl(join(root, "runs.jsonl"));
+      assert.deepEqual(stateEvents.map((entry) => ({ ...entry, record_hash: "<hash>" })), [{
         schema_version: EVIDENCE_SCHEMA_VERSION,
         schema: LEDGER_EVENT_SCHEMA,
         ts: "2026-05-24T15:00:00.000Z",
         ledger: "state",
         event: "gate_passed",
         source: "yolo",
+        prev_hash: null,
         task_id: "FIX-P36-001",
+        record_hash: "<hash>",
       }]);
-      assert.deepEqual(readJsonl(join(root, "runs.jsonl")), [{
+      assert.deepEqual(runEvents.map((entry) => ({ ...entry, record_hash: "<hash>" })), [{
         schema_version: EVIDENCE_SCHEMA_VERSION,
         schema: LEDGER_EVENT_SCHEMA,
         ts: "2026-05-24T15:00:01.000Z",
         ledger: "run",
         event: "run_end",
         source: "yolo",
+        prev_hash: null,
         passed: 1,
         failed: 0,
+        record_hash: "<hash>",
       }]);
+      assert.equal(stateEvents[0].record_hash, ledgerRecordHash(stateEvents[0]));
+      assert.equal(runEvents[0].record_hash, ledgerRecordHash(runEvents[0]));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -122,10 +136,47 @@ describe("evidence ledger", () => {
     assert.equal(record.schema_version, EVIDENCE_SCHEMA_VERSION);
     assert.equal(record.schema, LEDGER_EVENT_SCHEMA);
     assert.equal(record.source, "gate");
+    assert.equal(record.prev_hash, null);
+    assert.equal(record.record_hash, ledgerRecordHash(record));
     assert.deepEqual(validateLedgerRecord(record), { ok: true, errors: [] });
     assert.equal(artifact.schema_version, EVIDENCE_SCHEMA_VERSION);
     assert.equal(artifact.schema, EVIDENCE_ARTIFACT_SCHEMA);
     assert.equal(artifact.artifact_type, "gate.failure");
+    assert.equal(artifact.artifact_digest, evidenceArtifactDigest(artifact));
     assert.deepEqual(validateEvidenceArtifact(artifact), { ok: true, errors: [] });
+  });
+
+  test("appendJsonlRecord chains prev_hash and validateLedgerChain detects tampering", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+      const first = appendJsonlRecord(filePath, { event: "first" }, { now: "2026-05-24T15:00:00.000Z" });
+      const second = appendJsonlRecord(filePath, { event: "second" }, { now: "2026-05-24T15:00:01.000Z" });
+
+      assert.equal(second.prev_hash, first.record_hash);
+      assert.equal(validateLedgerChain(readJsonl(filePath)).status, "pass");
+
+      const tampered = [{ ...first, event: "changed" }, second];
+      const validation = validateLedgerChain(tampered);
+      assert.equal(validation.status, "fail");
+      assert.ok(validation.errors.some((error) => error.code === "LEDGER_RECORD_INVALID"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("validateLedgerChain can validate a retained ledger segment whose head points to archived records", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+      appendJsonlRecord(filePath, { event: "first" }, { now: "2026-05-24T15:00:00.000Z" });
+      const second = appendJsonlRecord(filePath, { event: "second" }, { now: "2026-05-24T15:00:01.000Z" });
+      const retained = [second];
+
+      assert.equal(validateLedgerChain(retained).status, "fail");
+      assert.equal(validateLedgerChain(retained, { allowExternalHead: true }).status, "pass");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

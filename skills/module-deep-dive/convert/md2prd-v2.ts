@@ -286,6 +286,13 @@ const prdId = fm.deep_dive_id
   : `PRD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-DEEP-DIVE`;
 
 const prdTitle = (md.match(/^#\s+(.+)$/m) || [])[1] || '未命名';
+const draftQuality = {
+  schema_version: '1.0',
+  schema: 'yolo.demand.quality.v1',
+  status: 'blocked',
+  total_score: 0,
+  dimensions: []
+};
 
 const prd = {
   $schema: 'https://yolo.dev/schemas/prd-v2.schema.json',
@@ -302,10 +309,34 @@ const prd = {
     lint_tool: tech.lint_tool || 'eslint',
     type_checker: tech.type_checker
   },
-  generated_by: 'module-deep-dive',
+  generated_by: 'other',
   generated_at: now,
   base_commit: baseCommit,
-  tasks,
+  source: 'module_deep_dive_draft',
+  execution_mode: 'draft',
+  demand_contract_required: true,
+  demand: {
+    id: prdId.replace(/^PRD-/, 'DEMAND-'),
+    source: 'module-deep-dive',
+    approval: {
+      approved: false,
+      effective_for_prd: false,
+      approval_source: 'pending_human_approval'
+    },
+    quality_report: draftQuality,
+    execution_readiness: {
+      quality_report: draftQuality
+    }
+  },
+  execution_readiness: {
+    level: 'draft',
+    afk_ready: false,
+    source: 'module_deep_dive_draft',
+    atomic_tasks: false,
+    quality_status: 'blocked',
+    quality_report: draftQuality
+  },
+  tasks: tasks.map(task => ({ ...task, status: 'needs_contract_review' })),
   defaults: {
     retry: { max_retries: 3, backoff_ms: 5000 },
     scope: {

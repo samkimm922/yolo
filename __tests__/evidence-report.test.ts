@@ -180,7 +180,7 @@ describe("evidence run report", () => {
       assert.equal(report.status, "success");
       assert.equal(report.summary.run_success_rate, 100);
       const finalAnswer = JSON.parse(readFileSync(result.final_answer_json_path, "utf8"));
-      assert.equal(finalAnswer.outcome, "completed");
+      assert.equal(finalAnswer.outcome, "success");
       assert.equal(finalAnswer.evidence.report_json, "reports/RUN-2/run-report.json");
       assert.match(readFileSync(result.markdown_path, "utf8"), /YOLO Run Report RUN-2/);
       assert.match(readFileSync(result.final_answer_markdown_path, "utf8"), /YOLO Final Answer RUN-2/);
@@ -238,6 +238,32 @@ describe("evidence run report", () => {
       assert.deepEqual(report.tasks.blocked, ["FIX-BLOCKED"]);
       assert.equal(report.summary.planned, 1);
       assert.equal(report.summary.task_success_rate, 0);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("buildRunReport fails empty task evidence instead of reporting success", () => {
+    const stateDir = tempStateDir();
+    try {
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-EMPTY",
+        taskResults: {
+          completed: [],
+          failed: [],
+          skipped: [],
+          blocked: [],
+        },
+        progressTotal: 0,
+      });
+
+      assert.equal(report.status, "error");
+      assert.equal(report.summary.planned, 0);
+      const finalAnswer = buildRunFinalAnswer(report);
+      assert.equal(finalAnswer.outcome, "needs_attention");
+      assert.ok(finalAnswer.blockers.some((blocker) => blocker.includes("no planned task evidence")));
+      assert.ok(finalAnswer.blockers.some((blocker) => blocker.includes("no terminal task evidence")));
     } finally {
       rmSync(stateDir, { recursive: true, force: true });
     }
@@ -459,6 +485,205 @@ describe("evidence run report", () => {
     } finally {
       rmSync(stateDir, { recursive: true, force: true });
     }
+  });
+
+  test("buildRunReport fails evidence integrity when ledger hash chain is invalid", () => {
+    const stateDir = tempStateDir();
+    try {
+      writeFileSync(join(stateDir, "events.jsonl"), `${JSON.stringify({
+        schema_version: "1.0",
+        schema: "yolo.ledger.event.v1",
+        ts: "2026-06-05T12:10:00.000Z",
+        ledger: "state",
+        event: "gate_passed",
+        source: "test",
+      })}\n`, "utf8");
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-BROKEN-LEDGER",
+        taskResults: {
+          completed: ["FIX-1"],
+          failed: [],
+          skipped: [],
+          blocked: [],
+        },
+        progressTotal: 1,
+      });
+
+      assert.equal(report.status, "error");
+      assert.equal(report.ledger.integrity.status, "fail");
+      assert.equal(report.ledger.integrity.error_count > 0, true);
+      assert.equal(report.summary.evidence_failures > 0, true);
+      const finalAnswer = buildRunFinalAnswer(report);
+      assert.ok(finalAnswer.blockers.some((blocker) => blocker.includes("evidence ledger integrity errors")));
+      assert.ok(finalAnswer.checks.some((check) => check.name === "evidence_integrity" && check.status === "fail"));
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("buildRunReport fails active ledger segments whose external head is not archived", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendStateEvent(stateDir, "run.note", {
+        run_id: "RUN-TRUNCATED",
+        status: "pass",
+      }, { now: "2026-06-05T12:20:00.000Z", source: "test" });
+      appendStateEvent(stateDir, "run.note", {
+        run_id: "RUN-TRUNCATED",
+        status: "pass",
+      }, { now: "2026-06-05T12:21:00.000Z", source: "test" });
+      const eventsPath = join(stateDir, "events.jsonl");
+      const lines = readFileSync(eventsPath, "utf8").trim().split("\n");
+      writeFileSync(eventsPath, `${lines[1]}\n`, "utf8");
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-TRUNCATED",
+        taskResults: {
+          completed: ["FIX-1"],
+          failed: [],
+          skipped: [],
+          blocked: [],
+        },
+        progressTotal: 1,
+      });
+
+      assert.equal(report.status, "error");
+      assert.equal(report.ledger.integrity.status, "fail");
+      assert.equal(report.ledger.integrity.state_chain.external_head_allowed, false);
+      assert.equal(report.summary.evidence_failures > 0, true);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("buildRunReport allows retained ledger heads only when archive proves the previous hash", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendStateEvent(stateDir, "run.note", {
+        run_id: "RUN-RETAINED",
+        status: "pass",
+      }, { now: "2026-06-05T12:30:00.000Z", source: "test" });
+      appendStateEvent(stateDir, "run.note", {
+        run_id: "RUN-RETAINED",
+        status: "pass",
+      }, { now: "2026-06-05T12:31:00.000Z", source: "test" });
+      const eventsPath = join(stateDir, "events.jsonl");
+      const lines = readFileSync(eventsPath, "utf8").trim().split("\n");
+      const archiveDir = join(stateDir, "archive", "jsonl", "2026-06");
+      mkdirSync(archiveDir, { recursive: true });
+      writeFileSync(join(archiveDir, "events.jsonl"), `${lines[0]}\n`, "utf8");
+      writeFileSync(eventsPath, `${lines[1]}\n`, "utf8");
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-RETAINED",
+        taskResults: {
+          completed: ["FIX-1"],
+          failed: [],
+          skipped: [],
+          blocked: [],
+        },
+        progressTotal: 1,
+      });
+
+      assert.equal(report.ledger.integrity.status, "pass");
+      assert.equal(report.ledger.integrity.state_chain.external_head_allowed, true);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("buildRunReport rejects state ledger heads proved only by run archives", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run.note", {
+        run_id: "RUN-CROSS-LEDGER",
+        status: "pass",
+      }, { now: "2026-06-05T12:40:00.000Z", source: "test" });
+      const runsPath = join(stateDir, "runs.jsonl");
+      const runLine = readFileSync(runsPath, "utf8").trim();
+      const archivedRunHash = JSON.parse(runLine).record_hash;
+      const archiveDir = join(stateDir, "archive", "jsonl", "2026-06");
+      mkdirSync(archiveDir, { recursive: true });
+      writeFileSync(join(archiveDir, "runs.jsonl"), `${runLine}\n`, "utf8");
+      writeFileSync(runsPath, "", "utf8");
+      appendStateEvent(stateDir, "run.note", {
+        run_id: "RUN-CROSS-LEDGER",
+        status: "pass",
+      }, { now: "2026-06-05T12:41:00.000Z", source: "test", prevHash: archivedRunHash });
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-CROSS-LEDGER",
+        taskResults: {
+          completed: ["FIX-1"],
+          failed: [],
+          skipped: [],
+          blocked: [],
+        },
+        progressTotal: 1,
+      });
+
+      assert.equal(report.ledger.integrity.status, "fail");
+      assert.equal(report.ledger.integrity.state_chain.external_head_allowed, false);
+      assert.equal(report.summary.evidence_failures > 0, true);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("buildRunReport rejects state records stored in archived run ledgers", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendStateEvent(stateDir, "run.note", {
+        run_id: "RUN-ARCHIVE-MISMATCH",
+        status: "pass",
+      }, { now: "2026-06-05T12:50:00.000Z", source: "test" });
+      appendStateEvent(stateDir, "run.note", {
+        run_id: "RUN-ARCHIVE-MISMATCH",
+        status: "pass",
+      }, { now: "2026-06-05T12:51:00.000Z", source: "test" });
+      const eventsPath = join(stateDir, "events.jsonl");
+      const lines = readFileSync(eventsPath, "utf8").trim().split("\n");
+      const archiveDir = join(stateDir, "archive", "jsonl", "2026-06");
+      mkdirSync(archiveDir, { recursive: true });
+      writeFileSync(join(archiveDir, "runs.jsonl"), `${lines[0]}\n`, "utf8");
+      writeFileSync(eventsPath, `${lines[1]}\n`, "utf8");
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-ARCHIVE-MISMATCH",
+        taskResults: {
+          completed: ["FIX-1"],
+          failed: [],
+          skipped: [],
+          blocked: [],
+        },
+        progressTotal: 1,
+      });
+
+      assert.equal(report.ledger.integrity.status, "fail");
+      assert.equal(report.ledger.integrity.state_chain.external_head_allowed, false);
+      assert.ok(report.ledger.integrity.archive_errors.some((issue) => issue.code === "ARCHIVE_LEDGER_MISMATCH"));
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("buildRunFinalAnswer treats explicit not-run checks as needs attention", () => {
+    const finalAnswer = buildRunFinalAnswer({
+      run_id: "RUN-NOT-RUN",
+      status: "success",
+      summary: { planned: 1, completed: 1, failed: 0, skipped: 0, blocked: 0, evidence_failures: 0 },
+      tasks: { completed: ["FIX-1"], failed: [], skipped: [], blocked: [] },
+      fixtures: { status: "not_run", run_count: 0 },
+    });
+
+    assert.equal(finalAnswer.outcome, "needs_attention");
+    assert.ok(finalAnswer.blockers.some((blocker) => blocker.includes("fixtures check is not_run")));
   });
 
 });

@@ -17,6 +17,7 @@ import {
 import {
   autoFixErrorFallback,
   buildReviewScannerArgs,
+  inspectReviewScannerCoverage,
   normalizeAutoFixResult,
   parseReviewFindings,
   scannerFailureDiagnostic,
@@ -212,9 +213,38 @@ export async function runReviewLoop({
       reviewFailCount = 0;
       pendingReviewFailureOutcome = null;
 
+      const coverageState = inspectReviewScannerCoverage(scanResult, findings);
+      if (!findings.length && coverageState.blocks_execution) {
+        logProgress("REVIEW", "BLOCKED", coverageState.message);
+        logReviewError("Scanner coverage 不完整", coverageState.message, reviewLogMeta({
+          round,
+          phase: coverageState.reason === "scanner_coverage_incomplete"
+            ? "REVIEW_SCANNER_COVERAGE_INCOMPLETE"
+            : "REVIEW_SCANNER_COVERAGE_MISSING",
+          blockers: coverageState.blockers,
+        }));
+        recordReviewOutcome({
+          id: coverageState.reason === "scanner_coverage_incomplete"
+            ? "REVIEW-SCANNER-COVERAGE-INCOMPLETE"
+            : "REVIEW-SCANNER-COVERAGE-MISSING",
+          status: "blocked",
+          reason: coverageState.reason,
+          message: coverageState.message,
+          meta: {
+            round,
+            phase: coverageState.reason === "scanner_coverage_incomplete"
+              ? "REVIEW_SCANNER_COVERAGE_INCOMPLETE"
+              : "REVIEW_SCANNER_COVERAGE_MISSING",
+            missing_fields: coverageState.missing_fields || [],
+            blockers: coverageState.blockers,
+          },
+        });
+        break;
+      }
+
       if (!findings.length) {
         logProgress("REVIEW", "", "无新发现，review 完成");
-        logReviewDone("pass", 0, 0, reviewLogMeta({ round, status: "clean" }));
+        logReviewDone("pass", 0, 0, reviewLogMeta({ round, status: "clean", coverage: coverageState.coverage }));
         reviewCompleted = true;
         break;
       }
@@ -233,8 +263,8 @@ export async function runReviewLoop({
 
       const { autoFixTasks, claudeFixTasks, infoCount } = classified;
       let reviewToPrdTasks = [];
+      const contractFindings = contractReviewFindings(findings);
       try {
-        const contractFindings = contractReviewFindings(findings);
         if (contractFindings.length > 0) {
           const { reviewFindingsToPrdTasks } = await importFromRoot(yoloRoot, "src/review/findings-to-tasks.js");
           const converted = reviewFindingsToPrdTasks(contractFindings, {
@@ -248,6 +278,42 @@ export async function runReviewLoop({
         }
       } catch (e) {
         logProgress("REVIEW", "review-to-prd", `转换失败: ${e.message}`);
+        if (contractFindings.length > 0) {
+          const targets = [...new Set(contractFindings.flatMap((finding) =>
+            (finding.files || [finding.file]).filter(Boolean).map((file) => String(file).replace(/:\d+$/, "")),
+          ))].map((file) => ({ file }));
+          reviewToPrdTasks = [{
+            id: `FIX-R${round}-CONVERSION-FAILED`,
+            title: "[review] Preserve blocking findings after conversion failure",
+            type: "bugfix",
+            priority: "P1",
+            status: "pending",
+            depends_on: [],
+            scope: { targets },
+            pre_conditions: [],
+            post_conditions: [],
+            acceptance_criteria: [
+              "Resolve or manually convert the preserved review findings before ship.",
+              "Attach evidence that the original findings were handled.",
+            ],
+            description: [
+              `reviewFindingsToPrdTasks failed: ${e.message}`,
+              ...contractFindings.map((finding) => `- [${finding.severity || "MEDIUM"}] ${finding.finding_id || finding.id || finding.code || "review-finding"} ${finding.message || finding.description || ""}`),
+            ].join("\n"),
+            source_findings: contractFindings,
+            blocks_ship: true,
+            review_conversion_failed: {
+              message: e.message,
+              preserved_finding_count: contractFindings.length,
+            },
+          }];
+          logReviewError("review finding 转换失败", e.message, reviewLogMeta({
+            round,
+            phase: "REVIEW_FINDING_CONVERSION_FAILED",
+            preserved_finding_count: contractFindings.length,
+            generated_task_id: reviewToPrdTasks[0].id,
+          }));
+        }
       }
 
       logProgress("REVIEW", "", `${autoFixTasks.length} AUTO_FIX, ${claudeFixTasks.length + reviewToPrdTasks.length} CLAUDE_FIX, ${infoCount} INFO`);

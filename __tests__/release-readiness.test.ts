@@ -1,5 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   inspectPackageReadiness,
@@ -105,5 +106,20 @@ describe("release readiness", () => {
     assert.ok(result.checks.some((item) => item.code === "YOLO_RELIABILITY_INCIDENT_EVIDENCE_PRESENT" && item.passed === false));
     assert.ok(result.blockers.some((item) => item.code === "YOLO_RELIABILITY_INCIDENT_COVERAGE"));
     assert.ok(result.blockers.some((item) => item.code === "PACKAGE_PRIVATE_RELEASE_BLOCK"));
+  });
+
+  test("release docs keep manual external, billable, public dogfood, and private blockers explicit", () => {
+    const docs = [
+      "docs/api-reference.md",
+      "docs/public-sdk-contract.md",
+      "ROADMAP.md",
+      "SYSTEM_STATE.md",
+    ].map((relativePath) => readFileSync(resolve(YOLO_DIR, relativePath), "utf8")).join("\n");
+
+    assert.match(docs, /private: true/);
+    assert.match(docs, /manual external|external publish/i);
+    assert.match(docs, /billable provider|billable execution/i);
+    assert.match(docs, /public dogfood/i);
+    assert.doesNotMatch(docs, /release-ready now|ready for public release|stable release is ready/i);
   });
 });

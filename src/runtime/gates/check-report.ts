@@ -85,6 +85,12 @@ function aggregateStatus(checks = []) {
   return "pass";
 }
 
+function checkExitCode(status) {
+  if (status === "pass") return 0;
+  if (status === "warning") return 2;
+  return 1;
+}
+
 function checkRecord(name, status, summary, details = {}) {
   return {
     name,
@@ -256,6 +262,12 @@ function demandContractReadiness({ prd, projectRoot, strictExecution }) {
     }
     if (demand && demand.approval?.approved !== true) {
       blockers.push({ code: "DEMAND_APPROVAL_MISSING", message: "Executable PRD must include explicit demand approval." });
+    } else if (demand && demand.approval?.effective_for_prd !== true) {
+      blockers.push({
+        code: "DEMAND_APPROVAL_NOT_EFFECTIVE_FOR_PRD",
+        message: "Executable PRD demand approval must be explicitly effective for PRD execution.",
+        human_needed: true,
+      });
     }
     if (executionReadiness.level !== "L3" || executionReadiness.afk_ready !== true) {
       blockers.push({ code: "DEMAND_NOT_L3_EXECUTABLE", message: "Executable PRD must declare L3 AFK-ready demand readiness." });
@@ -612,7 +624,7 @@ export function inspectYoloCheck(input = {}, options = {}) {
     summary: status === "blocked"
       ? "Strict check found remediation work; automation can continue only through the planned remediation route."
       : status === "warning"
-        ? "Strict check passed with warnings; warnings are recorded but do not block automation."
+        ? "Strict check produced warnings; automation is blocked until the warnings are reviewed or remediated."
         : "Strict check passed.",
   });
   const report = {
@@ -620,7 +632,7 @@ export function inspectYoloCheck(input = {}, options = {}) {
     schema: YOLO_CHECK_REPORT_SCHEMA,
     status,
     code: status === "blocked" ? "YOLO_CHECK_BLOCKED" : status === "warning" ? "YOLO_CHECK_WARNING" : "YOLO_CHECK_PASS",
-    summary: status === "pass" ? "YOLO check passed; PRD is ready for gated execution." : status === "warning" ? "YOLO check passed with warnings." : "YOLO check blocked execution.",
+    summary: status === "pass" ? "YOLO check passed; PRD is ready for gated execution." : status === "warning" ? "YOLO check blocked by warnings." : "YOLO check blocked execution.",
     generated_at: nowIso(),
     prd_path: resolvedPrdPath,
     project_root: projectRoot,
@@ -645,15 +657,15 @@ export function inspectYoloCheck(input = {}, options = {}) {
       gate_strength: "strict",
       remediation_mode: "blocking_when_execution_unsafe",
       ship_gate: "fail_closed",
-      automation_can_continue: status === "blocked" ? false : remediationPlan.automation_can_continue,
-      human_needed: remediationPlan.requires_human || blockers.some((blocker) => blocker.human_needed === true) || blockingWarnings.length > 0,
+      automation_can_continue: status === "pass" ? remediationPlan.automation_can_continue : false,
+      human_needed: status !== "pass" || remediationPlan.requires_human || blockers.some((blocker) => blocker.human_needed === true) || blockingWarnings.length > 0,
     },
     remediation_plan: remediationPlan,
     artifacts: [resolvedPrdPath],
     next_actions: blockers.length > 0
       ? remediationPlan.next_actions
       : status === "warning"
-        ? ["Review warnings, then continue only if the scope is still safe."]
+        ? ["Review or remediate warnings before continuing automation."]
         : ["Run /yolo-run only after user approval."],
   };
 
@@ -718,7 +730,7 @@ export function runYoloCheckCli(argv = process.argv.slice(2), io = {}) {
   const report = inspectYoloCheck({ prdPath, projectRoot: io.cwd || process.cwd(), mode, strictExecution, writeLifecycle }, { learnFailures: true });
   if (json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else (report.status === "error" ? stderr : stdout).write(`${formatYoloCheckText(report)}\n`);
-  return report.status === "blocked" || report.status === "error" ? 1 : 0;
+  return checkExitCode(report.status);
 }
 
 if (isMain) {

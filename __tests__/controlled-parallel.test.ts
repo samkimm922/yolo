@@ -5,6 +5,7 @@ import {
   detectParallelConflicts,
   formatControlledParallelPlanText,
   inspectParallelMergeGate,
+  inspectParallelWaveStartGate,
   mergeParallelEvidence,
   planControlledParallelWaves,
 } from "../src/runtime/parallel/wave-planner.js";
@@ -38,12 +39,16 @@ describe("controlled parallel execution planner", () => {
       ["task-a", "task-c"],
       ["task-b"],
     ]);
+    assert.equal(plan.execution_status, "blocked");
+    assert.equal(plan.waves[0].start_gate.status, "pass");
+    assert.equal(plan.waves[1].start_gate.status, "blocked");
+    assert.ok(plan.execution_blockers.some((blocker) => blocker.code === "PARALLEL_PREVIOUS_WAVE_NOT_PASSED"));
     assert.equal(plan.waves[0].worktrees[0].path, "/tmp/worktrees/task-a");
     assert.equal(plan.waves[0].merge_gate.fail_closed, true);
     assert.match(formatControlledParallelPlanText(plan), /wave-01: task-a, task-c/);
   });
 
-  test("keeps dependency successors out of the predecessor wave", () => {
+  test("does not schedule dependency successors without prior pass evidence", () => {
     const plan = planControlledParallelWaves({
       tasks: [
         { id: "setup", files: ["src/setup.ts"] },
@@ -52,11 +57,52 @@ describe("controlled parallel execution planner", () => {
       ],
     });
 
-    assert.equal(plan.status, "pass");
-    const setupWave = plan.waves.find((wave) => wave.task_ids.includes("setup"));
-    const featureWave = plan.waves.find((wave) => wave.task_ids.includes("feature"));
-    assert.ok(setupWave.index < featureWave.index);
+    assert.equal(plan.status, "blocked");
+    assert.equal(plan.waves.some((wave) => wave.task_ids.includes("feature")), false);
+    assert.ok(plan.blockers.some((blocker) => blocker.code === "TASK_DEPENDENCY_CYCLE_OR_BLOCKED" && blocker.task_id === "feature"));
     assert.equal(plan.graph.edges.some((edge) => edge.from === "setup" && edge.to === "feature"), true);
+  });
+
+  test("schedules dependency successors only after dependency pass evidence", () => {
+    const plan = planControlledParallelWaves({
+      tasks: [
+        { id: "setup", status: "completed", files: ["src/setup.ts"] },
+        { id: "feature", depends_on: ["setup"], files: ["src/feature.ts"] },
+      ],
+      completedTaskIds: ["setup"],
+    });
+
+    assert.equal(plan.status, "pass");
+    assert.equal(plan.execution_status, "pass");
+    assert.deepEqual(plan.waves.map((wave) => wave.task_ids), [["feature"]]);
+    assert.equal(plan.waves[0].start_gate.status, "pass");
+  });
+
+  test("wave start gate blocks later waves until previous merge evidence passes", () => {
+    const plan = planControlledParallelWaves({
+      tasks: [
+        { id: "task-a", files: ["src/a.ts"] },
+        { id: "task-b", files: ["src/a.ts"] },
+      ],
+    });
+
+    const blocked = inspectParallelWaveStartGate({ plan, wave: plan.waves[1], tasks: [
+      { id: "task-a", files: ["src/a.ts"] },
+      { id: "task-b", files: ["src/a.ts"] },
+    ] });
+    assert.equal(blocked.status, "blocked");
+    assert.ok(blocked.blockers.some((blocker) => blocker.code === "PARALLEL_PREVIOUS_WAVE_NOT_PASSED"));
+
+    const passed = inspectParallelWaveStartGate({
+      plan,
+      wave: plan.waves[1],
+      tasks: [
+        { id: "task-a", files: ["src/a.ts"] },
+        { id: "task-b", files: ["src/a.ts"] },
+      ],
+      passedWaveIds: ["wave-01"],
+    });
+    assert.equal(passed.status, "pass");
   });
 
   test("fails closed on missing dependencies", () => {

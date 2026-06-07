@@ -586,7 +586,7 @@ export async function runYoloBenchmarkCli(argv = [], io = {}) {
   });
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else stdout.write(`${formatYoloBenchmarkText(report)}\n`);
-  return report.status === "blocked" ? 1 : 0;
+  return report.status === "pass" ? 0 : report.status === "warning" ? 2 : 1;
 }
 
 if (isMain) {

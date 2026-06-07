@@ -9,6 +9,7 @@ import {
   parseGitNameStatusEntries,
   parseGitStatusEntries,
 } from "../src/runtime/execution/worktree-session.js";
+import { baselineArtifactHash } from "../src/runtime/execution/baselines.js";
 
 describe("worktree execution session helpers", () => {
   test("scope helpers allow explicit targets and sibling new files only when requested", () => {
@@ -111,12 +112,15 @@ describe("worktree execution session helpers", () => {
     assert.ok(commands.some((command) => command.includes("git worktree add --detach")));
     assert.ok(commands.some((command) => command.includes("checkout -b")));
     assert.ok(mkdirs.includes("/repo/.yolo-worktrees"));
-    assert.deepEqual(JSON.parse(writes.get("/repo/.yolo-worktrees/FIX-1/scripts/yolo/state/runtime/tsc-baseline.json")), {
-      keys: ["src/a.ts:1:TS1000"],
-    });
-    assert.deepEqual(JSON.parse(writes.get("/repo/.yolo-worktrees/FIX-1/scripts/yolo/state/runtime/eslint-baseline.json")), {
-      keys: ["src/a.ts:2:semi"],
-    });
+    const tscBaseline = JSON.parse(writes.get("/repo/.yolo-worktrees/FIX-1/scripts/yolo/state/runtime/tsc-baseline.json"));
+    const eslintBaseline = JSON.parse(writes.get("/repo/.yolo-worktrees/FIX-1/scripts/yolo/state/runtime/eslint-baseline.json"));
+    assert.deepEqual(tscBaseline.keys, ["src/a.ts:1:TS1000"]);
+    assert.equal(tscBaseline.meta.command, "tsc");
+    assert.equal(tscBaseline.meta.exit_code, 0);
+    assert.equal(tscBaseline.meta.artifact_hash, baselineArtifactHash(tscBaseline));
+    assert.deepEqual(eslintBaseline.keys, ["src/a.ts:2:semi"]);
+    assert.equal(eslintBaseline.meta.command, "eslint");
+    assert.equal(eslintBaseline.meta.artifact_hash, baselineArtifactHash(eslintBaseline));
   });
 
   test("createTaskWorktree falls back to a filesystem copy outside a git worktree", () => {

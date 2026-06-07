@@ -1,8 +1,8 @@
 import { existsSync as defaultExistsSync, readFileSync as defaultReadFileSync } from "node:fs";
-import { spawn as defaultSpawn } from "node:child_process";
+import { spawn as defaultSpawn, spawnSync } from "node:child_process";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { normalizeAgentProvider } from "../adapters/agent-contract.js";
+import { inspectAgentAdapterContract, normalizeAgentProvider } from "../adapters/agent-contract.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 export const YOLO_PACKAGE_ROOT = resolve(MODULE_DIR, "../../..");
@@ -38,6 +38,61 @@ function providerRunReason(status, verification = null) {
   if (status === "verification_failed") return verification?.reason || "provider_verification_failed";
   if (status === "failed") return "provider_exit_failed";
   return null;
+}
+
+function defaultCommandExists(command) {
+  const executable = cleanString(command);
+  if (!executable) return false;
+  const result = spawnSync("sh", ["-c", "command -v \"$1\"", "sh", executable], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  return result.status === 0;
+}
+
+function preflightReason(blockers = []) {
+  const codes = blockers.map((blocker) => blocker.code);
+  if (codes.includes("CLAUDE_SETTINGS_FILE_MISSING")) return "claude_settings_missing";
+  if (codes.includes("AGENT_COMMAND_MISSING")) return "agent_command_missing";
+  if (codes.includes("AGENT_COMMAND_UNAVAILABLE")) return "agent_command_unavailable";
+  if (codes.includes("PROVIDER_INVOCATION_COMMAND_UNAVAILABLE")) return "provider_command_unavailable";
+  if (codes.includes("AGENT_PERMISSION_UNSAFE")) return "agent_permission_unsafe";
+  if (codes.includes("AGENT_SANDBOX_UNSAFE")) return "agent_sandbox_unsafe";
+  if (codes.includes("AGENT_BUDGET_NOT_ENFORCEABLE")) return "agent_budget_not_enforceable";
+  if (codes.includes("AGENT_ALLOWED_ROOTS_MISSING") || codes.includes("AGENT_ROOT_POLICY_MISSING")) return "agent_root_policy_missing";
+  if (codes.includes("PROVIDER_INVOCATION_BUILD_FAILED")) return "provider_invocation_build_failed";
+  return "provider_preflight_blocked";
+}
+
+function blockedProviderRun({
+  provider,
+  command = null,
+  blockers = [],
+  inspection = null,
+  preflight = null,
+} = {}) {
+  const nowMs = Date.now();
+  const detail = blockers.map((blocker) => blocker.message || blocker.code).filter(Boolean).join("\n");
+  const run = {
+    success: false,
+    status: "blocked",
+    provider,
+    command,
+    exitCode: null,
+    signal: null,
+    stdout: "",
+    stderr: detail,
+    timedOut: false,
+    blocked: true,
+    reason: preflightReason(blockers),
+    adapter_contract_inspection: inspection,
+    preflight,
+    startedAtMs: nowMs,
+    endedAtMs: nowMs,
+    durationMs: 0,
+  };
+  run.attempt_ledger = [buildProviderAttemptLedgerEntry(run)];
+  return run;
 }
 
 export function classifyProviderRunStatus({
@@ -180,8 +235,22 @@ function settingsValue(rootDir, value, options = {}) {
   return resolveClaudeSettings(rootDir, value, options).value;
 }
 
-export function inspectProviderInvocationPreflight(invocation = {}, { existsSync = defaultExistsSync } = {}) {
+export function inspectProviderInvocationPreflight(invocation = {}, {
+  existsSync = defaultExistsSync,
+  commandExists = null,
+} = {}) {
   const blockers = [];
+  if (invocation.command && typeof commandExists === "function") {
+    const exists = commandExists(invocation.command);
+    if (exists === false) {
+      blockers.push({
+        code: "PROVIDER_INVOCATION_COMMAND_UNAVAILABLE",
+        provider: invocation.provider,
+        command: invocation.command,
+        message: "provider invocation command is not available",
+      });
+    }
+  }
   if (invocation.provider === "claude" && invocation.settingsFile) {
     if (!existsSync(invocation.settingsFile)) {
       blockers.push({
@@ -293,6 +362,7 @@ export function spawnProviderPrompt(prompt, {
   detectModelProvider,
   killTree,
   spawnImpl = defaultSpawn,
+  commandExists = defaultCommandExists,
   existsSync = defaultExistsSync,
   readFileSync = defaultReadFileSync,
   packageRoot = YOLO_PACKAGE_ROOT,
@@ -301,31 +371,59 @@ export function spawnProviderPrompt(prompt, {
   if (!rootDir) throw new Error("spawnProviderPrompt requires rootDir");
   if (!runtimeDir) throw new Error("spawnProviderPrompt requires runtimeDir");
   const workDir = cwd || rootDir;
-  const provider = selectedProvider(detectModelProvider ? detectModelProvider() : "claude");
-  const invocation = buildProviderInvocation({ provider, config, workDir, rootDir, runtimeDir, packageRoot });
-  const preflight = inspectProviderInvocationPreflight(invocation, { existsSync });
-  if (preflight.blocks_execution) {
-    const detail = preflight.blockers.map((blocker) => blocker.message).join("\n");
-    const nowMs = Date.now();
-    const blockedRun = {
-      success: false,
-      status: "blocked",
+  const providerDetection = detectModelProvider ? detectModelProvider() : null;
+  const provider = selectedProvider(providerDetection || config.ai?.executor || config.ai?.provider || "claude");
+  const inspection = inspectAgentAdapterContract({
+    config,
+    provider,
+    providerDetection: providerDetection && typeof providerDetection === "object" ? providerDetection : undefined,
+    commandExists,
+    rootDir,
+    workDir,
+    runtimeDir,
+    timeoutMs: timeout,
+  });
+  let invocation;
+  try {
+    invocation = buildProviderInvocation({ provider, config, workDir, rootDir, runtimeDir, packageRoot });
+  } catch (error) {
+    return Promise.resolve(blockedProviderRun({
+      provider,
+      command: inspection.contract?.command || null,
+      blockers: [
+        ...(inspection.blockers || []),
+        {
+          code: "PROVIDER_INVOCATION_BUILD_FAILED",
+          provider,
+          message: error?.message || String(error),
+        },
+      ],
+      inspection,
+      preflight: {
+        status: "blocked",
+        blocks_execution: true,
+        blockers: [{
+          code: "PROVIDER_INVOCATION_BUILD_FAILED",
+          provider,
+          message: error?.message || String(error),
+        }],
+        warnings: [],
+      },
+    }));
+  }
+  const preflight = inspectProviderInvocationPreflight(invocation, { existsSync, commandExists });
+  const blockers = [
+    ...(inspection.blockers || []),
+    ...(preflight.blockers || []),
+  ];
+  if (inspection.blocks_execution || preflight.blocks_execution) {
+    return Promise.resolve(blockedProviderRun({
       provider,
       command: invocation.command,
-      exitCode: null,
-      signal: null,
-      stdout: "",
-      stderr: detail,
-      timedOut: false,
-      blocked: true,
-      reason: "claude_settings_missing",
+      blockers,
+      inspection,
       preflight,
-      startedAtMs: nowMs,
-      endedAtMs: nowMs,
-      durationMs: 0,
-    };
-    blockedRun.attempt_ledger = [buildProviderAttemptLedgerEntry(blockedRun)];
-    return Promise.resolve(blockedRun);
+    }));
   }
 
   return new Promise((resolveRun) => {

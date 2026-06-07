@@ -4,6 +4,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { inspectYoloCheck, runYoloCheckCli } from "../src/runtime/gates/check-report.js";
+import { runYoloCli } from "../src/cli/yolo.js";
+import { initLifecycleState } from "../src/lifecycle/state.js";
 
 function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-check-report-"));
@@ -186,6 +188,71 @@ describe("yolo check report", () => {
     }
   });
 
+  test("advisory warning reports return CLI exit 2 instead of success", () => {
+    const root = tempProject();
+    let stdout = "";
+    let stderr = "";
+    try {
+      const prdPath = join(root, "legacy-prd.json");
+      initLifecycleState({ projectRoot: root });
+      writeJson(prdPath, strictPrd({}, {
+        source: undefined,
+        demand_contract_required: undefined,
+        demand: undefined,
+        execution_readiness: undefined,
+      }));
+
+      const exitCode = runYoloCheckCli([prdPath, "--mode=advisory", "--json", "--no-write"], {
+        cwd: root,
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      const report = JSON.parse(stdout);
+
+      assert.equal(exitCode, 2);
+      assert.equal(stderr, "");
+      assert.equal(report.status, "warning");
+      assert.equal(report.summary, "YOLO check blocked by warnings.");
+      assert.equal(report.execution_policy.automation_can_continue, false);
+      assert.equal(report.remediation_plan.automation_can_continue, false);
+      assert.equal(report.remediation_plan.requires_human, true);
+      assert.match(report.remediation_plan.summary, /automation is blocked/);
+      assert.ok(report.warnings.some((warning) => warning.code === "DEMAND_CONTRACT_MISSING"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("root yolo check exits 2 for warning reports", async () => {
+    const root = tempProject();
+    let stdout = "";
+    let stderr = "";
+    try {
+      const prdPath = join(root, "legacy-prd.json");
+      initLifecycleState({ projectRoot: root });
+      writeJson(prdPath, strictPrd({}, {
+        source: undefined,
+        demand_contract_required: undefined,
+        demand: undefined,
+        execution_readiness: undefined,
+      }));
+
+      const exitCode = await runYoloCli(["check", prdPath, "--mode=advisory", "--cwd", root, "--json", "--no-write"], {
+        cwd: root,
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      const report = JSON.parse(stdout);
+
+      assert.equal(exitCode, 2);
+      assert.equal(stderr, "");
+      assert.equal(report.status, "warning");
+      assert.equal(report.execution_policy.automation_can_continue, false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("YB-001 blocks runner check when the demand contract is missing", () => {
     const root = tempProject();
     try {
@@ -269,7 +336,7 @@ describe("yolo check report", () => {
         demand_contract_required: true,
         demand: {
           id: "DEMAND-CHECK",
-          approval: { approved: true },
+          approval: { approved: true, effective_for_prd: true },
           quality_report: {
             schema_version: "1.0",
             schema: "yolo.demand.quality.v1",
@@ -308,7 +375,7 @@ describe("yolo check report", () => {
     }
   });
 
-  test("blocks approved-demand PRDs with project facts outside the project root", () => {
+  test("blocks approved-demand PRDs when approval is not effective for PRD execution", () => {
     const root = tempProject();
     try {
       const prdPath = join(root, "prd.json");
@@ -319,6 +386,54 @@ describe("yolo check report", () => {
         demand: {
           id: "DEMAND-CHECK",
           approval: { approved: true, effective_for_prd: false },
+          project_facts: {
+            target_files: [{ file: "src/a.js", status: "verified" }],
+            assumptions: [],
+          },
+          quality_report: {
+            schema_version: "1.0",
+            schema: "yolo.demand.quality.v1",
+            status: "pass",
+            total_score: 100,
+            dimensions: [],
+          },
+        },
+        execution_readiness: {
+          level: "L3",
+          afk_ready: true,
+          quality_status: "pass",
+          quality_report: {
+            schema_version: "1.0",
+            schema: "yolo.demand.quality.v1",
+            status: "pass",
+            total_score: 100,
+            dimensions: [],
+          },
+        },
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root });
+      const demandContract = report.checks.find((check) => check.name === "demand_contract");
+
+      assert.equal(report.status, "blocked");
+      assert.equal(demandContract.status, "blocked");
+      assert.ok(report.blockers.some((blocker) => blocker.code === "DEMAND_APPROVAL_NOT_EFFECTIVE_FOR_PRD" && blocker.human_needed === true));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks approved-demand PRDs with project facts outside the project root", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({}, {
+        generated_by: "yolo-demand",
+        source: "approved_demand",
+        demand_contract_required: true,
+        demand: {
+          id: "DEMAND-CHECK",
+          approval: { approved: true, effective_for_prd: true },
           project_facts: {
             target_files: [{ file: "/tmp/outside-project.js", status: "verified" }],
             assumptions: [],

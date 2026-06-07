@@ -16,31 +16,102 @@ function countFiles(root, predicate) {
   return count;
 }
 
+function countRootFiles(root, predicate) {
+  return readdirSync(root)
+    .map((entry) => join(root, entry))
+    .filter((path) => statSync(path).isFile() && predicate(path))
+    .length;
+}
+
 function lineCount(filePath) {
   return readFileSync(filePath, "utf8").split("\n").length - 1;
 }
 
+function repoTruth() {
+  const packageJson = JSON.parse(readFileSync(join(YOLO_DIR, "package.json"), "utf8"));
+  return {
+    packageJson,
+    srcModules: countFiles(join(YOLO_DIR, "src"), (path) => path.endsWith(".ts")),
+    testFiles: countFiles(join(YOLO_DIR, "__tests__"), (path) => path.endsWith(".test.ts")),
+    docsMarkdown: countFiles(join(YOLO_DIR, "docs"), (path) => path.endsWith(".md")),
+    rootTs: countRootFiles(YOLO_DIR, (path) => path.endsWith(".ts")),
+    rootJs: countRootFiles(YOLO_DIR, (path) => path.endsWith(".js")),
+    runnerLines: lineCount(join(YOLO_DIR, "runner.ts")),
+    runnerCoreLines: lineCount(join(YOLO_DIR, "src/runtime/runner-core.ts")),
+    exportCount: Object.keys(packageJson.exports).length,
+    binCount: Object.keys(packageJson.bin).length,
+  };
+}
+
 describe("docs truth sync", () => {
   test("progress and gap docs track current structure numbers", () => {
-    const packageJson = JSON.parse(readFileSync(join(YOLO_DIR, "package.json"), "utf8"));
+    const truth = repoTruth();
     const progress = readFileSync(join(YOLO_DIR, "docs/yolo-public-sdk-progress.md"), "utf8");
     const gap = readFileSync(join(YOLO_DIR, "docs/sdk-gap-matrix.md"), "utf8");
-    const srcModules = countFiles(join(YOLO_DIR, "src"), (path) => path.endsWith(".ts"));
-    const testFiles = countFiles(join(YOLO_DIR, "__tests__"), (path) => path.endsWith(".test.ts"));
-    const rootTs = countFiles(YOLO_DIR, (path) => path.endsWith(".ts") && !path.slice(YOLO_DIR.length + 1).includes("/"));
-    const runnerLines = lineCount(join(YOLO_DIR, "runner.ts"));
-    const runnerCoreLines = lineCount(join(YOLO_DIR, "src/runtime/runner-core.ts"));
-    const exportCount = Object.keys(packageJson.exports).length;
-    const binCount = Object.keys(packageJson.bin).length;
 
-    assert.match(progress, new RegExp(`\\| \`runner\\.ts\` 行数 \\| ${runnerLines} \\|`));
-    assert.match(progress, new RegExp(`\\| \`src/runtime/runner-core\\.ts\` 行数 \\| ${runnerCoreLines} \\|`));
-    assert.match(progress, new RegExp(`\\| 根目录 \`\\.ts\` 文件 \\| ${rootTs} \\|`));
-    assert.match(progress, new RegExp(`\\| \`src/\\*\\*/\\*\\.ts\` 文件 \\| ${srcModules} \\|`));
-    assert.match(progress, new RegExp(`\\| 测试文件 \\| ${testFiles} \\|`));
-    assert.match(progress, new RegExp(`\\| package exports \\| ${exportCount} \\|`));
-    assert.match(gap, new RegExp(`package\\.json\` 已有 ${exportCount} 个 package exports、${binCount} 个 bin`));
-    assert.match(gap, new RegExp(`\`src/\\*\\*/\\*\\.ts\` ${srcModules} 个`));
+    assert.match(progress, new RegExp(`\\| \`runner\\.ts\` 行数 \\| ${truth.runnerLines} \\|`));
+    assert.match(progress, new RegExp(`\\| \`src/runtime/runner-core\\.ts\` 行数 \\| ${truth.runnerCoreLines} \\|`));
+    assert.match(progress, new RegExp(`\\| 根目录 \`\\.ts\` 文件 \\| ${truth.rootTs} \\|`));
+    assert.match(progress, new RegExp(`\\| \`src/\\*\\*/\\*\\.ts\` 文件 \\| ${truth.srcModules} \\|`));
+    assert.match(progress, new RegExp(`\\| 测试文件 \\| ${truth.testFiles} \\|`));
+    assert.match(progress, new RegExp(`\\| package exports \\| ${truth.exportCount} \\|`));
+    assert.match(progress, new RegExp(`\\| package bins \\| ${truth.binCount} \\|`));
+    assert.match(progress, new RegExp(`\\| \`docs/\\*\\*/\\*\\.md\` 文件 \\| ${truth.docsMarkdown} \\|`));
+    assert.match(gap, new RegExp(`package\\.json\` 已有 ${truth.exportCount} 个 package exports、${truth.binCount} 个 bin`));
+    assert.match(gap, new RegExp(`\`src/\\*\\*/\\*\\.ts\` ${truth.srcModules} 个`));
+    assert.match(gap, new RegExp(`\`__tests__/\\*\\.test\\.ts\` ${truth.testFiles} 个`));
+    assert.match(gap, new RegExp(`\`docs/\\*\\*/\\*\\.md\` ${truth.docsMarkdown} 个`));
+    assert.match(gap, new RegExp(`根目录 \`\\.ts\` ${truth.rootTs} 个`));
+  });
+
+  test("status and project-tree mirrors track current structure numbers", () => {
+    const truth = repoTruth();
+    const statusPaths = [
+      "SYSTEM_STATE.md",
+      "docs/SYSTEM_STATE.md",
+      "docs/memory/CURRENT_STATUS.md",
+    ];
+    const treePaths = [
+      "PROJECT_TREE.md",
+      "docs/PROJECT_TREE.md",
+      "docs/memory/PROJECT_TREE.md",
+    ];
+
+    assert.ok(truth.srcModules > 0, "src module count must be non-zero in this repository");
+    assert.ok(truth.testFiles > 0, "test file count must be non-zero in this repository");
+    assert.ok(truth.docsMarkdown > 0, "docs markdown count must be non-zero in this repository");
+    assert.ok(truth.rootTs > 0, "root .ts count must be non-zero in this repository");
+
+    for (const relativePath of statusPaths) {
+      const text = readFileSync(join(YOLO_DIR, relativePath), "utf8");
+      assert.match(text, new RegExp(`SDK surface: ${truth.exportCount} package exports and ${truth.binCount} bins\\.`), relativePath);
+      assert.match(
+        text,
+        new RegExp(`Source/test/docs surface: ${truth.srcModules} src modules, ${truth.testFiles} test files, ${truth.docsMarkdown} docs markdown files, ${truth.rootTs} root \\.ts files\\.`),
+        relativePath,
+      );
+      assert.doesNotMatch(text, /0 src modules, 0 test files/, relativePath);
+      assert.match(text, /`private: true` blocks release/, relativePath);
+      assert.match(text, /billable execution, and public dogfood/, relativePath);
+    }
+
+    for (const relativePath of treePaths) {
+      const text = readFileSync(join(YOLO_DIR, relativePath), "utf8");
+      assert.match(text, new RegExp(`package exports: ${truth.exportCount}`), relativePath);
+      assert.match(text, new RegExp(`package bins: ${truth.binCount}`), relativePath);
+      assert.match(text, new RegExp(`root \\.js files: ${truth.rootJs}`), relativePath);
+      assert.match(text, new RegExp(`root \\.ts files: ${truth.rootTs}`), relativePath);
+      assert.match(text, new RegExp(`src \\.ts files: ${truth.srcModules}`), relativePath);
+      assert.match(text, new RegExp(`test files: ${truth.testFiles}`), relativePath);
+      assert.match(text, new RegExp(`docs markdown files: ${truth.docsMarkdown}`), relativePath);
+      assert.doesNotMatch(text, /package exports: 50|src \.js files: 0|test files: 0/, relativePath);
+    }
+
+    assert.equal(readFileSync(join(YOLO_DIR, "SYSTEM_STATE.md"), "utf8"), readFileSync(join(YOLO_DIR, "docs/SYSTEM_STATE.md"), "utf8"));
+    assert.equal(readFileSync(join(YOLO_DIR, "SYSTEM_STATE.md"), "utf8"), readFileSync(join(YOLO_DIR, "docs/memory/CURRENT_STATUS.md"), "utf8"));
+    assert.equal(readFileSync(join(YOLO_DIR, "PROJECT_TREE.md"), "utf8"), readFileSync(join(YOLO_DIR, "docs/PROJECT_TREE.md"), "utf8"));
+    assert.equal(readFileSync(join(YOLO_DIR, "PROJECT_TREE.md"), "utf8"), readFileSync(join(YOLO_DIR, "docs/memory/PROJECT_TREE.md"), "utf8"));
+    assert.equal(readFileSync(join(YOLO_DIR, "ROADMAP.md"), "utf8"), readFileSync(join(YOLO_DIR, "docs/ROADMAP.md"), "utf8"));
   });
 
   test("demand doctrine documents the nontechnical-to-atomic-task flow", () => {

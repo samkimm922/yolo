@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -85,6 +85,62 @@ function tracedRequirement(id, text) {
   };
 }
 
+function writePiRunnablePrdFixture(root, stateRoot, { id = "PRD-20260530-PI-RUNNABLE" } = {}) {
+  const prdPath = join(root, "prd.json");
+  writeFileSync(prdPath, `${JSON.stringify({
+    version: "2.0",
+    id,
+    title: "PI runnable action",
+    project: { name: "pi", language: "javascript" },
+    generated_by: "yolo-review-agent",
+    generated_at: "2026-05-30T00:00:00.000Z",
+    base_commit: "abcdef0",
+    review_policy: { mode: "disabled" },
+    ...approvedDemandFields(["artifacts/pi.md"]),
+    requirements: [tracedRequirement("REQ-PI-001", "PI executes a deterministic artifact task.")],
+    designs: [{ id: "DES-PI-001", text: "Use a deterministic dry-run artifact task." }],
+    tasks: [{
+      id: "FIX-PI-001",
+      title: "Write PI artifact",
+      priority: "P3",
+      type: "cleanup",
+      task_kind: "dry_run_artifact",
+      status: "pending",
+      requirement_ids: ["REQ-PI-001"],
+      design_ids: ["DES-PI-001"],
+      scope: {
+        targets: [{ file: "artifacts/pi.md" }],
+        allow_new_files: true,
+        expected_zero_business_code: true,
+      },
+      post_conditions: [{
+        id: "POST-FILE",
+        type: "file_exists",
+        severity: "FAIL",
+        params: { file: "artifacts/pi.md" },
+      }],
+    }],
+  }, null, 2)}\n`, "utf8");
+  writeLifecycleStageReport("discovery", { status: "success" }, {
+    projectRoot: root,
+    stateRoot,
+    writeSessionMemory: false,
+  });
+  writeLifecycleStageReport("roadmap", { status: "success" }, {
+    projectRoot: root,
+    stateRoot,
+    writeSessionMemory: false,
+  });
+  writeLifecycleStageReport("prd", { status: "success", prd_path: prdPath, artifacts: [prdPath] }, {
+    projectRoot: root,
+    stateRoot,
+    writeSessionMemory: false,
+  });
+  const check = inspectYoloCheck({ prdPath, projectRoot: root, stateRoot, writeLifecycle: true });
+  assert.notEqual(check.status, "blocked", JSON.stringify(check.blockers, null, 2));
+  return prdPath;
+}
+
 describe("yolo sdk", () => {
   test("exports stable contract and scanner APIs", () => {
     const sdk = createYoloSdk();
@@ -144,7 +200,7 @@ describe("yolo sdk", () => {
     assert.equal(typeof sdk.commands.listBridgeWorkflowIds, "function");
     assert.equal(typeof sdk.commands.listNames, "function");
     assert.equal(typeof sdk.commands.renderUsage, "function");
-    assert.equal(sdk.commands.schemaVersion, "1.0");
+    assert.equal(sdk.commands.schemaVersion, "1.1");
     assert.equal(typeof sdk.doctor.buildReport, "function");
     assert.equal(typeof sdk.doctor.formatReportText, "function");
     assert.equal(sdk.doctor.schemaVersion, "1.0");
@@ -240,7 +296,7 @@ describe("yolo sdk", () => {
     assert.equal(typeof getYoloCommand, "function");
     assert.equal(typeof listYoloCommandNames, "function");
     assert.equal(typeof renderYoloCommandUsage, "function");
-    assert.equal(YOLO_COMMAND_REGISTRY_SCHEMA_VERSION, "1.0");
+    assert.equal(YOLO_COMMAND_REGISTRY_SCHEMA_VERSION, "1.1");
     assert.equal(typeof buildYoloDoctorReport, "function");
     assert.equal(typeof formatYoloDoctorText, "function");
     assert.equal(YOLO_DOCTOR_SCHEMA_VERSION, "1.0");
@@ -402,6 +458,29 @@ describe("yolo sdk", () => {
       "pi.discovery.required",
     ]);
     assert.ok(result.discovery.blockers.some((blocker) => blocker.code === "DISCOVERY_SUCCESS_CRITERIA_PRESENT"));
+  });
+
+  test("PI agent run API marks plan-only work as not run", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-pi-plan-only-"));
+    try {
+      const result = await runPiAgent({
+        requirement: "For store managers, build inventory alerts in src/inventory/alerts.js so an alert appears when stock is below threshold; success criteria: alert appears below threshold.",
+        title: "Inventory alerts",
+        outputDir: "state/dry-run/pi-plan-test",
+      }, {
+        yoloRoot: YOLO_DIR,
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        execute: false,
+      });
+
+      assert.equal(result.status, "not_run");
+      assert.equal(result.code, "PI_PLAN_NOT_EXECUTED");
+      assert.equal(result.exit_code, 2);
+      assert.equal(result.plan.input_source, "requirement");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("runner runtime reports missing PRD without spawning a CLI process", async () => {
@@ -573,6 +652,7 @@ describe("yolo sdk", () => {
         output: prdPath,
         title: "Inventory alerts",
         projectRoot: root,
+        demandContract: approvedDemandFields(["src/pages/inventory-alerts.tsx"]),
       });
       assert.equal(generated.status, "success");
 
@@ -690,11 +770,38 @@ describe("yolo sdk", () => {
         output: prdPath,
         title: "Label formatter",
         projectRoot: root,
+        demandContract: approvedDemandFields(["src/lib/format-label.ts"]),
       });
       assert.equal(generated.status, "success");
 
       const contract = await runPiRuntime("prd.contract_gate", { prdPath });
       assert.equal(contract.status, "success");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("audit-generated PRDs keep target facts as candidates until human verification", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-audit-generated-prd-"));
+    const sdk = createYoloSdk({ projectRoot: root });
+    try {
+      const result = sdk.prd.convertAuditToPrd({
+        findings: [{
+          id: "AUDIT-001",
+          severity: "HIGH",
+          kind: "atomic_fix",
+          type: "formatter_fix",
+          description: "Update label formatter trimming logic",
+          files: ["src/lib/format-label.ts"],
+        }],
+      }, { output: join(root, "prd.json"), force: true });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.prd.source, "audit_generated");
+      assert.equal(result.prd.demand.approval.approved, false);
+      assert.equal(result.prd.demand.approval.effective_for_prd, false);
+      assert.deepEqual(result.prd.demand.project_facts.target_files.map((fact) => fact.status), ["candidate"]);
+      assert.equal(result.prd.demand.project_facts.target_files[0].needs_verification, true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -1157,58 +1264,7 @@ describe("yolo sdk", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-pi-agent-"));
     try {
       const stateRoot = join(root, ".yolo");
-      const prdPath = join(root, "prd.json");
-      writeFileSync(prdPath, `${JSON.stringify({
-        version: "2.0",
-        id: "PRD-20260530-PI-FIRST-FAILED",
-        title: "PI first failed action",
-        project: { name: "pi", language: "javascript" },
-        generated_by: "yolo-review-agent",
-        generated_at: "2026-05-30T00:00:00.000Z",
-        base_commit: "abcdef0",
-        review_policy: { mode: "disabled" },
-        ...approvedDemandFields(["artifacts/pi.md"]),
-        requirements: [tracedRequirement("REQ-PI-001", "PI stops at the first failed action.")],
-        designs: [{ id: "DES-PI-001", text: "Use a deterministic dry-run artifact task." }],
-        tasks: [{
-          id: "FIX-PI-001",
-          title: "Write PI artifact",
-          priority: "P3",
-          type: "cleanup",
-          task_kind: "dry_run_artifact",
-          status: "pending",
-          requirement_ids: ["REQ-PI-001"],
-          design_ids: ["DES-PI-001"],
-          scope: {
-            targets: [{ file: "artifacts/pi.md" }],
-            allow_new_files: true,
-            expected_zero_business_code: true,
-          },
-          post_conditions: [{
-            id: "POST-FILE",
-            type: "file_exists",
-            severity: "FAIL",
-            params: { file: "artifacts/pi.md" },
-          }],
-        }],
-      }, null, 2)}\n`, "utf8");
-      writeLifecycleStageReport("discovery", { status: "success" }, {
-        projectRoot: root,
-        stateRoot,
-        writeSessionMemory: false,
-      });
-      writeLifecycleStageReport("roadmap", { status: "success" }, {
-        projectRoot: root,
-        stateRoot,
-        writeSessionMemory: false,
-      });
-      writeLifecycleStageReport("prd", { status: "success", prd_path: prdPath, artifacts: [prdPath] }, {
-        projectRoot: root,
-        stateRoot,
-        writeSessionMemory: false,
-      });
-      const check = inspectYoloCheck({ prdPath, projectRoot: root, stateRoot, writeLifecycle: true });
-      assert.notEqual(check.status, "blocked");
+      const prdPath = writePiRunnablePrdFixture(root, stateRoot, { id: "PRD-20260530-PI-FIRST-FAILED" });
       const seen = [];
       const result = await runPiAgent({
         prdPath,
@@ -1235,18 +1291,56 @@ describe("yolo sdk", () => {
     }
   });
 
+  test("PI agent execute mode stops on camelCase dryRun observations", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-pi-agent-dryrun-"));
+    try {
+      const stateRoot = join(root, ".yolo");
+      const prdPath = writePiRunnablePrdFixture(root, stateRoot, { id: "PRD-20260530-PI-DRYRUN" });
+      const seen = [];
+      const result = await runPiAgent({
+        prdPath,
+      }, {
+        yoloRoot: root,
+        projectRoot: root,
+        stateRoot,
+        execute: true,
+        executor: async (action) => {
+          seen.push(action.id);
+          return {
+            status: "success",
+            summary: action.id,
+            dryRun: action.id === "pi.execute.runner",
+          };
+        },
+      });
+
+      assert.equal(result.status, "dry_run");
+      assert.equal(result.code, "PI_DRY_RUN_READY");
+      assert.equal(result.exit_code, 2);
+      assert.equal(result.stop_condition, "dry_run_after_runner");
+      assert.ok(seen.includes("pi.execute.runner"));
+      assert.ok(!seen.includes("pi.review.scan"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("PI CLI accepts --prd value form and skips requirement generation", () => {
-    const output = execFileSync(process.execPath, [
+    const result = spawnSync(process.execPath, [
       join(YOLO_DIR, "dist/bin/yolo-pi.js"),
       "--prd",
       "data/prd/current/prd-yolo-p40-progress-dashboard.json",
       "--json",
     ], { cwd: YOLO_DIR, encoding: "utf8" });
-    const result = JSON.parse(output);
+    assert.equal(result.stderr, "");
+    assert.equal(result.status, 2);
+    const payload = JSON.parse(result.stdout);
 
-    assert.equal(result.plan.input_source, "prd");
-    assert.ok(!result.plan.actions.some((action) => action.id === "pi.findings.generate"));
-    assert.ok(result.plan.actions.some((action) => action.id === "pi.execute.runner"));
+    assert.equal(payload.status, "not_run");
+    assert.equal(payload.code, "PI_PLAN_NOT_EXECUTED");
+    assert.equal(payload.plan.input_source, "prd");
+    assert.ok(!payload.plan.actions.some((action) => action.id === "pi.findings.generate"));
+    assert.ok(payload.plan.actions.some((action) => action.id === "pi.execute.runner"));
   });
 
   test("loads SDK config from an explicit config path", () => {

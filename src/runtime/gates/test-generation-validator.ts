@@ -49,7 +49,12 @@ function fileAllowedByTaskScope(file, task) {
   return targets.some((target) => normalized === target || normalized.startsWith(`${dirname(target)}/`));
 }
 
-export function getChangedFiles(cwd = process.cwd()) {
+function gitErrorDetail(error) {
+  const stderr = error?.stderr?.toString?.().trim();
+  return stderr || error?.message || String(error || "unknown git error");
+}
+
+function inspectChangedFiles(cwd = process.cwd()) {
   let output = "";
   try {
     output = execFileSync("git", ["-C", cwd, "status", "--porcelain"], {
@@ -57,15 +62,19 @@ export function getChangedFiles(cwd = process.cwd()) {
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 10000,
     });
-  } catch {
-    return [];
+  } catch (error) {
+    return { ok: false, files: [], error: `git status failed; cannot verify test generation changes: ${gitErrorDetail(error)}` };
   }
-  return output.split("\n").map(parseStatusLine).filter(Boolean);
+  return { ok: true, files: output.split("\n").map(parseStatusLine).filter(Boolean) };
+}
+
+export function getChangedFiles(cwd = process.cwd()) {
+  return inspectChangedFiles(cwd).files;
 }
 
 function countAddedLines(cwd, file, isNew) {
   if (isNew && existsSync(resolve(cwd, file))) {
-    return readFileSync(resolve(cwd, file), "utf8").split("\n").length;
+    return { ok: true, addedLines: readFileSync(resolve(cwd, file), "utf8").split("\n").length };
   }
   try {
     const diff = execFileSync("git", ["-C", cwd, "diff", "--", file], {
@@ -73,9 +82,12 @@ function countAddedLines(cwd, file, isNew) {
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 10000,
     });
-    return diff.split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).length;
-  } catch {
-    return 0;
+    return {
+      ok: true,
+      addedLines: diff.split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).length,
+    };
+  } catch (error) {
+    return { ok: false, addedLines: 0, error: gitErrorDetail(error) };
   }
 }
 
@@ -83,11 +95,22 @@ export function validateTestGeneration(task, options = {}) {
   const cwd = options.cwd || process.cwd();
   const policy = task?.test_generation || {};
   const mode = policy.mode || DEFAULT_MODE;
-  const changedFiles = options.changedFiles || getChangedFiles(cwd);
-  const changedTests = changedFiles.filter((item) => isTestFile(item.file));
-  const newTests = changedTests.filter((item) => item.isNew);
+  const changedProbe = Object.prototype.hasOwnProperty.call(options, "changedFiles")
+    ? { ok: true, files: options.changedFiles || [] }
+    : inspectChangedFiles(cwd);
+  const changedFiles = changedProbe.files || [];
   const failures = [];
   const warnings = [];
+
+  if (!changedProbe.ok) {
+    failures.push({
+      code: "TEST_GENERATION_GIT_STATUS_UNAVAILABLE",
+      detail: changedProbe.error || "Unable to read git status; cannot verify test generation changes.",
+    });
+  }
+
+  const changedTests = changedFiles.filter((item) => isTestFile(item.file));
+  const newTests = changedTests.filter((item) => item.isNew);
 
   if (!["none", "reuse_existing", "add_minimal", "forbid"].includes(mode)) {
     failures.push({ code: "INVALID_TEST_GENERATION_MODE", detail: `未知 test_generation.mode: ${mode}` });
@@ -122,9 +145,15 @@ export function validateTestGeneration(task, options = {}) {
     }
     const maxLines = policy.max_test_lines_changed;
     if (maxLines != null) {
-      const overLimit = changedTests
-        .map((item) => ({ ...item, addedLines: countAddedLines(cwd, item.file, item.isNew) }))
-        .filter((item) => item.addedLines > maxLines);
+      const lineChecks = changedTests.map((item) => ({ ...item, ...countAddedLines(cwd, item.file, item.isNew) }));
+      const overLimit = lineChecks.filter((item) => item.addedLines > maxLines);
+      const diffFailures = lineChecks.filter((item) => item.ok === false);
+      if (diffFailures.length > 0) {
+        failures.push({
+          code: "TEST_GENERATION_DIFF_UNAVAILABLE",
+          detail: `无法读取测试文件 diff，无法验证测试改动行数: ${diffFailures.map((f) => `${f.file}: ${f.error || "git diff failed"}`).join("; ")}`,
+        });
+      }
       if (overLimit.length > 0) {
         failures.push({ code: "TEST_LINES_CHANGED_LIMIT", detail: `测试改动行数超限: ${overLimit.map((f) => `${f.file}:${f.addedLines}`).join(", ")}` });
       }
@@ -149,15 +178,16 @@ export function validateTestGeneration(task, options = {}) {
     warnings.push({ code: "MISSING_TEST_GENERATION_REASON", detail: "修改测试文件但 test_generation.reason 为空" });
   }
 
+  const status = failures.length > 0 ? "fail" : warnings.length > 0 ? "warning" : "pass";
   return {
-    status: failures.length > 0 ? "fail" : warnings.length > 0 ? "warning" : "pass",
-    blocks_execution: failures.length > 0,
+    status,
+    blocks_execution: status !== "pass",
     mode,
     changed_test_files: changedTests.map((item) => item.file),
     new_test_files: newTests.map((item) => item.file),
     failures,
     warnings,
-    next_action: failures.length > 0 ? "blocked" : "execute",
+    next_action: status === "pass" ? "execute" : "blocked",
   };
 }
 
@@ -189,7 +219,7 @@ if (isMain) {
     const task = loadTask(args.prd, args.task);
     const result = validateTestGeneration(task, { cwd: args.cwd || process.cwd() });
     console.log(args.json ? JSON.stringify(result, null, 2) : `[test-generation] ${result.status}`);
-    process.exit(result.blocks_execution ? 1 : 0);
+    process.exit(result.status === "pass" ? 0 : result.status === "warning" ? 2 : 1);
   } catch (error) {
     console.error(`[test-generation] ${error.message}`);
     process.exit(2);

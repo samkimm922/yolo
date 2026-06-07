@@ -33,6 +33,9 @@ export function evalDirExists(params, _taskScope, ROOT) {
 }
 
 export function evalFileNotExists(params, taskScope, ROOT) {
+  const file = params.file || params.path;
+  if (!file) return { passed: false, status: "not_run", detail: "缺少 file/path 参数" };
+
   const result = evalFileExists(params, taskScope, ROOT);
   return {
     passed: !result.passed,
@@ -70,8 +73,9 @@ export function evalFilesModifiedMax(params, taskScope, ROOT, exec) {
   const diff = exec("git diff --name-only");
   if (!diff.ok) {
     return {
-      passed: true,
-      detail: `无法获取 diff（限制 ${maxFiles}）`,
+      passed: false,
+      status: "indeterminate",
+      detail: `无法获取 diff，无法验证修改文件数（限制 ${maxFiles}）`,
       target_files: targetFiles,
       out_of_scope_files: [],
     };
@@ -80,9 +84,17 @@ export function evalFilesModifiedMax(params, taskScope, ROOT, exec) {
   const files = splitGitFileList(diff.out);
 
   const untracked = exec("git ls-files --others --exclude-standard");
-  const untrackedFiles = untracked.ok
-    ? splitGitFileList(untracked.out)
-    : [];
+  if (!untracked.ok) {
+    return {
+      passed: false,
+      status: "indeterminate",
+      detail: `无法获取未跟踪文件列表，无法验证修改文件数（限制 ${maxFiles}）`,
+      files,
+      target_files: targetFiles,
+      out_of_scope_files: [],
+    };
+  }
+  const untrackedFiles = splitGitFileList(untracked.out);
 
   const modifiedFiles = [...new Set([...files, ...untrackedFiles])].filter(isBusinessDiffFile);
   const outOfScopeFiles = targetFiles.length > 0
@@ -120,6 +132,13 @@ export function evalFileLinesMax(params, taskScope, ROOT) {
   const targets =
     params.targets || params.files || (params.file ? [params.file] : null) ||
     (taskScope?.targets || []).map((t) => t.file).filter(Boolean);
+  if (!targets.length) {
+    return {
+      passed: false,
+      status: "not_run",
+      detail: "无目标文件，无法验证文件行数",
+    };
+  }
   const baselinePath = resolve(ROOT, ".yolo-worktree-baseline.json");
   let baselineLineCounts = {};
   if (existsSync(baselinePath)) {

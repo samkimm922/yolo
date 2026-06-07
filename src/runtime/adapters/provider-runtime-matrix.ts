@@ -105,6 +105,9 @@ export function buildProviderRuntimeMatrix(options = {}) {
       provider,
       providerDetection: detection,
       commandExists,
+      rootDir,
+      workDir,
+      runtimeDir,
     });
     let invocation = null;
     let invocationError = null;
@@ -125,7 +128,7 @@ export function buildProviderRuntimeMatrix(options = {}) {
         random: options.random,
         packageRoot,
       });
-      invocationPreflight = inspectProviderInvocationPreflight(invocation, { existsSync });
+      invocationPreflight = inspectProviderInvocationPreflight(invocation, { existsSync, commandExists });
     } catch (error) {
       invocationError = error?.message || String(error);
     }

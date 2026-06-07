@@ -7,6 +7,7 @@ import { inspectDemandQuality, inspectDemandReadiness } from "./gate.js";
 import { buildDemandSessionState } from "./router.js";
 import { inspectAtomicTask } from "../runtime/execution/atomic-task-doctor.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
+import { preflightPrdDocument } from "../prd/preflight.js";
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -120,12 +121,15 @@ export function readDemandSession(pathOrDir) {
 function runtimeResult(label, session, outputDir, artifacts, options = {}) {
   const readiness = session.readiness || inspectDemandReadiness(session, { phase: session.phase });
   const blocked = readiness.status === "blocked";
+  const warning = readiness.status === "warning";
   return {
-    status: blocked ? "blocked" : readiness.status === "warning" ? "warning" : "success",
-    code: blocked ? "DEMAND_BLOCKED" : "DEMAND_READY",
+    status: blocked ? "blocked" : warning ? "warning" : "success",
+    code: blocked ? "DEMAND_BLOCKED" : warning ? "DEMAND_WARNING" : "DEMAND_READY",
     summary: blocked
       ? `${label} demand artifacts need more information before PRD.`
-      : `${label} demand artifacts created.`,
+      : warning
+        ? `${label} demand artifacts were created as draft-only; warnings must be resolved before executable PRD.`
+        : `${label} demand artifacts created.`,
     demand_id: session.id,
     demand_dir: outputDir,
     session,
@@ -241,6 +245,126 @@ export function runDemandStatusRuntime(input = {}, options = {}) {
       prd_execution: false,
       provider_execution: false,
       source: "yolo-demand-status",
+    },
+  };
+}
+
+function leanOfficeHoursMode(input = {}, options = {}) {
+  const raw = clean(input.officeHoursMode || input.office_hours_mode || input.profile || input.mode || options.profile || options.mode || "startup").toLowerCase();
+  if (["builder", "build", "operator"].includes(raw)) return "builder";
+  return "startup";
+}
+
+function leanOfficeHoursAlternatives(input = {}, mode = "startup") {
+  const provided = asArray(input.alternatives || input.alternative)
+    .map(clean)
+    .filter(Boolean)
+    .slice(0, 3);
+  const objective = clean(input.objective || input.idea || input.title || "this idea");
+  const defaults = mode === "builder"
+    ? [
+        `Ship the narrowest manual workflow for ${objective}.`,
+        `Prototype one reusable flow and defer integrations.`,
+        `Write a draft demand brief only, then ask for approval before PRD.`,
+      ]
+    : [
+        `Validate the smallest painful segment for ${objective}.`,
+        `Run a concierge or manual version before productizing.`,
+        `Narrow the offer to one buyer, one moment, and one proof.`,
+      ];
+  return (provided.length >= 2 ? provided : defaults).slice(0, 3).map((text, index) => ({
+    id: String.fromCharCode(65 + index),
+    label: text,
+    tradeoff: mode === "builder"
+      ? "Keeps implementation bounded while preserving learning."
+      : "Keeps market risk visible before committing build effort.",
+  }));
+}
+
+function resolveLeanOfficeHoursChoice(choice, alternatives = []) {
+  const value = clean(choice).toLowerCase();
+  if (!value) return null;
+  return alternatives.find((item, index) =>
+    item.id.toLowerCase() === value
+    || String(index + 1) === value
+    || item.label.toLowerCase() === value
+  ) || null;
+}
+
+export function runDemandOfficeHoursRuntime(input = {}, options = {}) {
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
+  const stateRoot = stateRootFor({ ...input, projectRoot }, options);
+  const mode = leanOfficeHoursMode(input, options);
+  const objective = clean(input.objective || input.idea || input.title || "Untitled office-hours idea");
+  const alternatives = leanOfficeHoursAlternatives({ ...input, objective }, mode);
+  const selected = resolveLeanOfficeHoursChoice(input.choice || input.selected || input.selection || input.decision, alternatives);
+  const explicitChoiceRequired = selected == null;
+  const premiseChallenge = clean(input.premise_challenge || input.premise || input.challenge)
+    || (mode === "builder"
+      ? "What evidence says this must be built now instead of tested manually first?"
+      : "What has to be true about the buyer, pain, and willingness to act for this to be worth building?");
+  const nextQuestion = {
+    id: "office_hours_choice",
+    slot: "explicit_user_choice",
+    text: `Choose A, B, or C: ${alternatives.map((item) => `${item.id}) ${item.label}`).join(" ")}`,
+    one_question_only: true,
+  };
+  const id = clean(input.id || input.demand_id || input.demandId)
+    || `OFFICE-HOURS-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${asciiIdPart(objective, "BRIEF")}`;
+  const draftBrief = {
+    schema: "yolo.demand.office_hours_brief.v1",
+    id,
+    generated_at: new Date().toISOString(),
+    profile: "lean_office_hours",
+    mode,
+    objective,
+    premise_challenge: premiseChallenge,
+    alternatives,
+    selected_alternative: selected,
+    explicit_user_choice_required: explicitChoiceRequired,
+    handoff: {
+      type: "draft_brief",
+      prd_execution: false,
+      code_execution: false,
+      next_step: explicitChoiceRequired
+        ? "Ask the single choice question and wait for the user to pick one alternative."
+        : "Convert the selected alternative into normal demand intake; do not generate executable PRD until approved demand and preflight pass.",
+    },
+  };
+  const outputDir = resolvePath(projectRoot, input.outputDir || input.output_dir || options.outputDir || join(stateRoot, "demand", "office-hours", id));
+  const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
+  const artifacts = shouldWrite ? [writeJson(join(outputDir, "brief.json"), draftBrief)] : [];
+
+  return {
+    status: explicitChoiceRequired ? "blocked" : "success",
+    code: explicitChoiceRequired ? "OFFICE_HOURS_CHOICE_REQUIRED" : "OFFICE_HOURS_DRAFT_READY",
+    summary: explicitChoiceRequired
+      ? "Lean office-hours captured a draft brief and needs one explicit user choice."
+      : "Lean office-hours draft brief is ready for demand handoff; PRD and code execution remain disabled.",
+    profile: "lean_office_hours",
+    mode,
+    objective,
+    next_question: explicitChoiceRequired ? nextQuestion : null,
+    premise_challenge: premiseChallenge,
+    alternatives,
+    selected_alternative: selected,
+    draft_brief: draftBrief,
+    blockers: explicitChoiceRequired ? [{
+      code: "EXPLICIT_USER_CHOICE_REQUIRED",
+      message: "User must choose one alternative before the draft brief can be handed to normal demand intake.",
+    }] : [],
+    warnings: [],
+    artifacts,
+    outputs: artifacts.map((path) => ({ path, type: "office_hours_draft_brief" })),
+    next_actions: explicitChoiceRequired
+      ? [nextQuestion.text]
+      : ["Run yolo demand discuss with the selected draft brief details; do not run PRD/code yet."],
+    guarantees: {
+      writes_business_code: false,
+      prd_execution: false,
+      provider_execution: false,
+      produces_executable_prd: false,
+      source: "yolo-demand:office-hours",
     },
   };
 }
@@ -886,23 +1010,135 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
       next_actions: atomicity.blockers.map((blocker) => `${blocker.task_id}: split scenario surface before PRD generation.`),
     };
   }
-  if (quality.status === "blocked") {
+  if (quality.status === "blocked" || quality.status === "warning") {
+    const qualityWarningsAsBlockers = asArray(quality.warnings).map((warning) => ({
+      code: warning.code || "DEMAND_QUALITY_WARNING",
+      message: warning.message || warning.detail || "Demand PRD quality warning must be resolved before executable PRD.",
+      warning,
+    }));
     return {
       status: "blocked",
-      code: "DEMAND_QUALITY_BLOCKED",
-      summary: "Demand PRD quality is below the executable threshold.",
+      code: quality.status === "blocked" ? "DEMAND_QUALITY_BLOCKED" : "DEMAND_QUALITY_WARNING",
+      summary: quality.status === "blocked"
+        ? "Demand PRD quality is below the executable threshold."
+        : "Demand PRD quality has warnings; executable PRD requires a clean pass.",
       readiness,
       atomicity,
       quality_report: quality,
-      blockers: quality.blockers,
+      blockers: quality.status === "blocked" ? quality.blockers : qualityWarningsAsBlockers,
       warnings: [...readiness.warnings, ...atomicity.warnings, ...quality.warnings],
       prd: null,
       next_actions: quality.next_actions,
     };
   }
 
+  const prd = {
+    $schema: "https://yolo.dev/schemas/prd-v2.schema.json",
+    version: "2.0",
+    id: prdId,
+    title: clean(input.title || session.project?.title || session.vision?.statement).slice(0, 120),
+    description: `Compiled from approved demand session ${session.id}.`,
+    project: {
+      name: clean(input.project_name || input.projectName || session.project?.title || "project"),
+      language: clean(input.language || "other"),
+      framework: clean(input.framework || "generic"),
+    },
+    generated_by: "yolo-demand",
+    generated_at: now,
+    base_commit: baseCommit,
+    source: "approved_demand",
+    demand_contract_required: true,
+    demand: {
+      id: session.id,
+      source: session.source || "yolo-demand",
+      approval: session.approval,
+      approval_reason: session.approval_reason || session.approval?.reason || session.approval?.note || "",
+      deferred_scope: asArray(session.discussion?.deferred),
+      deferred_scope_confirmation: deferredScopeConfirmation(session),
+      deferred_follow_up: deferredFollowUp(session.discussion?.deferred),
+      out_of_scope: asArray(session.requirements?.out_of_scope),
+      prd_intake: session.prd_intake || session.nontechnical_intake || null,
+      interview: session.interview || null,
+      question_trace: session.question_trace || [],
+      readiness_level: readiness.readiness_level,
+      readiness_score: readiness.quality_score,
+      quality_score: quality.total_score,
+      quality_report: quality,
+      project_facts: structuredProjectFacts(session),
+      scenario_matrix: {
+        schema: session.scenario_matrix?.schema || null,
+        scenario_count: asArray(session.scenario_matrix?.scenarios).length,
+        surface_count: asArray(session.scenario_matrix?.scenarios)
+          .reduce((sum, scenario) => sum + asArray(scenario.surfaces).length, 0),
+        scenarios: asArray(session.scenario_matrix?.scenarios).map((scenario) => ({
+          id: scenario.id,
+          requirement_id: scenario.requirement_id,
+          proof: scenario.proof || "",
+          source_question_ids: sourceQuestionIds(session, scenario, requirements.find((item) => item.id === scenario.requirement_id) || {}),
+          surfaces: asArray(scenario.surfaces).map((surface) => ({
+            id: surface.id,
+            kind: surface.kind || "code",
+            label: surfaceTitle(surface),
+            visual_style_source: asArray(surface.visual_style_source || scenario.visual_style_source),
+            session_budget: surface.session_budget || null,
+          })),
+        })),
+      },
+      atomicity_contract: {
+        rule: session.scenario_matrix?.atomic_task_rule || "one user-visible story with one proof maps to one task",
+        session_budget_required: true,
+        max_files_per_surface: 2,
+        generated_task_count: tasks.length,
+        doctor_status: atomicity.status,
+        session_handoff: sessionHandoff,
+      },
+      execution_readiness: {
+        level: readiness.readiness_level,
+        prd_ready: readiness.prd_ready,
+        executable_prd_ready: readiness.executable_prd_ready,
+        readiness_score: readiness.quality_score,
+        quality_score: quality.total_score,
+        quality_report: quality,
+        checks: readiness.checks.map((item) => ({ code: item.code, passed: item.passed, severity: item.severity })),
+      },
+    },
+    execution_readiness: {
+      level: "L3",
+      afk_ready: true,
+      source: "approved_demand_report",
+      atomic_tasks: true,
+      expected_task_session: "single_session",
+      demand_id: session.id,
+      readiness_score: readiness.quality_score,
+      quality_score: quality.total_score,
+      quality_status: quality.status,
+      quality_report: quality,
+      atomicity_status: atomicity.status,
+      session_handoff: sessionHandoff,
+    },
+    requirements: requirements.map((requirement) => ({
+      id: requirement.id,
+      text: requirement.text,
+      demand_trace: requirement.trace || {},
+    })),
+    designs: requirements.map((requirement) => ({
+      id: `DES-${requirement.id}`,
+      text: [
+        `Implement ${requirement.id}: ${requirement.text}`,
+        `Proof: ${asArray(requirement.acceptance_scenarios).map((scenario) => scenario.then || scenario.text).filter(Boolean).join("; ") || "Use task-level proof and post_conditions."}`,
+        `Constraints: ${asArray(session.requirements?.constraints).join("; ") || "None recorded."}`,
+        `Out of scope: ${asArray(session.requirements?.out_of_scope).join("; ") || "None recorded."}`,
+      ].join("\n"),
+    })),
+    tasks,
+    conflict_policy: {
+      on_overlap: "sequential",
+      overlap_detection: "file_only",
+    },
+  };
+
   return {
-    status: quality.status === "warning" ? "warning" : "success",
+    status: "success",
     code: "DEMAND_PRD_READY",
     summary: "Executable PRD compiled from approved demand artifacts.",
     readiness,
@@ -910,113 +1146,8 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
     quality_report: quality,
     blockers: [],
     warnings: [...readiness.warnings, ...atomicity.warnings, ...quality.warnings],
-    prd: {
-      $schema: "https://yolo.dev/schemas/prd-v2.schema.json",
-      version: "2.0",
-      id: prdId,
-      title: clean(input.title || session.project?.title || session.vision?.statement).slice(0, 120),
-      description: `Compiled from approved demand session ${session.id}.`,
-      project: {
-        name: clean(input.project_name || input.projectName || session.project?.title || "project"),
-        language: clean(input.language || "other"),
-        framework: clean(input.framework || "generic"),
-      },
-      generated_by: "yolo-demand",
-      generated_at: now,
-      base_commit: baseCommit,
-      source: "approved_demand",
-      demand_contract_required: true,
-      demand: {
-        id: session.id,
-        source: session.source || "yolo-demand",
-        approval: session.approval,
-        approval_reason: session.approval_reason || session.approval?.reason || session.approval?.note || "",
-        deferred_scope: asArray(session.discussion?.deferred),
-        deferred_scope_confirmation: deferredScopeConfirmation(session),
-        deferred_follow_up: deferredFollowUp(session.discussion?.deferred),
-        out_of_scope: asArray(session.requirements?.out_of_scope),
-        prd_intake: session.prd_intake || session.nontechnical_intake || null,
-        interview: session.interview || null,
-        question_trace: session.question_trace || [],
-        readiness_level: readiness.readiness_level,
-        readiness_score: readiness.quality_score,
-        quality_score: quality.total_score,
-        quality_report: quality,
-        project_facts: structuredProjectFacts(session),
-        scenario_matrix: {
-          schema: session.scenario_matrix?.schema || null,
-          scenario_count: asArray(session.scenario_matrix?.scenarios).length,
-          surface_count: asArray(session.scenario_matrix?.scenarios)
-            .reduce((sum, scenario) => sum + asArray(scenario.surfaces).length, 0),
-          scenarios: asArray(session.scenario_matrix?.scenarios).map((scenario) => ({
-            id: scenario.id,
-            requirement_id: scenario.requirement_id,
-            proof: scenario.proof || "",
-            source_question_ids: sourceQuestionIds(session, scenario, requirements.find((item) => item.id === scenario.requirement_id) || {}),
-            surfaces: asArray(scenario.surfaces).map((surface) => ({
-              id: surface.id,
-              kind: surface.kind || "code",
-              label: surfaceTitle(surface),
-              visual_style_source: asArray(surface.visual_style_source || scenario.visual_style_source),
-              session_budget: surface.session_budget || null,
-            })),
-          })),
-        },
-        atomicity_contract: {
-          rule: session.scenario_matrix?.atomic_task_rule || "one user-visible story with one proof maps to one task",
-          session_budget_required: true,
-          max_files_per_surface: 2,
-          generated_task_count: tasks.length,
-          doctor_status: atomicity.status,
-          session_handoff: sessionHandoff,
-        },
-        execution_readiness: {
-          level: readiness.readiness_level,
-          prd_ready: readiness.prd_ready,
-          executable_prd_ready: readiness.executable_prd_ready,
-          readiness_score: readiness.quality_score,
-          quality_score: quality.total_score,
-          quality_report: quality,
-          checks: readiness.checks.map((item) => ({ code: item.code, passed: item.passed, severity: item.severity })),
-        },
-      },
-      execution_readiness: {
-        level: "L3",
-        afk_ready: true,
-        source: "approved_demand_report",
-        atomic_tasks: true,
-        expected_task_session: "single_session",
-        demand_id: session.id,
-        readiness_score: readiness.quality_score,
-        quality_score: quality.total_score,
-        quality_status: quality.status,
-        quality_report: quality,
-        atomicity_status: atomicity.status,
-        session_handoff: sessionHandoff,
-      },
-      requirements: requirements.map((requirement) => ({
-        id: requirement.id,
-        text: requirement.text,
-        demand_trace: requirement.trace || {},
-      })),
-      designs: requirements.map((requirement) => ({
-        id: `DES-${requirement.id}`,
-        text: [
-          `Implement ${requirement.id}: ${requirement.text}`,
-          `Proof: ${asArray(requirement.acceptance_scenarios).map((scenario) => scenario.then || scenario.text).filter(Boolean).join("; ") || "Use task-level proof and post_conditions."}`,
-          `Constraints: ${asArray(session.requirements?.constraints).join("; ") || "None recorded."}`,
-          `Out of scope: ${asArray(session.requirements?.out_of_scope).join("; ") || "None recorded."}`,
-        ].join("\n"),
-      })),
-      tasks,
-      conflict_policy: {
-        on_overlap: "sequential",
-        overlap_detection: "file_only",
-      },
-    },
-    next_actions: quality.status === "warning"
-      ? quality.next_actions
-      : ["Run yolo check on the compiled PRD before yolo run."],
+    prd,
+    next_actions: ["Run yolo check on the compiled PRD before yolo run."],
   };
 }
 
@@ -1040,9 +1171,36 @@ export function runDemandPrdRuntime(input = {}, options = {}) {
 
   const compiled = buildDemandPrd(read.session, input, options);
   const outputFile = resolvePath(projectRoot, input.outputFile || input.output_file || input.prdPath || input.prd_path || join(read.dir, "prd.json"));
+  let preflight = null;
+  if (compiled.prd) {
+    preflight = preflightPrdDocument(compiled.prd, {
+      file: outputFile,
+      projectRoot,
+      mode: "verify",
+      strictExecution: true,
+      requireDemandContract: true,
+      strictWarnings: true,
+    });
+    if (preflight.status !== "pass") {
+      compiled.status = "blocked";
+      compiled.code = "DEMAND_PRD_PREFLIGHT_BLOCKED";
+      compiled.summary = "Approved demand PRD failed runner preflight and was not written as executable.";
+      compiled.blockers = [
+        ...(compiled.blockers || []),
+        ...asArray(preflight.blocked_reasons).map((reason) => ({
+          code: reason.code || "PRD_PREFLIGHT_BLOCKED",
+          message: reason.message || reason.detail || "PRD preflight blocked execution.",
+          source: reason.source || "preflight",
+          reason,
+        })),
+      ];
+      compiled.warnings = [...(compiled.warnings || []), ...asArray(preflight.warnings)];
+      compiled.next_actions = preflight.runner_readiness?.next_actions || ["Fix PRD preflight blockers before writing executable PRD."];
+    }
+  }
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
   const artifacts = [];
-  if (shouldWrite && compiled.prd) artifacts.push(writeJson(outputFile, compiled.prd));
+  if (shouldWrite && compiled.prd && compiled.status === "success") artifacts.push(writeJson(outputFile, compiled.prd));
 
   const result = {
     status: compiled.status,
@@ -1051,7 +1209,8 @@ export function runDemandPrdRuntime(input = {}, options = {}) {
     demand_path: read.path,
     demand_id: read.session.id,
     compiled,
-    prd: compiled.prd,
+    prd: compiled.status === "success" ? compiled.prd : null,
+    preflight,
     readiness: compiled.readiness,
     quality_report: compiled.quality_report,
     blockers: compiled.blockers || [],
@@ -1060,7 +1219,7 @@ export function runDemandPrdRuntime(input = {}, options = {}) {
     outputs: artifacts.map((path) => ({ path, type: "prd" })),
     next_actions: compiled.next_actions || [],
   };
-  if (shouldWrite && compiled.prd && shouldWriteLifecycle(input, options)) {
+  if (shouldWrite && compiled.prd && compiled.status === "success" && shouldWriteLifecycle(input, options)) {
     attachLifecycle(result, "prd", { projectRoot, stateRoot }, "yolo-prd");
   }
   return result;

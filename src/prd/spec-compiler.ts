@@ -100,7 +100,7 @@ export function compileDiscoveryPlanToSpec(input = {}, options = {}) {
   });
   const validation = inspectSpecLifecyclePackage(spec);
   const allBlockers = [...blockers, ...(validation.blockers || [])];
-  const status = allBlockers.length > 0 ? "blocked" : (validation.status === "warning" ? "warning" : "pass");
+  const status = allBlockers.length > 0 ? "blocked" : "draft";
   const prd = allBlockers.length === 0
     ? specLifecycleToPrd(spec, {
         id: options.prdId || `PRD-${spec.id}`,
@@ -113,6 +113,7 @@ export function compileDiscoveryPlanToSpec(input = {}, options = {}) {
     schema_version: PRD_SPEC_COMPILER_SCHEMA_VERSION,
     schema: PRD_SPEC_COMPILER_SCHEMA,
     status,
+    executable: false,
     spec,
     prd,
     validation: {
@@ -129,6 +130,6 @@ export function compileDiscoveryPlanToSpec(input = {}, options = {}) {
     },
     next_actions: allBlockers.length > 0
       ? ["Return to /yolo-discover or /yolo-plan until requirement, design, tasks, scope, and traceability are complete."]
-      : ["Run /yolo-check on the compiled PRD before implementation."],
+      : ["Treat this as a draft; collect approved demand and pass runner preflight before implementation."],
   };
 }
