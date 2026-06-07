@@ -14,6 +14,12 @@ state/archive/
 state/runtime/
 state/evidence/
 
+# Stress fixtures may create nested Git repositories to test boundary handling.
+# Track fixture files, but never parent-repo commit their internal Git metadata.
+.yolo/stress/**/.git/
+.yolo/stress/**/fixtures/*-real-boundary-mutation-probe/
+.yolo/stress/manual-boundary-probe-*/fixture/
+
 # Local logs and scratch files.
 logs/
 tmp/
