@@ -156,6 +156,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo",
     alias_for: "status",
+    deprecation_target: "status",
     lifecycle_stage: "status",
     workflow: "doctor",
     description: "Compatibility dispatcher for historical freeform /yolo usage; prefer yolo status plus the 8 stable subcommands.",
@@ -170,6 +171,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo-brainstorm",
     alias_for: "demand",
+    deprecation_target: "demand",
     lifecycle_stage: "idea",
     workflow: "brainstorm",
     description: "Compatibility alias for yolo demand --stage brainstorm.",
@@ -185,6 +187,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo-interview",
     alias_for: "demand",
+    deprecation_target: "demand",
     lifecycle_stage: "discovery",
     workflow: "interview",
     description: "Compatibility alias for yolo demand --stage interview; uses the same one-question demand interview host contract.",
@@ -200,6 +203,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo-discover",
     alias_for: "demand",
+    deprecation_target: "demand",
     lifecycle_stage: "discovery",
     workflow: "discover",
     description: "Compatibility alias for yolo demand --stage discover.",
@@ -215,6 +219,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo-discuss",
     alias_for: "demand",
+    deprecation_target: "demand",
     lifecycle_stage: "discovery",
     workflow: "discuss",
     description: "Compatibility alias for yolo demand --stage discuss.",
@@ -230,6 +235,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "office-hours",
     alias_for: "demand",
+    deprecation_target: "demand",
     lifecycle_stage: "idea",
     workflow: "demand",
     description: "Compatibility shim for yolo demand --mode office-hours; hidden from default help.",
@@ -246,6 +252,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo-next",
     alias_for: "status",
+    deprecation_target: "status",
     lifecycle_stage: "status",
     workflow: "doctor",
     description: "Compatibility alias for yolo status.",
@@ -261,6 +268,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo-plan",
     alias_for: "tasks",
+    deprecation_target: "tasks",
     lifecycle_stage: "tasks",
     workflow: "plan",
     description: "Compatibility alias for yolo tasks.",
@@ -276,6 +284,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo-prd",
     alias_for: "spec",
+    deprecation_target: "spec",
     lifecycle_stage: "spec",
     workflow: "prd",
     description: "Compatibility alias for yolo spec.",
@@ -291,6 +300,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo-fix",
     alias_for: "run",
+    deprecation_target: "run",
     lifecycle_stage: "run",
     workflow: "fix",
     description: "Compatibility alias for approved fix execution through yolo run.",
@@ -306,6 +316,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo-accept",
     alias_for: "release",
+    deprecation_target: "release",
     lifecycle_stage: "release",
     workflow: "accept",
     description: "Compatibility alias for yolo release accept.",
@@ -321,6 +332,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo-ui-review",
     alias_for: "release",
+    deprecation_target: "release",
     lifecycle_stage: "release",
     workflow: "accept",
     description: "Compatibility alias for yolo release accept --collect-evidence.",
@@ -336,6 +348,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo-ship",
     alias_for: "release",
+    deprecation_target: "release",
     lifecycle_stage: "release",
     workflow: "ship",
     description: "Compatibility alias for yolo release ship.",
@@ -351,6 +364,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo-release-candidate",
     alias_for: "release",
+    deprecation_target: "release",
     lifecycle_stage: "release",
     workflow: "ship",
     description: "Compatibility alias for yolo release candidate.",
@@ -366,6 +380,7 @@ export const YOLO_COMMANDS = [
   compatibilityCommand({
     name: "yolo-release-gate",
     alias_for: "release",
+    deprecation_target: "release",
     lifecycle_stage: "release",
     workflow: "ship",
     description: "Compatibility alias for yolo release candidate.",
@@ -381,6 +396,7 @@ export const YOLO_COMMANDS = [
   internalCommand({
     name: "init",
     alias_for: "status",
+    deprecation_target: "status",
     lifecycle_stage: "setup",
     workflow: "doctor",
     description: "Internal setup utility; hidden from default help.",
@@ -396,6 +412,7 @@ export const YOLO_COMMANDS = [
   internalCommand({
     name: "setup",
     alias_for: "status",
+    deprecation_target: "status",
     lifecycle_stage: "setup",
     workflow: "doctor",
     description: "Internal setup utility; hidden from default help.",
@@ -411,6 +428,7 @@ export const YOLO_COMMANDS = [
   internalCommand({
     name: "install",
     alias_for: "status",
+    deprecation_target: "status",
     lifecycle_stage: "setup",
     workflow: "doctor",
     description: "Internal install utility; hidden from default help.",
@@ -426,6 +444,7 @@ export const YOLO_COMMANDS = [
   internalCommand({
     name: "doctor",
     alias_for: "status",
+    deprecation_target: "status",
     lifecycle_stage: "status",
     workflow: "doctor",
     description: "Internal diagnostic utility; hidden from default help.",
@@ -441,6 +460,7 @@ export const YOLO_COMMANDS = [
   internalCommand({
     name: "eval",
     alias_for: "check",
+    deprecation_target: "check",
     lifecycle_stage: "check",
     workflow: "eval",
     description: "Internal benchmark/eval workflow; hidden from default help.",
@@ -456,6 +476,7 @@ export const YOLO_COMMANDS = [
   internalCommand({
     name: "runner",
     alias_for: "run",
+    deprecation_target: "run",
     lifecycle_stage: "run",
     workflow: "fix",
     description: "Internal engine-only runner; hidden from default help.",
@@ -471,6 +492,7 @@ export const YOLO_COMMANDS = [
   internalCommand({
     name: "progress-ui-evidence",
     alias_for: "release",
+    deprecation_target: "release",
     lifecycle_stage: "release",
     workflow: "accept",
     description: "Internal UI evidence helper; hidden from default help.",
@@ -486,6 +508,7 @@ export const YOLO_COMMANDS = [
   internalCommand({
     name: "memory",
     alias_for: "status",
+    deprecation_target: "status",
     lifecycle_stage: "learn",
     workflow: "learn",
     description: "Internal memory maintenance utility; hidden from default help.",
@@ -501,6 +524,7 @@ export const YOLO_COMMANDS = [
   internalCommand({
     name: "learn",
     alias_for: "release",
+    deprecation_target: "release",
     lifecycle_stage: "learn",
     workflow: "learn",
     description: "Internal learning workflow; hidden from default help.",
