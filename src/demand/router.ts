@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { detectProjectState } from "./project-state-detector.js";
 
 export const DEMAND_ROUTER_SCHEMA_VERSION = "1.0";
 export const DEMAND_ROUTER_SCHEMA = "yolo.demand.router.v1";
@@ -704,7 +705,17 @@ export function inspectDemandTriage(input = {}, options = {}) {
   const session = options.session || buildStatusSession(input, options);
   const files = targetFiles(session, input);
   const sourceText = textFrom(...demandTextItems(input, session));
-  const existing = hasExistingSignal(sourceText, files, input);
+  // brownfield 检测优先看项目实际文件状态，而非用户措辞。仅在显式传入 projectRoot/cwd 时扫描，
+  // 避免在纯文本 triage（projectRoot 回退到工具自身 cwd）时误判。
+  const explicitRoot = clean(
+    input.projectRoot || input.project_root || input.cwd
+    || options.projectRoot || options.project_root || options.cwd,
+  );
+  // 仅当调用方显式要求扫描项目状态时才扫描（默认开）。runtime 在调用方未提供真实项目 root 时
+  // 传 scanProjectState:false，避免在纯文本 triage（root 回退到工具自身 cwd）时误判 brownfield。
+  const scanProjectState = options.scanProjectState !== false && input.scanProjectState !== false;
+  const projectState = (explicitRoot && scanProjectState) ? detectProjectState(resolve(explicitRoot)) : null;
+  const existing = hasExistingSignal(sourceText, files, input) || projectState?.has_existing_code === true;
   const greenfield = hasGreenfieldSignal(sourceText);
   const hybrid = existing && (greenfield || hasHybridSignal(sourceText));
   const technicalRisk = hasTechnicalRiskSignal(sourceText);

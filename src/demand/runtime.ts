@@ -228,6 +228,12 @@ export function runDemandStatusRuntime(input = {}, options = {}) {
       };
     }
   }
+  // 仅当调用方显式提供项目 root 时才扫描项目文件状态做 brownfield 判定；
+  // 否则 projectRoot 是回退的工具 cwd，扫描会误判，关闭它。
+  const callerProvidedRoot = Boolean(
+    input.projectRoot || input.project_root || input.cwd
+    || options.projectRoot || options.project_root || options.cwd,
+  );
   const result = buildDemandSessionState({
     ...input,
     projectRoot,
@@ -236,6 +242,7 @@ export function runDemandStatusRuntime(input = {}, options = {}) {
     ...options,
     projectRoot,
     stateRoot,
+    scanProjectState: callerProvidedRoot,
   });
   return {
     ...result,
