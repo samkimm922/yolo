@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import {
   listWorkflows,
   workflowToSkillDescriptor,
@@ -599,7 +600,12 @@ export function installWorkflowSkills(options = {}) {
 }
 
 export function buildWorkflowSkillTargetSmokePlan(options = {}) {
-  const projectRoot = resolve(options.projectRoot || options.cwd || process.cwd());
+  // 烟测默认写入一次性 tmpdir 沙盒，绝不落到真实 cwd/.agents——避免污染当前项目。
+  // 仅当显式传入 projectRoot/cwd 时才使用指定目录（测试用临时沙盒）。
+  const explicitRoot = options.projectRoot || options.cwd;
+  const projectRoot = explicitRoot
+    ? resolve(explicitRoot)
+    : mkdtempSync(join(tmpdir(), "yolo-workflow-smoke-"));
   const packageRoot = options.packageRoot || options.package_root
     ? resolve(options.packageRoot || options.package_root)
     : null;
