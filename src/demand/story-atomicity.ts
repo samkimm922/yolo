@@ -111,6 +111,116 @@ function uniqueSignatures(signatures) {
   });
 }
 
+// ── 通用（领域无关）原子性检测 ────────────────────────────────
+// Kanban signatures 未命中 ≥2 时的兜底层，覆盖任意领域（API/CLI/数据/移动端等）。
+// 原则：只在「显式连词连接的多个独立可交付动作」或「跨 UI+API+DB 三层」时判定非原子，
+// 保持保守，避免对 read/return/display 这类支撑性动作误报。
+
+// 可独立交付的副作用/变更动词；刻意排除 read/return/show/display/get/fetch/load/render 等支撑动作。
+const DELIVERABLE_VERB_TERMS = [
+  "create", "creates", "add", "adds", "delete", "deletes", "remove", "removes",
+  "update", "updates", "edit", "edits", "modify", "modifies", "rename", "renames",
+  "move", "moves", "send", "sends", "upload", "uploads", "download", "downloads",
+  "deploy", "deploys", "validate", "validates", "verify", "authenticate", "authorize",
+  "implement", "implements", "build", "builds", "configure", "configures", "install",
+  "connect", "connects", "migrate", "migrates", "sync", "syncs", "export", "exports",
+  "import", "imports", "notify", "notifies", "schedule", "schedules", "integrate",
+  "transform", "transforms", "generate", "generates", "insert", "inserts", "parse",
+  "register", "registers", "login", "logout", "encrypt", "encrypts", "paginate",
+  "新增", "新建", "创建", "添加", "增加", "删除", "移除", "修改", "编辑", "重命名",
+  "移动", "拖动", "发送", "上传", "下载", "部署", "校验", "验证", "鉴权", "实现",
+  "构建", "配置", "安装", "连接", "迁移", "同步", "导出", "导入", "通知", "集成", "生成", "插入",
+];
+
+// 仅用真正的并列连词，刻意排除 / , 、 这类标点——它们会出现在结构性 surface 标签里（如"测试/验证"），
+// 用作连词会把自动生成的元数据误判成独立动作。
+const GENERIC_STRICT_CONNECTOR = "(?:\\band\\b|\\bplus\\b|\\bthen\\b|\\+|并且|并|以及|同时|然后)";
+const GENERIC_PAIR_DISTANCE = 40;
+
+const GENERIC_LAYER_UI_TERMS = ["button", "form", "page", "modal", "dialog", "screen", "component", "input", "按钮", "表单", "页面", "弹窗", "界面", "组件"];
+const GENERIC_LAYER_API_TERMS = ["endpoint", "api", "route", "request", "response", "rest", "graphql", "websocket", "接口", "路由", "请求", "响应"];
+const GENERIC_LAYER_DB_TERMS = ["database", "table", "query", "schema", "migration", "row", "column ", "数据库", "表", "查询", "字段", "记录"];
+
+// 名词化的可交付能力（"实现认证 + 邮箱验证 + OAuth" 这类句子动词只有一个，但列了多个独立能力）。
+const DELIVERABLE_CAPABILITY_TERMS = [
+  "authentication", "authorization", "verification", "validation", "migration",
+  "integration", "notification", "deployment", "login", "logout", "signup", "sign up",
+  "registration", "oauth", "sso", "single sign-on", "encryption", "pagination",
+  "caching", "rate limiting", "localization", "认证", "鉴权", "授权", "验证", "迁移",
+  "集成", "通知", "部署", "登录", "登出", "注册", "加密", "分页", "缓存", "限流", "本地化",
+];
+
+function distinctDeliverableActions(text) {
+  const found = new Set();
+  for (const verb of DELIVERABLE_VERB_TERMS) {
+    if (new RegExp(termSource(verb), "i").test(text)) {
+      // 归并英文时态变体到词根，避免 create/creates 计成两个
+      const root = verb.replace(/(s|es)$/i, "").replace(/(创建|新建|新增|添加|增加)/, "create");
+      found.add(root.toLowerCase());
+    }
+  }
+  for (const noun of DELIVERABLE_CAPABILITY_TERMS) {
+    if (new RegExp(termSource(noun), "i").test(text)) {
+      found.add(noun.toLowerCase());
+    }
+  }
+  return found;
+}
+
+// 两个可交付动作由并列连词在邻近范围连接 → 多 story 信号（避免全局共现误报）。
+function hasDeliverablePair(text) {
+  const deliv = termsPattern([...DELIVERABLE_VERB_TERMS, ...DELIVERABLE_CAPABILITY_TERMS]);
+  const window = `[\\s\\S]{0,${GENERIC_PAIR_DISTANCE}}`;
+  return new RegExp(`${deliv}${window}${GENERIC_STRICT_CONNECTOR}${window}${deliv}`, "i").test(text);
+}
+
+function crossesAllLayers(text) {
+  const ui = hasAny(text, GENERIC_LAYER_UI_TERMS);
+  const api = hasAny(text, GENERIC_LAYER_API_TERMS);
+  const db = hasAny(text, GENERIC_LAYER_DB_TERMS);
+  return ui && api && db;
+}
+
+// 框架自动注入的 surface 分类标签（见 artifacts.ts surfaceKindLabel / runtime.ts），
+// 不是用户 story 内容；通用检测前剥离，避免把"代码实现"/"测试/验证"当成独立动作。
+const STRUCTURAL_SURFACE_LABELS = [
+  "用户可见界面", "接口/服务入口", "业务规则/服务逻辑", "数据/持久化", "测试/验证", "文档/说明", "代码实现",
+];
+
+function stripStructuralLabels(text) {
+  let cleaned = text;
+  for (const label of STRUCTURAL_SURFACE_LABELS) {
+    cleaned = cleaned.split(label).join(" ");
+  }
+  return cleaned;
+}
+
+function detectGenericStories(rawText) {
+  const text = stripStructuralLabels(rawText);
+  const stories = [];
+  if (hasDeliverablePair(text)) {
+    const verbs = [...distinctDeliverableActions(text)];
+    verbs.forEach((verb, index) => {
+      stories.push({ id: `generic_action_${index + 1}`, label: `independent action: ${verb}` });
+    });
+    // 若去重后只剩一个词根（同一动作重复），仍按 pair 信号给出两个 story 占位以保持 ≥2。
+    if (stories.length < 2) {
+      stories.length = 0;
+      stories.push(
+        { id: "generic_action_1", label: "independent action" },
+        { id: "generic_action_2", label: "independent action" },
+      );
+    }
+  } else if (crossesAllLayers(text)) {
+    stories.push(
+      { id: "generic_layer_ui", label: "UI layer change" },
+      { id: "generic_layer_api", label: "API layer change" },
+      { id: "generic_layer_db", label: "data layer change" },
+    );
+  }
+  return stories;
+}
+
 function splitSuggestions(signatures, item) {
   return signatures.map((signature, index) => ({
     id: `${item.id || item.kind || "story"}-S${index + 1}`,
@@ -126,7 +236,14 @@ function textExcerpt(text) {
 
 export function inspectStoryAtomicityText(text, item = {}) {
   const normalized = clean(text).toLowerCase();
-  const signatures = uniqueSignatures(SIGNATURES.filter((signature) => signature.matches(normalized)));
+  let signatures = uniqueSignatures(SIGNATURES.filter((signature) => signature.matches(normalized)));
+  // 通用层只在领域 signatures 完全沉默时启用：领域文本若已被 Kanban 专家检测器判定（哪怕 1 个签名=单一
+  // story），就信任它，不用通用规则二次猜测——避免对领域内已判定原子的 task 误报。通用层覆盖 Kanban
+  // 词汇之外的领域（API/CLI/数据/移动端等）。
+  if (signatures.length === 0) {
+    const generic = detectGenericStories(normalized);
+    if (generic.length >= 2) signatures = generic;
+  }
   if (signatures.length < 2) {
     return {
       status: "pass",
