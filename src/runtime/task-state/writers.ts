@@ -1,4 +1,5 @@
-import { appendFileSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
+import { writeStateAtomic } from "../persist/atomic-state.js";
 
 function clean(value) {
   return typeof value === "string" ? value.trim() : value;
@@ -71,9 +72,7 @@ export function updatePrdTaskStatusFile(prdPath, taskId, update) {
     if (!task) return { wrote: false, reason: "task_not_found" };
 
     Object.assign(task, update);
-    const tmp = `${prdPath}.tmp`;
-    writeFileSync(tmp, JSON.stringify(prd, null, 2), "utf8");
-    renameSync(tmp, prdPath);
+    writeStateAtomic(prdPath, prd);
     return { wrote: true, task, prd };
   } catch (error) {
     return { wrote: false, reason: "write_failed", error };

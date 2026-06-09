@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { writeStateAtomic } from "../persist/atomic-state.js";
 
 export function buildCurrentRunPayload({
   runId,
@@ -19,9 +20,7 @@ export function writeCurrentRunFile({ currentRunFile, runId, prdPath, projectRoo
   try {
     const payload = buildCurrentRunPayload({ runId, prdPath, projectRoot, now });
     mkdirSync(dirname(currentRunFile), { recursive: true });
-    const tmp = `${currentRunFile}.tmp`;
-    writeFileSync(tmp, JSON.stringify(payload, null, 2), "utf8");
-    renameSync(tmp, currentRunFile);
+    writeStateAtomic(currentRunFile, payload);
     return { wrote: true, payload };
   } catch (error) {
     return { wrote: false, reason: "write_failed", error };
@@ -50,9 +49,7 @@ export function archiveCurrentRunFile({
     mkdirSync(archiveDir, { recursive: true });
     const archiveName = `${runId || payload.run_id}.json`;
     const archivePath = join(archiveDir, archiveName);
-    const tmp = `${archivePath}.tmp`;
-    writeFileSync(tmp, JSON.stringify(payload, null, 2), "utf8");
-    renameSync(tmp, archivePath);
+    writeStateAtomic(archivePath, payload);
     unlinkSync(currentRunFile);
     return { archived: true, archivePath, payload };
   } catch (error) {
