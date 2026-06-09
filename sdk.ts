@@ -124,6 +124,7 @@ import {
   runDemandStatusRuntime,
   writeDemandArtifacts,
 } from "./src/demand/runtime.js";
+import { buildUnderstandingPlayback } from "./src/demand/understanding-playback.js";
 import { discoverPackManifests, readPackManifest, validatePackManifest } from "./src/packs/manifest.js";
 import { resolveProjectContext } from "./src/packs/resolver.js";
 import { buildTraceabilityMatrix, inspectSpecGovernance } from "./src/spec/traceability.js";
@@ -505,6 +506,7 @@ export function createYoloSdk(options = {}) {
         ...demandOptions,
       }),
       markdownArtifacts: demandMarkdownArtifacts,
+      playbackUnderstanding: (session = {}) => buildUnderstandingPlayback(session),
       readSession: readDemandSession,
       readyArtifacts: demandReadyArtifacts,
       runBrainstorm: (demandInput = {}, demandOptions = {}) => runDemandBrainstormRuntime({

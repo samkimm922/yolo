@@ -766,6 +766,7 @@
           "inspectReadiness": "experimental",
           "inspectTriage": "experimental",
           "markdownArtifacts": "experimental",
+          "playbackUnderstanding": "experimental",
           "prdReadinessSchemaVersion": "experimental",
           "readSession": "experimental",
           "readinessSchemaVersion": "experimental",
