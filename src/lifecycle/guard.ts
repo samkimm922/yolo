@@ -16,6 +16,7 @@ const PENDING_REPORT_STATUSES = new Set(["pending", "active", "running", "in_pro
 const MAIN_NEXT_STAGES = [
   { stage: "discovery", command: "/yolo-discover", description: "clarify the idea before planning" },
   { stage: "roadmap", command: "/yolo-plan", description: "create the execution plan" },
+  { stage: "task-graph", command: "/yolo-tasks", description: "decompose the plan into atomic executable tasks" },
   { stage: "prd", command: "/yolo-prd", description: "compile the executable PRD" },
   { stage: "check", command: "/yolo-check", description: "validate the PRD before edits" },
   { stage: "run", command: "/yolo-run", description: "execute only after check passes and the user approves execution" },

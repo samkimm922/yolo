@@ -45,7 +45,7 @@ export const LIFECYCLE_STAGES = [
     label: "Task graph",
     purpose: "Split planned work into atomic tasks with dependencies, owners, gates, and evidence needs.",
     default_artifact: "task-graph.json",
-    entry_commands: ["yolo-plan"],
+    entry_commands: ["yolo-tasks"],
     writes_code: false,
   },
   {
