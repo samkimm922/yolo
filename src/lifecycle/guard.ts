@@ -9,7 +9,8 @@ export const LIFECYCLE_GUARD_SCHEMA = "yolo.lifecycle.guard.v1";
 const SETUP_COMMANDS = new Set(["yolo-init", "yolo-install", "yolo-doctor"]);
 const EARLY_COMMANDS = new Set(["yolo", "yolo-next", "yolo-brainstorm", "yolo-interview", "yolo-discover", "yolo-discuss"]);
 const WRITE_COMMANDS = new Set(["yolo-run", "yolo-fix", "yolo-init", "yolo-install"]);
-const WARNING_READY_STAGES = new Set();
+// Must remain empty. Adding any stage here allows warning-state artifacts to bypass gate enforcement (fail-closed policy).
+const WARNING_READY_STAGES: ReadonlySet<string> = Object.freeze(new Set<string>());
 const BLOCKING_REPORT_STATUSES = new Set(["blocked", "error", "failed", "fail", "warning", "draft", "not_run", "indeterminate"]);
 const PENDING_REPORT_STATUSES = new Set(["pending", "active", "running", "in_progress", "todo", "open"]);
 
