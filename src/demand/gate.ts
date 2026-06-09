@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { inspectStoryAtomicityFromDemand } from "./story-atomicity.js";
+import { validateWarningAck, buildWarningAckRequired } from "../lib/warning-ack.js";
 
 export const DEMAND_READINESS_SCHEMA_VERSION = "1.0";
 export const DEMAND_READINESS_SCHEMA = "yolo.demand.readiness.v1";
@@ -1172,6 +1173,33 @@ export function inspectDemandQuality(session = {}, options = {}) {
   }
 
   const status = blockers.length > 0 ? "blocked" : warnings.length > 0 ? "warning" : "pass";
+
+  // Demand quality warnings require explicit ack fingerprint — prevents silent fake success.
+  const ackWarnings = options.ackWarnings || options.ack_warnings;
+  if (status === "warning" && !validateWarningAck(warnings, ackWarnings)) {
+    const ackBlock = buildWarningAckRequired(warnings);
+    return {
+      schema_version: DEMAND_QUALITY_SCHEMA_VERSION,
+      schema: DEMAND_QUALITY_SCHEMA,
+      phase,
+      status: "blocked" as const,
+      code: ackBlock.code,
+      ack_required: ackBlock.ack_required,
+      message: ackBlock.message,
+      total_score,
+      pass_score: passScore,
+      block_score: blockScore,
+      dimensions,
+      blockers: [{ code: ackBlock.code, message: ackBlock.message }],
+      warnings,
+      readiness_status: readiness?.status || null,
+      readiness_level: readiness?.readiness_level || null,
+      atomicity_status: atomicity?.status || null,
+      story_atomicity_status: storyAtomicity?.status || null,
+      next_actions: [ackBlock.message],
+    };
+  }
+
   return {
     schema_version: DEMAND_QUALITY_SCHEMA_VERSION,
     schema: DEMAND_QUALITY_SCHEMA,

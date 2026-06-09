@@ -6,6 +6,7 @@ import { inspectPrdContract } from "../runtime/gates/prd-contract-doctor.js";
 import { createPrdMigrationAdvice, findPrdFiles } from "./migration.js";
 import { inspectSpecGovernanceGate, specGovernancePolicy } from "../runtime/gates/spec-governance-gate.js";
 import { validatePrdObject, validatePrdPath } from "./validate.js";
+import { validateWarningAck, buildWarningAckRequired } from "../lib/warning-ack.js";
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 const STRICT_WARNING_MODES = new Set(["verify", "runner", "release", "strict", "ship"]);
@@ -227,6 +228,38 @@ function inspectPreflightReadiness(read, schema, options = {}) {
   ].filter(Boolean);
   const warningCount = warnings.length;
   const runnerReadiness = buildRunnerReadiness({ read, schema, contract, migration, specGovernance, blockedReasons, blockingWarnings });
+
+  // Advisory warnings require explicit ack fingerprint to prevent silent fake success.
+  // Exception: "advisory" mode is itself an explicit opt-in — no fingerprint needed.
+  const ackWarnings = options.ackWarnings || options.ack_warnings;
+  const modeIsAdvisory = preflightMode(options) === "advisory";
+  if (!modeIsAdvisory && blockedReasons.length === 0 && advisoryWarnings.length > 0 && !validateWarningAck(advisoryWarnings, ackWarnings)) {
+    const ackBlock = buildWarningAckRequired(advisoryWarnings);
+    return {
+      ...ackBlock,
+      generated_at: nowIso(),
+      file: read.file,
+      schema,
+      contract,
+      spec_governance: specGovernance,
+      migration,
+      runner_readiness: { ...runnerReadiness, can_execute: false },
+      blocked_count: 1,
+      warning_count: warningCount,
+      advisory_warning_count: advisoryWarnings.length,
+      blocking_warning_count: 0,
+      warnings,
+      advisory_warnings: advisoryWarnings,
+      blocking_warnings: [],
+      warning_policy: {
+        mode: preflightMode(options),
+        fail_closed: failClosedWarnings,
+        advisory_warning_count: advisoryWarnings.length,
+        blocking_warning_count: 0,
+      },
+      blocked_reasons: [{ source: "warning_ack", code: ackBlock.code, detail: ackBlock.message }],
+    };
+  }
 
   return {
     status: blockedReasons.length > 0 ? "blocked" : warningCount > 0 ? "warning" : "pass",
