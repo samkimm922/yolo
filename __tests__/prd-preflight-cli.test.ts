@@ -141,7 +141,7 @@ describe("prd preflight CLI warning policy", () => {
     }
   });
 
-  test("advisory warning PRDs exit 2 in direct and wrapper preflight CLIs", () => {
+  test("advisory mode removed — warning PRDs are blocked regardless of mode", () => {
     const root = tempProject();
     let stdout = "";
     let stderr = "";
@@ -160,8 +160,9 @@ describe("prd preflight CLI warning policy", () => {
       const directPayload = JSON.parse(direct.stdout);
 
       assert.equal(direct.stderr, "");
-      assert.equal(direct.status, 2);
-      assert.equal(directPayload.status, "warning");
+      assert.equal(direct.status, 1);
+      assert.equal(directPayload.status, "blocked");
+      assert.equal(directPayload.blocking_warning_count > 0, true);
 
       const wrapperExit = runPrdPreflightCli([prdPath, "--mode=advisory", "--json"], {
         stdout: { write: (chunk) => { stdout += chunk; } },
@@ -170,8 +171,8 @@ describe("prd preflight CLI warning policy", () => {
       const wrapperPayload = JSON.parse(stdout);
 
       assert.equal(stderr, "");
-      assert.equal(wrapperExit, 2);
-      assert.equal(wrapperPayload.status, "warning");
+      assert.equal(wrapperExit, 1);
+      assert.equal(wrapperPayload.status, "blocked");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

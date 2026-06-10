@@ -6,10 +6,10 @@ import { inspectPrdContract } from "../runtime/gates/prd-contract-doctor.js";
 import { createPrdMigrationAdvice, findPrdFiles } from "./migration.js";
 import { inspectSpecGovernanceGate, specGovernancePolicy } from "../runtime/gates/spec-governance-gate.js";
 import { validatePrdObject, validatePrdPath } from "./validate.js";
-import { validateWarningAck, buildWarningAckRequired } from "../lib/warning-ack.js";
+
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
-const STRICT_WARNING_MODES = new Set(["verify", "runner", "release", "strict", "ship"]);
+
 
 function nowIso() {
   return new Date().toISOString();
@@ -29,12 +29,7 @@ function preflightMode(options = {}) {
   return clean(options.mode || options.executionMode || options.execution_mode || "verify").toLowerCase();
 }
 
-function strictWarningPolicy(options = {}) {
-  if (options.failClosedWarnings === false || options.fail_closed_warnings === false) return false;
-  if (options.strictWarnings === true || options.strict_warnings === true) return true;
-  if (options.strictExecution === true || options.strict_execution === true) return true;
-  return STRICT_WARNING_MODES.has(preflightMode(options));
-}
+
 
 function schemaWarningCode(warning) {
   const text = clean(warning);
@@ -217,49 +212,14 @@ function inspectPreflightReadiness(read, schema, options = {}) {
   }
 
   const warnings = collectWarnings({ schema, contract, specGovernance });
-  const failClosedWarnings = strictWarningPolicy(options);
-  const advisoryWarnings = failClosedWarnings ? [] : warnings;
-  const blockingWarnings = failClosedWarnings ? warnings : [];
   const blockedReasons = [
     schemaBlockedReason(schema),
     ...contractBlockedReasons(contract),
     ...specBlockedReasons(specGovernance),
-    ...blockingWarnings.map(warningBlockedReason),
+    ...warnings.map(warningBlockedReason),
   ].filter(Boolean);
   const warningCount = warnings.length;
-  const runnerReadiness = buildRunnerReadiness({ read, schema, contract, migration, specGovernance, blockedReasons, blockingWarnings });
-
-  // Advisory warnings require explicit ack fingerprint to prevent silent fake success.
-  // Exception: "advisory" mode is itself an explicit opt-in — no fingerprint needed.
-  const ackWarnings = options.ackWarnings || options.ack_warnings;
-  const modeIsAdvisory = preflightMode(options) === "advisory";
-  if (!modeIsAdvisory && blockedReasons.length === 0 && advisoryWarnings.length > 0 && !validateWarningAck(advisoryWarnings, ackWarnings)) {
-    const ackBlock = buildWarningAckRequired(advisoryWarnings);
-    return {
-      ...ackBlock,
-      generated_at: nowIso(),
-      file: read.file,
-      schema,
-      contract,
-      spec_governance: specGovernance,
-      migration,
-      runner_readiness: { ...runnerReadiness, can_execute: false },
-      blocked_count: 1,
-      warning_count: warningCount,
-      advisory_warning_count: advisoryWarnings.length,
-      blocking_warning_count: 0,
-      warnings,
-      advisory_warnings: advisoryWarnings,
-      blocking_warnings: [],
-      warning_policy: {
-        mode: preflightMode(options),
-        fail_closed: failClosedWarnings,
-        advisory_warning_count: advisoryWarnings.length,
-        blocking_warning_count: 0,
-      },
-      blocked_reasons: [{ source: "warning_ack", code: ackBlock.code, detail: ackBlock.message }],
-    };
-  }
+  const runnerReadiness = buildRunnerReadiness({ read, schema, contract, migration, specGovernance, blockedReasons, blockingWarnings: warnings });
 
   return {
     status: blockedReasons.length > 0 ? "blocked" : warningCount > 0 ? "warning" : "pass",
@@ -273,16 +233,16 @@ function inspectPreflightReadiness(read, schema, options = {}) {
     runner_readiness: runnerReadiness,
     blocked_count: blockedReasons.length,
     warning_count: warningCount,
-    advisory_warning_count: advisoryWarnings.length,
-    blocking_warning_count: blockingWarnings.length,
+    advisory_warning_count: 0,
+    blocking_warning_count: warningCount,
     warnings,
-    advisory_warnings: advisoryWarnings,
-    blocking_warnings: blockingWarnings,
+    advisory_warnings: [],
+    blocking_warnings: warnings,
     warning_policy: {
       mode: preflightMode(options),
-      fail_closed: failClosedWarnings,
-      advisory_warning_count: advisoryWarnings.length,
-      blocking_warning_count: blockingWarnings.length,
+      fail_closed: true,
+      advisory_warning_count: 0,
+      blocking_warning_count: warningCount,
     },
     blocked_reasons: blockedReasons,
   };

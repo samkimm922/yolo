@@ -2,13 +2,13 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { preflightPrdDocument } from "../src/prd/preflight.js";
 
-// PRD with acceptance_criteria post_condition (FAIL severity) → always produces MANUAL_FAIL_CONDITION warning
-// in contract doctor. In non-strict mode (mode="dev") this becomes an advisory warning, triggering ack gate.
+// PRD with acceptance_criteria post_condition (FAIL severity) → produces MANUAL_FAIL_CONDITION warning
+// in contract doctor. Warnings are now hard-blocked — no ack bypass exists.
 function prdWithManualFailCondition() {
   return {
     version: "2.0",
-    id: "PRD-001-WARN-ACK-TEST",
-    title: "Warning ack test",
+    id: "PRD-001-WARN-BLOCK-TEST",
+    title: "Warning block test",
     project: { name: "test", language: "typescript" },
     generated_by: "yolo-demand",
     generated_at: "2026-06-09T00:00:00.000Z",
@@ -44,65 +44,32 @@ function prdWithManualFailCondition() {
   };
 }
 
-// Non-strict mode: warnings become advisory (not blocking by default)
-const NON_STRICT_OPTS = { mode: "dev", strictExecution: false };
-
-describe("preflight warning soft-block (fingerprint ack)", () => {
-  test("advisory warnings without ack must return WARNING_ACK_REQUIRED blocked", () => {
-    const result = preflightPrdDocument(prdWithManualFailCondition(), NON_STRICT_OPTS);
-    assert.equal(result.advisory_warning_count, 1, "PRD must produce exactly 1 advisory warning");
-    assert.equal(result.status, "blocked");
-    assert.equal(result.code, "WARNING_ACK_REQUIRED");
-    assert.match(result.ack_required, /^[0-9a-f]{8}$/);
-    assert.ok(result.message.includes(result.ack_required));
+describe("preflight warning hard-block (no ack bypass)", () => {
+  test("warnings block preflight regardless of mode", () => {
+    const result = preflightPrdDocument(prdWithManualFailCondition(), { mode: "dev" });
+    assert.equal(result.status, "blocked", "warnings must block in dev mode");
+    assert.equal(result.blocking_warning_count > 0, true, "warnings must be treated as blocking");
+    assert.equal(result.advisory_warning_count, 0, "no advisory warnings — all are blocking");
   });
 
-  test("advisory warnings with correct ack fingerprint allows warning status through", () => {
-    const first = preflightPrdDocument(prdWithManualFailCondition(), NON_STRICT_OPTS);
-    assert.equal(first.code, "WARNING_ACK_REQUIRED");
-    const ack = first.ack_required;
-
-    const result = preflightPrdDocument(prdWithManualFailCondition(), { ...NON_STRICT_OPTS, ackWarnings: ack });
-    assert.equal(result.status, "warning", "with correct ack, advisory warnings should produce warning status (not blocked)");
-    assert.ok(result.advisory_warning_count > 0);
+  test("ackWarnings option is ignored — cannot bypass warning block", () => {
+    const result = preflightPrdDocument(prdWithManualFailCondition(), {
+      mode: "dev",
+      ackWarnings: "deadbeef",
+    });
+    assert.equal(result.status, "blocked", "ack fingerprint must not bypass the block");
+    assert.equal(result.code, undefined, "no WARNING_ACK_REQUIRED code — ack mechanism removed");
   });
 
-  test("wrong ack fingerprint still blocks", () => {
-    const result = preflightPrdDocument(prdWithManualFailCondition(), { ...NON_STRICT_OPTS, ackWarnings: "deadbeef" });
-    assert.equal(result.status, "blocked");
-    assert.equal(result.code, "WARNING_ACK_REQUIRED");
+  test("result never has ack_required field — ack mechanism is deleted", () => {
+    const result = preflightPrdDocument(prdWithManualFailCondition(), { mode: "dev" });
+    assert.equal(result.ack_required, undefined, "ack_required must not appear in result");
+    assert.equal(result.code, undefined, "no WARNING_ACK_REQUIRED code");
   });
 
-  test("strict mode warnings become hard-blocked (unchanged behavior)", () => {
-    // In strict mode, acceptance_criteria FAIL condition goes to unsupported-type failures
-    // or is still a warning — either way, ack must not be required
-    const result = preflightPrdDocument(prdWithManualFailCondition(), { mode: "verify", strictExecution: true });
-    assert.notEqual(result.code, "WARNING_ACK_REQUIRED", "strict mode must not produce ack-required");
-  });
-
-  test("PRD with no warnings passes without ack", () => {
-    const prd = {
-      ...prdWithManualFailCondition(),
-      tasks: [{
-        id: "IMPL-FEAT-001",
-        title: "Implement feature",
-        priority: "P2",
-        type: "feature",
-        task_kind: "atomic_implementation",
-        status: "pending",
-        requirement_ids: ["REQ-001"],
-        design_ids: ["DES-001"],
-        scope: { targets: [{ file: "src/foo.ts" }] },
-        post_conditions: [{
-          id: "POST-001",
-          type: "target_file_modified",
-          severity: "FAIL",
-          params: { file: "src/foo.ts" },
-        }],
-      }],
-    };
-    const result = preflightPrdDocument(prd, NON_STRICT_OPTS);
-    assert.notEqual(result.code, "WARNING_ACK_REQUIRED");
-    assert.equal(result.status, "pass");
+  test("advisory_warnings is always empty — all warnings are blocking", () => {
+    const result = preflightPrdDocument(prdWithManualFailCondition(), { mode: "dev" });
+    assert.deepEqual(result.advisory_warnings, []);
+    assert.equal(result.advisory_warning_count, 0);
   });
 });
