@@ -39,6 +39,7 @@ import {
   inspectDemandInterviewCoverage,
   selectDemandInterviewNextQuestion,
 } from "../demand/interview.js";
+import { buildUnderstandingPlayback } from "../demand/understanding-playback.js";
 import {
   formatLifecycleGuardText,
   inspectLifecycleGuard,
@@ -494,6 +495,10 @@ export function parseYoloInterviewArgs(argv = []) {
     } else if (arg === "--answer" || arg.startsWith("--answer=")) {
       const read = readArgValue(args, i, "--answer");
       input.answer = read.value;
+      i += read.consumed;
+    } else if (arg === "--confirm" || arg.startsWith("--confirm=")) {
+      const read = readArgValue(args, i, "--confirm");
+      input.confirm = read.value;
       i += read.consumed;
     } else if (!arg.startsWith("--") && command === "start") {
       input.ideaParts.push(arg);
@@ -1068,6 +1073,11 @@ function interviewNextActions(state = {}, extra = {}) {
   if (state.next_question) {
     actions.push(`Answer ${state.next_question.id}: yolo interview answer --session ${path} --question ${state.next_question.id} --answer "<answer>"`);
     actions.push(`Check progress: yolo interview status --session ${path}`);
+    return actions;
+  }
+  if (state.playback?.confirmed !== true) {
+    actions.push(`Confirm understanding: yolo interview playback --session ${path}`);
+    if (!extra.demand_dir) actions.push(`Then create demand artifacts: yolo interview to-demand --session ${path}`);
     return actions;
   }
   if (!extra.demand_dir) actions.push(`Create demand artifacts: yolo interview to-demand --session ${path}`);
@@ -2007,6 +2017,44 @@ export async function runYoloInterviewCli(argv = [], io = {}) {
       if (!read.ok) return error("status", "INTERVIEW_SESSION_MISSING", read.error, 1);
       return emit("status", interviewResult("status", read.state, {
         summary: "Interview session loaded.",
+      }));
+    }
+
+    if (command === "playback") {
+      if (!input.sessionPath) return error("playback", "MISSING_INTERVIEW_SESSION", "Missing --session <path|dir>.");
+      const read = readInterviewState(input.sessionPath, projectRoot);
+      if (!read.ok) return error("playback", "INTERVIEW_SESSION_MISSING", read.error, 1);
+      const state = read.state;
+      const generated = buildUnderstandingPlayback(state);
+      const hasConfirm = cleanCliText(input.confirm).length > 0;
+      if (hasConfirm) {
+        const now = new Date().toISOString();
+        state.playback = {
+          ...generated,
+          confirmed: true,
+          confirmed_by: "user",
+          answer: cleanCliText(input.confirm),
+          confirmed_at: now,
+        };
+        if (writeArtifacts) writeJsonFile(state.interview_path, state);
+        return emit("playback", interviewResult("playback", state, {
+          status: "success",
+          code: "PLAYBACK_CONFIRMED",
+          summary: "Understanding playback confirmed by user.",
+          artifacts: writeArtifacts ? [state.interview_path] : [],
+          outputs: [{ playback: state.playback }],
+          runtime_next_actions: [`Create demand artifacts: yolo interview to-demand --session ${state.interview_path}`],
+        }));
+      }
+      return emit("playback", interviewResult("playback", state, {
+        status: "ready",
+        code: "PLAYBACK_GENERATED",
+        summary: "Understanding playback generated. Review it, then confirm with --confirm '<your words>'.",
+        artifacts: [],
+        outputs: [{ playback: generated }],
+        runtime_next_actions: [
+          `Confirm understanding: yolo interview playback --session ${state.interview_path} --confirm "<your confirmation>"`,
+        ],
       }));
     }
 
