@@ -244,6 +244,13 @@ describe("yolo interview CLI", () => {
         ["mvp_priority", "MVP is threshold alert plus inventory badge; forecasting can come later."],
       ];
       for (const [question, value] of answers) await answer(root, started.session_path, question, value);
+      // P0.3: approval must come from real interview answer, not --approve flag
+      await answer(root, started.session_path, "execution_approval", "Approved, proceed to PRD.");
+
+      // Simulate playback confirmation (P0.3: playback must be confirmed before to-demand)
+      const sessionData = JSON.parse(readFileSync(started.session_path, "utf8"));
+      sessionData.playback = { confirmed: true, confirmed_by: "test", items: [] };
+      writeFileSync(started.session_path, JSON.stringify(sessionData), "utf8");
 
       const out = capture();
       const exitCode = await runYoloCli([
@@ -251,7 +258,6 @@ describe("yolo interview CLI", () => {
         "to-demand",
         "--session",
         dirname(started.session_path),
-        "--approve",
         "--json",
       ], { cwd: root, stdout: out.stream });
 
@@ -291,6 +297,13 @@ describe("yolo interview CLI", () => {
         ["mvp_priority", "MVP is creating and showing one private note on the customer record."],
       ];
       for (const [question, value] of answers) await answer(root, started.session_path, question, value);
+      // P0.3: approval must come from real interview answer, not --approve flag
+      await answer(root, started.session_path, "execution_approval", "Approved, proceed to PRD.");
+
+      // Simulate playback confirmation (P0.3)
+      const sessionData2 = JSON.parse(readFileSync(started.session_path, "utf8"));
+      sessionData2.playback = { confirmed: true, confirmed_by: "test", items: [] };
+      writeFileSync(started.session_path, JSON.stringify(sessionData2), "utf8");
 
       const out = capture();
       const exitCode = await runYoloCli([
@@ -298,7 +311,6 @@ describe("yolo interview CLI", () => {
         "to-demand",
         "--session",
         dirname(started.session_path),
-        "--approve",
         "--json",
       ], { cwd: root, stdout: out.stream });
 
@@ -332,13 +344,17 @@ describe("yolo interview CLI", () => {
       ];
       for (const [question, value] of answers) await answer(root, started.session_path, question, value);
 
+      // Simulate playback confirmation (P0.3)
+      const sessionData3 = JSON.parse(readFileSync(started.session_path, "utf8"));
+      sessionData3.playback = { confirmed: true, confirmed_by: "test", items: [] };
+      writeFileSync(started.session_path, JSON.stringify(sessionData3), "utf8");
+
       const out = capture();
       const exitCode = await runYoloCli([
         "interview",
         "to-demand",
         "--session",
         dirname(started.session_path),
-        "--approve",
         "--json",
       ], { cwd: root, stdout: out.stream });
 

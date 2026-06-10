@@ -1075,7 +1075,7 @@ function interviewNextActions(state = {}, extra = {}) {
     actions.push(`Check progress: yolo interview status --session ${path}`);
     return actions;
   }
-  if (!extra.demand_dir) actions.push(`Create demand artifacts: yolo interview to-demand --session ${path} --approve`);
+  if (!extra.demand_dir) actions.push(`Create demand artifacts: yolo interview to-demand --session ${path}`);
   if (extra.demand_dir) actions.push(`Continue to PRD when ready: yolo prd --demand ${extra.demand_dir}`);
   for (const action of extra.runtime_next_actions || []) {
     if (actions.length >= 3) break;
@@ -2020,11 +2020,8 @@ export async function runYoloInterviewCli(argv = [], io = {}) {
       const read = readInterviewState(input.sessionPath, projectRoot);
       if (!read.ok) return error("to-demand", "INTERVIEW_SESSION_MISSING", read.error, 1);
       const stateForDemand = cloneJson(read.state);
-      if (input.approve === true) {
-        answerDemandInterviewQuestion(stateForDemand, {
-          questionId: "execution_approval",
-          answer: "批准，按这个范围进入 PRD。",
-        });
+      if (stateForDemand.playback?.confirmed !== true) {
+        return error("to-demand", "PLAYBACK_UNCONFIRMED", "Understanding playback has not been confirmed by the user. Run playback confirmation before to-demand.", 2);
       }
       const demandInput = demandInterviewToDemandInput(stateForDemand);
       const demandResult = runDemandDiscussRuntime({

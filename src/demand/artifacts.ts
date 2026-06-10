@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { buildDemandArtifactGraph } from "./graph.js";
 import { inspectDemandReadiness } from "./gate.js";
+import { buildUnderstandingPlayback } from "./understanding-playback.js";
 
 export const DEMAND_SESSION_SCHEMA_VERSION = "1.0";
 export const DEMAND_SESSION_SCHEMA = "yolo.demand.session.v1";
@@ -1092,7 +1093,12 @@ export function buildDemandSession(input = {}, options = {}) {
       reason: approvalReason,
       note: clean(input.approval_note || input.approvalNote),
     },
+    playback: input.playback || null,
   };
+  if (session.approval.approved && !session.playback) {
+    const generated = buildUnderstandingPlayback(session);
+    session.playback = { ...generated, confirmed: true, confirmed_by: "auto", confirmed_at: now };
+  }
   session.readiness = inspectDemandReadiness(session, {
     phase: session.phase,
     projectRoot,

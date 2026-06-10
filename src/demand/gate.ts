@@ -647,6 +647,12 @@ export function inspectDemandReadiness(session = {}, options = {}) {
       { blocking_questions: blockingQuestions },
     ),
     check(
+      "PLAYBACK_CONFIRMED",
+      session.playback?.confirmed === true,
+      prdMode || deepMode ? "error" : "warning",
+      "Understanding playback must be generated and confirmed by the user before PRD. Run playback confirmation in the interview before to-demand.",
+    ),
+    check(
       "USER_APPROVAL_PRESENT",
       approval.approved === true,
       prdMode || deepMode ? "error" : "warning",
