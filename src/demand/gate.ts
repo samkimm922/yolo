@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { inspectStoryAtomicityFromDemand } from "./story-atomicity.js";
 import { validateWarningAck, buildWarningAckRequired } from "../lib/warning-ack.js";
+import { validateLedgerChain, readLedgerJsonl } from "../runtime/evidence/ledger.js";
 
 export const DEMAND_READINESS_SCHEMA_VERSION = "1.0";
 export const DEMAND_READINESS_SCHEMA = "yolo.demand.readiness.v1";
@@ -11,7 +12,12 @@ export const DEMAND_QUALITY_SCHEMA = "yolo.demand.quality.v1";
 function hasLedgerEvidence(stateDir) {
   if (!stateDir) return false;
   try {
-    return existsSync(join(stateDir, "evidence", "ledger.jsonl"));
+    const ledgerPath = join(stateDir, "evidence", "ledger.jsonl");
+    if (!existsSync(ledgerPath)) return false;
+    const records = readLedgerJsonl(ledgerPath);
+    if (records.length === 0) return false;
+    const validation = validateLedgerChain(records);
+    return validation.ok;
   } catch {
     return false;
   }
