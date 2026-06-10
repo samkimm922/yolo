@@ -1247,13 +1247,13 @@ describe("yolo sdk", () => {
     }
   });
 
-  test("runner module is import-safe for SDK runtime use", () => {
+  test("runner module does not export bare run/runCli — use SDK runtime instead", () => {
     const output = execFileSync(process.execPath, [
       "-e",
-      "import('./dist/runner.js').then((m)=>console.log(typeof m.run))",
+      "import('./dist/runner.js').then((m)=>console.log(typeof m.run, typeof m.runCli))",
     ], { cwd: YOLO_DIR, encoding: "utf8" }).trim();
 
-    assert.equal(output, "function");
+    assert.equal(output, "undefined undefined");
   });
 
   test("PM, PRD conversion, PRD preflight, and PRD validator modules are import-safe", () => {

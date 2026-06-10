@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 // YOLO Runner — PRD Contract v2.0 契约引擎 + narrower 重试 + WARN→FAIL 升级
-// 仅支持 PRD Contract v2.0 格式（scope + pre_conditions + post_conditions）
-// legacy PRD 不再支持运行时转换，请先离线迁移到 schemas/prd-v2.schema.json
-// 用法: node runner.js [prd.json] [--mode=dev] [--reset]
-//       PRD 路径可选，不传则自动找 scripts/yolo/ 下最新的 PRD JSON
+// 仅支持 PRD Contract v2.0 (scope + pre_conditions + post_conditions); 用法: node runner.js [prd.json] [--mode=dev] [--reset]
+// PRD 路径可选，不传则自动找 scripts/yolo/ 下最新的 PRD JSON
 import { appendFileSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,6 +40,7 @@ import {
   writeRunnerStateSnapshot,
 } from "./run-lifecycle/recovery-checkpoints.js";
 import { createRunnerTimeoutController } from "./run-lifecycle/shutdown.js";
+import { inspectLifecycleGuard } from "../lifecycle/guard.js";
 import {
   createRunnerWorktreeHandlers,
   detectRunnerModelProvider,
@@ -505,6 +504,8 @@ export async function run(prdPath, options = {}) {
   const runId = options.runId || options.run_id || generateRunId();
   activeRunId = runId;
   try {
+    const lg = inspectLifecycleGuard({ command: "yolo-run", projectRoot: ROOT, stateRoot: STATE_ROOT, prdPath });
+    if (lg.status !== "pass") { console.error(lg.summary || "Lifecycle guard blocked"); throw runnerError(lg.summary || "Lifecycle guard blocked", 1, { lifecycle_guard: lg }); }
     runPreExecutionGates(prdPath, { exitOnFailure: exitOnComplete });
 
     const resumeCompleted = prepareRunStartup({

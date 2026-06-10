@@ -57,7 +57,7 @@ describe("YOLO release-candidate CLI", () => {
     }
   });
 
-  test("supports publish mode and explicit allowances through the injected runner contract", async () => {
+  test("supports publish mode through the injected runner contract (no allow-untracked/allow-unknown bypass)", async () => {
     const root = tempProject();
     try {
       const { io, stdout } = captureIo(root, {
@@ -68,8 +68,8 @@ describe("YOLO release-candidate CLI", () => {
           assert.equal(input.internal_gate_id, "release-gate");
           assert.equal(input.mode, "publish");
           assert.equal(input.dryRun, false);
-          assert.equal(input.allowUntracked, true);
-          assert.equal(input.allowUnknown, true);
+          assert.equal(input.allowUntracked, false);
+          assert.equal(input.allowUnknown, false);
           assert.equal(input.failClosed, true);
           assert.equal(input.notTrelloReplay, true);
           assert.deepEqual(input.requiredGates.map((gate) => gate.id), [
@@ -100,8 +100,6 @@ describe("YOLO release-candidate CLI", () => {
         "release-gate",
         "--mode",
         "publish",
-        "--allow-untracked",
-        "--allow-unknown",
         "--json",
       ], io);
       const payload = JSON.parse(stdout.text);
@@ -112,7 +110,7 @@ describe("YOLO release-candidate CLI", () => {
       assert.equal(payload.mode, "publish");
       assert.equal(payload.dry_run, false);
       assert.equal(payload.fail_closed, true);
-      assert.deepEqual(payload.allowances, { untracked: true, unknown: true });
+      assert.deepEqual(payload.allowances, { untracked: false, unknown: false });
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

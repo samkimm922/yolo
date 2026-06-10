@@ -61,7 +61,7 @@ export function usage() {
     "  yolo check <prd.json> [--json] [--no-write] [--strict|--release]",
     "  yolo run <prd.json> [--json] [--dry-run] [--executor claude|codex|custom|auto] [--model <model>] [--agent-command <cmd>]",
     "  yolo review [path] [--json]",
-    "  yolo release [candidate|accept|ship] [--mode rc|publish] [--dry-run] [--allow-untracked] [--allow-unknown] [--json]",
+    "  yolo release [candidate|accept|ship] [--mode rc|publish] [--dry-run] [--json]",
     "",
     "`yolo status` 会读取 .yolo/lifecycle/status.json，告诉 agent 当前唯一安全的下一步。",
     "`yolo demand` 是需求阶段只读/访谈入口，会输出 context_type、route、evidence_policy、missing_slots、blockers、assumptions、needed_evidence_agents、prd_ready 和 next_action。",
@@ -353,10 +353,9 @@ export function parseYoloReleaseCandidateArgs(argv = []) {
       options.help = true;
     } else if (arg === "--dry-run") {
       options.dryRun = true;
-    } else if (arg === "--allow-untracked") {
-      options.allowUntracked = true;
-    } else if (arg === "--allow-unknown") {
-      options.allowUnknown = true;
+    } else if (arg === "--allow-untracked" || arg === "--allow-unknown") {
+      // Removed: untracked/unknown files must never bypass release provenance checks.
+      // These flags are accepted but ignored to avoid breaking existing scripts.
     } else if (arg === "--mode" || arg.startsWith("--mode=")) {
       const read = readArgValue(argv, i, "--mode");
       input.mode = read.value;
