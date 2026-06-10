@@ -17,7 +17,7 @@ function blockMandatoryHook(stage, error) {
     stage,
     message: error?.message || String(error || "hook failed"),
   }));
-  process.exit(1);
+  process.exit(2);
 }
 
 // 不在 yolo 环境中时静默退出

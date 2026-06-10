@@ -22,7 +22,7 @@ function reportHookFailure({ hook, classification, stage, error }) {
   const line = JSON.stringify(payload);
   if (classification === "mandatory") {
     console.error(line);
-    process.exit(1);
+    process.exit(2);
   }
   console.warn(line);
 }
