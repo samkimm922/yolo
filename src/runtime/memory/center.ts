@@ -42,7 +42,6 @@ const STAGE_COMMANDS = {
   discovery: "/yolo-interview, /yolo-discuss, or /yolo-discover",
   setup: "/yolo-init or /yolo-doctor",
   roadmap: "/yolo-plan",
-  "task-graph": "/yolo-plan",
   prd: "/yolo-prd",
   check: "/yolo-check",
   run: "/yolo-run",

@@ -57,7 +57,7 @@ describe("lifecycle drift detection", () => {
       stages: [
         { id: "discovery", status: "completed" },
         { id: "roadmap", status: "completed" },
-        { id: "task-graph", status: "pending" },
+        { id: "prd", status: "pending" },
       ],
     }));
     const result = inspectLifecycleDrift(root);

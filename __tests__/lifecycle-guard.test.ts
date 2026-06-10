@@ -286,14 +286,14 @@ describe("lifecycle guard", () => {
         stateRoot: join(root, ".yolo"),
         writeSessionMemory: false,
       });
-      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-tasks");
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-prd");
 
-      writeLifecycleStageReport("task-graph", { status: "success", summary: "tasks decomposed" }, {
+      writeLifecycleStageReport("prd", { status: "success", summary: "prd compiled" }, {
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         writeSessionMemory: false,
       });
-      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-prd");
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-check");
 
       for (const stage of ["prd", "check", "run", "review-fix"]) {
         writeLifecycleStageReport(stage, { status: "success" }, {

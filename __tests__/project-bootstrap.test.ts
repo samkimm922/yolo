@@ -46,7 +46,6 @@ describe("project bootstrap", () => {
         ".yolo/lifecycle/discovery.json",
         ".yolo/lifecycle/setup.json",
         ".yolo/lifecycle/roadmap.json",
-        ".yolo/lifecycle/task-graph.json",
         ".yolo/lifecycle/prd.json",
         ".yolo/lifecycle/check-report.json",
         ".yolo/lifecycle/run-report.json",
@@ -106,7 +105,7 @@ describe("project bootstrap", () => {
     try {
       const first = initProject({ projectRoot: root, projectName: "demo-app" });
       assert.equal(first.status, "success");
-      assert.equal(first.created.length, 56);
+      assert.equal(first.created.length, 55);
       assert.equal(first.memory_refresh.status, "ok");
       assert.equal(existsSync(join(root, ".yolo/config.json")), true);
       assert.equal(existsSync(join(root, ".yolo/constitution.md")), true);
@@ -154,7 +153,7 @@ describe("project bootstrap", () => {
       const result = initProject({ projectRoot: root, dryRun: true });
 
       assert.equal(result.dry_run, true);
-      assert.equal(result.created.length, 56);
+      assert.equal(result.created.length, 55);
       assert.equal(result.memory_refresh, null);
       assert.equal(existsSync(join(root, ".yolo/config.json")), false);
       assert.equal(existsSync(join(root, ".yolo/lifecycle/status.json")), false);

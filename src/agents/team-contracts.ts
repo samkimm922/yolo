@@ -29,7 +29,7 @@ export const TEAM_AGENT_CONTRACTS = [
     id: "planner-agent",
     label: "Planner Agent",
     purpose: "Turn clarified requirements into sequenced implementation plans and task graphs.",
-    lifecycle_stages: ["roadmap", "task-graph"],
+    lifecycle_stages: ["roadmap"],
     may_edit_code: false,
     owns: ["implementation_plan", "task_graph", "risk_review"],
     inputs: ["discovery_brief", "project_context"],

@@ -40,17 +40,8 @@ export const LIFECYCLE_STAGES = [
     writes_code: false,
   },
   {
-    id: "task-graph",
-    sequence: 5,
-    label: "Task graph",
-    purpose: "Split planned work into atomic tasks with dependencies, owners, gates, and evidence needs.",
-    default_artifact: "task-graph.json",
-    entry_commands: ["yolo-tasks"],
-    writes_code: false,
-  },
-  {
     id: "prd",
-    sequence: 6,
+    sequence: 5,
     label: "PRD and executable spec",
     purpose: "Compile approved requirements into executable PRD/spec artifacts.",
     default_artifact: "prd.json",
@@ -59,7 +50,7 @@ export const LIFECYCLE_STAGES = [
   },
   {
     id: "check",
-    sequence: 7,
+    sequence: 6,
     label: "Readiness check",
     purpose: "Fail closed on weak PRD, missing context, adapter gaps, missing tests, or unsafe execution state.",
     default_artifact: "check-report.json",
@@ -68,7 +59,7 @@ export const LIFECYCLE_STAGES = [
   },
   {
     id: "run",
-    sequence: 8,
+    sequence: 7,
     label: "Gated execution",
     purpose: "Execute only approved, checked work with gates, retries, and evidence.",
     default_artifact: "run-report.json",
@@ -77,7 +68,7 @@ export const LIFECYCLE_STAGES = [
   },
   {
     id: "review-fix",
-    sequence: 9,
+    sequence: 8,
     label: "Review and fix loop",
     purpose: "Review implementation, convert findings into tasks, fix, and re-run gates.",
     default_artifact: "review-report.json",
@@ -86,7 +77,7 @@ export const LIFECYCLE_STAGES = [
   },
   {
     id: "acceptance",
-    sequence: 10,
+    sequence: 9,
     label: "Acceptance",
     purpose: "Collect product, runtime, UI, accessibility, visual, and evidence-based acceptance results.",
     default_artifact: "acceptance-report.json",
@@ -95,7 +86,7 @@ export const LIFECYCLE_STAGES = [
   },
   {
     id: "delivery",
-    sequence: 11,
+    sequence: 10,
     label: "Delivery",
     purpose: "Prepare handoff, release readiness, rollback notes, and final evidence.",
     default_artifact: "delivery-report.json",
@@ -104,7 +95,7 @@ export const LIFECYCLE_STAGES = [
   },
   {
     id: "learn",
-    sequence: 12,
+    sequence: 11,
     label: "Learning and retrospective",
     purpose: "Promote useful lessons, pitfalls, and recovery patterns into model-agnostic memory.",
     default_artifact: "retrospective.json",
