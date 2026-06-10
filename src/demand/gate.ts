@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { inspectStoryAtomicityFromDemand } from "./story-atomicity.js";
 import { validateWarningAck, buildWarningAckRequired } from "../lib/warning-ack.js";
 
@@ -7,6 +7,15 @@ export const DEMAND_READINESS_SCHEMA_VERSION = "1.0";
 export const DEMAND_READINESS_SCHEMA = "yolo.demand.readiness.v1";
 export const DEMAND_QUALITY_SCHEMA_VERSION = "1.0";
 export const DEMAND_QUALITY_SCHEMA = "yolo.demand.quality.v1";
+
+function hasLedgerEvidence(stateDir) {
+  if (!stateDir) return false;
+  try {
+    return existsSync(join(stateDir, "evidence", "ledger.jsonl"));
+  } catch {
+    return false;
+  }
+}
 
 function asArray(value) {
   if (value == null) return [];
@@ -738,6 +747,7 @@ export function inspectDemandQuality(session = {}, options = {}) {
   const storyAtomicityBlocked = storyAtomicity?.status === "blocked" || asArray(storyAtomicity?.blockers).length > 0;
   const factGroundingIssues = projectFactGrounding(session, options);
   const hasFactIssue = (code) => factGroundingIssues.some((issue) => issue.code === code);
+  const evidence_grounded = hasLedgerEvidence(options.stateDir);
 
   const dimensions = [
     qualityDimension({
@@ -791,7 +801,7 @@ export function inspectDemandQuality(session = {}, options = {}) {
         ),
       ],
     }),
-    qualityDimension({
+    { ...qualityDimension({
       code: "project_fact_grounding",
       label: "项目事实落地",
       critical: true,
@@ -905,7 +915,7 @@ export function inspectDemandQuality(session = {}, options = {}) {
           { issues: factGroundingIssues },
         ),
       ],
-    }),
+    }), evidence_grounded },
     qualityDimension({
       code: "task_atomicity",
       label: "任务原子度",
