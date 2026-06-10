@@ -129,6 +129,7 @@ describe("demand runtime", () => {
         decisions: ["Start with trimming whitespace and returning the normalized label text."],
         roadmap: ["MVP label summary helper."],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
 
@@ -208,6 +209,7 @@ describe("demand runtime", () => {
         decisions: ["Start with an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
         roadmap: ["MVP badge in inventory list."],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
       assert.equal(discuss.status, "success");
@@ -251,6 +253,7 @@ describe("demand runtime", () => {
         decisions: ["Start with an inline badge labelled 'Low stock' after the SKU."],
         roadmap: ["MVP badge in inventory list."],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
 
@@ -304,6 +307,7 @@ describe("demand runtime", () => {
         decisions: ["Show an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
         roadmap: ["MVP badge in inventory list."],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
 
@@ -335,6 +339,7 @@ describe("demand runtime", () => {
         decisions: ["Start with an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
         roadmap: ["MVP badge in inventory list."],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
 
@@ -381,6 +386,7 @@ describe("demand runtime", () => {
         decisions: ["Keep execution scope confined to the project root."],
         roadmap: ["MVP low-stock signal."],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
 
@@ -487,6 +493,7 @@ describe("demand runtime", () => {
         decisions: ["Start with an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
         roadmap: ["MVP badge in inventory list."],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
       const prd = runDemandPrdRuntime({
@@ -586,6 +593,7 @@ describe("demand runtime", () => {
           approval_reason: "Business owner confirmed this is enough for MVP.",
         },
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
 
@@ -637,6 +645,7 @@ describe("demand runtime", () => {
         decisions: ["Start with an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
         roadmap: ["MVP badge in inventory list."],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
       const prd = runDemandPrdRuntime({
@@ -680,6 +689,7 @@ describe("demand runtime", () => {
         idea: "Build alerts",
         target_users: ["operator"],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
       const prd = runDemandPrdRuntime({
@@ -717,6 +727,7 @@ describe("demand runtime", () => {
         decisions: ["Start with one threshold rule item.quantity <= item.lowStockThreshold and one inline badge labelled 'Low stock'."],
         roadmap: ["MVP service rule and list badge."],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
       assert.equal(discuss.status, "success");
@@ -760,6 +771,7 @@ describe("demand runtime", () => {
         deferred_scope_confirmed: true,
         roadmap: ["MVP service rule and list badge."],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
 
@@ -858,6 +870,7 @@ describe("demand runtime", () => {
         decisions: ["Keep every task to one visible board behavior."],
         roadmap: ["MVP board behavior slices."],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
 
@@ -912,6 +925,7 @@ describe("demand runtime", () => {
         deferred: ["Zero quantity validation is deferred.", "Inventory availability checks are deferred."],
         roadmap: ["MVP negative quantity validation."],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
 
@@ -957,6 +971,7 @@ describe("demand runtime", () => {
         decisions: ["Start with an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
         roadmap: ["MVP badge in inventory list."],
         approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
 

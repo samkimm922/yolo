@@ -471,8 +471,6 @@ export function parseYoloInterviewArgs(argv = []) {
       options.help = true;
     } else if (arg === "--no-write") {
       options.writeArtifacts = false;
-    } else if (arg === "--approve" || arg === "--approved") {
-      input.approve = true;
     } else if (arg === "--cwd" || arg.startsWith("--cwd=")) {
       const read = readArgValue(args, i, "--cwd");
       input.cwd = read.value;
@@ -603,8 +601,6 @@ export function parseYoloWorkflowArgs(argv = []) {
       const read = readArgValue(argv, i, "--output");
       input.outputFile = read.value;
       i += read.consumed;
-    } else if (arg === "--approve" || arg === "--approved") {
-      input.approve = true;
     } else if (arg === "--approval" || arg.startsWith("--approval=")) {
       const read = readArgValue(argv, i, "--approval");
       input.approval = read.value;

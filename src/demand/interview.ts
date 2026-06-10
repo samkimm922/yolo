@@ -970,5 +970,6 @@ export function demandInterviewToDemandInput(session = {}) {
       },
     },
     ledgers: session.ledgers,
+    playback: session.playback || null,
   };
 }

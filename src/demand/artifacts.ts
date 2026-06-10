@@ -1095,10 +1095,6 @@ export function buildDemandSession(input = {}, options = {}) {
     },
     playback: input.playback || null,
   };
-  if (session.approval.approved && !session.playback) {
-    const generated = buildUnderstandingPlayback(session);
-    session.playback = { ...generated, confirmed: true, confirmed_by: "auto", confirmed_at: now };
-  }
   session.readiness = inspectDemandReadiness(session, {
     phase: session.phase,
     projectRoot,

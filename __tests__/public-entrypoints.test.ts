@@ -307,7 +307,6 @@ describe("public package entrypoints", () => {
         "discuss",
         demandText,
         "--decision=Low stock alert is the MVP wedge",
-        "--approve",
         `--cwd=${root}`,
         "--json",
         "--no-write",
@@ -315,10 +314,8 @@ describe("public package entrypoints", () => {
       assert.equal(discuss.stderr, "");
       assert.ok([0, 1].includes(discuss.status), discuss.stdout);
       const discussPayload = JSON.parse(discuss.stdout);
-      assert.ok(["DEMAND_READY", "DEMAND_BLOCKED"].includes(discussPayload.code));
-      assert.equal(discussPayload.readiness.readiness_level, "L3");
+      assert.ok(["DEMAND_READY", "DEMAND_BLOCKED", "DEMAND_WARNING"].includes(discussPayload.code));
       assert.equal(discussPayload.session.phase, "discuss");
-      assert.equal(discussPayload.session.approval.approved, true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

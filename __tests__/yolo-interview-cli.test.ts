@@ -66,10 +66,10 @@ describe("yolo interview CLI", () => {
     assert.equal(start.options.json, true);
     assert.equal(start.options.writeArtifacts, false);
 
-    const toDemand = parseYoloInterviewArgs(["to-demand", "--session", ".yolo/demand-interviews/inv", "--approve", "--json"]);
+    const toDemand = parseYoloInterviewArgs(["to-demand", "--session", ".yolo/demand-interviews/inv", "--json"]);
     assert.equal(toDemand.input.command, "to-demand");
     assert.equal(toDemand.input.sessionPath, ".yolo/demand-interviews/inv");
-    assert.equal(toDemand.input.approve, true);
+    assert.equal(toDemand.input.approve, undefined);
   });
 
   test("start writes the default interview state file", async () => {
