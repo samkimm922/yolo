@@ -278,6 +278,12 @@ function requiredStagesFor(command, input = {}) {
       satisfiedBy: ["planPath", "plan"],
       defaultArtifacts: ["discovery/plan.json"],
       requireLifecycleArtifact: true,
+    },
+    {
+      stage: "task-graph",
+      code: "TASK_GRAPH_REQUIRED",
+      message: "A completed task-graph is required before PRD compilation.",
+      requireLifecycleArtifact: true,
     }];
   }
   if (command === "yolo-check") {
@@ -499,6 +505,56 @@ export function inspectLifecycleGuard(input = {}, options = {}) {
       ? ["Confirm execution is current and specific before starting write-capable work."]
       : [`Complete this stage, then run ${recommended.command}.`],
   };
+}
+
+export interface DriftRecord {
+  stage: string;
+  declared: string;
+  actual: "missing" | "corrupt";
+}
+
+export interface LifecycleDriftResult {
+  has_drift: boolean;
+  drift_records: DriftRecord[];
+}
+
+const STAGE_ARTIFACTS: Record<string, string[]> = {
+  discovery: ["discovery.json"],
+  roadmap: ["roadmap.json"],
+  "task-graph": ["task-graph.json"],
+  prd: ["prd.json"],
+  check: ["check-report.json"],
+  run: ["run-report.json"],
+  "review-fix": ["review-report.json"],
+  acceptance: ["acceptance-report.json"],
+  delivery: ["delivery-report.json"],
+  learn: ["retrospective.json"],
+};
+
+export function inspectLifecycleDrift(projectRoot: string): LifecycleDriftResult {
+  const stateRoot = resolveLifecycleStateRoot({ projectRoot });
+  const statusPath = lifecycleStatusPath({ projectRoot, stateRoot });
+  if (!existsSync(statusPath)) {
+    return { has_drift: false, drift_records: [] };
+  }
+  let status: { stages?: Array<{ id: string; status: string }> };
+  try {
+    status = JSON.parse(readFileSync(statusPath, "utf8"));
+  } catch {
+    return { has_drift: false, drift_records: [] };
+  }
+  const drift_records: DriftRecord[] = [];
+  for (const stageEntry of status.stages || []) {
+    if (stageEntry.status !== "completed") continue;
+    const artifacts = STAGE_ARTIFACTS[stageEntry.id];
+    if (!artifacts) continue;
+    const lifecycleDir = join(stateRoot, "lifecycle");
+    const anyPresent = artifacts.some((rel) => existsSync(join(lifecycleDir, rel)));
+    if (!anyPresent) {
+      drift_records.push({ stage: stageEntry.id, declared: "completed", actual: "missing" });
+    }
+  }
+  return { has_drift: drift_records.length > 0, drift_records };
 }
 
 export function formatLifecycleGuardText(result = {}) {
