@@ -65,6 +65,16 @@ scripts/yolo/
   __tests__/          # 测试文件
 ```
 
+## 前提条件
+
+- **Node.js ≥ 18**（`node -v` 确认）
+- **Claude Code**（推荐）或 Codex 作为 AI 执行环境
+- 克隆本仓库后在项目根目录运行：
+
+```bash
+npm install
+```
+
 ## 快速开始
 
 ### Codex / Claude Code 用户
