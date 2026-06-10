@@ -86,9 +86,11 @@ describe("provider runtime matrix", () => {
     const claude = matrix.providers.find((entry) => entry.provider === "claude");
     const settingsIndex = claude.invocation.args.indexOf("--settings");
     assert.notEqual(settingsIndex, -1);
-    assert.equal(claude.invocation.args[settingsIndex + 1], DEFAULT_CLAUDE_SETTINGS_PATH);
-    assert.equal(claude.invocation.settings_file, DEFAULT_CLAUDE_SETTINGS_PATH);
-    assert.notEqual(claude.invocation.settings_file, join(projectRoot, "settings-minimal.json"));
+    const settingsArg = claude.invocation.args[settingsIndex + 1];
+    // Default settings are now inline JSON with absolute hook path
+    assert.equal(settingsArg.startsWith("{"), true);
+    assert.ok(settingsArg.includes("pre-tool-block-yolo-write.js"));
+    assert.equal(claude.invocation.settings_file, null);
 
     const codex = matrix.providers.find((entry) => entry.provider === "codex");
     assert.equal(codex.invocation.command, "codex");

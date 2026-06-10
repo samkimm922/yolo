@@ -219,15 +219,34 @@ export function resolveClaudeSettings(rootDir, value, { packageRoot = YOLO_PACKA
     default_settings: false,
   };
   const isDefaultSettings = settings === DEFAULT_CLAUDE_SETTINGS_FILE || settings === LEGACY_DEFAULT_CLAUDE_SETTINGS_FILE;
-  const settingsPath = isDefaultSettings
-    ? resolve(packageRoot, DEFAULT_CLAUDE_SETTINGS_FILE)
-    : isAbsolute(settings) ? settings : resolve(rootDir, settings);
+  if (isDefaultSettings) {
+    // Dynamically generate settings with absolute hook path so the hook
+    // works regardless of the target project's cwd or tsx availability.
+    const templatePath = resolve(packageRoot, DEFAULT_CLAUDE_SETTINGS_FILE);
+    const template = JSON.parse(defaultReadFileSync(templatePath, "utf8"));
+    const hookJs = resolve(packageRoot, "dist", "hooks", "pre-tool-block-yolo-write.js");
+    if (template.hooks?.PreToolUse) {
+      for (const hook of template.hooks.PreToolUse) {
+        if (hook.command && hook.command.includes("pre-tool-block-yolo-write")) {
+          hook.command = `node "${hookJs}"`;
+        }
+      }
+    }
+    return {
+      raw: settings,
+      value: JSON.stringify(template),
+      type: "inline",
+      path: null,
+      default_settings: true,
+    };
+  }
+  const settingsPath = isAbsolute(settings) ? settings : resolve(rootDir, settings);
   return {
     raw: settings,
     value: settingsPath,
     type: "file",
     path: settingsPath,
-    default_settings: isDefaultSettings,
+    default_settings: false,
   };
 }
 

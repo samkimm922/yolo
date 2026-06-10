@@ -3,12 +3,16 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { mkdtempSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { PassThrough } from "node:stream";
 import {
   buildProviderInvocation,
   classifyProviderFailure,
   DEFAULT_CLAUDE_SETTINGS_PATH,
   spawnProviderPrompt,
+  YOLO_PACKAGE_ROOT,
 } from "../src/runtime/execution/provider-adapter.js";
 
 const baseConfig = {
@@ -114,10 +118,12 @@ describe("provider execution adapter", () => {
 
     const settingsIndex = invocation.args.indexOf("--settings");
     assert.notEqual(settingsIndex, -1);
-    assert.equal(invocation.args[settingsIndex + 1], DEFAULT_CLAUDE_SETTINGS_PATH);
-    assert.equal(invocation.settingsFile, DEFAULT_CLAUDE_SETTINGS_PATH);
-    assert.notEqual(invocation.settingsFile, join(targetRoot, "settings-minimal.json"));
-    assert.equal(existsSync(invocation.settingsFile), true);
+    const settingsArg = invocation.args[settingsIndex + 1];
+    // Default settings are now inline JSON with absolute hook path
+    assert.equal(settingsArg.startsWith("{"), true);
+    assert.ok(settingsArg.includes("pre-tool-block-yolo-write.js"));
+    assert.ok(settingsArg.includes(YOLO_PACKAGE_ROOT));
+    assert.equal(invocation.settingsFile, null);
   });
 
   test("legacy default claude settings path also resolves to the YOLO package root", () => {
@@ -137,9 +143,11 @@ describe("provider execution adapter", () => {
 
     const settingsIndex = invocation.args.indexOf("--settings");
     assert.notEqual(settingsIndex, -1);
-    assert.equal(invocation.args[settingsIndex + 1], DEFAULT_CLAUDE_SETTINGS_PATH);
-    assert.equal(invocation.settingsFile, DEFAULT_CLAUDE_SETTINGS_PATH);
-    assert.notEqual(invocation.settingsFile, join(targetRoot, "scripts/yolo/settings-minimal.json"));
+    const settingsArg = invocation.args[settingsIndex + 1];
+    assert.equal(settingsArg.startsWith("{"), true);
+    assert.ok(settingsArg.includes("pre-tool-block-yolo-write.js"));
+    assert.ok(settingsArg.includes(YOLO_PACKAGE_ROOT));
+    assert.equal(invocation.settingsFile, null);
   });
 
   test("spawnProviderPrompt fails closed before spawning when claude settings are missing", async () => {
@@ -385,5 +393,51 @@ describe("provider execution adapter", () => {
       reason: null,
       detail: "",
     });
+  });
+
+  test("R4 hook: pre-tool-block-yolo-write blocks .yolo writes and allows other paths", () => {
+    const hookPath = join(YOLO_PACKAGE_ROOT, "dist", "hooks", "pre-tool-block-yolo-write.js");
+    const root = mkdtempSync(join(tmpdir(), "yolo-hook-test-"));
+
+    try {
+      // Block .yolo paths
+      const blockPayload = JSON.stringify({
+        tool_name: "Write",
+        tool_input: { file_path: join(root, ".yolo", "lifecycle", "status.json") },
+      });
+      const blockResult = spawnSync("node", [hookPath], { input: blockPayload, timeout: 5000 });
+      assert.equal(blockResult.status, 2, `expected exit 2 for .yolo path, got ${blockResult.status}`);
+
+      // Block .yolo paths as Edit
+      const editPayload = JSON.stringify({
+        tool_name: "Edit",
+        tool_input: { file_path: ".yolo/state/foo.json" },
+      });
+      const editResult = spawnSync("node", [hookPath], { input: editPayload, timeout: 5000 });
+      assert.equal(editResult.status, 2, `expected exit 2 for .yolo Edit, got ${editResult.status}`);
+
+      // Allow normal paths
+      const passPayload = JSON.stringify({
+        tool_name: "Write",
+        tool_input: { file_path: join(root, "src", "foo.ts") },
+      });
+      const passResult = spawnSync("node", [hookPath], { input: passPayload, timeout: 5000 });
+      assert.equal(passResult.status, 0, `expected exit 0 for normal path, got ${passResult.status}`);
+
+      // Allow non-Write/Edit tools
+      const bashPayload = JSON.stringify({
+        tool_name: "Bash",
+        tool_input: { command: "echo .yolo" },
+      });
+      const bashResult = spawnSync("node", [hookPath], { input: bashPayload, timeout: 5000 });
+      assert.equal(bashResult.status, 0, `expected exit 0 for Bash, got ${bashResult.status}`);
+
+      // Allow write without file_path
+      const noFilePayload = JSON.stringify({ tool_name: "Write", tool_input: {} });
+      const noFileResult = spawnSync("node", [hookPath], { input: noFilePayload, timeout: 5000 });
+      assert.equal(noFileResult.status, 0, `expected exit 0 for no file_path, got ${noFileResult.status}`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
