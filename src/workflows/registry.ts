@@ -32,6 +32,7 @@ const WORKFLOWS = {
     label: "Demand router workflow",
     purpose: "Route early demand work through fast/careful triage, PRD readiness, evidence policy, and explicit evidence-agent dispatch before brainstorm, interview, discuss, plan, or PRD.",
     preset: "planner",
+    sub_modes: ["brainstorm", "interview", "discover", "discuss"],
     triggers: ["idea.received", "demand.status.requested", "cli.yolo-demand-status"],
     inputs: ["idea?", "demandSession?", "projectFacts?", "acceptanceCriteria?", "approval?"],
     outputs: ["demand status", "dispatch plan", "agent evidence results", "context_type", "route", "evidence_policy", "missing_slots", "blockers", "needed_evidence_agents", "next_action"],
