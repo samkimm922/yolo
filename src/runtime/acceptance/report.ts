@@ -505,6 +505,7 @@ export function buildAcceptanceReport(input = {}, options = {}) {
       stateRoot,
       source: "acceptance-report",
       learnFailures: options.learnFailures === true || input.learnFailures === true,
+      skipSequenceCheck: true,
     });
     report.artifacts.push(report.lifecycle_write.artifact_path);
   }

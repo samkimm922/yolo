@@ -238,6 +238,7 @@ describe("YOLO command registry", () => {
         stateRoot: join(root, ".yolo"),
         source: "command-registry-test",
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
 
       const { io, stdout, stderr } = captureIo(root);

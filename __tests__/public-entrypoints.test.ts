@@ -171,6 +171,26 @@ describe("public package entrypoints", () => {
       const smoke = await runInitToFirstPrdSmoke({ projectRoot: root, projectName: "pi-app" });
       const relativePrd = join(root, "specs/prd.json");
       writeFileSync(relativePrd, readFileSync(smoke.prd_path, "utf8"), "utf8");
+      writeLifecycleStageReport("discovery", {
+        status: "success",
+        summary: "test discovery",
+      }, {
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        source: "public-entrypoints-test",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      writeLifecycleStageReport("roadmap", {
+        status: "success",
+        summary: "test roadmap",
+      }, {
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        source: "public-entrypoints-test",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
       writeLifecycleStageReport("prd", {
         status: "success",
         prd_path: relativePrd,
@@ -180,6 +200,7 @@ describe("public package entrypoints", () => {
         stateRoot: join(root, ".yolo"),
         source: "public-entrypoints-test",
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
 
       const check = spawnSync(process.execPath, [

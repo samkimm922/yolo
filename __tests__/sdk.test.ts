@@ -125,16 +125,19 @@ function writePiRunnablePrdFixture(root, stateRoot, { id = "PRD-20260530-PI-RUNN
     projectRoot: root,
     stateRoot,
     writeSessionMemory: false,
+    skipSequenceCheck: true,
   });
   writeLifecycleStageReport("roadmap", { status: "success" }, {
     projectRoot: root,
     stateRoot,
     writeSessionMemory: false,
+    skipSequenceCheck: true,
   });
   writeLifecycleStageReport("prd", { status: "success", prd_path: prdPath, artifacts: [prdPath] }, {
     projectRoot: root,
     stateRoot,
     writeSessionMemory: false,
+    skipSequenceCheck: true,
   });
   const check = inspectYoloCheck({ prdPath, projectRoot: root, stateRoot, writeLifecycle: true });
   assert.notEqual(check.status, "blocked", JSON.stringify(check.blockers, null, 2));
@@ -593,16 +596,19 @@ describe("yolo sdk", () => {
         projectRoot: root,
         stateRoot,
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       writeLifecycleStageReport("roadmap", { status: "success" }, {
         projectRoot: root,
         stateRoot,
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       writeLifecycleStageReport("prd", { status: "success", prd_path: prdPath, artifacts: [prdPath] }, {
         projectRoot: root,
         stateRoot,
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       const check = inspectYoloCheck({ prdPath, projectRoot: root, stateRoot, writeLifecycle: true });
       assert.notEqual(check.status, "blocked");
@@ -713,6 +719,7 @@ describe("yolo sdk", () => {
         stateRoot,
         source: "sdk-test",
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       writeLifecycleStageReport("review-fix", {
         status: "success",
@@ -723,6 +730,7 @@ describe("yolo sdk", () => {
         stateRoot,
         source: "sdk-test",
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
 
       const acceptance = await runPiRuntime("acceptance", { prdPath, projectRoot: root, stateRoot });

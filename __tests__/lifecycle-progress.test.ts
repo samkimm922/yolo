@@ -24,6 +24,7 @@ describe("lifecycle progress", () => {
         stateRoot,
         source: "unit",
         now: "2026-05-25T00:00:00.000Z",
+        skipSequenceCheck: true,
       });
 
       assert.equal(result.status, "ok");
@@ -57,6 +58,7 @@ describe("lifecycle progress", () => {
         stateRoot,
         source: "unit",
         learnFailures: true,
+        skipSequenceCheck: true,
       });
 
       assert.equal(result.learning.status, "ok");

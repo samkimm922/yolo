@@ -36,6 +36,7 @@ function lifecycleWrite(stageId, report = {}, params = {}, source = "pi-runtime"
     stateRoot: params.stateRoot,
     source,
     learnFailures: true,
+    skipSequenceCheck: true,
   });
 }
 
@@ -231,6 +232,7 @@ function runReviewScanRuntime(params = {}) {
       stateRoot: params.stateRoot,
       source: "pi-review-scan",
       learnFailures: true,
+      skipSequenceCheck: true,
     });
     report.artifacts.push(report.lifecycle_write.artifact_path);
   }
@@ -336,6 +338,7 @@ function runShipRuntime(params = {}) {
       stateRoot,
       source: "pi-ship",
       learnFailures: true,
+      skipSequenceCheck: true,
     });
     report.artifacts.push(report.lifecycle_write.artifact_path);
   }
@@ -380,6 +383,7 @@ function runLearnRuntime(params = {}) {
       projectRoot: params.projectRoot,
       stateRoot,
       source: "pi-learn",
+      skipSequenceCheck: true,
     });
     report.artifacts.push(report.lifecycle_write.artifact_path);
   }

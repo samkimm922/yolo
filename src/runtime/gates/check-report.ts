@@ -66,6 +66,7 @@ function prdJsonErrorReport({ prdPath, projectRoot, stateRoot, error, writeLifec
       stateRoot,
       source: "yolo-check",
       learnFailures,
+      skipSequenceCheck: true,
     });
     report.artifacts.push(report.lifecycle_write.artifact_path);
   }
@@ -675,6 +676,7 @@ export function inspectYoloCheck(input = {}, options = {}) {
       stateRoot,
       source: "yolo-check",
       learnFailures: options.learnFailures === true || input.learnFailures === true,
+      skipSequenceCheck: true,
     });
     report.artifacts.push(report.lifecycle_write.artifact_path);
   }

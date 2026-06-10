@@ -147,6 +147,22 @@ export function buildLifecycleStageReport(stageId, report = {}, options = {}) {
 export function writeLifecycleStageReport(stageId, report = {}, options = {}) {
   const stateRoot = resolveLifecycleStateRoot(options);
   const now = clean(options.now) || new Date().toISOString();
+
+  // Sequence validation: reject writes when prior stages have not completed
+  if (options.skipSequenceCheck !== true && options.skip_sequence_check !== true) {
+    const targetStage = getLifecycleStage(stageId);
+    const status = loadOrCreateStatus(stageId, { ...options, stateRoot, now });
+    const stageStatusMap = new Map((status.stages || []).map((s) => [s.id, s.status]));
+    const incomplete = LIFECYCLE_STAGES.filter(
+      (s) => s.sequence >= 5 && s.sequence < targetStage.sequence && stageStatusMap.get(s.id) !== "completed",
+    );
+    if (incomplete.length > 0) {
+      throw new Error(
+        `Cannot write ${stageId} report: prior stages not completed: ${incomplete.map((s) => s.id).join(", ")}`,
+      );
+    }
+  }
+
   const stageReport = buildLifecycleStageReport(stageId, report, { ...options, stateRoot, now });
   const stageStatus = stageReport.status;
   const artifactPath = lifecycleArtifactPath(stageId, { ...options, stateRoot });

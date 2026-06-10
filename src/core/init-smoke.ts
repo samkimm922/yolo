@@ -214,34 +214,36 @@ export async function runInitToFirstPrdSmoke(options = {}) {
 
   mkdirSync(dirname(prdAbsolutePath), { recursive: true });
   writeFileSync(prdAbsolutePath, stableJson(plan.prd), "utf8");
-  const stateRoot = join(projectRoot, ".yolo");
+  // Write lifecycle reports to a temporary state root to avoid polluting real project state
+  const smokeStateRoot = join(projectRoot, ".yolo", "smoke");
   writeLifecycleStageReport("discovery", {
     status: "success",
     summary: "Init-to-first-PRD smoke captured bootstrap discovery.",
     artifacts: bootstrap.artifacts,
-  }, { projectRoot, stateRoot, source: "init-smoke", writeSessionMemory: false });
+  }, { projectRoot, stateRoot: smokeStateRoot, source: "init-smoke", writeSessionMemory: false, skipSequenceCheck: true });
   writeLifecycleStageReport("roadmap", {
     status: "success",
     summary: "Init-to-first-PRD smoke generated a traceable first PRD plan.",
     artifacts: [plan.prd_path],
-  }, { projectRoot, stateRoot, source: "init-smoke", writeSessionMemory: false });
+  }, { projectRoot, stateRoot: smokeStateRoot, source: "init-smoke", writeSessionMemory: false, skipSequenceCheck: true });
   writeLifecycleStageReport("prd", {
     status: "success",
     summary: "Init-to-first-PRD smoke wrote the first executable PRD.",
     prd_path: prdAbsolutePath,
     artifacts: [prdAbsolutePath],
-  }, { projectRoot, stateRoot, source: "init-smoke", writeSessionMemory: false });
+  }, { projectRoot, stateRoot: smokeStateRoot, source: "init-smoke", writeSessionMemory: false, skipSequenceCheck: true });
   const preflight = preflightPrd(prdAbsolutePath);
+  const stateRoot = join(projectRoot, ".yolo");
   const check = inspectYoloCheck({
     prdPath: prdAbsolutePath,
     projectRoot,
-    stateRoot,
+    stateRoot: smokeStateRoot,
     writeLifecycle: true,
   }, { learnFailures: true });
   const runner = await runRunnerRuntime({
     prdPath: prdAbsolutePath,
     projectRoot,
-    stateRoot,
+    stateRoot: smokeStateRoot,
     mode: plan.runner_dry_run.mode,
     dryRun: true,
   });

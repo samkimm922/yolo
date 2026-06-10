@@ -355,6 +355,7 @@ export async function runRunnerRuntime(input = {}, options = {}) {
         stateRoot,
         source: "runner-runtime",
         learnFailures: true,
+        skipSequenceCheck: true,
       });
       response.artifacts.push(response.lifecycle_write.artifact_path);
     }

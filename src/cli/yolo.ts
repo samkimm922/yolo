@@ -2058,7 +2058,7 @@ export async function runYoloInterviewCli(argv = [], io = {}) {
           summary: "Demand artifacts generated from interview satisfy discovery.",
           demand_id: demandResult.demand_id,
           demand_dir: demandResult.demand_dir,
-        }, { projectRoot, stateRoot, source: "to-demand", writeSessionMemory: false });
+        }, { projectRoot, stateRoot, source: "to-demand", writeSessionMemory: false, skipSequenceCheck: true });
       }
       const status = demandResult.status === "warning" ? "warning" : blocked ? "blocked" : "success";
       const code = demandResult.status === "warning"
@@ -2555,6 +2555,7 @@ function buildScopedReviewScanReport({ scan, projectRoot, stateRoot, reviewScope
       stateRoot,
       source: "yolo-review",
       learnFailures: true,
+      skipSequenceCheck: true,
     });
     report.artifacts.push(report.lifecycle_write.artifact_path);
   }

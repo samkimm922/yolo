@@ -66,6 +66,7 @@ function lifecycleOptions(root) {
     stateRoot: join(root, ".yolo"),
     source: "unit",
     writeSessionMemory: false,
+    skipSequenceCheck: true,
   };
 }
 

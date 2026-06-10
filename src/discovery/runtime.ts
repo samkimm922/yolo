@@ -76,6 +76,7 @@ function lifecycleFor(stageId, result, params = {}) {
     stateRoot: params.stateRoot,
     source: params.source || `yolo-${stageId}`,
     writeSessionMemory: params.writeSessionMemory,
+    skipSequenceCheck: true,
   });
 }
 

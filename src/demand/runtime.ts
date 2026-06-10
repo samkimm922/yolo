@@ -65,6 +65,7 @@ function attachLifecycle(result = {}, stageId, context = {}, source = "demand-ru
     stateRoot: context.stateRoot,
     source,
     writeSessionMemory: context.writeSessionMemory,
+    skipSequenceCheck: true,
   });
   result.lifecycle_writes = [...(result.lifecycle_writes || []), lifecycle];
   result.artifacts = [...(result.artifacts || []), lifecycle.artifact_path];

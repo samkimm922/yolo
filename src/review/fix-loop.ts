@@ -134,6 +134,7 @@ export function inspectReviewFixLoop(input = {}, options = {}) {
       stateRoot: input.stateRoot || input.state_root || options.stateRoot || options.state_root,
       source: "review-fix-loop",
       learnFailures: options.learnFailures === true || input.learnFailures === true,
+      skipSequenceCheck: true,
     });
     report.artifacts.push(report.lifecycle_write.artifact_path);
   }

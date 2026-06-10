@@ -68,16 +68,19 @@ function prepareRunLifecycle(projectRoot, stateRoot, prdPath) {
     projectRoot,
     stateRoot,
     writeSessionMemory: false,
+    skipSequenceCheck: true,
   });
   writeLifecycleStageReport("roadmap", { status: "success" }, {
     projectRoot,
     stateRoot,
     writeSessionMemory: false,
+    skipSequenceCheck: true,
   });
   writeLifecycleStageReport("prd", { status: "success", prd_path: prdPath, artifacts: [prdPath] }, {
     projectRoot,
     stateRoot,
     writeSessionMemory: false,
+    skipSequenceCheck: true,
   });
   return inspectYoloCheck({ prdPath, projectRoot, stateRoot, writeLifecycle: true });
 }

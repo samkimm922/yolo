@@ -92,6 +92,7 @@ describe("init-to-first-PRD smoke", () => {
       const result = await runRunnerRuntime({
         prdPath: smoke.prd_path,
         dryRun: true,
+        stateRoot: join(root, ".yolo", "smoke"),
       });
 
       assert.equal(result.status, "dry_run");

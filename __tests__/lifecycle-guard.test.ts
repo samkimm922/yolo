@@ -36,6 +36,7 @@ function lifecycleWriteOptions(root) {
     stateRoot: join(root, ".yolo"),
     source: "unit",
     writeSessionMemory: false,
+    skipSequenceCheck: true,
   };
 }
 
@@ -120,6 +121,7 @@ describe("lifecycle guard", () => {
         stateRoot,
         source: "unit",
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
 
       const outOfOrder = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, prdPath });
@@ -130,11 +132,13 @@ describe("lifecycle guard", () => {
         projectRoot: root,
         stateRoot,
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       writeLifecycleStageReport("roadmap", { status: "success" }, {
         projectRoot: root,
         stateRoot,
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
 
       const allowed = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, prdPath });
@@ -155,11 +159,13 @@ describe("lifecycle guard", () => {
         projectRoot: root,
         stateRoot,
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       writeLifecycleStageReport("roadmap", { status: "success" }, {
         projectRoot: root,
         stateRoot,
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       const checkWrite = writeLifecycleStageReport("check", {
         status: "success",
@@ -170,6 +176,7 @@ describe("lifecycle guard", () => {
         stateRoot,
         source: "unit",
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       writeJson(checkWrite.artifact_path, {
         ...checkWrite.report,
@@ -201,11 +208,13 @@ describe("lifecycle guard", () => {
         projectRoot: root,
         stateRoot,
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       writeLifecycleStageReport("roadmap", { status: "success" }, {
         projectRoot: root,
         stateRoot,
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       const checkWrite = writeLifecycleStageReport("check", {
         status: "completed",
@@ -221,6 +230,7 @@ describe("lifecycle guard", () => {
         stateRoot,
         source: "unit",
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
 
       const guard = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, stateRoot, prdPath });
@@ -241,6 +251,7 @@ describe("lifecycle guard", () => {
         projectRoot: root,
         stateRoot,
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
 
       const blocked = inspectLifecycleGuard({ command: "yolo-accept", projectRoot: root });
@@ -251,6 +262,7 @@ describe("lifecycle guard", () => {
         projectRoot: root,
         stateRoot,
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
 
       const allowed = inspectLifecycleGuard({ command: "yolo-accept", projectRoot: root });
@@ -271,6 +283,7 @@ describe("lifecycle guard", () => {
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-plan");
 
@@ -278,6 +291,7 @@ describe("lifecycle guard", () => {
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-plan");
 
@@ -285,6 +299,7 @@ describe("lifecycle guard", () => {
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-prd");
 
@@ -292,6 +307,7 @@ describe("lifecycle guard", () => {
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-check");
 
@@ -300,12 +316,14 @@ describe("lifecycle guard", () => {
           projectRoot: root,
           stateRoot: join(root, ".yolo"),
           writeSessionMemory: false,
+          skipSequenceCheck: true,
         });
       }
       writeLifecycleStageReport("acceptance", { status: "warning" }, {
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
       assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-accept");
     } finally {
