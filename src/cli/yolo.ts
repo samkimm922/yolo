@@ -2055,6 +2055,14 @@ export async function runYoloInterviewCli(argv = [], io = {}) {
         ...(demandResult.artifacts || []),
       ].filter(Boolean);
       const blocked = isBlockingWorkflowStatus(demandResult.status);
+      if (!blocked && writeArtifacts) {
+        writeLifecycleStageReport("discovery", {
+          status: "success",
+          summary: "Demand artifacts generated from interview satisfy discovery.",
+          demand_id: demandResult.demand_id,
+          demand_dir: demandResult.demand_dir,
+        }, { projectRoot, stateRoot, source: "to-demand", writeSessionMemory: false });
+      }
       const status = demandResult.status === "warning" ? "warning" : blocked ? "blocked" : "success";
       const code = demandResult.status === "warning"
         ? "INTERVIEW_DEMAND_WARNING"

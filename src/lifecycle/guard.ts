@@ -269,7 +269,6 @@ function requiredStagesFor(command, input = {}) {
     }];
   }
   if (command === "yolo-prd") {
-    if (input.demandPath || input.demand_path || input.demand) return [];
     return [{
       stage: "roadmap",
       code: "PLAN_REQUIRED",
