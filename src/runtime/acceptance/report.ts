@@ -233,6 +233,24 @@ function acceptanceCriteriaIssues(prd, issues) {
   }
 }
 
+function collectManualCriteria(prd) {
+  const manualCriteria = [];
+  const tasks = asArray(prd?.tasks);
+  for (const task of tasks) {
+    const conditions = asArray(task.post_conditions);
+    for (const condition of conditions) {
+      if (condition.type === "acceptance_criteria" && !condition.verify_command) {
+        manualCriteria.push({
+          task_id: task.id || null,
+          condition_id: condition.id || null,
+          text: clean(condition.text || condition.params?.text || condition.detail || "验收标准（需人工复核）"),
+        });
+      }
+    }
+  }
+  return manualCriteria;
+}
+
 function runtimeEvidenceIssues(runReport, issues, { releaseMode = false } = {}) {
   if (!runReport) {
     pushIssue(issues, "P1", "RUN_REPORT_MISSING", "Acceptance requires run evidence or an explicit degraded/manual record.");
@@ -474,6 +492,7 @@ export function buildAcceptanceReport(input = {}, options = {}) {
     state_root: stateRoot,
     prd_path: prdPath ? resolve(prdPath) : "",
     mode,
+    manual_criteria: prd ? collectManualCriteria(prd) : [],
     issue_summary: summary,
     issues,
     warning_approval: {

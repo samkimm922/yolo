@@ -146,8 +146,11 @@ function meaningfulEvidenceEntry(entry) {
 }
 
 function hasManualAcceptanceCriteria(report = {}) {
-  const gates = Array.isArray(report.gates) ? report.gates : [];
-  return gates.some((gate) => gate.type === "acceptance_criteria" && gate.manual === true);
+  const manualCriteria = Array.isArray(report.manual_criteria) ? report.manual_criteria : [];
+  if (manualCriteria.length > 0) return true;
+  // When read from lifecycle artifact, the acceptance report is nested inside .report
+  const nested = Array.isArray(report.report?.manual_criteria) ? report.report.manual_criteria : [];
+  return nested.length > 0;
 }
 
 function reportEvidenceEntries(report = {}) {

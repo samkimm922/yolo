@@ -5,6 +5,8 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildAcceptanceReport, runYoloAcceptCli } from "../src/runtime/acceptance/report.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+import { initLifecycleState } from "../src/lifecycle/state.js";
+import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
 import { runYoloCli } from "../src/cli/yolo.js";
 
 function tempProject() {
@@ -68,6 +70,34 @@ function lifecycleOptions(root) {
     writeSessionMemory: false,
     skipSequenceCheck: true,
   };
+}
+
+function lifecycleWriteOptions(root) {
+  return {
+    projectRoot: root,
+    stateRoot: join(root, ".yolo"),
+    source: "unit",
+    writeSessionMemory: false,
+    skipSequenceCheck: true,
+  };
+}
+
+function writeRunPass(root) {
+  return writeLifecycleStageReport("run", {
+    status: "success",
+    summary: "run passed",
+    evidence: [{ path: "state/reports/run/run-report.json" }],
+  }, lifecycleWriteOptions(root));
+}
+
+function writeReviewPass(root, report = {}) {
+  return writeLifecycleStageReport("review-fix", {
+    status: "success",
+    summary: "review passed",
+    findings: [],
+    evidence: [{ path: "state/review/review-report.json" }],
+    ...report,
+  }, lifecycleWriteOptions(root));
 }
 
 describe("acceptance report", () => {
@@ -868,6 +898,67 @@ describe("acceptance report", () => {
       assert.equal(stdout.trim().startsWith("{"), true);
       assert.equal(stdout.includes("[yolo accept]"), false);
       assert.equal(stdout.includes("issues:"), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("R3 propagation chain: manual acceptance criteria flow from PRD through acceptance report to ship blocker", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      // Build a PRD with acceptance_criteria post-condition lacking verify_command
+      const prdWithManual = prd({
+        post_conditions: [{
+          id: "POST-ACCEPT-MANUAL",
+          type: "acceptance_criteria",
+          severity: "FAIL",
+          params: { text: "Product owner confirms inventory UX matches brand guidelines." },
+        }],
+      });
+
+      // Part 1: acceptance report collects manual_criteria from PRD
+      const report = buildAcceptanceReport({
+        prd: prdWithManual,
+        runReport: {
+          status: "success",
+          summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 },
+          fixtures: { fail_count: 0 },
+        },
+        reviewReport: { findings: [] },
+        uiEvidence: {
+          page_reachable: true,
+          critical_path_passed: true,
+          required_state_present: true,
+          screenshots: ["state/evidence/ui.png"],
+        },
+        resolver: { selected: { acceptance_adapter: { id: "local-browser" } }, blockers: [] },
+        projectRoot: root,
+        stateRoot,
+      });
+
+      assert.equal(report.manual_criteria.length, 1);
+      assert.equal(report.manual_criteria[0].task_id, "FEAT-ACCEPT-001");
+      assert.equal(report.manual_criteria[0].condition_id, "POST-ACCEPT-MANUAL");
+      assert.ok(report.manual_criteria[0].text.includes("Product owner"));
+
+      // Part 2: write lifecycle and verify deliveryHardGateBlockers triggers
+      initLifecycleState({ projectRoot: root });
+      writeRunPass(root);
+      writeReviewPass(root);
+      writeLifecycleStageReport("acceptance", {
+        status: "pass",
+        summary: "acceptance passed but has manual criteria",
+        evidence: [{ path: "state/acceptance/evidence.json" }],
+        manual_criteria: report.manual_criteria,
+      }, lifecycleWriteOptions(root));
+
+      const guard = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
+      assert.equal(guard.status, "blocked");
+      assert.ok(
+        guard.blockers.some((blocker) => blocker.code === "ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED"),
+        `expected ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED in blockers: ${JSON.stringify(guard.blockers)}`,
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
