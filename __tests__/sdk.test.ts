@@ -1531,4 +1531,56 @@ describe("yolo sdk", () => {
       rmSync(rootB, { recursive: true, force: true });
     }
   });
+
+  test("R5 SDK lifecycle.writeStageReport rejects skipSequenceCheck when writing out-of-order stage", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-sdk-r5-"));
+    const stateRoot = join(root, ".yolo");
+    try {
+      const sdk = createYoloSdk({ projectRoot: root, stateRoot, ensureCanonicalDirs: true });
+
+      // Write the first few lifecycle stages so we're at a known position
+      writeLifecycleStageReport("idea", { status: "completed" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      writeLifecycleStageReport("discovery", { status: "completed" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      writeLifecycleStageReport("setup", { status: "completed" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      writeLifecycleStageReport("roadmap", { status: "completed" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+
+      // Now try to write "delivery" (stage 10) via SDK with skipSequenceCheck:true —
+      // SDK must strip the flag so sequence validation catches the gap (stages 5-9 missing)
+      assert.throws(
+        () => sdk.lifecycle.writeStageReport("delivery", { status: "success" }, { skipSequenceCheck: true }),
+        /Cannot write delivery report: prior stages not completed/i,
+      );
+
+      // Verify the direct import WITH skipSequenceCheck still works (internal path intact)
+      const result = writeLifecycleStageReport("delivery", { status: "success" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      assert.equal(result.stage, "delivery");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

@@ -418,11 +418,16 @@ export function createYoloSdk(options = {}) {
     },
     lifecycle: {
       buildStageReport: buildLifecycleStageReport,
-      writeStageReport: (stageId, report = {}, lifecycleOptions = {}) => writeLifecycleStageReport(stageId, report, {
-        projectRoot,
-        stateRoot,
-        ...lifecycleOptions,
-      }),
+      writeStageReport: (stageId, report = {}, lifecycleOptions = {}) => {
+        // Strip skipSequenceCheck — SDK path always enforces sequence validation.
+        // Internal callers needing exemption must import writeLifecycleStageReport directly.
+        const { skipSequenceCheck, skip_sequence_check, ...safe } = lifecycleOptions;
+        return writeLifecycleStageReport(stageId, report, {
+          projectRoot,
+          stateRoot,
+          ...safe,
+        });
+      },
     },
     discovery: {
       buildArtifact: (discoveryInput = {}, discoveryOptions = {}) => buildDiscoveryArtifact({
