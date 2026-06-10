@@ -650,11 +650,14 @@ function modifiedFileCondition(taskId, index, file) {
 }
 
 function acceptanceCondition(taskId, index, scenario) {
+  const params = { text: scenario.then || scenario.text || scenario };
+  const verifyCommand = scenario.verify_command || scenario.verifyCommand;
+  if (verifyCommand) params.verify_command = verifyCommand;
   return {
     id: `POST-${taskId}-SCENARIO-${index + 1}`,
     type: "acceptance_criteria",
-    severity: "WARN",
-    params: { text: scenario.then || scenario.text || scenario },
+    severity: verifyCommand ? "FAIL" : "WARN",
+    params,
     message: scenario.then || scenario.text || scenario,
   };
 }

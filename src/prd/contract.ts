@@ -104,11 +104,33 @@ function createEvaluators(root) {
     test_file_passes: (params, ts) => evalTestsPass(params, ts, root),
     build_pass: (params, ts) => evalBuildPass(params, ts, root),
     business_code_min: (params, ts) => evalBusinessCodeMin(params, ts, root, exec),
-    acceptance_criteria: (_params, _taskScope) => ({
-      passed: true,
-      detail: "验收标准（人工复核）",
-      warn: true,
-    }),
+    acceptance_criteria: (params, _taskScope) => {
+      const verifyCommand = (params && params.verify_command) || null;
+      if (verifyCommand && typeof verifyCommand === "string") {
+        // Reject commands containing pipe, redirect, or semicolon (gsd-2 rule)
+        if (/[;&|>]/.test(verifyCommand)) {
+          return {
+            passed: false,
+            status: "fail",
+            detail: `验收标准 verify_command 不允许 pipe/redirect/分号: ${verifyCommand}`,
+          };
+        }
+        const result = createExec(root)(verifyCommand, { timeout: 60000 });
+        return {
+          passed: result.ok,
+          status: result.ok ? "pass" : "fail",
+          detail: result.ok ? `验收命令通过: ${verifyCommand}` : `验收命令失败: ${verifyCommand}${result.err ? " — " + result.err : ""}`,
+        };
+      }
+      // No executable verify command — mark as manual (blocked at delivery gate)
+      return {
+        passed: true,
+        status: "pass",
+        detail: params?.text || "验收标准（需人工复核）",
+        manual: true,
+        warn: true,
+      };
+    },
     code_matches: (params, ts) => evalCodeContains({ ...params, is_regex: true }, ts, root),
     target_file_modified: (params, ts) => {
       const targetFile = params.file || ts?.targets?.[0]?.file;

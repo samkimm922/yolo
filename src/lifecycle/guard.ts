@@ -145,6 +145,11 @@ function meaningfulEvidenceEntry(entry) {
   return Object.keys(entry).length > 0;
 }
 
+function hasManualAcceptanceCriteria(report = {}) {
+  const gates = Array.isArray(report.gates) ? report.gates : [];
+  return gates.some((gate) => gate.type === "acceptance_criteria" && gate.manual === true);
+}
+
 function reportEvidenceEntries(report = {}) {
   return [
     ...(Array.isArray(report.evidence) ? report.evidence : []),
@@ -251,6 +256,13 @@ function deliveryHardGateBlockers(stateRoot) {
         "ACCEPTANCE_EVIDENCE_EMPTY",
         "acceptance",
         "Acceptance report evidence is empty; external E2E output cannot replace YOLO lifecycle evidence.",
+      ));
+    }
+    if (hasManualAcceptanceCriteria(acceptance.report)) {
+      blockers.push(makeBlocker(
+        "ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED",
+        "acceptance",
+        "Acceptance evidence contains manual (unverified) acceptance criteria. Each criterion needs either a passing verify command or explicit human acceptance evidence.",
       ));
     }
   }
