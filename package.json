@@ -70,7 +70,7 @@
     "./release/experience-pack-audit": "./dist/src/release/experience-pack-audit.js",
     "./release/nontechnical-ux-doctor": "./dist/src/release/nontechnical-ux-doctor.js",
     "./eval/benchmark": "./dist/src/eval/benchmark.js",
-    "./pm": "./dist/src/pm/index.js",
+
     "./audit-to-prd": "./dist/src/prd/audit-to-prd.js",
     "./prd-migrate-gates": "./dist/src/prd/migration.js",
     "./prd-preflight": "./dist/src/prd/preflight.js",
@@ -95,7 +95,7 @@
     "gate": "npm run build --silent && node ./dist/gate.js",
     "contract": "npm run build --silent && node ./dist/src/prd/contract.js",
     "prompt": "npm run build --silent && node ./dist/prompt.js",
-    "pm": "npm run build --silent && node ./dist/src/pm/index.js",
+
     "migrate-gates": "npm run build --silent && node ./dist/bin/yolo-prd-migrate-gates.js",
     "preflight": "npm run build --silent && node ./dist/bin/yolo-prd-preflight.js --check-all",
     "review": "npm run build --silent && node ./dist/src/cli/review.js",

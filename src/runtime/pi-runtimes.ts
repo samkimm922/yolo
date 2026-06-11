@@ -4,7 +4,7 @@ import { convertAuditToPrd } from "../prd/audit-to-prd.js";
 import { inspectPrdContract } from "./gates/prd-contract-doctor.js";
 import { scanProject } from "../review/scanner.js";
 import { validatePrdPath } from "../prd/validate.js";
-import { generateFindingsFromRequirement } from "../pm/index.js";
+import { generateFindingsFromRequirement } from "../demand/findings-generator.js";
 import { runRunnerRuntime } from "./runner-runtime.js";
 import { createPrdMigrationAdvice } from "../prd/migration.js";
 import { preflightPrd } from "../prd/preflight.js";

@@ -305,12 +305,7 @@
       "tier": "experimental",
       "reason": "Benchmark fixtures and rubric scoring are public beta readiness evidence, but fixture set and thresholds may evolve before stable."
     },
-    {
-      "export": "./pm",
-      "target": "./dist/src/pm/index.js",
-      "tier": "experimental",
-      "reason": "Requirement-to-findings PM module input contract is not frozen."
-    },
+
     {
       "export": "./audit-to-prd",
       "target": "./dist/src/prd/audit-to-prd.js",

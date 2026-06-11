@@ -1,16 +1,8 @@
-#!/usr/bin/env node
 /**
- * YOLO PM — 需求 → 原子 findings JSON
+ * YOLO Demand — 需求 → 原子 findings JSON
  *
- * 输入需求描述，输出结构化 findings，直接喂给 audit-to-prd.js
- *
- * 用法:
- *   echo "加一个库存预警功能" | node pm.js
- *   node pm.js requirements.md
- *   node pm.js --output=findings.json "需求描述..."
- *
- * 管道:
- *   pm.js → findings JSON → audit-to-prd.js → PRD → runner
+ * 输入需求描述，输出结构化 findings，直接喂给 audit-to-prd。
+ * 从 src/pm/index.ts 迁移，demand 管道是唯一主线。
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
@@ -20,49 +12,18 @@ import { spawn } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
-const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
-
-// ── 读取输入 ──────────────────────────────────────────────────────
-function readInput() {
-  const args = process.argv.slice(2);
-
-  // --output= 参数
-  const outputArg = args.find(a => a.startsWith("--output="));
-  const outputFile = outputArg ? outputArg.split("=")[1] : null;
-
-  // 非 flag 参数：文件路径 或 直接文本
-  const textArgs = args.filter(a => !a.startsWith("--"));
-  if (textArgs.length > 0) {
-    const first = textArgs[0];
-    if (existsSync(first)) {
-      return { input: readFileSync(first, "utf8"), outputFile, source: first };
-    }
-    return { input: textArgs.join(" "), outputFile, source: "cli" };
-  }
-
-  // 从 stdin 读取
-  try {
-    const chunks = [];
-    const buf = readFileSync("/dev/stdin", "utf8");
-    if (buf.trim()) return { input: buf.trim(), outputFile, source: "stdin" };
-  } catch {}
-  return null;
-}
 
 // ── 加载项目上下文 ───────────────────────────────────────────────
 export function loadProjectContext(projectRoot = PACKAGE_ROOT) {
   const context = [];
-  // CLAUDE.md
   const claudeMd = join(projectRoot, ".claude", "CLAUDE.md");
   if (existsSync(claudeMd)) {
     const md = readFileSync(claudeMd, "utf8");
-    // 只取关键部分：技术栈、项目定位
     const techMatch = md.match(/## §8 技术栈[\s\S]*?(?=## §|$)/);
     if (techMatch) context.push(techMatch[0].slice(0, 500));
     const posMatch = md.match(/## §10 项目定位[\s\S]*?(?=## §|$)/);
     if (posMatch) context.push(posMatch[0].slice(0, 300));
   }
-  // package.json
   const pkgJson = join(projectRoot, "package.json");
   if (existsSync(pkgJson)) {
     try {
@@ -189,7 +150,6 @@ export async function generateFindings(prompt, timeout = 300000, options = {}) {
       if (done) return;
       done = true;
 
-      // 提取 JSON（模型可能在 JSON 前后加了说明文字）
       const text = out.trim();
       const jsonMatch = text.match(/\{[\s\S]*?"findings"[\s\S]*?\}/);
       if (!jsonMatch) {
@@ -240,60 +200,4 @@ export async function generateFindingsFromRequirement(input, options = {}) {
   return result.ok
     ? { ...result, prompt, output_file: options.outputFile ? resolve(options.outputFile) : null }
     : result;
-}
-
-// ── 主函数 ────────────────────────────────────────────────────────
-export async function runPmCli() {
-  const inputData = readInput();
-  if (!inputData || !inputData.input.trim()) {
-    console.error("用法: node pm.js [requirements.md] [--output=findings.json]");
-    console.error("      或: echo '需求描述' | node pm.js");
-    process.exit(1);
-  }
-
-  const { input, outputFile, source } = inputData;
-  console.log(`\n[pm] 输入来源: ${source}`);
-  console.log(`[pm] 需求长度: ${input.length} 字符\n`);
-
-  console.log("[pm] 正在分析需求并拆分原子 task...");
-  const result = await generateFindingsFromRequirement(input);
-
-  if (!result.ok) {
-    console.error(`\n[pm] 生成失败: ${result.error}`);
-    if (result.raw) console.error(`[pm] 原始输出片段:\n${result.raw}`);
-    process.exit(1);
-  }
-
-  const { data } = result;
-  console.log(`\n[pm] 拆分完成: ${data.findings.length} 个原子 task`);
-
-  // 打印摘要
-  const byPriority = {};
-  for (const f of data.findings) {
-    const p = f.priority || f.severity || "?";
-    byPriority[p] = (byPriority[p] || 0) + 1;
-  }
-  for (const [p, n] of Object.entries(byPriority)) {
-    console.log(`  ${p}: ${n} 个`);
-  }
-  console.log(`\n  依赖关系:`);
-  for (const f of data.findings) {
-    if (f.depends_on?.length) {
-      console.log(`    ${f.id} ← ${f.depends_on.join(", ")}`);
-    }
-  }
-
-  // 写入文件
-  const outPath = outputFile || join(PACKAGE_ROOT, "data", "findings-dev.json");
-  writeFileSync(outPath, JSON.stringify(data, null, 2), "utf8");
-  console.log(`\n[pm] findings 已写入: ${outPath}`);
-  console.log(`[pm] 下一步: node audit-to-prd.js ${outPath} --output=prd-dev.json`);
-  console.log(`[pm] 然后: node runner.js prd-dev.json --mode=dev\n`);
-}
-
-if (isMain) {
-  runPmCli().catch(e => {
-    console.error("[pm] 异常:", e.message);
-    process.exit(1);
-  });
 }

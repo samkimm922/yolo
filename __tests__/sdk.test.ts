@@ -1260,7 +1260,7 @@ describe("yolo sdk", () => {
     const output = execFileSync(process.execPath, [
       "-e",
       [
-        "Promise.all([import('./dist/src/pm/index.js'), import('./dist/src/prd/audit-to-prd.js'), import('./dist/src/prd/validate.js'), import('./dist/src/prd/migration.js'), import('./dist/src/prd/preflight.js')])",
+        "Promise.all([import('./dist/src/demand/findings-generator.js'), import('./dist/src/prd/audit-to-prd.js'), import('./dist/src/prd/validate.js'), import('./dist/src/prd/migration.js'), import('./dist/src/prd/preflight.js')])",
         ".then(([pm,audit,validate,migrate,preflight])=>console.log([typeof pm.generateFindingsFromRequirement, typeof audit.convertAuditToPrd, typeof validate.validatePrdPath, typeof migrate.migratePrdGates, typeof migrate.createPrdMigrationAdvice, typeof preflight.preflightPrd].join(',')))",
       ].join(""),
     ], { cwd: YOLO_DIR, encoding: "utf8" }).trim();

@@ -24,6 +24,7 @@ const INVENTORY = [
   ["src/core/bootstrap.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 4 }],
   ["src/core/setup.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 8 }],
   ["src/demand/evidence-dispatch.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
+  ["src/demand/findings-generator.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/demand/gate.ts", { WARN: 0, warning: 26, "best-effort": 0, skip: 0 }],
   ["src/demand/interview.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 0 }],
   ["src/demand/runtime.ts", { WARN: 1, warning: 14, "best-effort": 0, skip: 0 }],
@@ -41,7 +42,7 @@ const INVENTORY = [
   ["src/lifecycle/state.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 3 }],
   ["src/packs/manifest.ts", { WARN: 0, warning: 2, "best-effort": 0, skip: 0 }],
   ["src/packs/resolver.ts", { WARN: 0, warning: 7, "best-effort": 0, skip: 0 }],
-  ["src/pm/index.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
+
   ["src/prd/audit-to-prd.ts", { WARN: 1, warning: 0, "best-effort": 0, skip: 0 }],
   ["src/prd/check.ts", { WARN: 3, warning: 0, "best-effort": 0, skip: 13 }],
   ["src/prd/contract.ts", { WARN: 2, warning: 5, "best-effort": 0, skip: 0 }],
@@ -113,7 +114,7 @@ const COVERAGE_RULES = [
   { prefix: "src/eval/", rationale: "Benchmark warnings are release-readiness advisories with explicit score thresholds.", coveredBy: ["__tests__/eval-benchmark.test.ts"] },
   { prefix: "src/lifecycle/", rationale: "Lifecycle warning states are explicit stage outcomes and not execution bypasses.", coveredBy: ["__tests__/lifecycle-guard.test.ts", "__tests__/lifecycle-state.test.ts", "__tests__/lifecycle-progress.test.ts"] },
   { prefix: "src/packs/", rationale: "Pack resolver warnings describe optional/unknown context and must stay inspectable.", coveredBy: ["__tests__/pack-resolver.test.ts"] },
-  { prefix: "src/pm/", rationale: "PM entry skips are package import compatibility paths, not execution gates.", coveredBy: ["__tests__/public-entrypoints.test.ts"] },
+
   { prefix: "src/prd/", rationale: "PRD warnings/skips are schema and migration diagnostics covered by preflight/contract gates.", coveredBy: ["__tests__/prd-contract-doctor-gate.test.ts", "__tests__/pre-execution-gates.test.ts", "__tests__/spec-governance-gate.test.ts"] },
   { prefix: "src/release/", rationale: "Release skips and warnings are explicit evidence gates and cannot silently publish or approve a release candidate.", coveredBy: ["__tests__/release-hardening-drill.test.ts", "__tests__/release-local-dogfood-evidence.test.ts", "__tests__/release-candidate-gate.test.ts", "__tests__/release-change-provenance.test.ts", "__tests__/release-clean-environment-verify.test.ts", "__tests__/release-dogfood-matrix.test.ts"] },
   { prefix: "src/review/", rationale: "Review skips are scoped finding/task conversions and must not widen fixes.", coveredBy: ["__tests__/review-fix-loop.test.ts", "__tests__/review-finding-schema.test.ts"] },
