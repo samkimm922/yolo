@@ -21,7 +21,7 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -57,7 +57,7 @@ function evidencePresent(value) {
     || (Array.isArray(value.evidence) && value.evidence.length > 0);
 }
 
-function externalOnly(record = {}) {
+function externalOnly(record = Object()) {
   const summary = isObject(record) ? record : {};
   return summary.executed_by_sdk !== true
     && summary.published_by_sdk !== true
@@ -66,13 +66,13 @@ function externalOnly(record = {}) {
     && summary.dogfood_report_published_by_sdk !== true;
 }
 
-function manualCommandsOnly(runbook = {}) {
+function manualCommandsOnly(runbook = Object()) {
   const commands = Array.isArray(runbook.manual_commands) ? runbook.manual_commands : [];
   return commands.length > 0
     && commands.every((command) => command.execute === false && command.requires_human === true);
 }
 
-function credentialEvidenceApproved(evidence = {}) {
+function credentialEvidenceApproved(evidence = Object()) {
   const summary = isObject(evidence) ? evidence : {};
   return summary.status === "pass"
     && nonEmptyString(summary.operator)
@@ -84,7 +84,7 @@ function credentialEvidenceApproved(evidence = {}) {
     && !nonEmptyString(summary.raw_token);
 }
 
-function billableProviderEvidenceApproved(evidence = {}) {
+function billableProviderEvidenceApproved(evidence = Object()) {
   const summary = isObject(evidence) ? evidence : {};
   return summary.status === "pass"
     && nonEmptyString(summary.operator)
@@ -96,7 +96,7 @@ function billableProviderEvidenceApproved(evidence = {}) {
     && externalOnly(summary);
 }
 
-function dogfoodPublicationApproved(evidence = {}) {
+function dogfoodPublicationApproved(evidence = Object()) {
   const summary = isObject(evidence) ? evidence : {};
   return summary.status === "pass"
     && evidencePresent(summary)
@@ -107,7 +107,7 @@ function dogfoodPublicationApproved(evidence = {}) {
     && externalOnly(summary);
 }
 
-function externalRemediationEvidenceApproved(evidence = {}) {
+function externalRemediationEvidenceApproved(evidence = Object()) {
   const summary = isObject(evidence) ? evidence : {};
   return summary.status === "pass"
     && nonEmptyString(summary.operator)
@@ -121,7 +121,7 @@ function externalRemediationEvidenceApproved(evidence = {}) {
     && !nonEmptyString(summary.yolo_run_id);
 }
 
-function manualReleaseRecordApproved(record = {}, packageJson = {}) {
+function manualReleaseRecordApproved(record = Object(), packageJson = Object()) {
   const summary = isObject(record) ? record : {};
   return nonEmptyString(summary.operator)
     && validTimestamp(summary.published_at || summary.executed_at)
@@ -131,7 +131,7 @@ function manualReleaseRecordApproved(record = {}, packageJson = {}) {
     && externalOnly(summary);
 }
 
-function noReleaseSideEffects(result = {}) {
+function noReleaseSideEffects(result = Object()) {
   return result.guarantees?.published === false
     && result.guarantees?.credential_access === false
     && result.guarantees?.provider_execution === false
@@ -140,7 +140,7 @@ function noReleaseSideEffects(result = {}) {
     && result.guarantees?.dogfood_report_published === false;
 }
 
-export function buildManualExternalReleasePlan(options = {}) {
+export function buildManualExternalReleasePlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const requestedOperations = normalizeRequestedOperations(options.requestedOperations || options.requested_operations);
   return {
@@ -174,7 +174,7 @@ export function buildManualExternalReleasePlan(options = {}) {
   };
 }
 
-export function runManualExternalReleaseGate(options = {}) {
+export function runManualExternalReleaseGate(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const plan = options.plan || buildManualExternalReleasePlan({

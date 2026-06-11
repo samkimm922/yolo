@@ -61,7 +61,7 @@ function isYoloPackageRoot(projectRoot) {
   return pkg?.name === "yolo" && existsSync(join(projectRoot, "src/runtime"));
 }
 
-export function resolveLearningPaths(options = {}) {
+export function resolveLearningPaths(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.yoloRoot || options.cwd || process.cwd());
   const packageMode = options.packageMode ?? isYoloPackageRoot(projectRoot);
   const stateRoot = resolve(options.stateRoot || options.state_root || (packageMode ? projectRoot : join(projectRoot, ".yolo")));
@@ -139,14 +139,14 @@ function normalizedType(type = "") {
   return value || "lesson";
 }
 
-function defaultPrevention(input = {}) {
+function defaultPrevention(input = Object()) {
   if (input.prevention) return String(input.prevention);
   if (input.strategy) return String(input.strategy);
   if (input.type === "red_team" || input.attack_type) return `Keep blocking ${input.attack_type || "this risk pattern"} with deterministic gates.`;
   return input.lesson || input.content || input.knowledge || input.summary || "";
 }
 
-export function createLearningRecord(input = {}, options = {}) {
+export function createLearningRecord(input = Object(), options = Object()) {
   const now = options.now?.toISOString?.() || options.now || new Date().toISOString();
   const files = unique(asArray(input.files || input.related_files || input.file || input.filename));
   const directories = unique([
@@ -236,7 +236,7 @@ export function dedupeLearningRecords(records = []) {
   return [...byKey.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
-export function writeLearningRecords(filePath, records = [], options = {}) {
+export function writeLearningRecords(filePath, records = [], options = Object()) {
   const dryRun = options.dryRun === true || options.dry_run === true;
   const content = records.map((record) => JSON.stringify(record)).join("\n");
   if (!dryRun) {
@@ -246,7 +246,7 @@ export function writeLearningRecords(filePath, records = [], options = {}) {
   return { file: filePath, records: records.length, dry_run: dryRun };
 }
 
-export function appendLearningRecord(input = {}, options = {}) {
+export function appendLearningRecord(input = Object(), options = Object()) {
   const paths = resolveLearningPaths(options);
   const record = createLearningRecord(input, options);
   if (options.dryRun === true || options.dry_run === true) {
@@ -315,35 +315,35 @@ function learnedRuleRecords(paths) {
   const rules = readJson(paths.learnedRulesFile, {});
   return Object.entries(rules || {}).map(([key, entry]) => createLearningRecord({
     type: "rule",
-    lesson: entry.rule || key,
-    prevention: entry.strategy || entry.rule || key,
+    lesson: Object.assign(Object(), entry).rule || key,
+    prevention: Object.assign(Object(), entry).strategy || Object.assign(Object(), entry).rule || key,
     confidence: 7,
     status: "candidate",
     source: "learned_rules",
     legacy_source: rel(paths.projectRoot, paths.learnedRulesFile),
     legacy_id: key,
-    gate: entry.gate || key,
-    ts: entry.learned_at || entry.since,
+    gate: Object.assign(Object(), entry).gate || key,
+    ts: Object.assign(Object(), entry).learned_at || Object.assign(Object(), entry).since,
     tags: ["learned_rule"],
   }));
 }
 
-export function collectLegacyLearningRecords(options = {}) {
+export function collectLegacyLearningRecords(options = Object()) {
   const paths = resolveLearningPaths(options);
   const sources = [
-    ["legacy_knowledge", legacyKnowledgeRecords(paths)],
-    ["legacy_lessons", legacyLessonRecords(paths)],
-    ["legacy_red_team", legacyRedTeamRecords(paths)],
-    ["learned_rules", learnedRuleRecords(paths)],
+    { name: "legacy_knowledge", records: legacyKnowledgeRecords(paths) },
+    { name: "legacy_lessons", records: legacyLessonRecords(paths) },
+    { name: "legacy_red_team", records: legacyRedTeamRecords(paths) },
+    { name: "learned_rules", records: learnedRuleRecords(paths) },
   ];
   return {
     paths,
-    sources: Object.fromEntries(sources.map(([name, records]) => [name, records.length])),
-    records: sources.flatMap(([, records]) => records),
+    sources: Object.fromEntries(sources.map((source) => [source.name, source.records.length])),
+    records: sources.flatMap((source) => source.records),
   };
 }
 
-export function migrateLegacyLearning(options = {}) {
+export function migrateLegacyLearning(options = Object()) {
   const paths = resolveLearningPaths(options);
   const current = readLearningRecords(paths.learningFile);
   const legacy = collectLegacyLearningRecords(paths);
@@ -363,14 +363,14 @@ export function migrateLegacyLearning(options = {}) {
   };
 }
 
-export function summarizeLearningCenter(options = {}) {
+export function summarizeLearningCenter(options = Object()) {
   const paths = resolveLearningPaths(options);
   const records = readLearningRecords(paths.learningFile);
-  const byType = {};
-  const byStatus = {};
-  const bySource = {};
-  const byGate = {};
-  const byRisk = {};
+  const byType = Object();
+  const byStatus = Object();
+  const bySource = Object();
+  const byGate = Object();
+  const byRisk = Object();
   for (const record of records) {
     byType[record.type] = (byType[record.type] || 0) + 1;
     byStatus[record.status] = (byStatus[record.status] || 0) + 1;
@@ -387,13 +387,13 @@ export function summarizeLearningCenter(options = {}) {
     by_type: byType,
     by_status: byStatus,
     by_source: bySource,
-    top_gates: Object.entries(byGate).sort((a, b) => b[1] - a[1]).slice(0, 10),
-    top_risks: Object.entries(byRisk).sort((a, b) => b[1] - a[1]).slice(0, 10),
+    top_gates: Object.entries(byGate).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 10),
+    top_risks: Object.entries(byRisk).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 10),
     records,
   };
 }
 
-function taskText(task = {}, extraText = "") {
+function taskText(task = Object(), extraText = "") {
   const acceptance = (task.acceptance_criteria || [])
     .map((item) => typeof item === "string" ? item : (item.description || item.message || ""))
     .join("\n");
@@ -411,7 +411,7 @@ function taskText(task = {}, extraText = "") {
   ].filter(Boolean).join("\n");
 }
 
-function learningQueryFromTask(input = {}) {
+function learningQueryFromTask(input = Object()) {
   const task = input.task || {};
   const targetFiles = unique([
     ...asArray(input.files || input.targetFiles || input.target_files),
@@ -458,7 +458,7 @@ function relatedPathMatches(queryFiles = [], recordFiles = []) {
   return unique(matches);
 }
 
-function recordLearningFiles(record = {}) {
+function recordLearningFiles(record = Object()) {
   return unique([
     ...asArray(record.fingerprint?.files),
     ...asArray(record.evidence_refs),
@@ -472,7 +472,7 @@ function scoreStatus(status = "") {
   return 0;
 }
 
-export function scoreLearningRecord(record = {}, query = learningQueryFromTask()) {
+export function scoreLearningRecord(record = Object(), query = learningQueryFromTask()) {
   const reasons = [];
   let score = 0;
   if (record.status === "deprecated") return { score: -10, reasons: ["deprecated"] };
@@ -525,7 +525,7 @@ export function scoreLearningRecord(record = {}, query = learningQueryFromTask()
   return { score: Number(score.toFixed(2)), reasons };
 }
 
-export function selectRelevantLearningRecords(records = [], input = {}, options = {}) {
+export function selectRelevantLearningRecords(records = [], input = Object(), options = Object()) {
   const query = input.files || input.task || input.gate || input.lastGateError
     ? learningQueryFromTask(input)
     : input;
@@ -538,7 +538,7 @@ export function selectRelevantLearningRecords(records = [], input = {}, options 
     .slice(0, Math.max(0, limit));
 }
 
-export function retrieveRelevantLearningRecords(options = {}) {
+export function retrieveRelevantLearningRecords(options = Object()) {
   const paths = resolveLearningPaths(options);
   const records = readLearningRecords(paths.learningFile);
   const selected = selectRelevantLearningRecords(records, options, options);
@@ -556,7 +556,7 @@ function compactText(value = "", max = 220) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
-export function buildExperiencePackText(options = {}) {
+export function buildExperiencePackText(options = Object()) {
   const result = retrieveRelevantLearningRecords(options);
   const maxChars = Number(options.maxChars || options.max_chars || 1800);
   if (!result.selected.length) return "";
@@ -582,17 +582,17 @@ function countLines(title, items) {
   return [`- ${title}:`, ...items.map(([name, count]) => `  - ${name}: ${count}`)];
 }
 
-function isLocalLegacySource(record = {}) {
+function isLocalLegacySource(record = Object()) {
   const source = String(record.source || "");
   return source.startsWith("legacy_") || source === "learned_rules";
 }
 
 function summarizeRecords(records = []) {
-  const byType = {};
-  const byStatus = {};
-  const bySource = {};
-  const byGate = {};
-  const byRisk = {};
+  const byType = Object();
+  const byStatus = Object();
+  const bySource = Object();
+  const byGate = Object();
+  const byRisk = Object();
   for (const record of records) {
     byType[record.type] = (byType[record.type] || 0) + 1;
     byStatus[record.status] = (byStatus[record.status] || 0) + 1;
@@ -606,12 +606,12 @@ function summarizeRecords(records = []) {
     by_type: byType,
     by_status: byStatus,
     by_source: bySource,
-    top_gates: Object.entries(byGate).sort((a, b) => b[1] - a[1]).slice(0, 10),
-    top_risks: Object.entries(byRisk).sort((a, b) => b[1] - a[1]).slice(0, 10),
+    top_gates: Object.entries(byGate).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 10),
+    top_risks: Object.entries(byRisk).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 10),
   };
 }
 
-export function buildLearningIndexMarkdown(options = {}) {
+export function buildLearningIndexMarkdown(options = Object()) {
   const paths = resolveLearningPaths(options);
   const summary = summarizeLearningCenter(paths);
   const publicSafeMode = options.publicSafeMode ?? options.public_safe_mode ?? paths.packageMode;
@@ -656,7 +656,7 @@ export function buildLearningIndexMarkdown(options = {}) {
   ].filter((line) => line !== null).join("\n");
 }
 
-export function buildLessonsPlaybookMarkdown(options = {}) {
+export function buildLessonsPlaybookMarkdown(options = Object()) {
   const paths = resolveLearningPaths(options);
   const summary = summarizeLearningCenter(paths);
   const publicSafeMode = options.publicSafeMode ?? options.public_safe_mode ?? paths.packageMode;

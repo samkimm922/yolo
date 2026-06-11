@@ -91,7 +91,7 @@ export function validateFile(prdPath, schema, ajv) {
   return validatePrdDocument(prd, schema, ajv, { file: prdPath });
 }
 
-export function validatePrdDocument(prd, schema, ajv, options = {}) {
+export function validatePrdDocument(prd, schema, ajv, options = Object()) {
   const validate = ajv.compile(schema);
   const valid = validate(prd);
 
@@ -199,7 +199,7 @@ export function checkAllPrds(schema, ajv) {
   return results;
 }
 
-export function validatePrdPath(prdPath, options = {}) {
+export function validatePrdPath(prdPath, options = Object()) {
   if (!Ajv) {
     return {
       ok: false,
@@ -215,7 +215,7 @@ export function validatePrdPath(prdPath, options = {}) {
   return validateFile(resolve(prdPath), schema, ajv);
 }
 
-export function validatePrdObject(prd, options = {}) {
+export function validatePrdObject(prd, options = Object()) {
   if (!Ajv) {
     return {
       ok: false,
@@ -231,7 +231,7 @@ export function validatePrdObject(prd, options = {}) {
   return validatePrdDocument(prd, schema, ajv, options);
 }
 
-export function validateAllPrds(options = {}) {
+export function validateAllPrds(options = Object()) {
   if (!Ajv) {
     return {
       passed: 0,

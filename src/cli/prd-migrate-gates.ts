@@ -28,7 +28,7 @@ function formatResult(result) {
   return lines.join("\n");
 }
 
-export function runPrdMigrateGatesCli(argv = process.argv.slice(2), io = {}) {
+export function runPrdMigrateGatesCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const json = argv.includes("--json");

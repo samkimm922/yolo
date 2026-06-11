@@ -10,24 +10,24 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
-function hasNoReleaseSideEffects(hardeningDrill = {}) {
+function hasNoReleaseSideEffects(hardeningDrill = Object()) {
   return hardeningDrill.guarantees?.published === false
     && hardeningDrill.guarantees?.credential_access === false
     && hardeningDrill.guarantees?.billable_provider_execution === false
     && hardeningDrill.guarantees?.provider_execution_allowed === false;
 }
 
-function runtimeImplementationReady(runtimeApiFreeze = {}) {
+function runtimeImplementationReady(runtimeApiFreeze = Object()) {
   if (runtimeApiFreeze.implementation_ready === true) return true;
   const blockers = runtimeApiFreeze.blockers || [];
   return blockers.length > 0 && blockers.every((blocker) => blocker.code === "RUNTIME_API_BOUNDARY_STABLE");
 }
 
-export function buildLocalDogfoodEvidencePlan(options = {}) {
+export function buildLocalDogfoodEvidencePlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   return {
     schema_version: LOCAL_DOGFOOD_EVIDENCE_SCHEMA_VERSION,
@@ -49,7 +49,7 @@ export function buildLocalDogfoodEvidencePlan(options = {}) {
   };
 }
 
-export function runLocalDogfoodEvidenceDrill(options = {}) {
+export function runLocalDogfoodEvidenceDrill(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const plan = options.plan || buildLocalDogfoodEvidencePlan({ yoloRoot });

@@ -347,7 +347,7 @@ function formatCondition(c) {
 
 // ── 组装 prompt ──────────────────────────────────────────────────
 
-export function generatePrompt(input = {}) {
+export function generatePrompt(input = Object()) {
   const taskId = input.taskId;
   const prdPath = input.prdPath;
   const isFix = input.isFix === true || input.fix === true;
@@ -669,7 +669,7 @@ if (learningsText && !gateResult) {
   return parts.join("\n");
 }
 
-export function runPromptCli(argv = process.argv.slice(2), io = {}) {
+export function runPromptCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   try {

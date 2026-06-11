@@ -25,7 +25,7 @@ function asArray(value) {
   return [value];
 }
 
-function normalizeManifest(manifest = {}, sourcePath = "") {
+function normalizeManifest(manifest = Object(), sourcePath = "") {
   return {
     schema_version: clean(manifest.schema_version) || PACK_MANIFEST_SCHEMA_VERSION,
     schema: clean(manifest.schema) || PACK_MANIFEST_SCHEMA,
@@ -43,7 +43,7 @@ function normalizeManifest(manifest = {}, sourcePath = "") {
   };
 }
 
-export function validatePackManifest(manifest = {}) {
+export function validatePackManifest(manifest = Object()) {
   const normalized = normalizeManifest(manifest, manifest.source_path || "");
   const errors = [];
   const warnings = [];
@@ -78,7 +78,7 @@ export function readPackManifest(filePath) {
   };
 }
 
-export function discoverPackManifests(options = {}) {
+export function discoverPackManifests(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
   const stateRoot = resolve(options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
   const roots = asArray(options.roots || options.manifestRoots || options.manifest_roots).length

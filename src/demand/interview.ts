@@ -460,7 +460,7 @@ function answerQualityFor(question, answer) {
   };
 }
 
-function nowIso(options = {}) {
+function nowIso(options = Object()) {
   return clean(options.now) || new Date().toISOString();
 }
 
@@ -477,12 +477,12 @@ function idDate(now) {
   return clean(now).slice(0, 10).replace(/-/g, "") || "00000000";
 }
 
-function makeId(prefix, input = {}, now) {
+function makeId(prefix, input = Object(), now) {
   return clean(input.id || input.interview_id || input.interviewId)
     || `${prefix}-${idDate(now)}-${slug(input.title || input.idea || input.objective || "PROJECT")}`;
 }
 
-function makeDemandId(input = {}, now) {
+function makeDemandId(input = Object(), now) {
   return clean(input.demand_id || input.demandId)
     || `DEMAND-${idDate(now)}-${slug(input.title || input.idea || input.objective || "PROJECT")}`;
 }
@@ -491,7 +491,7 @@ function resolveRoot(value, fallback = process.cwd()) {
   return resolve(clean(value) || fallback);
 }
 
-function stateRootFor(input = {}, options = {}) {
+function stateRootFor(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const explicit = input.stateRoot || input.state_root || options.stateRoot || options.state_root;
   return explicit ? (isAbsolute(explicit) ? explicit : resolve(projectRoot, explicit)) : join(projectRoot, ".yolo");
@@ -505,7 +505,7 @@ function questionBySlot(slot, questions = DEMAND_INTERVIEW_QUESTION_BANK) {
   return questions.find((question) => question.slot === slot);
 }
 
-function answerRecordForSlot(session = {}, slot) {
+function answerRecordForSlot(session = Object(), slot) {
   const question = questionBySlot(slot, session.questions || DEMAND_INTERVIEW_QUESTION_BANK);
   return question ? session.answers?.[question.id] : null;
 }
@@ -546,14 +546,14 @@ function normalizeAnswer(question, answer) {
   };
 }
 
-function decorateQuestions(questions = DEMAND_INTERVIEW_QUESTION_BANK, answers = {}) {
+function decorateQuestions(questions = DEMAND_INTERVIEW_QUESTION_BANK, answers = Object()) {
   return questions.map((question) => ({
     ...question,
     answered: hasAnswer(answers[question.id]),
   }));
 }
 
-function missingSlots(session = {}, slots = []) {
+function missingSlots(session = Object(), slots = []) {
   return slots.filter((slot) => !hasAnswer(answerRecordForSlot(session, slot)));
 }
 
@@ -571,7 +571,7 @@ function qualityForAnsweredRecord(question, record) {
   return answerQualityFor(question, record.answer);
 }
 
-function answeredQualityItems(session = {}, questions = DEMAND_INTERVIEW_QUESTION_BANK) {
+function answeredQualityItems(session = Object(), questions = DEMAND_INTERVIEW_QUESTION_BANK) {
   return questions
     .map((question) => {
       const record = session.answers?.[question.id];
@@ -629,7 +629,7 @@ function qualitySummary(items = []) {
   };
 }
 
-function approvalState(session = {}) {
+function approvalState(session = Object()) {
   const record = answerRecordForSlot(session, "execution_approval");
   return {
     answered: hasAnswer(record),
@@ -662,7 +662,7 @@ function nextQuestionFromFollowUp(followUp, questions = DEMAND_INTERVIEW_QUESTIO
   };
 }
 
-export function selectDemandInterviewNextQuestion(session = {}, coverage = inspectDemandInterviewCoverage(session)) {
+export function selectDemandInterviewNextQuestion(session = Object(), coverage = inspectDemandInterviewCoverage(session)) {
   const questions = session.questions || DEMAND_INTERVIEW_QUESTION_BANK;
   const followUp = (coverage.follow_up_questions || [])[0];
   if (followUp) return nextQuestionFromFollowUp(followUp, questions);
@@ -697,7 +697,7 @@ function ledgerInfo({ id, demandId, projectRoot, stateRoot }) {
   };
 }
 
-export function inspectDemandInterviewCoverage(session = {}) {
+export function inspectDemandInterviewCoverage(session = Object()) {
   const questions = session.questions || DEMAND_INTERVIEW_QUESTION_BANK;
   const answered = questions
     .map((question) => ({ question, record: session.answers?.[question.id] }))
@@ -806,7 +806,7 @@ function refreshSession(session) {
   return session;
 }
 
-export function createDemandInterviewSession(input = {}, options = {}) {
+export function createDemandInterviewSession(input = Object(), options = Object()) {
   const now = nowIso(options);
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
@@ -834,7 +834,7 @@ export function createDemandInterviewSession(input = {}, options = {}) {
   return refreshSession(session);
 }
 
-export function answerDemandInterviewQuestion(session, { questionId, answer, now } = {}) {
+export function answerDemandInterviewQuestion(session, { questionId, answer, now } = Object()) {
   const question = questionById(questionId, session?.questions || DEMAND_INTERVIEW_QUESTION_BANK);
   if (!question) {
     throw new Error(`Unknown demand interview question: ${questionId}`);
@@ -867,7 +867,7 @@ function textForSlot(session, slot) {
   return record?.normalized?.text || textFromValue(record?.answer);
 }
 
-function answeredQuestionRounds(session = {}) {
+function answeredQuestionRounds(session = Object()) {
   const answers = session.answers || {};
   return (session.questions || DEMAND_INTERVIEW_QUESTION_BANK)
     .filter((question) => hasAnswer(answers[question.id]))
@@ -880,7 +880,7 @@ function answeredQuestionRounds(session = {}) {
     }));
 }
 
-function decisionLines(session = {}) {
+function decisionLines(session = Object()) {
   const lines = [];
   const categories = [
     ["target_users", "用户/角色"],
@@ -898,7 +898,7 @@ function decisionLines(session = {}) {
   return lines;
 }
 
-export function demandInterviewToDemandInput(session = {}) {
+export function demandInterviewToDemandInput(session = Object()) {
   const coverage = inspectDemandInterviewCoverage(session);
   const followUpPrompts = (coverage.follow_up_questions || [])
     .map((item) => item.plain_language_prompt)

@@ -21,7 +21,7 @@ export const YOLO_DOCTOR_SCHEMA_VERSION = "1.0";
 export const YOLO_DOCTOR_SCHEMA = "yolo.doctor.report.v1";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function check(code, severity, passed, message, extra = {}) {
+function check(code, severity, passed, message, extra = Object()) {
   return {
     code,
     severity,
@@ -43,7 +43,7 @@ function readJsonSafe(path) {
   }
 }
 
-function artifactStatus(file = {}) {
+function artifactStatus(file = Object()) {
   const path = file.path || "";
   const exists = Boolean(path) && existsSync(path);
   const size = exists ? statSync(path).size : 0;
@@ -59,7 +59,7 @@ function artifactStatus(file = {}) {
   };
 }
 
-function expectedBridgeArtifacts(bridgePlan = {}) {
+function expectedBridgeArtifacts(bridgePlan = Object()) {
   return [
     ...(bridgePlan.files || []),
     ...(bridgePlan.native_skill_files || []),
@@ -101,7 +101,7 @@ function lifecycleInspection(projectRoot) {
   }
 }
 
-export function buildYoloDoctorReport(options = {}) {
+export function buildYoloDoctorReport(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
   const yoloRoot = resolve(options.yoloRoot || options.yolo_root || join(__dirname, "../.."));
   const homeDir = resolve(options.homeDir || options.home_dir || homedir());
@@ -198,7 +198,7 @@ export function buildYoloDoctorReport(options = {}) {
       status_path: lifecycle.path,
       exists: lifecycle.exists,
       validation: lifecycle.validation,
-      current_stage: lifecycle.state?.current_stage || null,
+      current_stage: Object.assign(Object(), lifecycle).state?.current_stage || null,
     },
     commands: {
       schema: commandRegistry.schema,
@@ -228,7 +228,7 @@ export function buildYoloDoctorReport(options = {}) {
   };
 }
 
-export function formatYoloDoctorText(report = {}) {
+export function formatYoloDoctorText(report = Object()) {
   const lines = [
     `[yolo doctor] ${report.status}`,
     `project: ${report.project_root}`,
@@ -252,7 +252,7 @@ export function formatYoloDoctorText(report = {}) {
 
 function parseDoctorArgs(argv = []) {
   const options = { json: false, help: false };
-  const input = {};
+  const input = Object();
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--json") options.json = true;
@@ -276,7 +276,7 @@ function parseDoctorArgs(argv = []) {
   return { input, options };
 }
 
-export function runYoloDoctorCli(argv = [], io = {}) {
+export function runYoloDoctorCli(argv = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const { input, options } = parseDoctorArgs(argv);
   if (options.help) {

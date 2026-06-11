@@ -378,7 +378,7 @@ function commandMatches(command, normalizedName) {
   return (command.aliases || []).some((alias) => normalizeCommandName(alias) === normalizedName);
 }
 
-export function listYoloCommands(options = {}) {
+export function listYoloCommands(options = Object()) {
   const commands = YOLO_COMMANDS.map(clone);
   if (options.all === true || options.includeHidden === true || options.include_hidden === true) return commands;
   if (options.stable === true || options.defaultSurface === true || options.default_surface === true || options.recommended === true || options.recommended_only === true) {
@@ -408,7 +408,7 @@ export function listYoloCommands(options = {}) {
   return commands.filter((command) => command.stability === "stable" && command.visibility === "default");
 }
 
-export function listYoloCommandNames(options = {}) {
+export function listYoloCommandNames(options = Object()) {
   return listYoloCommands(options).map((command) => command.name);
 }
 

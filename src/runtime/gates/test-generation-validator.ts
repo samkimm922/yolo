@@ -91,13 +91,13 @@ function countAddedLines(cwd, file, isNew) {
   }
 }
 
-export function validateTestGeneration(task, options = {}) {
+export function validateTestGeneration(task, options = Object()) {
   const cwd = options.cwd || process.cwd();
   const policy = task?.test_generation || {};
   const mode = policy.mode || DEFAULT_MODE;
-  const changedProbe = Object.prototype.hasOwnProperty.call(options, "changedFiles")
+  const changedProbe = Object.assign(Object(), Object.prototype.hasOwnProperty.call(options, "changedFiles")
     ? { ok: true, files: options.changedFiles || [] }
-    : inspectChangedFiles(cwd);
+    : inspectChangedFiles(cwd));
   const changedFiles = changedProbe.files || [];
   const failures = [];
   const warnings = [];
@@ -192,7 +192,7 @@ export function validateTestGeneration(task, options = {}) {
 }
 
 function parseArgs(argv) {
-  const args = {};
+  const args = Object();
   for (const arg of argv) {
     const match = arg.match(/^--([^=]+)=(.*)$/);
     if (match) args[match[1]] = match[2];

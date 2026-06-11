@@ -40,7 +40,7 @@ function isoLocal() {
 }
 
 // ── 初始化：创建目录 + 清理旧日志 ────────────────────────────
-export function initTaskLogs(options = {}) {
+export function initTaskLogs(options = Object()) {
   const dir = options.taskLogsDir || options.task_logs_dir;
   if (dir) setTaskLogsDir(dir);
   setTaskLogRunId(options.runId || options.run_id || null);
@@ -103,13 +103,13 @@ export function logTaskError(taskId, message, detail, stack) {
 }
 
 export function logTaskDone(taskId, result, durationMs, error) {
-  const entry = { type: "DONE", result, duration_ms: durationMs };
+  const entry = Object.assign(Object(), { type: "DONE", result, duration_ms: durationMs });
   if (error) entry.error = error;
   writeTaskLog(taskId, entry);
 }
 
 // ── Review 专用 ──────────────────────────────────────────────
-export function logReviewStart(scope, totalFiles, meta = {}) {
+export function logReviewStart(scope, totalFiles, meta = Object()) {
   writeTaskLog("_review", { type: "REVIEW_START", scope, total_files: totalFiles, ...meta });
 }
 
@@ -117,18 +117,18 @@ export function logReviewRead(file, detail) {
   writeTaskLog("_review", { type: "READ", file, detail });
 }
 
-export function logReviewGate(check, result, meta = {}) {
+export function logReviewGate(check, result, meta = Object()) {
   writeTaskLog("_review", { type: "GATE", check, result, ...meta });
 }
 
-export function logReviewIssue(severity, file, line, message, meta = {}) {
+export function logReviewIssue(severity, file, line, message, meta = Object()) {
   writeTaskLog("_review", { type: "REVIEW_ISSUE", severity, file, line, message, ...meta });
 }
 
-export function logReviewDone(result, issuesFound, issuesFixed, meta = {}) {
+export function logReviewDone(result, issuesFound, issuesFixed, meta = Object()) {
   writeTaskLog("_review", { type: "DONE", result, issues_found: issuesFound, issues_fixed: issuesFixed, ...meta });
 }
 
-export function logReviewError(message, detail, meta = {}) {
+export function logReviewError(message, detail, meta = Object()) {
   writeTaskLog("_review", { type: "ERROR", message, detail: detail || "", ...meta });
 }

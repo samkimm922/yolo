@@ -25,7 +25,7 @@ function asArray(value) {
   return [value];
 }
 
-function preflightMode(options = {}) {
+function preflightMode(options = Object()) {
   return clean(options.mode || options.executionMode || options.execution_mode || "verify").toLowerCase();
 }
 
@@ -101,7 +101,7 @@ function readPrd(path) {
 
 function taskStats(prd) {
   const tasks = Array.isArray(prd?.tasks) ? prd.tasks : [];
-  const byStatus = {};
+  const byStatus = Object();
   for (const task of tasks) {
     const status = task?.status || "unknown";
     byStatus[status] = (byStatus[status] || 0) + 1;
@@ -186,11 +186,11 @@ function buildRunnerReadiness({ read, schema, contract, migration, specGovernanc
   };
 }
 
-export function defaultSpecGovernancePolicy(options = {}) {
+export function defaultSpecGovernancePolicy(options = Object()) {
   return specGovernancePolicy(options);
 }
 
-function inspectPreflightReadiness(read, schema, options = {}) {
+function inspectPreflightReadiness(read, schema, options = Object()) {
   let contract = null;
   let migration = null;
   let specGovernance = null;
@@ -248,7 +248,7 @@ function inspectPreflightReadiness(read, schema, options = {}) {
   };
 }
 
-export function preflightPrdDocument(prd, options = {}) {
+export function preflightPrdDocument(prd, options = Object()) {
   const file = options.file || options.prdPath || options.prd_path || "<memory>";
   const read = {
     ok: true,
@@ -259,13 +259,13 @@ export function preflightPrdDocument(prd, options = {}) {
   return inspectPreflightReadiness(read, schema, options);
 }
 
-export function preflightPrd(prdPath, options = {}) {
+export function preflightPrd(prdPath, options = Object()) {
   const read = readPrd(prdPath);
   const schema = validatePrdPath(prdPath, options.schemaOptions || {});
   return inspectPreflightReadiness(read, schema, options);
 }
 
-export function preflightAllPrds(options = {}) {
+export function preflightAllPrds(options = Object()) {
   const files = findPrdFiles(options.dirs);
   const results = files.map((file) => preflightPrd(file, options));
   if (files.length === 0) {
@@ -342,7 +342,7 @@ function printAll(result) {
 }
 
 function parseCliArgs(argv = process.argv.slice(2)) {
-  const options = { mode: "verify" };
+  const options = Object.assign(Object(), { mode: "verify" });
   let fileArg = "";
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];

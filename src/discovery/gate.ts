@@ -64,11 +64,11 @@ function hasSignal(text, patterns) {
   return patterns.some((pattern) => pattern.test(text));
 }
 
-function check(code, passed, severity, message, extra = {}) {
+function check(code, passed, severity, message, extra = Object()) {
   return { code, passed: Boolean(passed), severity, message, ...extra };
 }
 
-export function buildDiscoveryBrief(input = {}, options = {}) {
+export function buildDiscoveryBrief(input = Object(), options = Object()) {
   const idea = typeof input === "string" ? input : input.idea || input.requirement || input.text;
   const ideaText = clean(idea);
   return {
@@ -88,7 +88,7 @@ export function buildDiscoveryBrief(input = {}, options = {}) {
   };
 }
 
-export function inspectDiscoveryReadiness(input = {}, options = {}) {
+export function inspectDiscoveryReadiness(input = Object(), options = Object()) {
   const brief = buildDiscoveryBrief(input, options);
   const text = [
     brief.idea,

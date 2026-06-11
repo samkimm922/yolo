@@ -40,7 +40,7 @@ function readEvidenceDir(taskRoot) {
   return findings;
 }
 
-function extractFragilityPoints(task = {}, outcome = {}) {
+function extractFragilityPoints(task = Object(), outcome = Object()) {
   const points = [];
   const postConditions = task.post_conditions || [];
 
@@ -69,7 +69,7 @@ function extractFragilityPoints(task = {}, outcome = {}) {
   return [...new Set(points)].slice(0, 5);
 }
 
-function extractAssumptionChanges(task = {}, outcome = {}, evidenceFindings = []) {
+function extractAssumptionChanges(task = Object(), outcome = Object(), evidenceFindings = []) {
   const changes = [];
 
   // Assumption changes from evidence findings
@@ -101,7 +101,7 @@ function extractAssumptionChanges(task = {}, outcome = {}, evidenceFindings = []
   return [...new Set(changes)].slice(0, 5);
 }
 
-export function buildTaskSummary({ task = {}, outcome = {}, evidenceDir = "", projectRoot = "" } = {}) {
+export function buildTaskSummary({ task = Object(), outcome = Object(), evidenceDir = "", projectRoot = "" } = Object()) {
   const taskId = clean(task.id);
   const title = clean(task.title || task.description || taskId);
   const status = clean(outcome.status || "unknown");

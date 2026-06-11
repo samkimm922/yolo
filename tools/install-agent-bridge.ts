@@ -15,7 +15,7 @@ const BRIDGE_START = "<!-- yolo-agent-bridge:start -->";
 const BRIDGE_END = "<!-- yolo-agent-bridge:end -->";
 
 function unique(values) {
-  return [...new Set(values)];
+  return [...new Set(values)].map(String);
 }
 
 function clean(value) {
@@ -110,7 +110,7 @@ export function parseAgentBridgeArgs(argv = process.argv.slice(2)) {
   return options;
 }
 
-export function buildAgentBridgeBlock({ agent, yoloRoot = DEFAULT_YOLO_ROOT } = {}) {
+export function buildAgentBridgeBlock({ agent, yoloRoot = DEFAULT_YOLO_ROOT } = Object()) {
   const label = agent === "claude" ? "Claude Code" : "Codex";
   return [
     BRIDGE_START,
@@ -180,7 +180,7 @@ function displayRelativePath(baseDir, path, scope) {
   return scope === "user" ? `~/${relativePath}` : relativePath;
 }
 
-function asScopes(options = {}) {
+function asScopes(options = Object()) {
   if (Array.isArray(options.scopes)) return options.scopes;
   return normalizeInstallScopes(options.scope || options.installScope || options.install_scope || "project");
 }
@@ -193,46 +193,46 @@ function renderCommandUsage(commandInput) {
   return renderYoloCommandUsage(commandInput);
 }
 
-function primarySlashNameForCommand(command = {}) {
+function primarySlashNameForCommand(command = Object()) {
   if (command.stability === "stable") return `yolo-${command.name}`;
   if (String(command.name || "").startsWith("yolo-")) return command.name;
   return `yolo-${command.name}`;
 }
 
-function isDemandCompatibilityAlias(command = {}) {
+function isDemandCompatibilityAlias(command = Object()) {
   return command.alias_for === "demand"
     && command.stability === "compat"
     && Boolean(command.demand_stage || command.demand_mode);
 }
 
-function isDemandHostCommand(command = {}) {
+function isDemandHostCommand(command = Object()) {
   return command.name === "demand" || isDemandCompatibilityAlias(command);
 }
 
-function demandAliasSlashRoute(command = {}) {
+function demandAliasSlashRoute(command = Object()) {
   if (!isDemandCompatibilityAlias(command)) return "";
   if (command.demand_mode) return `/yolo-demand --mode ${command.demand_mode}`;
   return `/yolo-demand --stage ${command.demand_stage || command.mode}`;
 }
 
-function demandAliasRoute(command = {}) {
+function demandAliasRoute(command = Object()) {
   if (!isDemandCompatibilityAlias(command)) return "";
   if (command.demand_mode) return `yolo demand --mode ${command.demand_mode}`;
   return `yolo demand --stage ${command.demand_stage || command.mode}`;
 }
 
-function compatibilityAliasRoute(command = {}) {
+function compatibilityAliasRoute(command = Object()) {
   if (isDemandCompatibilityAlias(command)) return demandAliasRoute(command);
   return command.usage || "";
 }
 
-function isWriteCommand(command = {}) {
+function isWriteCommand(command = Object()) {
   return command.writes_code === true
     || ["run", "fix", "runner", "init", "setup", "install"].includes(command.name)
     || ["run", "fix", "runner", "init", "setup", "install"].includes(command.mode);
 }
 
-function allowedToolsForCommand(command = {}) {
+function allowedToolsForCommand(command = Object()) {
   const tools = ["Read", "Bash", "Glob", "Grep"];
   if (isWriteCommand(command)) {
     tools.push("Edit", "Write");
@@ -240,7 +240,7 @@ function allowedToolsForCommand(command = {}) {
   return tools.map((tool) => `  - ${tool}`);
 }
 
-function stageStopRule(command = {}) {
+function stageStopRule(command = Object()) {
   if (command.name === "demand") {
     return "- `/yolo-demand` is the unified demand-stage interview host. Route internally between brainstorm, interview, discover, discuss, office-hours, status, evidence dispatch, and spec-readiness. If slots are missing, ask exactly one `next_question` and stop; do not enter `/yolo-spec` in the same response.";
   }
@@ -256,7 +256,7 @@ function stageStopRule(command = {}) {
   return "- Stage stop: complete only this command's stage, then stop with artifacts, blockers, and the next recommended `/yolo-*` command. Do not advance to tasks, spec, check, run, fix, or source-code edits in the same response.";
 }
 
-function demandHostRules(command = {}) {
+function demandHostRules(command = Object()) {
   if (!isDemandHostCommand(command)) return [];
   return [
     "- Demand host default: run one-question mode. If required slots are missing, return exactly one `next_question` and wait for the user's answer.",
@@ -266,14 +266,14 @@ function demandHostRules(command = {}) {
   ];
 }
 
-function executionApprovalRule(command = {}) {
+function executionApprovalRule(command = Object()) {
   if (isWriteCommand(command)) {
     return "- Execution approval must be current and specific to this run/fix scope.";
   }
   return "- User confirmation that this stage output looks good is not execution approval. It only authorizes the next no-code stage unless the user later invokes `/yolo-run` or `/yolo-fix` after checks pass.";
 }
 
-export function buildClaudeSlashCommand(commandName, { yoloRoot = DEFAULT_YOLO_ROOT } = {}) {
+export function buildClaudeSlashCommand(commandName, { yoloRoot = DEFAULT_YOLO_ROOT } = Object()) {
   const command = getYoloCommand(commandName);
 
   return [
@@ -321,7 +321,7 @@ export function buildClaudeSlashCommand(commandName, { yoloRoot = DEFAULT_YOLO_R
   ].join("\n");
 }
 
-function codexMenuDescription(command = {}) {
+function codexMenuDescription(command = Object()) {
   const descriptions = {
     demand: "统一需求访谈主持入口：缺槽位时 one-question 只问一个 next_question；不输出大段建议、不进 PRD、不改代码。",
     auto: "全自动执行 YOLO 流水线：需求澄清 \u2192 spec \u2192 check \u2192 实现 \u2192 review \u2192 交付；各阶段独立 gate。",
@@ -337,7 +337,7 @@ function codexMenuDescription(command = {}) {
   return descriptions[command.name] || command.description || "";
 }
 
-export function buildYoloNativeSkill({ agent = "codex", yoloRoot = DEFAULT_YOLO_ROOT } = {}) {
+export function buildYoloNativeSkill({ agent = "codex", yoloRoot = DEFAULT_YOLO_ROOT } = Object()) {
   const label = agent === "claude" ? "Claude Code" : "Codex";
   const recommendedCommands = listYoloCommands({ recommended: true });
   const demandAliases = listYoloCommands({ compatibilityAliases: true })
@@ -402,7 +402,7 @@ export function buildYoloNativeSkill({ agent = "codex", yoloRoot = DEFAULT_YOLO_
   ].join("\n");
 }
 
-export function buildCodexSourceCommandSkill(commandName, { yoloRoot = DEFAULT_YOLO_ROOT } = {}) {
+export function buildCodexSourceCommandSkill(commandName, { yoloRoot = DEFAULT_YOLO_ROOT } = Object()) {
   const command = getYoloCommand(commandName);
   const aliases = commandName === "yolo"
     ? "`/yolo`, `/yolo status`, `/yolo demand`, `/yolo tasks`, `/yolo check`, `/yolo run`, or `/yolo review`"
@@ -455,7 +455,7 @@ export function buildCodexSourceCommandSkill(commandName, { yoloRoot = DEFAULT_Y
   ].join("\n");
 }
 
-export function buildCodexSlashCommandSkill(commandName, { yoloRoot = DEFAULT_YOLO_ROOT } = {}) {
+export function buildCodexSlashCommandSkill(commandName, { yoloRoot = DEFAULT_YOLO_ROOT } = Object()) {
   const command = getYoloCommand(commandName);
   return [
     "---",
@@ -543,7 +543,7 @@ function writePlainArtifact({ file, dryRun, force, written, planned, overwritten
 
 const MAX_INSTALL_FILE_COUNT = 12;
 
-export function buildAgentBridgeInstallPlan(options = {}) {
+export function buildAgentBridgeInstallPlan(options = Object()) {
   const projectRoot = resolve(options.projectRoot || process.cwd());
   const yoloRoot = resolve(options.yoloRoot || DEFAULT_YOLO_ROOT);
   const homeDir = resolve(options.homeDir || options.home_dir || homedir());
@@ -606,7 +606,7 @@ export function buildAgentBridgeInstallPlan(options = {}) {
   };
 }
 
-export function installAgentBridge(options = {}) {
+export function installAgentBridge(options = Object()) {
   const plan = buildAgentBridgeInstallPlan(options);
   const dryRun = options.dryRun === true || options.dry_run === true;
   const force = options.force === true;

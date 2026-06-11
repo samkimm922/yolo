@@ -3,7 +3,7 @@ import { inspectRuntimeBoundaryCandidate } from "./runtime-boundary-candidate.js
 
 export const RUNTIME_BOUNDARY_DECISION_SCHEMA_VERSION = "1.0";
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -19,7 +19,7 @@ function validTimestamp(value) {
   return nonEmptyString(value) && !Number.isNaN(Date.parse(value));
 }
 
-function decisionApproved(record = {}, candidate = {}) {
+function decisionApproved(record = Object(), candidate = Object()) {
   const summary = isObject(record) ? record : {};
   return summary.approved === true
     && nonEmptyString(summary.approver || summary.operator)
@@ -32,7 +32,7 @@ function decisionApproved(record = {}, candidate = {}) {
     && nonEmptyString(summary.rollback_plan || summary.rollback_plan_path);
 }
 
-export function buildRuntimeBoundaryDecisionPlan(options = {}) {
+export function buildRuntimeBoundaryDecisionPlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const targetExport = options.targetExport || options.target_export || "./runtime";
   return {
@@ -64,7 +64,7 @@ export function buildRuntimeBoundaryDecisionPlan(options = {}) {
   };
 }
 
-export function runRuntimeBoundaryDecisionGate(options = {}) {
+export function runRuntimeBoundaryDecisionGate(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const plan = options.plan || buildRuntimeBoundaryDecisionPlan({
     yoloRoot,

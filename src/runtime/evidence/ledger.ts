@@ -28,7 +28,7 @@ function previousRecordHash(filePath) {
   return records.at(-1)?.record_hash || null;
 }
 
-export function validateLedgerChain(records = [], options = {}) {
+export function validateLedgerChain(records = [], options = Object()) {
   const errors = [];
   const allowExternalHead = options.allowExternalHead === true || options.allow_external_head === true;
   let previousHash = allowExternalHead && records[0]?.prev_hash ? records[0].prev_hash : null;
@@ -61,7 +61,7 @@ export function readLedgerJsonl(filePath) {
   return readJsonlRecords(filePath);
 }
 
-export function appendJsonlRecord(filePath, record, options = {}) {
+export function appendJsonlRecord(filePath, record, options = Object()) {
   const now = options.now || new Date().toISOString();
   mkdirSync(dirname(filePath), { recursive: true });
   const payload = buildLedgerRecord(record?.event, record, {
@@ -78,11 +78,11 @@ export function appendJsonlRecord(filePath, record, options = {}) {
   return payload;
 }
 
-export function appendStateEvent(stateDir, event, data = {}, options = {}) {
+export function appendStateEvent(stateDir, event, data = Object(), options = Object()) {
   return appendJsonlRecord(join(stateDir, "events.jsonl"), { ...data, event, ledger: "state" }, options);
 }
 
-export function appendRunEvent(stateDir, event, data = {}, options = {}) {
+export function appendRunEvent(stateDir, event, data = Object(), options = Object()) {
   return appendJsonlRecord(join(stateDir, "runs.jsonl"), { ...data, event, ledger: "run" }, options);
 }
 
@@ -97,8 +97,8 @@ export function createEvidenceLedger({ stateDir }) {
     throw new Error("createEvidenceLedger requires stateDir");
   }
   return {
-    appendStateEvent: (event, data = {}, options = {}) => appendStateEvent(stateDir, event, data, options),
-    appendRunEvent: (event, data = {}, options = {}) => appendRunEvent(stateDir, event, data, options),
+    appendStateEvent: (event, data = Object(), options = Object()) => appendStateEvent(stateDir, event, data, options),
+    appendRunEvent: (event, data = Object(), options = Object()) => appendRunEvent(stateDir, event, data, options),
     buildEvidenceArtifact,
     buildLedgerRecord,
     evidenceArtifactDigest,

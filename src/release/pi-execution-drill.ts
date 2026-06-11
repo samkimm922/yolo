@@ -4,7 +4,7 @@ export const PI_EXECUTION_DRILL_SCHEMA_VERSION = "1.0";
 
 const CONTROLLED_PI_MODES = ["mock", "dry_run", "controlled_billable"];
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -20,7 +20,7 @@ function validTimestamp(value) {
   return nonEmptyString(value) && !Number.isNaN(Date.parse(value));
 }
 
-function evidencePresent(value = {}) {
+function evidencePresent(value = Object()) {
   return Boolean(value.artifact_path)
     || Boolean(value.report_path)
     || Boolean(value.public_url)
@@ -28,13 +28,13 @@ function evidencePresent(value = {}) {
     || (Array.isArray(value.evidence) && value.evidence.length > 0);
 }
 
-function noSdkExecutionClaim(value = {}) {
+function noSdkExecutionClaim(value = Object()) {
   return value.executed_by_sdk !== true
     && value.provider_executed_by_sdk !== true
     && value.billable_provider_executed_by_sdk !== true;
 }
 
-function authorizationApproved(record = {}, provider = "") {
+function authorizationApproved(record = Object(), provider = "") {
   const summary = isObject(record) ? record : {};
   return summary.approved === true
     && nonEmptyString(summary.operator || summary.approver)
@@ -45,7 +45,7 @@ function authorizationApproved(record = {}, provider = "") {
     && (summary.max_budget_usd === undefined || Number(summary.max_budget_usd) >= 0);
 }
 
-export function buildPiExecutionDrillPlan(options = {}) {
+export function buildPiExecutionDrillPlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const mode = options.mode || options.executionMode || options.execution_mode || "dry_run";
@@ -77,7 +77,7 @@ export function buildPiExecutionDrillPlan(options = {}) {
   };
 }
 
-export function runPiExecutionDrillGate(options = {}) {
+export function runPiExecutionDrillGate(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const plan = options.plan || buildPiExecutionDrillPlan({

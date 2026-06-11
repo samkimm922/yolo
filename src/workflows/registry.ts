@@ -350,7 +350,7 @@ export function listWorkflowCommandSurfaces() {
   }));
 }
 
-export function createWorkflowPlan(input = {}) {
+export function createWorkflowPlan(input = Object()) {
   const workflow = getWorkflow(input.workflow || input.id || "pi");
   const objective = input.objective || "";
   return {
@@ -373,7 +373,7 @@ export function createWorkflowPlan(input = {}) {
   };
 }
 
-export function workflowToSkillDescriptor(workflowInput, options = {}) {
+export function workflowToSkillDescriptor(workflowInput, options = Object()) {
   const workflow = typeof workflowInput === "string" ? getWorkflow(workflowInput) : getWorkflow(workflowInput.id);
   const agent = options.agent || "generic";
   return {
@@ -398,6 +398,6 @@ export function workflowToSkillDescriptor(workflowInput, options = {}) {
   };
 }
 
-export function listWorkflowSkillDescriptors(options = {}) {
+export function listWorkflowSkillDescriptors(options = Object()) {
   return listWorkflows().map((workflow) => workflowToSkillDescriptor(workflow, options));
 }

@@ -26,14 +26,14 @@ function pathInside(child, parent) {
   return resolvedChild === resolvedParent || resolvedChild.startsWith(withTrailingSeparator(resolvedParent));
 }
 
-function providerOverrides(options = {}, provider) {
+function providerOverrides(options = Object(), provider) {
   return {
     ...(options.providerConfigs?.[provider] || {}),
     ...(options.provider_configs?.[provider] || {}),
   };
 }
 
-function providerConfig(baseConfig = {}, provider, options = {}) {
+function providerConfig(baseConfig = Object(), provider, options = Object()) {
   const override = providerOverrides(options, provider);
   const ai = {
     ...(baseConfig.ai || {}),
@@ -85,7 +85,7 @@ function cliArgsInclude(args = [], value) {
   return Array.isArray(args) && args.includes(value);
 }
 
-export function buildProviderRuntimeMatrix(options = {}) {
+export function buildProviderRuntimeMatrix(options = Object()) {
   const config = options.config || {};
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const stateRoot = resolve(options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
@@ -177,7 +177,7 @@ export function buildProviderRuntimeMatrix(options = {}) {
   };
 }
 
-export function inspectProviderRuntimeMatrix(options = {}) {
+export function inspectProviderRuntimeMatrix(options = Object()) {
   const matrix = buildProviderRuntimeMatrix(options);
   const blockers = [];
   const warnings = [];
@@ -242,7 +242,7 @@ export function inspectProviderRuntimeMatrix(options = {}) {
   };
 }
 
-export function buildProviderCliDryRunMatrix(options = {}) {
+export function buildProviderCliDryRunMatrix(options = Object()) {
   const runtimeMatrix = buildProviderRuntimeMatrix(options);
   const requireExplicitBudget = options.requireExplicitBudget === true || options.require_explicit_budget === true;
   const workDir = resolve(options.workDir || options.work_dir || runtimeMatrix.project_root);
@@ -318,7 +318,7 @@ export function buildProviderCliDryRunMatrix(options = {}) {
   };
 }
 
-export function inspectProviderCliDryRunMatrix(options = {}) {
+export function inspectProviderCliDryRunMatrix(options = Object()) {
   const runtimeInspection = options.matrix ? null : inspectProviderRuntimeMatrix(options);
   const matrix = options.matrix || buildProviderCliDryRunMatrix(options);
   const blockers = [];

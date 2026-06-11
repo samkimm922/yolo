@@ -45,7 +45,7 @@ function clean(value) {
   return String(value ?? "").trim();
 }
 
-function coverageArtifact(parsed = {}) {
+function coverageArtifact(parsed = Object()) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   return parsed.coverage_artifact || parsed.coverage || parsed.scan_coverage || parsed.review_coverage || parsed;
 }
@@ -134,7 +134,7 @@ export function shouldStopReviewAfterFailure(failureCount, maxFailures = 3) {
   return failureCount >= maxFailures;
 }
 
-export function normalizeAutoFixResult(autoResult = {}) {
+export function normalizeAutoFixResult(autoResult = Object()) {
   const escalatedFromAuto = autoResult.escalatedTasks || [];
   const autoFixedCount = autoResult.stats?.fixed || 0;
   return {

@@ -648,7 +648,7 @@ function specsReadme() {
   ].join("\n");
 }
 
-export function buildProjectBootstrapPlan(options = {}) {
+export function buildProjectBootstrapPlan(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.cwd || process.cwd());
   const projectName = normalizeProjectName(projectRoot, options.projectName || options.name);
   const lifecycle = buildLifecycleStateFiles({ projectName, now: options.now });
@@ -724,7 +724,7 @@ export function buildProjectBootstrapPlan(options = {}) {
   };
 }
 
-export function initProject(options = {}) {
+export function initProject(options = Object()) {
   const plan = buildProjectBootstrapPlan(options);
   const force = options.force === true;
   const dryRun = options.dryRun === true || options.dry_run === true;

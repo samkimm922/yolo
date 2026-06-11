@@ -1,8 +1,8 @@
-export function atomicDoctorFailureReason(doctor = {}) {
+export function atomicDoctorFailureReason(doctor = Object()) {
   return doctor.mode === "must_split" ? "atomic_task_must_split" : "atomic_task_doctor_failed";
 }
 
-export function atomicDoctorFailureDetail(doctor = {}) {
+export function atomicDoctorFailureDetail(doctor = Object()) {
   if (doctor.mode === "must_split") {
     return `atomic_task_must_split: score=${doctor.score}, evidence=${doctor.evidence_file}`;
   }
@@ -10,11 +10,11 @@ export function atomicDoctorFailureDetail(doctor = {}) {
 }
 
 export function buildAtomicDoctorBlockOutcome({
-  task = {},
-  doctor = {},
+  task = Object(),
+  doctor = Object(),
   splitResult = { applied: false, childIds: [] },
   now = new Date().toISOString(),
-} = {}) {
+} = Object()) {
   const reason = atomicDoctorFailureReason(doctor);
   const failReason = atomicDoctorFailureDetail(doctor);
   const childIds = splitResult.childIds || [];

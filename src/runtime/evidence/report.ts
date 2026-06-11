@@ -84,7 +84,7 @@ function cleanStatus(value) {
   return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
 }
 
-function reportStatus({ failed = [], blocked = [], evidenceFailures = 0, plannedCount = null, terminalCount = 0 } = {}) {
+function reportStatus({ failed = [], blocked = [], evidenceFailures = 0, plannedCount = null, terminalCount = 0 } = Object()) {
   return failed.length > 0 ||
     blocked.length > 0 ||
     evidenceFailures > 0 ||
@@ -100,7 +100,7 @@ function itemList(values = [], limit = 8) {
   return remaining > 0 ? [...items, `+${remaining} more`] : items;
 }
 
-function taskId(entry = {}) {
+function taskId(entry = Object()) {
   return entry.task_id || entry.task || null;
 }
 
@@ -215,7 +215,7 @@ function validateLedgerChainWithArchive(records = [], archiveHashes = new Set())
   };
 }
 
-function summarizeLedgerIntegrity({ runs = [], events = [], stateDir = "" } = {}) {
+function summarizeLedgerIntegrity({ runs = [], events = [], stateDir = "" } = Object()) {
   const archiveHashes = archivedLedgerHashes(stateDir);
   const runChain = validateLedgerChainWithArchive(runs, archiveHashes.run);
   const stateChain = validateLedgerChainWithArchive(events, archiveHashes.state);
@@ -271,15 +271,15 @@ function summarizeSpecGovernance(stateEvents) {
 }
 
 function evidenceFailureCount({
-  gates = {},
-  review = {},
-  fixtures = {},
-  specGovernance = {},
-  remediation = {},
-  ledgerIntegrity = {},
+  gates = Object(),
+  review = Object(),
+  fixtures = Object(),
+  specGovernance = Object(),
+  remediation = Object(),
+  ledgerIntegrity = Object(),
   failed = [],
   blocked = [],
-} = {}) {
+} = Object()) {
   const representedTaskFailures = new Set([...failed, ...blocked]);
   const gateTasks = unique(gates.failed_tasks || []);
   const unrepresentedGateTasks = gateTasks.filter((id) => !representedTaskFailures.has(id)).length;
@@ -296,7 +296,7 @@ function evidenceFailureCount({
     (ledgerIntegrity.error_count || 0);
 }
 
-function summarizeRemediation({ taskResults = {}, stateEvents = [] } = {}) {
+function summarizeRemediation({ taskResults = Object(), stateEvents = [] } = Object()) {
   const fromTaskResults = (taskResults.remediation || []).map((entry) => ({
     source: "task-results",
     task_id: entry.task_id || null,
@@ -320,7 +320,7 @@ function summarizeRemediation({ taskResults = {}, stateEvents = [] } = {}) {
       ts: entry.ts || null,
     }));
   const items = [...fromTaskResults, ...fromEvents];
-  const action_counts = {};
+  const action_counts = Object();
   for (const item of items) {
     const action = item.action || "UNKNOWN";
     action_counts[action] = (action_counts[action] || 0) + 1;
@@ -340,13 +340,13 @@ export function buildRunReport({
   stateDir,
   runId,
   prdPath = null,
-  taskResults = {},
+  taskResults = Object(),
   progressTotal = null,
   startedAt = null,
   finishedAt = new Date().toISOString(),
   durationSec = null,
   taskLogsDir = null,
-} = {}) {
+} = Object()) {
   if (!stateDir) throw new Error("buildRunReport requires stateDir");
 
   const runs = readJsonl(join(stateDir, "runs.jsonl"));
@@ -494,7 +494,7 @@ export function formatRunReportMarkdown(report) {
   return `${lines.join("\n")}\n`;
 }
 
-export function buildRunFinalAnswer(report = {}, options = {}) {
+export function buildRunFinalAnswer(report = Object(), options = Object()) {
   const summary = report.summary || {};
   const tasks = report.tasks || {};
   const failed = unique(tasks.failed || []);
@@ -629,7 +629,7 @@ export function buildRunFinalAnswer(report = {}, options = {}) {
   };
 }
 
-export function formatRunFinalAnswerMarkdown(finalAnswerOrReport = {}, options = {}) {
+export function formatRunFinalAnswerMarkdown(finalAnswerOrReport = Object(), options = Object()) {
   const finalAnswer = finalAnswerOrReport.schema === "yolo.evidence.final_answer.v1"
     ? finalAnswerOrReport
     : buildRunFinalAnswer(finalAnswerOrReport, options);
@@ -675,7 +675,7 @@ export function runReportPaths(stateDir, runId = "latest") {
   };
 }
 
-export function writeRunReport(options = {}) {
+export function writeRunReport(options = Object()) {
   const report = buildRunReport(options);
   const paths = runReportPaths(options.stateDir, report.run_id || options.runId || "latest");
   writeJsonArtifact(paths.json_path, report);

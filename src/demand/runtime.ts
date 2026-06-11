@@ -48,19 +48,19 @@ function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-function stateRootFor(input = {}, options = {}) {
+function stateRootFor(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   return resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
 }
 
-function shouldWriteLifecycle(input = {}, options = {}) {
+function shouldWriteLifecycle(input = Object(), options = Object()) {
   return input.writeLifecycle !== false
     && input.write_lifecycle !== false
     && options.writeLifecycle !== false
     && options.write_lifecycle !== false;
 }
 
-function attachLifecycle(result = {}, stageId, context = {}, source = "demand-runtime") {
+function attachLifecycle(result = Object(), stageId, context = Object(), source = "demand-runtime") {
   const lifecycle = writeLifecycleStageReport(stageId, result, {
     projectRoot: context.projectRoot,
     stateRoot: context.stateRoot,
@@ -85,14 +85,14 @@ export function defaultDemandSessionPath(stateRoot, id) {
   return join(demandStateDir(stateRoot, id), "session.json");
 }
 
-function outputDirFor(session, input = {}, options = {}) {
+function outputDirFor(session, input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor(input, options);
   const explicit = input.outputDir || input.output_dir || options.outputDir || options.output_dir;
   return explicit ? resolvePath(projectRoot, explicit) : demandStateDir(stateRoot, session.id);
 }
 
-export function writeDemandArtifacts(session = {}, outputDir) {
+export function writeDemandArtifacts(session = Object(), outputDir) {
   const artifacts = [];
   const markdown = demandMarkdownArtifacts(session);
   mkdirSync(outputDir, { recursive: true });
@@ -120,7 +120,7 @@ export function readDemandSession(pathOrDir) {
   }
 }
 
-function runtimeResult(label, session, outputDir, artifacts, options = {}) {
+function runtimeResult(label, session, outputDir, artifacts, options = Object()) {
   const stateDir = options.stateDir || options.state_dir || null;
   const readiness = stateDir
     ? inspectDemandReadiness(session, { phase: session.phase, stateDir })
@@ -161,7 +161,7 @@ function runtimeResult(label, session, outputDir, artifacts, options = {}) {
   };
 }
 
-export function runDemandBrainstormRuntime(input = {}, options = {}) {
+export function runDemandBrainstormRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const session = buildDemandSession({ ...input, projectRoot, stateRoot, phase: "brainstorm", source: "yolo-brainstorm" }, {
@@ -179,7 +179,7 @@ export function runDemandBrainstormRuntime(input = {}, options = {}) {
   return result;
 }
 
-export function runDemandDiscussRuntime(input = {}, options = {}) {
+export function runDemandDiscussRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const stateDir = join(stateRoot, "state");
@@ -225,7 +225,7 @@ export function runDemandDiscussRuntime(input = {}, options = {}) {
   return result;
 }
 
-export function runDemandStatusRuntime(input = {}, options = {}) {
+export function runDemandStatusRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const explicitDemandPath = input.demandPath || input.demand_path || input.demand || input.sessionPath || input.session_path;
@@ -293,13 +293,13 @@ export function runDemandStatusRuntime(input = {}, options = {}) {
   };
 }
 
-function leanOfficeHoursMode(input = {}, options = {}) {
+function leanOfficeHoursMode(input = Object(), options = Object()) {
   const raw = clean(input.officeHoursMode || input.office_hours_mode || input.profile || input.mode || options.profile || options.mode || "startup").toLowerCase();
   if (["builder", "build", "operator"].includes(raw)) return "builder";
   return "startup";
 }
 
-function leanOfficeHoursAlternatives(input = {}, mode = "startup") {
+function leanOfficeHoursAlternatives(input = Object(), mode = "startup") {
   const provided = asArray(input.alternatives || input.alternative)
     .map(clean)
     .filter(Boolean)
@@ -335,7 +335,7 @@ function resolveLeanOfficeHoursChoice(choice, alternatives = []) {
   ) || null;
 }
 
-export function runDemandOfficeHoursRuntime(input = {}, options = {}) {
+export function runDemandOfficeHoursRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const mode = leanOfficeHoursMode(input, options);
@@ -413,12 +413,12 @@ export function runDemandOfficeHoursRuntime(input = {}, options = {}) {
   };
 }
 
-function targetFiles(session = {}) {
+function targetFiles(session = Object()) {
   const files = session.project?.target_files || session.target_files || [];
   return Array.isArray(files) ? files.filter(Boolean) : [files].filter(Boolean);
 }
 
-function structuredProjectFacts(session = {}) {
+function structuredProjectFacts(session = Object()) {
   return session.project_facts && typeof session.project_facts === "object" ? session.project_facts : null;
 }
 
@@ -427,7 +427,7 @@ function normalizeBaseCommit(value) {
   return /^[a-f0-9]{7,40}$/.test(text) ? text : "";
 }
 
-function readBaseCommit(input = {}, options = {}) {
+function readBaseCommit(input = Object(), options = Object()) {
   const explicit = normalizeBaseCommit(options.base_commit || options.baseCommit || input.base_commit || input.baseCommit);
   if (explicit) return explicit;
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
@@ -450,7 +450,7 @@ function chunk(values = [], size = 2) {
   return chunks.length ? chunks : [[]];
 }
 
-function requirementById(session = {}) {
+function requirementById(session = Object()) {
   const map = new Map();
   for (const requirement of asArray(session.requirements?.active || session.requirements)) {
     if (requirement?.id) map.set(requirement.id, requirement);
@@ -458,7 +458,7 @@ function requirementById(session = {}) {
   return map;
 }
 
-function scenarioMatrix(session = {}) {
+function scenarioMatrix(session = Object()) {
   return asArray(session.scenario_matrix?.scenarios);
 }
 
@@ -471,7 +471,7 @@ function questionTraceIds(value) {
     .filter(Boolean))];
 }
 
-function sourceQuestionIds(session = {}, scenario = {}, requirement = {}) {
+function sourceQuestionIds(session = Object(), scenario = Object(), requirement = Object()) {
   return [...new Set([
     ...questionTraceIds(scenario.source_question_ids),
     ...questionTraceIds(scenario.question_trace),
@@ -481,12 +481,12 @@ function sourceQuestionIds(session = {}, scenario = {}, requirement = {}) {
   ])];
 }
 
-function verificationHint({ scenario = {}, surface = {}, proof = "", files = [] } = {}) {
+function verificationHint({ scenario = Object(), surface = Object(), proof = "", files = [] } = Object()) {
   return clean(surface.verification_hint || scenario.verification_hint)
     || `Verify "${proof || scenario.desired_behavior || "the requested behavior"}" through ${scenario.touchpoint || "the target workflow"} on ${surfaceTitle(surface)}${files.length ? ` (${files.join(", ")})` : ""}.`;
 }
 
-function fallbackScenarios(session = {}) {
+function fallbackScenarios(session = Object()) {
   const files = targetFiles(session);
   return asArray(session.requirements?.active || session.requirements).map((requirement, index) => {
     const scenarios = asArray(requirement.acceptance_scenarios || requirement.scenarios);
@@ -520,7 +520,7 @@ function fallbackScenarios(session = {}) {
   });
 }
 
-function taskTypeForSurface(surface = {}) {
+function taskTypeForSurface(surface = Object()) {
   return surface.kind === "test" || surface.kind === "doc" ? "cleanup" : "feature";
 }
 
@@ -535,16 +535,16 @@ function fileKind(file = "") {
   return "code";
 }
 
-function surfaceTitle(surface = {}) {
+function surfaceTitle(surface = Object()) {
   return clean(surface.label) || clean(surface.kind) || "Implementation surface";
 }
 
-function isUiSurface(surface = {}, files = []) {
+function isUiSurface(surface = Object(), files = []) {
   const kind = clean(surface.kind).toLowerCase();
   return kind === "ui" || files.some((file) => /(^|\/)(pages?|views?|screens?|components?|ui)\//i.test(clean(file)));
 }
 
-function uiStateMatrixForTask({ scenario = {}, surface = {}, proof = "" } = {}) {
+function uiStateMatrixForTask({ scenario = Object(), surface = Object(), proof = "" } = Object()) {
   return [
     {
       state: "ready",
@@ -556,7 +556,7 @@ function uiStateMatrixForTask({ scenario = {}, surface = {}, proof = "" } = {}) 
   ];
 }
 
-function uiEvidencePlanForTask({ scenario = {}, surface = {}, proof = "", files = [] } = {}) {
+function uiEvidencePlanForTask({ scenario = Object(), surface = Object(), proof = "", files = [] } = Object()) {
   return [
     {
       type: "screenshot",
@@ -602,7 +602,7 @@ function buildTaskSessionPlan({
   requirementId = "",
   scenarioId = "",
   surfaceId = "",
-} = {}) {
+} = Object()) {
   const safeDemandId = pathSafeId(demandId, "DEMAND");
   const safeTaskId = pathSafeId(taskId, "TASK");
   const taskRoot = `.yolo/demand/${safeDemandId}/tasks/${safeTaskId}`;
@@ -663,7 +663,7 @@ function deferredFollowUp(deferred = []) {
   };
 }
 
-function deferredScopeConfirmation(session = {}) {
+function deferredScopeConfirmation(session = Object()) {
   const confirmation = session.discussion?.deferred_scope_confirmation || {};
   return {
     required: confirmation.required === true,
@@ -687,7 +687,7 @@ function modifiedFileCondition(taskId, index, file) {
 }
 
 function acceptanceCondition(taskId, index, scenario) {
-  const params = { text: scenario.then || scenario.text || scenario };
+  const params = Object.assign(Object(), { text: scenario.then || scenario.text || scenario });
   const verifyCommand = scenario.verify_command || scenario.verifyCommand;
   // P0.4 compile-time validation: reject verify commands with pipe/redirect/semicolon
   if (verifyCommand && /[;&|>]/.test(verifyCommand)) {
@@ -751,7 +751,7 @@ function behaviorCodeConditions(taskId, files = [], text = "", uiTask = false) {
   return conditions.slice(0, 3);
 }
 
-function relatedReadFirst(files = [], scenarioFiles = [], surface = {}) {
+function relatedReadFirst(files = [], scenarioFiles = [], surface = Object()) {
   const own = asArray(files);
   const readonly = asArray(surface.readonly_files);
   const kind = clean(surface.kind);
@@ -804,7 +804,7 @@ function deriveFileDependencies(tasks = []) {
   return tasks;
 }
 
-function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
+function buildAtomicDemandTasks(session = Object(), input = Object(), options = Object()) {
   const requirements = requirementById(session);
   const scenarios = scenarioMatrix(session).length ? scenarioMatrix(session) : fallbackScenarios(session);
   const allFiles = targetFiles(session);
@@ -1021,7 +1021,7 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
   return { tasks, compileErrors };
 }
 
-function inspectAtomicity(tasks = [], input = {}, options = {}) {
+function inspectAtomicity(tasks = [], input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const results = [];
   const blockers = [];
@@ -1065,7 +1065,7 @@ function inspectAtomicity(tasks = [], input = {}, options = {}) {
   };
 }
 
-function buildDemandPrd(session = {}, input = {}, options = {}) {
+function buildDemandPrd(session = Object(), input = Object(), options = Object()) {
   const projectRoot = input.projectRoot || input.project_root || options.projectRoot || options.project_root;
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const stateDir = join(stateRoot, "state");
@@ -1279,7 +1279,7 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
   };
 }
 
-export function runDemandPrdRuntime(input = {}, options = {}) {
+export function runDemandPrdRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const demandPath = resolvePath(projectRoot, input.demandPath || input.demand_path || input.demand || defaultDemandSessionPath(stateRoot, input.id || ""));
@@ -1353,7 +1353,7 @@ export function runDemandPrdRuntime(input = {}, options = {}) {
   return result;
 }
 
-export function runDemandTaskRuntime(input = {}, options = {}) {
+export function runDemandTaskRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const demandPath = resolvePath(projectRoot, input.demandPath || input.demand_path || input.demand || defaultDemandSessionPath(stateRoot, input.id || ""));

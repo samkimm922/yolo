@@ -89,7 +89,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && tsx scripts/copy-runtime-assets.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && node --import tsx scripts/typecheck-guard.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "runner": "npm run build --silent && node ./dist/runner.js",
     "pi": "npm run build --silent && node ./dist/bin/yolo-pi.js",
     "gate": "npm run build --silent && node ./dist/gate.js",

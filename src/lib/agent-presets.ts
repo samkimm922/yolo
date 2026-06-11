@@ -58,7 +58,7 @@ export function getAgentPreset(id = "pi") {
   return clone(preset);
 }
 
-export function createAgentPlan(input = {}) {
+export function createAgentPlan(input = Object()) {
   const preset = getAgentPreset(input.preset || "pi");
   const objective = input.objective || "";
   const taskId = input.taskId || input.task_id || null;

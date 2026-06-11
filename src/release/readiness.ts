@@ -24,7 +24,7 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -37,7 +37,7 @@ function rateValue(numerator, denominator) {
   return Number(((numerator / denominator) * 100).toFixed(1));
 }
 
-function normalizeIncidentEvidence(evidence = {}) {
+function normalizeIncidentEvidence(evidence = Object()) {
   const source = asArray(evidence.incidents).length
     ? evidence.incidents
     : asArray(evidence.results).length
@@ -57,7 +57,7 @@ function cleanStatus(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function claimsPass(report = {}) {
+function claimsPass(report = Object()) {
   const status = cleanStatus(report.status);
   const outcome = cleanStatus(report.outcome || report.final_answer?.outcome);
   return ["pass", "passed", "success", "completed"].includes(status)
@@ -68,7 +68,7 @@ function numericZero(value) {
   return value != null && Number(value) === 0;
 }
 
-function explicitlyNoFileChanges(report = {}) {
+function explicitlyNoFileChanges(report = Object()) {
   const summary = report.summary || report.final_answer?.summary || {};
   if (numericZero(report.files_changed_total ?? report.filesChangedTotal ?? summary.files_changed_total ?? summary.filesChangedTotal)) return true;
   if (numericZero(report.file_changes ?? report.fileChanges ?? summary.file_changes ?? summary.fileChanges)) return true;
@@ -79,7 +79,7 @@ function explicitlyNoFileChanges(report = {}) {
   return false;
 }
 
-function fakeSuccessReasons(report = {}) {
+function fakeSuccessReasons(report = Object()) {
   const status = String(report.status || "").toLowerCase();
   const outcome = String(report.outcome || report.final_answer?.outcome || "").toLowerCase();
   const summary = report.summary || report.final_answer?.summary || {};
@@ -96,7 +96,7 @@ function fakeSuccessReasons(report = {}) {
   return reasons;
 }
 
-export function classifyFakeSuccessReport(report = {}) {
+export function classifyFakeSuccessReport(report = Object()) {
   const reasons = fakeSuccessReasons(report);
   if (reasons.length === 0) return null;
   const summary = report.summary || report.final_answer?.summary || {};
@@ -112,7 +112,7 @@ export function classifyFakeSuccessReport(report = {}) {
   };
 }
 
-export function inspectYoloReliabilityReadiness(options = {}) {
+export function inspectYoloReliabilityReadiness(options = Object()) {
   const incidentEvidence = options.incidentEvidence || options.incident_evidence || null;
   const incidents = normalizeIncidentEvidence(incidentEvidence || {});
   const incidentIds = new Set(incidents.map((entry) => entry.id));
@@ -198,13 +198,16 @@ function inspectApiBoundaryDocument({ yoloRoot, packageJson }) {
 
   const exportsEntries = Array.isArray(boundary.package_exports) ? boundary.package_exports : [];
   const packageExports = packageJson.exports || {};
-  const byExport = new Map(exportsEntries.map((entry) => [entry.export, entry]));
+  const byExport = new Map(exportsEntries.map((entry) => {
+    const exportEntry = Object.assign(Object(), entry);
+    return [String(exportEntry.export), exportEntry];
+  }));
   const packageExportKeys = Object.keys(packageExports).sort();
-  const boundaryExportKeys = [...byExport.keys()].sort();
+  const boundaryExportKeys = [...byExport.keys()].map(String).sort();
   const missingExports = packageExportKeys.filter((name) => !byExport.has(name));
   const extraExports = boundaryExportKeys.filter((name) => !Object.hasOwn(packageExports, name));
   const targetMismatches = Object.entries(packageExports)
-    .filter(([name, target]) => byExport.get(name)?.target !== target)
+    .filter(([name, target]) => Object.assign(Object(), byExport.get(name)).target !== target)
     .map(([name]) => name);
 
   checks.push(check(
@@ -224,7 +227,7 @@ function inspectApiBoundaryDocument({ yoloRoot, packageJson }) {
       usedTiers.add(tier);
     }
   }
-  const missingPolicies = [...usedTiers].filter((tier) => !policy[tier]);
+  const missingPolicies = [...usedTiers].filter((tier) => !policy[String(tier)]);
   checks.push(check(
     "API_BOUNDARY_VERSION_POLICY",
     missingPolicies.length === 0,
@@ -244,7 +247,7 @@ function inspectApiBoundaryDocument({ yoloRoot, packageJson }) {
   return checks;
 }
 
-export function inspectPackageReadiness(packageJson = {}) {
+export function inspectPackageReadiness(packageJson = Object()) {
   const packageFiles = Array.isArray(packageJson.files) ? packageJson.files : [];
   const forbiddenFileEntries = packageFiles.filter((entry) =>
     ["__tests__", "closed-loop", "data", "logs", "node_modules", "state", "tmp", "scripts", "hooks"].some((forbidden) =>
@@ -280,7 +283,7 @@ export function inspectPackageReadiness(packageJson = {}) {
   };
 }
 
-export function inspectPublicBetaReadiness(options = {}) {
+export function inspectPublicBetaReadiness(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || DEFAULT_YOLO_ROOT);
   const packageJsonPath = join(yoloRoot, "package.json");
   const packageJson = options.packageJson || readJson(packageJsonPath);

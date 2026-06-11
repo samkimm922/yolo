@@ -331,7 +331,7 @@ import { preflightAllPrds, preflightPrd } from "./src/prd/preflight.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export function createYoloSdk(options = {}) {
+export function createYoloSdk(options = Object()) {
   const cfg = options.config || loadConfig({
     forceReload: Boolean(options.forceConfigReload),
     path: options.configPath,
@@ -353,17 +353,17 @@ export function createYoloSdk(options = {}) {
       resolvePrdPath: (input) => resolvePrdPath(input, stateRoot),
     },
     project: {
-      buildInitPlan: (projectOptions = {}) => buildProjectBootstrapPlan({ projectRoot, ...projectOptions }),
-      buildInitToFirstPrdSmokePlan: (projectOptions = {}) => buildInitToFirstPrdSmokePlan({ projectRoot, ...projectOptions }),
-      buildSetupPlan: (projectOptions = {}) => buildProjectSetupPlan({ projectRoot, yoloRoot, ...projectOptions }),
-      inspectSetupTarget: (projectOptions = {}) => inspectProjectSetupTarget({ projectRoot, ...projectOptions }),
-      initProject: (projectOptions = {}) => initProject({ projectRoot, ...projectOptions }),
-      runSetup: (projectOptions = {}) => runProjectSetup({ projectRoot, yoloRoot, ...projectOptions }),
-      runInitToFirstPrdSmoke: (projectOptions = {}) => runInitToFirstPrdSmoke({ projectRoot, ...projectOptions }),
+      buildInitPlan: (projectOptions = Object()) => buildProjectBootstrapPlan({ projectRoot, ...projectOptions }),
+      buildInitToFirstPrdSmokePlan: (projectOptions = Object()) => buildInitToFirstPrdSmokePlan({ projectRoot, ...projectOptions }),
+      buildSetupPlan: (projectOptions = Object()) => buildProjectSetupPlan({ projectRoot, yoloRoot, ...projectOptions }),
+      inspectSetupTarget: (projectOptions = Object()) => inspectProjectSetupTarget({ projectRoot, ...projectOptions }),
+      initProject: (projectOptions = Object()) => initProject({ projectRoot, ...projectOptions }),
+      runSetup: (projectOptions = Object()) => runProjectSetup({ projectRoot, yoloRoot, ...projectOptions }),
+      runInitToFirstPrdSmoke: (projectOptions = Object()) => runInitToFirstPrdSmoke({ projectRoot, ...projectOptions }),
     },
     contract: {
-      evaluatePreConditions: (task, prd, evalOptions = {}) => evaluatePreConditions(task, prd, { root: projectRoot, ...evalOptions }),
-      evaluatePostConditions: (task, prd, evalOptions = {}) => evaluatePostConditions(task, prd, { root: projectRoot, ...evalOptions }),
+      evaluatePreConditions: (task, prd, evalOptions = Object()) => evaluatePreConditions(task, prd, { root: projectRoot, ...evalOptions }),
+      evaluatePostConditions: (task, prd, evalOptions = Object()) => evaluatePostConditions(task, prd, { root: projectRoot, ...evalOptions }),
       supportedConditionTypes,
       toGateFormat,
       inspectPrdContract,
@@ -418,7 +418,7 @@ export function createYoloSdk(options = {}) {
     },
     lifecycle: {
       buildStageReport: buildLifecycleStageReport,
-      writeStageReport: (stageId, report = {}, lifecycleOptions = {}) => {
+      writeStageReport: (stageId, report = Object(), lifecycleOptions = Object()) => {
         // Strip skipSequenceCheck — SDK path always enforces sequence validation.
         // Internal callers needing exemption must import writeLifecycleStageReport directly.
         const { skipSequenceCheck, skip_sequence_check, ...safe } = lifecycleOptions;
@@ -430,7 +430,7 @@ export function createYoloSdk(options = {}) {
       },
     },
     discovery: {
-      buildArtifact: (discoveryInput = {}, discoveryOptions = {}) => buildDiscoveryArtifact({
+      buildArtifact: (discoveryInput = Object(), discoveryOptions = Object()) => buildDiscoveryArtifact({
         projectRoot,
         stateRoot,
         ...discoveryInput,
@@ -440,7 +440,7 @@ export function createYoloSdk(options = {}) {
         ...discoveryOptions,
       }),
       buildPlan: buildDiscoveryPlan,
-      buildPrd: (discovery, prdInput = {}, prdOptions = {}) => buildPrdFromDiscovery(discovery, prdInput, {
+      buildPrd: (discovery, prdInput = Object(), prdOptions = Object()) => buildPrdFromDiscovery(discovery, prdInput, {
         projectRoot,
         stateRoot,
         ...prdOptions,
@@ -449,7 +449,7 @@ export function createYoloSdk(options = {}) {
       defaultPlanPath: () => defaultDiscoveryPlanPath(stateRoot),
       defaultPrdPath: () => defaultDiscoveryPrdPath(stateRoot),
       readArtifact: readDiscoveryArtifact,
-      run: (discoveryInput = {}, discoveryOptions = {}) => runDiscoveryRuntime({
+      run: (discoveryInput = Object(), discoveryOptions = Object()) => runDiscoveryRuntime({
         projectRoot,
         stateRoot,
         ...discoveryInput,
@@ -458,7 +458,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...discoveryOptions,
       }),
-      runPlan: (planInput = {}, planOptions = {}) => runDiscoveryPlanRuntime({
+      runPlan: (planInput = Object(), planOptions = Object()) => runDiscoveryPlanRuntime({
         projectRoot,
         stateRoot,
         ...planInput,
@@ -467,7 +467,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...planOptions,
       }),
-      runPrd: (prdInput = {}, prdOptions = {}) => runDiscoveryPrdRuntime({
+      runPrd: (prdInput = Object(), prdOptions = Object()) => runDiscoveryPrdRuntime({
         projectRoot,
         stateRoot,
         ...prdInput,
@@ -480,7 +480,7 @@ export function createYoloSdk(options = {}) {
     demand: {
       buildArtifactGraph: buildDemandArtifactGraph,
       buildOrder: demandBuildOrder,
-      buildSession: (demandInput = {}, demandOptions = {}) => buildDemandSession({
+      buildSession: (demandInput = Object(), demandOptions = Object()) => buildDemandSession({
         projectRoot,
         stateRoot,
         ...demandInput,
@@ -492,7 +492,7 @@ export function createYoloSdk(options = {}) {
       blockedArtifacts: demandBlockedArtifacts,
       defaultSessionPath: (id = "") => defaultDemandSessionPath(stateRoot, id),
       inspectReadiness: inspectDemandReadiness,
-      inspectPrdReadiness: (demandInput = {}, demandOptions = {}) => inspectDemandPrdReadiness({
+      inspectPrdReadiness: (demandInput = Object(), demandOptions = Object()) => inspectDemandPrdReadiness({
         projectRoot,
         stateRoot,
         ...demandInput,
@@ -501,7 +501,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...demandOptions,
       }),
-      inspectTriage: (demandInput = {}, demandOptions = {}) => inspectDemandTriage({
+      inspectTriage: (demandInput = Object(), demandOptions = Object()) => inspectDemandTriage({
         projectRoot,
         stateRoot,
         ...demandInput,
@@ -511,10 +511,10 @@ export function createYoloSdk(options = {}) {
         ...demandOptions,
       }),
       markdownArtifacts: demandMarkdownArtifacts,
-      playbackUnderstanding: (session = {}) => buildUnderstandingPlayback(session),
+      playbackUnderstanding: (session = Object()) => buildUnderstandingPlayback(session),
       readSession: readDemandSession,
       readyArtifacts: demandReadyArtifacts,
-      runBrainstorm: (demandInput = {}, demandOptions = {}) => runDemandBrainstormRuntime({
+      runBrainstorm: (demandInput = Object(), demandOptions = Object()) => runDemandBrainstormRuntime({
         projectRoot,
         stateRoot,
         ...demandInput,
@@ -523,7 +523,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...demandOptions,
       }),
-      runDiscuss: (demandInput = {}, demandOptions = {}) => runDemandDiscussRuntime({
+      runDiscuss: (demandInput = Object(), demandOptions = Object()) => runDemandDiscussRuntime({
         projectRoot,
         stateRoot,
         ...demandInput,
@@ -532,7 +532,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...demandOptions,
       }),
-      runPrd: (demandInput = {}, demandOptions = {}) => runDemandPrdRuntime({
+      runPrd: (demandInput = Object(), demandOptions = Object()) => runDemandPrdRuntime({
         projectRoot,
         stateRoot,
         ...demandInput,
@@ -541,7 +541,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...demandOptions,
       }),
-      status: (demandInput = {}, demandOptions = {}) => runDemandStatusRuntime({
+      status: (demandInput = Object(), demandOptions = Object()) => runDemandStatusRuntime({
         projectRoot,
         stateRoot,
         ...demandInput,
@@ -550,7 +550,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...demandOptions,
       }),
-      buildEvidenceDispatchPlan: (demandInput = {}, demandOptions = {}) => buildDemandEvidenceDispatchPlan({
+      buildEvidenceDispatchPlan: (demandInput = Object(), demandOptions = Object()) => buildDemandEvidenceDispatchPlan({
         projectRoot,
         stateRoot,
         ...demandInput,
@@ -559,7 +559,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...demandOptions,
       }),
-      dispatchEvidence: (demandInput = {}, demandOptions = {}) => runDemandEvidenceDispatchRuntime({
+      dispatchEvidence: (demandInput = Object(), demandOptions = Object()) => runDemandEvidenceDispatchRuntime({
         projectRoot,
         stateRoot,
         ...demandInput,
@@ -568,7 +568,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...demandOptions,
       }),
-      buildSessionState: (demandInput = {}, demandOptions = {}) => buildDemandSessionState({
+      buildSessionState: (demandInput = Object(), demandOptions = Object()) => buildDemandSessionState({
         projectRoot,
         stateRoot,
         ...demandInput,
@@ -591,13 +591,13 @@ export function createYoloSdk(options = {}) {
       writeArtifacts: writeDemandArtifacts,
     },
     packs: {
-      discoverManifests: (packOptions = {}) => discoverPackManifests({ projectRoot, stateRoot, ...packOptions }),
+      discoverManifests: (packOptions = Object()) => discoverPackManifests({ projectRoot, stateRoot, ...packOptions }),
       readManifest: readPackManifest,
-      resolveProjectContext: (packOptions = {}) => resolveProjectContext({ projectRoot, stateRoot, ...packOptions }),
+      resolveProjectContext: (packOptions = Object()) => resolveProjectContext({ projectRoot, stateRoot, ...packOptions }),
       validateManifest: validatePackManifest,
     },
     acceptance: {
-      buildAdapterEvidencePlan: (adapterInput = {}, adapterOptions = {}) => buildAdapterEvidencePlan({
+      buildAdapterEvidencePlan: (adapterInput = Object(), adapterOptions = Object()) => buildAdapterEvidencePlan({
         projectRoot,
         stateRoot,
         ...adapterInput,
@@ -606,7 +606,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...adapterOptions,
       }),
-      buildReport: (acceptanceInput = {}, acceptanceOptions = {}) => buildAcceptanceReport({
+      buildReport: (acceptanceInput = Object(), acceptanceOptions = Object()) => buildAcceptanceReport({
         projectRoot,
         stateRoot,
         ...acceptanceInput,
@@ -615,7 +615,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...acceptanceOptions,
       }),
-      collectAdapterEvidence: (adapterInput = {}, adapterOptions = {}) => runAdapterEvidenceCollector({
+      collectAdapterEvidence: (adapterInput = Object(), adapterOptions = Object()) => runAdapterEvidenceCollector({
         projectRoot,
         stateRoot,
         ...adapterInput,
@@ -625,7 +625,7 @@ export function createYoloSdk(options = {}) {
         ...adapterOptions,
       }),
       formatReportText: formatAcceptanceReportText,
-      inspectReport: (acceptanceInput = {}, acceptanceOptions = {}) => inspectAcceptanceReport({
+      inspectReport: (acceptanceInput = Object(), acceptanceOptions = Object()) => inspectAcceptanceReport({
         projectRoot,
         stateRoot,
         ...acceptanceInput,
@@ -636,11 +636,11 @@ export function createYoloSdk(options = {}) {
       }),
     },
     eval: {
-      buildBenchmarkPlan: (evalOptions = {}) => buildYoloBenchmarkPlan({ projectRoot, stateRoot, ...evalOptions }),
+      buildBenchmarkPlan: (evalOptions = Object()) => buildYoloBenchmarkPlan({ projectRoot, stateRoot, ...evalOptions }),
       formatBenchmarkText: formatYoloBenchmarkText,
       listBenchmarkFixtures,
       rubric: YOLO_BENCHMARK_RUBRIC,
-      runBenchmark: (evalInput = {}, evalOptions = {}) => runYoloBenchmark({
+      runBenchmark: (evalInput = Object(), evalOptions = Object()) => runYoloBenchmark({
         projectRoot,
         stateRoot,
         ...evalInput,
@@ -661,7 +661,7 @@ export function createYoloSdk(options = {}) {
       schemaVersion: YOLO_COMMAND_REGISTRY_SCHEMA_VERSION,
     },
     doctor: {
-      buildReport: (doctorOptions = {}) => buildYoloDoctorReport({
+      buildReport: (doctorOptions = Object()) => buildYoloDoctorReport({
         yoloRoot,
         projectRoot,
         ...doctorOptions,
@@ -670,7 +670,7 @@ export function createYoloSdk(options = {}) {
       schemaVersion: YOLO_DOCTOR_SCHEMA_VERSION,
     },
     parallel: {
-      buildExecutionPlan: (parallelInput = {}, parallelOptions = {}) => buildControlledParallelExecutionPlan({
+      buildExecutionPlan: (parallelInput = Object(), parallelOptions = Object()) => buildControlledParallelExecutionPlan({
         projectRoot,
         stateRoot,
         ...parallelInput,
@@ -684,7 +684,7 @@ export function createYoloSdk(options = {}) {
       formatPlanText: formatControlledParallelPlanText,
       inspectMergeGate: inspectParallelMergeGate,
       mergeEvidence: mergeParallelEvidence,
-      planWaves: (parallelInput = {}, parallelOptions = {}) => planControlledParallelWaves({
+      planWaves: (parallelInput = Object(), parallelOptions = Object()) => planControlledParallelWaves({
         projectRoot,
         stateRoot,
         ...parallelInput,
@@ -695,105 +695,105 @@ export function createYoloSdk(options = {}) {
       }),
     },
     workflows: {
-      buildSkillInstallPlan: (workflowOptions = {}) => buildWorkflowSkillInstallPlan({ projectRoot, ...workflowOptions }),
-      buildSkillTargetSmokePlan: (workflowOptions = {}) => buildWorkflowSkillTargetSmokePlan({ projectRoot, ...workflowOptions }),
+      buildSkillInstallPlan: (workflowOptions = Object()) => buildWorkflowSkillInstallPlan({ projectRoot, ...workflowOptions }),
+      buildSkillTargetSmokePlan: (workflowOptions = Object()) => buildWorkflowSkillTargetSmokePlan({ projectRoot, ...workflowOptions }),
       createWorkflowPlan,
       getWorkflow,
-      installSkills: (workflowOptions = {}) => installWorkflowSkills({ projectRoot, ...workflowOptions }),
+      installSkills: (workflowOptions = Object()) => installWorkflowSkills({ projectRoot, ...workflowOptions }),
       inspectSkillInstallPlan: inspectWorkflowSkillInstallPlan,
       listWorkflowSkillDescriptors,
       listWorkflows,
-      runSkillTargetSmoke: (workflowOptions = {}) => runWorkflowSkillTargetSmoke({ projectRoot, ...workflowOptions }),
+      runSkillTargetSmoke: (workflowOptions = Object()) => runWorkflowSkillTargetSmoke({ projectRoot, ...workflowOptions }),
       validateSkillDescriptor: validateWorkflowSkillDescriptor,
       workflowToSkillDescriptor,
     },
     fixtures: {
       fixtureEvidenceRecord,
       copyFixtureToWorkspace,
-      getFixtureDefinition: (id, fixtureOptions = {}) => getFixtureDefinition(id, { yoloRoot, ...fixtureOptions }),
+      getFixtureDefinition: (id, fixtureOptions = Object()) => getFixtureDefinition(id, { yoloRoot, ...fixtureOptions }),
       inspectFixtureDefinition,
-      inspectFixtureRegistry: (fixtureOptions = {}) => inspectFixtureRegistry({ yoloRoot, ...fixtureOptions }),
-      listFixtureDefinitions: (fixtureOptions = {}) => listFixtureDefinitions({ yoloRoot, ...fixtureOptions }),
-      runFixtureHarness: (id, fixtureOptions = {}) => runFixtureHarness(id, { yoloRoot, ...fixtureOptions }),
+      inspectFixtureRegistry: (fixtureOptions = Object()) => inspectFixtureRegistry({ yoloRoot, ...fixtureOptions }),
+      listFixtureDefinitions: (fixtureOptions = Object()) => listFixtureDefinitions({ yoloRoot, ...fixtureOptions }),
+      runFixtureHarness: (id, fixtureOptions = Object()) => runFixtureHarness(id, { yoloRoot, ...fixtureOptions }),
     },
     release: {
-      buildPackageInstallSmokePlan: (releaseOptions = {}) => buildPackageInstallSmokePlan({ yoloRoot, ...releaseOptions }),
-      buildControlledBetaReleaseDecisionPlan: (releaseOptions = {}) => buildControlledBetaReleaseDecisionPlan({ yoloRoot, ...releaseOptions }),
-      buildReleaseCandidateChangeManifest: (releaseOptions = {}) => buildReleaseCandidateChangeManifest({ rootDir: yoloRoot, ...releaseOptions }),
-      buildCleanEnvironmentVerifyPlan: (releaseOptions = {}) => buildCleanEnvironmentVerifyPlan({ yoloRoot, ...releaseOptions }),
-      buildDogfoodMatrixPlan: (releaseOptions = {}) => buildDogfoodMatrixPlan({ yoloRoot, projectRoot, ...releaseOptions }),
-      buildDogfoodMatrixReport: (releaseOptions = {}) => buildDogfoodMatrixReport({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildPackageInstallSmokePlan: (releaseOptions = Object()) => buildPackageInstallSmokePlan({ yoloRoot, ...releaseOptions }),
+      buildControlledBetaReleaseDecisionPlan: (releaseOptions = Object()) => buildControlledBetaReleaseDecisionPlan({ yoloRoot, ...releaseOptions }),
+      buildReleaseCandidateChangeManifest: (releaseOptions = Object()) => buildReleaseCandidateChangeManifest({ rootDir: yoloRoot, ...releaseOptions }),
+      buildCleanEnvironmentVerifyPlan: (releaseOptions = Object()) => buildCleanEnvironmentVerifyPlan({ yoloRoot, ...releaseOptions }),
+      buildDogfoodMatrixPlan: (releaseOptions = Object()) => buildDogfoodMatrixPlan({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildDogfoodMatrixReport: (releaseOptions = Object()) => buildDogfoodMatrixReport({ yoloRoot, projectRoot, ...releaseOptions }),
       buildDogfoodMatrixEvidence,
-      buildOperatorReleaseRunbookPlan: (releaseOptions = {}) => buildOperatorReleaseRunbookPlan({ yoloRoot, ...releaseOptions }),
-      buildOperatorReleaseStatePlan: (releaseOptions = {}) => buildOperatorReleaseStatePlan({ yoloRoot, ...releaseOptions }),
-      buildPostReleaseAuditPlan: (releaseOptions = {}) => buildPostReleaseAuditPlan({ yoloRoot, ...releaseOptions }),
-      buildPublicBetaHardeningDrillPlan: (releaseOptions = {}) => buildPublicBetaHardeningDrillPlan({ yoloRoot, ...releaseOptions }),
-      buildStableGraduationPlan: (releaseOptions = {}) => buildStableGraduationPlan({ yoloRoot, ...releaseOptions }),
-      buildManualExternalReleasePlan: (releaseOptions = {}) => buildManualExternalReleasePlan({ yoloRoot, ...releaseOptions }),
-      buildAgentIntegrationDoctorPlan: (releaseOptions = {}) => buildAgentIntegrationDoctorPlan({ yoloRoot, projectRoot, ...releaseOptions }),
-      buildRealProjectDogfoodPlan: (releaseOptions = {}) => buildRealProjectDogfoodPlan({ yoloRoot, projectRoot, ...releaseOptions }),
-      buildPiExecutionDrillPlan: (releaseOptions = {}) => buildPiExecutionDrillPlan({ yoloRoot, projectRoot, ...releaseOptions }),
-      buildRuntimeBoundaryDecisionPlan: (releaseOptions = {}) => buildRuntimeBoundaryDecisionPlan({ yoloRoot, ...releaseOptions }),
-      buildPublicBetaEvidencePlan: (releaseOptions = {}) => buildPublicBetaEvidencePlan({ yoloRoot, projectRoot, ...releaseOptions }),
-      buildRealProjectDogfoodPackPlan: (releaseOptions = {}) => buildRealProjectDogfoodPackPlan({ yoloRoot, projectRoot, ...releaseOptions }),
-      buildExperiencePackEffectivenessAuditPlan: (releaseOptions = {}) => buildExperiencePackEffectivenessAuditPlan({ projectRoot, stateRoot, ...releaseOptions }),
-      buildNonTechnicalUxDoctorPlan: (releaseOptions = {}) => buildNonTechnicalUxDoctorPlan({ yoloRoot, ...releaseOptions }),
+      buildOperatorReleaseRunbookPlan: (releaseOptions = Object()) => buildOperatorReleaseRunbookPlan({ yoloRoot, ...releaseOptions }),
+      buildOperatorReleaseStatePlan: (releaseOptions = Object()) => buildOperatorReleaseStatePlan({ yoloRoot, ...releaseOptions }),
+      buildPostReleaseAuditPlan: (releaseOptions = Object()) => buildPostReleaseAuditPlan({ yoloRoot, ...releaseOptions }),
+      buildPublicBetaHardeningDrillPlan: (releaseOptions = Object()) => buildPublicBetaHardeningDrillPlan({ yoloRoot, ...releaseOptions }),
+      buildStableGraduationPlan: (releaseOptions = Object()) => buildStableGraduationPlan({ yoloRoot, ...releaseOptions }),
+      buildManualExternalReleasePlan: (releaseOptions = Object()) => buildManualExternalReleasePlan({ yoloRoot, ...releaseOptions }),
+      buildAgentIntegrationDoctorPlan: (releaseOptions = Object()) => buildAgentIntegrationDoctorPlan({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildRealProjectDogfoodPlan: (releaseOptions = Object()) => buildRealProjectDogfoodPlan({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildPiExecutionDrillPlan: (releaseOptions = Object()) => buildPiExecutionDrillPlan({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildRuntimeBoundaryDecisionPlan: (releaseOptions = Object()) => buildRuntimeBoundaryDecisionPlan({ yoloRoot, ...releaseOptions }),
+      buildPublicBetaEvidencePlan: (releaseOptions = Object()) => buildPublicBetaEvidencePlan({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildRealProjectDogfoodPackPlan: (releaseOptions = Object()) => buildRealProjectDogfoodPackPlan({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildExperiencePackEffectivenessAuditPlan: (releaseOptions = Object()) => buildExperiencePackEffectivenessAuditPlan({ projectRoot, stateRoot, ...releaseOptions }),
+      buildNonTechnicalUxDoctorPlan: (releaseOptions = Object()) => buildNonTechnicalUxDoctorPlan({ yoloRoot, ...releaseOptions }),
       inspectAgentBridgeDryRunDoctor,
       inspectPackedPackage,
       inspectPackageReadiness,
-      inspectPublicBetaReadiness: (releaseOptions = {}) => inspectPublicBetaReadiness({ yoloRoot, ...releaseOptions }),
+      inspectPublicBetaReadiness: (releaseOptions = Object()) => inspectPublicBetaReadiness({ yoloRoot, ...releaseOptions }),
       classifyReleaseChangeDomain,
       listDogfoodMatrixScenarios,
-      runPackageInstallSmoke: (releaseOptions = {}) => runPackageInstallSmoke({ yoloRoot, ...releaseOptions }),
-      runControlledBetaReleaseDecisionGate: (releaseOptions = {}) => runControlledBetaReleaseDecisionGate({ yoloRoot, ...releaseOptions }),
+      runPackageInstallSmoke: (releaseOptions = Object()) => runPackageInstallSmoke({ yoloRoot, ...releaseOptions }),
+      runControlledBetaReleaseDecisionGate: (releaseOptions = Object()) => runControlledBetaReleaseDecisionGate({ yoloRoot, ...releaseOptions }),
       runReleaseCandidateGate,
       evaluateReleaseCandidateGate,
-      readReleaseCandidateChangeManifest: (releaseOptions = {}) => readReleaseCandidateChangeManifest({ rootDir: yoloRoot, ...releaseOptions }),
+      readReleaseCandidateChangeManifest: (releaseOptions = Object()) => readReleaseCandidateChangeManifest({ rootDir: yoloRoot, ...releaseOptions }),
       executeCleanEnvironmentVerifyPlan,
-      runCleanEnvironmentVerify: (releaseOptions = {}) => runCleanEnvironmentVerify({ yoloRoot, ...releaseOptions }),
-      runOperatorReleaseRunbookGate: (releaseOptions = {}) => runOperatorReleaseRunbookGate({ yoloRoot, ...releaseOptions }),
-      runOperatorReleaseStateMutation: (releaseOptions = {}) => runOperatorReleaseStateMutation({ yoloRoot, ...releaseOptions }),
-      runPostReleaseAuditGate: (releaseOptions = {}) => runPostReleaseAuditGate({ yoloRoot, ...releaseOptions }),
-      runPublicBetaHardeningDrill: (releaseOptions = {}) => runPublicBetaHardeningDrill({ yoloRoot, ...releaseOptions }),
-      runStableGraduationGate: (releaseOptions = {}) => runStableGraduationGate({ yoloRoot, ...releaseOptions }),
-      runManualExternalReleaseGate: (releaseOptions = {}) => runManualExternalReleaseGate({ yoloRoot, ...releaseOptions }),
-      runAgentIntegrationDoctor: (releaseOptions = {}) => runAgentIntegrationDoctor({ yoloRoot, projectRoot, ...releaseOptions }),
-      runRealProjectDogfoodGate: (releaseOptions = {}) => runRealProjectDogfoodGate({ yoloRoot, projectRoot, ...releaseOptions }),
-      runPiExecutionDrillGate: (releaseOptions = {}) => runPiExecutionDrillGate({ yoloRoot, projectRoot, ...releaseOptions }),
-      runRuntimeBoundaryDecisionGate: (releaseOptions = {}) => runRuntimeBoundaryDecisionGate({ yoloRoot, ...releaseOptions }),
-      runPublicBetaEvidenceGate: (releaseOptions = {}) => runPublicBetaEvidenceGate({ yoloRoot, projectRoot, ...releaseOptions }),
-      runRealProjectDogfoodPack: (releaseOptions = {}) => runRealProjectDogfoodPack({ yoloRoot, projectRoot, ...releaseOptions }),
-      runExperiencePackEffectivenessAudit: (releaseOptions = {}) => runExperiencePackEffectivenessAudit({ projectRoot, stateRoot, ...releaseOptions }),
-      runNonTechnicalUxDoctor: (releaseOptions = {}) => runNonTechnicalUxDoctor({ yoloRoot, ...releaseOptions }),
+      runCleanEnvironmentVerify: (releaseOptions = Object()) => runCleanEnvironmentVerify({ yoloRoot, ...releaseOptions }),
+      runOperatorReleaseRunbookGate: (releaseOptions = Object()) => runOperatorReleaseRunbookGate({ yoloRoot, ...releaseOptions }),
+      runOperatorReleaseStateMutation: (releaseOptions = Object()) => runOperatorReleaseStateMutation({ yoloRoot, ...releaseOptions }),
+      runPostReleaseAuditGate: (releaseOptions = Object()) => runPostReleaseAuditGate({ yoloRoot, ...releaseOptions }),
+      runPublicBetaHardeningDrill: (releaseOptions = Object()) => runPublicBetaHardeningDrill({ yoloRoot, ...releaseOptions }),
+      runStableGraduationGate: (releaseOptions = Object()) => runStableGraduationGate({ yoloRoot, ...releaseOptions }),
+      runManualExternalReleaseGate: (releaseOptions = Object()) => runManualExternalReleaseGate({ yoloRoot, ...releaseOptions }),
+      runAgentIntegrationDoctor: (releaseOptions = Object()) => runAgentIntegrationDoctor({ yoloRoot, projectRoot, ...releaseOptions }),
+      runRealProjectDogfoodGate: (releaseOptions = Object()) => runRealProjectDogfoodGate({ yoloRoot, projectRoot, ...releaseOptions }),
+      runPiExecutionDrillGate: (releaseOptions = Object()) => runPiExecutionDrillGate({ yoloRoot, projectRoot, ...releaseOptions }),
+      runRuntimeBoundaryDecisionGate: (releaseOptions = Object()) => runRuntimeBoundaryDecisionGate({ yoloRoot, ...releaseOptions }),
+      runPublicBetaEvidenceGate: (releaseOptions = Object()) => runPublicBetaEvidenceGate({ yoloRoot, projectRoot, ...releaseOptions }),
+      runRealProjectDogfoodPack: (releaseOptions = Object()) => runRealProjectDogfoodPack({ yoloRoot, projectRoot, ...releaseOptions }),
+      runExperiencePackEffectivenessAudit: (releaseOptions = Object()) => runExperiencePackEffectivenessAudit({ projectRoot, stateRoot, ...releaseOptions }),
+      runNonTechnicalUxDoctor: (releaseOptions = Object()) => runNonTechnicalUxDoctor({ yoloRoot, ...releaseOptions }),
     },
     provider: {
       buildAgentAdapterCapabilities,
-      buildAgentAdapterContract: (providerOptions = {}) => buildAgentAdapterContract({ config: cfg, ...providerOptions }),
-      buildProviderRuntimeMatrix: (providerOptions = {}) => buildProviderRuntimeMatrix({
+      buildAgentAdapterContract: (providerOptions = Object()) => buildAgentAdapterContract({ config: cfg, ...providerOptions }),
+      buildProviderRuntimeMatrix: (providerOptions = Object()) => buildProviderRuntimeMatrix({
         config: cfg,
         projectRoot,
         stateRoot,
         ...providerOptions,
       }),
-      buildProviderCliDryRunMatrix: (providerOptions = {}) => buildProviderCliDryRunMatrix({
+      buildProviderCliDryRunMatrix: (providerOptions = Object()) => buildProviderCliDryRunMatrix({
         config: cfg,
         projectRoot,
         stateRoot,
         ...providerOptions,
       }),
       detectModelProvider,
-      inspectAgentAdapterContract: (providerOptions = {}) => inspectAgentAdapterContract({
+      inspectAgentAdapterContract: (providerOptions = Object()) => inspectAgentAdapterContract({
         config: cfg,
         providerDetection: detectModelProvider({ config: cfg }),
         ...providerOptions,
       }),
-      inspectProviderRuntimeMatrix: (providerOptions = {}) => inspectProviderRuntimeMatrix({
+      inspectProviderRuntimeMatrix: (providerOptions = Object()) => inspectProviderRuntimeMatrix({
         config: cfg,
         projectRoot,
         stateRoot,
         ...providerOptions,
       }),
-      inspectProviderCliDryRunMatrix: (providerOptions = {}) => inspectProviderCliDryRunMatrix({
+      inspectProviderCliDryRunMatrix: (providerOptions = Object()) => inspectProviderCliDryRunMatrix({
         config: cfg,
         projectRoot,
         stateRoot,
@@ -803,7 +803,7 @@ export function createYoloSdk(options = {}) {
     },
     runtime: {
       runPiRuntime,
-      runRunner: (input = {}, runtimeOptions = {}) => runRunnerRuntime({
+      runRunner: (input = Object(), runtimeOptions = Object()) => runRunnerRuntime({
         projectRoot,
         stateRoot,
         ...input,
@@ -812,7 +812,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...runtimeOptions,
       }),
-      inspectCheck: (input = {}, checkOptions = {}) => inspectYoloCheck({
+      inspectCheck: (input = Object(), checkOptions = Object()) => inspectYoloCheck({
         projectRoot,
         stateRoot,
         ...input,
@@ -824,7 +824,7 @@ export function createYoloSdk(options = {}) {
       formatCheckText: formatYoloCheckText,
     },
     progress: {
-      buildUiEvidence: (progressInput = {}, progressOptions = {}) => buildProgressDashboardUiEvidence({
+      buildUiEvidence: (progressInput = Object(), progressOptions = Object()) => buildProgressDashboardUiEvidence({
         projectRoot,
         stateRoot,
         ...progressInput,
@@ -833,7 +833,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...progressOptions,
       }),
-      inspectUiEvidence: (progressInput = {}, progressOptions = {}) => inspectProgressDashboardUiEvidence({
+      inspectUiEvidence: (progressInput = Object(), progressOptions = Object()) => inspectProgressDashboardUiEvidence({
         projectRoot,
         stateRoot,
         ...progressInput,
@@ -842,7 +842,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...progressOptions,
       }),
-      runUiEvidence: (progressInput = {}, progressOptions = {}) => runProgressDashboardUiEvidence({
+      runUiEvidence: (progressInput = Object(), progressOptions = Object()) => runProgressDashboardUiEvidence({
         projectRoot,
         stateRoot,
         ...progressInput,
@@ -856,21 +856,21 @@ export function createYoloSdk(options = {}) {
       createPlan: createAgentPlan,
       getPreset: getAgentPreset,
       listPresets: listAgentPresets,
-      createPiAgent: (agentOptions = {}) => createPiAgent({ yoloRoot, projectRoot, stateRoot, sdk, ...agentOptions }),
-      createPiPlan: (input = {}, agentOptions = {}) => createPiRunPlan(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
-      runPi: (input = {}, agentOptions = {}) => runPiAgent(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
+      createPiAgent: (agentOptions = Object()) => createPiAgent({ yoloRoot, projectRoot, stateRoot, sdk, ...agentOptions }),
+      createPiPlan: (input = Object(), agentOptions = Object()) => createPiRunPlan(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
+      runPi: (input = Object(), agentOptions = Object()) => runPiAgent(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
     },
     pi: {
-      createAgent: (agentOptions = {}) => createPiAgent({ yoloRoot, projectRoot, stateRoot, sdk, ...agentOptions }),
-      createPlan: (input = {}, agentOptions = {}) => createPiRunPlan(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
-      run: (input = {}, agentOptions = {}) => runPiAgent(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
+      createAgent: (agentOptions = Object()) => createPiAgent({ yoloRoot, projectRoot, stateRoot, sdk, ...agentOptions }),
+      createPlan: (input = Object(), agentOptions = Object()) => createPiRunPlan(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
+      run: (input = Object(), agentOptions = Object()) => runPiAgent(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
     },
     review: {
-      scanProject: (scanOptions = {}) => scanProject({ root: projectRoot, config: cfg, ...scanOptions }),
-      scanFile: (file, scanOptions = {}) => scanFile(file, { root: projectRoot, config: cfg, ...scanOptions }),
+      scanProject: (scanOptions = Object()) => scanProject({ root: projectRoot, config: cfg, ...scanOptions }),
+      scanFile: (file, scanOptions = Object()) => scanFile(file, { root: projectRoot, config: cfg, ...scanOptions }),
       buildReviewOutput,
       buildReviewFixPrd,
-      inspectReviewFixLoop: (input = {}, reviewOptions = {}) => inspectReviewFixLoop({
+      inspectReviewFixLoop: (input = Object(), reviewOptions = Object()) => inspectReviewFixLoop({
         projectRoot,
         stateRoot,
         ...input,

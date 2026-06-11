@@ -28,7 +28,7 @@ function positiveNumber(value) {
   return Number.isFinite(number) && number > 0 ? number : null;
 }
 
-function commandForProvider(provider, config = {}) {
+function commandForProvider(provider, config = Object()) {
   if (provider === "custom") return cleanString(config.ai?.custom_command || config.ai?.command) || null;
   return PROVIDER_COMMANDS[provider] || provider;
 }
@@ -53,7 +53,7 @@ function uniqueResolved(paths = []) {
   return [...new Set(paths.map(cleanString).filter(Boolean).map((path) => resolve(path)))];
 }
 
-function adapterAllowedRoots({ options = {}, config = {} } = {}) {
+function adapterAllowedRoots({ options = Object(), config = Object() } = Object()) {
   const explicit = options.allowedRoots || options.allowed_roots || config.ai?.allowed_roots || config.ai?.allowedRoots;
   const roots = Array.isArray(explicit) ? explicit : (explicit ? [explicit] : []);
   roots.push(options.rootDir || options.root_dir || options.projectRoot || options.project_root);
@@ -63,7 +63,7 @@ function adapterAllowedRoots({ options = {}, config = {} } = {}) {
   return resolved.length > 0 ? resolved : [resolve(process.cwd())];
 }
 
-function timeoutPolicy(options = {}, config = {}) {
+function timeoutPolicy(options = Object(), config = Object()) {
   const ai = config.ai || {};
   const maxMs = positiveMilliseconds(
     options.timeoutMs || options.timeout_ms || options.timeout || ai.timeout_ms || ai.timeoutMs,
@@ -77,7 +77,7 @@ function timeoutPolicy(options = {}, config = {}) {
   };
 }
 
-function retryPolicy(options = {}, config = {}) {
+function retryPolicy(options = Object(), config = Object()) {
   const ai = config.ai || {};
   return {
     max_attempts: positiveInteger(
@@ -95,7 +95,7 @@ function retryPolicy(options = {}, config = {}) {
   };
 }
 
-function outputSchemaFor(capabilities = {}) {
+function outputSchemaFor(capabilities = Object()) {
   return {
     schema: "yolo.runtime.provider_run_result.v1",
     required: true,
@@ -107,7 +107,7 @@ function outputSchemaFor(capabilities = {}) {
   };
 }
 
-function rootPolicy(options = {}, allowedRoots = []) {
+function rootPolicy(options = Object(), allowedRoots = []) {
   return {
     root_dir: options.rootDir || options.root_dir || options.projectRoot || options.project_root || null,
     work_dir: options.workDir || options.work_dir || null,
@@ -124,7 +124,7 @@ export function normalizeAgentProvider(value) {
   return PROVIDER_ALIASES[provider] || provider;
 }
 
-export function buildAgentAdapterCapabilities(provider, config = {}) {
+export function buildAgentAdapterCapabilities(provider, config = Object()) {
   const normalized = normalizeAgentProvider(provider) || "claude";
   const ai = config.ai || {};
   const codexSandbox = cleanString(ai.codex_sandbox || "workspace-write");
@@ -181,7 +181,7 @@ export function buildAgentAdapterCapabilities(provider, config = {}) {
   };
 }
 
-export function buildAgentAdapterContract(options = {}) {
+export function buildAgentAdapterContract(options = Object()) {
   const config = options.config || {};
   const requested = normalizeAgentProvider(options.requested || options.provider || config.ai?.executor || config.ai?.provider);
   const selected = normalizeAgentProvider(options.selected || options.providerDetection?.selected || requested || "claude") || "claude";
@@ -246,7 +246,7 @@ function defaultCommandExists() {
   return null;
 }
 
-export function inspectAgentAdapterContract(options = {}) {
+export function inspectAgentAdapterContract(options = Object()) {
   const providerDetection = options.providerDetection || {};
   const config = options.config || {};
   const requested = normalizeAgentProvider(options.requested || providerDetection.requested || config.ai?.executor || config.ai?.provider);

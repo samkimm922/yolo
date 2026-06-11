@@ -19,15 +19,15 @@ export async function prepareProviderSession({
   createWorktree,
   computeTaskTimeout,
   spawnProviderInWorktree,
-  logTaskBash = () => {},
-  logProgress = () => {},
-  logEvent = () => {},
-  onWorktreeCreated = () => {},
+  logTaskBash = (..._args) => {},
+  logProgress = (..._args) => {},
+  logEvent = (..._args) => {},
+  onWorktreeCreated = (..._args) => {},
   nowMs = () => Date.now(),
   createSessionId = ({ task, attempt }) => `${task?.id || "task"}-attempt-${attempt}`,
   validateContextPack = validateContextPackBeforeSession,
   captureBaselines = captureExecutionBaselines,
-} = {}) {
+} = Object()) {
   const sessionId = createSessionId({ task, attempt });
   const contextGate = await validateContextPack({
     task,

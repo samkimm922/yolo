@@ -73,7 +73,7 @@ function demandFieldsForSmoke(prd, targetFile) {
   };
 }
 
-function defaultSmokeSpec(options = {}) {
+function defaultSmokeSpec(options = Object()) {
   const targetFile = cleanString(options.targetFile || options.target_file, "specs/tasks.md");
   return buildSpecLifecyclePackage({
     id: cleanString(options.specId || options.spec_id, "SPEC-FIRST-PRD-SMOKE"),
@@ -126,7 +126,7 @@ function defaultSmokeSpec(options = {}) {
   });
 }
 
-export function buildInitToFirstPrdSmokePlan(options = {}) {
+export function buildInitToFirstPrdSmokePlan(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.cwd || process.cwd());
   const projectName = cleanString(options.projectName || options.name, projectRoot.split(/[\\/]/).filter(Boolean).at(-1) || "project");
   const prdPath = projectRelative(projectRoot, options.prdPath || options.prd_path || ".yolo/smoke/first-prd.json");
@@ -173,7 +173,7 @@ export function buildInitToFirstPrdSmokePlan(options = {}) {
   };
 }
 
-export async function runInitToFirstPrdSmoke(options = {}) {
+export async function runInitToFirstPrdSmoke(options = Object()) {
   const plan = buildInitToFirstPrdSmokePlan(options);
   const dryRun = options.dryRun === true || options.dry_run === true;
   const projectRoot = plan.project_root;

@@ -13,7 +13,7 @@ export function createRunnerProgressLogger({
   localeTime = (date) => date.toLocaleTimeString("zh-CN", { hour12: false }),
   log = console.log,
   quiet = false,
-} = {}) {
+} = Object()) {
   return function logProgress(id, phase, detail) {
     const ts = localeTime(new Date(nowMs()));
     const elapsedSeconds = ((nowMs() - startTimeMs) / 1000).toFixed(0);

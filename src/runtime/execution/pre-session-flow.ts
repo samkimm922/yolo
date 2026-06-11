@@ -19,8 +19,8 @@ export async function handlePreSessionFlow({
   task,
   prdPath,
   attempt = 0,
-  taskRoute = {},
-  config = {},
+  taskRoute = Object(),
+  config = Object(),
   yoloRoot,
   projectRoot,
   execNode,
@@ -35,9 +35,9 @@ export async function handlePreSessionFlow({
   updatePrdTaskStatus,
   applySplitSuggestionsToPrd,
   isBusinessFile,
-  logProgress = () => {},
-  logTaskBash = () => {},
-  logTaskDone = () => {},
+  logProgress = (..._args) => {},
+  logTaskBash = (..._args) => {},
+  logTaskDone = (..._args) => {},
   nowMs = () => Date.now(),
   engineBlockBuilder = buildEngineSelfModificationBlockOutcome,
   dryRunTaskCompleter = completeDryRunArtifactTask,
@@ -45,7 +45,7 @@ export async function handlePreSessionFlow({
   atomicDoctorGate = runAtomicTaskDoctorGate,
   atomicDoctorBlockBuilder = buildAtomicDoctorBlockOutcome,
   postPrecheckInspector = inspectPostPrecheckSkip,
-} = {}) {
+} = Object()) {
   if (attempt === 0 && shouldRunPrecheck(task)) {
     const precheckScript = "src/runtime/execution/precheck.js";
     const precheckArgs = [

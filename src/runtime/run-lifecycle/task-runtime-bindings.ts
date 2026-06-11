@@ -25,7 +25,7 @@ export function createRunnerWorktreeHandlers({
   setActiveGitSession,
   clearActiveGitSession,
   log,
-} = {}) {
+} = Object()) {
   return {
     createWorktree(taskId) {
       const wt = createTaskWorktree({
@@ -63,7 +63,7 @@ export function runRunnerGateInWorktree({
   runtimeDir,
   rootDir,
   spawnSync,
-} = {}) {
+} = Object()) {
   const gateResult = spawnSync(
     "node",
     [
@@ -95,7 +95,7 @@ export function refreshRunnerBaselinesAfterCommit({
   config,
   refreshBaselineAfterCommit,
   log,
-} = {}) {
+} = Object()) {
   const results = refreshBaselineAfterCommit({ rootDir, runtimeDir, config });
   for (const result of results) {
     if (!result.skipped && result.removed > 0) {

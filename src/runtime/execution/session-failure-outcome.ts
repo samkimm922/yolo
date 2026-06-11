@@ -5,7 +5,7 @@ import {
 } from "../task-state/transitions.js";
 import { buildProviderAttemptLedgerEntry, classifyProviderFailure } from "./provider-adapter.js";
 
-export function providerFailureDiagnostic(providerRun = {}) {
+export function providerFailureDiagnostic(providerRun = Object()) {
   return [
     providerRun.exitCode !== null && providerRun.exitCode !== undefined ? `exit=${providerRun.exitCode}` : null,
     providerRun.signal ? `signal=${providerRun.signal}` : null,
@@ -17,7 +17,7 @@ function terminalProviderPhase(reason) {
   return reason === "provider_budget_exceeded" ? "provider_budget" : "provider_preflight";
 }
 
-function providerStatusFailureReason(providerName, providerRun = {}, diagnostic = "", providerFailure = {}) {
+function providerStatusFailureReason(providerName, providerRun = Object(), diagnostic = "", providerFailure = Object()) {
   if (providerRun.status === "timed_out" || providerRun.timedOut === true) return `${providerName} 超时`;
   if (providerRun.status === "no_output") return `${providerName} 输出为空`;
   if (providerRun.status === "killed") return `${providerName} 被终止${diagnostic ? `: ${diagnostic}` : ""}`;
@@ -34,10 +34,10 @@ function providerStatusFailureReason(providerName, providerRun = {}, diagnostic 
 export function buildProviderFailureOutcome({
   taskId,
   providerName = "provider",
-  providerRun = {},
+  providerRun = Object(),
   attempt = 0,
   maxRetry = 0,
-} = {}) {
+} = Object()) {
   const providerFailure = classifyProviderFailure(providerRun);
   const diagnostic = providerFailureDiagnostic(providerRun);
   const failReason = providerStatusFailureReason(providerName, providerRun, diagnostic, providerFailure);
@@ -99,10 +99,10 @@ export function buildProviderFailureOutcome({
 
 export function buildDiffQualityFailureOutcome({
   taskId,
-  diffQualityGate = {},
+  diffQualityGate = Object(),
   attempt = 0,
   maxRetry = 1,
-} = {}) {
+} = Object()) {
   const failures = diffQualityGate.failures || [];
   const failReason = `diff-quality-gate blocked: ${failures.map((failure) => failure.code).join(", ")}`;
   const lastGateError = [
@@ -152,9 +152,9 @@ export function buildDiffQualityFailureOutcome({
 
 export function buildTestGenerationFailureOutcome({
   taskId,
-  testGenerationGate = {},
+  testGenerationGate = Object(),
   attempt = 0,
-} = {}) {
+} = Object()) {
   const failReason = `test-generation-validator blocked: ${(testGenerationGate.failures || []).map((failure) => failure.code).join(", ")}`;
   return {
     failReason,

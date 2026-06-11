@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { refreshMemoryCenter } from "../runtime/memory/center.js";
 
-export function runGenerateTreeCli(argv = process.argv.slice(2), io = {}) {
+export function runGenerateTreeCli(argv = process.argv.slice(2), io = Object()) {
   const result = refreshMemoryCenter({
     dryRun: argv.includes("--dry-run"),
     writeLegacyPointers: true,

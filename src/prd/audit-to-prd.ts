@@ -144,7 +144,7 @@ function cloneJson(value) {
   return value ? JSON.parse(JSON.stringify(value)) : value;
 }
 
-function explicitDemandContractOption(options = {}) {
+function explicitDemandContractOption(options = Object()) {
   return options.approvedDemandContract
     || options.approved_demand_contract
     || options.demandContract
@@ -199,7 +199,7 @@ function requireApprovedDemandContract(input, tasks = []) {
   };
 }
 
-function buildGeneratedDemandContract({ tasks = [], source = "audit" } = {}) {
+function buildGeneratedDemandContract({ tasks = [], source = "audit" } = Object()) {
   const targetFiles = uniqueTaskTargetFiles(tasks);
   const quality = demandQualityReport("blocked");
   return {
@@ -306,7 +306,7 @@ function buildTask(kind, findingsList, index) {
   };
 }
 
-export function buildPrdFromFindings(findings, options = {}) {
+export function buildPrdFromFindings(findings, options = Object()) {
   const groups = groupFindings(findings);
   const tasks = [];
   let taskIndex = 0;
@@ -379,7 +379,7 @@ export function buildPrdFromFindings(findings, options = {}) {
   };
 }
 
-export function convertAuditToPrd(input, options = {}) {
+export function convertAuditToPrd(input, options = Object()) {
   const audit = typeof input === "string"
     ? JSON.parse(readFileSync(resolve(input), "utf8"))
     : input;

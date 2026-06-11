@@ -32,7 +32,7 @@ export function isFileInScopeTargets(filePath, targets = []) {
 }
 
 export function isFileAllowedByScope(filePath, scopeOrTargets = []) {
-  const scope = Array.isArray(scopeOrTargets) ? { targets: scopeOrTargets } : (scopeOrTargets || {});
+  const scope = Object.assign(Object(), Array.isArray(scopeOrTargets) ? { targets: scopeOrTargets } : (scopeOrTargets || {}));
   const targets = scope.targets || [];
   if (isFileInScopeTargets(filePath, targets)) return true;
   if (scope.allow_new_files !== true) return false;
@@ -81,7 +81,7 @@ function describeCommandFailure(error) {
   return stderr || stdout || error?.message || String(error);
 }
 
-export function gitLines(cwd, args, { execFileSync = defaultExecFileSync, strict = true } = {}) {
+export function gitLines(cwd, args, { execFileSync = defaultExecFileSync, strict = true } = Object()) {
   try {
     const output = execFileSync("git", ["-C", cwd, ...args], {
       encoding: "utf8",
@@ -104,7 +104,7 @@ function ensureWorktreeRoot(worktreeRoot, { existsSync, mkdirSync }) {
   if (!existsSync(worktreeRoot)) mkdirSync(worktreeRoot, { recursive: true });
 }
 
-function isInsideGitWorkTree(rootDir, { execSync = defaultExecSync } = {}) {
+function isInsideGitWorkTree(rootDir, { execSync = defaultExecSync } = Object()) {
   try {
     return execSync("git rev-parse --is-inside-work-tree", {
       cwd: rootDir,
@@ -116,7 +116,7 @@ function isInsideGitWorkTree(rootDir, { execSync = defaultExecSync } = {}) {
   }
 }
 
-function removePath(path, { existsSync, rmSync, execSync } = {}) {
+function removePath(path, { existsSync, rmSync, execSync } = Object()) {
   if (!existsSync(path)) return;
   try {
     rmSync(path, { recursive: true, force: true });
@@ -139,9 +139,9 @@ function writeFilesystemLineBaseline({
   readdirSync,
   statSync,
   writeFileSync,
-} = {}) {
-  const lineCounts = {};
-  const hashes = {};
+} = Object()) {
+  const lineCounts = Object();
+  const hashes = Object();
   const sourceExt = /\.(mjs|cjs|js|jsx|ts|tsx|css|scss|html)$/i;
   const walk = (relativeDir = "") => {
     const absoluteDir = join(wtPath, relativeDir);
@@ -314,7 +314,7 @@ export function createTaskWorktree({
   statSync = defaultStatSync,
   cpSync = defaultCpSync,
   writeFileSync = defaultWriteFileSync,
-} = {}) {
+} = Object()) {
   const wtBranch = `yolo-${taskId}-${now()}`;
   const wtPath = join(worktreeRoot, taskId);
   const insideGitWorkTree = isInsideGitWorkTree(rootDir, { execSync });
@@ -424,8 +424,8 @@ export function cleanupTaskWorktree({
   statSync = defaultStatSync,
   mkdirSync = defaultMkdirSync,
   copyFileSync = defaultCopyFileSync,
-  log = () => {},
-} = {}) {
+  log = (..._args) => {},
+} = Object()) {
   const copiedFiles = [];
   const outOfScopeSkipped = [];
   const allowedTargets = Array.isArray(allowedScope) ? allowedScope : (allowedScope?.targets || []);

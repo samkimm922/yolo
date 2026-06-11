@@ -16,7 +16,7 @@ export function buildCurrentRunPayload({
   };
 }
 
-export function writeCurrentRunFile({ currentRunFile, runId, prdPath, projectRoot, now }) {
+export function writeCurrentRunFile({ currentRunFile, runId, prdPath, projectRoot, now = undefined }) {
   try {
     const payload = buildCurrentRunPayload({ runId, prdPath, projectRoot, now });
     mkdirSync(dirname(currentRunFile), { recursive: true });
@@ -60,7 +60,7 @@ export function archiveCurrentRunFile({
 export function cleanupRuntimeStateFiles({
   stateDir,
   fileNames = ["expanded-tasks.json", "runner.pid"],
-} = {}) {
+} = Object()) {
   const deleted = [];
   const skipped = [];
   const errors = [];

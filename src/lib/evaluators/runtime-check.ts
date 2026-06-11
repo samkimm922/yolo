@@ -24,7 +24,7 @@ function runCommand(command, ROOT, timeout) {
   }
 }
 
-export function evalTestsPass(params = {}, _taskScope, ROOT) {
+export function evalTestsPass(params = Object(), _taskScope, ROOT) {
   const command = params.command || config.build?.test || "";
   if (command) {
     const file = params.file || params.test_file;
@@ -63,7 +63,7 @@ export function evalTestsPass(params = {}, _taskScope, ROOT) {
   }
 }
 
-export function evalBuildPass(params = {}, _taskScope, ROOT) {
+export function evalBuildPass(params = Object(), _taskScope, ROOT) {
   const command = params.command || config.build?.build || "";
   if (command) {
     const result = runCommand(command, ROOT, params.timeout_ms || config.gate?.timeout?.build || 240000);
@@ -88,10 +88,10 @@ function hashFile(path) {
   return createHash("sha256").update(readFileSync(path, "utf8")).digest("hex");
 }
 
-function changedFilesFromFilesystemBaseline(ROOT, taskScope = {}) {
+function changedFilesFromFilesystemBaseline(ROOT, taskScope = Object()) {
   const baselinePath = resolve(ROOT, ".yolo-worktree-baseline.json");
   if (!existsSync(baselinePath)) return [];
-  let baseline = {};
+  let baseline = Object();
   try {
     baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
   } catch {

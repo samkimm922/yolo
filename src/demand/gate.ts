@@ -44,11 +44,11 @@ function hasTraceItems(value) {
   });
 }
 
-function check(code, passed, severity, message, extra = {}) {
+function check(code, passed, severity, message, extra = Object()) {
   return { code, passed: Boolean(passed), severity, message, ...extra };
 }
 
-function blockingOpenQuestions(session = {}) {
+function blockingOpenQuestions(session = Object()) {
   return asArray(session.discussion?.open_questions || session.open_questions)
     .map((item) => {
       if (typeof item === "string") return { text: clean(item), blocking: true };
@@ -57,36 +57,36 @@ function blockingOpenQuestions(session = {}) {
     .filter((item) => item.text && item.blocking);
 }
 
-function requirementCount(session = {}) {
+function requirementCount(session = Object()) {
   return asArray(session.requirements?.active || session.requirements).length;
 }
 
-function requirementItems(session = {}) {
+function requirementItems(session = Object()) {
   return asArray(session.requirements?.active || session.requirements);
 }
 
-function acceptanceScenarioCount(session = {}) {
+function acceptanceScenarioCount(session = Object()) {
   const requirements = requirementItems(session);
   return requirements.reduce((sum, requirement) => sum + asArray(requirement.acceptance_scenarios || requirement.scenarios).length, 0);
 }
 
-function scenarioMatrix(session = {}) {
+function scenarioMatrix(session = Object()) {
   return asArray(session.scenario_matrix?.scenarios || session.scenarios);
 }
 
-function scenarioProofCount(session = {}) {
+function scenarioProofCount(session = Object()) {
   return scenarioMatrix(session).filter((scenario) => clean(scenario.proof || scenario.acceptance).length > 0).length;
 }
 
-function scenarioSurfaceCount(session = {}) {
+function scenarioSurfaceCount(session = Object()) {
   return scenarioMatrix(session).filter((scenario) => asArray(scenario.surfaces).length > 0).length;
 }
 
-function scenarioSurfaceTotal(session = {}) {
+function scenarioSurfaceTotal(session = Object()) {
   return scenarioMatrix(session).reduce((sum, scenario) => sum + asArray(scenario.surfaces).length, 0);
 }
 
-function surfaceBudgetFailures(session = {}) {
+function surfaceBudgetFailures(session = Object()) {
   const failures = [];
   for (const scenario of scenarioMatrix(session)) {
     for (const surface of asArray(scenario.surfaces)) {
@@ -111,15 +111,15 @@ function surfaceBudgetFailures(session = {}) {
   return failures;
 }
 
-function targetFileCount(session = {}) {
+function targetFileCount(session = Object()) {
   return asArray(session.project?.target_files || session.target_files).length;
 }
 
-function targetFiles(session = {}) {
+function targetFiles(session = Object()) {
   return asArray(session.project?.target_files || session.target_files).map(clean).filter(Boolean);
 }
 
-function targetFileFactRecords(session = {}) {
+function targetFileFactRecords(session = Object()) {
   return asArray(session.project_facts?.target_files || session.project?.target_file_facts)
     .map((fact) => {
       if (typeof fact === "string") return { file: clean(fact), status: "needs_verification", source: "legacy_string" };
@@ -143,7 +143,7 @@ function scopedProjectPath(projectRoot, file) {
   return path;
 }
 
-function assumptionFactRecords(session = {}) {
+function assumptionFactRecords(session = Object()) {
   return asArray(session.project_facts?.assumptions || session.reflection?.assumption_records || session.investigation?.assumptions)
     .map((fact) => {
       if (typeof fact === "string") return { text: clean(fact), status: "assumption" };
@@ -157,7 +157,7 @@ function assumptionFactRecords(session = {}) {
     .filter((fact) => fact.text || fact.id);
 }
 
-function combinedDemandText(session = {}) {
+function combinedDemandText(session = Object()) {
   const requirements = requirementItems(session);
   const scenarios = scenarioMatrix(session);
   const values = [
@@ -202,7 +202,7 @@ function combinedDemandText(session = {}) {
   return values.flat(Infinity).map(clean).filter(Boolean).join("\n");
 }
 
-function visualStyleSourceItems(session = {}) {
+function visualStyleSourceItems(session = Object()) {
   const scenarios = scenarioMatrix(session);
   return [
     session.context?.visual_style_source,
@@ -219,7 +219,7 @@ function visualStyleSourceItems(session = {}) {
   ].flat(Infinity).map(clean).filter(Boolean);
 }
 
-function conditionalStyleSourceIssue(session = {}) {
+function conditionalStyleSourceIssue(session = Object()) {
   const items = visualStyleSourceItems(session);
   for (const item of [...items, items.join("; ")]) {
     if (!item) continue;
@@ -232,7 +232,7 @@ function conditionalStyleSourceIssue(session = {}) {
   return "";
 }
 
-function readProjectTargetText(session = {}, options = {}) {
+function readProjectTargetText(session = Object(), options = Object()) {
   const projectRoot = clean(options.projectRoot || options.project_root || options.cwd);
   if (!projectRoot) return "";
   const chunks = [];
@@ -246,15 +246,15 @@ function readProjectTargetText(session = {}, options = {}) {
   return chunks.join("\n");
 }
 
-function hasUiTarget(session = {}) {
+function hasUiTarget(session = Object()) {
   return targetFiles(session).some((file) => /(^|\/)(pages?|views?|screens?|components?|ui)\//i.test(file) || /\.(tsx|jsx|vue|svelte)$/i.test(file));
 }
 
-function hasApiOrServiceTarget(session = {}) {
+function hasApiOrServiceTarget(session = Object()) {
   return targetFiles(session).some((file) => /(^|\/)(routes?|api|controllers?|server|services?|domain|lib)\//i.test(file));
 }
 
-function projectFactGrounding(session = {}, options = {}) {
+function projectFactGrounding(session = Object(), options = Object()) {
   const projectRoot = clean(options.projectRoot || options.project_root || options.cwd);
   const text = combinedDemandText(session);
   const lower = text.toLowerCase();
@@ -387,7 +387,7 @@ function projectFactGrounding(session = {}, options = {}) {
   return issues;
 }
 
-function qualityCheck(code, passed, points, severity, message, extra = {}) {
+function qualityCheck(code, passed, points, severity, message, extra = Object()) {
   return { code, passed: Boolean(passed), points, severity, message, ...extra };
 }
 
@@ -418,23 +418,23 @@ function qualityDimension({ code, label, weight = 20, critical = false, checks =
   };
 }
 
-function taskTargets(task = {}) {
+function taskTargets(task = Object()) {
   return asArray(task.scope?.targets).map((target) => clean(target?.file || target)).filter(Boolean);
 }
 
-function taskAcceptanceCriteria(task = {}) {
+function taskAcceptanceCriteria(task = Object()) {
   return asArray(task.handoff?.acceptance_criteria || task.acceptance_criteria);
 }
 
-function taskHasAcceptanceCondition(task = {}) {
+function taskHasAcceptanceCondition(task = Object()) {
   return asArray(task.post_conditions).some((condition) => condition?.type === "acceptance_criteria" && clean(condition.message || condition.params?.text).length > 0);
 }
 
-function handoffPresent(task = {}) {
+function handoffPresent(task = Object()) {
   return task.handoff && typeof task.handoff === "object";
 }
 
-function handoffFieldsComplete(task = {}) {
+function handoffFieldsComplete(task = Object()) {
   const handoff = task.handoff || {};
   return handoffPresent(task)
     && clean(handoff.plain_language_goal).length >= 10
@@ -446,14 +446,14 @@ function handoffFieldsComplete(task = {}) {
     && taskTargets(task).length > 0;
 }
 
-function taskEvidenceChainComplete(task = {}) {
+function taskEvidenceChainComplete(task = Object()) {
   const chain = task.handoff?.evidence_chain || {};
   return clean(chain.demand_id).length > 0
     && clean(chain.scenario_id).length > 0
     && clean(chain.surface_id).length > 0;
 }
 
-function taskSessionPlanComplete(task = {}) {
+function taskSessionPlanComplete(task = Object()) {
   const session = task.handoff?.session || task.session_plan || {};
   return clean(session.session_id).length > 0
     && clean(session.state_path).length > 0
@@ -464,13 +464,13 @@ function taskSessionPlanComplete(task = {}) {
     && clean(session.resume_instructions).length > 0;
 }
 
-function scenarioHasProof(scenario = {}) {
+function scenarioHasProof(scenario = Object()) {
   return clean(scenario.proof || scenario.acceptance).length >= 10;
 }
 
 // ── Completeness matrix (P2.15b): deterministic gate rules ──
 
-function extractRoles(session = {}) {
+function extractRoles(session = Object()) {
   const raw = asArray(session.vision?.target_users || session.project?.target_users || session.target_users);
   return raw
     .map((entry) => {
@@ -497,7 +497,7 @@ function roleScenarioCoverage(roles = [], scenarios = []) {
   };
 }
 
-function scenarioExceptionCoverage(scenarios = [], _session = {}) {
+function scenarioExceptionCoverage(scenarios = [], _session = Object()) {
   const missing = [];
   for (const scenario of scenarios) {
     const exceptions = asArray(scenario.exceptions).map(clean).filter(Boolean);
@@ -540,7 +540,7 @@ function requirementAcceptanceEvidence(requirements = [], scenarios = []) {
   };
 }
 
-function inspectCompletenessMatrix(session = {}) {
+function inspectCompletenessMatrix(session = Object()) {
   const roles = extractRoles(session);
   const scenarios = scenarioMatrix(session);
   const requirements = requirementItems(session);
@@ -595,7 +595,7 @@ function inspectCompletenessMatrix(session = {}) {
   };
 }
 
-function scenarioSurfaces(session = {}) {
+function scenarioSurfaces(session = Object()) {
   return scenarioMatrix(session).flatMap((scenario) => asArray(scenario.surfaces));
 }
 
@@ -603,27 +603,27 @@ function allTasksHaveSourceQuestions(tasks = []) {
   return tasks.length > 0 && tasks.every((task) => hasTraceItems(task.source_question_ids || task.handoff?.source_question_ids || task.trace?.source_question_ids));
 }
 
-function allScenariosOrTasksHaveSourceQuestions(session = {}, tasks = []) {
+function allScenariosOrTasksHaveSourceQuestions(session = Object(), tasks = []) {
   const scenarios = scenarioMatrix(session);
   if (tasks.length > 0) return allTasksHaveSourceQuestions(tasks);
   return scenarios.length > 0 && scenarios.every((scenario) => hasTraceItems(scenario.source_question_ids || scenario.question_trace));
 }
 
-function evidenceOrAssumptionPresent(session = {}) {
+function evidenceOrAssumptionPresent(session = Object()) {
   return hasItems(session.investigation?.evidence)
     || hasItems(session.evidence)
     || hasItems(session.reflection?.assumptions)
     || hasItems(session.assumptions);
 }
 
-function completedQuestioning(session = {}) {
+function completedQuestioning(session = Object()) {
   return hasTraceItems(session.question_trace)
     || scenarioMatrix(session).some((scenario) => hasTraceItems(scenario.question_trace || scenario.source_question_ids))
     || hasTraceItems(session.discussion?.rounds)
     || hasTraceItems(session.discussion?.questions);
 }
 
-function deferredScopeConfirmation(session = {}) {
+function deferredScopeConfirmation(session = Object()) {
   const deferred = asArray(session.discussion?.deferred || session.deferred_scope)
     .map(clean)
     .filter(Boolean);
@@ -643,7 +643,7 @@ function statusFromChecks(checks) {
   return "pass";
 }
 
-function readinessLevel(checks, session = {}) {
+function readinessLevel(checks, session = Object()) {
   const passed = (code) => checks.find((item) => item.code === code)?.passed === true;
   if (
     passed("USER_APPROVAL_PRESENT")
@@ -663,7 +663,7 @@ function readinessLevel(checks, session = {}) {
   return "L0";
 }
 
-export function inspectDemandReadiness(session = {}, options = {}) {
+export function inspectDemandReadiness(session = Object(), options = Object()) {
   const phase = clean(options.phase || session.phase || "discuss");
   const approval = session.approval || {};
   const requirements = asArray(session.requirements?.active || session.requirements);
@@ -846,7 +846,7 @@ export function inspectDemandReadiness(session = {}, options = {}) {
   };
 }
 
-export function inspectDemandQuality(session = {}, options = {}) {
+export function inspectDemandQuality(session = Object(), options = Object()) {
   const phase = clean(options.phase || session.phase || "prd");
   const readiness = options.readiness || session.readiness || null;
   const tasks = asArray(options.tasks);

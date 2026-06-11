@@ -68,7 +68,7 @@ function projectPath(projectRoot, path) {
   return rel && !rel.startsWith("..") && !isAbsolute(rel) ? rel.replaceAll("\\", "/") : absolute;
 }
 
-function resolveTargetDir(projectRoot, options = {}) {
+function resolveTargetDir(projectRoot, options = Object()) {
   if (options.targetDir) {
     const absolute = isAbsolute(options.targetDir) ? options.targetDir : join(projectRoot, options.targetDir);
     return {
@@ -106,7 +106,7 @@ function yamlString(value) {
   return JSON.stringify(cleanString(value));
 }
 
-function skillMarkdownFilename(options = {}) {
+function skillMarkdownFilename(options = Object()) {
   return cleanString(options.skillMarkdownFile || options.skill_markdown_file || "SKILL.md") || "SKILL.md";
 }
 
@@ -135,7 +135,7 @@ function requiredArray(errors, descriptor, field) {
   }
 }
 
-export function validateWorkflowSkillDescriptor(descriptor = {}) {
+export function validateWorkflowSkillDescriptor(descriptor = Object()) {
   const errors = [];
   const warnings = [];
 
@@ -345,14 +345,14 @@ function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex, markdo
   return lines.join("\n");
 }
 
-function descriptorsForInstall(options = {}) {
+function descriptorsForInstall(options = Object()) {
   const workflowIds = asArray(options.workflow || options.workflows);
   const selectedIds = workflowIds.length > 0 ? workflowIds : listWorkflows().map((workflow) => workflow.id);
   const agent = defaultAgentForTarget(options.target, options.agent);
   return selectedIds.map((id) => workflowToSkillDescriptor(id, { agent }));
 }
 
-export function buildWorkflowSkillInstallPlan(options = {}) {
+export function buildWorkflowSkillInstallPlan(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.cwd || process.cwd());
   const targetInfo = resolveTargetDir(projectRoot, options);
   const descriptors = descriptorsForInstall({
@@ -442,7 +442,7 @@ export function buildWorkflowSkillInstallPlan(options = {}) {
   };
 }
 
-export function inspectWorkflowSkillInstallPlan(plan = {}) {
+export function inspectWorkflowSkillInstallPlan(plan = Object()) {
   const descriptorResults = (plan.descriptors || []).map(validateWorkflowSkillDescriptor);
   const errors = descriptorResults.flatMap((result) => result.errors.map((error) => ({
     descriptor_id: result.descriptor_id,
@@ -534,7 +534,7 @@ export function inspectWorkflowSkillInstallPlan(plan = {}) {
   };
 }
 
-export function installWorkflowSkills(options = {}) {
+export function installWorkflowSkills(options = Object()) {
   const plan = buildWorkflowSkillInstallPlan(options);
   if (!plan.validation.ready) {
     return {
@@ -559,7 +559,8 @@ export function installWorkflowSkills(options = {}) {
   const overwritten = [];
   const skipped = [];
 
-  for (const dir of plan.directories) {
+  for (const dirValue of plan.directories) {
+    const dir = String(dirValue);
     const absoluteDir = isAbsolute(dir) ? dir : join(plan.project_root, dir);
     if (!existsSync(absoluteDir)) {
       createdDirs.push(dir);
@@ -605,7 +606,7 @@ export function installWorkflowSkills(options = {}) {
   };
 }
 
-export function buildWorkflowSkillTargetSmokePlan(options = {}) {
+export function buildWorkflowSkillTargetSmokePlan(options = Object()) {
   // 烟测默认写入一次性 tmpdir 沙盒，绝不落到真实 cwd/.agents——避免污染当前项目。
   // 仅当显式传入 projectRoot/cwd 时才使用指定目录（测试用临时沙盒）。
   const explicitRoot = options.projectRoot || options.cwd;
@@ -621,7 +622,8 @@ export function buildWorkflowSkillTargetSmokePlan(options = {}) {
     : ["fix"];
   const agentByTarget = options.agentByTarget || options.agent_by_target || {};
 
-  const targetPlans = targets.map((target) => {
+  const targetPlans = targets.map((targetValue) => {
+    const target = String(targetValue);
     const agent = cleanString(agentByTarget[target] || options.agent);
     const installPlan = buildWorkflowSkillInstallPlan({
       projectRoot,
@@ -651,7 +653,7 @@ export function buildWorkflowSkillTargetSmokePlan(options = {}) {
   };
 }
 
-function check(passed, code, message, extra = {}) {
+function check(passed, code, message, extra = Object()) {
   return {
     code,
     passed: Boolean(passed),
@@ -660,7 +662,7 @@ function check(passed, code, message, extra = {}) {
   };
 }
 
-export function runWorkflowSkillTargetSmoke(options = {}) {
+export function runWorkflowSkillTargetSmoke(options = Object()) {
   const plan = buildWorkflowSkillTargetSmokePlan(options);
   const dryRun = options.dryRun === true || options.dry_run === true;
   if (dryRun) {

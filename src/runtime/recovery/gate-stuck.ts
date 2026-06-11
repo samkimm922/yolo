@@ -26,7 +26,7 @@ export function summarizeGateFailures({ failures = [], gateExitCode, gateOutput 
 
 export function incrementRetryCountFile(retryCountFile, taskId) {
   try {
-    let retryData = {};
+    let retryData = Object();
     if (existsSync(retryCountFile)) {
       retryData = JSON.parse(readFileSync(retryCountFile, "utf8"));
     }
@@ -44,7 +44,7 @@ export function hasRepeatedGateFailure(history = []) {
     last2.every((failure) => failure.gate === last2[0].gate && failure.fingerprint === last2[0].fingerprint);
 }
 
-export function buildContractSuspectTransition({ task, suspect, failedSummary, attempt, now }) {
+export function buildContractSuspectTransition({ task, suspect, failedSummary, attempt, now = undefined }) {
   return createTaskTransition({
     taskId: task.id,
     result: {
@@ -66,7 +66,7 @@ export function buildContractSuspectTransition({ task, suspect, failedSummary, a
   });
 }
 
-export function buildRepeatedGateFailureTransition({ taskId, attempt, now }) {
+export function buildRepeatedGateFailureTransition({ taskId, attempt, now = undefined }) {
   return failTaskTransition({
     taskId,
     reason: "连续同因",
@@ -75,7 +75,7 @@ export function buildRepeatedGateFailureTransition({ taskId, attempt, now }) {
   });
 }
 
-export function buildMaxRetryFailure({ taskId, gateExitCode, attempt, now }) {
+export function buildMaxRetryFailure({ taskId, gateExitCode, attempt, now = undefined }) {
   const reason = `闸门 exit ${gateExitCode}, 重试 ${attempt} 次仍失败`;
   return {
     reason,

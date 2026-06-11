@@ -6,7 +6,7 @@ import { generatePrompt } from "../cli/prompt.js";
 
 export const EXPERIENCE_PACK_AUDIT_SCHEMA_VERSION = "1.0";
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -25,7 +25,7 @@ function experienceItemCount(prompt = "") {
   return (match[0].match(/^- learn_/gm) || []).length;
 }
 
-export function buildExperiencePackEffectivenessAuditPlan(options = {}) {
+export function buildExperiencePackEffectivenessAuditPlan(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.project_root || plannedFixtureRoot());
   const stateRoot = resolve(options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
   return {
@@ -118,7 +118,7 @@ function seedLearning(projectRoot, stateRoot) {
   return { relevant, unrelated, noisy };
 }
 
-export function runExperiencePackEffectivenessAudit(options = {}) {
+export function runExperiencePackEffectivenessAudit(options = Object()) {
   const plan = options.plan || buildExperiencePackEffectivenessAuditPlan(options);
   const projectRoot = resolve(plan.project_root);
   const stateRoot = resolve(plan.state_root);

@@ -184,7 +184,7 @@ function isUntrackedFailClosedReleaseFile(entry, allowUntracked) {
     && (isSourceOrTestFile(entry.path) || entry.domain === "ci-meta-package");
 }
 
-function riskForEntry(entry, { allowUntracked = false, allowUnknown = false } = {}) {
+function riskForEntry(entry, { allowUntracked = false, allowUnknown = false } = Object()) {
   if (entry.domain === "unknown" && !allowUnknown) return "critical";
   if (entry.kind === "deleted") return "critical";
   if (isUntrackedFailClosedReleaseFile(entry, allowUntracked)) return "critical";
@@ -195,7 +195,7 @@ function riskForEntry(entry, { allowUntracked = false, allowUnknown = false } = 
   return "medium";
 }
 
-function blockersForEntry(entry, { allowUntracked = false, allowUnknown = false } = {}) {
+function blockersForEntry(entry, { allowUntracked = false, allowUnknown = false } = Object()) {
   const blockers = [];
   if (entry.domain === "unknown" && !allowUnknown) {
     blockers.push({
@@ -283,7 +283,7 @@ export function buildReleaseCandidateChangeManifest({
   allow_untracked = false,
   allowUnknown = false,
   currentRoundFiles = null,
-} = {}) {
+} = Object()) {
   const effectiveAllowUntracked = allowUntracked === true || allow_untracked === true;
   const diffByPath = new Map(parseGitDiffNameStatusZ(diffNameStatusOutput).map((entry) => [entry.path, entry]));
   const currentRoundSet = Array.isArray(currentRoundFiles)
@@ -362,7 +362,7 @@ export function readReleaseCandidateChangeManifest({
   allow_untracked = false,
   allowUnknown = false,
   currentRoundFiles = null,
-} = {}) {
+} = Object()) {
   const effectiveAllowUntracked = allowUntracked === true || allow_untracked === true;
   const resolvedRoot = resolve(rootDir);
   try {

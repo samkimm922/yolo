@@ -15,7 +15,7 @@ export function readWorktreeDiffStats({
   wtPath,
   baseRef = null,
   execFileSync = defaultExecFileSync,
-} = {}) {
+} = Object()) {
   try {
     const committed = baseRef
       ? execFileSync("git", ["-C", wtPath, "diff", "--numstat", baseRef, "HEAD"], {
@@ -46,14 +46,14 @@ export function buildScopeTargetCoverage(scopeTargets = [], changedFiles = []) {
 export function buildTaskExecutionBaseRecord({
   taskId,
   startedAtMs,
-  diffStats = {},
+  diffStats = Object(),
   businessFiles = [],
   metadataFiles = [],
   outOfScope = [],
   scopeTargets = [],
   now = Date.now,
   nowIso = () => new Date().toISOString(),
-} = {}) {
+} = Object()) {
   const coverage = buildScopeTargetCoverage(scopeTargets, [...businessFiles, ...metadataFiles]);
   return {
     id: taskId,

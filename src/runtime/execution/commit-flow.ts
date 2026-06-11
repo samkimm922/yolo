@@ -8,7 +8,7 @@ export function isDocUpdateHookFailure(error) {
   return stderr.includes("SNAPSHOT.md") || stderr.includes("doc-update-check");
 }
 
-export function buildTaskCommitMessage({ task = {}, mode = "fix", businessFiles = [] } = {}) {
+export function buildTaskCommitMessage({ task = Object(), mode = "fix", businessFiles = [] } = Object()) {
   const prefix = mode === "dev" ? "feat" : "fix";
   const tag = businessFiles.length > 0 ? "[code]" : "[metadata-only]";
   const title = (task.title || task.description || "").replace(/\n/g, " ").slice(0, 50);
@@ -21,7 +21,7 @@ export function buildScopeAuditRecord({
   targetFiles = [],
   modified = [],
   nowIso = () => new Date().toISOString(),
-} = {}) {
+} = Object()) {
   return {
     ts: nowIso(),
     task: taskId,
@@ -41,7 +41,7 @@ export function appendScopeAuditRecord({
   required = true,
   appendFileSync = defaultAppendFileSync,
   nowIso,
-} = {}) {
+} = Object()) {
   if (outOfScope.length === 0) {
     return { written: false, skipped: true, reason: "no_out_of_scope" };
   }
@@ -61,11 +61,11 @@ export function appendScopeAuditRecord({
 }
 
 export function buildScopeAuditDecision({
-  task = {},
+  task = Object(),
   outOfScope = [],
   targetFiles = [],
   modified = [],
-} = {}) {
+} = Object()) {
   if (outOfScope.length === 0) {
     return { logs: [], audit: null };
   }
@@ -93,14 +93,14 @@ export function buildScopeAuditDecision({
 
 export function applyScopeAudit({
   auditPath,
-  task = {},
+  task = Object(),
   outOfScope = [],
   targetFiles = [],
   modified = [],
   required = true,
-  log = () => {},
+  log = (..._args) => {},
   appendRecord = appendScopeAuditRecord,
-} = {}) {
+} = Object()) {
   const decision = buildScopeAuditDecision({ task, outOfScope, targetFiles, modified });
   for (const entry of decision.logs) {
     log(entry.id, entry.marker, entry.message);
@@ -111,8 +111,7 @@ export function applyScopeAudit({
   if (auditResult?.error) {
     if (required !== false) {
       log(task.id, "!!", `scope audit write failed: ${auditResult.error}`);
-      const error = new Error(`scope_audit_write_failed: ${auditResult.error}`);
-      error.auditResult = auditResult;
+      const error = Object.assign(new Error(`scope_audit_write_failed: ${auditResult.error}`), { auditResult });
       throw error;
     }
     log(task.id, "WARN", `scope audit skipped: ${auditResult.error}`);
@@ -121,12 +120,12 @@ export function applyScopeAudit({
 }
 
 export function buildDryRunOutOfScopeBlock({
-  task = {},
+  task = Object(),
   hasRealCode = false,
   businessFiles = [],
   metadataFiles = [],
   outOfScope = [],
-} = {}) {
+} = Object()) {
   if (task.task_kind !== "dry_run_artifact" || outOfScope.length === 0) return null;
   return {
     committed: false,
@@ -144,7 +143,7 @@ export function buildOutOfScopeBlock({
   businessFiles = [],
   metadataFiles = [],
   outOfScope = [],
-} = {}) {
+} = Object()) {
   if (outOfScope.length === 0) return null;
   return {
     committed: false,
@@ -162,13 +161,13 @@ function uniqueFiles(files = []) {
 }
 
 export function buildCommitSkipDecision({
-  task = {},
+  task = Object(),
   code = [],
   hasRealCode = false,
   businessFiles = [],
   metadataFiles = [],
   outOfScope = [],
-} = {}) {
+} = Object()) {
   if (code.length === 0) {
     return {
       reason: "no_code",
@@ -193,15 +192,15 @@ export function buildCommitSkipDecision({
   return null;
 }
 
-export function shouldUpdateDocsBeforeCommit(task = {}) {
+export function shouldUpdateDocsBeforeCommit(task = Object()) {
   return task.task_kind !== "dry_run_artifact";
 }
 
 export function buildDocUpdatePayload({
-  task = {},
+  task = Object(),
   modifiedFiles = [],
   status = "PASS",
-} = {}) {
+} = Object()) {
   return {
     taskId: task.id,
     taskTitle: task.title || task.description || "",
@@ -212,13 +211,13 @@ export function buildDocUpdatePayload({
 
 export async function updateDocsBeforeCommit({
   rootDir,
-  task = {},
+  task = Object(),
   modifiedFiles = [],
   status = "PASS",
   required = true,
   updateDocs,
   importDocUpdater = () => import("./doc-updater.js"),
-} = {}) {
+} = Object()) {
   if (!shouldUpdateDocsBeforeCommit(task)) {
     return { updated: false, skipped: true, reason: "dry_run_artifact" };
   }
@@ -239,7 +238,7 @@ export async function updateDocsBeforeCommit({
   }
 }
 
-function buildCommitFailureRecord({ commitResult = {}, result = {} } = {}) {
+function buildCommitFailureRecord({ commitResult = Object(), result = Object() } = Object()) {
   const reason = commitResult.reason || commitResult.commitWarning || "commit_failed";
   return {
     ...result,
@@ -249,12 +248,12 @@ function buildCommitFailureRecord({ commitResult = {}, result = {} } = {}) {
 }
 
 export function buildCommitResultDecision({
-  commitResult = {},
-  task = {},
+  commitResult = Object(),
+  task = Object(),
   hasRealCode = false,
   businessFiles = [],
   metadataFiles = [],
-} = {}) {
+} = Object()) {
   const result = { committed: false, hasRealCode, businessFiles, metadataFiles };
   if (commitResult.committed) {
     return {
@@ -301,7 +300,7 @@ export function buildCommitResultDecision({
 
 export async function runTaskCommitFlow({
   rootDir,
-  task = {},
+  task = Object(),
   code = [],
   hasRealCode = false,
   businessFiles = [],
@@ -309,13 +308,13 @@ export async function runTaskCommitFlow({
   outOfScope = [],
   docUpdateRequired = true,
   mode = "fix",
-  log = () => {},
-  emitEvent = () => {},
-  refreshBaselines = () => {},
+  log = (..._args) => {},
+  emitEvent = (..._args) => {},
+  refreshBaselines = (..._args) => {},
   updateDocs,
   importDocUpdater,
   commitChanges = commitTaskChanges,
-} = {}) {
+} = Object()) {
   const effectiveOutOfScope = uniqueFiles(outOfScope);
   const dryRunOutOfScopeBlock = buildDryRunOutOfScopeBlock({
     task,
@@ -339,14 +338,14 @@ export async function runTaskCommitFlow({
     return { status: "blocked", result: outOfScopeBlock };
   }
 
-  const docsResult = await updateDocsBeforeCommit({
+  const docsResult = Object.assign(Object(), await updateDocsBeforeCommit({
     rootDir,
     task,
     modifiedFiles: code,
     required: docUpdateRequired,
     updateDocs,
     importDocUpdater,
-  });
+  }));
   if (docsResult.reason === "doc_update_failed") {
     if (docsResult.blocked) {
       const blockReason = `doc_update_failed: ${docsResult.error}`;
@@ -413,7 +412,7 @@ export async function runTaskCommitFlow({
   };
 }
 
-function readShortCommitHash({ rootDir, execFileSync = defaultExecFileSync } = {}) {
+function readShortCommitHash({ rootDir, execFileSync = defaultExecFileSync } = Object()) {
   try {
     return execFileSync("git", ["rev-parse", "--short", "HEAD"], {
       cwd: rootDir,
@@ -425,7 +424,7 @@ function readShortCommitHash({ rootDir, execFileSync = defaultExecFileSync } = {
   }
 }
 
-function resetStagedFiles(files, { rootDir, execFileSync = defaultExecFileSync } = {}) {
+function resetStagedFiles(files, { rootDir, execFileSync = defaultExecFileSync } = Object()) {
   if (!files?.length) return false;
   try {
     execFileSync("git", ["reset", "HEAD", "--", ...files], {
@@ -451,7 +450,7 @@ export function commitTaskChanges({
   docUpdateFiles = DEFAULT_DOC_UPDATE_FILES,
   message,
   execFileSync = defaultExecFileSync,
-} = {}) {
+} = Object()) {
   const gitOptions = { cwd: rootDir, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] };
   try {
     execFileSync("git", ["add", ...files], gitOptions);

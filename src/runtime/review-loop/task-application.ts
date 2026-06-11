@@ -56,8 +56,8 @@ export function markReviewOutcome({
   reason,
   message,
   humanNeeded = false,
-  meta = {},
-} = {}) {
+  meta = Object(),
+} = Object()) {
   if (!taskResults || !id) return taskResults;
   if (!Array.isArray(taskResults.failed)) taskResults.failed = [];
   if (!Array.isArray(taskResults.blocked)) taskResults.blocked = [];
@@ -100,11 +100,11 @@ export function reviewTaskIdSet(tasks = []) {
   return new Set(tasks.map((task) => task.id).filter(Boolean));
 }
 
-export function hasReviewFixFailures(reviewResults = {}) {
+export function hasReviewFixFailures(reviewResults = Object()) {
   return (reviewResults.failed || []).length > 0 || (reviewResults.blocked || []).length > 0;
 }
 
-export function reviewFixFailureDetail(reviewResults = {}) {
+export function reviewFixFailureDetail(reviewResults = Object()) {
   return `failed=${(reviewResults.failed || []).length}, blocked=${(reviewResults.blocked || []).length}`;
 }
 

@@ -179,8 +179,8 @@ function includesAny(text, terms) {
 }
 
 function existingTargets(files, roots = [PROJECT_ROOT, YOLO_ROOT]) {
-  const resolvedRoots = unique(roots.map((root) => resolve(root)));
-  return files.filter((file) => resolvedRoots.some((root) => existsSync(resolve(root, normalizeFile(file)))));
+  const resolvedRoots = unique(roots.map((root) => resolve(String(root)))).map(String);
+  return files.map((file) => String(file)).filter((file) => resolvedRoots.some((root) => existsSync(resolve(root, normalizeFile(file)))));
 }
 
 function buildSplitSuggestions(task, files, layers, text, classify = fileLayer) {
@@ -241,17 +241,17 @@ function buildSplitSuggestions(task, files, layers, text, classify = fileLayer) 
   return suggestions;
 }
 
-export function inspectAtomicTask(task, options = {}) {
+export function inspectAtomicTask(task, options = Object()) {
   if (!task || !task.id) throw new Error("inspectAtomicTask requires task.id");
 
   const projectRoot = resolve(options.projectRoot || options.project_root || options.root || PROJECT_ROOT);
-  const targetRoots = unique([projectRoot, PROJECT_ROOT, YOLO_ROOT]);
+  const targetRoots = unique([projectRoot, PROJECT_ROOT, YOLO_ROOT]).map(String);
   const layerMap = buildLayerMap(projectRoot);
   const classify = (file) => fileLayerWithMap(file, layerMap);
   const targets = task.scope?.targets || [];
-  const files = unique(targets.map((target) => normalizeFile(target.file)));
-  const readonlyFiles = unique(task.scope?.readonly_files || []);
-  const layers = unique(files.map(classify));
+  const files = unique(targets.map((target) => normalizeFile(target.file))).map(String);
+  const readonlyFiles = unique(task.scope?.readonly_files || []).map(String);
+  const layers = unique(files.map(classify)).map(String);
   const text = taskText(task);
   const failPostconditions = countFailPostconditions(task);
   const behavioralFailPostconditions = countBehavioralFailPostconditions(task);
@@ -274,7 +274,7 @@ export function inspectAtomicTask(task, options = {}) {
 
   let score = 0;
   const reasons = [];
-  const add = (points, id, detail, evidence = {}) => {
+  const add = (points, id, detail, evidence = Object()) => {
     score += points;
     reasons.push({ id, points, detail, evidence });
   };
@@ -366,7 +366,7 @@ export function inspectAtomicTask(task, options = {}) {
   };
 }
 
-export function inspectTaskFromPrd(prdPath, taskId, options = {}) {
+export function inspectTaskFromPrd(prdPath, taskId, options = Object()) {
   const resolved = resolvePrdPath(prdPath);
   const prd = readJson(resolved);
   const task = (prd.tasks || []).find((item) => item.id === taskId);
@@ -374,7 +374,7 @@ export function inspectTaskFromPrd(prdPath, taskId, options = {}) {
   return inspectAtomicTask(task, { ...options, prdPath: resolved });
 }
 
-export function runAtomicTaskDoctorCli(options = {}) {
+export function runAtomicTaskDoctorCli(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || YOLO_ROOT);
   const prdPath = getArg("--prd=");
   const taskId = getArg("--task=");

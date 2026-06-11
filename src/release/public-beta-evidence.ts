@@ -7,7 +7,7 @@ import { runRuntimeBoundaryDecisionGate } from "./runtime-boundary-decision.js";
 
 export const PUBLIC_BETA_EVIDENCE_SCHEMA_VERSION = "1.0";
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -15,7 +15,7 @@ function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function noReleaseSideEffects(result = {}) {
+function noReleaseSideEffects(result = Object()) {
   const guarantees = result.guarantees || {};
   return guarantees.published !== true
     && guarantees.credential_access !== true
@@ -32,7 +32,7 @@ function statusOf(component) {
   return isObject(component) ? component.status || "unknown" : "missing";
 }
 
-export function buildPublicBetaEvidencePlan(options = {}) {
+export function buildPublicBetaEvidencePlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const releaseScope = options.releaseScope || options.release_scope || "public-beta";
@@ -73,7 +73,7 @@ export function buildPublicBetaEvidencePlan(options = {}) {
   };
 }
 
-export function runPublicBetaEvidenceGate(options = {}) {
+export function runPublicBetaEvidenceGate(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const plan = options.plan || buildPublicBetaEvidencePlan({

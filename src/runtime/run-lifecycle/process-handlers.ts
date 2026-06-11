@@ -17,7 +17,7 @@ export function registerRunnerProcessHandlers({
   archiveCurrentRunFile,
   cleanupRuntimeStateFiles,
   execSync,
-} = {}) {
+} = Object()) {
   const gracefulShutdown = createGracefulShutdownHandler({
     progress,
     runResultsTracker,
@@ -74,7 +74,7 @@ export function handleRunCliFailure({
   execSync,
   logError = console.error,
   exit = process.exit,
-} = {}) {
+} = Object()) {
   logError("[yolo-runner] run() 顶层异常:", error);
   try {
     writeRunEndOnCrashEvent({

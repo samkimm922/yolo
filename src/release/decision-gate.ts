@@ -64,7 +64,7 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -97,7 +97,7 @@ function cleanIssueCode(value, fallback) {
     .toUpperCase();
 }
 
-function issue(code, report, message, extra = {}) {
+function issue(code, report, message, extra = Object()) {
   return { code, report, message, ...extra };
 }
 
@@ -148,7 +148,7 @@ function provenanceKnown(report) {
   return RELEASE_CANDIDATE_KNOWN_PROVENANCE.has(source);
 }
 
-function approvalIssueCodes(approval = {}) {
+function approvalIssueCodes(approval = Object()) {
   const source = Array.isArray(approval.issue_codes)
     ? approval.issue_codes
     : Array.isArray(approval.issueCodes)
@@ -156,22 +156,22 @@ function approvalIssueCodes(approval = {}) {
       : Array.isArray(approval.codes)
         ? approval.codes
         : [];
-  return source.map((code) => cleanIssueCode(code)).filter(Boolean);
+  return source.map((code) => cleanIssueCode(code, "")).filter(Boolean);
 }
 
-function approvalId(approval = {}) {
+function approvalId(approval = Object()) {
   return String(approval.id || approval.approval_id || "").trim();
 }
 
-function approvalApprovedAt(approval = {}) {
+function approvalApprovedAt(approval = Object()) {
   return approval.approved_at || approval.approvedAt || null;
 }
 
-function approvalExpiresAt(approval = {}) {
+function approvalExpiresAt(approval = Object()) {
   return approval.expires_at || approval.expiresAt || approval.valid_until || approval.validUntil || null;
 }
 
-function approvalHasValidExpiry(approval = {}) {
+function approvalHasValidExpiry(approval = Object()) {
   return validTimestamp(approvalExpiresAt(approval));
 }
 
@@ -219,7 +219,7 @@ function collectReportBlockerIssues(reportName, report) {
   ));
 }
 
-function reportClaimsDryRun(report = {}) {
+function reportClaimsDryRun(report = Object()) {
   return report.dry_run === true
     || report.dryRun === true
     || report.plan_only === true
@@ -233,7 +233,7 @@ function commandPassed(record) {
   return status === "pass" || record.exit_code === 0 || record.exitCode === 0;
 }
 
-function collectCommandEvidence(report = {}) {
+function collectCommandEvidence(report = Object()) {
   const commands = [];
   for (const record of asArray(report.commands || report.command_results || report.commandResults)) {
     if (isObject(record)) commands.push(record);
@@ -248,7 +248,7 @@ function collectCommandEvidence(report = {}) {
   return commands;
 }
 
-function hasPassingCommandEvidence(report = {}) {
+function hasPassingCommandEvidence(report = Object()) {
   const commands = collectCommandEvidence(report);
   return commands.length > 0 && commands.every(commandPassed);
 }
@@ -259,7 +259,7 @@ function stepPassed(stepRecord) {
   return status === "pass" || commandPassed(stepRecord.command);
 }
 
-function cleanEnvironmentEvidencePasses(report = {}) {
+function cleanEnvironmentEvidencePasses(report = Object()) {
   const steps = asArray(report.steps);
   const byId = new Map(steps.map((stepRecord) => [stepRecord?.id, stepRecord]));
   return report.dry_run === false
@@ -331,7 +331,7 @@ function dogfoodFailureIssues(report) {
     ));
 }
 
-function changeManifestEvidencePasses(report = {}) {
+function changeManifestEvidencePasses(report = Object()) {
   const manifest = report.manifest || report.change_manifest || report.changeManifest;
   return isObject(manifest)
     && manifest.schema === "yolo.release_change_provenance.v1"
@@ -438,7 +438,7 @@ function riskAccepted(decision) {
     || (Array.isArray(decision?.risk_acceptance) && decision.risk_acceptance.length > 0);
 }
 
-function hardeningReleaseBlockerCodes(hardeningDrill = {}) {
+function hardeningReleaseBlockerCodes(hardeningDrill = Object()) {
   return (hardeningDrill.release_blockers || []).map((blocker) => blocker.code).filter(Boolean);
 }
 
@@ -467,7 +467,7 @@ function sanitizeDecision(decision) {
   };
 }
 
-export function buildControlledBetaReleaseDecisionPlan(options = {}) {
+export function buildControlledBetaReleaseDecisionPlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const releaseScope = options.releaseScope || options.release_scope || DEFAULT_RELEASE_SCOPE;
   const requestedActions = normalizeRequestedActions(options.requestedActions || options.requested_actions);
@@ -507,7 +507,7 @@ export function buildControlledBetaReleaseDecisionPlan(options = {}) {
   };
 }
 
-export function runControlledBetaReleaseDecisionGate(options = {}) {
+export function runControlledBetaReleaseDecisionGate(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJsonPath = join(yoloRoot, "package.json");
   const packageBefore = readJson(packageJsonPath);
@@ -677,13 +677,13 @@ export function runControlledBetaReleaseDecisionGate(options = {}) {
   };
 }
 
-export function runReleaseCandidateGate(options = {}) {
+export function runReleaseCandidateGate(options = Object()) {
   const mode = normalizeReleaseCandidateMode(options.mode || options.releaseMode || options.release_mode);
   const now = options.now ? new Date(options.now) : new Date();
   const reportSource = isObject(options.reports) ? options.reports : options;
   const blockers = [];
   const warnings = [];
-  const normalizedReports = {};
+  const normalizedReports = Object();
 
   if (!["rc", "publish"].includes(String(options.mode || options.releaseMode || options.release_mode || "rc"))) {
     blockers.push(issue(

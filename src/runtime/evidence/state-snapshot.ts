@@ -20,7 +20,7 @@ function readJsonIfExists(file) {
   }
 }
 
-export function writeStateSnapshot({ argv = [], now = new Date() } = {}) {
+export function writeStateSnapshot({ argv = [], now = new Date() } = Object()) {
   const stateRootArg = argValue(argv, "--state-root=") || argValue(argv, "--yolo-root=");
   const stateDirArg = argValue(argv, "--state-dir=");
   const stateDir = stateDirArg
@@ -41,7 +41,7 @@ export function writeStateSnapshot({ argv = [], now = new Date() } = {}) {
   return { status: "ok", file: resolve(latestFile), snapshot };
 }
 
-export function runStateSnapshotCli(argv = process.argv.slice(2), io = {}) {
+export function runStateSnapshotCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const result = writeStateSnapshot({ argv });
   if (argv.includes("--json")) {

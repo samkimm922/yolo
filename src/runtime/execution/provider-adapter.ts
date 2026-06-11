@@ -70,10 +70,10 @@ function blockedProviderRun({
   blockers = [],
   inspection = null,
   preflight = null,
-} = {}) {
+} = Object()) {
   const nowMs = Date.now();
   const detail = blockers.map((blocker) => blocker.message || blocker.code).filter(Boolean).join("\n");
-  const run = {
+  const run = Object.assign(Object(), {
     success: false,
     status: "blocked",
     provider,
@@ -90,7 +90,7 @@ function blockedProviderRun({
     startedAtMs: nowMs,
     endedAtMs: nowMs,
     durationMs: 0,
-  };
+  });
   run.attempt_ledger = [buildProviderAttemptLedgerEntry(run)];
   return run;
 }
@@ -102,7 +102,7 @@ export function classifyProviderRunStatus({
   stdout = "",
   verification = null,
   commandSucceeded = null,
-} = {}) {
+} = Object()) {
   if (timedOut) return "timed_out";
   if (signal) return "killed";
   if (verification?.status === "failed") return "verification_failed";
@@ -112,11 +112,11 @@ export function classifyProviderRunStatus({
   return "completed";
 }
 
-export function buildProviderAttemptLedgerEntry(providerRun = {}, {
+export function buildProviderAttemptLedgerEntry(providerRun = Object(), {
   attempt = null,
   taskId = null,
   runId = null,
-} = {}) {
+} = Object()) {
   const verification = providerRun.output_verification || providerRun.outputVerification || null;
   const status = providerRun.status || classifyProviderRunStatus({
     exitCode: providerRun.exitCode ?? null,
@@ -150,12 +150,12 @@ function buildProviderRunResult({
   command,
   stdout = "",
   stderr = "",
-  terminal = {},
+  terminal = Object(),
   commandSucceeded = null,
   startedAtMs = null,
   endedAtMs = Date.now(),
   outputVerification = null,
-} = {}) {
+} = Object()) {
   const exitCode = Number.isInteger(terminal.exitCode) ? terminal.exitCode : null;
   const signal = terminal.signal || null;
   const timedOut = !!terminal.timedOut;
@@ -168,7 +168,7 @@ function buildProviderRunResult({
     commandSucceeded,
   });
   const reason = providerRunReason(status, outputVerification);
-  const run = {
+  const run = Object.assign(Object(), {
     success: status === "completed",
     status,
     reason,
@@ -182,18 +182,18 @@ function buildProviderRunResult({
     startedAtMs,
     endedAtMs,
     durationMs: Number.isFinite(startedAtMs) && Number.isFinite(endedAtMs) ? endedAtMs - startedAtMs : null,
-  };
+  });
   if (outputVerification) run.output_verification = outputVerification;
   run.attempt_ledger = [buildProviderAttemptLedgerEntry(run)];
   return run;
 }
 
-function modelValue(ai = {}) {
+function modelValue(ai = Object()) {
   const model = cleanString(ai.model);
   return model && model !== "auto" ? model : "";
 }
 
-function renderCustomCommand(command, ai = {}) {
+function renderCustomCommand(command, ai = Object()) {
   const model = modelValue(ai);
   return cleanString(command).replaceAll("${model}", model);
 }
@@ -202,7 +202,7 @@ function inlineSettings(settings) {
   return settings.startsWith("{") || settings.startsWith("[");
 }
 
-export function resolveClaudeSettings(rootDir, value, { packageRoot = YOLO_PACKAGE_ROOT } = {}) {
+export function resolveClaudeSettings(rootDir, value, { packageRoot = YOLO_PACKAGE_ROOT } = Object()) {
   const settings = cleanString(value);
   if (!settings) return {
     raw: "",
@@ -250,14 +250,14 @@ export function resolveClaudeSettings(rootDir, value, { packageRoot = YOLO_PACKA
   };
 }
 
-function settingsValue(rootDir, value, options = {}) {
+function settingsValue(rootDir, value, options = Object()) {
   return resolveClaudeSettings(rootDir, value, options).value;
 }
 
-export function inspectProviderInvocationPreflight(invocation = {}, {
+export function inspectProviderInvocationPreflight(invocation = Object(), {
   existsSync = defaultExistsSync,
   commandExists = null,
-} = {}) {
+} = Object()) {
   const blockers = [];
   if (invocation.command && typeof commandExists === "function") {
     const exists = commandExists(invocation.command);
@@ -297,7 +297,7 @@ export function buildProviderInvocation({
   now = Date.now,
   random = Math.random,
   packageRoot = YOLO_PACKAGE_ROOT,
-} = {}) {
+} = Object()) {
   if (!config?.ai) throw new Error("buildProviderInvocation requires config.ai");
   const selected = selectedProvider(provider);
   const ai = config.ai || {};
@@ -385,7 +385,7 @@ export function spawnProviderPrompt(prompt, {
   existsSync = defaultExistsSync,
   readFileSync = defaultReadFileSync,
   packageRoot = YOLO_PACKAGE_ROOT,
-} = {}) {
+} = Object()) {
   if (!config?.ai) throw new Error("spawnProviderPrompt requires config.ai");
   if (!rootDir) throw new Error("spawnProviderPrompt requires rootDir");
   if (!runtimeDir) throw new Error("spawnProviderPrompt requires runtimeDir");
@@ -488,7 +488,7 @@ export function spawnProviderPrompt(prompt, {
         }, timeout)
       : null;
 
-    const finish = (success, stdout, stderr, terminal = {}) => {
+    const finish = (success, stdout, stderr, terminal = Object()) => {
       if (timer) clearTimeout(timer);
       if (done) return;
       done = true;
@@ -551,7 +551,7 @@ export function spawnProviderPrompt(prompt, {
   });
 }
 
-export function classifyProviderFailure(providerRun = {}) {
+export function classifyProviderFailure(providerRun = Object()) {
   const combined = `${providerRun.stdout || ""}\n${providerRun.stderr || ""}`;
   if (providerRun.blocked === true && providerRun.reason) {
     return {

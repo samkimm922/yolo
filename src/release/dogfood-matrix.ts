@@ -236,7 +236,7 @@ function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function normalizeEvidenceByScenario(options = {}) {
+function normalizeEvidenceByScenario(options = Object()) {
   return options.evidenceByScenario
     || options.evidence_by_scenario
     || options.scenarioEvidence
@@ -245,7 +245,7 @@ function normalizeEvidenceByScenario(options = {}) {
     || {};
 }
 
-function evidencePaths(evidence = {}) {
+function evidencePaths(evidence = Object()) {
   return unique([
     evidence.artifact_path,
     evidence.report_path,
@@ -255,14 +255,14 @@ function evidencePaths(evidence = {}) {
   ]);
 }
 
-function evidenceWarnings(evidence = {}) {
+function evidenceWarnings(evidence = Object()) {
   return unique([
     ...(evidence.warnings || []),
     ...(evidence.warning ? [evidence.warning] : []),
   ]);
 }
 
-function evidenceBlockers(evidence = {}) {
+function evidenceBlockers(evidence = Object()) {
   return [
     ...(evidence.blockers || []),
     ...(evidence.blocked_reasons || []),
@@ -278,7 +278,7 @@ function includesEveryEvidencePath(actualPaths, requiredPaths) {
   return requiredPaths.every((path) => actual.has(path));
 }
 
-function forbiddenSideEffectBlockers(evidence = {}) {
+function forbiddenSideEffectBlockers(evidence = Object()) {
   return FORBIDDEN_EVIDENCE_FLAGS
     .filter((field) => evidence[field] === true)
     .map((field) => ({
@@ -417,7 +417,7 @@ export function listDogfoodMatrixScenarios() {
   }));
 }
 
-export function buildDogfoodMatrixPlan(options = {}) {
+export function buildDogfoodMatrixPlan(options = Object()) {
   const scenarios = listDogfoodMatrixScenarios();
   return {
     schema_version: DOGFOOD_MATRIX_SCHEMA_VERSION,
@@ -461,7 +461,7 @@ function scenarioSetBlockers(scenarios = []) {
   }];
 }
 
-export function buildDogfoodMatrixReport(options = {}) {
+export function buildDogfoodMatrixReport(options = Object()) {
   const plan = options.plan || buildDogfoodMatrixPlan(options);
   const evidenceByScenario = normalizeEvidenceByScenario(options);
   const scenarios = plan.scenarios || listDogfoodMatrixScenarios();
@@ -496,7 +496,7 @@ export function buildDogfoodMatrixReport(options = {}) {
   };
 }
 
-export function buildDogfoodMatrixEvidence(statusByScenario = {}) {
+export function buildDogfoodMatrixEvidence(statusByScenario = Object()) {
   return Object.fromEntries(GENERIC_DOGFOOD_MATRIX.map((scenario) => {
     const configured = statusByScenario[scenario.id];
     const status = typeof configured === "string"

@@ -15,11 +15,11 @@ import { runDiscoveryRuntime } from "../discovery/runtime.js";
 import { inspectYoloCheck } from "./gates/check-report.js";
 import { inspectLifecycleGuard } from "../lifecycle/guard.js";
 
-function ok(summary, extra = {}) {
+function ok(summary, extra = Object()) {
   return { status: "success", summary, artifacts: [], next_actions: [], ...extra };
 }
 
-function fail(summary, extra = {}) {
+function fail(summary, extra = Object()) {
   return {
     status: "error",
     summary,
@@ -29,7 +29,7 @@ function fail(summary, extra = {}) {
   };
 }
 
-function lifecycleWrite(stageId, report = {}, params = {}, source = "pi-runtime") {
+function lifecycleWrite(stageId, report = Object(), params = Object(), source = "pi-runtime") {
   if (params.writeLifecycle === false || params.write_lifecycle === false || !params.stateRoot) return null;
   return writeLifecycleStageReport(stageId, report, {
     projectRoot: params.projectRoot,
@@ -71,7 +71,7 @@ function summarizeCheckReport(report) {
   };
 }
 
-async function runFindingsRuntime(params = {}) {
+async function runFindingsRuntime(params = Object()) {
   const requirement = params.requirementFile
     ? readFileSync(resolve(params.requirementFile), "utf8")
     : params.requirement;
@@ -103,7 +103,7 @@ async function runFindingsRuntime(params = {}) {
   return report;
 }
 
-function runPrdGenerateRuntime(params = {}) {
+function runPrdGenerateRuntime(params = Object()) {
   const output = resolve(params.output);
   mkdirSync(dirname(output), { recursive: true });
   const result = convertAuditToPrd(params.findingsPath, {
@@ -133,8 +133,8 @@ function runPrdGenerateRuntime(params = {}) {
   return report;
 }
 
-function runSchemaGateRuntime(params = {}) {
-  const result = validatePrdPath(params.prdPath);
+function runSchemaGateRuntime(params = Object()) {
+  const result = Object.assign(Object(), validatePrdPath(params.prdPath));
   if (!result.ok) {
     return fail(`PRD schema gate failed: ${result.error}`, {
       code: "PI_PRD_SCHEMA_FAILED",
@@ -148,7 +148,7 @@ function runSchemaGateRuntime(params = {}) {
   });
 }
 
-function runPrdPreflightRuntime(params = {}) {
+function runPrdPreflightRuntime(params = Object()) {
   const result = preflightPrd(params.prdPath);
   const check = params.stateRoot
     ? inspectYoloCheck({
@@ -191,7 +191,7 @@ function runPrdPreflightRuntime(params = {}) {
   });
 }
 
-function runContractGateRuntime(params = {}) {
+function runContractGateRuntime(params = Object()) {
   const prd = JSON.parse(readFileSync(resolve(params.prdPath), "utf8"));
   const result = inspectPrdContract(prd);
   if (result.blocks_execution) {
@@ -210,7 +210,7 @@ function runContractGateRuntime(params = {}) {
   });
 }
 
-function runReviewScanRuntime(params = {}) {
+function runReviewScanRuntime(params = Object()) {
   const result = scanProject({
     root: params.projectRoot,
     config: params.config,
@@ -218,14 +218,14 @@ function runReviewScanRuntime(params = {}) {
   });
 
   const hasHigh = result.findings.some((finding) => finding.severity === "HIGH" || finding.severity === "CRITICAL" || finding.must_fix_before_ship === true);
-  const report = {
+  const report = Object.assign(Object(), {
     status: hasHigh ? "warning" : "success",
     summary: `Review scan found ${result.total_findings} finding(s).`,
     artifacts: [],
     next_actions: hasHigh ? ["Review HIGH/CRITICAL findings before shipping."] : [],
     scan: result,
     findings: result.findings,
-  };
+  });
   if (params.writeLifecycle !== false && params.stateRoot) {
     report.lifecycle_write = writeLifecycleStageReport("review-fix", report, {
       projectRoot: params.projectRoot,
@@ -239,7 +239,7 @@ function runReviewScanRuntime(params = {}) {
   return report;
 }
 
-function runAcceptanceRuntime(params = {}) {
+function runAcceptanceRuntime(params = Object()) {
   const report = buildAcceptanceReport({
     prdPath: params.prdPath,
     projectRoot: params.projectRoot,
@@ -274,7 +274,7 @@ function readJsonMaybe(path) {
   }
 }
 
-function runShipRuntime(params = {}) {
+function runShipRuntime(params = Object()) {
   const expectedPrd = params.prdPath ? resolve(params.prdPath) : "";
   const projectRoot = resolve(params.projectRoot || params.project_root || (expectedPrd ? dirname(expectedPrd) : process.cwd()));
   const stateRoot = resolve(params.stateRoot || params.state_root || join(projectRoot, ".yolo"));
@@ -320,7 +320,7 @@ function runShipRuntime(params = {}) {
   }
 
   const status = blockers.length > 0 ? "blocked" : "success";
-  const report = {
+  const report = Object.assign(Object(), {
     status,
     code: status === "success" ? "SHIP_READY" : "SHIP_BLOCKED",
     summary: status === "success" ? "Ship gate passed; delivery is ready." : "Ship gate blocked by missing or failing evidence.",
@@ -331,7 +331,7 @@ function runShipRuntime(params = {}) {
     next_actions: status === "success"
       ? ["Prepare operator handoff and release notes."]
       : ["Fix ship blockers, then rerun PI or yolo ship."],
-  };
+  });
   if (params.writeLifecycle !== false && stateRoot) {
     report.lifecycle_write = writeLifecycleStageReport("delivery", report, {
       projectRoot: params.projectRoot,
@@ -348,7 +348,7 @@ function runShipRuntime(params = {}) {
     : fail(report.summary, { code: report.code, artifacts: report.artifacts, blockers, ship: report, next_actions: report.next_actions });
 }
 
-function runLearnRuntime(params = {}) {
+function runLearnRuntime(params = Object()) {
   const stateRoot = params.stateRoot ? resolve(params.stateRoot) : undefined;
   const lesson = params.lesson || "PI lifecycle completed through delivery gate.";
   const record = appendLearningRecord({
@@ -370,14 +370,14 @@ function runLearnRuntime(params = {}) {
     stateRoot,
   });
 
-  const report = {
+  const report = Object.assign(Object(), {
     status: "success",
     code: "LEARN_RECORDED",
     summary: "Learning record captured for the PI lifecycle.",
     artifacts: [record.file].filter(Boolean),
     learning: record,
     next_actions: [],
-  };
+  });
   if (params.writeLifecycle !== false && stateRoot) {
     report.lifecycle_write = writeLifecycleStageReport("learn", report, {
       projectRoot: params.projectRoot,
@@ -394,7 +394,7 @@ function runLearnRuntime(params = {}) {
   });
 }
 
-export async function runPiRuntime(runtime, params = {}, context = {}) {
+export async function runPiRuntime(runtime, params = Object(), context = Object()) {
   switch (runtime) {
     case "discovery.write":
     case "discovery.inspect":

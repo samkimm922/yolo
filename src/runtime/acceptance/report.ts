@@ -36,16 +36,16 @@ function defaultAdapterEvidencePath({ stateRoot, resolver }) {
   return join(stateRoot, "state", "evidence", "adapters", `${adapterId}-latest.json`);
 }
 
-function loadPrd(input = {}) {
+function loadPrd(input = Object()) {
   if (input.prd) return input.prd;
   return readJsonMaybe(input.prdPath || input.prd_path);
 }
 
-function acceptanceMode(input = {}, options = {}) {
+function acceptanceMode(input = Object(), options = Object()) {
   return clean(input.mode || input.acceptanceMode || input.acceptance_mode || options.mode || options.acceptanceMode || options.acceptance_mode || "accept").toLowerCase();
 }
 
-function approvalArtifactPath({ input = {}, options = {}, stateRoot }) {
+function approvalArtifactPath({ input = Object(), options = Object(), stateRoot }) {
   return input.approvalArtifact ||
     input.approval_artifact ||
     input.acceptanceApprovalArtifact ||
@@ -79,7 +79,7 @@ function readApprovalArtifact(path) {
   }
 }
 
-function warningApprovalDigest({ prdPath, mode, warnings = [] } = {}) {
+function warningApprovalDigest({ prdPath, mode, warnings = [] } = Object()) {
   const normalized = {
     prd_path: prdPath ? resolve(prdPath) : "",
     mode,
@@ -99,12 +99,12 @@ function approvalValueMatches(value, expected) {
   return clean(value) === clean(expected);
 }
 
-function hasApprovalAuditFields(approval = {}) {
+function hasApprovalAuditFields(approval = Object()) {
   return Boolean(clean(approval.approved_at || approval.approvedAt || approval.executed_at || approval.executedAt)) &&
     Boolean(clean(approval.approver || approval.approved_by || approval.approvedBy || approval.reviewer));
 }
 
-function approvalWarningsMatch(approval = {}, expected = {}) {
+function approvalWarningsMatch(approval = Object(), expected = Object()) {
   const expectedCount = expected.warning_count || 0;
   const digest = approval.warning_digest || approval.warnings_digest || approval.issue_digest || approval.issues_digest;
   if (digest) return clean(digest) === clean(expected.warning_digest);
@@ -113,7 +113,7 @@ function approvalWarningsMatch(approval = {}, expected = {}) {
   return expectedCount === 0;
 }
 
-function approvalFromArtifact(path, expected = {}) {
+function approvalFromArtifact(path, expected = Object()) {
   const read = readApprovalArtifact(path);
   const artifact = read.artifact;
   const payload = artifact?.report || artifact;
@@ -153,7 +153,7 @@ function readArgValue(argv, index) {
   return { value: argv[index + 1], consumed: 1 };
 }
 
-function pushIssue(issues, level, code, message, extra = {}) {
+function pushIssue(issues, level, code, message, extra = Object()) {
   issues.push({
     level,
     code,
@@ -251,7 +251,7 @@ function collectManualCriteria(prd) {
   return manualCriteria;
 }
 
-function runtimeEvidenceIssues(runReport, issues, { releaseMode = false } = {}) {
+function runtimeEvidenceIssues(runReport, issues, { releaseMode = false } = Object()) {
   if (!runReport) {
     pushIssue(issues, "P1", "RUN_REPORT_MISSING", "Acceptance requires run evidence or an explicit degraded/manual record.");
     return;
@@ -399,7 +399,7 @@ function uiEvidenceIssues({ prd, uiEvidence, resolver }, issues) {
   return { ui_task_count: tasks.length };
 }
 
-export function buildAcceptanceReport(input = {}, options = {}) {
+export function buildAcceptanceReport(input = Object(), options = Object()) {
   const prdPath = input.prdPath || input.prd_path || options.prdPath || options.prd_path || "";
   const prd = loadPrd({ ...options, ...input });
   const projectRoot = resolve(input.projectRoot || input.project_root || options.projectRoot || options.project_root || (prdPath ? dirname(resolve(prdPath)) : process.cwd()));
@@ -481,7 +481,7 @@ export function buildAcceptanceReport(input = {}, options = {}) {
     summary = summarizeIssues(issues);
   }
   const status = summary.p0 > 0 || summary.p1 > 0 ? "blocked" : summary.p2 > 0 || summary.human_review > 0 ? "warning" : "pass";
-  const report = {
+  const report = Object.assign(Object(), {
     schema_version: ACCEPTANCE_REPORT_SCHEMA_VERSION,
     schema: ACCEPTANCE_REPORT_SCHEMA,
     status,
@@ -517,7 +517,7 @@ export function buildAcceptanceReport(input = {}, options = {}) {
       : status === "warning"
         ? ["Review P2/human review notes before delivery."]
         : ["Continue to /yolo-ship."],
-  };
+  });
   if (input.writeLifecycle || input.write_lifecycle || options.writeLifecycle || options.write_lifecycle) {
     report.lifecycle_write = writeLifecycleStageReport("acceptance", report, {
       projectRoot,
@@ -533,7 +533,7 @@ export function buildAcceptanceReport(input = {}, options = {}) {
 
 export const inspectAcceptanceReport = buildAcceptanceReport;
 
-export function formatAcceptanceReportText(report = {}) {
+export function formatAcceptanceReportText(report = Object()) {
   const lines = [`[yolo accept] ${report.status}: ${report.summary}`];
   if (report.issue_summary) {
     lines.push(`issues: P0=${report.issue_summary.p0} P1=${report.issue_summary.p1} P2=${report.issue_summary.p2} human=${report.issue_summary.human_review}`);
@@ -548,7 +548,7 @@ export function formatAcceptanceReportText(report = {}) {
   return lines.join("\n");
 }
 
-export function runYoloAcceptCli(argv = process.argv.slice(2), io = {}) {
+export function runYoloAcceptCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const json = argv.includes("--json");

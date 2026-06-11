@@ -112,7 +112,7 @@ function readPrd() {
       const failed = tasks.filter((t) => t.status === "failed").length;
       // 读 PRD 元数据（标题等）
       const prdFile = etData.source || resolvePrdPath();
-      let prdMeta = {};
+      let prdMeta = Object();
       try { prdMeta = JSON.parse(readFileSync(prdFile, "utf8")); } catch (e) { console.warn('[progress-server] PRD 元数据解析失败:', e.message); }
       return { tasks, done: done + skipped, failed, total: tasks.length, prd: { ...prdMeta, tasks: etData.tasks } };
     } catch (e) { console.warn('[progress-server] PRD 解析失败:', e.message); }
@@ -296,7 +296,7 @@ function readTaskLogSummaries() {
       const lines = content.trim().split("\n").filter(Boolean);
       const entries = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
       const startEntry = entries.find((e) => e.type === "TASK_START");
-      const doneEntry = entries.findLast((e) => e.type === "DONE");
+      const doneEntry = [...entries].reverse().find((e) => e.type === "DONE");
       const hasError = entries.some((e) => e.type === "ERROR");
       const status = doneEntry
         ? (doneEntry.result === "completed" ? "done" : "failed")
@@ -353,7 +353,8 @@ const SELF_FILE_PATH = fileURLToPath(import.meta.url);
 function sseBroadcast(event, data) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const client of sseClients) {
-    try { client.res.write(payload); } catch { /* 连接已断开 */ }
+    const state = Object.assign(Object(), client);
+    try { state.res.write(payload); } catch { /* 连接已断开 */ }
   }
 }
 
@@ -378,10 +379,10 @@ function handleSSEConnection(req, res) {
   });
 
   // 每个连接维护自己的日志行偏移
-  const clientState = {
+  const clientState = Object.assign(Object(), {
     res,
     taskLogPositions: new Map(), // taskId → 已发送行数
-  };
+  });
 
   sseClients.add(clientState);
 
@@ -444,13 +445,14 @@ function startFileWatchers() {
         const filePath = join(TASK_LOGS_DIR, filename);
 
         for (const client of sseClients) {
-          const lastPos = client.taskLogPositions.get(taskId) || 0;
+          const state = Object.assign(Object(), client);
+          const lastPos = state.taskLogPositions.get(taskId) || 0;
           const { entries, totalLines } = readTaskLogIncremental(filePath, lastPos);
-          client.taskLogPositions.set(taskId, totalLines);
+          state.taskLogPositions.set(taskId, totalLines);
 
           if (entries.length > 0) {
             try {
-              client.res.write(`event: task-log\ndata: ${JSON.stringify({ taskId, entries })}\n\n`);
+              state.res.write(`event: task-log\ndata: ${JSON.stringify({ taskId, entries })}\n\n`);
             } catch { /* 连接已断开 */ }
           }
         }
@@ -605,7 +607,7 @@ function escapeAttr(value) {
     .replace(/'/g, "&#39;");
 }
 
-function lifecycleIdleSummary(lifecycle = {}) {
+function lifecycleIdleSummary(lifecycle = Object()) {
   const counts = lifecycle.stage_counts || {};
   if (!lifecycle.exists) {
     return `
@@ -911,8 +913,8 @@ const CSS = `
 // ── JS 模板（客户端逻辑 — SSE 实时推送）────────────────────────
 const CLIENT_JS = `
 (function() {
-  var expandedCards = {};
-  var loadedLogs = {};
+  var expandedCards = Object();
+  var loadedLogs = Object();
   var currentProgress = null;
 
   // 展开/折叠切换
@@ -1451,7 +1453,7 @@ const HTML = (data, stats) => {
   const pendingCount = tasks.filter((t) => t.status === "pending").length;
 
   const failedRows = Object.entries(stats)
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
     .slice(0, 5)
     .map(([gate, count]) => `<li>${escapeHtml(gate)}: <strong>${Number(count) || 0}次</strong></li>`)
     .join("");

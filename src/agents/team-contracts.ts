@@ -118,7 +118,7 @@ function asArray(value) {
   return [value];
 }
 
-function runtimeBindings(options = {}) {
+function runtimeBindings(options = Object()) {
   const raw = options.runtimeBindings || options.runtime_bindings || {};
   if (Array.isArray(raw)) {
     return Object.fromEntries(raw
@@ -128,14 +128,14 @@ function runtimeBindings(options = {}) {
   return raw && typeof raw === "object" ? raw : {};
 }
 
-function evidenceOnlyRoles(options = {}, selected = []) {
+function evidenceOnlyRoles(options = Object(), selected = []) {
   const explicit = asArray(options.evidenceOnlyRoles || options.evidence_only_roles).map(clean);
   if (explicit.length > 0) return new Set(explicit);
   const executable = options.executable === true || clean(options.mode || options.executionMode || options.execution_mode) === "execute";
   return executable ? new Set() : new Set(selected.map((agent) => agent.id));
 }
 
-function normalizeRuntimeBinding(agent, bindings = {}) {
+function normalizeRuntimeBinding(agent, bindings = Object()) {
   const binding = bindings[agent.id] || bindings[agent.label] || null;
   if (!binding) return null;
   if (typeof binding === "string") {
@@ -165,7 +165,7 @@ export function getTeamAgentContract(id = "pi-agent") {
   return clone(contract);
 }
 
-export function validateTeamAgentContract(contract = {}) {
+export function validateTeamAgentContract(contract = Object()) {
   const errors = [];
   for (const field of ["id", "label", "purpose"]) {
     if (!clean(contract[field])) errors.push({ code: "TEAM_AGENT_FIELD_MISSING", field, message: `${field} is required` });
@@ -193,7 +193,7 @@ export function agentsForLifecycleStage(stageId = "idea") {
     .map(clone);
 }
 
-export function buildTeamDispatchPlan(options = {}) {
+export function buildTeamDispatchPlan(options = Object()) {
   const currentStage = clean(options.currentStage || options.current_stage || "idea");
   const objective = clean(options.objective);
   const agents = agentsForLifecycleStage(currentStage);

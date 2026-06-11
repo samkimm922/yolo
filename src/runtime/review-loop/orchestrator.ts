@@ -89,7 +89,7 @@ export async function runReviewLoop({
   logReviewIssue = noop,
   logReviewDone = noop,
   logReviewError = noop,
-} = {}) {
+} = Object()) {
   if (!execFileSync) throw new Error("runReviewLoop requires execFileSync");
   if (typeof loadPRD !== "function") throw new Error("runReviewLoop requires loadPRD");
 
@@ -105,7 +105,7 @@ export async function runReviewLoop({
       return prd;
     }
   };
-  const reviewLogMeta = (extra = {}) => ({ run_id: runId, ...extra });
+  const reviewLogMeta = (extra = Object()) => ({ run_id: runId, ...extra });
   const recordReviewOutcome = (outcome) => {
     reviewOutcomeRecorded = true;
     markReviewOutcome({ taskResults, appendUnique, ...outcome });

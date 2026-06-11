@@ -35,7 +35,7 @@ function commandRecord(command, args, cwd, result, startedAt) {
   };
 }
 
-function runCommand(command, args, cwd, options = {}) {
+function runCommand(command, args, cwd, options = Object()) {
   const startedAt = new Date().toISOString();
   try {
     const result = spawnSync(command, args, {
@@ -64,7 +64,7 @@ function runCommand(command, args, cwd, options = {}) {
   }
 }
 
-function readPackageShape(packageJson = {}) {
+function readPackageShape(packageJson = Object()) {
   const packageName = packageJson.name || "yolo";
   const exportsMap = packageJson.exports || {};
   return {
@@ -98,11 +98,11 @@ function materializeWorkspace(plan, tempRoot) {
   };
 }
 
-function step(id, label, command, details = {}) {
+function step(id, label, command, details = Object()) {
   return { id, label, command, ...details };
 }
 
-export function buildCleanEnvironmentVerifyPlan(options = {}) {
+export function buildCleanEnvironmentVerifyPlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageShape = readPackageShape(options.packageJson || readJson(join(yoloRoot, "package.json")));
   const useClone = Boolean(options.repositoryUrl || options.repository_url);
@@ -237,7 +237,7 @@ function cleanCopyFilter(sourceRoot, excludes) {
   };
 }
 
-function prepareCleanWorkspace(plan, options = {}) {
+function prepareCleanWorkspace(plan, options = Object()) {
   const source = plan.source || {};
   if (source.mode === "git_clone") {
     const args = ["clone"];
@@ -339,7 +339,7 @@ function isManagedCleanEnvironmentTempRoot(tempRoot) {
   return basename(resolve(tempRoot)).startsWith(CLEAN_ENVIRONMENT_TEMP_PREFIX);
 }
 
-export function executeCleanEnvironmentVerifyPlan(plan, options = {}) {
+export function executeCleanEnvironmentVerifyPlan(plan, options = Object()) {
   const keepWorkspace = options.keepWorkspace === true;
   const cleanup = options.cleanup !== false;
   const explicitTempRoot = options.tempRoot || options.temp_root;
@@ -471,7 +471,7 @@ export function executeCleanEnvironmentVerifyPlan(plan, options = {}) {
   }
 }
 
-export function runCleanEnvironmentVerify(options = {}) {
+export function runCleanEnvironmentVerify(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const plan = buildCleanEnvironmentVerifyPlan({

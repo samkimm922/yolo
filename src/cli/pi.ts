@@ -8,8 +8,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const defaultYoloRoot = resolve(__dirname, "../..");
 
 export function parsePiArgs(argv = process.argv.slice(2)) {
-  const input = {};
-  const options = {};
+  const input = Object();
+  const options = Object();
   let json = false;
 
   const readValue = (index, prefix) => {
@@ -103,7 +103,7 @@ export function formatPiText(result) {
   return lines.join("\n");
 }
 
-export async function runPiCli(argv = process.argv.slice(2), io = {}) {
+export async function runPiCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const { input, options, json } = parsePiArgs(argv);
@@ -132,5 +132,6 @@ export async function runPiCli(argv = process.argv.slice(2), io = {}) {
   if (json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatPiText(result)}\n`);
 
-  return result.exit_code ?? (result.status === "success" ? 0 : 1);
+  const dynamicResult = Object.assign(Object(), result);
+  return dynamicResult.exit_code ?? (dynamicResult.status === "success" ? 0 : 1);
 }

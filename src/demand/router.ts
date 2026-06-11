@@ -188,7 +188,7 @@ function questionForSlot(slot) {
   };
 }
 
-function questionQueueFor(missingSlots = [], options = {}) {
+function questionQueueFor(missingSlots = [], options = Object()) {
   const missing = new Set(asArray(missingSlots).map(clean).filter(Boolean));
   const nonApprovalSlots = DEMAND_REQUIRED_PRD_SLOTS
     .filter((slot) => slot !== "approval" && missing.has(slot));
@@ -210,7 +210,7 @@ function textFrom(...values) {
     .toLowerCase();
 }
 
-function demandTextItems(input = {}, session = {}) {
+function demandTextItems(input = Object(), session = Object()) {
   const requirements = requirementItems(session, input);
   const scenarios = asArray(session.scenario_matrix?.scenarios || session.scenarios);
   return [
@@ -279,7 +279,7 @@ function demandTextItems(input = {}, session = {}) {
   ];
 }
 
-function resolveRoot(input = {}, options = {}) {
+function resolveRoot(input = Object(), options = Object()) {
   return resolve(clean(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd) || process.cwd());
 }
 
@@ -312,7 +312,7 @@ function readDemandSessionFile(pathOrDir) {
   }
 }
 
-function loadSession(input = {}, options = {}) {
+function loadSession(input = Object(), options = Object()) {
   if (input.session && typeof input.session === "object") return input.session;
   const projectRoot = resolveRoot(input, options);
   const demandPath = clean(input.demandPath || input.demand_path || input.sessionPath || input.session_path);
@@ -325,7 +325,7 @@ function loadSession(input = {}, options = {}) {
   return null;
 }
 
-function buildStatusSession(input = {}, options = {}) {
+function buildStatusSession(input = Object(), options = Object()) {
   const loaded = loadSession(input, options);
   if (loaded) return loaded;
   const objective = clean(input.objective || input.idea || input.requirement || input.text);
@@ -355,18 +355,18 @@ function buildStatusSession(input = {}, options = {}) {
   };
 }
 
-function targetFiles(session = {}, input = {}) {
+function targetFiles(session = Object(), input = Object()) {
   return unique([
     ...asArray(input.target_files || input.targetFiles),
     ...asArray(session.project?.target_files || session.target_files),
   ]);
 }
 
-function requirementItems(session = {}, input = {}) {
+function requirementItems(session = Object(), input = Object()) {
   return asArray(session.requirements?.active || session.requirements || input.requirements);
 }
 
-function acceptanceItems(session = {}, input = {}) {
+function acceptanceItems(session = Object(), input = Object()) {
   const requirements = requirementItems(session, input);
   return firstItems(
     input.acceptance_criteria,
@@ -379,7 +379,7 @@ function acceptanceItems(session = {}, input = {}) {
   );
 }
 
-function assumptions(session = {}, input = {}) {
+function assumptions(session = Object(), input = Object()) {
   return [
     ...stringItems(input.assumptions),
     ...stringItems(session.assumptions),
@@ -387,7 +387,7 @@ function assumptions(session = {}, input = {}) {
   ];
 }
 
-function evidenceItems(session = {}, input = {}) {
+function evidenceItems(session = Object(), input = Object()) {
   return firstItems(input.evidence, session.evidence, session.investigation?.evidence);
 }
 
@@ -399,7 +399,7 @@ function normalizeEvidenceRole(value) {
   return role;
 }
 
-function evidenceResultSources(session = {}, input = {}) {
+function evidenceResultSources(session = Object(), input = Object()) {
   return [
     input.evidence_results,
     input.evidenceResults,
@@ -421,7 +421,7 @@ function evidenceResultSources(session = {}, input = {}) {
   ];
 }
 
-function evidenceResultItems(session = {}, input = {}) {
+function evidenceResultItems(session = Object(), input = Object()) {
   return evidenceResultSources(session, input)
     .flatMap((value) => {
       if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -439,7 +439,7 @@ function evidenceResultItems(session = {}, input = {}) {
     .filter((item) => item.role);
 }
 
-function evidenceRecords(result = {}) {
+function evidenceRecords(result = Object()) {
   return [
     result.evidence,
     result.result?.evidence,
@@ -453,7 +453,7 @@ function evidenceRecords(result = {}) {
   ].flatMap((value) => asArray(value)).filter(Boolean);
 }
 
-function evidenceRecordScope(record = {}) {
+function evidenceRecordScope(record = Object()) {
   if (typeof record === "string") return "unknown";
   if (!record || typeof record !== "object") return "unknown";
   const scope = clean(record.scope || record.evidence_scope || record.source_scope || record.kind || record.type).toLowerCase();
@@ -479,20 +479,20 @@ function evidenceRecordScope(record = {}) {
   return "unknown";
 }
 
-function evidenceRecordHasDeclaredScope(record = {}) {
+function evidenceRecordHasDeclaredScope(record = Object()) {
   if (!record || typeof record !== "object") return false;
   const scope = clean(record.scope || record.evidence_scope || record.source_scope).toLowerCase();
   return VALID_EVIDENCE_SCOPES.has(scope);
 }
 
-function evidenceRecordHasProjectLocator(record = {}) {
+function evidenceRecordHasProjectLocator(record = Object()) {
   if (!record || typeof record !== "object") return false;
   const path = clean(record.path || record.file || record.file_path || record.filename);
   if (!path || /^https?:\/\//i.test(path)) return false;
   return true;
 }
 
-function evidenceScopeSummary(result = {}) {
+function evidenceScopeSummary(result = Object()) {
   const records = evidenceRecords(result);
   const analyzed = records.map((record) => ({
     scope: evidenceRecordScope(record),
@@ -509,7 +509,7 @@ function evidenceScopeSummary(result = {}) {
   };
 }
 
-function evidenceScopeDeclarationIssues(result = {}) {
+function evidenceScopeDeclarationIssues(result = Object()) {
   const role = normalizeEvidenceRole(result.role || result.agent || result.agent_role || result.agentRole || result.name);
   const invalid = evidenceRecords(result).filter((record) => !evidenceRecordHasDeclaredScope(record));
   if (invalid.length === 0) return [];
@@ -520,7 +520,7 @@ function evidenceScopeDeclarationIssues(result = {}) {
   }];
 }
 
-function resultEvidencePresent(result = {}) {
+function resultEvidencePresent(result = Object()) {
   return hasItems(result.evidence)
     || hasItems(result.sources)
     || hasItems(result.findings)
@@ -529,7 +529,7 @@ function resultEvidencePresent(result = {}) {
     || hasItems(result.output?.evidence);
 }
 
-function resultPayloadPresent(result = {}) {
+function resultPayloadPresent(result = Object()) {
   return result.result != null
     || result.output != null
     || result.claim != null
@@ -538,7 +538,7 @@ function resultPayloadPresent(result = {}) {
     || result.verdict != null;
 }
 
-function evidenceResultComplete(result = {}) {
+function evidenceResultComplete(result = Object()) {
   const status = clean(result.status || result.state || result.completed_status).toLowerCase();
   const completed = result.completed === true
     || result.complete === true
@@ -552,7 +552,7 @@ function requiredEvidenceRoles(policy) {
   return [];
 }
 
-function evidenceResultBlockingIssues(result = {}) {
+function evidenceResultBlockingIssues(result = Object()) {
   const issues = [];
   const role = normalizeEvidenceRole(result.role || result.agent || result.agent_role || result.agentRole || result.name);
   const recommendation = clean(result.recommendation || result.result?.recommendation || result.output?.recommendation).toLowerCase();
@@ -584,7 +584,7 @@ function evidenceResultBlockingIssues(result = {}) {
   return issues;
 }
 
-function projectEvidenceBlockingIssues(result = {}) {
+function projectEvidenceBlockingIssues(result = Object()) {
   const role = normalizeEvidenceRole(result.role || result.agent || result.agent_role || result.agentRole || result.name);
   const summary = evidenceScopeSummary(result);
   if (summary.records.length === 0 || summary.has_project) return [];
@@ -627,11 +627,11 @@ function uniqueBlockers(blockers = []) {
   return result;
 }
 
-function riskItems(session = {}, input = {}) {
+function riskItems(session = Object(), input = Object()) {
   return firstItems(input.risks, session.risks, session.reflection?.risks, session.investigation?.risks);
 }
 
-function slotValues(session = {}, input = {}) {
+function slotValues(session = Object(), input = Object()) {
   const requirements = requirementItems(session, input);
   const scopeIn = firstItems(
     input.scope_in,
@@ -654,7 +654,7 @@ function slotValues(session = {}, input = {}) {
   };
 }
 
-function unresolvedAssumptions(session = {}, input = {}) {
+function unresolvedAssumptions(session = Object(), input = Object()) {
   const raw = [
     ...asArray(input.assumptions),
     ...asArray(session.assumptions),
@@ -676,7 +676,7 @@ function hasGreenfieldSignal(text) {
   return /\b(new|greenfield|from scratch|startup|mvp|idea|prototype)\b|新项目|从零|全新|想法|原型/.test(text);
 }
 
-function hasExistingSignal(text, files = [], input = {}) {
+function hasExistingSignal(text, files = [], input = Object()) {
   return files.length > 0
     || Boolean(clean(input.demandPath || input.demand_path || input.sessionPath || input.session_path))
     || /\b(existing|current|legacy|brownfield|already|implemented|bug|fix|regression|refactor|production)\b|已有|现有|当前|线上|半成品|实现|修复|改造|回归/.test(text);
@@ -701,7 +701,7 @@ function hasPrdIntent(text) {
   return /\b(prd|requirements?|acceptance|ship|implement|execute|build now)\b|需求文档|验收|执行|实现|交付/.test(text);
 }
 
-export function inspectDemandTriage(input = {}, options = {}) {
+export function inspectDemandTriage(input = Object(), options = Object()) {
   const session = options.session || buildStatusSession(input, options);
   const files = targetFiles(session, input);
   const sourceText = textFrom(...demandTextItems(input, session));
@@ -759,16 +759,16 @@ export function inspectDemandTriage(input = {}, options = {}) {
   };
 }
 
-export function inspectDemandPrdReadiness(input = {}, options = {}) {
+export function inspectDemandPrdReadiness(input = Object(), options = Object()) {
   const session = options.session || buildStatusSession(input, options);
   const triage = options.triage || inspectDemandTriage(input, { ...options, session });
   const slots = slotValues(session, input);
   const missingSlots = DEMAND_REQUIRED_PRD_SLOTS.filter((slot) => !hasItems(slots[slot]));
-  const blockerList = missingSlots.map((slot) => ({
+  const blockerList = Object.assign([], missingSlots.map((slot) => ({
     code: `MISSING_${slot.toUpperCase()}`,
     slot,
     message: `PRD readiness requires ${slot}.`,
-  }));
+  })));
   blockerList.push(...activeBlockers(input.blockers, session.blockers, session.readiness?.blockers));
   const openQuestions = asArray(session.discussion?.open_questions || session.open_questions || input.open_questions)
     .map((item) => typeof item === "string" ? { text: clean(item), blocking: true } : {
@@ -845,7 +845,7 @@ export function inspectDemandPrdReadiness(input = {}, options = {}) {
   };
 }
 
-export function buildDemandEvidenceTasks(triage = {}, readiness = {}) {
+export function buildDemandEvidenceTasks(triage = Object(), readiness = Object()) {
   if (triage.evidence_policy === "none") return [];
   const tasks = [{
     role: "explorer",
@@ -879,7 +879,7 @@ export function inspectEvidenceAgreement(results = []) {
   }
   for (const [claim, claimResults] of byClaim) {
     const recommendations = unique(claimResults.map((item) => item.recommendation));
-    if (recommendations.includes("block") || (recommendations.includes("proceed") && recommendations.some((item) => ["clarify", "cross_check"].includes(clean(item.recommendation))))) {
+    if (recommendations.includes("block") || (recommendations.includes("proceed") && claimResults.some((item) => ["clarify", "cross_check"].includes(clean(item.recommendation))))) {
       conflicts.push({
         code: "EVIDENCE_AGENT_CONFLICT",
         claim,
@@ -894,7 +894,7 @@ export function inspectEvidenceAgreement(results = []) {
   };
 }
 
-function stageFrom(readiness = {}, triage = {}) {
+function stageFrom(readiness = Object(), triage = Object()) {
   if (readiness.prd_ready) return "prd_ready";
   const missingSlots = asArray(readiness.missing_slots).map(clean).filter(Boolean);
   const nonApprovalMissing = missingSlots.filter((slot) => slot !== "approval");
@@ -905,7 +905,7 @@ function stageFrom(readiness = {}, triage = {}) {
   return "discuss";
 }
 
-function nextActionFor(stage, triage = {}, readiness = {}, evidenceTasks = [], nextQuestion = null) {
+function nextActionFor(stage, triage = Object(), readiness = Object(), evidenceTasks = [], nextQuestion = null) {
   if (readiness.prd_ready) return "Proceed to yolo prd after user confirms this demand state.";
   if (nextQuestion?.text) return `请回答：${nextQuestion.text}`;
   if (stage === "evidence") return `Run ${evidenceTasks.map((task) => task.role).join(" + ")} before treating project claims as facts.`;
@@ -915,7 +915,7 @@ function nextActionFor(stage, triage = {}, readiness = {}, evidenceTasks = [], n
   return triage.route === "careful" ? "Discuss risks and evidence blockers before PRD." : "Continue fast demand clarification.";
 }
 
-export function buildDemandSessionState(input = {}, options = {}) {
+export function buildDemandSessionState(input = Object(), options = Object()) {
   const session = buildStatusSession(input, options);
   const triage = inspectDemandTriage(input, { ...options, session });
   const readiness = inspectDemandPrdReadiness(input, { ...options, session, triage });

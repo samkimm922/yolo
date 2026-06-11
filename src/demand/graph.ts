@@ -111,7 +111,7 @@ export function demandReadyArtifacts(completed = [], artifacts = DEMAND_ARTIFACT
 
 export function demandBlockedArtifacts(completed = [], artifacts = DEMAND_ARTIFACTS) {
   const done = completed instanceof Set ? completed : new Set(completed);
-  const blocked = {};
+  const blocked = Object();
   for (const artifact of artifacts) {
     if (done.has(artifact.id)) continue;
     const missing = artifact.requires.filter((id) => !done.has(id));
@@ -135,8 +135,8 @@ export function buildDemandArtifactGraph(completed = []) {
     schema: DEMAND_GRAPH_SCHEMA,
     build_order: demandBuildOrder(),
     completed: [...done].sort(),
-    ready: demandReadyArtifacts(done),
-    blocked: demandBlockedArtifacts(done),
+    ready: demandReadyArtifacts(Array.from(done)),
+    blocked: demandBlockedArtifacts(Array.from(done)),
     artifacts,
   };
 }

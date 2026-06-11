@@ -1,11 +1,11 @@
 import { skipTaskTransition } from "../task-state/transitions.js";
 import { taskForValidSkipPostconditions } from "./post-precheck.js";
 
-export function precheckRequestedSkip(precheck = {}) {
+export function precheckRequestedSkip(precheck = Object()) {
   return String(precheck.stdout || "").includes("PRE-CHECK SKIP");
 }
 
-export function buildPrecheckValidSkipOutcome({ task = {} } = {}) {
+export function buildPrecheckValidSkipOutcome({ task = Object() } = Object()) {
   const skipTask = taskForValidSkipPostconditions(task);
   return {
     logMessage: "precheck: 已修复，post_conditions 已满足，跳过",
@@ -34,11 +34,11 @@ export function buildPrecheckValidSkipOutcome({ task = {} } = {}) {
   };
 }
 
-export function precheckInvalidSkipMessage(postResult = {}) {
+export function precheckInvalidSkipMessage(postResult = Object()) {
   return `precheck 想跳过，但 post_conditions 未满足: ${(postResult.failed || []).join("; ")}，继续执行修复`;
 }
 
-export function precheckErrorMessage(precheck = {}) {
+export function precheckErrorMessage(precheck = Object()) {
   if (precheck.ok) return null;
   return `precheck 错误: ${precheck.stderr || precheck.stdout?.slice(0, 100) || "unknown"}，继续执行`;
 }

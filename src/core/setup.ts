@@ -68,7 +68,7 @@ function readJsonParseError(path) {
   }
 }
 
-function missingBootstrapArtifacts(plan = {}) {
+function missingBootstrapArtifacts(plan = Object()) {
   const projectRoot = plan.project_root;
   const missingDirs = (plan.directories || []).filter((dir) => !existsSync(join(projectRoot, dir)));
   const missingFiles = (plan.files || []).map((file) => file.path).filter((path) => !existsSync(join(projectRoot, path)));
@@ -79,7 +79,7 @@ function missingBootstrapArtifacts(plan = {}) {
   };
 }
 
-function bootstrapExistingCount(plan = {}) {
+function bootstrapExistingCount(plan = Object()) {
   const projectRoot = plan.project_root;
   const existingDirs = (plan.directories || []).filter((dir) => existsSync(join(projectRoot, dir))).length;
   const existingFiles = (plan.files || []).filter((file) => existsSync(join(projectRoot, file.path))).length;
@@ -90,13 +90,13 @@ function hasDevelopmentMarkers(projectRoot) {
   return DEVELOPMENT_MARKERS.some((marker) => existsSync(join(projectRoot, marker)));
 }
 
-function doctorBridgeExistingCount(report = {}) {
+function doctorBridgeExistingCount(report = Object()) {
   const total = report.agent_bridge?.expected_artifact_count || 0;
   const missing = report.agent_bridge?.missing_artifact_count || 0;
   return Math.max(0, total - missing);
 }
 
-function doctorGap(check = {}) {
+function doctorGap(check = Object()) {
   const paths = [check.path].filter(Boolean);
   const missingArtifacts = check.missing_artifacts || [];
   return {
@@ -178,7 +178,7 @@ function classifySetupState({ plan, initialDoctor, riskGaps }) {
   return "partial";
 }
 
-function resultStateFromDoctor(report = {}) {
+function resultStateFromDoctor(report = Object()) {
   return report.status === "pass" ? "initialized" : "partial";
 }
 
@@ -353,7 +353,7 @@ function humanContextGaps(setupState) {
   ];
 }
 
-export function setupProject(options = {}) {
+export function setupProject(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
   const yoloRoot = resolve(options.yoloRoot || options.yolo_root || DEFAULT_YOLO_ROOT);
   const homeDir = resolve(options.homeDir || options.home_dir || homedir());
@@ -480,17 +480,17 @@ export function setupProject(options = {}) {
   };
 }
 
-export function inspectProjectSetupTarget(options = {}) {
+export function inspectProjectSetupTarget(options = Object()) {
   return setupProject({ ...options, dryRun: true });
 }
 
-export function buildProjectSetupPlan(options = {}) {
+export function buildProjectSetupPlan(options = Object()) {
   return setupProject({ ...options, dryRun: true });
 }
 
 export const runProjectSetup = setupProject;
 
-export function formatProjectSetupText(result = {}) {
+export function formatProjectSetupText(result = Object()) {
   const lines = [
     `[yolo setup] ${result.status}: ${result.summary}`,
     `root: ${result.project_root}`,

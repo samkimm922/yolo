@@ -9,7 +9,7 @@ import {
   inspectFixtureDefinition,
 } from "./registry.js";
 
-function fixtureWorkspace(id, options = {}) {
+function fixtureWorkspace(id, options = Object()) {
   return mkdtempSync(join(resolve(options.tmpRoot || tmpdir()), `yolo-fixture-${id}-`));
 }
 
@@ -20,7 +20,7 @@ function commandName(command = "") {
   return match ? match[1] : "";
 }
 
-function classifyCommandFailure(result = {}) {
+function classifyCommandFailure(result = Object()) {
   const stderr = String(result.stderr_tail || "");
   const stdout = String(result.stdout_tail || "");
   const text = `${stdout}\n${stderr}`;
@@ -76,17 +76,18 @@ function runCommand(command, cwd, timeout_ms, spawnSync = defaultSpawnSync) {
     timeout: timeout_ms,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const commandResult = {
+  const spawnError = result.error ? Object.assign(Object(), result.error) : null;
+  const commandResult = Object.assign(Object(), {
     command,
     exit_code: result.status,
     signal: result.signal,
-    timed_out: result.error?.code === "ETIMEDOUT" || result.signal === "SIGTERM",
+    timed_out: spawnError?.code === "ETIMEDOUT" || result.signal === "SIGTERM",
     status: result.status === 0 ? "pass" : "blocked",
     started_at: startedAt,
     finished_at: new Date().toISOString(),
     stdout_tail: String(result.stdout || "").slice(-4000),
     stderr_tail: String(result.stderr || "").slice(-4000),
-  };
+  });
   const failure = classifyCommandFailure(commandResult);
   if (failure) commandResult.failure = failure;
   return commandResult;
@@ -106,13 +107,13 @@ function safeRelativeEvidencePath(value) {
   return normalized;
 }
 
-export function copyFixtureToWorkspace(fixture, options = {}) {
+export function copyFixtureToWorkspace(fixture, options = Object()) {
   const workspace = resolve(options.workspace || fixtureWorkspace(fixture.id, options));
   cpSync(fixture.fixture_dir, workspace, { recursive: true });
   return workspace;
 }
 
-export function runFixtureHarness(id, options = {}) {
+export function runFixtureHarness(id, options = Object()) {
   const fixture = typeof id === "string" ? getFixtureDefinition(id, options) : id;
   const inspection = inspectFixtureDefinition(fixture);
   if (inspection.blocks_execution) {

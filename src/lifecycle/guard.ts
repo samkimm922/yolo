@@ -54,20 +54,20 @@ function readCurrentStage(statusPath) {
   }
 }
 
-function stageStatus(state = {}, stageId = "") {
+function stageStatus(state = Object(), stageId = "") {
   return (state.stages || []).find((stage) => stage.id === stageId)?.status || "pending";
 }
 
-function stageCompleted(state = {}, stageId = "") {
+function stageCompleted(state = Object(), stageId = "") {
   return stageStatus(state, stageId) === "completed";
 }
 
-function stageReady(state = {}, stageId = "") {
+function stageReady(state = Object(), stageId = "") {
   const status = stageStatus(state, stageId);
   return status === "completed" || (status === "warning" && WARNING_READY_STAGES.has(stageId));
 }
 
-function inputPathExists(projectRoot, input = {}, keys = []) {
+function inputPathExists(projectRoot, input = Object(), keys = []) {
   return keys.some((key) => {
     const path = normalizePath(projectRoot, input[key] || input[key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)]);
     return path && existsSync(path);
@@ -94,7 +94,7 @@ function normalizeReportStatus(value) {
   return clean(value).toLowerCase().replace(/\s+/g, "_");
 }
 
-function reportStatusValues(report = {}, depth = 0) {
+function reportStatusValues(report = Object(), depth = 0) {
   if (!report || typeof report !== "object" || depth > 4) return [];
   return [
     report.status,
@@ -145,7 +145,7 @@ function meaningfulEvidenceEntry(entry) {
   return Object.keys(entry).length > 0;
 }
 
-function hasManualAcceptanceCriteria(report = {}) {
+function hasManualAcceptanceCriteria(report = Object()) {
   const manualCriteria = Array.isArray(report.manual_criteria) ? report.manual_criteria : [];
   const nested = Array.isArray(report.report?.manual_criteria) ? report.report.manual_criteria : [];
   const allManual = [...manualCriteria, ...nested];
@@ -168,7 +168,7 @@ function hasManualAcceptanceCriteria(report = {}) {
   return unresolved.length > 0;
 }
 
-function reportEvidenceEntries(report = {}) {
+function reportEvidenceEntries(report = Object()) {
   return [
     ...(Array.isArray(report.evidence) ? report.evidence : []),
     ...(Array.isArray(report.report?.evidence) ? report.report.evidence : []),
@@ -181,7 +181,7 @@ function samePath(projectRoot, left, right) {
   return Boolean(leftPath && rightPath && leftPath === rightPath);
 }
 
-function checkedPrdMatchesInput(projectRoot, stateRoot, input = {}) {
+function checkedPrdMatchesInput(projectRoot, stateRoot, input = Object()) {
   const prdPath = normalizePath(projectRoot, input.prdPath || input.prd_path || input.prd);
   if (!prdPath) return false;
   const path = lifecycleArtifactPath("check", { stateRoot });
@@ -288,7 +288,7 @@ function deliveryHardGateBlockers(stateRoot) {
   return blockers;
 }
 
-function requiredStagesFor(command, input = {}) {
+function requiredStagesFor(command, input = Object()) {
   if (command === "yolo-plan") {
     return [{
       stage: "discovery",
@@ -369,7 +369,7 @@ function requiredStagesFor(command, input = {}) {
   return [];
 }
 
-function requirementSatisfied(requirement, state, projectRoot, stateRoot, options = {}) {
+function requirementSatisfied(requirement, state, projectRoot, stateRoot, options = Object()) {
   const lifecycleReady = requirement.mustBeStrictCompleted
     ? stageCompleted(state, requirement.stage)
     : stageReady(state, requirement.stage);
@@ -383,7 +383,7 @@ function requirementSatisfied(requirement, state, projectRoot, stateRoot, option
   return (requirement.defaultArtifacts || []).some((path) => defaultArtifactExists(stateRoot, path));
 }
 
-export function nextLifecycleAction(options = {}) {
+export function nextLifecycleAction(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
   const stateRoot = resolveLifecycleStateRoot({ ...options, projectRoot });
   const statusPath = lifecycleStatusPath({ ...options, projectRoot, stateRoot });
@@ -417,7 +417,7 @@ export function nextLifecycleAction(options = {}) {
   };
 }
 
-export function inspectLifecycleGuard(input = {}, options = {}) {
+export function inspectLifecycleGuard(input = Object(), options = Object()) {
   const command = asCommand(input.command || options.command);
   const projectRoot = resolve(input.projectRoot || input.project_root || options.projectRoot || options.project_root || input.cwd || options.cwd || process.cwd());
   const stateRoot = resolveLifecycleStateRoot({ ...options, ...input, projectRoot });
@@ -578,7 +578,7 @@ export function inspectLifecycleDrift(projectRoot: string): LifecycleDriftResult
   return { has_drift: drift_records.length > 0, drift_records };
 }
 
-export function formatLifecycleGuardText(result = {}) {
+export function formatLifecycleGuardText(result = Object()) {
   const lines = [`[yolo guard] ${result.status}: ${result.summary || ""}`.trimEnd()];
   if (result.current_stage) lines.push(`current_stage: ${result.current_stage}`);
   if (result.target_stage) lines.push(`target_stage: ${result.target_stage}`);

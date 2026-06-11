@@ -16,7 +16,7 @@ export function buildRunTaskExceptionOutcome({
   attempt = 0,
   history = [],
   maxAttempts = 3,
-} = {}) {
+} = Object()) {
   const failKey = exceptionFailureKey(error);
   const errorMessage = String(error?.message || error);
 

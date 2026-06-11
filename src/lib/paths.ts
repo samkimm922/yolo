@@ -41,7 +41,7 @@ export function prdSearchDirs(yoloRoot = DEFAULT_YOLO_ROOT) {
   ];
 }
 
-export function resolvePrdPath(input, yoloRoot = DEFAULT_YOLO_ROOT, options = {}) {
+export function resolvePrdPath(input, yoloRoot = DEFAULT_YOLO_ROOT, options = Object()) {
   if (!input) return null;
 
   const raw = String(input);

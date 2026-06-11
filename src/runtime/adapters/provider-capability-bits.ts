@@ -38,7 +38,7 @@ export const PROVIDER_CAPABILITY_BIT_DEFAULTS: Record<string, Record<ProviderCap
   },
 };
 
-export function buildProviderCapabilityBits(provider: string, overrides: Record<string, boolean> = {}) {
+export function buildProviderCapabilityBits(provider: string, overrides: Record<string, boolean> = Object()) {
   const normalized = String(provider ?? "").trim().toLowerCase();
   const defaults = PROVIDER_CAPABILITY_BIT_DEFAULTS[normalized] || PROVIDER_CAPABILITY_BIT_DEFAULTS.custom;
   return {
@@ -48,7 +48,7 @@ export function buildProviderCapabilityBits(provider: string, overrides: Record<
   };
 }
 
-export function buildProviderParityMatrix(options: { providers?: string[]; overrides?: Record<string, Record<string, boolean>> } = {}) {
+export function buildProviderParityMatrix(options: { providers?: string[]; overrides?: Record<string, Record<string, boolean>> } = Object()) {
   const providers = options.providers || Object.keys(PROVIDER_CAPABILITY_BIT_DEFAULTS);
   const overrides = options.overrides || {};
 
@@ -62,7 +62,7 @@ export function buildProviderParityMatrix(options: { providers?: string[]; overr
   };
 }
 
-export function inspectProviderParityMatrix(options: { providers?: string[]; overrides?: Record<string, Record<string, boolean>> } = {}) {
+export function inspectProviderParityMatrix(options: { providers?: string[]; overrides?: Record<string, Record<string, boolean>> } = Object()) {
   const matrix = buildProviderParityMatrix(options);
   const warnings: Array<{ code: string; provider: string; message: string }> = [];
 

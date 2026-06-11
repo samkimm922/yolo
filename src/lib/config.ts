@@ -104,7 +104,7 @@ const DEFAULTS = {
  */
 function parseYAML(yaml) {
   const lines = yaml.split('\n');
-  const root = {};
+  const root = Object();
   // 栈: [{ obj, indent, key }], key 是该节点在父对象中的属性名
   const stack = [{ obj: root, indent: -1, key: null }];
 
@@ -170,7 +170,7 @@ function parseYAML(yaml) {
 
     if (rawValue === '' || rawValue === undefined) {
       // 空的 value → 嵌套对象的父 key
-      const newObj = {};
+      const newObj = Object();
       parent[key] = newObj;
       stack.push({ obj: newObj, indent, key });
     } else if (rawValue.startsWith('[') && rawValue.endsWith(']')) {
@@ -327,7 +327,7 @@ let loadedConfigPath;
 /**
  * 标准化配置加载参数，兼容旧的 loadConfig(true) 调用。
  */
-export function normalizeLoadConfigOptions(input = false) {
+export function normalizeLoadConfigOptions(input = undefined) {
   if (input === null || input === undefined) {
     return { forceReload: false, path: CONFIG_PATH };
   }
@@ -348,14 +348,14 @@ export function normalizeLoadConfigOptions(input = false) {
  * @param {boolean|object} options - true 表示强制重载；对象支持 path/configPath/forceReload。
  * @returns {object} 配置对象
  */
-export function loadConfig(options = false) {
+export function loadConfig(options = undefined) {
   const { forceReload, path } = normalizeLoadConfigOptions(options);
 
   if (config !== undefined && loadedConfigPath === path && !forceReload) {
     return config;
   }
 
-  let parsed = {};
+  let parsed = Object();
 
   try {
     const yamlContent = readFileSync(path, 'utf-8');

@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { prdSearchDirs, resolvePrdPath } from "../../lib/paths.js";
 
-export function findLatestPrd({ yoloRoot, searchDirs = prdSearchDirs(yoloRoot) } = {}) {
+export function findLatestPrd({ yoloRoot, searchDirs = prdSearchDirs(yoloRoot) } = Object()) {
   try {
     const files = [];
     for (const dir of searchDirs) {
@@ -33,7 +33,7 @@ export function resolveRunnerCliArgs({
   yoloRoot,
   resolvePrdPathFn = resolvePrdPath,
   findLatestPrdFn = () => findLatestPrd({ yoloRoot }),
-} = {}) {
+} = Object()) {
   const args = argv.slice(2);
   const prdFlagIndex = args.findIndex((arg) => arg.startsWith("--prd"));
   let prdArg;

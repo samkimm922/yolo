@@ -15,7 +15,7 @@ function isSafeRelativePath(value) {
   return normalized !== ".." && !normalized.startsWith("../");
 }
 
-function commandPolicy(command, fixture = {}) {
+function commandPolicy(command, fixture = Object()) {
   const text = String(command || "").trim();
   if (!text) return { safe: false, code: "EMPTY_COMMAND" };
   if (/\b(npm|pnpm|yarn)\s+publish\b|\bnpm\s+token\b|NODE_AUTH_TOKEN|NPM_TOKEN/i.test(text)) {
@@ -30,11 +30,11 @@ function commandPolicy(command, fixture = {}) {
   return { safe: true, code: "SAFE_COMMAND" };
 }
 
-function fixtureRoot(options = {}) {
+function fixtureRoot(options = Object()) {
   return resolve(options.fixturesRoot || join(options.yoloRoot || DEFAULT_YOLO_ROOT, "fixtures"));
 }
 
-export function listFixtureDefinitions(options = {}) {
+export function listFixtureDefinitions(options = Object()) {
   const root = fixtureRoot(options);
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true })
@@ -49,7 +49,7 @@ export function listFixtureDefinitions(options = {}) {
     .sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
-export function getFixtureDefinition(id, options = {}) {
+export function getFixtureDefinition(id, options = Object()) {
   const fixture = listFixtureDefinitions(options).find((item) => item.id === id);
   if (!fixture) {
     throw new Error(`Unknown YOLO fixture "${id}"`);
@@ -57,7 +57,7 @@ export function getFixtureDefinition(id, options = {}) {
   return fixture;
 }
 
-export function inspectFixtureDefinition(fixture = {}) {
+export function inspectFixtureDefinition(fixture = Object()) {
   const commandPolicies = (fixture.run?.commands || []).map((command) => ({
     command,
     ...commandPolicy(command, fixture),
@@ -72,7 +72,7 @@ export function inspectFixtureDefinition(fixture = {}) {
     ["SUPPORTS_DRY_RUN", fixture.run?.supports_dry_run === true],
     ["HAS_EVIDENCE_CONTRACT", Array.isArray(fixture.evidence?.expected) && fixture.evidence.expected.length > 0],
     ["SAFE_EVIDENCE_PATHS", (fixture.evidence?.expected || []).every(isSafeRelativePath)],
-  ].map(([code, passed]) => ({ code, passed }));
+  ].map(([code, passed]) => Object.assign(Object(), { code, passed }));
   const unsafeCommands = commandPolicies.filter((policy) => !policy.safe);
   if (unsafeCommands.length > 0) {
     checks.find((check) => check.code === "SAFE_RUN_COMMANDS").commands = unsafeCommands;
@@ -86,7 +86,7 @@ export function inspectFixtureDefinition(fixture = {}) {
   }
 
   if (missingFiles.length > 0) {
-    checks.push({ code: "MISSING_FIXTURE_FILES", passed: false, files: missingFiles });
+    checks.push(Object.assign(Object(), { code: "MISSING_FIXTURE_FILES", passed: false, files: missingFiles }));
   } else {
     checks.push({ code: "FIXTURE_FILES_EXIST", passed: true });
   }
@@ -101,7 +101,7 @@ export function inspectFixtureDefinition(fixture = {}) {
   };
 }
 
-export function inspectFixtureRegistry(options = {}) {
+export function inspectFixtureRegistry(options = Object()) {
   const fixtures = listFixtureDefinitions(options);
   const inspections = fixtures.map((fixture) => inspectFixtureDefinition(fixture));
   return {

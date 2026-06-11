@@ -266,7 +266,7 @@ function textExcerpt(text) {
   return oneLine.length > 240 ? `${oneLine.slice(0, 237)}...` : oneLine;
 }
 
-export function inspectStoryAtomicityText(text, item = {}) {
+export function inspectStoryAtomicityText(text, item = Object()) {
   const normalized = clean(text).toLowerCase();
   let signatures = uniqueSignatures(SIGNATURES.filter((signature) => signature.matches(normalized)));
   // 通用层只在领域 signatures 完全沉默时启用：领域文本若已被 Kanban 专家检测器判定（哪怕 1 个签名=单一
@@ -335,7 +335,7 @@ export function inspectStoryAtomicityText(text, item = {}) {
   };
 }
 
-export function inspectStoryAtomicityItems(items = [], options = {}) {
+export function inspectStoryAtomicityItems(items = [], options = Object()) {
   const findings = [];
   const inspected = [];
   for (const item of asArray(items)) {
@@ -400,7 +400,7 @@ export function inspectStoryAtomicityItems(items = [], options = {}) {
   };
 }
 
-function conditionText(condition = {}) {
+function conditionText(condition = Object()) {
   return compact([
     condition.message,
     condition.params?.text,
@@ -409,7 +409,7 @@ function conditionText(condition = {}) {
   ]).join("\n");
 }
 
-function scenarioText(scenario = {}) {
+function scenarioText(scenario = Object()) {
   return compact([
     scenario.title,
     scenario.text,
@@ -429,7 +429,7 @@ function scenarioText(scenario = {}) {
   ]).join("\n");
 }
 
-function requirementText(requirement = {}) {
+function requirementText(requirement = Object()) {
   return compact([
     requirement.title,
     requirement.text,
@@ -441,7 +441,7 @@ function requirementText(requirement = {}) {
   ]).join("\n");
 }
 
-function taskText(task = {}) {
+function taskText(task = Object()) {
   const handoff = task.handoff || {};
   return compact([
     task.title,
@@ -463,7 +463,7 @@ function taskText(task = {}) {
   ]).join("\n");
 }
 
-export function collectStoryAtomicityItemsFromDemand(session = {}, options = {}) {
+export function collectStoryAtomicityItemsFromDemand(session = Object(), options = Object()) {
   const requirements = options.includeRequirements === false
     ? []
     : asArray(session.requirements?.active || session.requirements).map((requirement, index) => ({
@@ -484,7 +484,7 @@ export function collectStoryAtomicityItemsFromDemand(session = {}, options = {})
   return [...requirements, ...scenarios, ...tasks];
 }
 
-export function collectStoryAtomicityItemsFromPrd(prd = {}) {
+export function collectStoryAtomicityItemsFromPrd(prd = Object()) {
   const requirements = asArray(prd.requirements).map((requirement, index) => ({
     kind: "requirement",
     id: requirement?.id || `REQ-${index + 1}`,
@@ -508,13 +508,13 @@ export function collectStoryAtomicityItemsFromPrd(prd = {}) {
   return [...requirements, ...scenarios, ...tasks];
 }
 
-export function inspectStoryAtomicityFromDemand(session = {}, options = {}) {
+export function inspectStoryAtomicityFromDemand(session = Object(), options = Object()) {
   return inspectStoryAtomicityItems(collectStoryAtomicityItemsFromDemand(session, options), {
     extra: { source: "demand" },
   });
 }
 
-export function inspectStoryAtomicityFromPrd(prd = {}) {
+export function inspectStoryAtomicityFromPrd(prd = Object()) {
   return inspectStoryAtomicityItems(collectStoryAtomicityItemsFromPrd(prd), {
     extra: { source: "prd" },
   });

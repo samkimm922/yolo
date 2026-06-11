@@ -34,7 +34,7 @@ export function cleanupWorktreeRoot({
   existsSync = defaultExistsSync,
   readdirSync = defaultReaddirSync,
   rmSync = defaultRmSync,
-} = {}) {
+} = Object()) {
   if (!isSafeWorktreeRoot(worktreeRoot)) {
     return { skipped: true, reason: "unsafe_worktree_root", removed: [] };
   }
@@ -59,7 +59,7 @@ export function cleanDirByPattern({
   existsSync = defaultExistsSync,
   readdirSync = defaultReaddirSync,
   unlinkSync = defaultUnlinkSync,
-} = {}) {
+} = Object()) {
   const removed = [];
   if (!existsSync(dir)) return removed;
   const files = readdirSync(dir).filter((file) => file.match(pattern)).sort().reverse();
@@ -86,7 +86,7 @@ export function archiveRawRunEvidence({
   readdirSync = defaultReaddirSync,
   mkdirSync = defaultMkdirSync,
   cpSync = defaultCpSync,
-} = {}) {
+} = Object()) {
   if (completionStatus !== "success") {
     return { archived: false, reason: "non_success_run", archived_count: 0 };
   }
@@ -133,7 +133,7 @@ export function cleanupRunArtifacts({
   spawnSync = defaultSpawnSync,
   consoleLog = (...args) => console.log(...args),
   now = new Date(),
-} = {}) {
+} = Object()) {
   consoleLog("\n[cleanup] 自动清理临时文件...");
   let cleanedCount = 0;
   const rawEvidenceArchive = archiveRawRunEvidence({
@@ -307,11 +307,11 @@ function collectDryRunFlags(value, field = "", depth = 0, seen = new Set()) {
   return flags;
 }
 
-function reportStatusValues(report = {}) {
+function reportStatusValues(report = Object()) {
   return collectStatusEntries(report).map((entry) => entry.status);
 }
 
-function reportHasNonCleanStatus(report = {}) {
+function reportHasNonCleanStatus(report = Object()) {
   return reportStatusValues(report).some((status) => !RUN_CLEAN_STATUSES.has(status));
 }
 
@@ -319,7 +319,7 @@ function pathCount(value) {
   return typeof value === "string" && value.trim() ? 1 : 0;
 }
 
-function collectTaskResultStatusIssues(result = {}) {
+function collectTaskResultStatusIssues(result = Object()) {
   const issues = [];
   const statusEntries = collectStatusEntries(result);
   pushIssue(issues, "RUNNER_RESULT_STATUS_ERROR", "runner result status is not clean", statusEntries.filter((entry) => !RUN_CLEAN_STATUSES.has(entry.status)).length);
@@ -328,7 +328,7 @@ function collectTaskResultStatusIssues(result = {}) {
   return issues;
 }
 
-function collectRunArtifactIssues(runReportResult = {}) {
+function collectRunArtifactIssues(runReportResult = Object()) {
   const issues = [];
   pushIssue(issues, "RUN_REPORT_ARTIFACT_MISSING", "run report JSON artifact is missing", pathCount(runReportResult.json_path) ? 0 : 1);
   pushIssue(issues, "RUN_REPORT_MARKDOWN_MISSING", "run report markdown artifact is missing", pathCount(runReportResult.markdown_path) ? 0 : 1);
@@ -337,7 +337,7 @@ function collectRunArtifactIssues(runReportResult = {}) {
   return issues;
 }
 
-function collectRunReportIssues(runReportResult = {}, { requireArtifacts = false } = {}) {
+function collectRunReportIssues(runReportResult = Object(), { requireArtifacts = false } = Object()) {
   const issues = [];
   const report = runReportResult.report || runReportResult.run_report || runReportResult.runReport || null;
   const finalAnswer = runReportResult.final_answer || runReportResult.finalAnswer || null;
@@ -387,7 +387,7 @@ function collectRunReportIssues(runReportResult = {}, { requireArtifacts = false
   return issues;
 }
 
-function collectSkippedIssues(result = {}) {
+function collectSkippedIssues(result = Object()) {
   const skipped = asArray(result.skipped);
   const abnormal = skipped.filter((item) => {
     if (!item || typeof item !== "object") return false;
@@ -411,11 +411,11 @@ function verdictSummary(issues = []) {
 }
 
 export function buildRunFinalVerdict({
-  taskResults = {},
-  runReportResult = {},
+  taskResults = Object(),
+  runReportResult = Object(),
   failOnSkippedIssues = false,
   requireRunArtifacts = false,
-} = {}) {
+} = Object()) {
   const issues = [];
   const failedCount = asArray(taskResults.failed).length;
   const blockedCount = asArray(taskResults.blocked).length;
@@ -444,7 +444,7 @@ export function buildRunReturnResult({
   taskResults,
   runReportResult,
   normalizeRepoPath = (value) => value,
-} = {}) {
+} = Object()) {
   const finalVerdict = buildRunFinalVerdict({ taskResults, runReportResult, requireRunArtifacts: true });
   const exitCode = finalVerdict.exit_code;
   const contractReview = taskResults.contractReview || taskResults.contract_review || [];
@@ -473,11 +473,11 @@ export function printRunReportSummary({
   taskResults,
   progressTotal,
   elapsed,
-  reportSummary = {},
+  reportSummary = Object(),
   runReportResult,
   normalizeRepoPath = (value) => value,
   consoleLog = (...args) => console.log(...args),
-} = {}) {
+} = Object()) {
   const totalTasks = taskResults.completed.length + taskResults.failed.length;
   const taskSuccessRate = reportSummary.task_success_rate == null ? "N/A" : `${reportSummary.task_success_rate.toFixed(1)}%`;
   const runSuccessRate = reportSummary.run_success_rate == null ? "N/A" : `${reportSummary.run_success_rate.toFixed(1)}%`;
@@ -517,7 +517,7 @@ export function finalizeRun({
   spawnSync = defaultSpawnSync,
   consoleLog = (...args) => console.log(...args),
   now = () => new Date(),
-} = {}) {
+} = Object()) {
   const elapsed = ((Date.now() - startTimeMs) / 1000).toFixed(1);
   logRun("run_end", {
     run_id: runId,

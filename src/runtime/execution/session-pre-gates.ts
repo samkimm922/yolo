@@ -6,7 +6,7 @@ import {
 } from "./session-failure-outcome.js";
 import { validateTestGenerationAfterSession } from "./session-validation.js";
 
-function providerOutputMissing(providerRun = {}) {
+function providerOutputMissing(providerRun = Object()) {
   return !providerRun.success || !providerRun.stdout || providerRun.stdout.trim().length === 0;
 }
 
@@ -15,20 +15,20 @@ export async function inspectSessionPreGateChecks({
   attempt = 0,
   wt,
   startedAtMs = Date.now(),
-  providerRun = {},
+  providerRun = Object(),
   providerName = "provider",
   maxRetryForProvider = 0,
   maxRetryForDiffQuality = 1,
   validateDiffQualityGate = validateDiffQuality,
   validateTestGeneration = validateTestGenerationAfterSession,
-  cleanupWorktree = () => {},
-  recordTaskTransition = () => {},
-  logProgress = () => {},
-  logTaskError = () => {},
-  logTaskBash = () => {},
-  logTaskDone = () => {},
+  cleanupWorktree = (..._args) => {},
+  recordTaskTransition = (..._args) => {},
+  logProgress = (..._args) => {},
+  logTaskError = (..._args) => {},
+  logTaskBash = (..._args) => {},
+  logTaskDone = (..._args) => {},
   nowMs = () => Date.now(),
-} = {}) {
+} = Object()) {
   if (providerOutputMissing(providerRun)) {
     const providerFailureOutcome = buildProviderFailureOutcome({
       taskId: task.id,

@@ -49,7 +49,7 @@ function isDocUpdateTask(title = '', description = '') {
 function parseFrontmatter(md) {
   const m = md.match(/^---\n([\s\S]*?)\n---/);
   if (!m) return {};
-  const fm = {};
+  const fm = Object();
   for (const line of m[1].split('\n')) {
     const idx = line.indexOf(':');
     if (idx > 0) fm[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
@@ -68,7 +68,7 @@ function parseTable(text) {
     if (!line.startsWith('|')) break;
     const cells = line.split('|').map(c => c.trim()).filter(Boolean);
     if (cells.length === 0) continue;
-    const row = {};
+    const row = Object();
     headers.forEach((h, idx) => { row[h] = cells[idx] || ''; });
     results.push(row);
   }
@@ -107,7 +107,7 @@ let baseCommit = '0000000';
 try { baseCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim(); } catch {}
 
 const projectOverview = parseTable(extractSection(md, '项目概述'));
-const projectInfo = {};
+const projectInfo = Object();
 for (const row of projectOverview) projectInfo[row['属性']] = row['值'];
 
 const moduleList = parseTable(extractSection(md, '模块列表'));
@@ -115,7 +115,7 @@ const modules = extractModules(md);
 
 function inferTechStack(info) {
   const platform = (info['平台'] || '').toLowerCase();
-  const stack = { language, framework, package_manager: 'pnpm' };
+  const stack = Object.assign(Object(), { language, framework, package_manager: 'pnpm' });
   if (platform.includes('小程序')) { stack.framework = 'taro'; stack.language = 'typescript'; }
   else if (platform.includes('web')) { stack.framework = framework === 'generic' ? 'react' : framework; }
   stack.type_checker = 'tsc --noEmit';
@@ -134,12 +134,12 @@ function buildDataModelTask(mod) {
 
   const title = `${mod.name} — 数据模型`;
   const description = `定义 ${mod.name} 的数据字段和类型。\n\n字段清单：\n${fields}`;
-  const scope = {
+  const scope = Object.assign(Object(), {
     targets: [{ file: `src/types/${mod.name.toLowerCase().replace(/\s+/g, '-')}.ts`, description: `${mod.name} 类型定义` }],
     allow_new_files: true,
     max_files: 3,
     max_lines_per_file: 150
-  };
+  });
   if (isDocUpdateTask(title, description)) scope.expected_zero_business_code = true;
 
   return {
@@ -170,7 +170,7 @@ function buildOperationsTask(mod) {
 
   const title = `${mod.name} — 业务操作`;
   const description = `实现 ${mod.name} 的 CRUD 操作。\n\n操作清单：\n${ops}`;
-  const scope = {
+  const scope = Object.assign(Object(), {
     targets: [
       { file: `src/services/${mod.name.toLowerCase().replace(/\s+/g, '-')}.service.ts`, description: `${mod.name} 业务逻辑` },
       { file: `src/hooks/use-${mod.name.toLowerCase().replace(/\s+/g, '-')}.ts`, description: `${mod.name} 数据 hook` }
@@ -178,7 +178,7 @@ function buildOperationsTask(mod) {
     allow_new_files: true,
     max_files: 5,
     max_lines_per_file: 150
-  };
+  });
   if (isDocUpdateTask(title, description)) scope.expected_zero_business_code = true;
 
   return {
@@ -213,7 +213,7 @@ function buildUITask(mod) {
 
   const title = `${mod.name} — 页面与交互`;
   const description = `实现 ${mod.name} 的页面和组件。\n\n展示规则：\n${displayDesc}`;
-  const scope = {
+  const scope = Object.assign(Object(), {
     targets: [
       { file: `src/pages/${mod.name.toLowerCase().replace(/\s+/g, '-')}/index.tsx`, description: `${mod.name} 页面` },
       { file: `src/components/${mod.name.toLowerCase().replace(/\s+/g, '-')}/index.tsx`, description: `${mod.name} 组件` }
@@ -221,7 +221,7 @@ function buildUITask(mod) {
     allow_new_files: true,
     max_files: 8,
     max_lines_per_file: 150
-  };
+  });
   if (isDocUpdateTask(title, description)) scope.expected_zero_business_code = true;
 
   return {
@@ -256,12 +256,12 @@ if (tasks.length === 0 && moduleList.length > 0) {
   for (const mod of moduleList) {
     const title = `${mod['模块名']} — 完整实现`;
     const description = `实现 ${mod['模块名']} 模块。依赖：${mod['依赖'] || '无'}。`;
-    const scope = {
+    const scope = Object.assign(Object(), {
       targets: [{ file: 'src/', description: '项目源代码' }],
       allow_new_files: true,
       max_files: 10,
       max_lines_per_file: 150
-    };
+    });
     if (isDocUpdateTask(title, description)) scope.expected_zero_business_code = true;
 
     tasks.push({

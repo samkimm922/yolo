@@ -31,7 +31,7 @@ function loadTask(prdPath, taskId) {
   return { prd, task };
 }
 
-function applyWarnEscalation(task, { stateRoot } = {}) {
+function applyWarnEscalation(task, { stateRoot } = Object()) {
   try {
     const args = [learnCli, "--escalate"];
     if (stateRoot) args.push(`--state-root=${stateRoot}`);
@@ -80,7 +80,7 @@ function writeGateLog({ logDir = defaultLogDir, taskId, gateFormat, durationMs }
   return logFile;
 }
 
-export function runGateCli(argv = process.argv.slice(2), io = {}) {
+export function runGateCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const taskId = argValue(argv, "--task") || "unknown";

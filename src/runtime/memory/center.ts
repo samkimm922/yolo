@@ -110,7 +110,7 @@ function isYoloPackageRoot(projectRoot) {
   return pkg?.name === "yolo" && existsSync(join(projectRoot, "src/runtime"));
 }
 
-export function resolveMemoryPaths(options = {}) {
+export function resolveMemoryPaths(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.yoloRoot || options.cwd || process.cwd());
   const packageMode = options.packageMode ?? isYoloPackageRoot(projectRoot);
   const stateRoot = resolve(options.stateRoot || options.state_root || (packageMode ? projectRoot : join(projectRoot, ".yolo")));
@@ -125,7 +125,7 @@ export function resolveMemoryPaths(options = {}) {
   };
 }
 
-function walkFiles(root, options = {}) {
+function walkFiles(root, options = Object()) {
   const files = [];
   const includeHidden = options.includeHidden !== false;
   const includeArchive = options.includeArchive === true;
@@ -302,7 +302,7 @@ function classifyMemoryDocument(relativePath, content = "") {
   };
 }
 
-export function discoverMemoryDocuments(options = {}) {
+export function discoverMemoryDocuments(options = Object()) {
   const paths = resolveMemoryPaths(options);
   const files = walkFiles(paths.projectRoot, { includeArchive: true, includeHidden: true })
     .filter((file) => file.endsWith(".md") || file.endsWith(".jsonl"))
@@ -327,9 +327,9 @@ export function discoverMemoryDocuments(options = {}) {
   };
 }
 
-export function buildMemoryAudit(options = {}) {
+export function buildMemoryAudit(options = Object()) {
   const discovered = discoverMemoryDocuments(options);
-  const byAction = {};
+  const byAction = Object();
   for (const doc of discovered.documents) {
     byAction[doc.action] = (byAction[doc.action] || 0) + 1;
   }
@@ -348,7 +348,7 @@ export function buildMemoryAudit(options = {}) {
   };
 }
 
-function listTreeFiles(root, options = {}) {
+function listTreeFiles(root, options = Object()) {
   const maxFiles = options.maxFiles || 800;
   const files = [];
 
@@ -524,7 +524,7 @@ function projectBrainSummary(paths) {
   };
 }
 
-function compactSessionMemoryLine(entry = {}) {
+function compactSessionMemoryLine(entry = Object()) {
   const summary = entry.summary || entry.message || entry.event || entry.raw || "";
   const source = entry.source || entry.type || "session";
   const ts = entry.ts || entry.logged_at || entry.created_at || "";
@@ -551,7 +551,7 @@ function latestValidationText(projectRoot) {
   return matches.length ? matches.at(-1)[1].replace(/\s+/g, " ") : "not recorded";
 }
 
-export function buildProjectTreeMarkdown(options = {}) {
+export function buildProjectTreeMarkdown(options = Object()) {
   const paths = resolveMemoryPaths(options);
   const counts = sourceCounts(paths.projectRoot);
   const ledgers = ledgerSummaries(paths.stateDir);
@@ -591,7 +591,7 @@ export function buildProjectTreeMarkdown(options = {}) {
   ].filter((line) => line !== null).join("\n");
 }
 
-export function buildCurrentStatusMarkdown(options = {}) {
+export function buildCurrentStatusMarkdown(options = Object()) {
   const paths = resolveMemoryPaths(options);
   const counts = sourceCounts(paths.projectRoot);
   const ledgers = ledgerSummaries(paths.stateDir);
@@ -661,7 +661,7 @@ export function buildCurrentStatusMarkdown(options = {}) {
   ].join("\n");
 }
 
-export function buildCurrentHandoffMarkdown(options = {}) {
+export function buildCurrentHandoffMarkdown(options = Object()) {
   const paths = resolveMemoryPaths(options);
   const brain = projectBrainSummary(paths);
   if (!paths.packageMode) {
@@ -729,7 +729,7 @@ export function buildCurrentHandoffMarkdown(options = {}) {
   ].join("\n");
 }
 
-export function buildDocumentGovernanceMarkdown(options = {}) {
+export function buildDocumentGovernanceMarkdown(options = Object()) {
   const paths = resolveMemoryPaths(options);
   const memoryHome = paths.packageMode ? "docs/memory/" : ".yolo/memory/";
   const stateHome = paths.packageMode ? "state/" : ".yolo/state/";
@@ -790,7 +790,7 @@ export function buildDocumentGovernanceMarkdown(options = {}) {
   ].join("\n");
 }
 
-export function buildMemoryAuditMarkdown(options = {}) {
+export function buildMemoryAuditMarkdown(options = Object()) {
   const audit = buildMemoryAudit(options);
   const rows = audit.documents.map((doc) =>
     `| \`${doc.path}\` | ${doc.category} | ${doc.action} | ${doc.stale ? "yes" : "no"} | ${doc.reason.replaceAll("|", "\\|")} |`
@@ -820,7 +820,7 @@ export function buildMemoryAuditMarkdown(options = {}) {
   ].join("\n");
 }
 
-export function buildMemoryIndexMarkdown(options = {}) {
+export function buildMemoryIndexMarkdown(options = Object()) {
   const paths = resolveMemoryPaths(options);
   return [
     "# YOLO Memory Index",
@@ -873,7 +873,7 @@ function writeDoc(filePath, content, dryRun) {
   return { path: filePath, bytes: Buffer.byteLength(content, "utf8") };
 }
 
-function buildDocs(options = {}) {
+function buildDocs(options = Object()) {
   return {
     "MEMORY_INDEX.md": buildMemoryIndexMarkdown(options),
     "CURRENT_STATUS.md": buildCurrentStatusMarkdown(options),
@@ -886,7 +886,7 @@ function buildDocs(options = {}) {
   };
 }
 
-export function refreshMemoryCenter(options = {}) {
+export function refreshMemoryCenter(options = Object()) {
   const paths = resolveMemoryPaths(options);
   const dryRun = options.dryRun === true || options.dry_run === true;
   const learningMigration = options.migrateLearning === false || options.migrate_learning === false
@@ -941,14 +941,14 @@ function argValue(argv, name) {
 }
 
 function parseMemoryCenterArgs(argv = []) {
-  const options = {
+  const options = Object.assign(Object(), {
     dryRun: argv.includes("--dry-run"),
     json: argv.includes("--json"),
     writeLegacyPointers: argv.includes("--legacy-pointers") || argv.includes("--write-legacy-pointers"),
     applyRetention: !argv.includes("--no-retention"),
     migrateLearning: !argv.includes("--no-learning-migration"),
     pruneGeneratedArchives: !argv.includes("--no-prune-generated-archives"),
-  };
+  });
   for (const key of ["project-root", "state-root", "state-dir", "memory-dir", "cwd"]) {
     const parsed = argValue(argv, key);
     if (parsed.value) options[key.replaceAll("-", "_")] = parsed.value;
@@ -960,7 +960,7 @@ function parseMemoryCenterArgs(argv = []) {
   return options;
 }
 
-export function runMemoryCenterCli(argv = process.argv.slice(2), io = {}) {
+export function runMemoryCenterCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   try {

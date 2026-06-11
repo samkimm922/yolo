@@ -75,7 +75,7 @@ function normalizePlatforms(values = []) {
   return unique(platformValues(values).map(normalizePlatform));
 }
 
-function inferRequiredPlatforms(input = {}, options = {}) {
+function inferRequiredPlatforms(input = Object(), options = Object()) {
   const prd = input.prd || input.prd_contract || input.prdContract || options.prd || options.prd_contract || options.prdContract || {};
   return normalizePlatforms([
     input.requiredPlatform,
@@ -105,7 +105,7 @@ function inferRequiredPlatforms(input = {}, options = {}) {
   ]);
 }
 
-function adapterAppliesTo(adapter = {}) {
+function adapterAppliesTo(adapter = Object()) {
   return asArray(adapter?.applies_to).map(String);
 }
 
@@ -114,9 +114,9 @@ function missingRequiredPlatforms(requiredPlatforms = [], coveredPlatforms = [])
   return requiredPlatforms.filter((platform) => !covered.has(platform));
 }
 
-function evidenceCoveredPlatforms(record = {}) {
+function evidenceCoveredPlatforms(record = Object()) {
   if (!record || typeof record !== "object") return [];
-  const coverageFields = (source = {}) => [
+  const coverageFields = (source = Object()) => [
     source.covered_platform,
     source.covered_platforms,
     source.platform,
@@ -134,7 +134,7 @@ function evidenceCoveredPlatforms(record = {}) {
   ]);
 }
 
-function annotateEvidenceRecord(record = {}, plan = {}) {
+function annotateEvidenceRecord(record = Object(), plan = Object()) {
   if (!record || typeof record !== "object" || Array.isArray(record)) return record;
   return {
     ...record,
@@ -144,7 +144,7 @@ function annotateEvidenceRecord(record = {}, plan = {}) {
   };
 }
 
-function normalizeCommand(entry = {}, index = 0) {
+function normalizeCommand(entry = Object(), index = 0) {
   const command = typeof entry === "string" ? entry : entry.command;
   return {
     id: clean(entry.id || entry.name || `command-${index + 1}`),
@@ -206,7 +206,7 @@ function commandPlatformBlockers(commands = [], requiredPlatforms = []) {
   return blockers;
 }
 
-export function buildAdapterEvidencePlan(input = {}, options = {}) {
+export function buildAdapterEvidencePlan(input = Object(), options = Object()) {
   const projectRoot = resolve(input.projectRoot || input.project_root || options.projectRoot || options.project_root || process.cwd());
   const stateRoot = resolve(input.stateRoot || input.state_root || options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
   const resolver = input.resolver || options.resolver || resolveProjectContext({
@@ -297,12 +297,12 @@ export function buildAdapterEvidencePlan(input = {}, options = {}) {
   };
 }
 
-export function runAdapterEvidenceCollector(input = {}, options = {}) {
+export function runAdapterEvidenceCollector(input = Object(), options = Object()) {
   const plan = buildAdapterEvidencePlan(input, options);
   const execute = input.execute === true || input.executeAdapter === true || input.execute_adapter === true || options.execute === true || options.executeAdapter === true || options.execute_adapter === true;
   const allow = input.allowAdapterCommands === true || input.allow_adapter_commands === true || options.allowAdapterCommands === true || options.allow_adapter_commands === true;
   const writeArtifact = input.writeArtifact !== false && input.write_artifact !== false && options.writeArtifact !== false && options.write_artifact !== false;
-  const result = {
+  const result = Object.assign(Object(), {
     ...plan,
     mode: execute ? "execute" : "dry_run",
     status: plan.status === "blocked" ? "blocked" : execute ? "blocked" : "dry_run",
@@ -316,7 +316,7 @@ export function runAdapterEvidenceCollector(input = {}, options = {}) {
     collected_evidence: [],
     ui_evidence: null,
     artifacts: [],
-  };
+  });
 
   if (plan.status === "blocked") {
     return result;

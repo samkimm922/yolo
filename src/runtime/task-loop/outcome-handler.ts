@@ -25,7 +25,7 @@ export function handleTaskPreRun({
   taskIsSplitParent,
   taskCountsAsCompleted,
   recordTaskTransition,
-  log = () => {},
+  log = (..._args) => {},
   now = new Date().toISOString(),
 }) {
   if (completedIds.has(task.id)) {
@@ -89,7 +89,7 @@ export function handleTaskOutcome({
   markParentCompleteIfAllChildrenDone,
   markParentBlockedByChildFailure,
   recordTaskTransition,
-  log = () => {},
+  log = (..._args) => {},
   stopForImmediateRemediation = false,
   now = new Date().toISOString(),
 }) {

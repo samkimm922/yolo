@@ -130,7 +130,7 @@ function preConditions(taskId, finding, files) {
   }];
 }
 
-export function reviewFindingsToPrdTasks(findings = [], options = {}) {
+export function reviewFindingsToPrdTasks(findings = [], options = Object()) {
   const round = Number.isInteger(options.round) ? options.round : 1;
   const existingIds = existingTaskIds(options.existingTasks || []);
   const tasks = [];

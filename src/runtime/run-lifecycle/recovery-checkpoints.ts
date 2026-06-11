@@ -25,9 +25,9 @@ export function createRunnerLedgerWriters({
   appendStateEvent,
   appendRunEvent,
   error = console.error,
-} = {}) {
+} = Object()) {
   return {
-    logEvent(event, data = {}) {
+    logEvent(event, data = Object()) {
       try {
         const runId = getRunId();
         const payload = runId && data?.run_id == null ? { ...data, run_id: runId } : data;
@@ -36,7 +36,7 @@ export function createRunnerLedgerWriters({
         error("[runner] logEvent 写入失败:", e.message);
       }
     },
-    logRun(event, data = {}) {
+    logRun(event, data = Object()) {
       try {
         const runId = getRunId();
         const payload = runId && data?.run_id == null ? { ...data, run_id: runId } : data;
@@ -58,7 +58,7 @@ export function writeRunnerStateSnapshot({
   spawnSync,
   processExecPath,
   warn = console.warn,
-} = {}) {
+} = Object()) {
   try {
     const args = [runtimeScript(packageRoot, "src/runtime/evidence/state-snapshot.js"), `--state-root=${stateRoot}`];
     if (prdPath) args.push(`--prd=${normalizeRepoPath(prdPath, { rootDir }).replace(/^scripts\/yolo\//, "")}`);
@@ -81,7 +81,7 @@ export function recordRunnerMemoryCheckpoint({
   reason,
   prdPath,
   taskId,
-  update = {},
+  update = Object(),
   packageRoot,
   stateRoot,
   rootDir,
@@ -89,7 +89,7 @@ export function recordRunnerMemoryCheckpoint({
   spawnSync,
   processExecPath,
   warn = console.warn,
-} = {}) {
+} = Object()) {
   const status = update.status || "updated";
   if (!MEMORY_CHECKPOINT_STATUSES.has(status)) return;
   try {
@@ -125,7 +125,7 @@ export function recordRunnerMemoryCheckpoint({
   }
 }
 
-export function writeRunnerRecoveryCheckpoint(options = {}) {
+export function writeRunnerRecoveryCheckpoint(options = Object()) {
   recordRunnerMemoryCheckpoint(options);
   writeRunnerStateSnapshot(options);
 }

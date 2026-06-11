@@ -123,7 +123,7 @@ export function validateFindings(data) {
 }
 
 // ── 调模型生成 findings ──────────────────────────────────────────
-export async function generateFindings(prompt, timeout = 300000, options = {}) {
+export async function generateFindings(prompt, timeout = 300000, options = Object()) {
   const projectRoot = resolve(options.projectRoot || PACKAGE_ROOT);
   const tmpFile = join(projectRoot, "tmp", `yolo-pm-prompt-${Date.now()}.txt`);
   try { mkdirSync(dirname(tmpFile), { recursive: true }); } catch {}
@@ -177,7 +177,7 @@ export async function generateFindings(prompt, timeout = 300000, options = {}) {
   });
 }
 
-export async function generateFindingsFromRequirement(input, options = {}) {
+export async function generateFindingsFromRequirement(input, options = Object()) {
   const requirement = typeof input === "string" ? input : input?.requirement;
   if (!requirement || !requirement.trim()) {
     return { ok: false, error: "缺少需求描述" };
@@ -186,11 +186,11 @@ export async function generateFindingsFromRequirement(input, options = {}) {
   const projectRoot = resolve(options.projectRoot || PACKAGE_ROOT);
   const projectContext = options.projectContext ?? loadProjectContext(projectRoot);
   const prompt = buildPmPrompt(requirement, projectContext);
-  const result = await generateFindings(prompt, options.timeout_ms || options.timeout || 300000, {
+  const result = Object.assign(Object(), await generateFindings(prompt, options.timeout_ms || options.timeout || 300000, {
     projectRoot,
     model: options.model,
     settings: options.settings,
-  });
+  }));
 
   if (result.ok && options.outputFile) {
     mkdirSync(dirname(resolve(options.outputFile)), { recursive: true });

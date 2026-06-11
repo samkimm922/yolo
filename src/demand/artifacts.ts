@@ -31,7 +31,7 @@ function isPlainObject(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
 
-function nowIso(options = {}) {
+function nowIso(options = Object()) {
   return clean(options.now) || new Date().toISOString();
 }
 
@@ -48,7 +48,7 @@ function idDate(now) {
   return clean(now).slice(0, 10).replace(/-/g, "") || "00000000";
 }
 
-function demandId(input = {}, now) {
+function demandId(input = Object(), now) {
   return clean(input.id || input.demand_id || input.demandId)
     || `DEMAND-${idDate(now)}-${slug(input.title || input.idea || input.objective || input.requirement || "PROJECT")}`;
 }
@@ -140,7 +140,7 @@ function extname(path) {
   return match ? match[1].toLowerCase() : "";
 }
 
-function collectProjectFiles(projectRoot, options = {}) {
+function collectProjectFiles(projectRoot, options = Object()) {
   const root = resolve(clean(projectRoot) || process.cwd());
   const maxFiles = Number(options.maxFiles || 600);
   if (!existsSync(root)) return [];
@@ -228,7 +228,7 @@ function scoreCandidateFile(file, tokenList, kind) {
   return score;
 }
 
-function inferTargetFiles({ projectRoot, text, explicitFiles = [], maxPerKind = 2 } = {}) {
+function inferTargetFiles({ projectRoot, text, explicitFiles = [], maxPerKind = 2 } = Object()) {
   const explicit = uniqueStrings(explicitFiles);
   if (explicit.length > 0) return explicit;
   const files = collectProjectFiles(projectRoot);
@@ -277,7 +277,7 @@ function evidenceMentionsFile(evidence = [], file = "") {
   return target && evidenceText(evidence).includes(target);
 }
 
-function targetFileFacts({ projectRoot, explicitFiles = [], inferredFiles = [], evidence = [], verifiedFiles = [] } = {}) {
+function targetFileFacts({ projectRoot, explicitFiles = [], inferredFiles = [], evidence = [], verifiedFiles = [] } = Object()) {
   const verifiedSet = new Set(uniqueStrings(verifiedFiles));
   const explicit = uniqueStrings(explicitFiles);
   const inferred = uniqueStrings(inferredFiles).filter((file) => !explicit.includes(file));
@@ -344,7 +344,7 @@ function projectFactIdentifiers(text = "") {
   return uniqueStrings([...camelOrSnake, ...dotted.flatMap((item) => item.split(".")).filter((part) => !part.endsWith("[]")), ...simple]);
 }
 
-function assumptionRecords({ assumptions = [], evidence = [], targetFacts = [], projectRoot = "" } = {}) {
+function assumptionRecords({ assumptions = [], evidence = [], targetFacts = [], projectRoot = "" } = Object()) {
   const evidenceSource = evidenceText(evidence).toLowerCase();
   const targetText = targetFacts
     .filter((fact) => ["verified", "needs_verification"].includes(fact.status))
@@ -405,7 +405,7 @@ function assumptionRecords({ assumptions = [], evidence = [], targetFacts = [], 
 }
 
 function buildNonTechnicalIntake({
-  input = {},
+  input = Object(),
   objective = "",
   problem = "",
   targetUsers = [],
@@ -418,7 +418,7 @@ function buildNonTechnicalIntake({
   targetFiles = [],
   candidateTargetFiles = [],
   visualStyleSource = [],
-} = {}) {
+} = Object()) {
   const touchpoints = mergeField(input, "touchpoints", LABELS.touchpoint, objective);
   const triggers = mergeField(input, "triggers", LABELS.trigger, objective);
   const exceptions = mergeField(input, "exceptions", LABELS.exception, objective);
@@ -484,14 +484,14 @@ function traceEntries(value) {
   if (isPlainObject(value)) {
     return Object.entries(value).map(([key, item]) => (
       isPlainObject(item)
-        ? { id: key, ...item }
+        ? Object.assign(Object(), { id: key }, item)
         : { id: key, question: key, answer: item }
     ));
   }
   return clean(value) ? [value] : [];
 }
 
-function normalizeTraceItem(item, index, input = {}, source = "interview") {
+function normalizeTraceItem(item, index, input = Object(), source = "interview") {
   const fallbackQuestion = asArray(input.questions || input.question)[index];
   if (isPlainObject(item)) {
     const answerValue = item.answer ?? item.response ?? item.value ?? item.result ?? item.content;
@@ -518,7 +518,7 @@ function normalizeTraceItem(item, index, input = {}, source = "interview") {
   };
 }
 
-function normalizeInterviewContext(input = {}) {
+function normalizeInterviewContext(input = Object()) {
   const interview = input.interview;
   const interviewObject = isPlainObject(interview) ? interview : {};
   const answers = input.interview_answers
@@ -570,7 +570,7 @@ function normalizeInterviewContext(input = {}) {
   };
 }
 
-function buildPrdIntake({ nontechnicalIntake = {}, interviewContext = {} } = {}) {
+function buildPrdIntake({ nontechnicalIntake = Object(), interviewContext = Object() } = Object()) {
   const raw = interviewContext.prd_intake_source;
   const rawObject = isPlainObject(raw) ? raw : {};
   const rawText = typeof raw === "string" ? clean(raw) : "";
@@ -611,7 +611,7 @@ function groupFilesBySurface(files = []) {
 }
 
 function buildScenarioMatrix({
-  input = {},
+  input = Object(),
   objective = "",
   requirements = [],
   targetUsers = [],
@@ -621,7 +621,7 @@ function buildScenarioMatrix({
   targetFiles = [],
   visualStyleSource = [],
   questionTrace = [],
-} = {}) {
+} = Object()) {
   const touchpoints = mergeField(input, "touchpoints", LABELS.touchpoint, objective);
   const triggers = mergeField(input, "triggers", LABELS.trigger, objective);
   const exceptions = mergeField(input, "exceptions", LABELS.exception, objective);
@@ -692,7 +692,7 @@ function firstField(input, keys, text, labels) {
   return clean(extractLabel(text, labels));
 }
 
-function requirementRecord(text, index, input = {}) {
+function requirementRecord(text, index, input = Object()) {
   const id = `REQ-${String(index + 1).padStart(3, "0")}`;
   const scenarioText = clean(input.acceptance_scenario || input.acceptanceScenario || text);
   const sourceQuestionIds = questionTraceIds(input.questionTrace || input.question_trace);
@@ -824,7 +824,7 @@ function expandRequirementStories(requirements = []) {
   return expanded;
 }
 
-function buildRounds(input = {}, questionTrace = []) {
+function buildRounds(input = Object(), questionTrace = []) {
   const rounds = asArray(input.rounds || input.discussion_rounds || input.questions || input.question).filter(Boolean);
   if (rounds.length > 0) {
     return rounds.map((item, index) => {
@@ -854,7 +854,7 @@ function truthyConfirmation(value) {
   return ["true", "yes", "approved", "confirm", "confirmed", "ok", "确认", "批准", "同意"].includes(text);
 }
 
-function deferredScopeConfirmation(input = {}, deferredItems = [], now = "") {
+function deferredScopeConfirmation(input = Object(), deferredItems = [], now = "") {
   const items = uniqueStrings(deferredItems);
   const raw = input.deferred_scope_confirmed
     ?? input.deferredScopeConfirmed
@@ -884,7 +884,7 @@ function deferredScopeConfirmation(input = {}, deferredItems = [], now = "") {
   };
 }
 
-function completedArtifacts(session = {}) {
+function completedArtifacts(session = Object()) {
   const completed = [];
   if (clean(session.vision?.statement || session.vision?.idea).length >= 10) completed.push("vision");
   if (session.reflection?.assumptions?.length || session.reflection?.alternatives?.length || clean(session.reflection?.summary)) completed.push("reflection");
@@ -898,7 +898,7 @@ function completedArtifacts(session = {}) {
   return completed;
 }
 
-export function buildDemandSession(input = {}, options = {}) {
+export function buildDemandSession(input = Object(), options = Object()) {
   const now = nowIso(options);
   const objective = clean(input.objective || input.idea || input.requirement || input.text || input.title);
   const projectRoot = input.projectRoot || input.project_root || options.projectRoot || options.project_root;
@@ -996,7 +996,7 @@ export function buildDemandSession(input = {}, options = {}) {
   });
   const approvalReason = interviewContext.approval_reason || clean(input.approval_note || input.approvalNote);
 
-  const session = {
+  const session = Object.assign(Object(), {
     schema_version: DEMAND_SESSION_SCHEMA_VERSION,
     schema: DEMAND_SESSION_SCHEMA,
     id,
@@ -1094,7 +1094,7 @@ export function buildDemandSession(input = {}, options = {}) {
       note: clean(input.approval_note || input.approvalNote),
     },
     playback: input.playback || null,
-  };
+  });
   session.readiness = inspectDemandReadiness(session, {
     phase: session.phase,
     projectRoot,
@@ -1125,7 +1125,7 @@ function scenarioLines(requirement) {
   ].join("\n")).join("\n\n");
 }
 
-export function demandMarkdownArtifacts(session = {}) {
+export function demandMarkdownArtifacts(session = Object()) {
   const reqs = asArray(session.requirements?.active);
   const decisions = asArray(session.discussion?.decisions).map((item) => item.text || item);
   const rounds = asArray(session.discussion?.rounds);

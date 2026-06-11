@@ -22,14 +22,14 @@ export async function handleGatePassFlow({
   cleanupWorktree,
   commitTask,
   recordTaskTransition,
-  logEvent = () => {},
-  logProgress = () => {},
-  logTaskError = () => {},
-  logTaskDone = () => {},
+  logEvent = (..._args) => {},
+  logProgress = (..._args) => {},
+  logTaskError = (..._args) => {},
+  logTaskDone = (..._args) => {},
   readDiffStats = readWorktreeDiffStats,
   buildBaseRecord = buildTaskExecutionBaseRecord,
   nowMs = () => Date.now(),
-} = {}) {
+} = Object()) {
   logEvent("gate_pass", { task: task.id });
 
   const prdForPreMergePostCheck = loadPRD(prdPath);

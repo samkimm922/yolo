@@ -23,7 +23,7 @@ function uniqueStrings(values) {
   return [...new Set(asArray(values).map((value) => clean(value)).filter(Boolean))];
 }
 
-function normalizeTask(input = {}, index = 1, refs = {}) {
+function normalizeTask(input = Object(), index = 1, refs = Object()) {
   return buildTaskArtifact({
     id: input.id || `TASK-${String(index).padStart(3, "0")}`,
     title: input.title || input.name || `Task ${index}`,
@@ -42,7 +42,7 @@ function normalizeTask(input = {}, index = 1, refs = {}) {
   }, { index });
 }
 
-export function compileDiscoveryPlanToSpec(input = {}, options = {}) {
+export function compileDiscoveryPlanToSpec(input = Object(), options = Object()) {
   const discovery = input.discovery || input.discoveryBrief || input.discovery_brief || {};
   const plan = input.plan || {};
   const tasksInput = asArray(input.tasks || plan.tasks);

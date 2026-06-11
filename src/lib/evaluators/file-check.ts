@@ -140,7 +140,7 @@ export function evalFileLinesMax(params, taskScope, ROOT) {
     };
   }
   const baselinePath = resolve(ROOT, ".yolo-worktree-baseline.json");
-  let baselineLineCounts = {};
+  let baselineLineCounts = Object();
   if (existsSync(baselinePath)) {
     try {
       baselineLineCounts = JSON.parse(readFileSync(baselinePath, "utf8")).line_counts || {};

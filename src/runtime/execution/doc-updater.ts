@@ -16,7 +16,7 @@ function resolveDocPaths(rootDir) {
   };
 }
 
-export async function updateDocs({ taskId, taskTitle, modifiedFiles, status }, options = {}) {
+export async function updateDocs({ taskId, taskTitle, modifiedFiles, status }, options = Object()) {
   const { root, session, snapshot, delivery } = resolveDocPaths(options.rootDir);
   const runGit = options.execFileSync || defaultExecFileSync;
   mkdirSync(dirname(session), { recursive: true });

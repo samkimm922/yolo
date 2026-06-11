@@ -1,6 +1,6 @@
 import { inspectSpecGovernance } from "../../spec/traceability.js";
 
-export function specGovernancePolicy(options = {}) {
+export function specGovernancePolicy(options = Object()) {
   return {
     requireRequirements: options.requireRequirements !== false,
     requireDesign: options.requireDesign !== false,
@@ -15,7 +15,7 @@ export function formatSpecGovernanceBlockers(blockers = [], limit = 8) {
     .join("\n");
 }
 
-export function inspectSpecGovernanceGate({ prd, policyOptions = {} }) {
+export function inspectSpecGovernanceGate({ prd, policyOptions = Object() }) {
   const result = inspectSpecGovernance(prd, specGovernancePolicy(policyOptions));
   if (result.blocks_execution) {
     return {

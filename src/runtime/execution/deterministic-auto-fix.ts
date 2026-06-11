@@ -4,7 +4,7 @@ import {
   passTaskTransition,
 } from "../task-state/transitions.js";
 
-export function normalizeAutoFixTask(task = {}) {
+export function normalizeAutoFixTask(task = Object()) {
   const findings = task.fix_findings || task.source_findings || [];
   const firstRule = task.fix_rule || findings[0]?.scanner_id || findings[0]?.rule_id || "";
   return {
@@ -20,12 +20,12 @@ export function normalizeAutoFixTask(task = {}) {
 }
 
 export function buildDeterministicAutoFixResultRecord({
-  task = {},
+  task = Object(),
   modifiedFiles = [],
   startedAtMs,
   nowMs = Date.now(),
   isBusinessFile = () => false,
-} = {}) {
+} = Object()) {
   const targetFiles = (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
   return {
     deterministic_auto_fix: true,
@@ -49,11 +49,11 @@ export async function tryDeterministicAutoFixTask({
   taskPostconditionsPass,
   commitTask,
   recordTaskTransition,
-  logProgress = () => {},
-  logTaskBash = () => {},
-  logTaskDone = () => {},
+  logProgress = (..._args) => {},
+  logTaskBash = (..._args) => {},
+  logTaskDone = (..._args) => {},
   isBusinessFile = () => false,
-} = {}) {
+} = Object()) {
   const result = await applyAutoFixTasks([normalizeAutoFixTask(task)], projectRoot, { logP: logProgress });
   const modifiedFiles = result.modifiedFiles || [];
 

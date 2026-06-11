@@ -605,7 +605,7 @@ async function handleEslintFix(task, rootDir, _efSync) {
  * @param {Function} [options.existsSync] - 可注入的文件存在检查函数
  * @returns {Promise<{ success: boolean, escalatedTasks?: Array, stats: { fixed: number, escalated: number, unchanged: number } }>}
  */
-export async function applyAutoFixTasks(tasks, rootDir, options = {}) {
+export async function applyAutoFixTasks(tasks, rootDir, options = Object()) {
   const {
     commitFn,
     logP,

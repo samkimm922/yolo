@@ -7,7 +7,7 @@ export interface RecoveryDecision {
 
 export function classifyRecovery(
   status: string,
-  ctx: { attempt?: number; maxRetry?: number } = {},
+  ctx: { attempt?: number; maxRetry?: number } = Object(),
 ): RecoveryDecision {
   const { attempt = 1, maxRetry = 3 } = ctx;
   if (attempt > maxRetry) {

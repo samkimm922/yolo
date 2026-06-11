@@ -105,7 +105,7 @@ function makeUniqueConditionId(existingIds, base) {
   return id;
 }
 
-function addIssue(issues, task, code, detail, extra = {}) {
+function addIssue(issues, task, code, detail, extra = Object()) {
   issues.push({
     task_id: task?.id || null,
     code,
@@ -142,7 +142,7 @@ function summarizeContract(result) {
   };
 }
 
-export function migratePrdGates(inputPrd, options = {}) {
+export function migratePrdGates(inputPrd, options = Object()) {
   const prd = deepClone(inputPrd || {});
   const issues = [];
   const tasksChanged = [];
@@ -266,7 +266,7 @@ export function createPrdMigrationAdvice(inputPrd, prdPath = "prd.json") {
   };
 }
 
-export function migratePrdFile(path, options = {}) {
+export function migratePrdFile(path, options = Object()) {
   const resolved = resolve(process.cwd(), path);
   if (!existsSync(resolved)) throw new Error(`PRD not found: ${path}`);
 

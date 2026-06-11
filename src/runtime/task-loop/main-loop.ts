@@ -38,7 +38,7 @@ export async function runMainLoopWithRuntime({
   skippedTaskPostconditionsPass,
   log = noop,
   writeRelayArtifact = null,
-} = {}) {
+} = Object()) {
   const prd = loadPRD(prdPath);
   const results = { completed: [], failed: [], skipped: [], blocked: [], contractReview: [], remediation: [], immediateRemediationQueue: [] };
   const completedIds = new Set(preCompleted);

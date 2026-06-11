@@ -17,7 +17,7 @@ function artifactId(input, prefix, index = 1) {
   return cleanText(input.id || input.key || input.ref || `${prefix}-${String(index).padStart(3, "0")}`);
 }
 
-export function buildRequirementArtifact(input = {}, options = {}) {
+export function buildRequirementArtifact(input = Object(), options = Object()) {
   return {
     schema_version: SPEC_LIFECYCLE_SCHEMA_VERSION,
     schema: "yolo.spec.requirement.v1",
@@ -32,7 +32,7 @@ export function buildRequirementArtifact(input = {}, options = {}) {
   };
 }
 
-export function buildDesignArtifact(input = {}, options = {}) {
+export function buildDesignArtifact(input = Object(), options = Object()) {
   return {
     schema_version: SPEC_LIFECYCLE_SCHEMA_VERSION,
     schema: "yolo.spec.design.v1",
@@ -48,7 +48,7 @@ export function buildDesignArtifact(input = {}, options = {}) {
   };
 }
 
-export function buildTaskArtifact(input = {}, options = {}) {
+export function buildTaskArtifact(input = Object(), options = Object()) {
   return {
     schema_version: SPEC_LIFECYCLE_SCHEMA_VERSION,
     schema: "yolo.spec.task.v1",
@@ -68,7 +68,7 @@ export function buildTaskArtifact(input = {}, options = {}) {
   };
 }
 
-export function buildChangeArtifact(input = {}, options = {}) {
+export function buildChangeArtifact(input = Object(), options = Object()) {
   return {
     schema_version: SPEC_LIFECYCLE_SCHEMA_VERSION,
     schema: "yolo.spec.change.v1",
@@ -86,7 +86,7 @@ export function buildChangeArtifact(input = {}, options = {}) {
   };
 }
 
-export function buildSpecLifecyclePackage(input = {}, options = {}) {
+export function buildSpecLifecyclePackage(input = Object(), options = Object()) {
   const requirements = asArray(input.requirements).map((item, index) =>
     buildRequirementArtifact(item, { index: index + 1 })
   );
@@ -117,7 +117,7 @@ function missingRefs(refs, validRefs) {
   return refs.filter((ref) => !validRefs.has(ref));
 }
 
-export function inspectSpecLifecyclePackage(specPackage = {}) {
+export function inspectSpecLifecyclePackage(specPackage = Object()) {
   const requirements = asArray(specPackage.requirements);
   const designs = asArray(specPackage.designs);
   const tasks = asArray(specPackage.tasks);
@@ -210,7 +210,7 @@ function draftDemandQualityReport() {
   };
 }
 
-export function specLifecycleToPrd(specPackage = {}, options = {}) {
+export function specLifecycleToPrd(specPackage = Object(), options = Object()) {
   const executable = options.executable === true;
   const draftQuality = draftDemandQualityReport();
   return {

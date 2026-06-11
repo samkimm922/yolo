@@ -47,7 +47,7 @@ export function rollupBatch(summaries = []) {
   };
 }
 
-export function buildRelayInjection(summaries = [], { maxTokens = 2500 } = {}) {
+export function buildRelayInjection(summaries = [], { maxTokens = 2500 } = Object()) {
   if (!summaries.length) return "";
 
   const rollup = rollupBatch(summaries);

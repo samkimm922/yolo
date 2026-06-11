@@ -26,14 +26,14 @@ function normalizeEvidenceRefs(...values) {
   return normalizeRefs(...values).filter((ref) => ref.length > 0);
 }
 
-function targetFiles(task = {}) {
+function targetFiles(task = Object()) {
   return [...new Set((task.scope?.targets || [])
     .map((target) => target.file)
     .filter(Boolean)
     .map((file) => String(file).replace(/:\d+(?:-\d+)?$/, "")))];
 }
 
-function taskRequirementIds(task = {}) {
+function taskRequirementIds(task = Object()) {
   return normalizeRefs(
     task.requirement_id,
     task.requirement_ids,
@@ -47,7 +47,7 @@ function taskRequirementIds(task = {}) {
   );
 }
 
-function taskDesignIds(task = {}) {
+function taskDesignIds(task = Object()) {
   return normalizeRefs(
     task.design_id,
     task.design_ids,
@@ -61,7 +61,7 @@ function taskDesignIds(task = {}) {
   );
 }
 
-function taskEvidenceRefs(task = {}) {
+function taskEvidenceRefs(task = Object()) {
   return normalizeEvidenceRefs(
     task.evidence_file,
     task.evidence_files,
@@ -75,7 +75,7 @@ function taskEvidenceRefs(task = {}) {
   );
 }
 
-export function buildTraceabilityMatrix(prd = {}) {
+export function buildTraceabilityMatrix(prd = Object()) {
   const tasks = (prd.tasks || []).map((task) => {
     const requirementIds = taskRequirementIds(task);
     const designIds = taskDesignIds(task);
@@ -116,7 +116,7 @@ export function buildTraceabilityMatrix(prd = {}) {
   };
 }
 
-export function inspectSpecGovernance(prd = {}, options = {}) {
+export function inspectSpecGovernance(prd = Object(), options = Object()) {
   const policy = {
     requireRequirements: options.requireRequirements === true,
     requireDesign: options.requireDesign === true,

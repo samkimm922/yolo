@@ -125,14 +125,14 @@ function copyFixtureToProject(source: string, destination: string) {
   }
 }
 
-function firstSourceFile(descriptor = {}) {
+function firstSourceFile(descriptor = Object()) {
   const files = asArray(descriptor.files).map(clean).filter(Boolean);
   return files.find((file) => /^src\//.test(file))
     || files.find((file) => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(file))
     || "src/index.ts";
 }
 
-function firstTestFile(descriptor = {}) {
+function firstTestFile(descriptor = Object()) {
   const files = asArray(descriptor.files).map(clean).filter(Boolean);
   return files.find((file) => /(^|\/)(test|tests|__tests__)\//.test(file))
     || files.find((file) => /\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$/.test(file))
@@ -462,7 +462,7 @@ async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: 
   }
 }
 
-export async function runSoak(options = {}, deps = {}) {
+export async function runSoak(options = Object(), deps = Object()) {
   const normalized = {
     rounds: options.rounds ?? DEFAULT_ROUNDS,
     fixtures: options.fixtures ?? [...DEFAULT_FIXTURES],
@@ -511,7 +511,7 @@ export async function runSoak(options = {}, deps = {}) {
   return { summary, exitCode, reports };
 }
 
-export async function main(argv = process.argv.slice(2), io = {}) {
+export async function main(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   let options;

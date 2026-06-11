@@ -13,7 +13,7 @@ export function readTaskChangedFiles({
   worktreeFiles = null,
   execFileSync = defaultExecFileSync,
   fallbackExcludes = DEFAULT_FALLBACK_CHANGED_FILE_EXCLUDES,
-} = {}) {
+} = Object()) {
   if (worktreeFiles?.length > 0) return worktreeFiles;
 
   const diff = execFileSync("git", ["diff", "--name-only"], {
@@ -47,7 +47,7 @@ export function filterCommittableFiles(
   {
     excludeFiles = DEFAULT_COMMIT_EXCLUDE_FILES,
     binaryFilePattern = DEFAULT_BINARY_FILE_PATTERN,
-  } = {},
+  } = Object(),
 ) {
   return files.filter(
     (file) => file && !excludeFiles.includes(file) && !binaryFilePattern.test(file),
@@ -65,7 +65,7 @@ export function classifyChangedFiles(files = []) {
   return { business, metadata };
 }
 
-export function scopedOutOfScopeFiles(files = [], task = {}, { isFileAllowedByScope } = {}) {
+export function scopedOutOfScopeFiles(files = [], task = Object(), { isFileAllowedByScope } = Object()) {
   const targetFiles = (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
   if (targetFiles.length === 0 || files.length === 0) {
     const unscoped = targetFiles.length === 0;
@@ -80,13 +80,13 @@ export function scopedOutOfScopeFiles(files = [], task = {}, { isFileAllowedBySc
 
 export function buildCommitChangeContext({
   rootDir,
-  task = {},
+  task = Object(),
   worktreeFiles = null,
   execFileSync = defaultExecFileSync,
   isFileAllowedByScope,
   fallbackExcludes,
   committableOptions,
-} = {}) {
+} = Object()) {
   const allChanged = readTaskChangedFiles({
     rootDir,
     worktreeFiles,

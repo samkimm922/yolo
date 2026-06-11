@@ -34,7 +34,7 @@ function slug(value, fallback = "DISCOVERY") {
   return normalized || fallback;
 }
 
-function nowIso(options = {}) {
+function nowIso(options = Object()) {
   return clean(options.now) || new Date().toISOString();
 }
 
@@ -50,7 +50,7 @@ function projectId(brief, now) {
   return `DISC-${idDate(now)}-${slug(brief.idea || brief.problem || "PROJECT")}`;
 }
 
-function detectProjectShape(brief = {}) {
+function detectProjectShape(brief = Object()) {
   const signals = [
     ...arrayOfStrings(brief.constraints),
     ...arrayOfStrings(brief.success_criteria),
@@ -82,7 +82,7 @@ function requirementTitle(text, index) {
   return title || `Requirement ${requirementId(index)}`;
 }
 
-function openQuestionForCheck(check = {}) {
+function openQuestionForCheck(check = Object()) {
   const code = clean(check.code);
   const prompts = {
     DISCOVERY_IDEA_SPECIFIC: "What concrete outcome should this work deliver?",
@@ -96,7 +96,7 @@ function openQuestionForCheck(check = {}) {
   return prompts[code] || check.message || check.summary || "";
 }
 
-function requirementStatusCounts(contract = {}) {
+function requirementStatusCounts(contract = Object()) {
   return {
     active: contract.active.length,
     validated: contract.validated.length,
@@ -118,7 +118,7 @@ function buildRequirementRecord(text, index, source = "success_criteria") {
   };
 }
 
-function normalizeResearchDecision(input = {}, readiness = {}) {
+function normalizeResearchDecision(input = Object(), readiness = Object()) {
   const raw = input.research_decision ?? input.researchDecision ?? input.research;
   if (raw === true) return "research";
   const value = clean(raw).toLowerCase();
@@ -127,7 +127,7 @@ function normalizeResearchDecision(input = {}, readiness = {}) {
   return "skip";
 }
 
-function readBaseCommit(options = {}) {
+function readBaseCommit(options = Object()) {
   try {
     return execSync("git rev-parse HEAD", {
       cwd: options.projectRoot || options.project_root || process.cwd(),
@@ -144,7 +144,7 @@ function taskTitle(requirement) {
   return clean(requirement.title).slice(0, 96) || `Implement ${requirement.id}`;
 }
 
-function targetFilesForPrd(discovery = {}) {
+function targetFilesForPrd(discovery = Object()) {
   const briefTargets = arrayOfStrings(discovery.brief?.target_files);
   const projectTargets = arrayOfStrings(discovery.project?.target_files);
   return uniqueStrings([...briefTargets, ...projectTargets]);
@@ -180,7 +180,7 @@ function draftDemandQualityReport() {
   };
 }
 
-export function buildProjectContext(brief = {}, input = {}, options = {}) {
+export function buildProjectContext(brief = Object(), input = Object(), options = Object()) {
   const now = nowIso(options);
   const idea = clean(brief.idea || input.idea || input.objective || input.requirement);
   const problem = clean(brief.problem || input.problem);
@@ -210,7 +210,7 @@ export function buildProjectContext(brief = {}, input = {}, options = {}) {
   };
 }
 
-export function buildRequirementsContract(brief = {}, input = {}) {
+export function buildRequirementsContract(brief = Object(), input = Object()) {
   const successCriteria = uniqueStrings(brief.success_criteria || input.success_criteria || input.successCriteria);
   const contract = {
     schema: DISCOVERY_REQUIREMENTS_SCHEMA,
@@ -233,7 +233,7 @@ export function buildRequirementsContract(brief = {}, input = {}) {
   };
 }
 
-export function buildResearchDecision(input = {}, readiness = {}, options = {}) {
+export function buildResearchDecision(input = Object(), readiness = Object(), options = Object()) {
   const decision = normalizeResearchDecision(input, readiness);
   return {
     schema: DISCOVERY_RESEARCH_DECISION_SCHEMA,
@@ -247,7 +247,7 @@ export function buildResearchDecision(input = {}, readiness = {}, options = {}) 
   };
 }
 
-export function buildOpenQuestions(readiness = {}) {
+export function buildOpenQuestions(readiness = Object()) {
   const brief = readiness.brief || {};
   const generated = [
     ...(Array.isArray(readiness.blockers) ? readiness.blockers : []),
@@ -259,7 +259,7 @@ export function buildOpenQuestions(readiness = {}) {
   ]);
 }
 
-export function buildTraceability(project = {}, requirements = {}) {
+export function buildTraceability(project = Object(), requirements = Object()) {
   return {
     project_id: project.id,
     milestone_ids: arrayOfStrings(project.milestone_sequence?.map((item) => item.id)),
@@ -272,7 +272,7 @@ export function buildTraceability(project = {}, requirements = {}) {
   };
 }
 
-export function buildDiscoveryArtifact(input = {}, options = {}) {
+export function buildDiscoveryArtifact(input = Object(), options = Object()) {
   const now = nowIso(options);
   const readiness = inspectDiscoveryReadiness(input, options);
   const brief = readiness.brief;
@@ -305,7 +305,7 @@ export function buildDiscoveryArtifact(input = {}, options = {}) {
   };
 }
 
-export function buildDiscoveryPlan(discovery = {}, input = {}, options = {}) {
+export function buildDiscoveryPlan(discovery = Object(), input = Object(), options = Object()) {
   const requirements = discovery.requirements?.active || [];
   const blocked = discovery.ready_for_plan !== true;
   const steps = blocked
@@ -341,7 +341,7 @@ export function buildDiscoveryPlan(discovery = {}, input = {}, options = {}) {
   };
 }
 
-export function buildPrdFromDiscovery(discovery = {}, input = {}, options = {}) {
+export function buildPrdFromDiscovery(discovery = Object(), input = Object(), options = Object()) {
   const requirements = discovery.requirements?.active || [];
   const targetFiles = targetFilesForPrd(discovery);
   const now = nowIso(options);

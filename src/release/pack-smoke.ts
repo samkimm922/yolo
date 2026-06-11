@@ -71,7 +71,7 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function runCommand(command, args, cwd, options = {}) {
+function runCommand(command, args, cwd, options = Object()) {
   const startedAt = new Date().toISOString();
   const result = spawnSync(command, args, {
     cwd,
@@ -102,14 +102,14 @@ function parseNpmPackJson(stdout) {
   return pack;
 }
 
-export function packageExportSpecifiers(packageJson = {}) {
+export function packageExportSpecifiers(packageJson = Object()) {
   const packageName = packageJson.name || "yolo";
   return Object.keys(packageJson.exports || {})
     .sort()
     .map((name) => (name === "." ? packageName : `${packageName}/${name.replace(/^\.\//, "")}`));
 }
 
-export function buildPackageInstallSmokePlan(options = {}) {
+export function buildPackageInstallSmokePlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const importSpecifiers = options.importSpecifiers || packageExportSpecifiers(packageJson);
@@ -138,7 +138,7 @@ export function buildPackageInstallSmokePlan(options = {}) {
   };
 }
 
-export function inspectPackedPackage(packInfo = {}, options = {}) {
+export function inspectPackedPackage(packInfo = Object(), options = Object()) {
   const paths = (packInfo.files || []).map((file) => file.path).sort();
   const requiredEntries = options.requiredEntries || DEFAULT_PACKAGE_SMOKE_REQUIRED_ENTRIES;
   const forbiddenPrefixes = options.forbiddenPrefixes || DEFAULT_PACKAGE_SMOKE_FORBIDDEN_PREFIXES;
@@ -394,7 +394,7 @@ console.log(JSON.stringify({
   writeFileSync(filePath, source, "utf8");
 }
 
-export function runPackageInstallSmoke(options = {}) {
+export function runPackageInstallSmoke(options = Object()) {
   const plan = buildPackageInstallSmokePlan(options);
   if (options.dryRun === true || options.dry_run === true) {
     return {

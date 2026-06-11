@@ -6,7 +6,7 @@ export function createTaskTransition({ taskId, result = null, prdUpdate = null, 
   };
 }
 
-export function failTaskTransition({ taskId, reason, result = {}, prdUpdate = {}, now }) {
+export function failTaskTransition({ taskId, reason, result = Object(), prdUpdate = Object(), now = undefined }) {
   return createTaskTransition({
     taskId,
     result: { ...result, status: "FAIL", reason },
@@ -15,7 +15,7 @@ export function failTaskTransition({ taskId, reason, result = {}, prdUpdate = {}
   });
 }
 
-export function passTaskTransition({ taskId, result = {}, prdUpdate = {}, now }) {
+export function passTaskTransition({ taskId, result = Object(), prdUpdate = Object(), now = undefined }) {
   return createTaskTransition({
     taskId,
     result: { ...result, status: "PASS" },
@@ -24,7 +24,7 @@ export function passTaskTransition({ taskId, result = {}, prdUpdate = {}, now })
   });
 }
 
-export function skipTaskTransition({ taskId, reason, result = {}, prdUpdate = {}, now }) {
+export function skipTaskTransition({ taskId, reason, result = Object(), prdUpdate = Object(), now = undefined }) {
   return createTaskTransition({
     taskId,
     result: { ...result, status: "SKIP", reason },
@@ -33,7 +33,7 @@ export function skipTaskTransition({ taskId, reason, result = {}, prdUpdate = {}
   });
 }
 
-export function blockedTaskTransition({ taskId, reason, result = {}, prdUpdate = {}, now }) {
+export function blockedTaskTransition({ taskId, reason, result = Object(), prdUpdate = Object(), now = undefined }) {
   return createTaskTransition({
     taskId,
     result: { ...result, status: "BLOCKED", reason },

@@ -34,12 +34,12 @@ export function setContractRoot(newRoot) {
 
 // ── 工具函数 ────────────────────────────────────────────────────
 
-function scopedRoot(options = {}) {
+function scopedRoot(options = Object()) {
   return resolve(options.root || options.cwd || ROOT);
 }
 
 function createExec(root) {
-  return function exec(cmd, opts = {}) {
+  return function exec(cmd, opts = Object()) {
     const timeout = opts.timeout || 60000;
     try {
       const out = execFileSync("sh", ["-c", cmd], {
@@ -204,7 +204,7 @@ export function supportedConditionTypes() {
 const NON_PASS_STATUSES = new Set(["fail", "warning", "not_run", "indeterminate", "blocked", "error"]);
 const INVERTIBLE_STATUSES = new Set(["pass", "fail"]);
 
-function normalizeEvaluatorStatus(result = {}) {
+function normalizeEvaluatorStatus(result = Object()) {
   if (result.status === "pass" || NON_PASS_STATUSES.has(result.status)) return result.status;
   if (result.error) return "error";
   if (result.blocked) return "blocked";
@@ -214,8 +214,8 @@ function normalizeEvaluatorStatus(result = {}) {
   return result.passed ? "pass" : "fail";
 }
 
-function evaluateCondition(condition, taskScope, options = {}) {
-  const { id, type, params = {}, severity = "FAIL", invert = false } =
+function evaluateCondition(condition, taskScope, options = Object()) {
+  const { id, type, params = Object(), severity = "FAIL", invert = false } =
     condition;
 
   const fn = createEvaluators(scopedRoot(options))[condition.type];
@@ -265,7 +265,7 @@ function evaluateCondition(condition, taskScope, options = {}) {
  * 评估一组条件
  * @returns {{ allPass, failConditions, warnConditions, results }}
  */
-function evaluateConditions(conditions, taskScope, options = {}) {
+function evaluateConditions(conditions, taskScope, options = Object()) {
   const results = conditions.map((c) => evaluateCondition(c, taskScope, options));
   const nonPassConditions = results.filter((r) => r.status !== "pass" || r.passed !== true);
   const failConditions = results.filter(
@@ -297,7 +297,7 @@ function loadTask(prdPath, taskId) {
 /**
  * 评估 pre_conditions（修前验证）
  */
-export function evaluatePreConditions(task, prd, options = {}) {
+export function evaluatePreConditions(task, prd, options = Object()) {
   const conditions = task.pre_conditions || [];
   if (conditions.length === 0) {
     return { allPass: true, failConditions: [], warnConditions: [], nonPassConditions: [], results: [] };
@@ -309,7 +309,7 @@ export function evaluatePreConditions(task, prd, options = {}) {
  * 评估 post_conditions（修后验证）
  * 自动追加 auto-conditions
  */
-export function evaluatePostConditions(task, prd, options = {}) {
+export function evaluatePostConditions(task, prd, options = Object()) {
   const explicitConditions = task.post_conditions || [];
   const scope = task.scope || {};
 
@@ -411,7 +411,7 @@ export function toGateFormat(result) {
 // ── CLI ──────────────────────────────────────────────────────────
 
 function parseArgs() {
-  const args = {};
+  const args = Object();
   for (const a of process.argv.slice(2)) {
     const m = a.match(/^--(\w[\w-]*)=(.*)$/);
     if (m) args[m[1]] = m[2];

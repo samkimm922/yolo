@@ -70,15 +70,15 @@ function asArray(value) {
   return [value];
 }
 
-function issueCode(issue = {}) {
+function issueCode(issue = Object()) {
   return clean(issue.code || issue.id || issue.rule_id || issue.type || issue.name || "GATE_FAILURE");
 }
 
-function issueMessage(issue = {}) {
+function issueMessage(issue = Object()) {
   return clean(issue.message || issue.detail || issue.summary || issue.reason || issue.description || issue.type || issue.code || "Gate issue");
 }
 
-function issueText(issue = {}) {
+function issueText(issue = Object()) {
   return lower([
     issueCode(issue),
     issue.type,
@@ -89,19 +89,19 @@ function issueText(issue = {}) {
   ].join(" "));
 }
 
-function isUnsafeIssue(issue = {}) {
+function isUnsafeIssue(issue = Object()) {
   const text = issueText(issue);
   return /credential|secret|api[_ -]?key|password|token|publish|release|permission|sandbox|delete|destructive|unsafe|dangerous|innerhtml|billable|npm publish|curl|wget/.test(text);
 }
 
-function isHumanRequiredIssue(issue = {}) {
+function isHumanRequiredIssue(issue = Object()) {
   const code = issueCode(issue);
   const text = issueText(issue);
   return HUMAN_CODES.has(code) ||
     /discovery|requirement|scope missing|target missing|adapter.*missing|contract_suspect|contract review|needs_contract_review|user approval/.test(text);
 }
 
-function isAutoRemediableIssue(issue = {}) {
+function isAutoRemediableIssue(issue = Object()) {
   const code = issueCode(issue);
   const text = issueText(issue);
   if (/adapter/.test(text)) return false;
@@ -109,14 +109,14 @@ function isAutoRemediableIssue(issue = {}) {
     /acceptance.*missing|post.?condition.*missing|state matrix|evidence plan|must split|atomicity/.test(text);
 }
 
-function isRetryableFailure(issue = {}) {
+function isRetryableFailure(issue = Object()) {
   const type = clean(issue.type || issue.gate || issue.source);
   const text = issueText(issue);
   return RETRYABLE_FAILURE_TYPES.has(type) ||
     /eslint|tsc|typescript|test.*fail|vitest|postcondition|file scope|file_scope|lint/.test(text);
 }
 
-function actionForIssue(issue = {}, context = {}) {
+function actionForIssue(issue = Object(), context = Object()) {
   const decisionAction = clean(context.decisionAction || context.gateFailureDecision?.action);
   if (isUnsafeIssue(issue)) return GATE_REMEDIATION_ACTIONS.STOP_UNSAFE;
   if (decisionAction === "contract_suspect") return GATE_REMEDIATION_ACTIONS.ASK_HUMAN;
@@ -153,7 +153,7 @@ function actionAutomationCanContinue(action) {
   ].includes(action);
 }
 
-export function classifyGateRemediationIssue(issue = {}, context = {}) {
+export function classifyGateRemediationIssue(issue = Object(), context = Object()) {
   const action = actionForIssue(issue, context);
   const taskId = issue.task_id || issue.taskId || context.task?.id || context.taskId || null;
   return {
@@ -166,7 +166,7 @@ export function classifyGateRemediationIssue(issue = {}, context = {}) {
     automation_can_continue: actionAutomationCanContinue(action),
     requires_human: action === GATE_REMEDIATION_ACTIONS.ASK_HUMAN,
     unsafe_stop: action === GATE_REMEDIATION_ACTIONS.STOP_UNSAFE,
-    blocks_ship: action !== GATE_REMEDIATION_ACTIONS.PASS,
+    blocks_ship: true,
     rationale: actionRationale(action),
   };
 }
@@ -264,7 +264,7 @@ export function buildGateRemediationPlan({
   blockers = [],
   warnings = [],
   summary = "",
-} = {}) {
+} = Object()) {
   const issues = [...asArray(blockers), ...asArray(failures)];
   const items = issues.map((issue, index) => classifyGateRemediationIssue(issue, {
     source,

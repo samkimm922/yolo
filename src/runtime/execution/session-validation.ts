@@ -8,7 +8,7 @@ export async function validateContextPackBeforeSession({
   rootDir,
   runtimeDir,
   loadContextPackModule = () => import("./context-pack-validator.js"),
-} = {}) {
+} = Object()) {
   try {
     const { buildContextPackForTask, validateContextPack } = await loadContextPackModule();
     const pack = buildContextPackForTask(task, { root: rootDir, attempt });
@@ -32,7 +32,7 @@ export async function validateTestGenerationAfterSession({
   task,
   cwd,
   loadTestGenerationModule = () => import("../gates/test-generation-validator.js"),
-} = {}) {
+} = Object()) {
   try {
     const { validateTestGeneration } = await loadTestGenerationModule();
     return validateTestGeneration(task, { cwd });
@@ -58,8 +58,8 @@ export function runAtomicTaskDoctorGate({
   prdPath,
   yoloRoot,
   inspectAtomicTask = defaultInspectAtomicTask,
-  logTaskBash = () => {},
-} = {}) {
+  logTaskBash = (..._args) => {},
+} = Object()) {
   if (!shouldRunAtomicTaskDoctor(task)) return { ok: true, skipped: true };
   try {
     const result = inspectAtomicTask(task, { root: yoloRoot, prdPath, writeEvidence: true });

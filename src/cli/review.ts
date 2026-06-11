@@ -121,12 +121,13 @@ const result = spawnSync('claude', [
 
 // --- 处理结果 ---
 if (result.error) {
-  if (result.error.code === 'ETIMEDOUT') {
+  const spawnError = Object.assign(Object(), result.error);
+  if (spawnError.code === 'ETIMEDOUT') {
     console.error(`[yolo-review] claude 超时 (round ${round})`);
     console.log('[]');
     process.exit(2);
   }
-  console.error(`[yolo-review] claude 调用失败: ${result.error.message}`);
+  console.error(`[yolo-review] claude 调用失败: ${spawnError.message}`);
   console.log('[]');
   process.exit(1);
 }

@@ -4,23 +4,23 @@ import {
   passTaskTransition,
 } from "../task-state/transitions.js";
 
-export function shouldRunPostCommitPostconditions(commitResult = {}) {
+export function shouldRunPostCommitPostconditions(commitResult = Object()) {
   return commitResult.blocked !== true
     && commitResult.hasRealCode === true
     && commitResult.committed === true;
 }
 
-function buildCommitFailureReason(commitResult = {}) {
+function buildCommitFailureReason(commitResult = Object()) {
   const reason = commitResult.commitFailure || commitResult.reason || commitResult.commitWarning || "commit_failed";
   return reason === "commit_failed" ? "commit 失败" : `commit 失败: ${reason}`;
 }
 
 export function buildPostCommitOutcome({
-  task = {},
-  commitResult = {},
-  baseRecord = {},
+  task = Object(),
+  commitResult = Object(),
+  baseRecord = Object(),
   postResult = null,
-} = {}) {
+} = Object()) {
   const taskId = task.id;
   if (commitResult.blocked) {
     const reason = commitResult.blockReason || "scope audit blocked";

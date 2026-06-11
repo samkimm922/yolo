@@ -7,14 +7,14 @@ function clean(value) {
 }
 
 export function buildFreshSessionContextContract({
-  task = {},
+  task = Object(),
   prdPath = "",
   attempt = 1,
   sessionId = "",
   rootDir = "",
   stateRoot = "",
   hasFailureHint = false,
-} = {}) {
+} = Object()) {
   const targets = (task.scope?.targets || [])
     .map((target) => clean(target?.file || target))
     .filter(Boolean);
@@ -48,7 +48,7 @@ export function buildRetryLearningText({
   learnStdout = "",
   failureHint = "",
   lastGateError = "",
-} = {}) {
+} = Object()) {
   let learnText = `${learnStdout}\n${failureHint}`.slice(0, 1800);
   if (lastGateError.includes("改动范围") && lastGateError.includes("150")) {
     learnText += "\n上次失败原因：文件超过 150 行限制。这次必须先拆分文件（提取函数到独立文件），再修复 bug，不要让文件超行。";
@@ -57,7 +57,7 @@ export function buildRetryLearningText({
 }
 
 export function buildPromptSession({
-  task = {},
+  task = Object(),
   prdPath,
   attempt,
   mode,
@@ -68,7 +68,7 @@ export function buildPromptSession({
   stateRoot = "",
   experienceLimit = null,
   disableExperiencePack = false,
-} = {}) {
+} = Object()) {
   const contextContract = buildFreshSessionContextContract({
     task,
     prdPath,

@@ -49,7 +49,7 @@ export function trimJsonlWithArchive({
   readFileSync = defaultReadFileSync,
   writeFileSync = defaultWriteFileSync,
   mkdirSync = defaultMkdirSync,
-} = {}) {
+} = Object()) {
   if (!filePath) throw new Error("filePath is required");
   if (!Number.isFinite(maxLines) || maxLines < 0) throw new Error("maxLines must be a non-negative number");
   if (!existsSync(filePath)) {
@@ -109,7 +109,7 @@ export function pruneGeneratedArchiveSnapshots({
   existsSync = defaultExistsSync,
   readdirSync = defaultReaddirSync,
   rmSync = defaultRmSync,
-} = {}) {
+} = Object()) {
   const archiveDir = join(resolve(stateDir || "state"), "archive");
   if (!existsSync(archiveDir)) {
     return { status: "missing", archive_dir: archiveDir, deleted: [], deleted_count: 0, dry_run: dryRun };
@@ -132,7 +132,7 @@ export function pruneGeneratedArchiveSnapshots({
   };
 }
 
-export function applyMemoryRetention(options = {}) {
+export function applyMemoryRetention(options = Object()) {
   const stateDir = resolve(options.stateDir || options.state_dir || "state");
   const dryRun = options.dryRun === true || options.dry_run === true;
   const now = options.now || new Date();

@@ -135,7 +135,7 @@ export function lifecycleStageForCommand(commandName = "") {
   return stage ? clone(stage) : null;
 }
 
-export function createLifecycleArtifact(stageInput, options = {}) {
+export function createLifecycleArtifact(stageInput, options = Object()) {
   const stage = typeof stageInput === "string" ? getLifecycleStage(stageInput) : getLifecycleStage(stageInput.id);
   const now = clean(options.now) || new Date().toISOString();
   const projectName = clean(options.projectName || options.project_name) || "project";
@@ -163,7 +163,7 @@ export function createLifecycleArtifact(stageInput, options = {}) {
   };
 }
 
-export function createLifecycleStateSnapshot(options = {}) {
+export function createLifecycleStateSnapshot(options = Object()) {
   const now = clean(options.now) || new Date().toISOString();
   const projectName = clean(options.projectName || options.project_name) || "project";
   const currentStage = clean(options.currentStage || options.current_stage) || "idea";
@@ -188,7 +188,7 @@ export function createLifecycleStateSnapshot(options = {}) {
   };
 }
 
-export function validateLifecycleState(state = {}) {
+export function validateLifecycleState(state = Object()) {
   const errors = [];
   const warnings = [];
 

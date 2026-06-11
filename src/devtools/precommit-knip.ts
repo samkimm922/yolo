@@ -93,7 +93,7 @@ if (newDead.length === 0) {
 // 报告新增死代码
 console.error(`\n[knip-precommit] 发现 ${newDead.length} 个新增死代码：`);
 for (const key of newDead.slice(0, 20)) {
-  const [file, cat, name] = key.split(":");
+  const [file, cat, name] = String(key).split(":");
   console.error(`  ${cat === "export" ? "未使用导出" : "未使用类型"}: ${name} (${file})`);
 }
 if (newDead.length > 20) {

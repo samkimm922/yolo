@@ -5,7 +5,7 @@ import { resolve, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { config } from "../config.js";
 
-function configuredCommand(params = {}, key) {
+function configuredCommand(params = Object(), key) {
   return params.command || config.build?.[key] || "";
 }
 
@@ -97,7 +97,7 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
   return { passed: true, detail: "安全扫描通过，无禁用模式", violations: [] };
 }
 
-export function evalNoNewTypeErrors(params = {}, taskScope, ROOT, exec) {
+export function evalNoNewTypeErrors(params = Object(), taskScope, ROOT, exec) {
   const FATAL_CODES = new Set([
     "TS2304", "TS2305", "TS2307", "TS2322", "TS2345", "TS2554", "TS2741",
   ]);
@@ -151,12 +151,12 @@ export function evalNoNewTypeErrors(params = {}, taskScope, ROOT, exec) {
     : "";
 
   const newFatalIssues = relevantNewIssues.filter((k) => {
-    const code = k.split(":").pop();
+    const code = String(k).split(":").pop();
     return FATAL_CODES.has(code);
   });
 
   const otherNewIssues = relevantNewIssues.filter((k) => {
-    const code = k.split(":").pop();
+    const code = String(k).split(":").pop();
     return !FATAL_CODES.has(code);
   });
 
@@ -186,7 +186,7 @@ export function evalNoNewTypeErrors(params = {}, taskScope, ROOT, exec) {
   };
 }
 
-export function evalTypeErrorsContain(params = {}, _taskScope, ROOT, exec) {
+export function evalTypeErrorsContain(params = Object(), _taskScope, ROOT, exec) {
   const command = configuredCommand(params, "type_check");
   if (!command) return { passed: false, detail: "未配置 type_check 命令，无法验证 type_errors_contain", type: "type_errors_contain" };
 
@@ -206,7 +206,7 @@ export function evalTypeErrorsContain(params = {}, _taskScope, ROOT, exec) {
   };
 }
 
-export function evalNoNewLintErrors(params = {}, _taskScope, ROOT, exec) {
+export function evalNoNewLintErrors(params = Object(), _taskScope, ROOT, exec) {
   const baselinePath = join(ROOT, "scripts", "yolo", "state", "runtime", "eslint-baseline.json");
   let baselineKeys = [];
   if (existsSync(baselinePath)) {
@@ -263,7 +263,7 @@ export function evalNoNewLintErrors(params = {}, _taskScope, ROOT, exec) {
   };
 }
 
-export function evalNoNewDeadCode(params = {}, _taskScope, ROOT) {
+export function evalNoNewDeadCode(params = Object(), _taskScope, ROOT) {
   const baselinePath = join(ROOT, "scripts", "yolo", "state", "runtime", "knip-baseline.json");
   let baselineKeys = [];
   if (existsSync(baselinePath)) {

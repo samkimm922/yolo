@@ -43,7 +43,7 @@ function commandAction({ id, phase, summary, command, args = [], cwd, stdin, cre
   };
 }
 
-function runtimeAction({ id, phase, summary, runtime, params = {}, timeout_ms = 120000 }) {
+function runtimeAction({ id, phase, summary, runtime, params = Object(), timeout_ms = 120000 }) {
   return {
     id,
     phase,
@@ -52,6 +52,8 @@ function runtimeAction({ id, phase, summary, runtime, params = {}, timeout_ms = 
     summary,
     runtime,
     params,
+    artifacts: [],
+    next_actions: [],
     timeout_ms,
   };
 }
@@ -68,7 +70,7 @@ function observeAction({ id, phase, summary, artifacts = [], next_actions = [] }
   };
 }
 
-function resolvePiArtifacts(input = {}, context = {}) {
+function resolvePiArtifacts(input = Object(), context = Object()) {
   const yoloRoot = resolve(context.yoloRoot || DEFAULT_YOLO_ROOT);
   const projectRoot = resolve(context.projectRoot || resolve(yoloRoot, "../.."));
   const stateRoot = resolve(context.stateRoot || context.state_root || yoloRoot);
@@ -98,7 +100,7 @@ function readRequirementForDiscovery(requirement, requirementFile) {
   return "";
 }
 
-function discoveryInputForPi(input = {}, artifacts = {}, requirement = "") {
+function discoveryInputForPi(input = Object(), artifacts = Object(), requirement = "") {
   const sourceRequirement = readRequirementForDiscovery(requirement, artifacts.requirementFile);
   return {
     requirement: sourceRequirement,
@@ -116,7 +118,7 @@ function discoveryInputForPi(input = {}, artifacts = {}, requirement = "") {
   };
 }
 
-function executionConfigForPi(input = {}) {
+function executionConfigForPi(input = Object()) {
   const model = input.model;
   const agentCommand = input.agentCommand || input.agent_command || input.customCommand || input.custom_command;
   const executor = input.executor || input.provider || (agentCommand ? "custom" : null);
@@ -133,7 +135,7 @@ function executionConfigForPi(input = {}) {
   };
 }
 
-function adapterEvidenceConfigForPi(input = {}) {
+function adapterEvidenceConfigForPi(input = Object()) {
   return {
     ...(input.collectEvidence === true || input.collect_evidence === true ? { collectEvidence: true } : {}),
     ...(input.executeAdapter === true || input.execute_adapter === true ? { executeAdapter: true } : {}),
@@ -141,7 +143,7 @@ function adapterEvidenceConfigForPi(input = {}) {
   };
 }
 
-export function createPiRunPlan(input = {}, context = {}) {
+export function createPiRunPlan(input = Object(), context = Object()) {
   const artifacts = resolvePiArtifacts(input, context);
   const mode = input.mode || "dev";
   const title = input.title || "PI implementation";
@@ -389,7 +391,7 @@ export function createPiRunPlan(input = {}, context = {}) {
   };
 }
 
-export async function defaultPiExecutor(action, context = {}) {
+export async function defaultPiExecutor(action, context = Object()) {
   if (action.kind === "runtime") {
     const { runPiRuntime } = await import("../runtime/pi-runtimes.js");
     return runPiRuntime(action.runtime, action.params || {}, {
@@ -428,13 +430,13 @@ export async function defaultPiExecutor(action, context = {}) {
   };
 }
 
-function isDryRunObservation(observation = {}) {
+function isDryRunObservation(observation = Object()) {
   return observation.dry_run === true ||
     observation.dryRun === true ||
     observation.code === "RUNNER_DRY_RUN_READY";
 }
 
-export async function runPiAgent(input = {}, options = {}) {
+export async function runPiAgent(input = Object(), options = Object()) {
   const plan = createPiRunPlan(input, options);
   if (plan.status !== "success") return plan;
 
@@ -554,11 +556,11 @@ export async function runPiAgent(input = {}, options = {}) {
   };
 }
 
-export function createPiAgent(context = {}) {
+export function createPiAgent(context = Object()) {
   return {
     id: "pi",
     label: "Product Implementation Agent",
-    createPlan: (input = {}) => createPiRunPlan(input, context),
-    run: (input = {}, options = {}) => runPiAgent(input, { ...context, ...options }),
+    createPlan: (input = Object()) => createPiRunPlan(input, context),
+    run: (input = Object(), options = Object()) => runPiAgent(input, { ...context, ...options }),
   };
 }

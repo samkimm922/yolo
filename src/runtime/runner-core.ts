@@ -107,7 +107,7 @@ const progress = { total: 0, done: 0, failed: 0 };
 let CURRENT_RUN_FILE = runnerContext.currentRunFile, EXPANDED_TASKS_FILE = runnerContext.expandedTasksFile, OUTPUT_LOG = runnerContext.outputLog, activeRunId = null;
 process.env.YOLO_LOOP = "1";
 
-function applyRunnerContext(options = {}) {
+function applyRunnerContext(options = Object()) {
   runnerContext = resolveRunnerContext(options, { packageRoot: PACKAGE_ROOT, config, yoloPath });
   ROOT = runnerContext.rootDir;
   STATE_ROOT = runnerContext.stateRoot;
@@ -145,7 +145,7 @@ function writeStateSnapshot(reason, prdPath = null) {
   });
 }
 
-function writeRunnerRecoveryCheckpoint(reason, prdPath, taskId, update = {}) {
+function writeRunnerRecoveryCheckpoint(reason, prdPath, taskId, update = Object()) {
   writeRunnerRecoveryCheckpointImpl({
     reason,
     prdPath,
@@ -192,7 +192,7 @@ function applySplitSuggestionsToPrd(prdPath, parentTask, doctor) {
   });
 }
 
-function spawnProvider(prompt, timeout = runtimeConfig.ai.timeout_ms, { cwd: cwdPath } = {}) {
+function spawnProvider(prompt, timeout = runtimeConfig.ai.timeout_ms, { cwd: cwdPath } = Object()) {
   return spawnProviderPrompt(prompt, {
     timeout,
     cwd: cwdPath || ROOT,
@@ -423,7 +423,7 @@ const globalTimeoutController = createRunnerTimeoutController({
   execSync,
 });
 
-function _setGlobalTimeout(ms, options = {}) {
+function _setGlobalTimeout(ms, options = Object()) {
   return globalTimeoutController.setGlobalTimeout(ms, options);
 }
 
@@ -462,14 +462,14 @@ function writeCurrentRun(runId, prdPath) {
 
 const runnerError = createRunnerError;
 
-function runPreExecutionGates(prdPath, options = {}) {
+function runPreExecutionGates(prdPath, options = Object()) {
   const exitOnFailure = options.exitOnFailure !== false;
   const prd = loadPRD(prdPath);
   const gate = inspectPreExecutionGates({
     prd,
     prdPath,
     stateDir: STATE_DIR,
-    projectRoot: ROOT,
+    projectRoot: ROOT, config: runtimeConfig,
   });
   if (gate.status !== "pass") {
     const output = gate.messages.join("\n");
@@ -495,7 +495,7 @@ function archiveCurrentRun(runId, results) {
   archiveCurrentRunFile({ currentRunFile: CURRENT_RUN_FILE, stateDir: STATE_DIR, runId, results });
 }
 
-export async function run(prdPath, options = {}) {
+export async function run(prdPath, options = Object()) {
   applyRunnerContext(options);
   runtimeConfig = withExecutionConfig(config, options);
   const exitOnComplete = options.exitOnComplete !== false;

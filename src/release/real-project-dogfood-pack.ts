@@ -21,7 +21,7 @@ export const REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION = "1.0";
 const DOGFOOD_MODES = REAL_PROJECT_DOGFOOD_V2_MODES;
 const DOGFOOD_IDEA = "For operators, add a safe dogfood smoke marker so YOLO can prove idea-to-acceptance flow without editing production code or calling providers.";
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -39,7 +39,7 @@ function writeJson(filePath, value) {
   return filePath;
 }
 
-function expectedPlanPaths(plan = {}) {
+function expectedPlanPaths(plan = Object()) {
   const plainFiles = [
     ...(plan.files || []),
     ...(plan.native_skill_files || []),
@@ -55,7 +55,7 @@ function expectedPlanPaths(plan = {}) {
   }));
 }
 
-function plannedPathsFromDryRun(result = {}) {
+function plannedPathsFromDryRun(result = Object()) {
   return unique([
     ...(result.planned || []),
   ]);
@@ -73,7 +73,7 @@ function commandForMode(mode) {
   return `/yolo-${mode.replace(/_/g, "-")}`;
 }
 
-export function inspectAgentBridgeDryRunDoctor({ plan = {}, dryRunResult = {} } = {}) {
+export function inspectAgentBridgeDryRunDoctor({ plan = Object(), dryRunResult = Object() } = Object()) {
   const expected = expectedPlanPaths(plan);
   const planned = plannedPathsFromDryRun(dryRunResult);
   const plannedText = planned.join("\n");
@@ -133,7 +133,7 @@ export function inspectAgentBridgeDryRunDoctor({ plan = {}, dryRunResult = {} } 
   };
 }
 
-export function buildRealProjectDogfoodPackPlan(options = {}) {
+export function buildRealProjectDogfoodPackPlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || plannedProjectRoot());
   const homeDir = resolve(options.homeDir || options.home_dir || join(projectRoot, ".home"));
@@ -164,7 +164,7 @@ export function buildRealProjectDogfoodPackPlan(options = {}) {
   };
 }
 
-function dogfoodEvidence({ mode, projectRoot, now, payload = {}, status = "pass", linkedArtifacts = [] }) {
+function dogfoodEvidence({ mode, projectRoot, now, payload = Object(), status = "pass", linkedArtifacts = [] }) {
   const command = commandForMode(mode);
   const artifactPath = join(projectRoot, ".yolo/state/reports/dogfood", `${mode}.json`);
   const artifact = {
@@ -194,7 +194,7 @@ function dogfoodEvidence({ mode, projectRoot, now, payload = {}, status = "pass"
   };
 }
 
-function dogfoodPrdEvidencePayload(compiled = {}) {
+function dogfoodPrdEvidencePayload(compiled = Object()) {
   const blockers = unique([
     ...(compiled.blockers || []).map((blocker) => blocker.code || blocker.message || "SPEC_COMPILER_BLOCKER"),
     ...((compiled.validation?.blockers || []).map((blocker) => blocker.code || blocker.message || "SPEC_VALIDATION_BLOCKER")),
@@ -535,7 +535,7 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now, compiledRaw: injectedCo
   };
 }
 
-export function runRealProjectDogfoodPack(options = {}) {
+export function runRealProjectDogfoodPack(options = Object()) {
   const plan = options.plan || buildRealProjectDogfoodPackPlan(options);
   const yoloRoot = resolve(plan.yolo_root);
   const projectRoot = resolve(plan.project_root);

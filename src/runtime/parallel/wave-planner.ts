@@ -22,15 +22,15 @@ function normalizePath(value = "") {
   return clean(value).replace(/\\/g, "/").replace(/^\.\//, "").replace(/:\d+(?:-\d+)?$/, "");
 }
 
-function taskId(task = {}) {
+function taskId(task = Object()) {
   return clean(task.id || task.task_id);
 }
 
-function taskStatus(task = {}) {
+function taskStatus(task = Object()) {
   return clean(task.status || "pending").toLowerCase();
 }
 
-function taskTargets(task = {}) {
+function taskTargets(task = Object()) {
   return [
     ...asArray(task.scope?.targets).map((target) => normalizePath(target.file || target.path || target)),
     ...asArray(task.files).map(normalizePath),
@@ -38,25 +38,25 @@ function taskTargets(task = {}) {
   ].filter(Boolean);
 }
 
-function taskDependencies(task = {}) {
+function taskDependencies(task = Object()) {
   return asArray(task.depends_on || task.dependencies).map(String).filter(Boolean);
 }
 
-function taskKind(task = {}) {
+function taskKind(task = Object()) {
   const text = [task.type, task.task_kind, task.title, task.description].filter(Boolean).join(" ").toLowerCase();
   if (/review|审查/.test(text)) return "review";
   if (/accept|qa|ui|验收/.test(text)) return "qa";
   return "implementation";
 }
 
-function agentForTask(task = {}) {
+function agentForTask(task = Object()) {
   const kind = taskKind(task);
   if (kind === "review") return "reviewer-agent";
   if (kind === "qa") return "qa-agent";
   return "implementer-agent";
 }
 
-function taskCanRun(task = {}) {
+function taskCanRun(task = Object()) {
   return !["done", "completed", "skipped", "merged_into"].includes(taskStatus(task));
 }
 
@@ -65,7 +65,7 @@ function intersects(a = [], b = []) {
   return b.filter((item) => set.has(item));
 }
 
-function isExclusiveTask(task = {}) {
+function isExclusiveTask(task = Object()) {
   const targets = taskTargets(task);
   if (targets.length === 0) return true;
   if (task.parallel === false || task.allow_parallel === false) return true;
@@ -73,7 +73,7 @@ function isExclusiveTask(task = {}) {
   return false;
 }
 
-function conflictBetween(left = {}, right = {}) {
+function conflictBetween(left = Object(), right = Object()) {
   const leftTargets = taskTargets(left);
   const rightTargets = taskTargets(right);
   const shared = intersects(leftTargets, rightTargets);
@@ -107,7 +107,7 @@ export function detectParallelConflicts(tasks = []) {
   return conflicts;
 }
 
-export function buildTaskDependencyGraph(input = {}) {
+export function buildTaskDependencyGraph(input = Object()) {
   const tasks = asArray(input.tasks || input.prd?.tasks).filter((task) => taskId(task));
   const ids = new Set(tasks.map(taskId));
   const nodes = tasks.map((task) => {
@@ -169,14 +169,14 @@ function passedWaveIdsFromReports(waveReports = []) {
     .filter(Boolean));
 }
 
-function waveIdsBefore(waves = [], wave = {}) {
+function waveIdsBefore(waves = [], wave = Object()) {
   return asArray(waves)
     .filter((candidate) => Number(candidate.index || 0) < Number(wave.index || 0))
     .map((candidate) => candidate.id)
     .filter(Boolean);
 }
 
-export function inspectParallelWaveStartGate(input = {}, options = {}) {
+export function inspectParallelWaveStartGate(input = Object(), options = Object()) {
   const wave = input.wave || {};
   const waves = asArray(input.waves || input.plan?.waves || options.waves || options.plan?.waves);
   const completed = new Set(asArray(input.completedTaskIds || input.completed_task_ids || options.completedTaskIds || options.completed_task_ids).map(clean));
@@ -245,7 +245,7 @@ function waveRecord({ waveIndex, tasks, worktreeRoot }) {
   };
 }
 
-export function planControlledParallelWaves(input = {}, options = {}) {
+export function planControlledParallelWaves(input = Object(), options = Object()) {
   const projectRoot = clean(input.projectRoot || input.project_root || options.projectRoot || options.project_root || process.cwd());
   const worktreeRoot = normalizePath(input.worktreeRoot || input.worktree_root || options.worktreeRoot || options.worktree_root || `${projectRoot}/../.yolo-worktrees`);
   const graph = buildTaskDependencyGraph(input);
@@ -285,7 +285,7 @@ export function planControlledParallelWaves(input = {}, options = {}) {
   for (const task of unscheduled) {
     const dependencies = taskDependencies(task);
     const missing = dependencies.filter((dependency) => !taskById.has(dependency) && !completed.has(dependency));
-    blockers.push({
+    blockers.push(Object.assign(Object(), {
       code: missing.length > 0 ? "TASK_DEPENDENCY_MISSING" : "TASK_DEPENDENCY_CYCLE_OR_BLOCKED",
       message: missing.length > 0
         ? "Task has missing dependencies and cannot be scheduled."
@@ -293,7 +293,7 @@ export function planControlledParallelWaves(input = {}, options = {}) {
       task_id: taskId(task),
       dependencies,
       missing_dependencies: missing,
-    });
+    }));
   }
 
   const startGates = waves.map((wave) => inspectParallelWaveStartGate({
@@ -351,7 +351,7 @@ function reportForTask(taskIdValue, taskReports = []) {
   return taskReports.find((report) => clean(report.task_id || report.taskId || report.id) === taskIdValue);
 }
 
-export function inspectParallelMergeGate(input = {}, options = {}) {
+export function inspectParallelMergeGate(input = Object(), options = Object()) {
   const wave = input.wave || {};
   const taskReports = asArray(input.taskReports || input.task_reports || options.taskReports || options.task_reports);
   const blockers = [];
@@ -395,7 +395,7 @@ export function inspectParallelMergeGate(input = {}, options = {}) {
   };
 }
 
-export function mergeParallelEvidence(input = {}, options = {}) {
+export function mergeParallelEvidence(input = Object(), options = Object()) {
   const waves = asArray(input.waves || input.plan?.waves || options.waves);
   const taskReports = asArray(input.taskReports || input.task_reports || options.taskReports || options.task_reports);
   const waveReports = waves.map((wave) => inspectParallelMergeGate({ wave, taskReports }));
@@ -421,7 +421,7 @@ export function mergeParallelEvidence(input = {}, options = {}) {
   };
 }
 
-export function formatControlledParallelPlanText(plan = {}) {
+export function formatControlledParallelPlanText(plan = Object()) {
   const lines = [`[yolo parallel] ${plan.status}: ${plan.wave_count || 0} wave(s), ${plan.task_count || 0} task(s)`];
   for (const wave of asArray(plan.waves)) {
     lines.push(`- ${wave.id}: ${wave.task_ids.join(", ")} (${wave.status})`);

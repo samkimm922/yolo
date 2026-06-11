@@ -14,7 +14,7 @@ export function buildGateFailureRetryDecision({
   lastGateError = "",
   attempt = 0,
   maxRetryForGate = 0,
-} = {}) {
+} = Object()) {
   if (hasRepeatedGateFailure(history)) {
     const action = isContractConditionFailure(failures) ? "contract_suspect" : "stuck";
     const base = {

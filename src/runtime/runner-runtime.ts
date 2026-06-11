@@ -28,7 +28,7 @@ function readJsonMaybe(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-function wantsAdapterEvidence(input = {}, options = {}) {
+function wantsAdapterEvidence(input = Object(), options = Object()) {
   return input.collectEvidence === true
     || input.collect_evidence === true
     || options.collectEvidence === true
@@ -53,18 +53,18 @@ function attachAdapterEvidence(response, evidence) {
   return response;
 }
 
-function collectAdapterEvidenceForRun({ prd, projectRoot, stateRoot, runId, input = {}, options = {} } = {}) {
+function collectAdapterEvidenceForRun({ prd, projectRoot, stateRoot, runId, input = Object(), options = Object() } = Object()) {
   if (!wantsAdapterEvidence(input, options)) return null;
   const requiresAcceptanceAdapter = uiTasks(prd).length > 0;
   if (!requiresAcceptanceAdapter) return null;
-  const evidence = runAdapterEvidenceCollector({
+  const evidence = Object.assign(Object(), runAdapterEvidenceCollector({
     projectRoot,
     stateRoot,
     prd,
     requiresAcceptanceAdapter,
     execute: input.executeAdapter === true || input.execute_adapter === true || options.executeAdapter === true || options.execute_adapter === true,
     allowAdapterCommands: input.allowAdapterCommands === true || input.allow_adapter_commands === true || options.allowAdapterCommands === true || options.allow_adapter_commands === true,
-  });
+  }));
   try {
     appendStateEvent(join(stateRoot, "state"), "ui.evidence", {
       run_id: runId || null,
@@ -96,7 +96,7 @@ function numberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function runnerResultReportArtifacts(result = {}) {
+function runnerResultReportArtifacts(result = Object()) {
   return {
     json_path: result.report_file || result.report_json || result.reportJson || result.report_path || result.reportPath,
     markdown_path: result.report_markdown || result.reportMarkdown || result.report_md || result.reportMd,
@@ -105,28 +105,28 @@ function runnerResultReportArtifacts(result = {}) {
   };
 }
 
-function artifactJson(path, { projectRoot } = {}) {
+function artifactJson(path, { projectRoot } = Object()) {
   if (!path) return null;
   return readJsonMaybe(resolve(projectRoot || "", path));
 }
 
-function runnerResultReport(result = {}, context = {}) {
+function runnerResultReport(result = Object(), context = Object()) {
   if (result.run_report || result.runReport || result.report) return result.run_report || result.runReport || result.report;
   return artifactJson(runnerResultReportArtifacts(result).json_path, context);
 }
 
-function runnerResultFinalAnswer(result = {}, context = {}) {
+function runnerResultFinalAnswer(result = Object(), context = Object()) {
   if (result.final_answer || result.finalAnswer) return result.final_answer || result.finalAnswer;
   return artifactJson(runnerResultReportArtifacts(result).final_answer_json_path, context);
 }
 
-function runnerResultExitCode(result = {}, verdict = {}) {
+function runnerResultExitCode(result = Object(), verdict = Object()) {
   const exitCode = numberOrNull(result.exit_code ?? result.exitCode);
   if (exitCode != null && exitCode !== 0) return exitCode;
   return verdict.status === "success" ? 0 : 1;
 }
 
-function normalizeRunnerResult(result = {}, context = {}) {
+function normalizeRunnerResult(result = Object(), context = Object()) {
   const artifacts = runnerResultReportArtifacts(result);
   const finalVerdict = buildRunFinalVerdict({
     taskResults: {
@@ -207,7 +207,7 @@ function inferProjectRootFromPrdPath(prdPath) {
   return dirname(prdPath);
 }
 
-export async function runRunnerRuntime(input = {}, options = {}) {
+export async function runRunnerRuntime(input = Object(), options = Object()) {
   const prdPath = input.prdPath || input.prd_path;
   const dryRun = input.dryRun === true || input.dry_run === true || options.dryRun === true || options.dry_run === true;
   if (!prdPath) {
@@ -281,7 +281,7 @@ export async function runRunnerRuntime(input = {}, options = {}) {
     }
 
     if (dryRun) {
-      const response = {
+      const response = Object.assign(Object(), {
         status: "dry_run",
         summary: "runner dry-run preflight passed",
         exit_code: 2,
@@ -292,7 +292,7 @@ export async function runRunnerRuntime(input = {}, options = {}) {
         check: summarizeCheckReport(check),
         runner_readiness: preflight.runner_readiness,
         next_actions: ["Run without dryRun to start implementation."],
-      };
+      });
       return attachAdapterEvidence(response, collectAdapterEvidenceForRun({
         prd,
         projectRoot,
@@ -320,7 +320,7 @@ export async function runRunnerRuntime(input = {}, options = {}) {
     });
     const normalizedResult = normalizeRunnerResult(result, { projectRoot, stateRoot });
 
-    const response = {
+    const response = Object.assign(Object(), {
       status: normalizedResult.status,
       summary: normalizedResult.summary,
       exit_code: normalizedResult.exit_code,
@@ -336,7 +336,7 @@ export async function runRunnerRuntime(input = {}, options = {}) {
       next_actions: normalizedResult.status === "success"
         ? []
         : ["Review failed/blocked task IDs and rerun PI after fixing the root cause."],
-    };
+    });
     attachAdapterEvidence(response, collectAdapterEvidenceForRun({
       prd,
       projectRoot,

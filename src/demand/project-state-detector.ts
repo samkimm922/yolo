@@ -82,7 +82,7 @@ export interface ProjectState {
 
 // 从项目实际文件系统 + git 历史检测是否为"已开发项目"，而非依赖用户描述的关键词。
 // 已有代码 → 必须走 brownfield / 项目阅读 grounding 路径，无论用户怎么表述。
-export function detectProjectState(projectRoot: string, options: { sourceFileThreshold?: number } = {}): ProjectState {
+export function detectProjectState(projectRoot: string, options: { sourceFileThreshold?: number } = Object()): ProjectState {
   const threshold = Number.isFinite(options.sourceFileThreshold as number)
     ? (options.sourceFileThreshold as number)
     : DEFAULT_SOURCE_FILE_THRESHOLD;

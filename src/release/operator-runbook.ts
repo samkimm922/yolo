@@ -18,7 +18,7 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -36,11 +36,11 @@ function actionAuthorized(decisionGate, action) {
     || (Array.isArray(decisionGate?.approved_actions) && decisionGate.approved_actions.includes(action));
 }
 
-function decisionGateFromOperatorState(operatorState = {}) {
+function decisionGateFromOperatorState(operatorState = Object()) {
   return operatorState.components?.decision_gate || operatorState.decision_gate || null;
 }
 
-function dogfoodReportEvidencePresent(report = {}) {
+function dogfoodReportEvidencePresent(report = Object()) {
   const summary = report && typeof report === "object" ? report : {};
   return Boolean(summary.report_path)
     || Boolean(summary.artifact_path)
@@ -48,14 +48,14 @@ function dogfoodReportEvidencePresent(report = {}) {
     || (Array.isArray(summary.evidence) && summary.evidence.length > 0);
 }
 
-function dogfoodReportApproved(report = {}) {
+function dogfoodReportApproved(report = Object()) {
   const summary = report && typeof report === "object" ? report : {};
   return summary.publication_approved === true
     && typeof summary.approver === "string"
     && summary.approver.trim().length > 0;
 }
 
-function buildManualCommands(operations, packageJson = {}, options = {}) {
+function buildManualCommands(operations, packageJson = Object(), options = Object()) {
   const packageName = packageJson.name || "package";
   const packageVersion = packageJson.version || "0.0.0";
   const providerCommand = options.providerCommand || options.provider_command || "<operator-provider-command>";
@@ -109,7 +109,7 @@ function buildManualCommands(operations, packageJson = {}, options = {}) {
   return commands;
 }
 
-export function buildOperatorReleaseRunbookPlan(options = {}) {
+export function buildOperatorReleaseRunbookPlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const requestedOperations = normalizeRequestedOperations(options.requestedOperations || options.requested_operations);
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
@@ -136,7 +136,7 @@ export function buildOperatorReleaseRunbookPlan(options = {}) {
   };
 }
 
-export function runOperatorReleaseRunbookGate(options = {}) {
+export function runOperatorReleaseRunbookGate(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const plan = options.plan || buildOperatorReleaseRunbookPlan({

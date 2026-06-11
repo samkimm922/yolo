@@ -40,12 +40,12 @@ function formatAll(result) {
   return lines.join("\n");
 }
 
-export function runPrdPreflightCli(argv = process.argv.slice(2), io = {}) {
+export function runPrdPreflightCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const json = argv.includes("--json");
   const checkAll = argv.includes("--check-all");
-  const options = {};
+  const options = Object();
   let fileArg = "";
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];

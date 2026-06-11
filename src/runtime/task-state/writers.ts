@@ -13,7 +13,7 @@ function taskResultError(field, reason = "missing") {
   return new Error(`Invalid task result: ${field} ${reason}`);
 }
 
-function normalizeAttemptId({ taskId, record = {}, options = {} } = {}) {
+function normalizeAttemptId({ taskId, record = Object(), options = Object() } = Object()) {
   const explicit = firstPresent(
     record.attempt_id,
     record.attemptId,
@@ -33,7 +33,7 @@ function normalizeAttemptId({ taskId, record = {}, options = {} } = {}) {
   return "";
 }
 
-export function normalizeTaskResultRecord(record = {}, options = {}) {
+export function normalizeTaskResultRecord(record = Object(), options = Object()) {
   if (!record || typeof record !== "object" || Array.isArray(record)) {
     throw taskResultError("record", "must be an object");
   }
@@ -58,7 +58,7 @@ export function normalizeTaskResultRecord(record = {}, options = {}) {
   };
 }
 
-export function appendTaskResult(resultsFile, record, options = {}) {
+export function appendTaskResult(resultsFile, record, options = Object()) {
   const payload = normalizeTaskResultRecord(record, options);
   appendFileSync(resultsFile, `${JSON.stringify(payload)}\n`, "utf8");
   return payload;

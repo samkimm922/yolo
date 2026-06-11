@@ -15,7 +15,7 @@ function execGit(cwd, args) {
   }
 }
 
-function targetFiles(task = {}) {
+function targetFiles(task = Object()) {
   return (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
 }
 
@@ -36,7 +36,7 @@ function changedFiles(cwd) {
   return [...new Set([...tracked, ...untracked])];
 }
 
-export function validateDiffQuality(task = {}, options = {}) {
+export function validateDiffQuality(task = Object(), options = Object()) {
   const cwd = options.cwd || process.cwd();
   const route = classifyTaskExecution(task);
   if (route.quality_profile !== "single_line_mechanical") {

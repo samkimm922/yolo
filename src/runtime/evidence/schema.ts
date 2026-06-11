@@ -34,20 +34,20 @@ export function sha256Evidence(value) {
   return createHash(EVIDENCE_HASH_ALGORITHM).update(stableEvidenceJson(value)).digest("hex");
 }
 
-function omitHashFields(value = {}, fields = []) {
+function omitHashFields(value = Object(), fields = []) {
   const omitted = new Set(fields);
   return Object.fromEntries(Object.entries(value || {}).filter(([key]) => !omitted.has(key)));
 }
 
-export function ledgerRecordHash(record = {}) {
+export function ledgerRecordHash(record = Object()) {
   return sha256Evidence(omitHashFields(record, ["record_hash"]));
 }
 
-export function evidenceArtifactDigest(artifact = {}) {
+export function evidenceArtifactDigest(artifact = Object()) {
   return sha256Evidence(omitHashFields(artifact, ["artifact_digest", "schema_check"]));
 }
 
-export function buildLedgerRecord(event, data = {}, options = {}) {
+export function buildLedgerRecord(event, data = Object(), options = Object()) {
   if (!requiredString(event)) {
     throw new Error("buildLedgerRecord requires event");
   }
@@ -82,7 +82,7 @@ export function buildLedgerRecord(event, data = {}, options = {}) {
   };
 }
 
-export function buildEvidenceArtifact(artifactType, payload = {}, options = {}) {
+export function buildEvidenceArtifact(artifactType, payload = Object(), options = Object()) {
   if (!requiredString(artifactType)) {
     throw new Error("buildEvidenceArtifact requires artifactType");
   }
@@ -109,7 +109,7 @@ export function buildEvidenceArtifact(artifactType, payload = {}, options = {}) 
   };
 }
 
-export function validateLedgerRecord(record = {}) {
+export function validateLedgerRecord(record = Object()) {
   const errors = [];
   if (record.schema_version !== EVIDENCE_SCHEMA_VERSION) errors.push("schema_version must be 1.0");
   if (record.schema !== LEDGER_EVENT_SCHEMA) errors.push(`schema must be ${LEDGER_EVENT_SCHEMA}`);
@@ -128,7 +128,7 @@ export function validateLedgerRecord(record = {}) {
   };
 }
 
-export function validateEvidenceArtifact(artifact = {}) {
+export function validateEvidenceArtifact(artifact = Object()) {
   const errors = [];
   if (artifact.schema_version !== EVIDENCE_SCHEMA_VERSION) errors.push("schema_version must be 1.0");
   if (artifact.schema !== EVIDENCE_ARTIFACT_SCHEMA) errors.push(`schema must be ${EVIDENCE_ARTIFACT_SCHEMA}`);

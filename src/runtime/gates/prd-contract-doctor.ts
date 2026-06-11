@@ -66,7 +66,7 @@ function cleanString(value) {
   return String(value ?? "").trim();
 }
 
-function strictExecutionPolicy(prd, options = {}) {
+function strictExecutionPolicy(prd, options = Object()) {
   if (options.strictExecution === false || options.strict_execution === false) return false;
   if (options.requireDemandContract === false || options.require_demand_contract === false) return false;
   if (options.strictExecution === true || options.strict_execution === true) return true;
@@ -78,14 +78,14 @@ function strictExecutionPolicy(prd, options = {}) {
     prd?.execution_readiness?.level === "L3";
 }
 
-function taskDependencyIds(task = {}) {
+function taskDependencyIds(task = Object()) {
   return [...new Set([
     ...asArray(task.depends_on),
     ...asArray(task.dependencies),
   ].map(String).filter(Boolean))];
 }
 
-function normalizeTaskTargets(task = {}) {
+function normalizeTaskTargets(task = Object()) {
   const scopeTargets = asArray(task.scope?.targets)
     .map((target) => typeof target === "string" ? { file: target } : target)
     .filter((target) => cleanString(target?.file || target?.path || target).length > 0)
@@ -99,7 +99,7 @@ function normalizeTaskTargets(task = {}) {
     .filter((target) => cleanString(target.file).length > 0);
 }
 
-function hasTaskAcceptance(task = {}) {
+function hasTaskAcceptance(task = Object()) {
   return asArray(task.acceptance_criteria).length > 0 ||
     cleanString(task.acceptance).length > 0 ||
     cleanString(task.success_criteria).length > 0 ||
@@ -186,7 +186,7 @@ function suggestionForUnsupported(condition) {
   return null;
 }
 
-function addFinding(list, task, condition, code, detail, extra = {}) {
+function addFinding(list, task, condition, code, detail, extra = Object()) {
   list.push({
     task_id: task?.id || "UNKNOWN",
     condition_id: condition?.id || null,
@@ -198,7 +198,7 @@ function addFinding(list, task, condition, code, detail, extra = {}) {
   });
 }
 
-export function inspectPrdContract(prd, options = {}) {
+export function inspectPrdContract(prd, options = Object()) {
   const failures = [];
   const warnings = [];
   const tasks = Array.isArray(prd?.tasks) ? prd.tasks : [];

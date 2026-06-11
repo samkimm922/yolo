@@ -1,8 +1,8 @@
-export function mergedSourceTaskIds(task = {}) {
+export function mergedSourceTaskIds(task = Object()) {
   return Array.isArray(task.merged_from) ? task.merged_from.filter((id) => id && id !== task.id) : [];
 }
 
-export function updateMergedSourceTasks({ task, update = {}, updateTaskStatus, now = new Date().toISOString() }) {
+export function updateMergedSourceTasks({ task, update = Object(), updateTaskStatus, now = new Date().toISOString() }) {
   const ids = mergedSourceTaskIds(task);
   if (ids.length === 0) return [];
   for (const id of ids) {
@@ -39,7 +39,7 @@ export function completeParentIfAllChildrenDone({
   childMap,
   completedIds,
   updateTaskStatus,
-  log = () => {},
+  log = (..._args) => {},
   now = new Date().toISOString(),
 }) {
   const parentId = deriveParentTaskId(task.id);
@@ -64,7 +64,7 @@ export function blockParentForChildFailure({
   childMap,
   reason,
   updateTaskStatus,
-  log = () => {},
+  log = (..._args) => {},
   now = new Date().toISOString(),
 }) {
   const parentId = deriveParentTaskId(task.id);

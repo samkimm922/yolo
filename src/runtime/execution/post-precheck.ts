@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { execSync as defaultExecSync } from "node:child_process";
 import { skipTaskTransition } from "../task-state/transitions.js";
 
-export function taskForValidSkipPostconditions(task = {}) {
+export function taskForValidSkipPostconditions(task = Object()) {
   return {
     ...task,
     scope: {
@@ -17,11 +17,11 @@ export function taskForValidSkipPostconditions(task = {}) {
 }
 
 export function explicitCodePostconditionsPass({
-  task = {},
+  task = Object(),
   rootDir,
   existsSync = defaultExistsSync,
   readFileSync = defaultReadFileSync,
-} = {}) {
+} = Object()) {
   const postConditions = task.post_conditions || [];
   if (postConditions.length === 0) {
     return { passed: false, reason: "no_post_conditions" };
@@ -68,18 +68,18 @@ export function parseTscErrorFiles(tscOutput = "") {
 export function targetFilesHaveTscErrors(targetFiles = [], errorFiles = new Set()) {
   return targetFiles.some((file) => {
     const rel = String(file || "").replace(/^\.\//, "");
-    return errorFiles.has(rel) || [...errorFiles].some((errorFile) => errorFile.endsWith(rel) || rel.endsWith(errorFile));
+    return errorFiles.has(rel) || [...errorFiles].some((errorFile) => String(errorFile).endsWith(rel) || rel.endsWith(String(errorFile)));
   });
 }
 
 export function inspectPostPrecheckSkip({
-  task = {},
+  task = Object(),
   rootDir,
   typeCheckCommand,
   execSync = defaultExecSync,
   existsSync = defaultExistsSync,
   readFileSync = defaultReadFileSync,
-} = {}) {
+} = Object()) {
   const explicit = explicitCodePostconditionsPass({
     task,
     rootDir,

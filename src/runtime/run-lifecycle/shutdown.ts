@@ -1,4 +1,4 @@
-export function writeRunEndOnCrashEvent(result = {}, { logRun, startTimeMs, nowMs = Date.now } = {}) {
+export function writeRunEndOnCrashEvent(result = Object(), { logRun, startTimeMs, nowMs = Date.now } = Object()) {
   try {
     logRun("run_end", {
       prd: result.prd || "unknown",
@@ -19,8 +19,8 @@ export function cleanupActiveGitSession({
   activeBranch,
   rootDir,
   execSync,
-  log = () => {},
-} = {}) {
+  log = (..._args) => {},
+} = Object()) {
   if (activeWorktree) {
     try {
       log(`  清理 worktree: ${activeWorktree}`);
@@ -56,7 +56,7 @@ export function createRunnerTimeoutController({
   setTimeoutFn = setTimeout,
   clearTimeoutFn = clearTimeout,
   nowMs = Date.now,
-} = {}) {
+} = Object()) {
   let timeoutId = null;
   let timeoutMs = initialTimeoutMs;
 
@@ -86,7 +86,7 @@ export function createRunnerTimeoutController({
     exit(2);
   }
 
-  function setGlobalTimeout(ms, options = {}) {
+  function setGlobalTimeout(ms, options = Object()) {
     if (options.exitOnTimeout === false) {
       if (timeoutId) clearTimeoutFn(timeoutId);
       timeoutId = null;
@@ -123,7 +123,7 @@ export function createGracefulShutdownHandler({
   execSync,
   log = console.log,
   exit = process.exit,
-} = {}) {
+} = Object()) {
   return async function gracefulShutdown(signal) {
     log(`\n⚠️ 收到 ${signal}，正在清理...`);
     writeRunEndOnCrashEvent({
@@ -162,7 +162,7 @@ export function handleRunnerFatalError({
   cleanupRuntimeStateFiles,
   error = console.error,
   exit = process.exit,
-} = {}) {
+} = Object()) {
   error("[yolo-runner] 未捕获的异常:", reason);
   try {
     writeRunEndOnCrashEvent({ reason: exitReason }, { logRun, startTimeMs });

@@ -6,14 +6,32 @@ function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function textFromAnswer(record: any): string {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+interface DemandAnswerRecord extends Record<string, unknown> {
+  slot?: unknown;
+  answer?: unknown;
+  normalized?: unknown;
+}
+
+interface UnderstandingSession {
+  answers?: unknown;
+}
+
+function normalizedText(record: DemandAnswerRecord): unknown {
+  return isRecord(record.normalized) ? record.normalized.text : undefined;
+}
+
+function textFromAnswer(record: DemandAnswerRecord | undefined): string {
   if (!record) return "";
   const answer = record.answer;
   if (typeof answer === "string") return clean(answer);
-  if (answer && typeof answer === "object") {
-    return clean(answer.text || answer.value || answer.answer || record.normalized?.text);
+  if (isRecord(answer)) {
+    return clean(answer.text || answer.value || answer.answer || normalizedText(record));
   }
-  return clean(record.normalized?.text);
+  return clean(normalizedText(record));
 }
 
 function slotLabel(slot: string): string {
@@ -37,11 +55,13 @@ export interface UnderstandingPlayback {
 
 // 在进入 PRD 前，把已收集的每个槽位复述成"我的理解"清单，要求用户逐项确认或纠正。
 // 这是防"鸡同鸭讲"的结构化对齐步骤：审批门只问"批不批准"，复述步骤先确认"我理解对了吗"。
-export function buildUnderstandingPlayback(session: any = {}): UnderstandingPlayback {
-  const answers = (session && session.answers) || {};
+export function buildUnderstandingPlayback(session: UnderstandingSession = {}): UnderstandingPlayback {
+  const answers = isRecord(session.answers) ? session.answers : {};
   const items: PlaybackItem[] = [];
   const seen = new Set<string>();
-  for (const record of Object.values(answers) as any[]) {
+  for (const value of Object.values(answers)) {
+    if (!isRecord(value)) continue;
+    const record: DemandAnswerRecord = value;
     const slot = clean(record?.slot);
     if (!slot || slot === "execution_approval" || seen.has(slot)) continue;
     const understanding = textFromAnswer(record);

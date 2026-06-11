@@ -69,7 +69,7 @@ export function normalizeMenuChoice(value = "") {
   return "unknown";
 }
 
-export function planToMarkdown(result = {}) {
+export function planToMarkdown(result = Object()) {
   const actions = result.plan?.actions || [];
   const artifacts = result.artifacts || result.plan?.artifacts || {};
   const lines = [
@@ -100,7 +100,7 @@ export function planToMarkdown(result = {}) {
   return lines.join("\n");
 }
 
-export function friendlyPreflightSummary(result = {}) {
+export function friendlyPreflightSummary(result = Object()) {
   if (result.runner_readiness?.can_execute) {
     return {
       ok: true,
@@ -175,8 +175,9 @@ async function handlePlan(rl) {
     result.status === "success" ? "计划已生成，没有改代码。" : "计划生成失败。",
     `计划文件：${planPath}`,
   ]);
-  if (result.plan?.actions?.length) {
-    print(["YOLO 打算做这些事：", ...result.plan.actions.map((action) => `- ${action.summary}`)]);
+  const dynamicResult = Object.assign(Object(), result);
+  if (dynamicResult.plan?.actions?.length) {
+    print(["YOLO 打算做这些事：", ...dynamicResult.plan.actions.map((action) => `- ${action.summary}`)]);
   }
 }
 

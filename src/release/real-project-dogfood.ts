@@ -30,7 +30,7 @@ function commandForMode(mode) {
   return `/yolo-${mode.replace(/_/g, "-")}`;
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -38,7 +38,7 @@ function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function evidencePresent(value = {}) {
+function evidencePresent(value = Object()) {
   return Boolean(value.artifact_path)
     || Boolean(value.report_path)
     || Boolean(value.public_url)
@@ -46,7 +46,7 @@ function evidencePresent(value = {}) {
     || (Array.isArray(value.evidence) && value.evidence.length > 0);
 }
 
-function noExecutionSideEffects(value = {}) {
+function noExecutionSideEffects(value = Object()) {
   return value.writes_workspace !== true
     && value.mutates_workspace !== true
     && value.edits_code !== true
@@ -56,7 +56,7 @@ function noExecutionSideEffects(value = {}) {
     && value.executed_by_sdk !== true;
 }
 
-function evidenceForMode(mode, options = {}) {
+function evidenceForMode(mode, options = Object()) {
   const dogfoodEvidence = options.dogfoodEvidence || options.dogfood_evidence || {};
   if (isObject(dogfoodEvidence[mode])) return dogfoodEvidence[mode];
   if (mode === "plan") return options.planEvidence || options.plan_evidence || null;
@@ -74,7 +74,7 @@ function dogfoodModePassed(mode, evidence) {
     && noExecutionSideEffects(evidence);
 }
 
-export function buildRealProjectDogfoodPlan(options = {}) {
+export function buildRealProjectDogfoodPlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const modes = unique(options.modes || DOGFOOD_MODES);
@@ -107,7 +107,7 @@ export function buildRealProjectDogfoodPlan(options = {}) {
   };
 }
 
-export function runRealProjectDogfoodGate(options = {}) {
+export function runRealProjectDogfoodGate(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const plan = options.plan || buildRealProjectDogfoodPlan({ yoloRoot, projectRoot });

@@ -13,7 +13,7 @@ function arrayItems(value) {
   return [];
 }
 
-function requiredCapabilitiesFromPrd(prd = {}) {
+function requiredCapabilitiesFromPrd(prd = Object()) {
   const explicit = arrayItems(prd.required_capabilities);
   if (explicit.length > 0) return explicit;
 
@@ -27,7 +27,7 @@ function requiredCapabilitiesFromPrd(prd = {}) {
   return fromTasks;
 }
 
-export function inspectProviderCapabilityGate(options = {}) {
+export function inspectProviderCapabilityGate(options = Object()) {
   const prd = options.prd || {};
   const config = options.config || {};
   const provider = normalizeAgentProvider(options.provider || config.ai?.executor || config.ai?.provider) || "claude";

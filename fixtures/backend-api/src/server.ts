@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 
 const USERS = Object.freeze([
@@ -34,7 +35,12 @@ export function createApiServer() {
   return createServer(routeApiRequest);
 }
 
-export function startApiServer(options = {}) {
+type ApiServerHandle = {
+  server: ReturnType<typeof createApiServer>;
+  url: string;
+};
+
+export function startApiServer(options = Object()): Promise<ApiServerHandle> {
   const port = Number(options.port ?? 0);
   const host = options.host || "127.0.0.1";
   const server = createApiServer();
@@ -44,9 +50,14 @@ export function startApiServer(options = {}) {
     server.listen(port, host, () => {
       server.off("error", reject);
       const address = server.address();
+      if (typeof address === "string" || address === null) {
+        reject(new Error("backend-api fixture did not bind to a TCP address"));
+        return;
+      }
+      const tcpAddress: AddressInfo = address;
       resolve({
         server,
-        url: `http://${address.address}:${address.port}`,
+        url: `http://${tcpAddress.address}:${tcpAddress.port}`,
       });
     });
   });

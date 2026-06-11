@@ -158,7 +158,7 @@ function evidenceScopeErrors(value) {
   });
 }
 
-function demandRequestsExternalResearch(input = {}, plan = {}) {
+function demandRequestsExternalResearch(input = Object(), plan = Object()) {
   const text = [
     input.objective,
     input.problem,
@@ -184,7 +184,7 @@ function externalEvidencePresent(agentResults = []) {
   }));
 }
 
-function readDemandSession(input = {}, projectRoot) {
+function readDemandSession(input = Object(), projectRoot) {
   if (input.session && typeof input.session === "object") return input.session;
   const path = clean(input.demandPath || input.demand_path || input.sessionPath || input.session_path || input.demand);
   if (!path) return null;
@@ -198,7 +198,7 @@ function readDemandSession(input = {}, projectRoot) {
   }
 }
 
-function dispatchIdFor(input = {}, status = {}) {
+function dispatchIdFor(input = Object(), status = Object()) {
   const explicit = clean(input.dispatchId || input.dispatch_id);
   if (explicit) return safeId(explicit);
   const session = status?.state?.session_id || status?.demand_id || input.id || input.demandId || input.demand_id || "dispatch";
@@ -207,13 +207,13 @@ function dispatchIdFor(input = {}, status = {}) {
   return safeId(`${session}-${stamp}-${suffix}`);
 }
 
-function outputDirFor(input = {}, options = {}, projectRoot, stateRoot, status) {
+function outputDirFor(input = Object(), options = Object(), projectRoot, stateRoot, status) {
   const explicit = input.outputDir || input.output_dir || options.outputDir || options.output_dir;
   if (explicit) return resolvePath(projectRoot, explicit);
   return join(stateRoot, "demand", "evidence", dispatchIdFor(input, status));
 }
 
-function agentToolProfile(input = {}, options = {}) {
+function agentToolProfile(input = Object(), options = Object()) {
   return clean(options.agentToolProfile || options.agent_tool_profile || options.toolProfile || options.tool_profile || input.agentToolProfile || input.agent_tool_profile || input.toolProfile || input.tool_profile || "boundary").toLowerCase();
 }
 
@@ -228,7 +228,7 @@ function safeRepoRelativePath(value) {
   return path;
 }
 
-function boundaryMutationProbe(input = {}, options = {}) {
+function boundaryMutationProbe(input = Object(), options = Object()) {
   const path = safeRepoRelativePath(
     options.boundaryMutationProbe
     || options.boundary_mutation_probe
@@ -263,7 +263,7 @@ function actionForTask(task, index, outputDir, projectRoot) {
   };
 }
 
-export function buildDemandEvidenceDispatchPlan(input = {}, options = {}) {
+export function buildDemandEvidenceDispatchPlan(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const toolProfile = agentToolProfile(input, options);
@@ -320,7 +320,7 @@ function renderJsonBlock(value) {
   return JSON.stringify(value, null, 2);
 }
 
-export function buildDemandEvidenceAgentPrompt({ action = {}, plan = {}, previousResults = [] } = {}) {
+export function buildDemandEvidenceAgentPrompt({ action = Object(), plan = Object(), previousResults = [] } = Object()) {
   const protocol = action.protocol || {};
   const status = plan.demand_status || {};
   const toolProfile = clean(plan.execution_policy?.agent_tool_profile || "boundary");
@@ -446,7 +446,7 @@ function extractJsonObject(text = "") {
   return { parsed: null, repaired: false, error: errors.find(Boolean) || "no JSON object found in provider output" };
 }
 
-function normalizeAgentResult({ action = {}, providerRun = {}, parsed = null, parseError = "" } = {}) {
+function normalizeAgentResult({ action = Object(), providerRun = Object(), parsed = null, parseError = "" } = Object()) {
   if (!providerRun.success || !parsed || typeof parsed !== "object") {
     const errorCode = !parsed ? "EVIDENCE_AGENT_INVALID_JSON" : "EVIDENCE_AGENT_PROVIDER_FAILED";
     return {
@@ -499,7 +499,7 @@ function normalizeAgentResult({ action = {}, providerRun = {}, parsed = null, pa
   return normalized;
 }
 
-function executionConfig(input = {}, options = {}) {
+function executionConfig(input = Object(), options = Object()) {
   const loaded = options.config || input.config || loadConfig(options.configPath ? { path: options.configPath } : false);
   const ai = {
     ...(loaded.ai || {}),
@@ -553,7 +553,7 @@ function executionConfig(input = {}, options = {}) {
   };
 }
 
-export async function runDemandEvidenceDispatchRuntime(input = {}, options = {}) {
+export async function runDemandEvidenceDispatchRuntime(input = Object(), options = Object()) {
   const plan = buildDemandEvidenceDispatchPlan(input, options);
   const execute = input.executeAgents === true
     || input.execute_agents === true
@@ -570,7 +570,7 @@ export async function runDemandEvidenceDispatchRuntime(input = {}, options = {})
     && options.writeArtifact !== false
     && options.write_artifact !== false;
 
-  const result = {
+  const result = Object.assign(Object(), {
     ...plan,
     mode: execute ? "execute" : "dry_run",
     status: plan.actions.length === 0 ? "pass" : execute ? "blocked" : "dry_run",
@@ -587,7 +587,7 @@ export async function runDemandEvidenceDispatchRuntime(input = {}, options = {})
     agent_results: [],
     provider_runs: [],
     artifacts: [],
-  };
+  });
 
   if (plan.actions.length === 0 || !execute) return result;
   if (!allow) return result;

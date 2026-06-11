@@ -7,11 +7,11 @@ import { listYoloCommandNames } from "../workflows/command-registry.js";
 export const AGENT_INTEGRATION_DOCTOR_SCHEMA_VERSION = "1.0";
 const DEFAULT_HOST_DISCOVERY_FRESHNESS_MS = 30 * 60 * 1000;
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
-function artifactStatus(file = {}) {
+function artifactStatus(file = Object()) {
   const path = file.path || "";
   const exists = Boolean(path) && existsSync(path);
   const size = exists ? statSync(path).size : 0;
@@ -28,7 +28,7 @@ function artifactStatus(file = {}) {
   };
 }
 
-function expectedArtifacts(bridgePlan = {}) {
+function expectedArtifacts(bridgePlan = Object()) {
   return [
     ...(bridgePlan.files || []),
     ...(bridgePlan.native_skill_files || []),
@@ -51,7 +51,7 @@ function timestampMs(value) {
   return Number.isFinite(time) ? time : null;
 }
 
-function hostDiscoveryEvidence(options = {}, plan = {}) {
+function hostDiscoveryEvidence(options = Object(), plan = Object()) {
   return options.hostDiscoveryEvidence
     || options.host_discovery_evidence
     || plan.host_discovery_evidence
@@ -59,7 +59,7 @@ function hostDiscoveryEvidence(options = {}, plan = {}) {
     || null;
 }
 
-function inspectHostDiscoveryEvidence(options = {}, plan = {}) {
+function inspectHostDiscoveryEvidence(options = Object(), plan = Object()) {
   const evidence = hostDiscoveryEvidence(options, plan);
   const nowMs = Number(options.nowMs || options.now_ms) || (typeof options.now === "function" ? options.now() : Date.now());
   const freshnessMs = Number(options.hostDiscoveryFreshnessMs || options.host_discovery_freshness_ms) || DEFAULT_HOST_DISCOVERY_FRESHNESS_MS;
@@ -131,7 +131,7 @@ function inspectHostDiscoveryEvidence(options = {}, plan = {}) {
   };
 }
 
-export function buildAgentIntegrationDoctorPlan(options = {}) {
+export function buildAgentIntegrationDoctorPlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || process.cwd());
   const homeDir = resolve(options.homeDir || options.home_dir || homedir());
@@ -189,7 +189,7 @@ export function buildAgentIntegrationDoctorPlan(options = {}) {
   };
 }
 
-export function runAgentIntegrationDoctor(options = {}) {
+export function runAgentIntegrationDoctor(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || process.cwd());
   const homeDir = resolve(options.homeDir || options.home_dir || homedir());

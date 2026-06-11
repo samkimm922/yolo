@@ -51,7 +51,7 @@ function readTextFileIfPresent(projectRoot, path) {
   return readFileSync(resolved, "utf8").trim();
 }
 
-function normalizeDiscoveryInput(input = {}, projectRoot) {
+function normalizeDiscoveryInput(input = Object(), projectRoot) {
   const fileText = readTextFileIfPresent(projectRoot, input.requirementFile || input.requirement_file || input.inputFile || input.input_file);
   const objective = clean(input.objective || input.requirement || input.idea || input.text || fileText);
   return {
@@ -69,7 +69,7 @@ function normalizeDiscoveryInput(input = {}, projectRoot) {
   };
 }
 
-function lifecycleFor(stageId, result, params = {}) {
+function lifecycleFor(stageId, result, params = Object()) {
   if (params.writeLifecycle === false || params.write_lifecycle === false) return null;
   return writeLifecycleStageReport(stageId, result, {
     projectRoot: params.projectRoot,
@@ -108,7 +108,7 @@ export function readDiscoveryArtifact(path) {
   }
 }
 
-export function runDiscoveryRuntime(input = {}, options = {}) {
+export function runDiscoveryRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const discoveryInput = normalizeDiscoveryInput(input, projectRoot);
@@ -148,7 +148,7 @@ export function runDiscoveryRuntime(input = {}, options = {}) {
   return { ...result, lifecycle };
 }
 
-export function runDiscoveryPlanRuntime(input = {}, options = {}) {
+export function runDiscoveryPlanRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const discoveryPath = resolveOutputPath(projectRoot, input.discoveryPath || input.discovery_path || input.discovery || defaultDiscoveryPath(stateRoot));
@@ -197,7 +197,7 @@ export function runDiscoveryPlanRuntime(input = {}, options = {}) {
   return { ...result, lifecycle };
 }
 
-export function runDiscoveryPrdRuntime(input = {}, options = {}) {
+export function runDiscoveryPrdRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const discoveryPath = resolveOutputPath(projectRoot, input.discoveryPath || input.discovery_path || input.discovery || defaultDiscoveryPath(stateRoot));

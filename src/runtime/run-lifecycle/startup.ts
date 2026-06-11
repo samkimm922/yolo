@@ -18,10 +18,8 @@ import {
 } from "../execution/baselines.js";
 import { trimJsonlWithArchive } from "../memory/retention.js";
 
-export function createRunnerError(message, exitCode = 1, details = {}) {
-  const error = new Error(message);
-  error.exitCode = exitCode;
-  Object.assign(error, details);
+export function createRunnerError(message, exitCode = 1, details = Object()) {
+  const error = Object.assign(new Error(message), { exitCode }, details);
   return error;
 }
 
@@ -37,7 +35,7 @@ export function acquireRunnerPidLock({
   processExit = process.exit,
   makeError = createRunnerError,
   consoleError = (...args) => console.error(...args),
-} = {}) {
+} = Object()) {
   if (existsSync(pidFile)) {
     const oldPid = parseInt(readFileSync(pidFile, "utf8").trim(), 10);
     try {
@@ -68,7 +66,7 @@ export function rotateTaskResults({
   unlinkSync = defaultUnlinkSync,
   now = () => new Date(),
   consoleLog = (...args) => console.log(...args),
-} = {}) {
+} = Object()) {
   if (!existsSync(resultsFile)) return { rotated: false };
   const bakFile = `${resultsFile.replace(".jsonl", "")}.bak.${now().toISOString().replace(/[-:T]/g, "").slice(0, 15)}`;
   try { copyFileSync(resultsFile, bakFile); } catch (_) {}
@@ -87,7 +85,7 @@ export function initializeRuntimeState({
   unlinkSync = defaultUnlinkSync,
   consoleLog = (...args) => console.log(...args),
   consoleError = (...args) => console.error(...args),
-} = {}) {
+} = Object()) {
   try {
     if (!existsSync(runtimeDir)) mkdirSync(runtimeDir, { recursive: true });
     for (const file of readdirSync(runtimeDir)) {
@@ -115,8 +113,8 @@ export function truncateJsonlFile({
   readFileSync = defaultReadFileSync,
   writeFileSync = defaultWriteFileSync,
   mkdirSync = defaultMkdirSync,
-  log = () => {},
-} = {}) {
+  log = (..._args) => {},
+} = Object()) {
   const result = trimJsonlWithArchive({
     filePath,
     maxLines,
@@ -150,9 +148,9 @@ export function initializeMissingBaselines({
   existsSync = defaultExistsSync,
   writeFileSync = defaultWriteFileSync,
   execFileSync = defaultExecFileSync,
-  log = () => {},
+  log = (..._args) => {},
   nowIso = () => new Date().toISOString(),
-} = {}) {
+} = Object()) {
   const initialized = [];
   for (const tool of ["tsc", "eslint"]) {
     const baselinePath = join(runtimeDir, `${tool}-baseline.json`);
@@ -225,7 +223,7 @@ export function cleanupStaleGitWorktreesAndBranches({
   rootDir,
   execSync = defaultExecSync,
   consoleLog = (...args) => console.log(...args),
-} = {}) {
+} = Object()) {
   const removed = { worktrees: [], branches: [] };
   try {
     const wtList = execSync("git worktree list --porcelain", {
@@ -277,7 +275,7 @@ export function cleanupRetryRoundFiles({
   readdirSync = defaultReaddirSync,
   unlinkSync = defaultUnlinkSync,
   consoleLog = (...args) => console.log(...args),
-} = {}) {
+} = Object()) {
   const removed = [];
   try {
     if (!existsSync(retryDir)) return removed;
@@ -302,7 +300,7 @@ export function loadResumeCompletedFromPrd({
   writeFileSync = defaultWriteFileSync,
   renameSync = defaultRenameSync,
   consoleLog = (...args) => console.log(...args),
-} = {}) {
+} = Object()) {
   try {
     const prd = JSON.parse(readFileSync(prdPath, "utf8"));
     const resumeCompleted = new Set((prd.tasks || []).filter(taskCountsAsCompleted).map((task) => task.id));
@@ -331,15 +329,15 @@ export function prepareRunStartup({
   exitOnComplete,
   pid = process.pid,
   taskCountsAsCompleted,
-  initTaskLogs = () => {},
-  writeCurrentRun = () => {},
-  startProgressApiServer = () => {},
+  initTaskLogs = (..._args) => {},
+  writeCurrentRun = (..._args) => {},
+  startProgressApiServer = (..._args) => {},
   initializeBaselines = true,
-  logProgress = () => {},
+  logProgress = (..._args) => {},
   runnerError = createRunnerError,
   processKill = process.kill,
   processExit = process.exit,
-} = {}) {
+} = Object()) {
   acquireRunnerPidLock({
     pidFile: join(paths.stateDir, "runner.pid"),
     pid,

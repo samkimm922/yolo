@@ -125,7 +125,7 @@ function currentCommit(rootDir, execSync = defaultExecSync) {
   }
 }
 
-export function baselineArtifactHash(baseline = {}) {
+export function baselineArtifactHash(baseline = Object()) {
   const meta = { ...(baseline.meta || {}) };
   delete meta.artifact_hash;
   return sha256({ ...baseline, meta });
@@ -143,10 +143,10 @@ export function buildBaselineArtifact({
   reason = null,
   createdAt = new Date().toISOString(),
   updatedAt = createdAt,
-} = {}) {
+} = Object()) {
   const baseline = {
     keys,
-    meta: {
+    meta: Object.assign(Object(), {
       schema: "yolo.execution.baseline.v1",
       tool,
       command,
@@ -158,7 +158,7 @@ export function buildBaselineArtifact({
       commit,
       created_at: createdAt,
       updated_at: updatedAt,
-    },
+    }),
   };
   baseline.meta.artifact_hash = baselineArtifactHash(baseline);
   return baseline;
@@ -174,7 +174,7 @@ export function runBaselineCommand({
   command,
   execSync = defaultExecSync,
   timeout = 60000,
-} = {}) {
+} = Object()) {
   try {
     const stdout = execSync(`${command} 2>&1`, {
       cwd: rootDir,
@@ -215,7 +215,7 @@ export function runBaselineCommand({
   }
 }
 
-export function createDirtyWorktreeSnapshot({ rootDir, execSync = defaultExecSync } = {}) {
+export function createDirtyWorktreeSnapshot({ rootDir, execSync = defaultExecSync } = Object()) {
   try {
     const diffOut = execSync("git status --porcelain", {
       cwd: rootDir,
@@ -234,7 +234,7 @@ export function createDirtyWorktreeSnapshot({ rootDir, execSync = defaultExecSyn
   }
 }
 
-export function restoreDirtyWorktreeSnapshot(stashRef, { rootDir, execSync = defaultExecSync } = {}) {
+export function restoreDirtyWorktreeSnapshot(stashRef, { rootDir, execSync = defaultExecSync } = Object()) {
   if (!stashRef) return false;
   try {
     execSync(`git stash apply ${stashRef}`, {
@@ -255,7 +255,7 @@ export function captureTscBaseline({
   execSync = defaultExecSync,
   writeFileSync = defaultWriteFileSync,
   nowIso = () => new Date().toISOString(),
-} = {}) {
+} = Object()) {
   const run = runBaselineCommand({ rootDir, command, execSync, timeout: 60000 });
   const keys = parseTscBaselineKeys(run.output);
   const baseline = buildBaselineArtifact({
@@ -281,7 +281,7 @@ export function captureEslintBaseline({
   execSync = defaultExecSync,
   writeFileSync = defaultWriteFileSync,
   nowIso = () => new Date().toISOString(),
-} = {}) {
+} = Object()) {
   const run = runBaselineCommand({ rootDir, command, execSync, timeout: 60000 });
   const keys = parseEslintBaselineKeys(run.output, rootDir);
   const baseline = buildBaselineArtifact({
@@ -308,7 +308,7 @@ export function captureExecutionBaselines({
   execSync = defaultExecSync,
   writeFileSync = defaultWriteFileSync,
   nowIso = () => new Date().toISOString(),
-} = {}) {
+} = Object()) {
   const stashRef = createDirtyWorktreeSnapshot({ rootDir, execSync });
   const tscBaseline = captureTscBaseline({
     rootDir,
@@ -361,7 +361,7 @@ export function refreshBaselineAfterCommit({
   readFileSync = defaultReadFileSync,
   writeFileSync = defaultWriteFileSync,
   nowIso = () => new Date().toISOString(),
-} = {}) {
+} = Object()) {
   const results = [];
   for (const tool of ["tsc", "eslint"]) {
     const baselinePath = join(runtimeDir, `${tool}-baseline.json`);
