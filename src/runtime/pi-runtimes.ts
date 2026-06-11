@@ -350,6 +350,26 @@ function runShipRuntime(params = Object()) {
 
 function runLearnRuntime(params = Object()) {
   const stateRoot = params.stateRoot ? resolve(params.stateRoot) : undefined;
+  const projectRoot = resolve(params.projectRoot || params.project_root || (params.prdPath ? dirname(resolve(params.prdPath)) : process.cwd()));
+  if (stateRoot) {
+    const guard = inspectLifecycleGuard({
+      ...params,
+      command: "yolo-learn",
+      projectRoot,
+      stateRoot,
+      prdPath: params.prdPath ? resolve(params.prdPath) : undefined,
+    });
+    if (guard.status !== "pass") {
+      return fail(guard.summary || "Learn gate blocked by YOLO lifecycle guard.", {
+        code: guard.code || "LIFECYCLE_GUARD_BLOCKED",
+        exit_code: 2,
+        blockers: guard.blockers || [],
+        lifecycle_guard: guard,
+        next_actions: guard.next_actions || ["Run /yolo-next before learning."],
+      });
+    }
+  }
+
   const lesson = params.lesson || "PI lifecycle completed through delivery gate.";
   const record = appendLearningRecord({
     type: "retrospective",
@@ -366,7 +386,7 @@ function runLearnRuntime(params = Object()) {
     ].filter(Boolean),
     tags: ["pi", "lifecycle", "learn"],
   }, {
-    projectRoot: params.projectRoot,
+    projectRoot,
     stateRoot,
   });
 

@@ -538,6 +538,30 @@ describe("lifecycle guard", () => {
     }
   });
 
+  test("negative: yolo-learn is blocked until delivery is completed with an artifact", async () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    const prdPath = join(root, "prd.json");
+    try {
+      writeJson(prdPath, { version: "2.0", tasks: [] });
+      initLifecycleState({ projectRoot: root });
+      writeRunPass(root);
+      writeReviewPass(root);
+      writeAcceptancePass(root);
+
+      const guard = inspectLifecycleGuard({ command: "yolo-learn", projectRoot: root, stateRoot, prdPath });
+      assert.equal(guard.status, "blocked");
+      assert.deepEqual(guard.missing_required_stages, ["delivery"]);
+
+      const learn = await runPiRuntime("learn", { prdPath, projectRoot: root, stateRoot });
+      assert.equal(learn.status, "error");
+      assert.equal(learn.code, "LIFECYCLE_GUARD_BLOCKED");
+      assert.equal(learn.lifecycle_guard.missing_required_stages.includes("delivery"), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("S2 yolo auto --dry-run routes through pi and produces action plan with expected phases", async () => {
     const root = tempProject();
     try {

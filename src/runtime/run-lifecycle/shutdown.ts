@@ -146,8 +146,8 @@ export function createGracefulShutdownHandler({
     });
     cleanupRuntimeStateFiles({ stateDir: state.stateDir() });
     cleanupProgressServer(state.progressServerProc());
-    log("✅ 清理完成，安全退出");
-    exit(0);
+    log("✅ 清理完成，已记录中断并以失败状态退出");
+    exit(130);
   };
 }
 

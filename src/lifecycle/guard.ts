@@ -366,6 +366,11 @@ function requiredStagesFor(command, input = Object()) {
       { stage: "acceptance", code: "ACCEPTANCE_REQUIRED", message: "Passing acceptance evidence is required before ship readiness.", mustBeStrictCompleted: true, requireLifecycleArtifact: true },
     ];
   }
+  if (command === "yolo-learn") {
+    return [
+      { stage: "delivery", code: "DELIVERY_REQUIRED", message: "Delivery evidence is required before lifecycle learning.", mustBeStrictCompleted: true, requireLifecycleArtifact: true },
+    ];
+  }
   return [];
 }
 

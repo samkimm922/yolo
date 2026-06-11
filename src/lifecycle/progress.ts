@@ -31,11 +31,15 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function normalizedReportStatus(report = Object()) {
+  return clean(report.status || report.verdict || report.outcome).toLowerCase().replace(/[\s-]+/g, "_");
+}
+
 function statusForReport(report = Object()) {
-  const status = clean(report.status || report.verdict || report.outcome).toLowerCase();
-  if (["pass", "passed", "success", "succeeded", "ready", "completed", "done"].includes(status)) return "completed";
+  const status = normalizedReportStatus(report);
+  if (["pass", "passed", "success", "succeeded", "completed", "done"].includes(status)) return "completed";
   if (["warning", "warn"].includes(status)) return "warning";
-  if (["blocked", "error", "failed", "fail"].includes(status)) return "blocked";
+  if (["blocked", "error", "failed", "fail", "skipped", "not_run", "indeterminate"].includes(status)) return "blocked";
   return "active";
 }
 

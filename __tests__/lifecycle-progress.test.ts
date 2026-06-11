@@ -68,4 +68,30 @@ describe("lifecycle progress", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("negative: non-success report statuses do not complete lifecycle stages", () => {
+    for (const reportStatus of ["ready", "skipped", "not_run", "indeterminate"]) {
+      const root = tempProject();
+      const stateRoot = join(root, ".yolo");
+      try {
+        const result = writeLifecycleStageReport("check", {
+          status: reportStatus,
+          summary: `${reportStatus} is not executable success`,
+        }, {
+          projectRoot: root,
+          stateRoot,
+          source: "unit",
+          writeSessionMemory: false,
+          skipSequenceCheck: true,
+        });
+
+        const status = JSON.parse(readFileSync(join(stateRoot, "lifecycle/status.json"), "utf8"));
+        const checkStage = status.stages.find((stage) => stage.id === "check");
+        assert.notEqual(result.stage_status, "completed", `${reportStatus} must not normalize to completed`);
+        assert.notEqual(checkStage.status, "completed", `${reportStatus} must not mark lifecycle stage completed`);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+  });
 });
