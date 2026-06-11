@@ -79,6 +79,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node --import tsx --test __tests__/package-install-smoke.test.ts
 
+  repo-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: test "$(git ls-files '.yolo/**' | wc -l | tr -d ' ')" = "0"
+      - run: test ! -e vitest.yolo.config.ts
+
   source-grep-meta:
     runs-on: ubuntu-latest
     steps:

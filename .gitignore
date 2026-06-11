@@ -8,6 +8,7 @@ __pycache__/
 .agents/
 
 # Append-only runtime state and generated evidence.
+.yolo/
 .yolo/state/
 .yolo/skills/
 state/*.jsonl
@@ -15,11 +16,7 @@ state/archive/
 state/runtime/
 state/evidence/
 
-# Stress fixtures may create nested Git repositories to test boundary handling.
-# Track fixture files, but never parent-repo commit their internal Git metadata.
-.yolo/stress/**/.git/
-.yolo/stress/**/fixtures/*-real-boundary-mutation-probe/
-.yolo/stress/manual-boundary-probe-*/fixture/
+# Stress fixtures and demand evidence are runtime state; keep them on disk only.
 
 # Local logs and scratch files.
 logs/

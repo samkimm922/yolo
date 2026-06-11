@@ -1,5 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -12,6 +13,16 @@ function inspectVerifyCoverage(packageText, ciText) {
   if (verifyScript.includes("./dist/lib/config.js")) findings.push("VERIFY_STALE_CONFIG_PATH");
   if (!verifyScript.includes("./dist/src/lib/config.js")) findings.push("VERIFY_REAL_CONFIG_PATH_MISSING");
   if (!/\bnpm run verify\b/.test(ciText)) findings.push("CI_VERIFY_JOB_MISSING");
+  return findings;
+}
+
+function inspectRepoHygiene({ gitLsFilesText = "", ciText = "", files = new Set() } = {}) {
+  const findings = [];
+  const trackedYolo = gitLsFilesText.split(/\r?\n/).filter((line) => line.startsWith(".yolo/"));
+  if (trackedYolo.length > 0) findings.push("TRACKED_YOLO_RUNTIME_STATE");
+  if (files.has("vitest.yolo.config.ts")) findings.push("DEAD_VITEST_YOLO_CONFIG");
+  if (!/git ls-files ['"]?\.yolo\/\*\*['"]?/.test(ciText)) findings.push("CI_YOLO_TRACKING_GUARD_MISSING");
+  if (!/vitest\.yolo\.config\.ts/.test(ciText)) findings.push("CI_DEAD_CONFIG_GUARD_MISSING");
   return findings;
 }
 
@@ -43,6 +54,26 @@ describe("open source checklist", () => {
     assert.ok(findings.includes("VERIFY_STALE_CONFIG_PATH"));
     assert.ok(findings.includes("VERIFY_REAL_CONFIG_PATH_MISSING"));
     assert.ok(findings.includes("CI_VERIFY_JOB_MISSING"));
+  });
+
+  test("W6 repo hygiene blocks tracked .yolo state and dead vitest config", () => {
+    const ciText = readFileSync(join(YOLO_DIR, ".github/workflows/ci.yml"), "utf8");
+    const gitLsFilesText = execFileSync("git", ["ls-files", ".yolo/**"], { cwd: YOLO_DIR, encoding: "utf8" });
+    const files = new Set();
+    if (existsSync(join(YOLO_DIR, "vitest.yolo.config.ts"))) files.add("vitest.yolo.config.ts");
+    assert.deepEqual(inspectRepoHygiene({ gitLsFilesText, ciText, files }), []);
+  });
+
+  test("W6 negative: fake tracked .yolo artifact or stale vitest config is blocked", () => {
+    const findings = inspectRepoHygiene({
+      gitLsFilesText: ".yolo/demand/session.json\nsrc/index.ts\n",
+      ciText: "jobs:\n  unit:\n    steps: []\n",
+      files: new Set(["vitest.yolo.config.ts"]),
+    });
+    assert.ok(findings.includes("TRACKED_YOLO_RUNTIME_STATE"));
+    assert.ok(findings.includes("DEAD_VITEST_YOLO_CONFIG"));
+    assert.ok(findings.includes("CI_YOLO_TRACKING_GUARD_MISSING"));
+    assert.ok(findings.includes("CI_DEAD_CONFIG_GUARD_MISSING"));
   });
 
   test("CHANGELOG exists at root", () => {

@@ -16,9 +16,9 @@
 
 | 指标 | 当前值 |
 |---|---:|
-| 根目录 `.ts` entrypoint | 8 |
+| 根目录 `.ts` entrypoint | 7 |
 | `keep_root` | 1 |
-| `shim_to_src` | 7 |
+| `shim_to_src` | 6 |
 | `migrate_to_src` | 0 |
 | `legacy_pending` | 0 |
 
@@ -28,7 +28,7 @@
 |---|---|---|
 | P0 | `sdk.ts` | 唯一允许长期保留的 package root SDK facade。 |
 | P0 | `runner.ts`, `gate.ts`, `prompt.ts` | 已是兼容入口；真实实现通过 `src/`、`bin/` 或 `dist/`。 |
-| P1 | `learn.ts`, `task-logger.ts`, `session-memory.ts`, `state-snapshot.ts` | 已迁入 `src/runtime/learning`、`src/runtime/logging`、`src/runtime/evidence`，root 只保留 shim。 |
+| P1 | `learn.ts`, `session-memory.ts`, `state-snapshot.ts` | 已迁入 `src/runtime/learning`、`src/runtime/evidence`，root 只保留 shim。 |
 | done | `contract.ts`, `validate-prd.ts`, `review-scanner.ts`, `pm.ts`, `audit-to-prd.ts`, `pi-agent.ts`, `prd-preflight.ts`, `prd-migrate-gates.ts`, `atomic-task-doctor.ts`, `provider-doctor.ts`, `prd-contract-doctor.ts`, `context-pack-validator.ts`, `diff-quality-gate.ts`, `test-generation-validator.ts`, `precheck.ts`, `progress-server.ts`, `generate-tree.ts`, `precommit-knip.ts`, `prd-check.ts`, `stash.ts` | 已从 root 移除或迁到 `src/`/`bin/`。 |
 
 机器可读清单：`docs/root-entrypoint-inventory.json`。
