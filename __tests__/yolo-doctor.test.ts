@@ -51,7 +51,7 @@ describe("YOLO doctor", () => {
 
       assert.equal(report.status, "warning");
       assert.equal(report.lifecycle.current_stage, "idea");
-      assert.deepEqual(report.commands.names, ["status", "demand", "spec", "tasks", "run", "check", "review", "release"]);
+      assert.deepEqual(report.commands.names, ["demand", "auto", "ship", "status"]);
       assert.equal(report.commands.names.includes("yolo-discover"), false);
       assert.equal(report.commands.names.includes("yolo-doctor"), false);
       assert.ok(report.warnings.some((warning) => warning.code === "YOLO_DOCTOR_AGENT_BRIDGE_INSTALLED"));

@@ -139,29 +139,35 @@ describe("agent bridge installer", () => {
     ]);
   });
 
-  test("buildYoloNativeSkill documents command aliases for Codex skill discovery", () => {
+  test("buildYoloNativeSkill documents the 4 stable command surface for Codex skill discovery", () => {
     const skill = buildYoloNativeSkill({ agent: "codex", yoloRoot: "/tmp/yolo" });
 
     assert.match(skill, /^---\nname: yolo/m);
     assert.match(skill, /How To Choose/);
     assert.match(skill, /Recommended user commands/);
     assert.match(skill, /Hidden demand compatibility aliases/);
+    // 4 stable commands: demand, auto, ship, status
     assert.match(skill, /\/yolo-status/);
     assert.match(skill, /\/yolo-demand/);
-    assert.match(skill, /\/yolo-spec/);
-    assert.match(skill, /\/yolo-tasks/);
-    assert.match(skill, /\/yolo-run/);
-    assert.match(skill, /\/yolo-check/);
-    assert.match(skill, /\/yolo-review/);
-    assert.match(skill, /\/yolo-release/);
-    assert.match(skill, /\/yolo-interview/);
-    assert.match(skill, /\/yolo-discover/);
-    assert.match(skill, /\/yolo-discuss/);
-    assert.match(skill, /\/office-hours/);
+    assert.match(skill, /\/yolo-auto/);
+    assert.match(skill, /\/yolo-ship/);
+    // Internal commands are not in the recommended surface
+    assert.doesNotMatch(skill, /^- `\/yolo-spec`:/m);
+    assert.doesNotMatch(skill, /^- `\/yolo-tasks`:/m);
+    assert.doesNotMatch(skill, /^- `\/yolo-run`:/m);
+    assert.doesNotMatch(skill, /^- `\/yolo-check`:/m);
+    assert.doesNotMatch(skill, /^- `\/yolo-review`:/m);
+    assert.doesNotMatch(skill, /^- `\/yolo-release`:/m);
+    // Compat aliases are fully deleted; no compat entries in the skill
+    assert.doesNotMatch(skill, /^- `\/yolo-interview` ->/m);
+    assert.doesNotMatch(skill, /^- `\/yolo-discover` ->/m);
+    assert.doesNotMatch(skill, /^- `\/yolo-discuss` ->/m);
+    assert.doesNotMatch(skill, /^- `\/office-hours` ->/m);
     assert.doesNotMatch(skill, /^- `\/yolo-plan` ->/m);
     assert.doesNotMatch(skill, /^- `\/yolo-prd` ->/m);
     assert.doesNotMatch(skill, /^- `\/yolo-ship` ->/m);
     assert.doesNotMatch(skill, /\/yolo-doctor/);
+    // Core protocol rules still present
     assert.match(skill, /one-question mode/);
     assert.match(skill, /next_question/);
     assert.match(skill, /do not output long recommendation lists/);
@@ -173,11 +179,11 @@ describe("agent bridge installer", () => {
     assert.match(skill, /Require explicit confirmation before code edits/);
   });
 
-  test("buildCodexSourceCommandSkill follows local Codex source-command convention", () => {
-    const skill = buildCodexSourceCommandSkill("yolo", { yoloRoot: "/tmp/yolo" });
+  test("buildCodexSourceCommandSkill uses demand as the primary source-command entry", () => {
+    const skill = buildCodexSourceCommandSkill("demand", { yoloRoot: "/tmp/yolo" });
 
-    assert.match(skill, /^---\nname: "source-command-yolo"/m);
-    assert.match(skill, /\/yolo status/);
+    assert.match(skill, /^---\nname: "source-command-demand"/m);
+    assert.match(skill, /\/yolo-demand/);
     assert.match(skill, /YOLO root: \/tmp\/yolo/);
     assert.match(skill, /legacy demand subcommand/);
     assert.match(skill, /ask one `next_question`/);
@@ -186,25 +192,24 @@ describe("agent bridge installer", () => {
     assert.match(skill, /do not edit code/);
     assert.match(skill, /evidence agent JSON role contracts belong only in provider sub-agent prompts/);
     assert.match(skill, /another explicit `\/yolo-\*` command/);
-    assert.match(skill, /must still stop at that stage/);
     assert.match(skill, /not execution approval/);
     assert.match(skill, /Default to `\/yolo-status` or a no-code demand\/tasks stage/);
   });
 
-  test("buildCodexSlashCommandSkill follows direct Codex slash skill convention", () => {
-    const skill = buildCodexSlashCommandSkill("yolo-brainstorm", { yoloRoot: "/tmp/yolo" });
+  test("buildCodexSlashCommandSkill renders a stable command skill without compat alias text", () => {
+    const skill = buildCodexSlashCommandSkill("yolo-demand", { yoloRoot: "/tmp/yolo" });
 
-    assert.match(skill, /^---\nname: yolo-brainstorm/m);
-    assert.match(skill, /# \/yolo-brainstorm/);
+    assert.match(skill, /^---\nname: yolo-demand/m);
+    assert.match(skill, /# \/yolo-demand/);
     assert.match(skill, /YOLO root: \/tmp\/yolo/);
-    assert.match(skill, /compatibility alias for `\/yolo-demand --stage brainstorm`/);
-    assert.match(skill, /use the unified demand-stage protocol/);
+    assert.match(skill, /explicit stage command/);
     assert.match(skill, /one-question mode/);
     assert.match(skill, /next_question/);
     assert.match(skill, /批准最后/);
     assert.match(skill, /Evidence dispatch prompt content is only for provider sub-agents/);
-    assert.match(skill, /Brainstorm-only/);
     assert.doesNotMatch(skill, /when execution is needed/);
+    // Compat alias phrasing must not appear for stable commands
+    assert.doesNotMatch(skill, /compatibility alias/);
   });
 
   test("Codex slash command tools are read-only for no-code stages and writable for execution/setup stages", () => {
@@ -232,28 +237,41 @@ describe("agent bridge installer", () => {
       ".codex/skills/yolo/SKILL.md",
       ".claude/skills/yolo/SKILL.md",
     ]);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo.md"), true);
+    // Only 4 stable commands generate command files
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo.md"), false);
     assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-status.md"), true);
     assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-demand.md"), true);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-spec.md"), true);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-tasks.md"), true);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-run.md"), true);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-check.md"), true);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-review.md"), true);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-release.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-auto.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-ship.md"), true);
+    // Internal commands are not installed as command files
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-spec.md"), false);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-tasks.md"), false);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-run.md"), false);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-check.md"), false);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-review.md"), false);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-release.md"), false);
+    // Deleted compat commands are not in any plan
     assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-plan.md"), false);
     assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/yolo-doctor.md"), false);
     assert.equal(plan.command_files.some((file) => file.relative_path === ".claude/commands/office-hours.md"), false);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-tasks.md"), true);
-    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-spec.md"), true);
+    // Codex skill command docs for stable commands only
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-demand.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-auto.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-ship.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-status.md"), true);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-tasks.md"), false);
+    assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-spec.md"), false);
     assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-plan.md"), false);
     assert.equal(plan.command_files.some((file) => file.relative_path === ".codex/skills/yolo/commands/yolo-prd.md"), false);
-    assert.deepEqual(plan.source_command_files.map((file) => file.relative_path), [".codex/skills/source-command-yolo/SKILL.md"]);
-    assert.equal(plan.legacy_cleanup_files.some((file) => file.relative_path === ".codex/skills/source-command-yolo-plan"), true);
+    // Primary source command uses a valid stable command
+    assert.deepEqual(plan.source_command_files.map((file) => file.relative_path), [".codex/skills/source-command-demand/SKILL.md"]);
+    // Deleted compat names are not targeted for legacy cleanup
+    assert.equal(plan.legacy_cleanup_files.some((file) => file.relative_path === ".codex/skills/source-command-yolo-plan"), false);
     assert.equal(plan.legacy_cleanup_files.some((file) => file.relative_path === ".codex/skills/source-command-yolo"), false);
     assert.equal(plan.legacy_cleanup_files.some((file) => file.relative_path === ".codex/skills/yolo.pi/SKILL.md"), true);
     assert.deepEqual(plan.codex_slash_command_files, []);
-    assert.equal(plan.legacy_cleanup_files.some((file) => file.relative_path === ".codex/skills/yolo-plan"), true);
+    // Deleted compat direct slash skills not in cleanup; active names still cleaned
+    assert.equal(plan.legacy_cleanup_files.some((file) => file.relative_path === ".codex/skills/yolo-plan"), false);
     assert.equal(plan.legacy_cleanup_files.some((file) => file.relative_path === ".codex/skills/yolo-demand"), true);
     assert.equal(plan.skill_plans.find((item) => item.agent_target === "codex")?.files.some((file) => file.path === ".codex/skills/yolo.pi/WORKFLOW.md"), true);
     assert.equal(plan.skill_plans.find((item) => item.agent_target === "codex")?.files.some((file) => file.path === ".codex/skills/yolo.pi/SKILL.md"), false);
@@ -279,38 +297,47 @@ describe("agent bridge installer", () => {
     assert.equal(result.status, "success");
     assert.equal(result.overwritten.includes("AGENTS.md"), true);
     assert.equal(result.written.includes("CLAUDE.md"), true);
-    assert.equal(result.written.includes(".claude/commands/yolo.md"), true);
+    // Only 4 stable commands generate Claude slash command files
+    assert.equal(result.written.includes(".claude/commands/yolo.md"), false);
     assert.equal(result.written.includes(".claude/commands/yolo-status.md"), true);
     assert.equal(result.written.includes(".claude/commands/yolo-demand.md"), true);
-    assert.equal(result.written.includes(".claude/commands/yolo-spec.md"), true);
-    assert.equal(result.written.includes(".claude/commands/yolo-tasks.md"), true);
-    assert.equal(result.written.includes(".claude/commands/yolo-run.md"), true);
-    assert.equal(result.written.includes(".claude/commands/yolo-check.md"), true);
-    assert.equal(result.written.includes(".claude/commands/yolo-review.md"), true);
-    assert.equal(result.written.includes(".claude/commands/yolo-release.md"), true);
+    assert.equal(result.written.includes(".claude/commands/yolo-auto.md"), true);
+    assert.equal(result.written.includes(".claude/commands/yolo-ship.md"), true);
+    assert.equal(result.written.includes(".claude/commands/yolo-spec.md"), false);
+    assert.equal(result.written.includes(".claude/commands/yolo-tasks.md"), false);
+    assert.equal(result.written.includes(".claude/commands/yolo-run.md"), false);
+    assert.equal(result.written.includes(".claude/commands/yolo-check.md"), false);
+    assert.equal(result.written.includes(".claude/commands/yolo-review.md"), false);
+    assert.equal(result.written.includes(".claude/commands/yolo-release.md"), false);
     assert.equal(result.written.includes(".claude/commands/yolo-plan.md"), false);
     assert.equal(result.written.includes(".claude/commands/yolo-interview.md"), false);
     assert.equal(result.written.includes(".claude/commands/yolo-doctor.md"), false);
     assert.equal(result.written.includes(".claude/commands/office-hours.md"), false);
     assert.equal(result.written.includes(".codex/skills/yolo/SKILL.md"), true);
-    assert.equal(result.written.includes(".codex/skills/yolo/commands/yolo-tasks.md"), true);
-    assert.equal(result.written.includes(".codex/skills/yolo/commands/yolo-spec.md"), true);
+    // Codex skill command docs: only stable commands
+    assert.equal(result.written.includes(".codex/skills/yolo/commands/yolo-demand.md"), true);
+    assert.equal(result.written.includes(".codex/skills/yolo/commands/yolo-auto.md"), true);
+    assert.equal(result.written.includes(".codex/skills/yolo/commands/yolo-ship.md"), true);
+    assert.equal(result.written.includes(".codex/skills/yolo/commands/yolo-status.md"), true);
+    assert.equal(result.written.includes(".codex/skills/yolo/commands/yolo-tasks.md"), false);
+    assert.equal(result.written.includes(".codex/skills/yolo/commands/yolo-spec.md"), false);
     assert.equal(result.written.includes(".codex/skills/yolo/commands/yolo-plan.md"), false);
-    assert.equal(result.written.includes(".codex/skills/source-command-yolo/SKILL.md"), true);
+    // Primary source command uses demand instead of yolo
+    assert.equal(result.written.includes(".codex/skills/source-command-demand/SKILL.md"), true);
+    assert.equal(result.written.includes(".codex/skills/source-command-yolo/SKILL.md"), false);
     assert.equal(result.written.includes(".codex/skills/source-command-yolo-plan/SKILL.md"), false);
-    assert.equal(existsSync(join(projectRoot, ".codex/skills/source-command-yolo-plan")), false);
+    // Deleted compat commands are not in the registry; no cleanup entry targets them
+    assert.equal(existsSync(join(projectRoot, ".codex/skills/source-command-yolo-plan")), true);
     const sourceArchive = result.legacy_archived.find((item) => item.relative_path === ".codex/skills/source-command-yolo-plan");
-    assert.equal(Boolean(sourceArchive), true);
-    assert.equal(sourceArchive.backup_path.includes(".codex/skills/"), false);
-    assert.equal(existsSync(join(sourceArchive.backup_path, "SKILL.md")), false);
-    assert.equal(existsSync(join(sourceArchive.backup_path, "SKILL.md.archived")), true);
+    assert.equal(Boolean(sourceArchive), false);
     assert.equal(existsSync(join(projectRoot, ".codex/skills/yolo.pi/SKILL.md")), false);
     assert.equal(existsSync(join(projectRoot, ".codex/skills/yolo.pi/WORKFLOW.md")), true);
     assert.equal(result.legacy_archived.some((item) => item.relative_path === ".codex/skills/yolo.pi/SKILL.md"), true);
     assert.equal(result.written.includes(".codex/skills/yolo-brainstorm/SKILL.md"), false);
     assert.equal(result.written.includes(".codex/skills/yolo-interview/SKILL.md"), false);
-    assert.equal(existsSync(join(projectRoot, ".codex/skills/yolo-plan/SKILL.md")), false);
-    assert.equal(result.legacy_archived.some((item) => item.relative_path === ".codex/skills/yolo-plan"), true);
+    // Deleted compat direct slash skills not cleaned up by registry-based cleanup
+    assert.equal(existsSync(join(projectRoot, ".codex/skills/yolo-plan/SKILL.md")), true);
+    assert.equal(result.legacy_archived.some((item) => item.relative_path === ".codex/skills/yolo-plan"), false);
     assert.equal(existsSync(join(projectRoot, ".codex/skills/.yolo-menu-backup-old")), false);
     assert.equal(result.legacy_archived.some((item) => item.relative_path === ".codex/skills/.yolo-menu-backup-old"), true);
     const movedSkillRootBackup = result.legacy_archived.find((item) => item.relative_path === ".codex/skills/.yolo-menu-backup-old");
@@ -333,7 +360,7 @@ describe("agent bridge installer", () => {
     assert.equal(existsSync(join(projectRoot, ".codex/skills/yolo.pi/SKILL.md")), false);
     assert.equal(existsSync(join(projectRoot, ".codex/skills/yolo/SKILL.md")), true);
     assert.equal(existsSync(join(projectRoot, ".claude/skills/triggers.json")), true);
-    assert.equal(existsSync(join(projectRoot, ".claude/commands/yolo-run.md")), true);
+    assert.equal(existsSync(join(projectRoot, ".claude/commands/yolo-run.md")), false);
   });
 
   test("dry-run reports planned files without writing", () => {
@@ -349,13 +376,20 @@ describe("agent bridge installer", () => {
     assert.equal(result.dry_run, true);
     assert.equal(result.planned.includes("AGENTS.md"), true);
     assert.equal(result.planned.includes(".codex/skills/yolo/SKILL.md"), true);
-    assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-run.md"), true);
+    // Only 4 stable commands generate skill command docs
+    assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-demand.md"), true);
+    assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-auto.md"), true);
+    assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-ship.md"), true);
     assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-status.md"), true);
-    assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-release.md"), true);
+    assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-run.md"), false);
+    assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-release.md"), false);
     assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-doctor.md"), false);
     assert.equal(result.planned.includes(".codex/skills/yolo/commands/yolo-plan.md"), false);
-    assert.equal(result.planned.includes(".codex/skills/source-command-yolo/SKILL.md"), true);
+    // Primary source command uses demand
+    assert.equal(result.planned.includes(".codex/skills/source-command-demand/SKILL.md"), true);
+    assert.equal(result.planned.includes(".codex/skills/source-command-yolo/SKILL.md"), false);
     assert.equal(result.planned.includes(".codex/skills/source-command-yolo-check/SKILL.md"), false);
+    // Existing active commands still generate cleanup; deleted ones do not
     assert.equal(result.legacy_cleanup_planned.includes(".codex/skills/source-command-yolo-check"), true);
     assert.equal(result.legacy_cleanup_planned.includes(".codex/skills/yolo.pi/SKILL.md"), true);
     assert.equal(result.legacy_cleanup_planned.includes(".codex/skills/yolo-check"), true);
@@ -368,7 +402,7 @@ describe("agent bridge installer", () => {
     assert.equal(result.skill_installs[0].skipped.includes(".codex/skills/yolo.pi/SKILL.md"), false);
     assert.deepEqual(result.written, []);
     assert.equal(existsSync(join(projectRoot, "AGENTS.md")), false);
-    assert.equal(existsSync(join(projectRoot, ".codex/skills/source-command-yolo/SKILL.md")), false);
+    assert.equal(existsSync(join(projectRoot, ".codex/skills/source-command-demand/SKILL.md")), false);
   });
 
   test("user scope installs global Codex skill and Claude slash commands under supplied home", () => {
@@ -387,17 +421,22 @@ describe("agent bridge installer", () => {
     assert.deepEqual(result.scopes, ["user"]);
     assert.equal(existsSync(join(projectRoot, "AGENTS.md")), false);
     assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/SKILL.md")), true);
+    // Only 4 stable commands generate skill command docs in user scope
     assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-status.md")), true);
     assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-demand.md")), true);
-    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-spec.md")), true);
-    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-tasks.md")), true);
-    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-run.md")), true);
-    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-check.md")), true);
-    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-review.md")), true);
-    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-release.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-auto.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-ship.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-spec.md")), false);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-tasks.md")), false);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-run.md")), false);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-check.md")), false);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-review.md")), false);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-release.md")), false);
     assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-plan.md")), false);
     assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/commands/yolo-doctor.md")), false);
-    assert.equal(existsSync(join(homeDir, ".agents/skills/source-command-yolo/SKILL.md")), true);
+    // Primary source command uses demand
+    assert.equal(existsSync(join(homeDir, ".agents/skills/source-command-demand/SKILL.md")), true);
+    assert.equal(existsSync(join(homeDir, ".agents/skills/source-command-yolo/SKILL.md")), false);
     assert.equal(existsSync(join(homeDir, ".agents/skills/source-command-yolo-run/SKILL.md")), false);
     assert.equal(existsSync(join(homeDir, ".agents/skills/yolo-brainstorm/SKILL.md")), false);
     assert.equal(existsSync(join(homeDir, ".agents/skills/yolo-interview/SKILL.md")), false);
@@ -407,7 +446,10 @@ describe("agent bridge installer", () => {
     assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/workflows/yolo.interview/WORKFLOW.md")), true);
     assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/workflows/yolo.pi/SKILL.md")), false);
     assert.equal(existsSync(join(homeDir, ".claude/skills/yolo/SKILL.md")), true);
-    assert.equal(existsSync(join(homeDir, ".claude/commands/yolo.md")), true);
-    assert.match(readFileSync(join(homeDir, ".claude/commands/yolo-run.md"), "utf8"), /Requires explicit user confirmation/);
+    assert.equal(existsSync(join(homeDir, ".claude/commands/yolo.md")), false);
+    // Internal commands are not installed; only stable commands have Claude slash files
+    assert.equal(existsSync(join(homeDir, ".claude/commands/yolo-run.md")), false);
+    assert.equal(existsSync(join(homeDir, ".claude/commands/yolo-demand.md")), true);
+    assert.match(readFileSync(join(homeDir, ".claude/commands/yolo-demand.md"), "utf8"), /one-question mode/);
   });
 });

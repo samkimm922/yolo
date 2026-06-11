@@ -29,3 +29,4 @@ tmp/
 DELIVERY_LOG.md
 SESSION.md
 SNAPSHOT.md
+.claude/worktrees/

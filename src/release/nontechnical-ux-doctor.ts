@@ -69,9 +69,9 @@ export function runNonTechnicalUxDoctor(options = {}) {
   const yoloRoot = resolve(plan.yolo_root);
   const docs = Object.fromEntries(plan.docs.map((doc) => [doc, fileContains(yoloRoot, doc, plan.one_sentence_entry)]));
   const nativeSkill = buildYoloNativeSkill({ agent: "codex", yoloRoot });
-  const claudeCommand = buildClaudeSlashCommand("yolo", { yoloRoot });
-  const codexSlashCommand = buildCodexSlashCommandSkill("yolo", { yoloRoot });
-  const codexCommand = buildCodexSourceCommandSkill("yolo", { yoloRoot });
+  const claudeCommand = buildClaudeSlashCommand("yolo-status", { yoloRoot });
+  const codexSlashCommand = buildCodexSlashCommandSkill("yolo-status", { yoloRoot });
+  const codexCommand = buildCodexSourceCommandSkill("demand", { yoloRoot });
   const bridgeBlock = buildAgentBridgeBlock({ agent: "codex", yoloRoot });
 
   const checks = [
@@ -104,7 +104,7 @@ export function runNonTechnicalUxDoctor(options = {}) {
         && bridgeBlock.includes("compatibility alias for `/yolo-demand --stage <stage>`")
         && bridgeBlock.includes("Do not expose internal workflow names")
         && codexCommand.includes("explicit `/yolo-*` command")
-        && codexSlashCommand.includes("不确定该走哪一步时先读状态"),
+        && codexSlashCommand.includes("唯一安全下一步"),
       "Codex bridge and command artifacts must make /yolo a fallback router and /yolo-* commands clear stage entries",
     ),
     check(

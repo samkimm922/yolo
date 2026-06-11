@@ -133,13 +133,13 @@ export function buildAgentBridgeBlock({ agent, yoloRoot = DEFAULT_YOLO_ROOT } = 
     "",
     "1. Treat this chat as the user interface. Do not ask the user to memorize terminal commands.",
     "2. Read YOLO docs first when needed: `docs/agent-chat-usage.md`, `docs/non-technical-user-guide.md`, and `docs/public-sdk-contract.md` under the YOLO root.",
-    "3. If the user invokes `/yolo ...`, route it yourself through the stable surface: status, demand, spec, tasks, run, check, review, or release.",
+    "3. If the user invokes `/yolo ...`, route it yourself through the command surface: demand, auto, ship, or status. Route internally to spec, tasks, run, check, review, or release as needed.",
     "4. Treat `/yolo-demand` as the single demand-stage entry and user-facing demand interview host. Route brainstorm, interview, discovery, discussion, office-hours, evidence dispatch, and spec-readiness questions inside that demand stage.",
     "5. Default `/yolo-demand` to one-question mode: when required slots are missing, ask exactly one `next_question` in plain language and stop. Do not output long recommendation lists, do not enter PRD, and do not edit code.",
     "6. Keep audiences separated: this user-facing chat prompt must not include evidence agent JSON role contracts. Evidence dispatch prompts are only for provider sub-agents spawned by `yolo demand dispatch`.",
     "7. If the user invokes a legacy demand subcommand such as `/yolo-brainstorm`, `/yolo-interview`, `/yolo-discover`, `/yolo-discuss`, or `/office-hours`, treat it as a hidden compatibility alias for `/yolo-demand --stage <stage>` or `yolo demand --mode office-hours` and enforce the same demand-stage protocol.",
-    "8. If the user invokes a legacy post-demand command such as `/yolo-plan`, `/yolo-prd`, `/yolo-accept`, or `/yolo-ship`, route it to the matching stable command (`/yolo-tasks`, `/yolo-spec`, or `/yolo-release`) and enforce that stage's safety rules.",
-    "9. A stage command is terminal for the current turn unless it is `/yolo-run` or `/yolo-fix`: finish only that stage, report artifacts/blockers, and suggest the next `/yolo-*` command.",
+    "8. If the user invokes a legacy post-demand command such as `/yolo-plan`, `/yolo-prd`, `/yolo-accept`, or `/yolo-ship`, route it to the matching stable command (`/yolo-auto` or `/yolo-ship`) and enforce that stage's safety rules.",
+    "9. A stage command is terminal for the current turn unless it is `/yolo-auto` or `/yolo-run`: finish only that stage, report artifacts/blockers, and suggest the next `/yolo-*` command.",
     "10. For `/yolo-demand`, demand aliases, `/yolo-tasks`, `/yolo-spec`, and `/yolo-check`, do not continue into downstream stages in the same response, even if the user says the result looks good.",
     "11. User approval of a demand discussion, plan, PRD, or check means permission to move to the next stage, not permission to edit code. 批准最后: demand approval comes after slots are concrete, and execution approval remains separate.",
     "12. When unsure, run `/yolo-status` first and follow the lifecycle guard recommendation instead of choosing a downstream stage yourself.",
@@ -209,9 +209,7 @@ function renderCommandUsage(commandInput) {
 }
 
 function primarySlashNameForCommand(command = {}) {
-  if (command.name === "yolo") return "yolo";
   if (command.stability === "stable") return `yolo-${command.name}`;
-  if (command.name === "office-hours") return "office-hours";
   if (String(command.name || "").startsWith("yolo-")) return command.name;
   return `yolo-${command.name}`;
 }
@@ -227,13 +225,10 @@ function slashNamesForCommand(command = {}) {
 }
 
 function installableSlashCommands() {
-  return [
-    { ...getYoloCommand("yolo"), slash_name: "yolo" },
-    ...listYoloCommands({ recommended: true }).map((command) => ({
-      ...command,
-      slash_name: primarySlashNameForCommand(command),
-    })),
-  ];
+  return listYoloCommands({ recommended: true }).map((command) => ({
+    ...command,
+    slash_name: primarySlashNameForCommand(command),
+  }));
 }
 
 function legacyCodexCommandNames() {
@@ -246,35 +241,16 @@ function legacyCodexCommandNames() {
 
 function codexMenuDescription(command = {}) {
   const descriptions = {
-    yolo: "兼容兜底入口：不确定该走哪一步时先读状态，再路由到 8 个稳定命令；默认不改代码。",
-    status: "读取 YOLO 项目状态和唯一安全下一步；不改代码。",
     demand: "统一需求访谈主持入口：缺槽位时 one-question 只问一个 next_question；不输出大段建议、不进 PRD、不改代码。",
+    auto: "全自动执行 YOLO 流水线：需求澄清 \u2192 spec \u2192 check \u2192 实现 \u2192 review \u2192 交付；各阶段独立 gate。",
+    ship: "交付判断：在 spec、gate、证据和 review 全部通过前，fail closed 阻止发布。",
+    status: "读取 YOLO 项目状态和唯一安全下一步；不改代码。",
     spec: "把已批准的需求、发现或任务材料编译成可执行 spec/PRD；不改代码。",
     tasks: "把澄清后的需求拆成可执行任务和计划；不改代码。",
     run: "执行已批准且已检查通过的 PRD/任务；可能改代码，必须有明确批准。",
     check: "执行前检查 spec、范围、gate、adapter 和证据计划；不改代码。",
     review: "审查实现质量、风险、回归和缺失测试；默认不改代码。",
     release: "运行验收、打包、dogfood 和 release-candidate gate；不发布。",
-    "yolo-brainstorm": "兼容别名：等同于 /yolo-demand --stage brainstorm；想法很早期时用，不改代码。",
-    "yolo-interview": "兼容别名：等同于 /yolo-demand --stage interview；沿用 one-question/next_question 访谈主持规则，不改代码。",
-    "yolo-discover": "兼容别名：等同于 /yolo-demand --stage discover；需求模糊时用，不改代码。",
-    "yolo-discuss": "兼容别名：等同于 /yolo-demand --stage discuss；需求需要深入讨论时用，不改代码。",
-    "yolo-init": "第一次接入项目时用：生成 .yolo 记忆、生命周期、state 和 specs 骨架；不改业务代码。",
-    "yolo-setup": "一键安全接入项目时用：判断新项目/半开发/已初始化状态，安装 YOLO 骨架和 agent 入口，并跑 doctor；不补录业务现状。",
-    "yolo-plan": "需求已基本清楚时用：生成执行计划和任务拆解；不改代码。",
-    "yolo-prd": "计划/需求已确认时用：编译可执行 prd.json/spec；不改代码。",
-    "yolo-check": "执行前用：检查 PRD、范围、gate、adapter、证据计划是否可执行；不改代码。",
-    "yolo-next": "不知道下一步时用：读取 lifecycle 状态，只报告当前唯一安全的下一步；不改代码。",
-    "yolo-run": "明确确认执行时用：运行已通过检查的 PRD；可能改代码，必须有批准。",
-    "yolo-review": "实现后或有 diff 时用：审查质量、风险、回归和缺失测试；默认不改代码。",
-    "yolo-fix": "review 有已批准阻塞项时用：按 fix 任务修复并重跑 gate；可能改代码。",
-    "yolo-accept": "功能做完后用：收集产品、运行、UI 和证据验收结果；不改代码。",
-    "yolo-ui-review": "前端界面验收时用：检查 UI 状态、可访问性、错误和截图证据；默认不改代码。",
-    "yolo-eval": "评估 YOLO 自身质量时用：跑 benchmark/rubric；不改业务代码。",
-    "yolo-ship": "交付前用：判断是否可交付，列出阻塞、证据和回滚说明；不发布。",
-    "yolo-learn": "交付或踩坑后用：把可复用经验写入记忆；不改业务代码。",
-    "yolo-doctor": "不知道项目是否装好时用：只读检查 YOLO 初始化、集成和状态；不改代码。",
-    "yolo-install": "需要安装/更新集成时用：写 AGENTS/CLAUDE/skills/commands；执行前说明文件。",
   };
   return descriptions[command.name] || command.description || "";
 }
@@ -303,19 +279,7 @@ function demandAliasRoute(command = {}) {
 
 function compatibilityAliasRoute(command = {}) {
   if (isDemandCompatibilityAlias(command)) return demandAliasRoute(command);
-  const routes = {
-    yolo: "yolo status",
-    "yolo-next": "yolo status",
-    "yolo-plan": "yolo tasks",
-    "yolo-prd": "yolo spec",
-    "yolo-fix": "yolo run --mode fix",
-    "yolo-accept": "yolo release accept",
-    "yolo-ui-review": "yolo release accept --collect-evidence",
-    "yolo-ship": "yolo release ship",
-    "yolo-release-candidate": "yolo release candidate",
-    "yolo-release-gate": "yolo release candidate",
-  };
-  return routes[command.name] || command.usage || "";
+  return command.usage || "";
 }
 
 function isWriteCommand(command = {}) {
@@ -333,9 +297,6 @@ function allowedToolsForCommand(command = {}) {
 }
 
 function stageStopRule(command = {}) {
-  if (command.name === "yolo") {
-    return "- `/yolo` may route to the safest current stage, but it must still stop at that stage unless the user explicitly invoked `/yolo-run` or `/yolo-fix` with a checked PRD.";
-  }
   if (command.name === "demand") {
     return "- `/yolo-demand` is the unified demand-stage interview host. Route internally between brainstorm, interview, discover, discuss, office-hours, status, evidence dispatch, and spec-readiness. If slots are missing, ask exactly one `next_question` and stop; do not enter `/yolo-spec` in the same response.";
   }
@@ -682,7 +643,7 @@ function commandFilesFor({ projectRoot, homeDir, target, scope, yoloRoot }) {
 function codexSourceCommandFilesFor({ projectRoot, homeDir, scope, yoloRoot }) {
   const baseDir = scope === "user" ? homeDir : projectRoot;
   const targetDir = scope === "user" ? ".agents/skills" : ".codex/skills";
-  return ["yolo"].map((command) => {
+  return ["demand"].map((command) => {
     const path = join(baseDir, targetDir, `source-command-${command}`, "SKILL.md");
     return {
       target: "codex",

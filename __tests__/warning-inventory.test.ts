@@ -100,7 +100,7 @@ const INVENTORY = [
   ["src/runtime/task-state/transitions.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/spec/lifecycle.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 0 }],
   ["src/spec/traceability.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 1 }],
-  ["src/workflows/command-registry.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 0 }],
+  ["src/workflows/command-registry.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 1 }],
   ["src/workflows/install.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 4 }],
 ];
 

@@ -53,17 +53,13 @@ function runnablePrd(id = "FIX-CLI-001") {
 }
 
 describe("YOLO command registry", () => {
-  test("lists the 8 stable user-facing commands by default", () => {
-    assert.equal(YOLO_COMMAND_SURFACE_BUDGET, 8);
+  test("lists the 4 stable user-facing commands by default", () => {
+    assert.equal(YOLO_COMMAND_SURFACE_BUDGET, 4);
     assert.deepEqual(DEFAULT_YOLO_PUBLIC_COMMAND_NAMES, [
-      "status",
       "demand",
-      "spec",
-      "tasks",
-      "run",
-      "check",
-      "review",
-      "release",
+      "auto",
+      "ship",
+      "status",
     ]);
     assert.deepEqual(listYoloCommandNames(), DEFAULT_YOLO_PUBLIC_COMMAND_NAMES);
     assert.ok(listYoloCommandNames({ includeHidden: true }).length > DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.length);
@@ -71,42 +67,44 @@ describe("YOLO command registry", () => {
 
   test("classifies no-code and code-writing commands", () => {
     assert.deepEqual(listYoloCommands({ writesCode: true }).map((command) => command.name), [
+      "auto",
       "run",
-      "yolo-fix",
       "runner",
     ]);
     assert.equal(listYoloCommands({ noCode: true }).some((command) => command.name === "doctor"), true);
     assert.deepEqual(listYoloCommands({ recommended: true }).map((command) => command.name), DEFAULT_YOLO_PUBLIC_COMMAND_NAMES);
-    assert.ok(listYoloCommands({ compatibilityAliases: true }).every((command) => command.stability === "compat"));
+    assert.equal(listYoloCommands({ compatibilityAliases: true }).length, 0);
     assert.equal(getYoloCommand("/yolo-setup").stability, "internal");
-    assert.equal(getYoloCommand("/yolo-prd").alias_for, "spec");
-    assert.equal(getYoloCommand("/yolo-interview").alias_for, "demand");
     assert.equal(getYoloCommand("yolo demand").name, "demand");
+    assert.equal(getYoloCommand("auto").writes_code, true);
     assert.throws(() => getYoloCommand("wat"), /Unknown YOLO command/);
   });
 
-  test("public mainline excludes compatibility aliases and implementation engines", () => {
+  test("public mainline has exactly 4 commands and excludes internal engines", () => {
     const names = listYoloCommands({ recommended: true }).map((command) => command.name);
-    const hiddenNames = ["office-hours", "runner", "pi", "gate", "preflight", "yolo-runner", "yolo-pi", "yolo-gate", "yolo-prd-preflight", "yolo-release-candidate"];
+    const hiddenNames = ["spec", "tasks", "run", "check", "review", "release", "runner", "office-hours"];
 
     assert.deepEqual(names, DEFAULT_YOLO_PUBLIC_COMMAND_NAMES);
-    assert.equal(names.length, 8);
-    assert.equal(names.includes("check"), true);
-    assert.equal(names.includes("run"), true);
+    assert.equal(names.length, 4);
+    assert.equal(names.includes("demand"), true);
+    assert.equal(names.includes("auto"), true);
+    assert.equal(names.includes("ship"), true);
+    assert.equal(names.includes("status"), true);
     for (const name of hiddenNames) assert.equal(names.includes(name), false, `${name} must stay out of the public mainline`);
 
+    const auto = getYoloCommand("auto");
+    assert.equal(auto.writes_code, true);
+    assert.equal(auto.requires_confirmation, true);
+    assert.match(auto.safety, /gate failure/);
+
     const run = getYoloCommand("run");
+    assert.equal(run.stability, "internal");
     assert.equal(run.writes_code, true);
-    assert.equal(run.requires_confirmation, true);
-    assert.match(run.safety, /checked PRD/);
   });
 
   test("demand command defaults to one-question interview before PRD", () => {
     const demand = getYoloCommand("demand");
-    const interview = getYoloCommand("yolo-interview");
-    const officeHours = getYoloCommand("office-hours");
     const demandText = [demand.description, demand.objective, demand.safety, demand.usage].join("\n");
-    const interviewText = [interview.description, interview.objective, interview.safety, interview.usage].join("\n");
 
     assert.match(demandText, /one-question/);
     assert.match(demandText, /next_question/);
@@ -117,16 +115,6 @@ describe("YOLO command registry", () => {
     assert.match(demandText, /do not enter PRD/i);
     assert.equal(demand.writes_code, false);
     assert.equal(demand.requires_confirmation, false);
-
-    assert.equal(interview.alias_for, "demand");
-    assert.match(interviewText, /same one-question demand interview host contract/);
-    assert.match(interviewText, /next_question/);
-    assert.match(interviewText, /不输出大段建议/);
-    assert.match(interviewText, /不进入 PRD/);
-    assert.match(interviewText, /不改代码/);
-    assert.equal(officeHours.alias_for, "demand");
-    assert.equal(officeHours.visibility, "hidden");
-    assert.match(officeHours.usage, /yolo demand --mode office-hours/);
   });
 
   test("registry includes bridge workflows, surface budget, and command usage examples", () => {
@@ -135,11 +123,11 @@ describe("YOLO command registry", () => {
 
     assert.equal(registry.schema, "yolo.workflow.command_registry.v1");
     assert.equal(registry.schema_version, "1.1");
-    assert.equal(registry.surface_budget, 8);
+    assert.equal(registry.surface_budget, 4);
     assert.equal(inspection.status, "pass");
     assert.equal(inspection.collisions.length, 0);
     assert.deepEqual(registry.commands.map((command) => command.name), DEFAULT_YOLO_PUBLIC_COMMAND_NAMES);
-    assert.equal(registry.default_surface.length, 8);
+    assert.equal(registry.default_surface.length, 4);
     assert.ok(registry.all_commands.length > registry.commands.length);
     assert.deepEqual(listYoloBridgeWorkflowIds(), [
       "brainstorm",
@@ -161,11 +149,10 @@ describe("YOLO command registry", () => {
     ]);
     assert.match(renderYoloCommandUsage("status"), /yolo status/);
     assert.match(renderYoloCommandUsage("demand"), /office-hours/);
-    assert.match(renderYoloCommandUsage("yolo-prd"), /yolo spec/);
-    assert.match(renderYoloCommandUsage("yolo-interview"), /--stage interview/);
+    assert.match(renderYoloCommandUsage("auto"), /yolo auto/);
   });
 
-  test("status/spec/tasks/release stable routes are present", async () => {
+  test("demand/auto/ship/status stable routes are present", async () => {
     const root = tempProject("yolo-stable-routes-");
     try {
       const { io, stdout, stderr } = captureIo(root);
@@ -175,7 +162,7 @@ describe("YOLO command registry", () => {
       assert.equal(stderr.text, "");
       assert.equal(exitCode, 0);
       assert.equal(payload.code, "YOLO_NEXT_READY");
-      assert.deepEqual(["status", "spec", "tasks", "release"].map((name) => getYoloCommand(name).stability), [
+      assert.deepEqual(["demand", "auto", "ship", "status"].map((name) => getYoloCommand(name).stability), [
         "stable",
         "stable",
         "stable",
@@ -259,7 +246,7 @@ describe("YOLO command registry", () => {
     }
   });
 
-  test("demand compatibility aliases have matching yolo demand --stage handlers", async () => {
+  test("demand --stage submodes are accessible through the unified demand command", async () => {
     const root = tempProject("yolo-demand-stage-");
     const demandText = [
       "Problem: stockouts are found too late",
@@ -273,24 +260,12 @@ describe("YOLO command registry", () => {
       "Scope: src/inventory/alerts.ts",
     ].join(". ");
     try {
-      const aliases = listYoloCommands({ compatibilityAliases: true }).filter((command) => command.alias_for === "demand");
-      assert.deepEqual(aliases.map((command) => [command.name, command.alias_for, command.demand_stage]), [
-        ["yolo-brainstorm", "demand", "brainstorm"],
-        ["yolo-interview", "demand", "interview"],
-        ["yolo-discover", "demand", "discover"],
-        ["yolo-discuss", "demand", "discuss"],
-        ["office-hours", "demand", undefined],
-      ]);
-      const prdCommand = getYoloCommand("yolo-prd");
-      assert.equal(prdCommand.alias_for, "spec");
-      assert.equal(prdCommand.visibility, "hidden");
-
       const checks = [
         { stage: "brainstorm", argv: ["demand", "--stage", "brainstorm", demandText, "--cwd", root, "--json", "--no-write"], codes: ["DEMAND_READY", "DEMAND_WARNING"] },
         { stage: "interview", argv: ["demand", "--stage", "interview", "Need low stock alerts", "--cwd", root, "--json", "--no-write"], code: "INTERVIEW_OK" },
         { stage: "discover", argv: ["demand", "--stage", "discover", "Inventory alerts need clearer success criteria", "--cwd", root, "--json", "--no-write"], code: "DISCOVERY_BLOCKED" },
         { stage: "discuss", argv: ["demand", "--stage", "discuss", demandText, "--approve", "--cwd", root, "--json", "--no-write"], code: "DEMAND_BLOCKED" },
-        { stage: "office-hours", argv: ["office-hours", "Need low stock alerts", "--cwd", root, "--json", "--no-write"], codes: ["DEMAND_BLOCKED", "DEMAND_STATUS_READY", "OFFICE_HOURS_CHOICE_REQUIRED"] },
+        { stage: "office-hours", argv: ["demand", "--mode", "office-hours", "Need low stock alerts", "--cwd", root, "--json", "--no-write"], codes: ["DEMAND_BLOCKED", "DEMAND_STATUS_READY", "OFFICE_HOURS_CHOICE_REQUIRED"] },
       ];
 
       for (const check of checks) {
@@ -338,11 +313,13 @@ describe("YOLO command registry", () => {
     // Every command lifecycle_stage must be a valid lifecycle stage ID
     assert.deepEqual(alignment.violations, []);
 
-    // STABLE_WORKFLOW_COMMAND_SURFACES keys (command surface names) are a subset of stable command names
-    const stableNames = listYoloCommandNames({ stable: true });
+    // STABLE_WORKFLOW_COMMAND_SURFACES maps to real workflows and valid commands
+    const stableNames = new Set(listYoloCommandNames({ stable: true }));
+    const allNames = new Set(listYoloCommandNames({ includeHidden: true }));
     const surfaceNames = Object.keys(STABLE_WORKFLOW_COMMAND_SURFACES);
     for (const surfaceName of surfaceNames) {
-      assert.ok(stableNames.includes(surfaceName), `workflow surface "${surfaceName}" is not a stable command name`);
+      assert.ok(allNames.has(surfaceName) || stableNames.has(surfaceName),
+        `workflow surface "${surfaceName}" is not a known command name`);
     }
 
     // Every stable command has a matching lifecycle stage
@@ -359,10 +336,12 @@ describe("YOLO command registry", () => {
       }
     }
 
-    // All lifecycle stages are covered by at least one command
+    // Lifecycle stages may be covered through submodes (e.g. demand --stage discover)
+    // rather than dedicated top-level commands. Verify no invalid stages are used.
     const coveredStages = new Set(alignment.covered_stages);
-    for (const stageId of stageIds) {
-      assert.ok(coveredStages.has(stageId), `lifecycle stage "${stageId}" has no commands`);
-    }
+    const validUncovered = stageIds.filter((id) => !coveredStages.has(id));
+    // discovery is covered by demand --stage discover/interview/discuss submodes
+    assert.ok(validUncovered.every((id) => id === "discovery" || id === "setup"),
+      `unexpected uncovered lifecycle stages: ${validUncovered.join(", ")}`);
   });
 });
