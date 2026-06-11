@@ -32,6 +32,11 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function rateValue(numerator, denominator) {
+  if (!denominator || denominator <= 0) return 0;
+  return Number(((numerator / denominator) * 100).toFixed(1));
+}
+
 function normalizeIncidentEvidence(evidence = {}) {
   const source = asArray(evidence.incidents).length
     ? evidence.incidents
@@ -48,14 +53,63 @@ function normalizeIncidentEvidence(evidence = {}) {
     .filter((entry) => entry.id);
 }
 
-function runReportHasFakeSuccess(report = {}) {
+function cleanStatus(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function claimsPass(report = {}) {
+  const status = cleanStatus(report.status);
+  const outcome = cleanStatus(report.outcome || report.final_answer?.outcome);
+  return ["pass", "passed", "success", "completed"].includes(status)
+    || ["success", "completed"].includes(outcome);
+}
+
+function numericZero(value) {
+  return value != null && Number(value) === 0;
+}
+
+function explicitlyNoFileChanges(report = {}) {
+  const summary = report.summary || report.final_answer?.summary || {};
+  if (numericZero(report.files_changed_total ?? report.filesChangedTotal ?? summary.files_changed_total ?? summary.filesChangedTotal)) return true;
+  if (numericZero(report.file_changes ?? report.fileChanges ?? summary.file_changes ?? summary.fileChanges)) return true;
+  if (Array.isArray(report.changed_files) && report.changed_files.length === 0) return true;
+  if (Array.isArray(report.changedFiles) && report.changedFiles.length === 0) return true;
+  if (Array.isArray(summary.changed_files) && summary.changed_files.length === 0) return true;
+  if (Array.isArray(summary.changedFiles) && summary.changedFiles.length === 0) return true;
+  return false;
+}
+
+function fakeSuccessReasons(report = {}) {
   const status = String(report.status || "").toLowerCase();
   const outcome = String(report.outcome || report.final_answer?.outcome || "").toLowerCase();
   const summary = report.summary || report.final_answer?.summary || {};
   const runSuccessRate = Number(summary.run_success_rate);
   const taskSuccessRate = Number(summary.task_success_rate);
-  return (status === "error" || status === "blocked" || outcome === "needs_attention")
-    && (runSuccessRate === 100 || taskSuccessRate === 100 || outcome === "completed");
+  const reasons = [];
+  if ((status === "error" || status === "blocked" || outcome === "needs_attention")
+    && (runSuccessRate === 100 || taskSuccessRate === 100 || outcome === "completed")) {
+    reasons.push("failed_with_100_percent_metrics");
+  }
+  if (claimsPass(report) && explicitlyNoFileChanges(report)) {
+    reasons.push("pass_without_file_changes");
+  }
+  return reasons;
+}
+
+function classifyFakeSuccessReport(report = {}) {
+  const reasons = fakeSuccessReasons(report);
+  if (reasons.length === 0) return null;
+  const summary = report.summary || report.final_answer?.summary || {};
+  return {
+    run_id: report.run_id || null,
+    status: report.status || null,
+    outcome: report.outcome || report.final_answer?.outcome || null,
+    reasons,
+    run_success_rate: summary.run_success_rate ?? null,
+    task_success_rate: summary.task_success_rate ?? null,
+    files_changed_total: report.files_changed_total ?? summary.files_changed_total ?? null,
+    changed_files: report.changed_files ?? summary.changed_files ?? null,
+  };
 }
 
 export function inspectYoloReliabilityReadiness(options = {}) {
@@ -68,18 +122,18 @@ export function inspectYoloReliabilityReadiness(options = {}) {
   );
   const runReports = asArray(options.runReports || options.run_reports);
   const fakeSuccessReports = runReports
-    .filter(runReportHasFakeSuccess)
-    .map((report) => ({
-      run_id: report.run_id || null,
-      status: report.status || null,
-      outcome: report.outcome || report.final_answer?.outcome || null,
-      run_success_rate: report.summary?.run_success_rate ?? report.final_answer?.summary?.run_success_rate ?? null,
-      task_success_rate: report.summary?.task_success_rate ?? report.final_answer?.summary?.task_success_rate ?? null,
-    }));
+    .map(classifyFakeSuccessReport)
+    .filter(Boolean);
   const externalRemediation = asArray(options.externalRemediation || options.external_remediation);
   const contaminatedExternalRemediation = externalRemediation.filter((entry) =>
     entry.counts_as_yolo_success === true || entry.internal === true || entry.yolo_runner_success === true
   );
+  const summary = {
+    run_report_count: runReports.length,
+    fake_success: fakeSuccessReports.length,
+    fake_success_rate: rateValue(fakeSuccessReports.length, runReports.length),
+    contaminated_external_remediation: contaminatedExternalRemediation.length,
+  };
 
   const checks = [
     check(
@@ -118,6 +172,7 @@ export function inspectYoloReliabilityReadiness(options = {}) {
     blocks_release: blockers.length > 0,
     required_incident_ids: [...REQUIRED_RELIABILITY_INCIDENT_IDS],
     incidents,
+    summary,
     checks,
     blockers,
   };

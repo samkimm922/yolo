@@ -38,6 +38,44 @@ describe("release readiness", () => {
     assert.ok(result.blockers.some((item) => item.code === "YOLO_RELIABILITY_EXTERNAL_REMEDIATION_ISOLATED"));
   });
 
+  test("伪造 PASS 但无文件变更会计入 fake_success", () => {
+    const result = inspectYoloReliabilityReadiness({
+      incidentEvidence: {
+        incidents: REQUIRED_RELIABILITY_INCIDENT_IDS.map((id) => ({ id, status: "pass", evidence: `fixtures/${id}.json` })),
+      },
+      runReports: [
+        {
+          run_id: "run-fake-pass-no-change",
+          status: "PASS",
+          summary: {
+            task_success_rate: 100,
+            run_success_rate: 100,
+            files_changed_total: 0,
+          },
+          changed_files: [],
+        },
+        {
+          run_id: "run-real-pass",
+          status: "success",
+          summary: {
+            task_success_rate: 100,
+            run_success_rate: 100,
+            files_changed_total: 2,
+          },
+          changed_files: ["src/inventory-alerts.ts", "__tests__/inventory-alerts.test.ts"],
+        },
+      ],
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.summary.fake_success, 1);
+    assert.equal(result.summary.fake_success_rate, 50);
+    const fakeSuccessCheck = result.checks.find((item) => item.code === "YOLO_RELIABILITY_NO_FAKE_SUCCESS_REPORTS");
+    assert.equal(fakeSuccessCheck.passed, false);
+    assert.equal(fakeSuccessCheck.fake_success_reports[0].run_id, "run-fake-pass-no-change");
+    assert.deepEqual(fakeSuccessCheck.fake_success_reports[0].reasons, ["pass_without_file_changes"]);
+  });
+
   test("inspectYoloReliabilityReadiness passes complete project-independent incident evidence", () => {
     const result = inspectYoloReliabilityReadiness({
       incidentEvidence: {
@@ -53,6 +91,7 @@ describe("release readiness", () => {
 
     assert.equal(result.status, "pass", JSON.stringify(result.blockers, null, 2));
     assert.equal(result.blocks_release, false);
+    assert.equal(result.summary.fake_success, 0);
   });
 
   test("inspectPackageReadiness blocks public release while package is private", () => {
