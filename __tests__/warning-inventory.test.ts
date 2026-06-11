@@ -25,9 +25,9 @@ const INVENTORY = [
   ["src/core/setup.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 8 }],
   ["src/demand/evidence-dispatch.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/demand/findings-generator.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
-  ["src/demand/gate.ts", { WARN: 0, warning: 26, "best-effort": 0, skip: 0 }],
+  ["src/demand/gate.ts", { WARN: 0, warning: 27, "best-effort": 0, skip: 0 }],
   ["src/demand/interview.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 0 }],
-  ["src/demand/runtime.ts", { WARN: 1, warning: 14, "best-effort": 0, skip: 0 }],
+  ["src/demand/runtime.ts", { WARN: 3, warning: 14, "best-effort": 0, skip: 0 }],
   ["src/devtools/doctor.ts", { WARN: 0, warning: 8, "best-effort": 0, skip: 0 }],
   ["src/discovery/artifacts.ts", { WARN: 1, warning: 3, "best-effort": 0, skip: 2 }],
   ["src/discovery/gate.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 0 }],
@@ -68,8 +68,10 @@ const INVENTORY = [
   ["src/runtime/execution/post-precheck.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/runtime/execution/precheck-outcome.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/runtime/execution/session-validation.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
+  ["src/runtime/execution/summary-relay.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
+  ["src/runtime/execution/task-summary.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 3 }],
   ["src/runtime/execution/worktree-session.ts", { WARN: 1, warning: 0, "best-effort": 0, skip: 0 }],
-  ["src/runtime/gates/check-report.ts", { WARN: 0, warning: 70, "best-effort": 0, skip: 0 }],
+  ["src/runtime/gates/check-report.ts", { WARN: 0, warning: 72, "best-effort": 0, skip: 0 }],
   ["src/runtime/gates/diff-quality-gate.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 2 }],
   ["src/runtime/gates/failure-analysis.ts", { WARN: 1, warning: 0, "best-effort": 0, skip: 0 }],
   ["src/runtime/gates/prd-contract-doctor-gate.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 0 }],
@@ -102,6 +104,7 @@ const INVENTORY = [
   ["src/spec/traceability.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 1 }],
   ["src/workflows/command-registry.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 1 }],
   ["src/workflows/install.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 4 }],
+  ["src/workflows/pm-protocol.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
 ];
 
 const COVERAGE_RULES = [
