@@ -28,26 +28,11 @@ function artifactStatus(file = {}) {
   };
 }
 
-function skillPlanFiles(skillPlans = []) {
-  return skillPlans.flatMap((plan) =>
-    (plan.files || []).map((file) => ({
-      target: plan.agent_target || plan.target || null,
-      scope: plan.scope || null,
-      role: "workflow_skill",
-      path: file.path,
-      relative_path: file.relative_path || file.path,
-    }))
-  );
-}
-
 function expectedArtifacts(bridgePlan = {}) {
   return [
     ...(bridgePlan.files || []),
     ...(bridgePlan.native_skill_files || []),
-    ...(bridgePlan.command_files || []),
-    ...(bridgePlan.source_command_files || []),
-    ...(bridgePlan.codex_slash_command_files || []),
-    ...skillPlanFiles(bridgePlan.skill_plans || []),
+    ...(bridgePlan.claude_slash_commands || []),
   ];
 }
 

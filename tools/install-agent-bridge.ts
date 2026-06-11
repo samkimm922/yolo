@@ -1,15 +1,10 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  buildWorkflowSkillInstallPlan,
-  installWorkflowSkills,
-} from "../src/workflows/install.js";
-import {
   getYoloCommand,
-  listYoloBridgeWorkflowIds,
   listYoloCommands,
   renderYoloCommandUsage,
 } from "../src/workflows/command-registry.js";
@@ -18,8 +13,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_YOLO_ROOT = resolve(__dirname, "..");
 const BRIDGE_START = "<!-- yolo-agent-bridge:start -->";
 const BRIDGE_END = "<!-- yolo-agent-bridge:end -->";
-const DEFAULT_WORKFLOWS = listYoloBridgeWorkflowIds();
-const CODEX_DIRECT_SLASH_COMMANDS = [];
 
 function unique(values) {
   return [...new Set(values)];
@@ -187,14 +180,6 @@ function displayRelativePath(baseDir, path, scope) {
   return scope === "user" ? `~/${relativePath}` : relativePath;
 }
 
-function codexSkillRootFor({ baseDir, scope }) {
-  return join(baseDir, scope === "user" ? ".agents/skills" : ".codex/skills");
-}
-
-function codexBackupRootFor({ baseDir, scope }) {
-  return join(baseDir, scope === "user" ? ".agents/yolo-menu-backups" : ".codex/yolo-menu-backups");
-}
-
 function asScopes(options = {}) {
   if (Array.isArray(options.scopes)) return options.scopes;
   return normalizeInstallScopes(options.scope || options.installScope || options.install_scope || "project");
@@ -212,47 +197,6 @@ function primarySlashNameForCommand(command = {}) {
   if (command.stability === "stable") return `yolo-${command.name}`;
   if (String(command.name || "").startsWith("yolo-")) return command.name;
   return `yolo-${command.name}`;
-}
-
-function slashNamesForCommand(command = {}) {
-  const names = new Set([primarySlashNameForCommand(command)]);
-  for (const alias of command.aliases || []) {
-    const normalized = String(alias || "").trim().replace(/^\//, "").toLowerCase();
-    if (!normalized || normalized.includes(" ")) continue;
-    if (normalized === "office-hours" || normalized.startsWith("yolo-")) names.add(normalized);
-  }
-  return [...names].filter(Boolean);
-}
-
-function installableSlashCommands() {
-  return listYoloCommands({ recommended: true }).map((command) => ({
-    ...command,
-    slash_name: primarySlashNameForCommand(command),
-  }));
-}
-
-function legacyCodexCommandNames() {
-  return unique(
-    listYoloCommands({ includeHidden: true })
-      .flatMap((command) => slashNamesForCommand(command))
-      .filter((name) => name !== "yolo")
-  ).sort();
-}
-
-function codexMenuDescription(command = {}) {
-  const descriptions = {
-    demand: "统一需求访谈主持入口：缺槽位时 one-question 只问一个 next_question；不输出大段建议、不进 PRD、不改代码。",
-    auto: "全自动执行 YOLO 流水线：需求澄清 \u2192 spec \u2192 check \u2192 实现 \u2192 review \u2192 交付；各阶段独立 gate。",
-    ship: "交付判断：在 spec、gate、证据和 review 全部通过前，fail closed 阻止发布。",
-    status: "读取 YOLO 项目状态和唯一安全下一步；不改代码。",
-    spec: "把已批准的需求、发现或任务材料编译成可执行 spec/PRD；不改代码。",
-    tasks: "把澄清后的需求拆成可执行任务和计划；不改代码。",
-    run: "执行已批准且已检查通过的 PRD/任务；可能改代码，必须有明确批准。",
-    check: "执行前检查 spec、范围、gate、adapter 和证据计划；不改代码。",
-    review: "审查实现质量、风险、回归和缺失测试；默认不改代码。",
-    release: "运行验收、打包、dogfood 和 release-candidate gate；不发布。",
-  };
-  return descriptions[command.name] || command.description || "";
 }
 
 function isDemandCompatibilityAlias(command = {}) {
@@ -377,6 +321,22 @@ export function buildClaudeSlashCommand(commandName, { yoloRoot = DEFAULT_YOLO_R
   ].join("\n");
 }
 
+function codexMenuDescription(command = {}) {
+  const descriptions = {
+    demand: "统一需求访谈主持入口：缺槽位时 one-question 只问一个 next_question；不输出大段建议、不进 PRD、不改代码。",
+    auto: "全自动执行 YOLO 流水线：需求澄清 \u2192 spec \u2192 check \u2192 实现 \u2192 review \u2192 交付；各阶段独立 gate。",
+    ship: "交付判断：在 spec、gate、证据和 review 全部通过前，fail closed 阻止发布。",
+    status: "读取 YOLO 项目状态和唯一安全下一步；不改代码。",
+    spec: "把已批准的需求、发现或任务材料编译成可执行 spec/PRD；不改代码。",
+    tasks: "把澄清后的需求拆成可执行任务和计划；不改代码。",
+    run: "执行已批准且已检查通过的 PRD/任务；可能改代码，必须有明确批准。",
+    check: "执行前检查 spec、范围、gate、adapter 和证据计划；不改代码。",
+    review: "审查实现质量、风险、回归和缺失测试；默认不改代码。",
+    release: "运行验收、打包、dogfood 和 release-candidate gate；不发布。",
+  };
+  return descriptions[command.name] || command.description || "";
+}
+
 export function buildYoloNativeSkill({ agent = "codex", yoloRoot = DEFAULT_YOLO_ROOT } = {}) {
   const label = agent === "claude" ? "Claude Code" : "Codex";
   const recommendedCommands = listYoloCommands({ recommended: true });
@@ -438,42 +398,6 @@ export function buildYoloNativeSkill({ agent = "codex", yoloRoot = DEFAULT_YOLO_
     "- Require explicit confirmation before code edits or user-level installs.",
     "- Fail closed on weak PRD, unclear file scope, unavailable provider, failing gate, or missing verification.",
     "- Explain results in business language and include artifact paths.",
-    "",
-  ].join("\n");
-}
-
-function buildGenericCommandMarkdown(commandName, { yoloRoot = DEFAULT_YOLO_ROOT } = {}) {
-  const command = getYoloCommand(commandName);
-  return [
-    "---",
-    `name: ${commandName}`,
-    `description: ${command.description}`,
-    `argument-hint: "${command.argumentHint}"`,
-    "uses:",
-    "  - yolo",
-    "outputs:",
-    "  - YOLO workflow result or blocking gate report",
-    "---",
-    "",
-    `# /${commandName}`,
-    "",
-    `YOLO root: ${resolve(yoloRoot)}`,
-    "",
-    command.objective,
-    "",
-    "## Rules",
-    "",
-    "- Use the `yolo` skill and installed workflow skills.",
-    "- Do not ask the user to run terminal commands manually.",
-    isDemandCompatibilityAlias(command)
-      ? `- This command is a compatibility alias for \`${demandAliasSlashRoute(command)}\` (CLI: \`${demandAliasRoute(command)}\`); use the unified demand-stage protocol.`
-      : "- Follow this command's declared stage and lifecycle boundary.",
-    ...demandHostRules(command),
-    stageStopRule(command),
-    executionApprovalRule(command),
-    "- Start with the selected no-code stage unless this command explicitly requires checking or execution.",
-    `- ${command.safety}`,
-    "- Stop and report blockers when a gate cannot pass.",
     "",
   ].join("\n");
 }
@@ -599,269 +523,6 @@ function nativeSkillFile({ projectRoot, homeDir, target, scope, yoloRoot }) {
   };
 }
 
-function commandFilesFor({ projectRoot, homeDir, target, scope, yoloRoot }) {
-  const baseDir = scope === "user" ? homeDir : projectRoot;
-  const commands = installableSlashCommands();
-  if (target === "claude") {
-    return commands.map((command) => {
-      const commandName = command.slash_name;
-      const path = join(baseDir, ".claude/commands", `${commandName}.md`);
-      return {
-        target,
-        scope,
-        path,
-        relative_path: displayRelativePath(baseDir, path, scope),
-        role: "claude_slash_command",
-        command: commandName,
-        registry_command: command.name,
-        host_support: "native_claude_code_slash_command",
-        content: buildClaudeSlashCommand(commandName, { yoloRoot }),
-      };
-    });
-  }
-
-  const commandDir = scope === "user"
-    ? ".agents/skills/yolo/commands"
-    : ".codex/skills/yolo/commands";
-  return commands.map((command) => {
-    const commandName = command.slash_name;
-    const path = join(baseDir, commandDir, `${commandName}.md`);
-    return {
-      target,
-      scope,
-      path,
-      relative_path: displayRelativePath(baseDir, path, scope),
-      role: "codex_skill_command_doc",
-      command: commandName,
-      registry_command: command.name,
-      host_support: "skill_discovery_command_alias",
-      content: buildGenericCommandMarkdown(commandName, { yoloRoot }),
-    };
-  });
-}
-
-function codexSourceCommandFilesFor({ projectRoot, homeDir, scope, yoloRoot }) {
-  const baseDir = scope === "user" ? homeDir : projectRoot;
-  const targetDir = scope === "user" ? ".agents/skills" : ".codex/skills";
-  return ["demand"].map((command) => {
-    const path = join(baseDir, targetDir, `source-command-${command}`, "SKILL.md");
-    return {
-      target: "codex",
-      scope,
-      path,
-      relative_path: displayRelativePath(baseDir, path, scope),
-      role: "codex_source_command_skill",
-      command,
-      host_support: "codex_source_command_skill",
-      content: buildCodexSourceCommandSkill(command, { yoloRoot }),
-    };
-  });
-}
-
-function legacyCodexCleanupFilesFor({ projectRoot, homeDir, scope }) {
-  const baseDir = scope === "user" ? homeDir : projectRoot;
-  const targetDir = scope === "user" ? ".agents/skills" : ".codex/skills";
-  const backupRoot = codexBackupRootFor({ baseDir, scope });
-  return legacyCodexCommandNames()
-    .map((command) => {
-      const relativePath = join(targetDir, `source-command-${command}`);
-      return {
-        target: "codex",
-        scope,
-        path: join(baseDir, relativePath),
-        relative_path: displayRelativePath(baseDir, join(baseDir, relativePath), scope),
-        backup_root: backupRoot,
-        backup_kind: "legacy-source-commands",
-        role: "legacy_codex_source_command_skill",
-        command,
-        cleanup: "archive",
-        reason: "Only source-command-yolo should remain visible; per-stage source-command-yolo-* skills are legacy menu noise.",
-      };
-    });
-}
-
-function legacyCodexWorkflowSkillMarkdownFilesFor({ projectRoot, homeDir, scope }) {
-  const baseDir = scope === "user" ? homeDir : projectRoot;
-  const targetDir = scope === "user" ? ".agents/skills/yolo/workflows" : ".codex/skills";
-  const backupRoot = codexBackupRootFor({ baseDir, scope });
-  return DEFAULT_WORKFLOWS.map((workflow) => {
-    const relativePath = join(targetDir, `yolo.${workflow}`, "SKILL.md");
-    return {
-      target: "codex",
-      scope,
-      path: join(baseDir, relativePath),
-      relative_path: displayRelativePath(baseDir, join(baseDir, relativePath), scope),
-      backup_root: backupRoot,
-      backup_kind: "legacy-workflow-skill-markdown",
-      backup_name: `yolo.${workflow}-SKILL.md`,
-      role: "legacy_codex_workflow_skill_markdown",
-      workflow,
-      cleanup: "archive",
-      reason: "Internal yolo.* workflow descriptors must use WORKFLOW.md, not top-level SKILL.md that appears in Codex menus.",
-    };
-  });
-}
-
-function legacyCodexDirectSlashSkillFilesFor({ projectRoot, homeDir, scope }) {
-  const baseDir = scope === "user" ? homeDir : projectRoot;
-  const targetDir = scope === "user" ? ".agents/skills" : ".codex/skills";
-  const backupRoot = codexBackupRootFor({ baseDir, scope });
-  const directCommands = legacyCodexCommandNames().filter((command) => !CODEX_DIRECT_SLASH_COMMANDS.includes(command));
-  return directCommands.map((command) => {
-    const relativePath = join(targetDir, command);
-    return {
-      target: "codex",
-      scope,
-      path: join(baseDir, relativePath),
-      relative_path: displayRelativePath(baseDir, join(baseDir, relativePath), scope),
-      backup_root: backupRoot,
-      backup_kind: "legacy-direct-slash-skills",
-      role: "legacy_codex_direct_slash_skill",
-      command,
-      cleanup: "archive",
-      reason: "Codex should expose YOLO as one visible /yolo entry; per-stage yolo-* top-level skills are legacy menu noise.",
-    };
-  });
-}
-
-function legacyCodexSkillRootBackupDirectoriesFor({ projectRoot, homeDir, scope }) {
-  const baseDir = scope === "user" ? homeDir : projectRoot;
-  const skillRoot = codexSkillRootFor({ baseDir, scope });
-  if (!existsSync(skillRoot)) return [];
-  return readdirSync(skillRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && entry.name.startsWith(".yolo-menu-backup-"))
-    .map((entry) => {
-      const path = join(skillRoot, entry.name);
-      return {
-        target: "codex",
-        scope,
-        path,
-        relative_path: displayRelativePath(baseDir, path, scope),
-        backup_root: codexBackupRootFor({ baseDir, scope }),
-        backup_kind: "skills-root-backups",
-        backup_name: entry.name,
-        role: "legacy_codex_skill_root_backup",
-        cleanup: "archive",
-        reason: "Backups inside a skills root can still be discovered as menu commands; move them outside the scanned root.",
-      };
-    });
-}
-
-function codexSlashCommandFilesFor({ projectRoot, homeDir, scope, yoloRoot }) {
-  const baseDir = scope === "user" ? homeDir : projectRoot;
-  const targetDir = scope === "user" ? ".agents/skills" : ".codex/skills";
-  return CODEX_DIRECT_SLASH_COMMANDS.map((command) => {
-    const path = join(baseDir, targetDir, command, "SKILL.md");
-    return {
-      target: "codex",
-      scope,
-      path,
-      relative_path: displayRelativePath(baseDir, path, scope),
-      role: "codex_slash_command_skill",
-      command,
-      host_support: "codex_direct_skill_slash_command",
-      content: buildCodexSlashCommandSkill(command, { yoloRoot }),
-    };
-  });
-}
-
-function workflowSkillPlanFor({ projectRoot, homeDir, target, scope }) {
-  const skillMarkdownFile = target === "codex" ? "WORKFLOW.md" : "SKILL.md";
-  if (scope === "user") {
-    const userRoot = resolve(homeDir);
-    const targetDir = target === "claude"
-      ? join(userRoot, ".claude/skills/yolo/workflows")
-      : join(userRoot, ".agents/skills/yolo/workflows");
-    return {
-      ...buildWorkflowSkillInstallPlan({
-        projectRoot: userRoot,
-        target: target === "claude" ? "claude" : "agents",
-        targetDir,
-        workflows: DEFAULT_WORKFLOWS,
-        agent: target,
-        skillMarkdownFile,
-      }),
-      scope,
-      agent_target: target,
-    };
-  }
-
-  return {
-    ...buildWorkflowSkillInstallPlan({
-      projectRoot,
-      target,
-      workflows: DEFAULT_WORKFLOWS,
-      agent: target,
-      skillMarkdownFile,
-    }),
-    scope,
-    agent_target: target,
-  };
-}
-
-export function buildAgentBridgeInstallPlan(options = {}) {
-  const projectRoot = resolve(options.projectRoot || process.cwd());
-  const yoloRoot = resolve(options.yoloRoot || DEFAULT_YOLO_ROOT);
-  const homeDir = resolve(options.homeDir || options.home_dir || homedir());
-  const targets = normalizeAgentTargets(options.targets || "both");
-  const scopes = asScopes(options);
-  const wantsProject = scopes.includes("project");
-  const wantsCommands = options.commands !== false && options.installCommands !== false;
-  const files = wantsProject ? targets.map((target) => ({
-    target,
-    scope: "project",
-    path: instructionFileFor(projectRoot, target),
-    relative_path: relativeToProject(projectRoot, instructionFileFor(projectRoot, target)),
-    role: target === "claude" ? "claude_project_memory" : "codex_project_instructions",
-    content: buildAgentBridgeBlock({ agent: target, yoloRoot }),
-  })) : [];
-  const native_skill_files = scopes.flatMap((scope) =>
-    targets.map((target) => nativeSkillFile({ projectRoot, homeDir, target, scope, yoloRoot }))
-  );
-  const command_files = wantsCommands
-    ? scopes.flatMap((scope) => targets.flatMap((target) =>
-      commandFilesFor({ projectRoot, homeDir, target, scope, yoloRoot })
-    ))
-    : [];
-  const source_command_files = wantsCommands && targets.includes("codex")
-    ? scopes.flatMap((scope) => codexSourceCommandFilesFor({ projectRoot, homeDir, scope, yoloRoot }))
-    : [];
-  const legacy_cleanup_files = wantsCommands && targets.includes("codex")
-    ? scopes.flatMap((scope) => legacyCodexCleanupFilesFor({ projectRoot, homeDir, scope }))
-      .concat(scopes.flatMap((scope) => legacyCodexWorkflowSkillMarkdownFilesFor({ projectRoot, homeDir, scope })))
-      .concat(scopes.flatMap((scope) => legacyCodexDirectSlashSkillFilesFor({ projectRoot, homeDir, scope })))
-      .concat(scopes.flatMap((scope) => legacyCodexSkillRootBackupDirectoriesFor({ projectRoot, homeDir, scope })))
-    : [];
-  const codex_slash_command_files = wantsCommands && targets.includes("codex")
-    ? scopes.flatMap((scope) => codexSlashCommandFilesFor({ projectRoot, homeDir, scope, yoloRoot }))
-    : [];
-  const skill_plans = scopes.flatMap((scope) =>
-    targets.map((target) => workflowSkillPlanFor({ projectRoot, homeDir, target, scope }))
-  );
-
-  return {
-    schema: "yolo.agent_bridge_install_plan.v1",
-    project_root: projectRoot,
-    home_dir: homeDir,
-    yolo_root: yoloRoot,
-    targets,
-    scopes,
-    commands: wantsCommands ? commandDefinitions() : [],
-    files,
-    native_skill_files,
-    command_files,
-    source_command_files,
-    legacy_cleanup_files,
-    codex_slash_command_files,
-    skill_plans,
-    writes_workspace: wantsProject,
-    writes_user_home: scopes.includes("user"),
-    publishes: false,
-    reads_credentials: false,
-    executes_provider: false,
-  };
-}
-
 function writePlainArtifact({ file, dryRun, force, written, planned, overwritten, skipped }) {
   if (dryRun) {
     planned.push(file.relative_path);
@@ -880,88 +541,79 @@ function writePlainArtifact({ file, dryRun, force, written, planned, overwritten
   else written.push(file.relative_path);
 }
 
-function archiveLegacyArtifact({ file, dryRun, cleanupStamp, legacyCleanupPlanned, legacyArchived }) {
-  if (!existsSync(file.path)) return;
-  if (dryRun) {
-    legacyCleanupPlanned.push(file.relative_path);
-    return;
-  }
-  const backupRoot = join(file.backup_root || dirname(file.path), `.yolo-menu-backup-${cleanupStamp}`, file.backup_kind || "legacy-artifacts");
-  let backupPath = join(backupRoot, file.backup_name || basename(file.path));
-  let suffix = 2;
-  while (existsSync(backupPath)) {
-    backupPath = join(backupRoot, `${basename(file.path)}-${suffix}`);
-    suffix += 1;
-  }
-  mkdirSync(dirname(backupPath), { recursive: true });
-  renameSync(file.path, backupPath);
-  legacyArchived.push({
-    relative_path: file.relative_path,
-    backup_path: backupPath,
-    reason: file.reason,
-  });
-}
+const MAX_INSTALL_FILE_COUNT = 12;
 
-function collectSkillMarkdownFiles(rootPath) {
-  if (!existsSync(rootPath)) return [];
-  let entries;
-  try {
-    entries = readdirSync(rootPath, { withFileTypes: true });
-  } catch {
-    return basename(rootPath) === "SKILL.md" ? [rootPath] : [];
-  }
+export function buildAgentBridgeInstallPlan(options = {}) {
+  const projectRoot = resolve(options.projectRoot || process.cwd());
+  const yoloRoot = resolve(options.yoloRoot || DEFAULT_YOLO_ROOT);
+  const homeDir = resolve(options.homeDir || options.home_dir || homedir());
+  const targets = normalizeAgentTargets(options.targets || "both");
+  const scopes = asScopes(options);
+  const wantsProject = scopes.includes("project");
 
-  return entries.flatMap((entry) => {
-    const entryPath = join(rootPath, entry.name);
-    if (entry.isDirectory()) return collectSkillMarkdownFiles(entryPath);
-    return entry.name === "SKILL.md" ? [entryPath] : [];
-  });
-}
+  const files = wantsProject ? targets.map((target) => ({
+    target,
+    scope: "project",
+    path: instructionFileFor(projectRoot, target),
+    relative_path: relativeToProject(projectRoot, instructionFileFor(projectRoot, target)),
+    role: target === "claude" ? "claude_project_memory" : "codex_project_instructions",
+    content: buildAgentBridgeBlock({ agent: target, yoloRoot }),
+  })) : [];
 
-function archivedSkillMarkdownPath(filePath) {
-  let candidate = `${filePath}.archived`;
-  let suffix = 2;
-  while (existsSync(candidate)) {
-    candidate = `${filePath}.archived-${suffix}`;
-    suffix += 1;
-  }
-  return candidate;
-}
+  const native_skill_files = scopes.flatMap((scope) =>
+    targets.map((target) => nativeSkillFile({ projectRoot, homeDir, target, scope, yoloRoot }))
+  );
 
-function quarantineCodexBackupSkillMarkdown({ projectRoot, homeDir, scopes, dryRun, legacyCleanupPlanned, legacyArchived }) {
-  for (const scope of scopes) {
-    const baseDir = scope === "user" ? homeDir : projectRoot;
-    const backupRoot = codexBackupRootFor({ baseDir, scope });
-    for (const skillMarkdownPath of collectSkillMarkdownFiles(backupRoot)) {
-      const relativePath = displayRelativePath(baseDir, skillMarkdownPath, scope);
-      if (dryRun) {
-        legacyCleanupPlanned.push(relativePath);
-        continue;
-      }
-      const archivedPath = archivedSkillMarkdownPath(skillMarkdownPath);
-      renameSync(skillMarkdownPath, archivedPath);
-      legacyArchived.push({
-        relative_path: relativePath,
-        backup_path: archivedPath,
-        reason: "Archived backups must not retain SKILL.md filenames because broad host discovery can treat them as live menu commands.",
-      });
-    }
-  }
+  const claude_slash_commands = targets.includes("claude")
+    ? scopes.flatMap((scope) => {
+        const baseDir = scope === "user" ? homeDir : projectRoot;
+        return listYoloCommands({ recommended: true }).map((command) => {
+          const commandName = primarySlashNameForCommand(command);
+          const path = join(baseDir, ".claude/commands", `${commandName}.md`);
+          return {
+            target: "claude",
+            scope,
+            path,
+            relative_path: displayRelativePath(baseDir, path, scope),
+            role: "claude_slash_command",
+            command: commandName,
+            content: buildClaudeSlashCommand(commandName, { yoloRoot }),
+          };
+        });
+      })
+    : [];
+
+  const allFiles = [...files, ...native_skill_files, ...claude_slash_commands];
+
+  return {
+    schema: "yolo.agent_bridge_install_plan.v1",
+    project_root: projectRoot,
+    home_dir: homeDir,
+    yolo_root: yoloRoot,
+    targets,
+    scopes,
+    commands: commandDefinitions(),
+    files,
+    native_skill_files,
+    claude_slash_commands,
+    total_file_count: allFiles.length,
+    within_budget: allFiles.length <= MAX_INSTALL_FILE_COUNT,
+    writes_workspace: wantsProject,
+    writes_user_home: scopes.includes("user"),
+    publishes: false,
+    reads_credentials: false,
+    executes_provider: false,
+  };
 }
 
 export function installAgentBridge(options = {}) {
   const plan = buildAgentBridgeInstallPlan(options);
   const dryRun = options.dryRun === true || options.dry_run === true;
   const force = options.force === true;
-  const cleanupStamp = clean(options.cleanupStamp || options.cleanup_stamp || options.now || new Date().toISOString())
-    .replace(/[^0-9A-Za-z_-]+/g, "")
-    .slice(0, 32) || "manual";
   const written = [];
   const planned = [];
   const skipped = [];
   const overwritten = [];
-  const legacyCleanupPlanned = [];
-  const legacyArchived = [];
 
   for (const file of plan.files) {
     const existing = existsSync(file.path) ? readFileSync(file.path, "utf8") : "";
@@ -976,54 +628,8 @@ export function installAgentBridge(options = {}) {
     }
   }
 
-  for (const file of [...plan.native_skill_files, ...plan.command_files, ...plan.source_command_files, ...plan.codex_slash_command_files]) {
+  for (const file of [...plan.native_skill_files, ...plan.claude_slash_commands]) {
     writePlainArtifact({ file, dryRun, force, written, planned, overwritten, skipped });
-  }
-
-  for (const file of plan.legacy_cleanup_files || []) {
-    archiveLegacyArtifact({ file, dryRun, cleanupStamp, legacyCleanupPlanned, legacyArchived });
-  }
-
-  if (plan.targets.includes("codex") && (plan.commands || []).length > 0) {
-    quarantineCodexBackupSkillMarkdown({
-      projectRoot: plan.project_root,
-      homeDir: plan.home_dir,
-      scopes: plan.scopes,
-      dryRun,
-      legacyCleanupPlanned,
-      legacyArchived,
-    });
-  }
-
-  const skillInstalls = [];
-  for (const skillPlan of plan.skill_plans) {
-    if (dryRun) {
-      skillInstalls.push({
-        target: skillPlan.agent_target,
-        install_target: skillPlan.target,
-        scope: skillPlan.scope,
-        target_dir: skillPlan.target_dir,
-        status: "planned",
-        created: [],
-        skipped: skillPlan.files.map((file) => file.path),
-      });
-      continue;
-    }
-
-    const result = installWorkflowSkills({
-      projectRoot: skillPlan.project_root,
-      target: skillPlan.target,
-      targetDir: skillPlan.target_dir,
-      workflows: DEFAULT_WORKFLOWS,
-      agent: skillPlan.agent_target,
-      skillMarkdownFile: skillPlan.skill_markdown_file,
-      force,
-    });
-    skillInstalls.push({
-      ...result,
-      scope: skillPlan.scope,
-      agent_target: skillPlan.agent_target,
-    });
   }
 
   return {
@@ -1041,9 +647,8 @@ export function installAgentBridge(options = {}) {
     written,
     overwritten,
     skipped,
-    legacy_cleanup_planned: legacyCleanupPlanned,
-    legacy_archived: legacyArchived,
-    skill_installs: skillInstalls,
+    total_file_count: plan.total_file_count,
+    within_budget: plan.within_budget,
     guarantees: {
       published: false,
       credential_access: false,
@@ -1052,7 +657,7 @@ export function installAgentBridge(options = {}) {
     next_actions: [
       "Restart Codex or Claude Code if the host discovers skills only at startup.",
       "In Claude Code, run /yolo <你的需求>.",
-      "In Codex, start a new session, then use /yolo <你的需求>; describe demand discussion, PRD, check, or run intent in that one entry. If the host has not refreshed, ask to use source-command-yolo or the yolo skill.",
+      "In Codex, start a new session, then use /yolo <你的需求>; describe demand discussion, PRD, check, or run intent in that one entry.",
     ],
   };
 }
@@ -1064,7 +669,7 @@ function usage() {
     "  node tools/install-agent-bridge.js --project-root /path/to/project --target codex|claude|both",
     "  node tools/install-agent-bridge.js /path/to/project --scope project|user|both",
     "",
-    "作用：安装 AGENTS.md / CLAUDE.md、Codex/Claude skills、Claude slash commands、Codex 单一 /yolo 兜底入口，并清理旧的 Codex 菜单噪音。",
+    "作用：安装 AGENTS.md / CLAUDE.md、Codex/Claude yolo skill、Claude slash commands（4 动词路由）。",
   ].join("\n");
 }
 

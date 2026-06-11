@@ -43,17 +43,9 @@ function expectedPlanPaths(plan = {}) {
   const plainFiles = [
     ...(plan.files || []),
     ...(plan.native_skill_files || []),
-    ...(plan.command_files || []),
-    ...(plan.source_command_files || []),
-    ...(plan.codex_slash_command_files || []),
+    ...(plan.claude_slash_commands || []),
   ];
-  const workflowFiles = (plan.skill_plans || [])
-    .flatMap((skillPlan) => (skillPlan.files || []).map((file) => ({
-      ...file,
-      target: skillPlan.agent_target || skillPlan.target,
-      scope: skillPlan.scope,
-    })));
-  return [...plainFiles, ...workflowFiles].map((file) => ({
+  return plainFiles.map((file) => ({
     target: file.target || file.agent_target || null,
     scope: file.scope || null,
     role: file.role || file.kind || "workflow_skill",
@@ -66,7 +58,6 @@ function expectedPlanPaths(plan = {}) {
 function plannedPathsFromDryRun(result = {}) {
   return unique([
     ...(result.planned || []),
-    ...(result.skill_installs || []).flatMap((install) => install.skipped || []),
   ]);
 }
 

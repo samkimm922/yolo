@@ -1241,8 +1241,7 @@ export function formatInstallText(result = {}) {
     `planned: ${result.planned?.length || 0}`,
     `skipped: ${result.skipped?.length || 0}`,
   ];
-  if (result.legacy_cleanup_planned?.length) lines.push(`legacy cleanup planned: ${result.legacy_cleanup_planned.length}`);
-  if (result.legacy_archived?.length) lines.push(`legacy archived: ${result.legacy_archived.length}`);
+  if (result.total_file_count != null) lines.push(`total files: ${result.total_file_count}`);
   if (result.next_actions?.length) {
     lines.push("next:");
     for (const action of result.next_actions) lines.push(`  - ${action}`);

@@ -297,13 +297,6 @@ function summarizeBridgeResult(result) {
     written: result.written,
     overwritten: result.overwritten,
     skipped: result.skipped,
-    skill_installs: (result.skill_installs || []).map((install) => ({
-      status: install.status,
-      scope: install.scope,
-      agent_target: install.agent_target,
-      created: install.created,
-      skipped: install.skipped,
-    })),
   };
 }
 
