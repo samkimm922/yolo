@@ -30,6 +30,7 @@ import {
   runDemandBrainstormRuntime,
   runDemandDiscussRuntime,
   runDemandOfficeHoursRuntime,
+  runDemandTaskRuntime,
   runDemandPrdRuntime,
   runDemandStatusRuntime,
 } from "../demand/runtime.js";
@@ -2398,6 +2399,17 @@ export async function runYoloPlanCli(argv = [], io = {}) {
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
   const guarded = guardBlocked("yolo-plan", input, options, projectRoot, { stdout, stderr });
   if (guarded !== 0) return guarded;
+  if (input.demandPath) {
+    let result = runDemandTaskRuntime({
+      ...input,
+      projectRoot,
+      stateRoot: join(projectRoot, ".yolo"),
+      writeArtifacts: options.writeLifecycle,
+    });
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stdout.write(`${formatDemandRuntimeText("tasks", result)}\n`);
+    return workflowExitCode(result);
+  }
   let result = runDiscoveryPlanRuntime({
     ...input,
     projectRoot,

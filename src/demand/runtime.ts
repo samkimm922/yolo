@@ -1352,3 +1352,91 @@ export function runDemandPrdRuntime(input = {}, options = {}) {
   }
   return result;
 }
+
+export function runDemandTaskRuntime(input = {}, options = {}) {
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
+  const stateRoot = stateRootFor({ ...input, projectRoot }, options);
+  const demandPath = resolvePath(projectRoot, input.demandPath || input.demand_path || input.demand || defaultDemandSessionPath(stateRoot, input.id || ""));
+  const read = readDemandSession(demandPath);
+  if (!read.ok) {
+    return {
+      status: "blocked",
+      code: "DEMAND_SESSION_MISSING",
+      summary: read.error,
+      blockers: [{ code: "DEMAND_SESSION_MISSING", message: read.error }],
+      warnings: [],
+      artifacts: [],
+      outputs: [],
+      next_actions: ["Run yolo interview to-demand first, or pass --demand <session.json|dir>."],
+    };
+  }
+
+  const readiness = inspectDemandReadiness(read.session, { phase: read.session.phase, stateDir: join(stateRoot, "state") });
+  if (readiness.status === "blocked") {
+    return {
+      status: "blocked",
+      code: "DEMAND_TASKS_BLOCKED",
+      summary: "Demand is not ready for task planning.",
+      demand_path: read.path,
+      demand_id: read.session.id,
+      readiness,
+      blockers: readiness.blockers || [],
+      warnings: readiness.warnings || [],
+      artifacts: [],
+      outputs: [],
+      next_actions: readiness.next_actions || ["Resolve demand blockers before task planning."],
+    };
+  }
+
+  const taskBuild = buildAtomicDemandTasks(read.session, input, options);
+  const atomicity = inspectAtomicity(taskBuild.tasks, input, options);
+  const blockers = [
+    ...taskBuild.compileErrors.map((error) => ({
+      code: "DEMAND_TASK_VERIFY_COMMAND_UNSAFE",
+      message: `Task ${error.task_id} has an unsafe verify command.`,
+      error,
+    })),
+    ...(atomicity.status === "blocked" ? atomicity.blockers || [] : []),
+  ];
+  const plan = {
+    schema: "yolo.demand.tasks.v1",
+    demand_id: read.session.id,
+    demand_path: read.path,
+    generated_at: new Date().toISOString(),
+    status: blockers.length ? "blocked" : "success",
+    task_count: taskBuild.tasks.length,
+    tasks: taskBuild.tasks,
+    readiness: {
+      status: readiness.status,
+      readiness_level: readiness.readiness_level,
+      executable_prd_ready: readiness.executable_prd_ready,
+    },
+    atomicity,
+  };
+  const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
+  const outputFile = resolvePath(projectRoot, input.outputFile || input.output_file || join(read.dir, "tasks.json"));
+  const artifacts = shouldWrite ? [writeJson(outputFile, plan)] : [];
+  const result = {
+    status: plan.status,
+    code: plan.status === "success" ? "DEMAND_TASKS_READY" : "DEMAND_TASKS_BLOCKED",
+    summary: plan.status === "success"
+      ? "Demand task plan artifact created."
+      : "Demand task plan is blocked by atomicity or compile issues.",
+    demand_path: read.path,
+    demand_id: read.session.id,
+    plan,
+    readiness,
+    atomicity,
+    blockers,
+    warnings: [...(readiness.warnings || []), ...(atomicity.warnings || [])],
+    artifacts,
+    outputs: artifacts.map((path) => ({ path, type: "demand_task_plan" })),
+    next_actions: plan.status === "success"
+      ? ["Use yolo prd --demand <session.json|dir> to compile the executable PRD."]
+      : blockers.map((blocker) => blocker.message).filter(Boolean),
+  };
+  if (shouldWrite && plan.status === "success" && shouldWriteLifecycle(input, options)) {
+    attachLifecycle(result, "roadmap", { projectRoot, stateRoot }, "yolo-tasks");
+  }
+  return result;
+}

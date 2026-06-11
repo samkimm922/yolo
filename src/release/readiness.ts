@@ -96,7 +96,7 @@ function fakeSuccessReasons(report = {}) {
   return reasons;
 }
 
-function classifyFakeSuccessReport(report = {}) {
+export function classifyFakeSuccessReport(report = {}) {
   const reasons = fakeSuccessReasons(report);
   if (reasons.length === 0) return null;
   const summary = report.summary || report.final_answer?.summary || {};
