@@ -148,6 +148,15 @@ const DELIVERABLE_CAPABILITY_TERMS = [
   "registration", "oauth", "sso", "single sign-on", "encryption", "pagination",
   "caching", "rate limiting", "localization", "认证", "鉴权", "授权", "验证", "迁移",
   "集成", "通知", "部署", "登录", "登出", "注册", "加密", "分页", "缓存", "限流", "本地化",
+  // P2.17 capability noun signals — system-level nouns that typically span layers
+  "支付", "付款", "交易", "扣款", "退款", "payment", "transaction", "billing", "checkout", "refund",
+  "权限", "许可", "permission", "access control", "rbac", "acl", "role",
+  "配置", "设置", "configuration", "settings", "config",
+  "搜索", "过滤", "search", "filter",
+  "报表", "统计", "report", "analytics", "dashboard",
+  "日志", "审计", "logging", "audit", "audit trail",
+  "备份", "恢复", "backup", "restore",
+  "导入", "导出", "import", "export",
 ];
 
 function distinctDeliverableActions(text) {
@@ -165,6 +174,29 @@ function distinctDeliverableActions(text) {
     }
   }
   return found;
+}
+
+// P2.17: 单动词 + 能力名词（支付/权限/登录等系统级名词）→ investigate_then_patch 而非直通。
+// 这些名词代表通常跨 UI+service+DB 的完整能力，仅一个动词但暗含多层改动。
+function detectSingleVerbCapabilityNouns(text) {
+  // 先收集能力名词，用于在动词计数中排除充当两者的词（如"配置"既是动词又是能力名词）
+  const capabilityNounSet = new Set(DELIVERABLE_CAPABILITY_TERMS.map((noun) => String(noun).toLowerCase()));
+  const verbRoots = new Set();
+  for (const verb of DELIVERABLE_VERB_TERMS) {
+    // 跳过同时出现在能力名词列表中的动词（如"配置"在中文既是动词 configure 也是名词 configuration）
+    if (capabilityNounSet.has(String(verb).toLowerCase())) continue;
+    if (new RegExp(termSource(verb), "i").test(text)) {
+      const root = verb.replace(/(s|es)$/i, "").replace(/(创建|新建|新增|添加|增加)/, "create");
+      verbRoots.add(root.toLowerCase());
+    }
+  }
+  const nouns = [];
+  for (const noun of DELIVERABLE_CAPABILITY_TERMS) {
+    if (new RegExp(termSource(noun), "i").test(text)) {
+      nouns.push(noun.toLowerCase());
+    }
+  }
+  return verbRoots.size === 1 && nouns.length >= 1 ? nouns : [];
 }
 
 // 两个可交付动作由并列连词在邻近范围连接 → 多 story 信号（避免全局共现误报）。
@@ -244,6 +276,32 @@ export function inspectStoryAtomicityText(text, item = {}) {
     const generic = detectGenericStories(normalized);
     if (generic.length >= 2) signatures = generic;
   }
+  // P2.17: 单动词 + 能力名词（支付/权限/登录等系统级名词）→ warn，建议 investigate_then_patch
+  if (signatures.length < 2) {
+    const capabilityNouns = detectSingleVerbCapabilityNouns(normalized);
+    if (capabilityNouns.length >= 1) {
+      const sigRecords = signatures.map((signature) => ({ id: signature.id, label: signature.label }));
+      return {
+        status: "warn",
+        story_count: signatures.length,
+        story_signatures: sigRecords,
+        finding: {
+          code: "STORY_ATOMICITY_CAPABILITY_NOUN",
+          severity: "warn",
+          kind: item.kind || "story",
+          item_id: item.id || null,
+          task_id: item.kind === "task" ? item.id || null : null,
+          requirement_id: item.kind === "requirement" ? item.id || null : null,
+          scenario_id: item.kind === "scenario" ? item.id || null : null,
+          message: `${item.kind || "Story"} ${item.id || ""} contains a single verb with system-level capability nouns (${capabilityNouns.join(", ")}) that likely span multiple layers. Recommend investigate_then_patch instead of direct execution.`,
+          text_excerpt: textExcerpt(text),
+          story_count: signatures.length,
+          story_signatures: sigRecords,
+          capability_nouns: capabilityNouns,
+        },
+      };
+    }
+  }
   if (signatures.length < 2) {
     return {
       status: "pass",
@@ -294,7 +352,10 @@ export function inspectStoryAtomicityItems(items = [], options = {}) {
     if (result.finding) findings.push(result.finding);
   }
 
-  const blockers = findings.map((finding) => ({
+  const errorFindings = findings.filter((finding) => finding.severity !== "warn");
+  const warnFindings = findings.filter((finding) => finding.severity === "warn");
+
+  const blockers = errorFindings.map((finding) => ({
     code: finding.code,
     message: finding.message,
     kind: finding.kind,
@@ -307,19 +368,34 @@ export function inspectStoryAtomicityItems(items = [], options = {}) {
     split_suggestions: finding.split_suggestions,
   }));
 
+  const warnings = warnFindings.map((finding) => ({
+    code: finding.code,
+    message: finding.message,
+    kind: finding.kind,
+    item_id: finding.item_id,
+    task_id: finding.task_id,
+    requirement_id: finding.requirement_id,
+    scenario_id: finding.scenario_id,
+    story_count: finding.story_count,
+    story_signatures: finding.story_signatures,
+    capability_nouns: finding.capability_nouns,
+  }));
+
   return {
     schema_version: STORY_ATOMICITY_SCHEMA_VERSION,
     schema: STORY_ATOMICITY_SCHEMA,
-    status: blockers.length > 0 ? "blocked" : "pass",
+    status: blockers.length > 0 ? "blocked" : warnings.length > 0 ? "warn" : "pass",
     inspected_count: inspected.length,
     finding_count: findings.length,
     inspected,
     findings,
     blockers,
-    warnings: [],
+    warnings,
     next_actions: blockers.length > 0
       ? ["Split each blocked requirement, scenario, or task so each one carries exactly one independent user story."]
-      : ["Story atomicity passed."],
+      : warnings.length > 0
+        ? ["Capability nouns detected with single verb — investigate before direct execution."]
+        : ["Story atomicity passed."],
     ...options.extra,
   };
 }

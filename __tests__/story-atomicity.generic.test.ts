@@ -54,4 +54,83 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
     );
     assert.equal(result.status, "blocked");
   });
+
+  // P2.17 — capability noun signals with single verb → warn (investigate_then_patch)
+  test("single verb + 支付 capability noun warns instead of passing", () => {
+    const result = inspectStoryAtomicityText(
+      "实现支付功能",
+      { kind: "task", id: "TASK-PAYMENT" },
+    );
+    assert.equal(result.status, "warn");
+    assert.ok(result.finding);
+    assert.equal(result.finding.code, "STORY_ATOMICITY_CAPABILITY_NOUN");
+    assert.ok(result.finding.capability_nouns.includes("支付"));
+  });
+
+  test("single verb + 权限 capability noun warns", () => {
+    const result = inspectStoryAtomicityText(
+      "添加权限控制",
+      { kind: "requirement", id: "REQ-PERMISSION" },
+    );
+    assert.equal(result.status, "warn");
+    assert.equal(result.finding.code, "STORY_ATOMICITY_CAPABILITY_NOUN");
+    assert.ok(result.finding.capability_nouns.some((n) => n.includes("权限") || n.includes("permission")));
+  });
+
+  test("single verb without capability noun still passes", () => {
+    const result = inspectStoryAtomicityText(
+      "修复按钮点击后颜色不变化的问题",
+      { kind: "task", id: "TASK-BUTTON-COLOR" },
+    );
+    assert.equal(result.status, "pass");
+    assert.equal(result.finding, null);
+  });
+
+  test("single verb + English payment capability noun warns", () => {
+    const result = inspectStoryAtomicityText(
+      "Implement payment processing",
+      { kind: "task", id: "TASK-PAY-EN" },
+    );
+    assert.equal(result.status, "warn");
+    assert.equal(result.finding.code, "STORY_ATOMICITY_CAPABILITY_NOUN");
+    assert.ok(result.finding.capability_nouns.includes("payment"));
+  });
+
+  test("single verb + 配置 capability noun warns", () => {
+    const result = inspectStoryAtomicityText(
+      "添加系统配置功能",
+      { kind: "task", id: "TASK-CONFIG" },
+    );
+    assert.equal(result.status, "warn");
+    assert.equal(result.finding.code, "STORY_ATOMICITY_CAPABILITY_NOUN");
+    assert.ok(result.finding.capability_nouns.some((n) => n.includes("配置") || n.includes("config")));
+  });
+
+  test("capability noun with zero verbs does not warn (no verb to flag)", () => {
+    const result = inspectStoryAtomicityText(
+      "支付系统权限配置",
+      { kind: "requirement", id: "REQ-NOUNS-ONLY" },
+    );
+    // No deliverable verb → no single-verb signal → passes atomicity
+    assert.equal(result.status, "pass");
+    assert.equal(result.finding, null);
+  });
+
+  test("multiple verbs with capability noun still blocked by existing multi-story detection", () => {
+    const result = inspectStoryAtomicityText(
+      "实现支付功能并添加退款处理",
+      { kind: "task", id: "TASK-MULTI-PAY" },
+    );
+    // Two verbs (实现 + 添加) → blocked by multi-story detection, not warn
+    assert.equal(result.status, "blocked");
+  });
+
+  test("single verb + search capability noun warns", () => {
+    const result = inspectStoryAtomicityText(
+      "实现全文搜索功能",
+      { kind: "task", id: "TASK-SEARCH" },
+    );
+    assert.equal(result.status, "warn");
+    assert.equal(result.finding.code, "STORY_ATOMICITY_CAPABILITY_NOUN");
+  });
 });

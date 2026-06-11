@@ -109,6 +109,7 @@ const STRICT_EXECUTION_MODES = new Set(["runner", "release", "strict"]);
 const ADVISORY_WARNING_CODES = new Set([
   "ADAPTER_MANIFEST_MISSING",
   "RESOLVER_UNKNOWN_CONTEXT",
+  "STORY_ATOMICITY_CAPABILITY_NOUN",
 ]);
 
 function executionMode(input = {}, options = {}) {
@@ -448,11 +449,26 @@ function storyAtomicityReadiness({ prd }) {
     story_signatures: blocker.story_signatures || [],
     split_suggestions: blocker.split_suggestions || [],
   }));
-  const status = blockers.length > 0 ? "blocked" : "pass";
-  return checkRecord("story_atomicity", status, status === "pass" ? "Story atomicity passed." : "Story atomicity found multi-story slices.", {
+  const warnItems = asArray(inspection.warnings).map((warn) => ({
+    code: warn.code || "STORY_ATOMICITY_CAPABILITY_NOUN",
+    task_id: warn.task_id || null,
+    requirement_id: warn.requirement_id || null,
+    scenario_id: warn.scenario_id || null,
+    item_id: warn.item_id || null,
+    kind: warn.kind || "story",
+    message: warn.message || "",
+    capability_nouns: warn.capability_nouns || [],
+  }));
+  const status = blockers.length > 0 ? "blocked" : warnItems.length > 0 ? "warning" : "pass";
+  const summary = status === "blocked"
+    ? "Story atomicity found multi-story slices."
+    : status === "warning"
+      ? "Story atomicity detected capability nouns with single verb — investigate before direct execution."
+      : "Story atomicity passed.";
+  return checkRecord("story_atomicity", status, summary, {
     inspection,
     blockers,
-    warnings: [],
+    warnings: warnItems,
   });
 }
 
