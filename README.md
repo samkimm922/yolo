@@ -4,37 +4,28 @@ YOLO 是面向 Codex / Claude Code 的项目生命周期 Team Agent 和公开 SD
 
 ## 核心流程
 
-用户在 Codex / Claude Code 里可以先用兜底入口：
+YOLO 的公开用户命令面只有 4 个动词：
 
 ```text
-/yolo 我有一个想法，帮我从零开始规划这个项目，先不要改代码。
+demand -> auto -> ship -> status
 ```
 
-如果已经知道阶段，Claude Code 可以直接用 8 个稳定入口：`/yolo-status`、`/yolo-demand`、`/yolo-spec`、`/yolo-tasks`、`/yolo-check`、`/yolo-run`、`/yolo-review`、`/yolo-release`。Codex 菜单只暴露 `/yolo` 总入口，阶段意图写进同一句话里，例如“需求沟通”“生成 PRD/spec”“检查 PRD”“执行已检查 PRD”。旧的 brainstorm/interview/discover/discuss/plan/prd/accept/ship 等入口只保留为隐藏兼容路由，不再作为默认菜单。
+| 动词 | 用户入口 | 含义 | 写代码 |
+|---|---|---|---|
+| demand | `/yolo-demand` | 把想法聊清楚，缺槽位时只问一个 `next_question`，不进入 PRD | 否 |
+| auto | `/yolo-auto` | 在用户明确批准后，从需求/PRD 走 spec、check、实现、review、fix 和证据 | 是 |
+| ship | `/yolo-ship` | 用 gate、验收、证据和 review 结果给出 ship/no-ship 判断 | 否 |
+| status | `/yolo-status` | 只读当前项目状态，报告唯一安全下一步 | 否 |
 
-YOLO 的主线是：
+Codex 可以继续用 `/yolo 你的需求...` 作为统一 fallback，由 agent 路由到这 4 个动词之一。统一 fallback 原句保持为：`/yolo 你的需求，先读状态并选择安全阶段，不要改代码。` Claude Code 安装后会得到这 4 个 slash commands。`spec`、`tasks`、`run`、`check`、`review`、`release` 仍是内部生命周期路由或底层 CLI 能力，不再作为默认用户菜单。
 
-```text
-idea
-  -> discovery
-  -> project setup
-  -> roadmap / plan
-  -> PRD / spec
-  -> check
-  -> run
-  -> review / fix
-  -> acceptance
-  -> ship
-  -> learn
-```
-
-默认不会改业务代码。`/yolo-demand`、`/yolo-spec`、`/yolo-tasks`、`/yolo-check` 都是阶段停止点：完成本阶段后必须停住，只报告产物、缺口和下一步建议。只有用户明确确认执行、PRD/spec 检查通过、gate 可运行、范围清楚时，`/yolo-run` 才能进入写代码路径。
+默认不会改业务代码。`/yolo-demand` 和 `/yolo-status` 是硬停止点；`/yolo-ship` 只给交付判断，不发布、不部署；只有 `/yolo-auto` 在范围清楚、检查通过、gate 可运行且用户明确批准执行时，才允许进入写代码路径。
 
 ## 产品形态
 
 | 层 | 作用 |
 |---|---|
-| Agent 入口 | Claude Code slash commands、Codex 单一 `/yolo` skill、source-command fallback，让用户在聊天里描述阶段意图而不是从一串菜单里挑 |
+| Agent 入口 | Claude Code 4 动词 slash commands、Codex `/yolo` fallback，让用户在聊天里描述目标而不是从一串内部阶段里挑 |
 | PI / Team Agent | 由 PI 负责 lifecycle routing，按阶段调度 discovery、planner、spec、implementer、reviewer、QA、release、learning |
 | Gate / Evidence | PRD preflight、spec governance、adapter readiness、review/fix、acceptance、parallel merge gate 和 final evidence |
 | SDK | `createYoloSdk()` 暴露 project、lifecycle、commands、doctor、pi、spec、runtime、review、acceptance、packs、eval、parallel、release |
@@ -77,10 +68,13 @@ npm install
 
 ## 快速开始
 
-最容易记的一句话入口：
+先装 agent bridge，再用 4 个动词推进：
 
 ```text
-/yolo 你的需求，先读状态并选择安全阶段，不要改代码。
+/yolo-demand 我想把库存预警需求聊清楚，先不要生成 PRD。
+/yolo-auto 我确认执行已检查通过的库存预警 PRD。
+/yolo-ship specs/prd-low-stock-alert.json
+/yolo-status
 ```
 
 详细快速开始指南见 [docs/quickstart.md](docs/quickstart.md)。

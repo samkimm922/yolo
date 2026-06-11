@@ -2,6 +2,8 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { buildAgentBridgeInstallPlan } from "../tools/install-agent-bridge.js";
+import { listYoloCommands } from "../src/workflows/command-registry.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 
@@ -41,6 +43,15 @@ function repoTruth() {
     exportCount: Object.keys(packageJson.exports).length,
     binCount: Object.keys(packageJson.bin).length,
   };
+}
+
+function extractCodeBlockAfter(text, label) {
+  const index = text.indexOf(label);
+  assert.notEqual(index, -1, `missing label: ${label}`);
+  const rest = text.slice(index);
+  const match = rest.match(/```(?:text|bash)?\n([\s\S]*?)\n```/);
+  assert.ok(match, `missing code block after: ${label}`);
+  return match[1].trim();
 }
 
 describe("docs truth sync", () => {
@@ -99,6 +110,55 @@ describe("docs truth sync", () => {
     assert.equal(existsSync(quickstartPath), true, "docs/quickstart.md must exist as canonical quickstart");
     const readme = readFileSync(readmePath, "utf8");
     assert.ok(readme.includes("docs/quickstart.md"), "README must reference docs/quickstart.md");
+  });
+
+  test("README and quickstart track the registered 4-verb command surface and installer manifest", () => {
+    const commands = listYoloCommands({ recommended: true });
+    const commandNames = commands.map((command) => command.name);
+    const slashCommands = commandNames.map((name) => `/yolo-${name}`);
+    const readme = readFileSync(join(YOLO_DIR, "README.md"), "utf8");
+    const quickstart = readFileSync(join(YOLO_DIR, "docs/quickstart.md"), "utf8");
+    const docs = `${readme}\n${quickstart}`;
+
+    assert.deepEqual(commandNames, ["demand", "auto", "ship", "status"]);
+    assert.match(docs, /demand -> auto -> ship -> status/);
+    assert.doesNotMatch(docs, /8 个稳定入口|8 个稳定 slash commands|8 stable/);
+    for (const command of slashCommands) {
+      assert.match(docs, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+
+    const installPrompt = extractCodeBlockAfter(quickstart, "让 agent 安装 YOLO bridge 时");
+    for (const command of slashCommands) {
+      assert.ok(installPrompt.includes(command), `install prompt must include ${command}`);
+    }
+    for (const hidden of ["/yolo-spec", "/yolo-tasks", "/yolo-run", "/yolo-check", "/yolo-review", "/yolo-release"]) {
+      assert.match(installPrompt, new RegExp(`不要生成[\\s\\S]*${hidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    }
+
+    const plan = buildAgentBridgeInstallPlan({
+      projectRoot: "/tmp/yolo-docs-truth-project",
+      homeDir: "/tmp/yolo-docs-truth-home",
+      yoloRoot: YOLO_DIR,
+      targets: "both",
+      scope: "project",
+    });
+    assert.deepEqual(plan.commands.map((command) => command.name), commandNames);
+
+    const installerManifest = [
+      ...plan.files,
+      ...plan.native_skill_files,
+      ...plan.claude_slash_commands,
+    ].map((file) => file.relative_path);
+    const documentedManifest = extractCodeBlockAfter(quickstart, "安装器的 project scope 清单是")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    assert.deepEqual(documentedManifest, installerManifest);
+    assert.deepEqual(
+      plan.claude_slash_commands.map((file) => `/${file.command}`),
+      slashCommands,
+    );
   });
 
   test("init-to-first-prd smoke does not bypass lifecycle sequence check", () => {
