@@ -92,6 +92,27 @@ export function writeJsonArtifact(filePath, payload) {
   return filePath;
 }
 
+export function createEvidenceLedger({ stateDir }) {
+  if (!stateDir) {
+    throw new Error("createEvidenceLedger requires stateDir");
+  }
+  return {
+    appendStateEvent: (event, data = {}, options = {}) => appendStateEvent(stateDir, event, data, options),
+    appendRunEvent: (event, data = {}, options = {}) => appendRunEvent(stateDir, event, data, options),
+    buildEvidenceArtifact,
+    buildLedgerRecord,
+    evidenceArtifactDigest,
+    ledgerRecordHash,
+    readLedgerJsonl,
+    sha256Evidence,
+    stableEvidenceJson,
+    validateEvidenceArtifact,
+    validateLedgerChain,
+    validateLedgerRecord,
+    writeJsonArtifact: (filePath, payload) => writeJsonArtifact(filePath, payload),
+  };
+}
+
 export {
   buildEvidenceArtifact,
   buildLedgerRecord,

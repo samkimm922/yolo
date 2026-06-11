@@ -12,7 +12,7 @@ import {
   evidenceArtifactDigest,
   LEDGER_EVENT_SCHEMA,
   ledgerRecordHash,
-} from "../src/evidence/ledger.js";
+} from "../src/runtime/evidence/ledger.js";
 
 describe("public evidence ledger facade", () => {
   test("appendJsonlRecord writes timestamped JSONL records", () => {

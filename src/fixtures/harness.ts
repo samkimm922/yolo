@@ -2,7 +2,7 @@ import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, relative, resolve, join, normalize } from "node:path";
 import { spawnSync as defaultSpawnSync } from "node:child_process";
-import { buildEvidenceArtifact, createEvidenceLedger, evidenceArtifactDigest, validateEvidenceArtifact } from "../evidence/ledger.js";
+import { buildEvidenceArtifact, createEvidenceLedger, evidenceArtifactDigest, validateEvidenceArtifact } from "../runtime/evidence/ledger.js";
 import {
   fixtureEvidenceRecord,
   getFixtureDefinition,

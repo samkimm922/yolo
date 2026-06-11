@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { appendRunEvent, appendStateEvent } from "../src/evidence/ledger.js";
+import { appendRunEvent, appendStateEvent } from "../src/runtime/evidence/ledger.js";
 import {
   buildRunFinalAnswer,
   buildRunReport,
   formatRunFinalAnswerMarkdown,
   formatRunReportMarkdown,
   writeRunReport,
-} from "../src/evidence/report.js";
+} from "../src/runtime/evidence/report.js";
 
 function tempStateDir() {
   return mkdtempSync(join(tmpdir(), "yolo-report-state-"));
