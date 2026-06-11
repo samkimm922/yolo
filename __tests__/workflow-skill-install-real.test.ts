@@ -38,14 +38,36 @@ describe("workflow skill install produces real content", () => {
         /^# /m,
         `SKILL.md for "${workflow.id}" must start with a markdown heading`,
       );
-      assert.ok(
-        content.includes("## Purpose"),
-        `SKILL.md for "${workflow.id}" must contain a Purpose section`,
-      );
-      assert.ok(
-        content.includes("## Entrypoints"),
-        `SKILL.md for "${workflow.id}" must contain an Entrypoints section`,
-      );
+
+      const isPmProtocol = workflow.id === "demand" || workflow.id === "interview";
+      if (isPmProtocol) {
+        // PM protocol replaces generic metadata with business-language interview rules
+        assert.ok(
+          content.includes("## 铁律一"),
+          `SKILL.md for "${workflow.id}" must contain PM protocol (Iron Rule 1)`,
+        );
+        assert.ok(
+          content.includes("## 铁律六"),
+          `SKILL.md for "${workflow.id}" must contain requirement checklist replay (Iron Rule 6)`,
+        );
+        assert.ok(
+          content.includes("## 禁止反模式"),
+          `SKILL.md for "${workflow.id}" must contain forbidden anti-patterns`,
+        );
+        assert.ok(
+          content.includes("## 翻译层职责"),
+          `SKILL.md for "${workflow.id}" must contain translation layer section`,
+        );
+      } else {
+        assert.ok(
+          content.includes("## Purpose"),
+          `SKILL.md for "${workflow.id}" must contain a Purpose section`,
+        );
+        assert.ok(
+          content.includes("## Entrypoints"),
+          `SKILL.md for "${workflow.id}" must contain an Entrypoints section`,
+        );
+      }
       assert.ok(
         content.includes("Fail closed"),
         `SKILL.md for "${workflow.id}" must include fail-closed execution contract`,

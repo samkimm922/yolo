@@ -6,6 +6,7 @@ import {
   workflowToSkillDescriptor,
   WORKFLOW_SKILL_DESCRIPTOR_SCHEMA,
 } from "./registry.js";
+import { renderPMProtocolMarkdown } from "./pm-protocol.js";
 
 export const WORKFLOW_SKILL_INSTALL_SCHEMA_VERSION = "1.0";
 export const WORKFLOW_SKILL_INSTALL_PLAN_SCHEMA = "yolo.workflow.skill_install_plan.v1";
@@ -193,6 +194,11 @@ export function validateWorkflowSkillDescriptor(descriptor = {}) {
 }
 
 function renderSkillMarkdown(descriptor) {
+  // Demand / interview workflows use the full PM protocol prompt
+  if (descriptor.workflow === "demand" || descriptor.workflow === "interview") {
+    return renderPMProtocolMarkdown(descriptor);
+  }
+
   const lines = [
     "---",
     `name: ${yamlString(descriptor.id)}`,
