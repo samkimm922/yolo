@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { inspectDemandQuality } from "../src/demand/gate.js";
+import { inspectDemandQuality, inspectDemandReadiness } from "../src/demand/gate.js";
 import { appendJsonlRecord } from "../src/runtime/evidence/ledger.js";
 
 describe("demand gate ledger evidence integration", () => {
@@ -58,6 +58,42 @@ describe("demand gate ledger evidence integration", () => {
       const factDim = result.dimensions?.find((d) => d.code === "project_fact_grounding");
       assert.ok(factDim !== undefined);
       assert.equal(factDim.evidence_grounded, false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("R6 in deep mode, missing evidence_grounded becomes readiness blocker", () => {
+    const dir = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
+    try {
+      // No ledger present — evidence_grounded is false
+      const result = inspectDemandReadiness({
+        playback: { confirmed: true, confirmed_by: "user" },
+        approval: { approved: true },
+        requirements: { active: [{ text: "User can do X." }] },
+      }, { phase: "discuss", stateDir: dir });
+
+      assert.ok(result.blockers.some((b) => b.code === "EVIDENCE_GROUNDED"),
+        `Expected EVIDENCE_GROUNDED blocker, got: ${JSON.stringify(result.blockers.map(b => b.code))}`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("R6 with valid ledger passes evidence_grounded readiness check", () => {
+    const dir = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
+    try {
+      const ledgerPath = join(dir, "evidence", "ledger.jsonl");
+      appendJsonlRecord(ledgerPath, { event: "project_read", file: "src/foo.ts", ledger: "state" });
+
+      const result = inspectDemandReadiness({
+        playback: { confirmed: true, confirmed_by: "user" },
+        approval: { approved: true },
+        requirements: { active: [{ text: "User can do X." }] },
+      }, { phase: "discuss", stateDir: dir });
+
+      const blocker = result.blockers.find((b) => b.code === "EVIDENCE_GROUNDED");
+      assert.equal(blocker, undefined, `EVIDENCE_GROUNDED should not block when ledger is valid, got blocker`);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

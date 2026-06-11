@@ -8,6 +8,7 @@ import { buildDemandSessionState } from "./router.js";
 import { inspectAtomicTask } from "../runtime/execution/atomic-task-doctor.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
 import { preflightPrdDocument } from "../prd/preflight.js";
+import { appendJsonlRecord } from "../runtime/evidence/ledger.js";
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -120,7 +121,17 @@ export function readDemandSession(pathOrDir) {
 }
 
 function runtimeResult(label, session, outputDir, artifacts, options = {}) {
-  const readiness = session.readiness || inspectDemandReadiness(session, { phase: session.phase });
+  const stateDir = options.stateDir || options.state_dir || null;
+  const readiness = stateDir
+    ? inspectDemandReadiness(session, { phase: session.phase, stateDir })
+    : (session.readiness || inspectDemandReadiness(session, { phase: session.phase }));
+  // Update approval effectiveness against freshly computed readiness
+  if (stateDir && session.approval) {
+    session.approval.effective_for_prd = session.approval.approved === true && readiness.executable_prd_ready === true;
+    session.approval.blocked_by = session.approval.approved === true && !session.approval.effective_for_prd
+      ? asArray(readiness.blockers).map((blocker) => ({ code: blocker.code, message: blocker.message }))
+      : [];
+  }
   const blocked = readiness.status === "blocked";
   const warning = readiness.status === "warning";
   return {
@@ -171,6 +182,7 @@ export function runDemandBrainstormRuntime(input = {}, options = {}) {
 export function runDemandDiscussRuntime(input = {}, options = {}) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
+  const stateDir = join(stateRoot, "state");
   const session = buildDemandSession({ ...input, projectRoot, stateRoot, phase: "discuss", source: "yolo-discuss" }, {
     ...options,
     phase: "discuss",
@@ -178,6 +190,30 @@ export function runDemandDiscussRuntime(input = {}, options = {}) {
   });
   const outputDir = outputDirFor(session, { ...input, projectRoot, stateRoot }, options);
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
+  // Write demand evidence ledger before artifacts so evidence_grounded gate can validate chain integrity
+  if (shouldWrite) {
+    try {
+      appendJsonlRecord(join(stateDir, "evidence", "ledger.jsonl"), {
+        event: "demand.discuss",
+        project_root: projectRoot,
+        state_root: stateRoot,
+        demand_id: session.id,
+        demand_dir: outputDir,
+        phase: "discuss",
+        ledger: "state",
+      });
+    } catch (_) {
+      // Ledger write is best-effort; gate will catch missing evidence
+    }
+  }
+  // Recompute readiness with stateDir so evidence_grounded check sees the ledger
+  session.readiness = inspectDemandReadiness(session, { phase: session.phase, stateDir });
+  if (session.approval) {
+    session.approval.effective_for_prd = session.approval.approved === true && session.readiness.executable_prd_ready === true;
+    session.approval.blocked_by = session.approval.approved === true && !session.approval.effective_for_prd
+      ? asArray(session.readiness.blockers).map((blocker) => ({ code: blocker.code, message: blocker.message }))
+      : [];
+  }
   const artifacts = shouldWrite ? writeDemandArtifacts(session, outputDir) : [];
   const result = runtimeResult("Discuss", session, outputDir, artifacts, { source: "yolo-discuss" });
   if (shouldWrite && shouldWriteLifecycle(input, options)) {
@@ -971,12 +1007,15 @@ function inspectAtomicity(tasks = [], input = {}, options = {}) {
 
 function buildDemandPrd(session = {}, input = {}, options = {}) {
   const projectRoot = input.projectRoot || input.project_root || options.projectRoot || options.project_root;
-  const readiness = inspectDemandReadiness(session, { phase: "prd", projectRoot });
+  const stateRoot = stateRootFor({ ...input, projectRoot }, options);
+  const stateDir = join(stateRoot, "state");
+  const readiness = inspectDemandReadiness(session, { phase: "prd", projectRoot, stateDir });
   if (!readiness.executable_prd_ready) {
     const quality = inspectDemandQuality(session, {
       phase: "prd",
       readiness,
       projectRoot,
+      stateDir,
     });
     return {
       status: "blocked",
@@ -1006,6 +1045,7 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
     atomicity,
     requireTasks: true,
     projectRoot,
+    stateDir,
   });
   if (atomicity.blockers.length > 0) {
     return {

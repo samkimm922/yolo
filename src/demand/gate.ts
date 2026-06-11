@@ -658,6 +658,12 @@ export function inspectDemandReadiness(session = {}, options = {}) {
       "Understanding playback must be generated and confirmed by the user before PRD. Run playback confirmation in the interview before to-demand.",
     ),
     check(
+      "EVIDENCE_GROUNDED",
+      hasLedgerEvidence(options.stateDir),
+      prdMode || deepMode ? "error" : "warning",
+      "Demand evidence must be grounded in a validated evidence ledger before executable PRD compilation.",
+    ),
+    check(
       "USER_APPROVAL_PRESENT",
       approval.approved === true,
       prdMode || deepMode ? "error" : "warning",
