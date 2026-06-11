@@ -16,7 +16,10 @@ import {
   listYoloCommandNames,
   listYoloCommands,
   renderYoloCommandUsage,
+  validateCommandLifecycleStageAlignment,
 } from "../src/workflows/command-registry.js";
+import { lifecycleStageIds } from "../src/lifecycle/schema.js";
+import { STABLE_WORKFLOW_COMMAND_SURFACES, listWorkflows } from "../src/workflows/registry.js";
 
 function tempProject(prefix = "yolo-command-registry-") {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -319,6 +322,47 @@ describe("YOLO command registry", () => {
       assert.equal(payload.status, "blocked");
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("all command lifecycle_stage values reference real lifecycle stages", () => {
+    const alignment = validateCommandLifecycleStageAlignment();
+    assert.equal(alignment.valid, true, `invalid lifecycle_stage values: ${JSON.stringify(alignment.violations)}`);
+    assert.equal(alignment.violations.length, 0, `lifecycle_stage violations: ${JSON.stringify(alignment.violations)}`);
+  });
+
+  test("lifecycle stage vocabulary is consistent across schema, command registry, and workflow surfaces", () => {
+    const stageIds = lifecycleStageIds();
+    const alignment = validateCommandLifecycleStageAlignment();
+
+    // Every command lifecycle_stage must be a valid lifecycle stage ID
+    assert.deepEqual(alignment.violations, []);
+
+    // STABLE_WORKFLOW_COMMAND_SURFACES keys (command surface names) are a subset of stable command names
+    const stableNames = listYoloCommandNames({ stable: true });
+    const surfaceNames = Object.keys(STABLE_WORKFLOW_COMMAND_SURFACES);
+    for (const surfaceName of surfaceNames) {
+      assert.ok(stableNames.includes(surfaceName), `workflow surface "${surfaceName}" is not a stable command name`);
+    }
+
+    // Every stable command has a matching lifecycle stage
+    for (const name of stableNames) {
+      const cmd = getYoloCommand(name);
+      assert.ok(stageIds.includes(cmd.lifecycle_stage), `stable command "${name}" lifecycle_stage "${cmd.lifecycle_stage}" is not a valid lifecycle stage`);
+    }
+
+    // Every stable workflow surface maps to a workflow that exists
+    const workflowIds = new Set(listWorkflows().map((w) => w.id));
+    for (const [surface, wfIds] of Object.entries(STABLE_WORKFLOW_COMMAND_SURFACES)) {
+      for (const wfId of wfIds) {
+        assert.ok(workflowIds.has(wfId), `surface "${surface}" references unknown workflow "${wfId}"`);
+      }
+    }
+
+    // All lifecycle stages are covered by at least one command
+    const coveredStages = new Set(alignment.covered_stages);
+    for (const stageId of stageIds) {
+      assert.ok(coveredStages.has(stageId), `lifecycle stage "${stageId}" has no commands`);
     }
   });
 });

@@ -1,3 +1,5 @@
+import { lifecycleStageIds } from "../lifecycle/schema.js";
+
 export const YOLO_COMMAND_REGISTRY_SCHEMA_VERSION = "1.1";
 export const YOLO_COMMAND_REGISTRY_SCHEMA = "yolo.workflow.command_registry.v1";
 export const YOLO_COMMAND_SURFACE_BUDGET = 8;
@@ -43,7 +45,7 @@ function internalCommand(command) {
 export const YOLO_COMMANDS = [
   stableCommand({
     name: "status",
-    lifecycle_stage: "status",
+    lifecycle_stage: "idea",
     workflow: "doctor",
     description: "Read YOLO project state and report the only safe next action.",
     argumentHint: "[--cwd <dir>] [--json]",
@@ -71,7 +73,7 @@ export const YOLO_COMMANDS = [
   }),
   stableCommand({
     name: "spec",
-    lifecycle_stage: "spec",
+    lifecycle_stage: "prd",
     workflow: "prd",
     description: "Compile approved demand, discovery, or plan artifacts into an executable PRD/spec.",
     argumentHint: "[--discovery <discovery.json>|--demand <session.json|dir>] [--output <prd.json>] [--json]",
@@ -85,7 +87,7 @@ export const YOLO_COMMANDS = [
   }),
   stableCommand({
     name: "tasks",
-    lifecycle_stage: "tasks",
+    lifecycle_stage: "roadmap",
     workflow: "plan",
     description: "Split clarified demand or discovery into task-ready implementation steps without changing code.",
     argumentHint: "[--discovery <discovery.json>] [--json]",
@@ -127,7 +129,7 @@ export const YOLO_COMMANDS = [
   }),
   stableCommand({
     name: "review",
-    lifecycle_stage: "review",
+    lifecycle_stage: "review-fix",
     workflow: "review",
     description: "Review implementation quality and produce scoped findings or fix tasks.",
     argumentHint: "[changed files, PRD path, or review scope] [--json]",
@@ -141,7 +143,7 @@ export const YOLO_COMMANDS = [
   }),
   stableCommand({
     name: "release",
-    lifecycle_stage: "release",
+    lifecycle_stage: "delivery",
     workflow: "ship",
     description: "Run acceptance, package, dogfood, public SDK, and release-candidate gates without publishing.",
     argumentHint: "[candidate|accept|ship] [--mode rc|publish] [--dry-run] [--json]",
@@ -157,7 +159,7 @@ export const YOLO_COMMANDS = [
     name: "yolo",
     alias_for: "status",
     deprecation_target: "status",
-    lifecycle_stage: "status",
+    lifecycle_stage: "idea",
     workflow: "doctor",
     description: "Compatibility dispatcher for historical freeform /yolo usage; prefer yolo status plus the 8 stable subcommands.",
     argumentHint: "<freeform request>",
@@ -253,7 +255,7 @@ export const YOLO_COMMANDS = [
     name: "yolo-next",
     alias_for: "status",
     deprecation_target: "status",
-    lifecycle_stage: "status",
+    lifecycle_stage: "idea",
     workflow: "doctor",
     description: "Compatibility alias for yolo status.",
     argumentHint: "[--cwd <dir>] [--json]",
@@ -269,7 +271,7 @@ export const YOLO_COMMANDS = [
     name: "yolo-plan",
     alias_for: "tasks",
     deprecation_target: "tasks",
-    lifecycle_stage: "tasks",
+    lifecycle_stage: "roadmap",
     workflow: "plan",
     description: "Compatibility alias for yolo tasks.",
     argumentHint: "<plain-language requirement>",
@@ -285,7 +287,7 @@ export const YOLO_COMMANDS = [
     name: "yolo-prd",
     alias_for: "spec",
     deprecation_target: "spec",
-    lifecycle_stage: "spec",
+    lifecycle_stage: "prd",
     workflow: "prd",
     description: "Compatibility alias for yolo spec.",
     argumentHint: "<approved plan, discovery brief, or PRD draft path>",
@@ -317,7 +319,7 @@ export const YOLO_COMMANDS = [
     name: "yolo-accept",
     alias_for: "release",
     deprecation_target: "release",
-    lifecycle_stage: "release",
+    lifecycle_stage: "acceptance",
     workflow: "accept",
     description: "Compatibility alias for yolo release accept.",
     argumentHint: "<PRD path> [--json]",
@@ -333,7 +335,7 @@ export const YOLO_COMMANDS = [
     name: "yolo-ui-review",
     alias_for: "release",
     deprecation_target: "release",
-    lifecycle_stage: "release",
+    lifecycle_stage: "acceptance",
     workflow: "accept",
     description: "Compatibility alias for yolo release accept --collect-evidence.",
     argumentHint: "<URL, PRD path, or UI surface>",
@@ -349,7 +351,7 @@ export const YOLO_COMMANDS = [
     name: "yolo-ship",
     alias_for: "release",
     deprecation_target: "release",
-    lifecycle_stage: "release",
+    lifecycle_stage: "delivery",
     workflow: "ship",
     description: "Compatibility alias for yolo release ship.",
     argumentHint: "<PRD path, run id, or release scope>",
@@ -365,7 +367,7 @@ export const YOLO_COMMANDS = [
     name: "yolo-release-candidate",
     alias_for: "release",
     deprecation_target: "release",
-    lifecycle_stage: "release",
+    lifecycle_stage: "delivery",
     workflow: "ship",
     description: "Compatibility alias for yolo release candidate.",
     argumentHint: "[--mode rc|publish] [--dry-run] [--json]",
@@ -381,7 +383,7 @@ export const YOLO_COMMANDS = [
     name: "yolo-release-gate",
     alias_for: "release",
     deprecation_target: "release",
-    lifecycle_stage: "release",
+    lifecycle_stage: "delivery",
     workflow: "ship",
     description: "Compatibility alias for yolo release candidate.",
     argumentHint: "[--mode rc|publish] [--dry-run] [--json]",
@@ -445,7 +447,7 @@ export const YOLO_COMMANDS = [
     name: "doctor",
     alias_for: "status",
     deprecation_target: "status",
-    lifecycle_stage: "status",
+    lifecycle_stage: "idea",
     workflow: "doctor",
     description: "Internal diagnostic utility; hidden from default help.",
     argumentHint: "[path] [--json]",
@@ -493,7 +495,7 @@ export const YOLO_COMMANDS = [
     name: "progress-ui-evidence",
     alias_for: "release",
     deprecation_target: "release",
-    lifecycle_stage: "release",
+    lifecycle_stage: "acceptance",
     workflow: "accept",
     description: "Internal UI evidence helper; hidden from default help.",
     argumentHint: "[path] [--output <file>] [--json]",
@@ -714,5 +716,32 @@ export function buildYoloCommandRegistry() {
     compatibility_aliases: listYoloCommands({ compatibilityAliases: true }),
     internal_commands: listYoloCommands({ internal: true }),
     workflows: listYoloBridgeWorkflowIds(),
+  };
+}
+
+export function validateCommandLifecycleStageAlignment() {
+  const validStageIds = lifecycleStageIds();
+  const violations = [];
+
+  for (const command of YOLO_COMMANDS) {
+    if (!validStageIds.includes(command.lifecycle_stage)) {
+      violations.push({
+        command: command.name,
+        lifecycle_stage: command.lifecycle_stage,
+        message: `lifecycle_stage "${command.lifecycle_stage}" is not a valid lifecycle stage ID`,
+      });
+    }
+  }
+
+  const commandStageIds = new Set(YOLO_COMMANDS.map((c) => c.lifecycle_stage));
+  const uncoveredStages = validStageIds.filter((id) => !commandStageIds.has(id));
+
+  return {
+    valid: violations.length === 0,
+    violations,
+    uncovered_stages: uncoveredStages,
+    covered_stages: validStageIds.filter((id) => commandStageIds.has(id)),
+    total_commands: YOLO_COMMANDS.length,
+    total_stages: validStageIds.length,
   };
 }
