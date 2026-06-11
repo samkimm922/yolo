@@ -9,6 +9,7 @@ __pycache__/
 
 # Append-only runtime state and generated evidence.
 .yolo/state/
+.yolo/skills/
 state/*.jsonl
 state/archive/
 state/runtime/
