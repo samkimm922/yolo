@@ -10,32 +10,92 @@ process.stdin.on('end', () => {
   try {
     data = JSON.parse(input);
   } catch {
-    // Invalid input — let it through
-    process.exit(0);
+    block("YOLO_HOOK_INVALID_JSON", "PreToolUse payload is invalid JSON; blocking fail-closed.");
+    return;
   }
 
   const toolName = (data.tool_name || '').toLowerCase();
-  if (toolName !== 'write' && toolName !== 'edit') {
+  if (toolName === 'bash') {
+    const command = data.tool_input?.command || '';
+    if (typeof command === "string" && commandWritesYoloState(command)) {
+      block(
+        "YOLO_STATE_BASH_WRITE_BLOCKED",
+        "Direct Bash writes to .yolo state are blocked. Use yolo CLI commands to modify lifecycle state.",
+        command,
+      );
+      return;
+    }
     process.exit(0);
+    return;
   }
 
-  const filePath = data.tool_input?.file_path || data.tool_input?.path || '';
-  if (!filePath) process.exit(0);
+  if (!isWriteLikeTool(toolName)) {
+    process.exit(0);
+    return;
+  }
 
-  // Normalize to forward slashes for cross-platform matching
-  const normalized = filePath.replace(/\\/g, '/');
-  const segments = normalized.split('/');
+  const filePath = data.tool_input?.file_path || data.tool_input?.path || data.tool_input?.notebook_path || '';
+  if (!filePath) {
+    block("YOLO_HOOK_MISSING_PATH", "Write-like tool payload is missing file_path/path; blocking fail-closed.");
+    return;
+  }
 
   // Block if any segment is exactly ".yolo"
-  if (segments.includes('.yolo')) {
-    console.error(JSON.stringify({
-      status: "blocked",
-      code: "YOLO_STATE_DIRECT_WRITE_BLOCKED",
-      message: `Direct LLM write to .yolo state is blocked. Use yolo CLI commands to modify lifecycle state.`,
-      file: filePath,
-    }));
-    process.exit(2);
+  if (pathTouchesYoloState(filePath)) {
+    block(
+      "YOLO_STATE_DIRECT_WRITE_BLOCKED",
+      "Direct LLM write to .yolo state is blocked. Use yolo CLI commands to modify lifecycle state.",
+      filePath,
+    );
+    return;
   }
 
   process.exit(0);
 });
+
+function isWriteLikeTool(toolName) {
+  return ["write", "edit", "multiedit", "notebookedit"].includes(toolName);
+}
+
+function pathTouchesYoloState(filePath) {
+  const normalized = String(filePath || "").replace(/\\/g, '/');
+  return normalized.split('/').includes('.yolo');
+}
+
+function block(code, message, file = null) {
+  console.error(JSON.stringify({
+    status: "blocked",
+    code,
+    message,
+    file,
+  }));
+  process.exit(2);
+}
+
+function commandWritesYoloState(command) {
+  return redirectsToYoloState(command)
+    || teeWritesYoloState(command)
+    || sedInPlaceTouchesYoloState(command);
+}
+
+function redirectsToYoloState(command) {
+  const pattern = /(?:^|[\s;&|])\d*>{1,2}\s*(["']?)([^"'\s;&|]+)\1/g;
+  let match;
+  while ((match = pattern.exec(command)) !== null) {
+    if (pathTouchesYoloState(match[2])) return true;
+  }
+  return false;
+}
+
+function teeWritesYoloState(command) {
+  const pattern = /(?:^|[\s;&|])tee(?:\s+-[A-Za-z]+)*\s+(["']?)([^"'\s;&|]+)\1/g;
+  let match;
+  while ((match = pattern.exec(command)) !== null) {
+    if (pathTouchesYoloState(match[2])) return true;
+  }
+  return false;
+}
+
+function sedInPlaceTouchesYoloState(command) {
+  return /(?:^|[\s;&|])sed\b[\s\S]*\s-i\b[\s\S]*\.yolo(?:\/|$)/.test(command.replace(/\\/g, "/"));
+}

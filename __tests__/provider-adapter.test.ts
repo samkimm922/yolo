@@ -416,6 +416,23 @@ describe("provider execution adapter", () => {
       const editResult = spawnSync("node", [hookPath], { input: editPayload, timeout: 5000 });
       assert.equal(editResult.status, 2, `expected exit 2 for .yolo Edit, got ${editResult.status}`);
 
+      const multiEditPayload = JSON.stringify({
+        tool_name: "MultiEdit",
+        tool_input: { file_path: ".yolo/state/foo.json", edits: [] },
+      });
+      const multiEditResult = spawnSync("node", [hookPath], { input: multiEditPayload, timeout: 5000 });
+      assert.equal(multiEditResult.status, 2, `expected exit 2 for .yolo MultiEdit, got ${multiEditResult.status}`);
+
+      const notebookPayload = JSON.stringify({
+        tool_name: "NotebookEdit",
+        tool_input: { notebook_path: ".yolo/state/foo.ipynb" },
+      });
+      const notebookResult = spawnSync("node", [hookPath], { input: notebookPayload, timeout: 5000 });
+      assert.equal(notebookResult.status, 2, `expected exit 2 for .yolo NotebookEdit, got ${notebookResult.status}`);
+
+      const invalidJsonResult = spawnSync("node", [hookPath], { input: "{not json", timeout: 5000 });
+      assert.equal(invalidJsonResult.status, 2, `expected exit 2 for invalid JSON, got ${invalidJsonResult.status}`);
+
       // Allow normal paths
       const passPayload = JSON.stringify({
         tool_name: "Write",
@@ -430,12 +447,40 @@ describe("provider execution adapter", () => {
         tool_input: { command: "echo .yolo" },
       });
       const bashResult = spawnSync("node", [hookPath], { input: bashPayload, timeout: 5000 });
-      assert.equal(bashResult.status, 0, `expected exit 0 for Bash, got ${bashResult.status}`);
+      assert.equal(bashResult.status, 0, `expected exit 0 for harmless Bash, got ${bashResult.status}`);
 
-      // Allow write without file_path
+      const bashRedirectPayload = JSON.stringify({
+        tool_name: "Bash",
+        tool_input: { command: "echo '{}' > /project/.yolo/lifecycle/status.json" },
+      });
+      const bashRedirectResult = spawnSync("node", [hookPath], { input: bashRedirectPayload, timeout: 5000 });
+      assert.equal(bashRedirectResult.status, 2, `expected exit 2 for Bash .yolo redirect, got ${bashRedirectResult.status}`);
+
+      const bashTeePayload = JSON.stringify({
+        tool_name: "Bash",
+        tool_input: { command: "printf '{}' | tee -a /project/.yolo/state/events.jsonl" },
+      });
+      const bashTeeResult = spawnSync("node", [hookPath], { input: bashTeePayload, timeout: 5000 });
+      assert.equal(bashTeeResult.status, 2, `expected exit 2 for Bash tee .yolo write, got ${bashTeeResult.status}`);
+
+      const bashSedPayload = JSON.stringify({
+        tool_name: "Bash",
+        tool_input: { command: "sed -i 's/a/b/' /project/.yolo/lifecycle/status.json" },
+      });
+      const bashSedResult = spawnSync("node", [hookPath], { input: bashSedPayload, timeout: 5000 });
+      assert.equal(bashSedResult.status, 2, `expected exit 2 for Bash sed -i .yolo write, got ${bashSedResult.status}`);
+
+      const yoloCliPayload = JSON.stringify({
+        tool_name: "Bash",
+        tool_input: { command: "node ./dist/bin/yolo.js status --state-root /project/.yolo" },
+      });
+      const yoloCliResult = spawnSync("node", [hookPath], { input: yoloCliPayload, timeout: 5000 });
+      assert.equal(yoloCliResult.status, 0, `expected exit 0 for yolo CLI state access, got ${yoloCliResult.status}`);
+
+      // Block write without file_path/path fail-closed
       const noFilePayload = JSON.stringify({ tool_name: "Write", tool_input: {} });
       const noFileResult = spawnSync("node", [hookPath], { input: noFilePayload, timeout: 5000 });
-      assert.equal(noFileResult.status, 0, `expected exit 0 for no file_path, got ${noFileResult.status}`);
+      assert.equal(noFileResult.status, 2, `expected exit 2 for no file_path, got ${noFileResult.status}`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

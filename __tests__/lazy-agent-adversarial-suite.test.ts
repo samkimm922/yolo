@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
 import { lifecycleStageIds, getLifecycleStage, lifecycleStageForCommand } from "../src/lifecycle/schema.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
@@ -144,6 +144,16 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     }
     assert.ok(threw, "hook must throw when blocking .yolo write");
     assert.equal(exited, 2, "hook must exit 2 when LLM tries to write .yolo state directly");
+
+    const invalidJson = spawnSync("node", ["--import", "tsx", hookPath], { input: "{not-json", encoding: "utf8", cwd: PROJECT_ROOT });
+    assert.equal(invalidJson.status, 2, "invalid JSON must fail closed with exit 2");
+
+    const normalPayload = JSON.stringify({
+      tool_name: "Write",
+      tool_input: { file_path: "/project/src/app.ts", content: "" },
+    });
+    const normalWrite = spawnSync("node", ["--import", "tsx", hookPath], { input: normalPayload, encoding: "utf8", cwd: PROJECT_ROOT });
+    assert.equal(normalWrite.status, 0, "normal non-.yolo write must exit 0");
   });
 
   // ── F5: acceptance_criteria stops always-passing ──
@@ -291,9 +301,8 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     assert.ok(refreshCalls.length <= 2, "refreshMemoryCenter must not be called in multiple command handlers");
   });
 
-  // ── Boundary A: Bash writing .yolo is NOT blocked by PreToolUse hook ──
-  // M2 boundary: the hook only matches Write|Edit tool calls, not Bash.
-  test("Boundary-A (M2): PreToolUse hook allows non-Write/Edit tools to touch .yolo paths", () => {
+  // ── Boundary A: Bash direct .yolo writes are blocked; yolo CLI state access is allowed ──
+  test("Boundary-A (M2): PreToolUse hook blocks Bash .yolo redirects and allows yolo CLI access", () => {
     const hookPath = join(PROJECT_ROOT, "hooks", "pre-tool-block-yolo-write.ts");
     if (!existsSync(hookPath)) {
       assert.ok(true, "hook not present — skip");
@@ -303,9 +312,15 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
       tool_name: "Bash",
       tool_input: { command: "echo '{}' > /project/.yolo/lifecycle/status.json" },
     });
-    // Bash tool should pass through (exit 0)
-    const out = execFileSync("node", ["--import", "tsx", hookPath], { input: payload, encoding: "utf8", cwd: PROJECT_ROOT });
-    assert.ok(out !== null, "Bash tool touching .yolo must not be blocked by PreToolUse hook");
+    const blocked = spawnSync("node", ["--import", "tsx", hookPath], { input: payload, encoding: "utf8", cwd: PROJECT_ROOT });
+    assert.equal(blocked.status, 2, "Bash redirect to .yolo must be blocked");
+
+    const cliPayload = JSON.stringify({
+      tool_name: "Bash",
+      tool_input: { command: "node ./dist/bin/yolo.js status --state-root /project/.yolo" },
+    });
+    const allowed = spawnSync("node", ["--import", "tsx", hookPath], { input: cliPayload, encoding: "utf8", cwd: PROJECT_ROOT });
+    assert.equal(allowed.status, 0, "yolo CLI state access must be allowed");
   });
 
   // ── Boundary B: manual_acceptance evidence can unblock delivery ──
