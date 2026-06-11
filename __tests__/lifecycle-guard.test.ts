@@ -11,6 +11,7 @@ import { runPiCli } from "../src/cli/pi.js";
 import { runRunnerRuntime } from "../src/runtime/runner-runtime.js";
 import { runPiRuntime } from "../src/runtime/pi-runtimes.js";
 import { runPiAgent } from "../src/agents/pi.js";
+import { DEFAULT_YOLO_PUBLIC_COMMAND_NAMES, YOLO_COMMANDS } from "../src/workflows/command-registry.js";
 
 function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-lifecycle-guard-"));
@@ -338,7 +339,7 @@ describe("lifecycle guard", () => {
       writeFileSync(join(root, ".yolo", "lifecycle", "status.json"), "{", "utf8");
 
       const out = capture();
-      const exitCode = await runYoloCli(["next", `--cwd=${root}`, "--json"], {
+      const exitCode = await runYoloCli(["status", `--cwd=${root}`, "--json"], {
         cwd: root,
         stdout: out.stream,
       });
@@ -372,7 +373,7 @@ describe("lifecycle guard", () => {
       assert.deepEqual(blocked.missing_required_stages, ["discovery", "roadmap", "prd", "check"]);
 
       const nextOut = capture();
-      const nextExit = await runYoloCli(["next", `--cwd=${root}`, "--json"], {
+      const nextExit = await runYoloCli(["status", `--cwd=${root}`, "--json"], {
         cwd: root,
         stdout: nextOut.stream,
       });
@@ -594,13 +595,92 @@ describe("lifecycle guard", () => {
     }
   });
 
-  test("S2 KNOWN_YOLO_COMMAND_WORDS includes all 4 stable surface verbs and internal commands", () => {
+  test("S2 KNOWN_YOLO_COMMAND_WORDS includes all 4 stable surface verbs", () => {
     assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("auto"), "auto must be in known words");
     assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("demand"), "demand must be in known words");
     assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("ship"), "ship must be in known words");
     assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("status"), "status must be in known words");
-    assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("office-hours"), "office-hours must be in known words (blocked compat alias)");
-    assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("brainstorm"), "brainstorm must be in known words (blocked compat alias)");
-    assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("release-gate"), "release-gate must be in known words (blocked compat alias)");
+  });
+
+  test("S3 deprecated alias names all exit 2 with redirect to stable verbs", async () => {
+    const deprecatedNames = [
+      "office-hours",
+      "brainstorm",
+      "discover",
+      "discuss",
+      "plan",
+      "prd",
+      "accept",
+      "ui-review",
+      "release-candidate",
+      "release-gate",
+      "next",
+    ];
+
+    const root = tempProject();
+    try {
+      for (const name of deprecatedNames) {
+        let stderr = "";
+        const exitCode = await runYoloCli([name, `--cwd=${root}`, "--json"], {
+          cwd: root,
+          stdout: { write: () => {} },
+          stderr: { write: (chunk) => { stderr += chunk; } },
+        });
+        assert.equal(exitCode, 2, `yolo ${name} must exit 2`);
+        assert.ok(
+          stderr.includes("no longer a standalone command"),
+          `yolo ${name} must mention deprecation: got "${stderr}"`,
+        );
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("S3 registry↔CLI alignment: non-registry command names error instead of silent execution", async () => {
+    const registryNames = new Set(YOLO_COMMANDS.map((cmd) => cmd.name));
+    // All old alias names removed from the public surface and the command registry.
+    // Every one must produce an error on stderr and exit 2 instead of silently executing.
+    const removedNames = [
+      "office-hours",
+      "brainstorm",
+      "discover",
+      "discuss",
+      "plan",
+      "prd",
+      "accept",
+      "ui-review",
+      "release-candidate",
+      "release-gate",
+      "next",
+      "pi",
+      "gate",
+      "preflight",
+    ];
+
+    const root = tempProject();
+    try {
+      for (const name of removedNames) {
+        assert.equal(
+          registryNames.has(name),
+          false,
+          `${name} must NOT be in command registry`,
+        );
+
+        let stderr = "";
+        const exitCode = await runYoloCli([name, `--cwd=${root}`, "--json"], {
+          cwd: root,
+          stdout: { write: () => {} },
+          stderr: { write: (chunk) => { stderr += chunk; } },
+        });
+        assert.equal(exitCode, 2, `yolo ${name} must exit 2 (registry-driven check)`);
+        assert.ok(
+          stderr.length > 0,
+          `yolo ${name} must produce an error message on stderr`,
+        );
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

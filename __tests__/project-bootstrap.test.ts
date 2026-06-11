@@ -265,6 +265,8 @@ describe("project bootstrap", () => {
 
       const result = spawnSync(process.execPath, [
         resolve(YOLO_DIR, packageJson.bin.yolo),
+        "demand",
+        "--stage",
         "brainstorm",
         demandText,
         `--cwd=${root}`,

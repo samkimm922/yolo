@@ -490,7 +490,6 @@ describe("acceptance report", () => {
       }, lifecycleOptions(root));
 
       for (const argv of [
-        ["accept", "prd.json", "--release", "--approval", approvalPath, "--cwd", root, "--json", "--no-write"],
         ["release", "accept", "prd.json", "--release", "--approval", approvalPath, "--cwd", root, "--json", "--no-write"],
       ]) {
         let stdout = "";

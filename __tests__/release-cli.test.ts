@@ -24,7 +24,7 @@ describe("YOLO release-candidate CLI", () => {
     const root = tempProject();
     try {
       const { io, stdout, stderr } = captureIo(root);
-      const exitCode = await runYoloCli(["release-candidate", "--json"], io);
+      const exitCode = await runYoloCli(["release", "candidate", "--json"], io);
       const payload = JSON.parse(stdout.text);
 
       assert.equal(stderr.text, "");
@@ -89,7 +89,8 @@ describe("YOLO release-candidate CLI", () => {
         },
       });
       const exitCode = await runYoloCli([
-        "release-gate",
+        "release",
+        "gate",
         "--mode",
         "publish",
         "--json",
@@ -124,7 +125,7 @@ describe("YOLO release-candidate CLI", () => {
           };
         },
       });
-      const exitCode = await runYoloCli(["release-candidate", "--json"], io);
+      const exitCode = await runYoloCli(["release", "candidate", "--json"], io);
       const payload = JSON.parse(stdout.text);
 
       assert.equal(stderr.text, "");
@@ -147,7 +148,7 @@ describe("YOLO release-candidate CLI", () => {
           throw new Error("boom from rc runner");
         },
       });
-      const exitCode = await runYoloCli(["release-candidate", "--json"], io);
+      const exitCode = await runYoloCli(["release", "candidate", "--json"], io);
       const payload = JSON.parse(stdout.text);
 
       assert.equal(stderr.text, "");
@@ -165,7 +166,7 @@ describe("YOLO release-candidate CLI", () => {
     const root = tempProject();
     try {
       const { io, stdout, stderr } = captureIo(root);
-      const exitCode = await runYoloCli(["release-candidate", "--mode", "trello", "--json"], io);
+      const exitCode = await runYoloCli(["release", "candidate", "--mode", "trello", "--json"], io);
       const payload = JSON.parse(stdout.text);
 
       assert.equal(stderr.text, "");
@@ -198,7 +199,7 @@ describe("YOLO release-candidate CLI", () => {
           };
         },
       });
-      const exitCode = await runYoloCli(["release-candidate", "--json"], io);
+      const exitCode = await runYoloCli(["release", "candidate", "--json"], io);
       const payload = JSON.parse(stdout.text);
 
       assert.equal(exitCode, 2);

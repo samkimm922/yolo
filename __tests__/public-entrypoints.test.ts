@@ -258,6 +258,8 @@ describe("public package entrypoints", () => {
   test("yolo lifecycle commands dispatch to real discovery runtime instead of PRD paths", () => {
     const result = spawnSync(process.execPath, [
       resolve(YOLO_DIR, packageJson.bin.yolo),
+      "demand",
+      "--stage",
       "discover",
       "Inventory alerts need clearer success criteria",
       "--json",
@@ -289,6 +291,8 @@ describe("public package entrypoints", () => {
     try {
       const brainstorm = spawnSync(process.execPath, [
         resolve(YOLO_DIR, packageJson.bin.yolo),
+        "demand",
+        "--stage",
         "brainstorm",
         demandText,
         `--cwd=${root}`,
@@ -304,6 +308,8 @@ describe("public package entrypoints", () => {
 
       const discuss = spawnSync(process.execPath, [
         resolve(YOLO_DIR, packageJson.bin.yolo),
+        "demand",
+        "--stage",
         "discuss",
         demandText,
         "--decision=Low stock alert is the MVP wedge",

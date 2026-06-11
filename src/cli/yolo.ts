@@ -2727,9 +2727,8 @@ export const KNOWN_YOLO_COMMAND_WORDS = new Set([
   "status", "demand", "auto", "ship",
   "spec", "tasks", "run", "runner", "check", "review", "release", "init", "setup", "install", "doctor", "eval",
   "progress-ui-evidence", "memory", "learn",
-  "office-hours", "brainstorm", "discover", "discuss", "next", "accept", "ui-review",
-  "release-candidate", "release-gate", "candidate", "gate", "rc", "publish",
-  "interview", "plan", "prd", "ui-evidence",
+  "candidate", "gate", "rc", "publish",
+  "ui-evidence",
 ]);
 
 export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
@@ -2763,14 +2762,32 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
   if (argv[0] === "auto") {
     return runYoloAutoCli(argv.slice(1), io);
   }
-  if (argv[0] === "office-hours") return runYoloDemandCli(["--mode", "office-hours", ...argv.slice(1)], io);
-  if (argv[0] === "brainstorm") return runYoloBrainstormCli(argv.slice(1), io);
+  if (argv[0] === "office-hours") {
+    stderr.write(`yolo office-hours is no longer a standalone command. Use: yolo demand --mode office-hours\n`);
+    return 2;
+  }
+  if (argv[0] === "brainstorm") {
+    stderr.write(`yolo brainstorm is no longer a standalone command. Use: yolo demand --stage brainstorm\n`);
+    return 2;
+  }
   if (argv[0] === "demand") return runYoloDemandCli(argv.slice(1), io);
   if (argv[0] === "interview") return runYoloInterviewCli(argv.slice(1), io);
-  if (argv[0] === "discover") return runYoloDiscoverCli(argv.slice(1), io);
-  if (argv[0] === "discuss") return runYoloDiscussCli(argv.slice(1), io);
-  if (argv[0] === "plan") return runYoloPlanCli(argv.slice(1), io);
-  if (argv[0] === "prd") return runYoloPrdCli(argv.slice(1), io);
+  if (argv[0] === "discover") {
+    stderr.write(`yolo discover is no longer a standalone command. Use: yolo demand --stage discover\n`);
+    return 2;
+  }
+  if (argv[0] === "discuss") {
+    stderr.write(`yolo discuss is no longer a standalone command. Use: yolo demand --stage discuss\n`);
+    return 2;
+  }
+  if (argv[0] === "plan") {
+    stderr.write(`yolo plan is no longer a standalone command. Use: yolo tasks\n`);
+    return 2;
+  }
+  if (argv[0] === "prd") {
+    stderr.write(`yolo prd is no longer a standalone command. Use: yolo spec\n`);
+    return 2;
+  }
   if (argv[0] === "check") {
     return runYoloCheckCli(argv.slice(1), io);
   }
@@ -2781,19 +2798,22 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
     return runYoloProgressUiEvidenceCli(argv.slice(1), io);
   }
   if (argv[0] === "accept" || argv[0] === "ui-review") {
-    return runYoloAcceptCli(argv.slice(1), io);
+    stderr.write(`yolo ${argv[0]} is no longer a standalone command. Use: yolo release accept\n`);
+    return 2;
   }
   if (argv[0] === "eval") {
     return runYoloBenchmarkCli(argv.slice(1), io);
   }
   if (argv[0] === "release-candidate" || argv[0] === "release-gate") {
-    return runYoloReleaseCli([argv[0], ...argv.slice(1)], io);
+    stderr.write(`yolo ${argv[0]} is no longer a standalone command. Use: yolo release candidate or yolo release gate\n`);
+    return 2;
   }
   if (argv[0] === "memory") {
     return runYoloMemoryCli(argv.slice(1), io);
   }
   if (argv[0] === "next") {
-    return runYoloNextCli(argv.slice(1), io);
+    stderr.write(`yolo next is no longer a standalone command. Use: yolo status\n`);
+    return 2;
   }
   if (argv[0] === "ship") {
     return runYoloShipCli(argv.slice(1), io);
