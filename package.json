@@ -1,6 +1,7 @@
 {
   "name": "yolo",
   "version": "0.1.0",
+  "private": true,
   "description": "YOLO — 自动化 coding 管道（PRD → 修复 → 闸门 → 提交）",
   "type": "module",
   "files": [
