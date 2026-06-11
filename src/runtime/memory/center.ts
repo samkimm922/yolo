@@ -865,30 +865,6 @@ export function buildMemoryIndexMarkdown(options = {}) {
   ].join("\n");
 }
 
-function legacyRoadmapMarkdown(options = {}) {
-  return [
-    "# YOLO Roadmap",
-    "",
-    `> Refreshed: ${options.now?.toISOString?.() || new Date().toISOString()}`,
-    "",
-    "The active roadmap and ordered execution progress now live in `docs/yolo-public-sdk-progress.md`.",
-    "",
-    "Memory-system truth lives in `docs/memory/`:",
-    "",
-    "- `docs/memory/MEMORY_INDEX.md`",
-    "- `docs/memory/CURRENT_STATUS.md`",
-    "- `docs/memory/CURRENT_HANDOFF.md`",
-    "- `docs/memory/DOCUMENT_GOVERNANCE.md`",
-    "- `docs/memory/LEARNING_INDEX.md`",
-    "- `docs/memory/LESSONS_PLAYBOOK.md`",
-    "- `docs/memory/PROJECT_TREE.md`",
-    "- `docs/memory/MEMORY_AUDIT.md`",
-    "",
-    "Current remaining release blockers are still operator/external-evidence work: real publish, billable provider evidence, public dogfood, and explicit runtime stable-boundary approval.",
-    "",
-  ].join("\n");
-}
-
 function writeDoc(filePath, content, dryRun) {
   if (!dryRun) {
     mkdirSync(dirname(filePath), { recursive: true });
@@ -934,22 +910,6 @@ export function refreshMemoryCenter(options = {}) {
   const written = [];
   for (const name of Object.keys(docs)) {
     written.push(writeDoc(join(paths.memoryDir, name), docs[name], dryRun));
-  }
-
-  if (options.writeLegacyPointers === true || options.write_legacy_pointers === true) {
-    const tree = docs["PROJECT_TREE.md"];
-    const status = docs["CURRENT_STATUS.md"];
-    const roadmap = legacyRoadmapMarkdown(options);
-    for (const [relativePath, content] of [
-      ["PROJECT_TREE.md", tree],
-      ["SYSTEM_STATE.md", status],
-      ["ROADMAP.md", roadmap],
-      ["docs/PROJECT_TREE.md", tree],
-      ["docs/SYSTEM_STATE.md", status],
-      ["docs/ROADMAP.md", roadmap],
-    ]) {
-      written.push(writeDoc(join(paths.projectRoot, relativePath), content, dryRun));
-    }
   }
 
   const audit = buildMemoryAudit({ ...options, ...paths });

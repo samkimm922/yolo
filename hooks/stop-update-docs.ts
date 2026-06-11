@@ -13,7 +13,7 @@ if (!existsSync(MEMORY_CENTER)) process.exit(0);
 
 try {
   // Always run on session end to ensure final doc state is correct
-  execFileSync('node', [MEMORY_CENTER, '--legacy-pointers'], { stdio: 'pipe', cwd: YOLO_DIR });
+  execFileSync('node', [MEMORY_CENTER], { stdio: 'pipe', cwd: YOLO_DIR });
 } catch (e) {
   // Silently ignore — stop hooks must not break anything
 }

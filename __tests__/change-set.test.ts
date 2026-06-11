@@ -43,9 +43,9 @@ describe("execution change-set helpers", () => {
 
   test("filterCommittableFiles excludes runner docs and common binary artifacts", () => {
     assert.deepEqual(filterCommittableFiles([
-      "SESSION.md",
+      "docs/memory/SESSION.md",
       "src/a.ts",
-      "SNAPSHOT.md",
+      "docs/memory/SNAPSHOT.md",
       "assets/icon.png",
       "package.json",
     ]), [
@@ -93,7 +93,7 @@ describe("execution change-set helpers", () => {
     const calls = [];
     const execFileSync = (bin, args) => {
       calls.push([bin, ...args]);
-      if (args[0] === "diff") return "src/a.ts\nREADME.md\nSNAPSHOT.md\nassets/logo.png\n";
+      if (args[0] === "diff") return "src/a.ts\nREADME.md\ndocs/memory/SNAPSHOT.md\nassets/logo.png\n";
       if (args[0] === "ls-files") return "docs/spec.md\nsrc/out.ts\n";
       return "";
     };
@@ -118,7 +118,7 @@ describe("execution change-set helpers", () => {
     assert.deepEqual(context.allChanged, [
       "src/a.ts",
       "README.md",
-      "SNAPSHOT.md",
+      "docs/memory/SNAPSHOT.md",
       "assets/logo.png",
       "docs/spec.md",
       "src/out.ts",

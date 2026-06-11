@@ -1,6 +1,6 @@
 import { execFileSync as defaultExecFileSync } from "node:child_process";
 
-export const DEFAULT_COMMIT_EXCLUDE_FILES = ["SESSION.md", "SNAPSHOT.md", "DELIVERY_LOG.md"];
+export const DEFAULT_COMMIT_EXCLUDE_FILES = ["docs/memory/SESSION.md", "docs/memory/SNAPSHOT.md", "docs/memory/DELIVERY_LOG.md"];
 export const DEFAULT_FALLBACK_CHANGED_FILE_EXCLUDES = ["dist-h5/", ".gstack/", ".yolo-backup/"];
 export const DEFAULT_BINARY_FILE_PATTERN = /\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|eot|mp4|webm|pdf|zip|gz|lock|jar)$/i;
 

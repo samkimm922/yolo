@@ -1,6 +1,6 @@
 // doc-updater.js — 在 git commit 前自动更新三文件
 import { readFileSync, writeFileSync, appendFileSync, existsSync, renameSync, statSync, mkdirSync } from 'fs';
-import { join, resolve } from 'path';
+import { dirname, join, resolve } from 'path';
 import { execFileSync as defaultExecFileSync } from 'child_process';
 
 const today = new Date().toISOString().split('T')[0];
@@ -10,15 +10,16 @@ function resolveDocPaths(rootDir) {
   const root = resolve(rootDir || process.cwd());
   return {
     root,
-    session: join(root, 'SESSION.md'),
-    snapshot: join(root, 'SNAPSHOT.md'),
-    delivery: join(root, 'DELIVERY_LOG.md'),
+    session: join(root, 'docs/memory/SESSION.md'),
+    snapshot: join(root, 'docs/memory/SNAPSHOT.md'),
+    delivery: join(root, 'docs/memory/DELIVERY_LOG.md'),
   };
 }
 
 export async function updateDocs({ taskId, taskTitle, modifiedFiles, status }, options = {}) {
   const { root, session, snapshot, delivery } = resolveDocPaths(options.rootDir);
   const runGit = options.execFileSync || defaultExecFileSync;
+  mkdirSync(dirname(session), { recursive: true });
   const fileStr = Array.isArray(modifiedFiles) && modifiedFiles.length
     ? modifiedFiles.join(', ')
     : '（无变更文件）';
@@ -106,7 +107,7 @@ export async function updateDocs({ taskId, taskTitle, modifiedFiles, status }, o
 
   // 4. git add 三文件
   try {
-    runGit('git', ['add', 'SESSION.md', 'SNAPSHOT.md', 'DELIVERY_LOG.md'], {
+    runGit('git', ['add', 'docs/memory/SESSION.md', 'docs/memory/SNAPSHOT.md', 'docs/memory/DELIVERY_LOG.md'], {
       cwd: root,
       encoding: 'utf8',
     });

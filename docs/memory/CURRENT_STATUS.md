@@ -8,8 +8,8 @@
 - Version: 0.1.0.
 - Latest recorded full validation: 764 tests / 131 suites / 0 fail.
 - Root .js budget: 0 files.
-- SDK surface: 53 package exports and 6 bins.
-- Source/test/docs surface: 181 src modules, 156 test files, 31 docs markdown files, 9 root .ts files.
+- SDK surface: 52 package exports and 6 bins.
+- Source/test/docs surface: 191 src modules, 156 test files, 28 docs markdown files, 8 root .ts files.
 
 ## Recent Lifecycle Reports
 

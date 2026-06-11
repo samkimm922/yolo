@@ -79,55 +79,6 @@ export function usage() {
   ].join("\n");
 }
 
-function summarizeMemoryRefresh(result = {}) {
-  return {
-    status: result.status,
-    memory_dir: result.memory_dir,
-    written: Array.isArray(result.written) ? result.written.map((item) => item.path || item).filter(Boolean) : [],
-    audit_summary: result.audit_summary,
-    retention: result.retention ? {
-      archived_record_count: result.retention.archived_record_count,
-      pruned_generated_snapshots: result.retention.pruned_generated_archives?.deleted_count || 0,
-    } : null,
-  };
-}
-
-function withMemoryRefresh(result = {}, params = {}) {
-  const options = params.options || {};
-  const projectRoot = params.projectRoot ? resolve(params.projectRoot) : null;
-  const writeEnabled = params.write !== false && options.writeLifecycle !== false && options.writeArtifacts !== false;
-  const dryRun = options.dryRun === true || options.dry_run === true;
-  if (!projectRoot || !writeEnabled || dryRun) return result;
-  try {
-    const memory = refreshMemoryCenter({
-      projectRoot,
-      source: params.source || "yolo-cli",
-    });
-    return {
-      ...result,
-      memory_refresh: summarizeMemoryRefresh(memory),
-    };
-  } catch (error) {
-    return {
-      ...result,
-      memory_refresh: {
-        status: "warning",
-        code: "MEMORY_REFRESH_FAILED",
-        error: error.message,
-      },
-    };
-  }
-}
-
-function appendMemoryRefreshText(lines, result = {}) {
-  if (!result.memory_refresh) return;
-  if (result.memory_refresh.status === "ok") {
-    lines.push(`memory: refreshed ${result.memory_refresh.written?.length || 0} docs at ${result.memory_refresh.memory_dir}`);
-  } else {
-    lines.push(`memory: ${result.memory_refresh.status} ${result.memory_refresh.error || ""}`.trimEnd());
-  }
-}
-
 function readArgValue(argv, index, name) {
   const arg = argv[index];
   if (arg.includes("=")) return { value: arg.split("=").slice(1).join("="), consumed: 0 };
@@ -740,7 +691,6 @@ export function formatRunnerText(result) {
     lines.push("next:");
     for (const action of result.next_actions) lines.push(`  - ${action}`);
   }
-  appendMemoryRefreshText(lines, result);
 
   return lines.join("\n");
 }
@@ -757,7 +707,6 @@ export function formatWorkflowPlanText(result = {}) {
     lines.push("next:");
     for (const action of result.next_actions) lines.push(`  - ${action}`);
   }
-  appendMemoryRefreshText(lines, result);
   return lines.join("\n");
 }
 
@@ -780,7 +729,6 @@ export function formatDiscoveryRuntimeText(label, result = {}) {
     lines.push("next:");
     for (const action of result.next_actions) lines.push(`  - ${action}`);
   }
-  appendMemoryRefreshText(lines, result);
   return lines.join("\n");
 }
 
@@ -810,7 +758,6 @@ export function formatDemandRuntimeText(label, result = {}) {
     lines.push("next:");
     for (const action of result.next_actions) lines.push(`  - ${action}`);
   }
-  appendMemoryRefreshText(lines, result);
   return lines.join("\n");
 }
 
@@ -1168,7 +1115,6 @@ export function formatPiRuntimeText(label, result = {}) {
     lines.push("next:");
     for (const action of result.next_actions) lines.push(`  - ${action}`);
   }
-  appendMemoryRefreshText(lines, result);
   return lines.join("\n");
 }
 
@@ -1223,7 +1169,6 @@ export function formatInitText(result) {
     lines.push("next:");
     for (const action of result.next_actions) lines.push(`  - ${action}`);
   }
-  appendMemoryRefreshText(lines, result);
   return lines.join("\n");
 }
 
@@ -1676,7 +1621,6 @@ export async function runYoloInitCli(argv = [], io = {}) {
       force: options.force,
       dryRun: options.dryRun,
     });
-    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-init" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatInitText(result)}\n`);
     return result.exit_code;
@@ -1902,7 +1846,6 @@ export async function runYoloCheckCli(argv = [], io = {}) {
     strictExecution: input.strictExecution,
     writeLifecycle: options.writeLifecycle,
   }, { learnFailures: true });
-  report = withMemoryRefresh(report, { projectRoot, options, source: "yolo-check" });
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else (report.status === "error" ? stderr : stdout).write(`${formatYoloCheckText(report)}\n`);
   return report.status === "pass" ? 0 : report.status === "warning" ? 2 : 1;
@@ -1955,7 +1898,6 @@ export async function runYoloProgressUiEvidenceCli(argv = [], io = {}) {
     outputPath: input.outputPath,
     writeArtifacts: options.writeArtifacts,
   });
-  report = withMemoryRefresh(report, { projectRoot, options, source: "yolo-progress-ui-evidence" });
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else stdout.write(`[yolo progress-ui-evidence] ${report.status}: ${report.summary}\n`);
   return report.status === "pass" ? 0 : 1;
@@ -2176,7 +2118,6 @@ export async function runYoloBrainstormCli(argv = [], io = {}) {
     objective: input.objective,
     writeArtifacts: options.writeLifecycle,
   });
-  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-brainstorm" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDemandRuntimeText("brainstorm", result)}\n`);
   return workflowExitCode(result);
@@ -2218,7 +2159,6 @@ async function runYoloDemandStageCli(stage, input = {}, options = {}, io = {}) {
       objective: input.objective,
       writeArtifacts: options.writeLifecycle,
     });
-    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-demand:office-hours" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDemandRuntimeText("office-hours", result)}\n`);
     return workflowExitCode(result);
@@ -2232,7 +2172,6 @@ async function runYoloDemandStageCli(stage, input = {}, options = {}, io = {}) {
       objective: input.objective,
       writeArtifacts: options.writeLifecycle,
     });
-    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-demand:brainstorm" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDemandRuntimeText("brainstorm", result)}\n`);
     return workflowExitCode(result);
@@ -2257,7 +2196,6 @@ async function runYoloDemandStageCli(stage, input = {}, options = {}, io = {}) {
       writeLifecycle: options.writeLifecycle,
       source: "yolo-demand:discover",
     });
-    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-demand:discover" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDiscoveryRuntimeText("discover", result)}\n`);
     return workflowExitCode(result);
@@ -2271,7 +2209,6 @@ async function runYoloDemandStageCli(stage, input = {}, options = {}, io = {}) {
       objective: input.objective,
       writeArtifacts: options.writeLifecycle,
     });
-    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-demand:discuss" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDemandRuntimeText("discuss", result)}\n`);
     return workflowExitCode(result);
@@ -2296,7 +2233,6 @@ async function runYoloDemandStageCli(stage, input = {}, options = {}, io = {}) {
         writeLifecycle: options.writeLifecycle,
         source: "yolo-demand:prd",
       });
-    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-demand:prd" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else {
       const text = input.demandPath ? formatDemandRuntimeText("prd", result) : formatDiscoveryRuntimeText("prd", result);
@@ -2388,7 +2324,6 @@ export async function runYoloDiscussCli(argv = [], io = {}) {
     objective: input.objective,
     writeArtifacts: options.writeLifecycle,
   });
-  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-discuss" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDemandRuntimeText("discuss", result)}\n`);
   return workflowExitCode(result);
@@ -2420,7 +2355,6 @@ export async function runYoloAcceptCli(argv = [], io = {}) {
     executeAdapter: options.executeAdapter,
     allowAdapterCommands: options.allowAdapterCommands,
   }, { learnFailures: true });
-  report = withMemoryRefresh(report, { projectRoot, options, source: "yolo-accept" });
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else stdout.write(`${formatAcceptanceReportText(report)}\n`);
   return workflowExitCode(report);
@@ -2445,7 +2379,6 @@ export async function runYoloDiscoverCli(argv = [], io = {}) {
     writeLifecycle: options.writeLifecycle,
     source: "yolo-discover",
   });
-  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-discover" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDiscoveryRuntimeText("discover", result)}\n`);
   return workflowExitCode(result);
@@ -2473,7 +2406,6 @@ export async function runYoloPlanCli(argv = [], io = {}) {
     writeLifecycle: options.writeLifecycle,
     source: "yolo-plan",
   });
-  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-plan" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDiscoveryRuntimeText("plan", result)}\n`);
   return workflowExitCode(result);
@@ -2499,7 +2431,6 @@ export async function runYoloPrdCli(argv = [], io = {}) {
       stateRoot: join(projectRoot, ".yolo"),
       writeArtifacts: options.writeLifecycle,
     });
-    result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-prd" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatDemandRuntimeText("prd", result)}\n`);
     return workflowExitCode(result);
@@ -2514,7 +2445,6 @@ export async function runYoloPrdCli(argv = [], io = {}) {
     writeLifecycle: options.writeLifecycle,
     source: "yolo-prd",
   });
-  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-prd" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatDiscoveryRuntimeText("prd", result)}\n`);
   return workflowExitCode(result);
@@ -2652,7 +2582,6 @@ export async function runYoloReviewCli(argv = [], io = {}) {
       stateRoot,
       writeLifecycle: options.writeLifecycle,
     });
-  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-review" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatPiRuntimeText("review", result)}\n`);
   return result.status === "success" ? 0 : 1;
@@ -2680,7 +2609,6 @@ export async function runYoloShipCli(argv = [], io = {}) {
     stateRoot: join(projectRoot, ".yolo"),
     writeLifecycle: options.writeLifecycle,
   });
-  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-ship" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatPiRuntimeText("ship", result)}\n`);
   return result.status === "success" ? 0 : 1;
@@ -2706,7 +2634,6 @@ export async function runYoloLearnCli(argv = [], io = {}) {
     stateRoot: join(projectRoot, ".yolo"),
     writeLifecycle: options.writeLifecycle,
   });
-  result = withMemoryRefresh(result, { projectRoot, options, source: "yolo-learn" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatPiRuntimeText("learn", result)}\n`);
   return result.status === "success" ? 0 : 1;
@@ -2851,7 +2778,6 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
       stateRoot: join(cliProjectRoot, ".yolo"),
       execute: true,
     });
-    result = withMemoryRefresh(result, { projectRoot: cliProjectRoot, options, source: "yolo-run" });
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatPiRuntimeText("run", result)}\n`);
     return workflowExitCode(result);
@@ -2874,7 +2800,6 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
     model: input.model,
     agentCommand: input.agentCommand,
   });
-  result = withMemoryRefresh(result, { projectRoot: cliProjectRoot, options, source: "yolo-runner" });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatRunnerText(result)}\n`);
 

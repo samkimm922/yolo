@@ -276,10 +276,9 @@ describe("project bootstrap", () => {
       const payload = JSON.parse(result.stdout);
       assert.equal(payload.status, "warning");
       assert.equal(payload.code, "DEMAND_WARNING");
-      assert.equal(payload.memory_refresh.status, "ok");
-      assert.equal(payload.memory_refresh.memory_dir, join(root, ".yolo/memory"));
-      assert.match(readFileSync(join(root, ".yolo/memory/CURRENT_STATUS.md"), "utf8"), /## Project Brain/);
-      assert.match(readFileSync(join(root, ".yolo/memory/CURRENT_STATUS.md"), "utf8"), /Latest demand session: `DEMAND-/);
+      // memory refresh is Stop-hook-only; lifecycle commands no longer auto-refresh
+      assert.equal(payload.memory_refresh, undefined);
+      // initProject wrote the base memory files
       assert.match(readFileSync(join(root, ".yolo/memory/CURRENT_HANDOFF.md"), "utf8"), /## Next Operator Action/);
     } finally {
       rmSync(root, { recursive: true, force: true });

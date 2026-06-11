@@ -21,14 +21,14 @@
 
 | 指标 | 当前值 | 目标 | 状态 |
 |---|---:|---:|---|
-| `runner.ts` 行数 | 16 | <300 | 达标 |
-| `src/runtime/runner-core.ts` 行数 | 599 | <=600 internal core | 达标，继续按需拆分 |
-| 根目录 `.ts` 文件 | 9 | 8 public/compat entry + test config | 达标 |
-| `src/**/*.ts` 文件 | 182 | 按 core/prd/spec/runtime/agents/review/evidence/workflows/memory/lifecycle/discovery/eval/parallel/demand 分层 | 进行中 |
-| 测试文件 | 157 | 持续增加真实项目 fixture/e2e | 进行中 |
-| package exports | 53 | stable/experimental/internal 分层明确 | 已建 manifest，root migration debt 清零，继续冻结 experimental API |
+| `runner.ts` 行数 | 12 | <300 | 达标 |
+| `src/runtime/runner-core.ts` 行数 | 600 | <=600 internal core | 达标，继续按需拆分 |
+| 根目录 `.ts` 文件 | 8 | 8 public/compat entry + test config | 达标 |
+| `src/**/*.ts` 文件 | 191 | 按 core/prd/spec/runtime/agents/review/evidence/workflows/memory/lifecycle/discovery/eval/parallel/demand 分层 | 进行中 |
+| 测试文件 | 156 | 持续增加真实项目 fixture/e2e | 进行中 |
+| package exports | 52 | stable/experimental/internal 分层明确 | 已建 manifest，root migration debt 清零，继续冻结 experimental API |
 | package bins | 6 | CLI public surface 明确 | 已登记 |
-| `docs/**/*.md` 文件 | 31 | 公开 docs / memory mirrors 与当前结构同步 | 进行中 |
+| `docs/**/*.md` 文件 | 28 | 公开 docs / memory mirrors 与当前结构同步 | 进行中 |
 | package public release | `private: true` | public beta 可发布 | P39 UX doctor、P38 experience audit、P37 dogfood pack/document governance、P33 memory center 和 P32 evidence bundle gate 已建，真实包仍阻断中 |
 
 ## 自动执行规则

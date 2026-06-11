@@ -25,8 +25,8 @@ logs/
 tmp/
 *.log
 
-# Local session handoff files.
-DELIVERY_LOG.md
-SESSION.md
-SNAPSHOT.md
+# Local session handoff files (runtime artifacts, not committed).
+docs/memory/SESSION.md
+docs/memory/SNAPSHOT.md
+docs/memory/DELIVERY_LOG.md
 .claude/worktrees/

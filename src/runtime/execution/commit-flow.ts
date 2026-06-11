@@ -1,11 +1,11 @@
 import { execFileSync as defaultExecFileSync } from "node:child_process";
 import { appendFileSync as defaultAppendFileSync } from "node:fs";
 
-export const DEFAULT_DOC_UPDATE_FILES = ["SESSION.md", "SNAPSHOT.md", "DELIVERY_LOG.md"];
+export const DEFAULT_DOC_UPDATE_FILES = ["docs/memory/SESSION.md", "docs/memory/SNAPSHOT.md", "docs/memory/DELIVERY_LOG.md"];
 
 export function isDocUpdateHookFailure(error) {
   const stderr = String(error?.stderr || "");
-  return stderr.includes("SNAPSHOT.md 未暂存") || stderr.includes("doc-update-check");
+  return stderr.includes("SNAPSHOT.md") || stderr.includes("doc-update-check");
 }
 
 export function buildTaskCommitMessage({ task = {}, mode = "fix", businessFiles = [] } = {}) {

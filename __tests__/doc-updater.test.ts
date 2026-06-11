@@ -19,9 +19,9 @@ describe("doc updater", () => {
         execFileSync: () => "",
       });
 
-      const session = join(rootDir, "SESSION.md");
-      const snapshot = join(rootDir, "SNAPSHOT.md");
-      const delivery = join(rootDir, "DELIVERY_LOG.md");
+      const session = join(rootDir, "docs/memory/SESSION.md");
+      const snapshot = join(rootDir, "docs/memory/SNAPSHOT.md");
+      const delivery = join(rootDir, "docs/memory/DELIVERY_LOG.md");
 
       assert.equal(existsSync(session), true);
       assert.equal(existsSync(snapshot), true);

@@ -7,13 +7,13 @@
 
 - package: yolo 0.1.0
 - package private: true
-- package exports: 53
+- package exports: 52
 - package bins: 6
 - root .js files: 0 (none)
-- root .ts files: 9
-- src .ts files: 181
+- root .ts files: 8
+- src .ts files: 191
 - test files: 156
-- docs markdown files: 31
+- docs markdown files: 28
 
 ## Active Ledgers
 

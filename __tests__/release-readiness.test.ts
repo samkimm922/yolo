@@ -112,8 +112,7 @@ describe("release readiness", () => {
     const docs = [
       "docs/api-reference.md",
       "docs/public-sdk-contract.md",
-      "ROADMAP.md",
-      "SYSTEM_STATE.md",
+      "docs/memory/CURRENT_STATUS.md",
     ].map((relativePath) => readFileSync(resolve(YOLO_DIR, relativePath), "utf8")).join("\n");
 
     assert.match(docs, /private: true/);
