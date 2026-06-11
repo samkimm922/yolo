@@ -115,6 +115,36 @@ describe("prd preflight CLI warning policy", () => {
     }
   });
 
+  test("check-all blocks a baseline-named blocked PRD instead of skipping by filename", () => {
+    const root = tempProject();
+    const previousCwd = process.cwd();
+    let stdout = "";
+    let stderr = "";
+    try {
+      const prdDir = join(root, "data/prd/current");
+      const prdPath = join(prdDir, "2026-baseline-blocked-prd.json");
+      writeJson(prdPath, prdWithWarning());
+
+      process.chdir(root);
+      const exitCode = runPrdPreflightCli(["--check-all", "--dir", prdDir, "--json"], {
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      const payload = JSON.parse(stdout);
+
+      assert.equal(stderr, "");
+      assert.equal(exitCode, 1);
+      assert.equal(payload.status, "blocked");
+      assert.equal(payload.file_count, 1);
+      assert.equal(payload.blocked_count, 1);
+      assert.match(payload.results[0].file, /baseline-blocked-prd\.json$/);
+      assert.ok(payload.results[0].blocked_reasons.some((reason) => reason.code === "MANUAL_FAIL_CONDITION"));
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("default verify blocks warning PRDs instead of returning success", () => {
     const root = tempProject();
     try {

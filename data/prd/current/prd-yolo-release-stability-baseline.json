@@ -23,6 +23,7 @@
     "source": "trello-dogfood-audit",
     "approval": {
       "approved": true,
+      "effective_for_prd": true,
       "approved_by": "user",
       "approved_at": "2026-06-06T16:35:51Z",
       "reason": "The user requested a publishable YOLO product PRD based on YOLO failures exposed by the Trello dogfood run, not more Trello application work."

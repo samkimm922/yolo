@@ -301,14 +301,19 @@ function collectPrdFiles(dir, files) {
       continue;
     }
     if (!file.endsWith(".json")) continue;
-    if (file.includes("baseline") || file.includes("learn") || file.includes("settings") || file === "package.json") continue;
     try {
       const data = JSON.parse(readFileSync(path, "utf8"));
-      if (Array.isArray(data?.tasks)) files.push(path);
+      if (isPrdDocument(data)) files.push(path);
     } catch {
       // Non-JSON or transient files are not PRD migration candidates.
     }
   }
+}
+
+function isPrdDocument(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return false;
+  if (typeof data.id !== "string" || !Array.isArray(data.tasks)) return false;
+  return data.tasks.every((task) => task && typeof task === "object" && typeof task.id === "string");
 }
 
 function defaultPrdDirs() {
