@@ -203,7 +203,7 @@ export function runDemandDiscussRuntime(input = {}, options = {}) {
         ledger: "state",
       });
     } catch (_) {
-      // Ledger write is best-effort; gate will catch missing evidence
+      // Ledger write is nonblocking; gate will catch missing evidence
     }
   }
   // Recompute readiness with stateDir so evidence_grounded check sees the ledger
