@@ -1,7 +1,8 @@
 import { inspectPrdContractDoctorGate } from "./prd-contract-doctor-gate.js";
 import { inspectSpecGovernanceGate } from "./spec-governance-gate.js";
+import { inspectProviderCapabilityGate } from "./provider-capability-gate.js";
 
-export function inspectPreExecutionGates({ prd, prdPath, stateDir, projectRoot }) {
+export function inspectPreExecutionGates({ prd, prdPath, stateDir, projectRoot, config }) {
   const contract = inspectPrdContractDoctorGate({
     prd,
     prdPath,
@@ -18,6 +19,7 @@ export function inspectPreExecutionGates({ prd, prdPath, stateDir, projectRoot }
       message: contract.message,
       contract,
       spec: null,
+      capability: null,
       messages: contract.code === "PLANNING_ONLY_PRD" ? [contract.message] : contract.messages,
     };
   }
@@ -33,7 +35,24 @@ export function inspectPreExecutionGates({ prd, prdPath, stateDir, projectRoot }
       message: warning ? "PRD spec governance warning blocked execution" : spec.message,
       contract,
       spec,
+      capability: null,
       messages: [`[spec-governance] ${warning ? "warning-blocked" : "blocked"}\n${spec.summary}`],
+    };
+  }
+
+  const capability = inspectProviderCapabilityGate({ prd, config });
+  if (capability.status !== "pass") {
+    const warning = capability.status === "warning";
+    return {
+      status: "blocked",
+      stage: "capability",
+      code: warning ? "PROVIDER_CAPABILITY_WARNING_BLOCKED" : "PROVIDER_CAPABILITY_BLOCKED",
+      exit_code: warning ? 2 : 1,
+      message: capability.message,
+      contract,
+      spec,
+      capability,
+      messages: [`[provider-capability] ${warning ? "warning-blocked" : "blocked"}\n${capability.message}`],
     };
   }
 
@@ -45,6 +64,7 @@ export function inspectPreExecutionGates({ prd, prdPath, stateDir, projectRoot }
     message: "Pre-execution gates passed",
     contract,
     spec,
+    capability,
     messages: [],
   };
 }
