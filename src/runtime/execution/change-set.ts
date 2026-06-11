@@ -101,6 +101,7 @@ export function buildCommitChangeContext({
   const { targetFiles: auditTargets, outOfScope } = scopedOutOfScopeFiles(code, task, {
     isFileAllowedByScope,
   });
+  const worktreeSkipped = worktreeFiles?.outOfScopeSkipped || [];
   return {
     allChanged,
     code,
@@ -108,6 +109,6 @@ export function buildCommitChangeContext({
     metadataFiles,
     hasRealCode,
     auditTargets,
-    outOfScope,
+    outOfScope: [...outOfScope, ...worktreeSkipped],
   };
 }

@@ -80,7 +80,7 @@ export function inspectAgentBridgeDryRunDoctor({ plan = {}, dryRunResult = {} } 
   const commandSet = new Set(expected.map((item) => item.command).filter(Boolean));
   const roles = new Set(expected.map((item) => item.role).filter(Boolean));
 
-  const requiredCommands = ["yolo", ...listYoloCommandNames().map((command) => `yolo-${command}`)];
+  const requiredCommands = listYoloCommandNames().map((command) => `yolo-${command}`);
   const checks = [
     check(
       "AGENT_BRIDGE_DRY_RUN_DOCTOR_NO_WRITES",
@@ -102,8 +102,8 @@ export function inspectAgentBridgeDryRunDoctor({ plan = {}, dryRunResult = {} } 
     ),
     check(
       "AGENT_BRIDGE_DRY_RUN_DOCTOR_WORKFLOW_SKILLS",
-      expected.some((item) => item.role === "workflow_skill" || String(item.relative_path || "").includes("yolo.pi")),
-      "dry-run plan must include workflow skill descriptors",
+      expected.some((item) => item.role === "native_yolo_skill" || String(item.relative_path || "").includes("skills/yolo")),
+      "dry-run plan must include native YOLO skill descriptors",
     ),
     check(
       "AGENT_BRIDGE_DRY_RUN_DOCTOR_PLANNED_PATHS",
