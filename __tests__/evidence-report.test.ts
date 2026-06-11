@@ -176,6 +176,9 @@ describe("evidence run report", () => {
       assert.equal(existsSync(result.markdown_path), true);
       assert.equal(existsSync(result.final_answer_json_path), true);
       assert.equal(existsSync(result.final_answer_markdown_path), true);
+      assert.equal(result.artifact_integrity.status, "pass");
+      assert.equal(result.artifact_integrity.checked_count, 4);
+      assert.equal(result.artifact_integrity.artifacts.every((artifact) => artifact.exists && artifact.sha256), true);
       const report = JSON.parse(readFileSync(result.json_path, "utf8"));
       assert.equal(report.status, "success");
       assert.equal(report.summary.run_success_rate, 100);
@@ -186,6 +189,8 @@ describe("evidence run report", () => {
       assert.match(readFileSync(result.final_answer_markdown_path, "utf8"), /YOLO Final Answer RUN-2/);
       assert.match(readFileSync(join(stateDir, "events.jsonl"), "utf8"), /"event":"run.report"/);
       assert.match(readFileSync(join(stateDir, "events.jsonl"), "utf8"), /"final_answer_markdown"/);
+      assert.match(readFileSync(join(stateDir, "events.jsonl"), "utf8"), /"artifact_integrity"/);
+      assert.match(readFileSync(join(stateDir, "events.jsonl"), "utf8"), /"sha256"/);
     } finally {
       rmSync(stateDir, { recursive: true, force: true });
     }

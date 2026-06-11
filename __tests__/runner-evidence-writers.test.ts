@@ -64,6 +64,11 @@ describe("runner evidence writers", () => {
             type: "code_contains",
             severity: "FAIL",
             params: { file: "src/a.ts", text: "fixed" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           }],
         },
         prdPath: join(yoloRoot, "data/prd.json"),

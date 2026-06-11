@@ -79,6 +79,11 @@ function writeDryRunArtifactPrd(prdPath) {
         type: "file_exists",
         severity: "FAIL",
         params: { file: "artifacts/state-root-smoke.md" },
+      }, {
+        id: "POST-TYPECHECK",
+        type: "no_new_type_errors",
+        severity: "FAIL",
+        params: { command: "npm run typecheck" },
       }],
     }],
   }, null, 2)}\n`, "utf8");

@@ -12,6 +12,7 @@ import {
   uiTasks,
 } from "../gates/readiness-policy.js";
 import { runAdapterEvidenceCollector } from "../adapters/evidence-collector.js";
+import { verifyArtifactIntegrity } from "../evidence/artifact-integrity.js";
 
 export const ACCEPTANCE_REPORT_SCHEMA_VERSION = "1.0";
 export const ACCEPTANCE_REPORT_SCHEMA = "yolo.acceptance.report.v1";
@@ -353,6 +354,37 @@ function normalizePathForCompare(value) {
   return value ? resolve(String(value)) : "";
 }
 
+function explicitOption(input = Object(), options = Object(), ...keys) {
+  return keys.some((key) => input[key] !== undefined || options[key] !== undefined);
+}
+
+function expectedArtifactDigests(input = Object(), options = Object()) {
+  return input.artifactDigests ||
+    input.artifact_digests ||
+    input.expectedArtifactDigests ||
+    input.expected_artifact_digests ||
+    options.artifactDigests ||
+    options.artifact_digests ||
+    options.expectedArtifactDigests ||
+    options.expected_artifact_digests ||
+    {};
+}
+
+function pushArtifactIntegrityIssues(issues, integrity) {
+  for (const artifact of integrity.missing || []) {
+    pushIssue(issues, "P1", "ACCEPTANCE_ARTIFACT_MISSING", "Acceptance evidence artifact path does not exist on disk.", {
+      artifact_path: artifact.absolute_path,
+    });
+  }
+  for (const artifact of integrity.digest_mismatches || []) {
+    pushIssue(issues, "P1", "ACCEPTANCE_ARTIFACT_DIGEST_MISMATCH", "Acceptance evidence artifact digest does not match the expected sha256.", {
+      artifact_path: artifact.absolute_path,
+      expected_sha256: artifact.expected_sha256,
+      actual_sha256: artifact.sha256,
+    });
+  }
+}
+
 function evidenceLineageIssues({ prdPath, runReport, reviewReport }, issues) {
   const expectedPrd = normalizePathForCompare(prdPath);
   if (!expectedPrd) return;
@@ -414,6 +446,14 @@ export function buildAcceptanceReport(input = Object(), options = Object()) {
   const reviewReportPath = input.reviewReportPath || input.review_report_path || options.reviewReportPath || options.review_report_path || join(stateRoot, "lifecycle", "review-report.json");
   const uiEvidencePath = input.uiEvidencePath || input.ui_evidence_path || options.uiEvidencePath || options.ui_evidence_path || "";
   const adapterEvidencePath = input.adapterEvidencePath || input.adapter_evidence_path || options.adapterEvidencePath || options.adapter_evidence_path || defaultAdapterEvidencePath({ stateRoot, resolver });
+  const runReportFromInput = Boolean(input.runReport || input.run_report);
+  const reviewReportFromInput = Boolean(input.reviewReport || input.review_report);
+  const uiEvidenceFromInput = Boolean(input.uiEvidence || input.ui_evidence);
+  const adapterEvidenceFromInput = Boolean(input.adapterEvidence || input.adapter_evidence);
+  const runReportPathExplicit = explicitOption(input, options, "runReportPath", "run_report_path");
+  const reviewReportPathExplicit = explicitOption(input, options, "reviewReportPath", "review_report_path");
+  const uiEvidencePathExplicit = explicitOption(input, options, "uiEvidencePath", "ui_evidence_path");
+  const adapterEvidencePathExplicit = explicitOption(input, options, "adapterEvidencePath", "adapter_evidence_path");
   const runReport = input.runReport || input.run_report || readJsonMaybe(runReportPath);
   const reviewReport = input.reviewReport || input.review_report || readJsonMaybe(reviewReportPath);
   const releaseMode = RELEASE_ACCEPTANCE_MODES.has(mode);
@@ -439,6 +479,18 @@ export function buildAcceptanceReport(input = Object(), options = Object()) {
     uiEvidence = adapterEvidence.collected_evidence.find((record) => record?.ui_evidence)?.ui_evidence || null;
   }
   const issues = [];
+  const artifactPaths = [
+    prdPath ? resolve(prdPath) : "",
+    runReport && (!runReportFromInput || runReportPathExplicit) ? resolve(runReportPath) : "",
+    reviewReport && (!reviewReportFromInput || reviewReportPathExplicit) ? resolve(reviewReportPath) : "",
+    uiEvidence && uiEvidencePath && (!uiEvidenceFromInput || uiEvidencePathExplicit) ? resolve(uiEvidencePath) : "",
+    adapterEvidence?.artifact_path || (adapterEvidence && adapterEvidencePath && (!adapterEvidenceFromInput || adapterEvidencePathExplicit) ? resolve(adapterEvidencePath) : ""),
+  ].filter(Boolean);
+  const artifactIntegrity = verifyArtifactIntegrity(artifactPaths, {
+    rootDir: projectRoot,
+    expectedSha256ByPath: expectedArtifactDigests(input, options),
+  });
+  pushArtifactIntegrityIssues(issues, artifactIntegrity);
   if (!prd) {
     pushIssue(issues, "P1", "PRD_MISSING", "Acceptance requires a PRD.");
   } else {
@@ -505,13 +557,8 @@ export function buildAcceptanceReport(input = Object(), options = Object()) {
     resolver,
     adapter_evidence: adapterEvidence,
     ui,
-    artifacts: [
-      prdPath ? resolve(prdPath) : null,
-      runReportPath && runReport ? resolve(runReportPath) : null,
-      reviewReportPath && reviewReport ? resolve(reviewReportPath) : null,
-      uiEvidencePath && uiEvidence ? resolve(uiEvidencePath) : null,
-      adapterEvidence?.artifact_path || (adapterEvidencePath && adapterEvidence ? resolve(adapterEvidencePath) : null),
-    ].filter(Boolean),
+    artifact_integrity: artifactIntegrity,
+    artifacts: artifactIntegrity.artifacts.filter((artifact) => artifact.exists).map((artifact) => artifact.absolute_path),
     next_actions: status === "blocked"
       ? ["Fix P0/P1 acceptance blockers, then rerun /yolo-accept.", "Do not ship until acceptance report is pass or approved with documented human review."]
       : status === "warning"

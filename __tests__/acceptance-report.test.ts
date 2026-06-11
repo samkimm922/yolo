@@ -194,6 +194,33 @@ describe("acceptance report", () => {
     }
   });
 
+  test("negative: acceptance blocks success-shaped run reports whose artifact path is missing", () => {
+    const root = tempProject();
+    try {
+      const report = buildAcceptanceReport({
+        prd: prd({
+          scope: { targets: [{ file: "src/services/inventory.ts" }] },
+          post_conditions: [{
+            id: "POST-SERVICE",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "src/services/inventory.ts" },
+          }],
+        }),
+        runReport: runReport(),
+        runReportPath: join(root, ".yolo", "lifecycle", "missing-run-report.json"),
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+      });
+
+      assert.equal(report.status, "blocked");
+      assert.ok(report.issues.some((issue) => issue.code === "ACCEPTANCE_ARTIFACT_MISSING"));
+      assert.equal(report.artifact_integrity.status, "fail");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("blocks release acceptance warnings without an approved artifact and returns nonzero", () => {
     const root = tempProject();
     const stateRoot = join(root, ".yolo");

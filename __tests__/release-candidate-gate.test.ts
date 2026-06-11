@@ -1,5 +1,9 @@
-import { describe, test } from "node:test";
+import { after, describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import {
   RELEASE_CANDIDATE_REQUIRED_REPORTS,
   runReleaseCandidateGate,
@@ -9,8 +13,26 @@ import { listDogfoodMatrixScenarios } from "../src/release/dogfood-matrix.js";
 const NOW = "2026-06-07T12:00:00.000Z";
 const STARTED_AT = "2026-06-07T10:00:00.000Z";
 const FINISHED_AT = "2026-06-07T10:01:00.000Z";
+const TEMP_DIRS = [];
+
+after(() => {
+  for (const dir of TEMP_DIRS) rmSync(dir, { recursive: true, force: true });
+});
+
+function writeArtifact(name, body = "") {
+  const dir = mkdtempSync(join(tmpdir(), "yolo-rc-artifact-"));
+  TEMP_DIRS.push(dir);
+  const path = join(dir, `${name}.json`);
+  const content = body || JSON.stringify({ name, generated_at: FINISHED_AT }, null, 2);
+  writeFileSync(path, content, "utf8");
+  return {
+    artifact_path: path,
+    artifact_sha256: createHash("sha256").update(content).digest("hex"),
+  };
+}
 
 function report(name, overrides = {}) {
+  const artifact = writeArtifact(name);
   return {
     status: "pass",
     provenance: { source: "ci", id: `${name}-run-1` },
@@ -18,6 +40,7 @@ function report(name, overrides = {}) {
     warnings: [],
     approvals: [],
     executed_at: FINISHED_AT,
+    ...artifact,
     ...overrides,
   };
 }
@@ -258,6 +281,32 @@ describe("release candidate gate aggregator", () => {
     assert.ok(result.issue_codes.includes("RC_GATE_REPORT_EXECUTION_EVIDENCE_MISSING"));
     assert.ok(result.issue_codes.includes("RC_GATE_REPORT_DRY_RUN"));
     assert.ok(result.issue_codes.includes("RC_GATE_DOGFOOD_MATRIX_INCOMPLETE"));
+  });
+
+  test("negative: fake pass reports are blocked when artifacts are missing or digest-mismatched", () => {
+    const missingDir = mkdtempSync(join(tmpdir(), "yolo-rc-missing-"));
+    TEMP_DIRS.push(missingDir);
+    const missingArtifact = join(missingDir, "missing.json");
+    const result = runReleaseCandidateGate({
+      mode: "rc",
+      now: NOW,
+      reports: passingReports({
+        verify: report("verify", {
+          provenance: { source: "verify", id: "verify-run-missing-artifact" },
+          artifact_path: missingArtifact,
+        }),
+        prdPreflight: report("prdPreflight", {
+          provenance: { source: "prd-preflight", id: "prd-preflight-run-bad-digest" },
+          artifact_sha256: "0".repeat(64),
+        }),
+      }),
+    });
+
+    assert.equal(result.status, "block");
+    assert.ok(result.issue_codes.includes("RC_GATE_ARTIFACT_MISSING"));
+    assert.ok(result.issue_codes.includes("RC_GATE_ARTIFACT_DIGEST_MISMATCH"));
+    assert.equal(result.reports.verify.artifact_integrity.status, "fail");
+    assert.equal(result.reports.prdPreflight.artifact_integrity.status, "fail");
   });
 
   test("blocks unknown provenance", () => {

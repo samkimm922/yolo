@@ -6,6 +6,7 @@ import {
   validateLedgerChain,
   writeJsonArtifact,
 } from "./ledger.js";
+import { verifyArtifactIntegrity } from "./artifact-integrity.js";
 import { normalizeReviewFinding } from "../../review/findings.js";
 
 function readJsonl(filePath) {
@@ -686,6 +687,12 @@ export function writeRunReport(options = Object()) {
   });
   writeJsonArtifact(paths.final_answer_json_path, finalAnswer);
   writeFileSync(paths.final_answer_markdown_path, formatRunFinalAnswerMarkdown(finalAnswer), "utf8");
+  const artifactIntegrity = verifyArtifactIntegrity([
+    paths.json_path,
+    paths.markdown_path,
+    paths.final_answer_json_path,
+    paths.final_answer_markdown_path,
+  ], { rootDir: options.stateDir });
 
   appendStateEvent(options.stateDir, "run.report", {
     run_id: report.run_id,
@@ -695,11 +702,13 @@ export function writeRunReport(options = Object()) {
     report_markdown: relative(resolve(options.stateDir), paths.markdown_path),
     final_answer_json: relative(resolve(options.stateDir), paths.final_answer_json_path),
     final_answer_markdown: relative(resolve(options.stateDir), paths.final_answer_markdown_path),
+    artifact_integrity: artifactIntegrity,
   }, { source: "run-report" });
 
   return {
     report,
     final_answer: finalAnswer,
+    artifact_integrity: artifactIntegrity,
     ...paths,
   };
 }

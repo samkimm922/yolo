@@ -351,6 +351,11 @@ assert.equal(piPlan.artifacts.outputDir.startsWith(join(projectRoot, ".yolo")), 
 	      type: "file_exists",
 	      severity: "FAIL",
 	      params: { file: "artifacts/pack-runner-smoke.md" }
+	    }, {
+	      id: "POST-TYPECHECK",
+	      type: "no_new_type_errors",
+	      severity: "FAIL",
+	      params: { command: "npm run typecheck" }
 	    }]
 	  }]
 	}, null, 2) + "\\n", "utf8");

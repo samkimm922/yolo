@@ -46,7 +46,10 @@ function strictPrd(overrides = {}) {
       requirement_ids: ["REQ-1"],
       design_ids: ["DES-1"],
       scope: { targets: [{ file: "src/a.js" }] },
-      post_conditions: [{ id: "POST-FILE", type: "file_exists", severity: "FAIL", params: { file: "src/a.js" } }],
+      post_conditions: [
+        { id: "POST-FILE", type: "file_exists", severity: "FAIL", params: { file: "src/a.js" } },
+        { id: "POST-TYPECHECK", type: "no_new_type_errors", severity: "FAIL", params: { command: "npm run typecheck" } },
+      ],
     }],
     ...overrides,
   };

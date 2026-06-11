@@ -251,6 +251,12 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now, compiledRaw: injectedCo
             severity: "FAIL",
             params: { file: "src/index.js" },
           },
+          {
+            id: "POST-DOGFOOD-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
         ],
         evidence_plan: ["PRD preflight", "yolo check", "review report", "acceptance report", "controlled parallel merge gate"],
       },

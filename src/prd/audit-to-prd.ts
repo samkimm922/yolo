@@ -104,6 +104,26 @@ function targetCoverageFiles(conditions = []) {
   return new Set(files.filter(Boolean));
 }
 
+const BEHAVIOR_VERIFICATION_CONDITION_TYPES = new Set([
+  "build_pass",
+  "no_new_lint_errors",
+  "no_new_type_errors",
+  "test_file_passes",
+  "tests_pass",
+]);
+
+function conditionVerifyCommand(condition) {
+  const params = condition?.params || {};
+  return String(condition?.verify_command || condition?.verifyCommand || params.verify_command || params.verifyCommand || "").trim();
+}
+
+function hasBehaviorVerificationCondition(conditions = []) {
+  return conditions.some((condition) =>
+    condition?.severity === "FAIL" &&
+    (BEHAVIOR_VERIFICATION_CONDITION_TYPES.has(condition.type) || conditionVerifyCommand(condition))
+  );
+}
+
 function withTargetCoverageConditions(conditions, targetFiles, taskId, kind) {
   const normalizedTargets = targetFiles.map(normalizeTargetPath).filter(Boolean);
   const covered = targetCoverageFiles(conditions);
@@ -122,6 +142,20 @@ function withTargetCoverageConditions(conditions, targetFiles, taskId, kind) {
   }
 
   return next;
+}
+
+function withBehaviorVerificationConditions(conditions, taskId) {
+  if (hasBehaviorVerificationCondition(conditions)) return conditions;
+  return [
+    ...conditions,
+    {
+      id: `POST-${taskId}-TYPECHECK`,
+      type: "no_new_type_errors",
+      severity: "FAIL",
+      params: { command: "npm run typecheck" },
+      message: "项目 typecheck 必须通过。",
+    },
+  ];
 }
 
 function demandQualityReport(status = "pass") {
@@ -278,11 +312,14 @@ function buildTask(kind, findingsList, index) {
   const existingPre = findingsList.find((finding) => Array.isArray(finding.pre_conditions) && finding.pre_conditions.length > 0)?.pre_conditions;
   const existingPost = findingsList.find((finding) => Array.isArray(finding.post_conditions) && finding.post_conditions.length > 0)?.post_conditions;
   const preConditions = normalizeConditionList(existingPre || [], `PRE-${id}`);
-  const postConditions = withTargetCoverageConditions(
-    normalizeConditionList(existingPost || [], `POST-${id}`),
-    targetFiles,
+  const postConditions = withBehaviorVerificationConditions(
+    withTargetCoverageConditions(
+      normalizeConditionList(existingPost || [], `POST-${id}`),
+      targetFiles,
+      id,
+      kind,
+    ),
     id,
-    kind,
   );
 
   return {

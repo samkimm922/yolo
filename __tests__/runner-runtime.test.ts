@@ -104,6 +104,11 @@ function writeRunnablePrd(prdPath) {
         type: "target_file_modified",
         severity: "FAIL",
         params: { file: "README.md" },
+      }, {
+        id: "POST-TYPECHECK",
+        type: "no_new_type_errors",
+        severity: "FAIL",
+        params: { command: "npm run typecheck" },
       }],
     }],
   });

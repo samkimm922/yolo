@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DOGFOOD_MATRIX_SCENARIO_IDS, listDogfoodMatrixScenarios } from "./dogfood-matrix.js";
 import { runPublicBetaHardeningDrill } from "./hardening-drill.js";
+import { verifyArtifactIntegrity } from "../runtime/evidence/artifact-integrity.js";
 
 export const CONTROLLED_BETA_RELEASE_DECISION_SCHEMA_VERSION = "1.0";
 
@@ -134,6 +135,38 @@ function provenanceId(report) {
     return String(provenance.id || provenance.run_id || provenance.runId || provenance.artifact_id || "").trim();
   }
   return String(report?.run_id || report?.runId || report?.artifact_id || "").trim();
+}
+
+function reportArtifactPaths(report = Object()) {
+  const provenance = report.provenance;
+  return [
+    report.artifact_path,
+    report.artifactPath,
+    report.report_path,
+    report.reportPath,
+    report.evidence_file,
+    ...(Array.isArray(report.artifacts) ? report.artifacts : []),
+    ...(isObject(provenance) ? [
+      provenance.artifact_path,
+      provenance.artifactPath,
+      provenance.report_path,
+      provenance.reportPath,
+      provenance.evidence_file,
+    ] : []),
+  ].map((item) => String(item || "").trim()).filter(Boolean);
+}
+
+function reportExpectedDigests(report = Object()) {
+  const expected = {
+    ...(isObject(report.artifact_digests) ? report.artifact_digests : {}),
+    ...(isObject(report.artifactDigests) ? report.artifactDigests : {}),
+    ...(isObject(report.expected_artifact_digests) ? report.expected_artifact_digests : {}),
+    ...(isObject(report.expectedArtifactDigests) ? report.expectedArtifactDigests : {}),
+  };
+  const path = report.artifact_path || report.artifactPath || report.report_path || report.reportPath;
+  const digest = report.artifact_sha256 || report.artifactSha256 || report.sha256;
+  if (path && digest) expected[path] = digest;
+  return expected;
 }
 
 function provenanceKnown(report) {
@@ -385,6 +418,49 @@ function releaseCandidateEvidenceIssues(reportName, report) {
     ));
   }
   return evidenceIssues;
+}
+
+function releaseCandidateArtifactIssues(reportName, report, options = Object()) {
+  const paths = reportArtifactPaths(report);
+  if (paths.length === 0) {
+    return {
+      integrity: {
+        status: "fail",
+        checked_count: 0,
+        artifacts: [],
+        missing: [],
+        digest_mismatches: [],
+      },
+      issues: [issue(
+        "RC_GATE_ARTIFACT_MISSING",
+        reportName,
+        "release candidate gate reports must include a real artifact path for existence and digest verification",
+      )],
+    };
+  }
+  const integrity = verifyArtifactIntegrity(paths, {
+    rootDir: options.artifactRoot || options.artifact_root || options.cwd || process.cwd(),
+    expectedSha256ByPath: reportExpectedDigests(report),
+  });
+  const issues = [
+    ...integrity.missing.map((artifact) => issue(
+      "RC_GATE_ARTIFACT_MISSING",
+      reportName,
+      "release candidate gate report artifact path does not exist on disk",
+      { artifact_path: artifact.absolute_path },
+    )),
+    ...integrity.digest_mismatches.map((artifact) => issue(
+      "RC_GATE_ARTIFACT_DIGEST_MISMATCH",
+      reportName,
+      "release candidate gate report artifact digest does not match the expected sha256",
+      {
+        artifact_path: artifact.absolute_path,
+        expected_sha256: artifact.expected_sha256,
+        actual_sha256: artifact.sha256,
+      },
+    )),
+  ];
+  return { integrity, issues };
 }
 
 function validateApprovals(reportName, approvals, now) {
@@ -742,6 +818,8 @@ export function runReleaseCandidateGate(options = Object()) {
       ));
     }
     blockers.push(...releaseCandidateEvidenceIssues(reportName, report));
+    const artifactIntegrity = releaseCandidateArtifactIssues(reportName, report, options);
+    blockers.push(...artifactIntegrity.issues);
 
     const reportBlockers = Array.isArray(report.blockers) ? report.blockers : [];
     const reportWarnings = Array.isArray(report.warnings) ? report.warnings : [];
@@ -764,6 +842,7 @@ export function runReleaseCandidateGate(options = Object()) {
       blocker_count: reportBlockers.length,
       warning_count: normalizedWarnings.length,
       approval_count: reportApprovals.length,
+      artifact_integrity: artifactIntegrity.integrity,
     };
     warnings.push(...normalizedWarnings);
     blockers.push(...validateApprovals(reportName, reportApprovals, now));

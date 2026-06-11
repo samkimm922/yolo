@@ -76,11 +76,17 @@ function taskEvidenceRefs(task = Object()) {
 }
 
 export function buildTraceabilityMatrix(prd = Object()) {
+  const requirements = normalizeRefs(prd.requirements, prd.spec?.requirements);
+  const designs = normalizeRefs(prd.designs, prd.design, prd.spec?.designs, prd.spec?.design);
+  const knownRequirements = new Set(requirements);
+  const knownDesigns = new Set(designs);
   const tasks = (prd.tasks || []).map((task) => {
     const requirementIds = taskRequirementIds(task);
     const designIds = taskDesignIds(task);
     const evidenceFiles = taskEvidenceRefs(task);
     const isTerminal = TERMINAL_STATUSES.has(task.status);
+    const danglingRequirements = requirementIds.filter((id) => !knownRequirements.has(id));
+    const danglingDesign = designIds.filter((id) => !knownDesigns.has(id));
     return {
       task_id: task.id || null,
       status: task.status || null,
@@ -92,6 +98,8 @@ export function buildTraceabilityMatrix(prd = Object()) {
         requirements: requirementIds.length === 0,
         design: designIds.length === 0,
         evidence: isTerminal && evidenceFiles.length === 0,
+        dangling_requirements: danglingRequirements,
+        dangling_design: danglingDesign,
       },
     };
   });
@@ -104,13 +112,19 @@ export function buildTraceabilityMatrix(prd = Object()) {
     missing_requirements: tasks.filter((task) => task.missing.requirements).map((task) => task.task_id),
     missing_design: tasks.filter((task) => task.missing.design).map((task) => task.task_id),
     missing_evidence: tasks.filter((task) => task.missing.evidence).map((task) => task.task_id),
+    dangling_requirements: tasks
+      .filter((task) => task.missing.dangling_requirements.length > 0)
+      .map((task) => ({ task_id: task.task_id, requirement_ids: task.missing.dangling_requirements })),
+    dangling_design: tasks
+      .filter((task) => task.missing.dangling_design.length > 0)
+      .map((task) => ({ task_id: task.task_id, design_ids: task.missing.dangling_design })),
   };
 
   return {
     prd_id: prd.id || null,
     generated_at: prd.generated_at || null,
-    requirements: normalizeRefs(prd.requirements, prd.spec?.requirements),
-    designs: normalizeRefs(prd.designs, prd.design, prd.spec?.designs, prd.spec?.design),
+    requirements,
+    designs,
     tasks,
     summary,
   };
@@ -140,6 +154,15 @@ export function inspectSpecGovernance(prd = Object(), options = Object()) {
         message: "task 缺少 requirement trace",
       });
     }
+    if (task.missing.dangling_requirements.length > 0) {
+      const target = policy.requireRequirements ? blockers : warnings;
+      target.push({
+        code: "DANGLING_REQUIREMENT_TRACE",
+        task_id: task.task_id,
+        requirement_ids: task.missing.dangling_requirements,
+        message: `task requirement trace references missing requirement ids: ${task.missing.dangling_requirements.join(", ")}`,
+      });
+    }
 
     if (policy.requireDesign && task.missing.design) {
       blockers.push({
@@ -152,6 +175,15 @@ export function inspectSpecGovernance(prd = Object(), options = Object()) {
         code: "MISSING_DESIGN_TRACE",
         task_id: task.task_id,
         message: "task 缺少 design trace",
+      });
+    }
+    if (task.missing.dangling_design.length > 0) {
+      const target = policy.requireDesign ? blockers : warnings;
+      target.push({
+        code: "DANGLING_DESIGN_TRACE",
+        task_id: task.task_id,
+        design_ids: task.missing.dangling_design,
+        message: `task design trace references missing design ids: ${task.missing.dangling_design.join(", ")}`,
       });
     }
 

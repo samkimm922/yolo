@@ -86,12 +86,20 @@ function strictPrd(taskOverrides = {}, prdOverrides = {}) {
       design_ids: ["DES-1"],
       scope: { targets: [{ file: "src/a.js" }] },
       acceptance_criteria: ["Small module target is modified."],
-      post_conditions: [{
-        id: "POST-TARGET",
-        type: "target_file_modified",
-        severity: "FAIL",
-        params: { file: "src/a.js" },
-      }],
+      post_conditions: [
+        {
+          id: "POST-TARGET",
+          type: "target_file_modified",
+          severity: "FAIL",
+          params: { file: "src/a.js" },
+        },
+        {
+          id: "POST-TYPECHECK",
+          type: "no_new_type_errors",
+          severity: "FAIL",
+          params: { command: "npm run typecheck" },
+        },
+      ],
       ...taskOverrides,
     }],
     ...prdOverrides,

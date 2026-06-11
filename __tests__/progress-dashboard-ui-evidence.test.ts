@@ -100,7 +100,10 @@ function progressUiPrd() {
       requirement_ids: ["REQ-UI-1"], design_ids: ["DES-UI-1"],
       scope: { targets: [{ file: "src/runtime/progress/server.ts" }], allow_new_files: true },
       acceptance_criteria: ["Progress dashboard exposes active and idle state UI evidence.", "Task and gate data are escaped before entering HTML."],
-      post_conditions: [{ id: "POST-SERVER", type: "target_file_modified", severity: "FAIL", params: { file: "src/runtime/progress/server.ts" } }],
+      post_conditions: [
+        { id: "POST-SERVER", type: "target_file_modified", severity: "FAIL", params: { file: "src/runtime/progress/server.ts" } },
+        { id: "POST-TYPECHECK", type: "no_new_type_errors", severity: "FAIL", params: { command: "npm run typecheck" } },
+      ],
     }],
   };
 }

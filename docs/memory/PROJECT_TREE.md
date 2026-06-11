@@ -11,7 +11,7 @@
 - package bins: 6
 - root .js files: 0 (none)
 - root .ts files: 7
-- src .ts files: 196
+- src .ts files: 197
 - test files: 166
 - docs markdown files: 29
 

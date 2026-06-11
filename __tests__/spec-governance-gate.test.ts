@@ -39,6 +39,8 @@ describe("spec governance gate", () => {
   test("passes when pending tasks link requirement and design traces", () => {
     const gate = inspectSpecGovernanceGate({
       prd: {
+        requirements: [{ id: "REQ-1", text: "Known requirement." }],
+        designs: [{ id: "DES-1", text: "Known design." }],
         tasks: [{
           id: "FIX-SPEC-GATE-002",
           status: "pending",
@@ -53,6 +55,28 @@ describe("spec governance gate", () => {
     assert.equal(gate.exit_code, 0);
     assert.equal(gate.result.blocks_execution, false);
     assert.equal(gate.summary, "");
+  });
+
+  test("negative: dangling requirement/design refs block execution", () => {
+    const gate = inspectSpecGovernanceGate({
+      prd: {
+        requirements: [{ id: "REQ-1", text: "Known requirement." }],
+        designs: [{ id: "DES-1", text: "Known design." }],
+        tasks: [{
+          id: "FIX-SPEC-GATE-DANGLING",
+          status: "pending",
+          requirement_ids: ["REQ-MISSING"],
+          design_ids: ["DES-MISSING"],
+        }],
+      },
+    });
+
+    assert.equal(gate.status, "blocked");
+    assert.deepEqual(gate.result.blockers.map((blocker) => blocker.code), [
+      "DANGLING_REQUIREMENT_TRACE",
+      "DANGLING_DESIGN_TRACE",
+    ]);
+    assert.match(gate.summary, /DANGLING_REQUIREMENT_TRACE task=FIX-SPEC-GATE-DANGLING/);
   });
 
   test("formats blocker summaries with a hard display limit", () => {

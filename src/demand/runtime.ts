@@ -720,6 +720,16 @@ function testsPassCondition(taskId) {
   };
 }
 
+function typecheckCondition(taskId) {
+  return {
+    id: `POST-${taskId}-TYPECHECK`,
+    type: "no_new_type_errors",
+    severity: "FAIL",
+    params: { command: "npm run typecheck" },
+    message: "Project typecheck must pass after this task.",
+  };
+}
+
 function behaviorCodeConditions(taskId, files = [], text = "", uiTask = false) {
   const sourceFiles = files.filter((file) => fileKind(file) !== "test");
   const primary = sourceFiles[0] || files[0];
@@ -992,6 +1002,7 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
             ...files.map((file, fileIndex) => modifiedFileCondition(taskId, fileIndex, file)),
             ...behaviorCodeConditions(taskId, files, behaviorText, uiTask),
             acceptanceCondition(taskId, 0, { then: proof || description, verify_command: scenario.verify_command || scenario.verifyCommand }),
+            typecheckCondition(taskId),
             ...(files.some((file) => fileKind(file) === "test") ? [testsPassCondition(taskId)] : []),
           ],
           trace: {

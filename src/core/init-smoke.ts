@@ -115,6 +115,11 @@ function defaultSmokeSpec(options = Object()) {
         type: "target_file_modified",
         severity: "FAIL",
         params: { file: targetFile },
+      }, {
+        id: "POST-SMOKE-TYPECHECK",
+        type: "no_new_type_errors",
+        severity: "FAIL",
+        params: { command: "npm run typecheck" },
       }],
       acceptance_criteria: [
         "PRD schema validation passes.",

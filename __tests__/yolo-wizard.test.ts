@@ -143,7 +143,10 @@ describe("non-technical YOLO wizard helpers", () => {
             allow_new_files: true,
             expected_zero_business_code: true,
           },
-          post_conditions: [{ id: "POST-1", type: "file_exists", severity: "FAIL", params: { file: "artifacts/wizard-check.md" } }],
+          post_conditions: [
+            { id: "POST-1", type: "file_exists", severity: "FAIL", params: { file: "artifacts/wizard-check.md" } },
+            { id: "POST-TYPECHECK", type: "no_new_type_errors", severity: "FAIL", params: { command: "npm run typecheck" } },
+          ],
         }],
       }, null, 2)}\n`, "utf8");
       initLifecycleState({ projectRoot: root });

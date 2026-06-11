@@ -351,12 +351,20 @@ describe("prd contract doctor gate", () => {
             type: "bugfix",
             status: "pending",
             scope: { targets: [{ file: "src/a.ts" }] },
-            post_conditions: [{
-              id: "POST-FILE",
-              type: "file_exists",
-              severity: "FAIL",
-              params: { file: "src/a.ts" },
-            }],
+            post_conditions: [
+              {
+                id: "POST-FILE",
+                type: "file_exists",
+                severity: "FAIL",
+                params: { file: "src/a.ts" },
+              },
+              {
+                id: "POST-TYPECHECK",
+                type: "no_new_type_errors",
+                severity: "FAIL",
+                params: { command: "npm run typecheck" },
+              },
+            ],
           }],
         },
         prdPath: paths.prdPath,
@@ -370,6 +378,97 @@ describe("prd contract doctor gate", () => {
       const evidence = JSON.parse(readFileSync(result.evidence_path, "utf8"));
       assert.equal(evidence.blocks_execution, false);
       assert.equal(evidence.prd, "data/prd.json");
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("counts verify_command acceptance as behavior verification without manual-only warning", () => {
+    const paths = makePaths();
+    try {
+      const result = inspectPrdContractDoctorGate({
+        prd: {
+          version: "2.0",
+          id: "PRD-VERIFY-COMMAND",
+          ...strictDemandFields(),
+          tasks: [{
+            id: "FIX-GATE-VERIFY-001",
+            title: "Strict task with verify command",
+            priority: "P1",
+            type: "bugfix",
+            status: "pending",
+            scope: { targets: [{ file: "src/a.ts" }] },
+            post_conditions: [
+              {
+                id: "POST-FILE",
+                type: "file_exists",
+                severity: "FAIL",
+                params: { file: "src/a.ts" },
+              },
+              {
+                id: "POST-VERIFY",
+                type: "acceptance_criteria",
+                severity: "FAIL",
+                params: { text: "npm test proves the behavior", verify_command: "npm test" },
+              },
+            ],
+          }],
+        },
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+      });
+
+      assert.equal(result.status, "pass");
+      assert.equal(result.doctor.warnings.some((warning) => warning.code === "MANUAL_FAIL_CONDITION"), false);
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("negative: target coverage gates do not count as behavior verification", () => {
+    const paths = makePaths();
+    try {
+      const result = inspectPrdContractDoctorGate({
+        prd: {
+          version: "2.0",
+          id: "PRD-TARGET-COVERAGE-ONLY",
+          ...strictDemandFields(),
+          tasks: [{
+            id: "FIX-GATE-COVERAGE-ONLY",
+            title: "Coverage-only pseudo success",
+            priority: "P1",
+            type: "bugfix",
+            status: "pending",
+            scope: { targets: [{ file: "src/a.ts" }] },
+            acceptance_criteria: ["Target file exists and is touched."],
+            post_conditions: [
+              {
+                id: "POST-FILE",
+                type: "file_exists",
+                severity: "FAIL",
+                params: { file: "src/a.ts" },
+              },
+              {
+                id: "POST-TARGET",
+                type: "target_file_modified",
+                severity: "FAIL",
+                params: { file: "src/a.ts" },
+              },
+            ],
+          }],
+        },
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+      });
+
+      assert.equal(result.status, "blocked");
+      assert.ok(result.doctor.failures.some((finding) => finding.code === "TASK_MISSING_BEHAVIOR_VERIFICATION"));
+      assert.equal(
+        result.doctor.failures.some((finding) => finding.code === "TASK_TARGETS_MISSING_EXECUTABLE_COVERAGE"),
+        false,
+      );
     } finally {
       rmSync(paths.projectRoot, { recursive: true, force: true });
     }

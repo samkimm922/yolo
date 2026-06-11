@@ -38,6 +38,14 @@ const MANUAL_ONLY_CONDITION_TYPES = new Set([
   "acceptance_criteria",
 ]);
 
+const BEHAVIOR_VERIFICATION_CONDITION_TYPES = new Set([
+  "build_pass",
+  "no_new_lint_errors",
+  "no_new_type_errors",
+  "test_file_passes",
+  "tests_pass",
+]);
+
 const TARGET_COVERAGE_CONDITION_TYPES = new Set([
   "ast_callback_uses_param",
   "ast_find_by_property",
@@ -127,6 +135,17 @@ function isExecutableFailGate(condition) {
   return normalized.severity === "FAIL" &&
     SUPPORTED_CONDITION_TYPES.has(normalized.type) &&
     !MANUAL_ONLY_CONDITION_TYPES.has(normalized.type);
+}
+
+function conditionVerifyCommand(condition = Object()) {
+  return cleanString(condition.verify_command || condition.verifyCommand || condition.params?.verify_command || condition.params?.verifyCommand);
+}
+
+function isBehaviorVerificationGate(condition) {
+  const normalized = normalizeCondition(condition);
+  if (normalized.severity !== "FAIL" || !SUPPORTED_CONDITION_TYPES.has(normalized.type)) return false;
+  if (BEHAVIOR_VERIFICATION_CONDITION_TYPES.has(normalized.type)) return true;
+  return conditionVerifyCommand(condition).length > 0;
 }
 
 function collectParamFiles(value, out = []) {
@@ -488,6 +507,25 @@ export function inspectPrdContract(prd, options = Object()) {
       );
     }
 
+    if (task.status === "pending" && !postConditions.some(isBehaviorVerificationGate)) {
+      addFinding(
+        failures,
+        task,
+        null,
+        "TASK_MISSING_BEHAVIOR_VERIFICATION",
+        "pending task must define at least one behavior verification gate: tests_pass, build_pass, no_new_type_errors, no_new_lint_errors, test_file_passes, or a FAIL condition with verify_command; file_exists and target_file_modified only prove target coverage",
+        {
+          suggestion: {
+            post_condition_examples: [
+              { id: "POST-TESTS", type: "tests_pass", severity: "FAIL", params: { command: "npm test" } },
+              { id: "POST-BUILD", type: "build_pass", severity: "FAIL", params: { command: "npm run build" } },
+              { id: "POST-TYPECHECK", type: "no_new_type_errors", severity: "FAIL", params: { command: "npm run typecheck" } },
+            ],
+          },
+        },
+      );
+    }
+
     if (task.status === "pending" && targets.length > 0) {
       const coveredTargets = new Set();
       for (const condition of postConditions) {
@@ -533,7 +571,7 @@ export function inspectPrdContract(prd, options = Object()) {
           suggestion: suggestionForUnsupported(condition),
         });
       }
-      if (normalized.severity === "FAIL" && normalized.type === "acceptance_criteria") {
+      if (normalized.severity === "FAIL" && normalized.type === "acceptance_criteria" && !conditionVerifyCommand(condition)) {
         addFinding(warnings, task, condition, "MANUAL_FAIL_CONDITION", "acceptance_criteria is manual-review only; prefer executable condition for FAIL gates");
       }
     }

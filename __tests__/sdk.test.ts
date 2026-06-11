@@ -118,6 +118,11 @@ function writePiRunnablePrdFixture(root, stateRoot, { id = "PRD-20260530-PI-RUNN
         type: "file_exists",
         severity: "FAIL",
         params: { file: "artifacts/pi.md" },
+      }, {
+        id: "POST-TYPECHECK",
+        type: "no_new_type_errors",
+        severity: "FAIL",
+        params: { command: "npm run typecheck" },
       }],
     }],
   }, null, 2)}\n`, "utf8");
@@ -589,6 +594,11 @@ describe("yolo sdk", () => {
             type: "target_file_modified",
             severity: "FAIL",
             params: { file: "src/pages/inventory.tsx" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           }],
         }],
       }, null, 2), "utf8");
@@ -649,6 +659,11 @@ describe("yolo sdk", () => {
             type: "file_exists",
             severity: "FAIL",
             params: { file: "src/pages/inventory-alerts.tsx" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           }],
         }],
       }), "utf8");
@@ -707,6 +722,11 @@ describe("yolo sdk", () => {
             type: "file_exists",
             severity: "FAIL",
             params: { file: "src/service.ts" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           }],
         }],
       }), "utf8");
@@ -856,12 +876,20 @@ describe("yolo sdk", () => {
       version: "2.0",
       tasks: [{
         ...baseTask,
-        post_conditions: [{
-          id: "POST-FILE",
-          type: "file_exists",
-          severity: "FAIL",
-          params: { file: "src/pages/inventory-alerts.tsx" },
-        }],
+        post_conditions: [
+          {
+            id: "POST-FILE",
+            type: "file_exists",
+            severity: "FAIL",
+            params: { file: "src/pages/inventory-alerts.tsx" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
       }],
     });
     assert.equal(executable.blocks_execution, false);
@@ -898,12 +926,20 @@ describe("yolo sdk", () => {
       version: "2.0",
       tasks: [{
         ...baseTask,
-        post_conditions: [{
-          id: "POST-PAGE",
-          type: "file_exists",
-          severity: "FAIL",
-          params: { file: "src/pages/inventory-alerts.tsx" },
-        }],
+        post_conditions: [
+          {
+            id: "POST-PAGE",
+            type: "file_exists",
+            severity: "FAIL",
+            params: { file: "src/pages/inventory-alerts.tsx" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
       }],
     });
     assert.equal(partial.blocks_execution, true);
@@ -928,6 +964,12 @@ describe("yolo sdk", () => {
             type: "target_file_modified",
             severity: "FAIL",
             params: { file: "src/services/inventory-alerts.ts" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           },
         ],
       }],
@@ -1060,6 +1102,11 @@ describe("yolo sdk", () => {
             type: "target_file_modified",
             severity: "FAIL",
             params: { file: "src/lib/format-label.ts" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           }],
         }],
       }), "utf8");
@@ -1106,6 +1153,11 @@ describe("yolo sdk", () => {
             type: "target_file_modified",
             severity: "FAIL",
             params: { file: "src/lib/format-label.ts" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           }],
         }],
       }), "utf8");
@@ -1150,6 +1202,11 @@ describe("yolo sdk", () => {
             type: "target_file_modified",
             severity: "FAIL",
             params: { file: "src/services/inventory-alerts.ts" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           }],
         }],
       }), "utf8");

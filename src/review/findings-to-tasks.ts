@@ -106,6 +106,16 @@ function targetConditions(taskId, files) {
   }));
 }
 
+function typecheckCondition(taskId) {
+  return {
+    id: `POST-${taskId}-TYPECHECK`,
+    type: "no_new_type_errors",
+    severity: "FAIL",
+    params: { command: "npm run typecheck" },
+    message: "project typecheck must pass after the review fix",
+  };
+}
+
 function absenceCondition(taskId, finding, files) {
   const match = truncateText(finding?.match || finding?.evidence_text || finding?.pattern);
   if (!match || !files.length) return [];
@@ -175,6 +185,7 @@ export function reviewFindingsToPrdTasks(findings = [], options = Object()) {
       post_conditions: [
         ...targetConditions(taskId, files),
         ...absenceCondition(taskId, finding, files),
+        typecheckCondition(taskId),
       ],
       acceptance_criteria: [
         description,

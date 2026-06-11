@@ -36,6 +36,8 @@ describe("spec traceability", () => {
         requirements: false,
         design: false,
         evidence: false,
+        dangling_requirements: [],
+        dangling_design: [],
       },
     });
     assert.equal(matrix.summary.task_count, 1);
@@ -75,5 +77,32 @@ describe("spec traceability", () => {
       "MISSING_REQUIREMENT_TRACE",
       "MISSING_DESIGN_TRACE",
     ]);
+  });
+
+  test("negative: dangling requirement and design traces are blocked when policy requires real refs", () => {
+    const result = inspectSpecGovernance({
+      requirements: [{ id: "REQ-1", text: "Known requirement." }],
+      designs: [{ id: "DES-1", text: "Known design." }],
+      tasks: [{
+        id: "FIX-SPEC-DANGLING",
+        status: "pending",
+        requirement_ids: ["REQ-MISSING"],
+        design_ids: ["DES-MISSING"],
+      }],
+    }, {
+      requireRequirements: true,
+      requireDesign: true,
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.blocks_execution, true);
+    assert.deepEqual(result.blockers.map((blocker) => blocker.code), [
+      "DANGLING_REQUIREMENT_TRACE",
+      "DANGLING_DESIGN_TRACE",
+    ]);
+    assert.deepEqual(result.matrix.summary.dangling_requirements, [{
+      task_id: "FIX-SPEC-DANGLING",
+      requirement_ids: ["REQ-MISSING"],
+    }]);
   });
 });
