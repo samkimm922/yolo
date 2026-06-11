@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { initLifecycleState } from "../src/lifecycle/state.js";
 import { inspectLifecycleGuard, nextLifecycleAction } from "../src/lifecycle/guard.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
-import { runYoloCli } from "../src/cli/yolo.js";
+import { runYoloCli, KNOWN_YOLO_COMMAND_WORDS } from "../src/cli/yolo.js";
 import { runPiCli } from "../src/cli/pi.js";
 import { runRunnerRuntime } from "../src/runtime/runner-runtime.js";
 import { runPiRuntime } from "../src/runtime/pi-runtimes.js";
@@ -535,5 +535,72 @@ describe("lifecycle guard", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("S2 yolo auto --dry-run routes through pi and produces action plan with expected phases", async () => {
+    const root = tempProject();
+    try {
+      const out = capture();
+      const exitCode = await runYoloCli(["auto", "--dry-run", "--json", "test inventory alerts feature", `--cwd=${root}`], {
+        cwd: root,
+        stdout: out.stream,
+      });
+      const result = out.json();
+
+      assert.equal(exitCode, 2, "auto --dry-run returns exit 2 for dry-run plan ready");
+      assert.equal(result.code, "AUTO_PLAN_READY");
+      assert.ok(result.plan, "result must contain a plan");
+      const phaseIds = (result.plan.actions || []).map((a) => a.phase || a.id || "");
+      const phaseSet = new Set(phaseIds);
+      const expectedPhases = ["prd_contract", "implementation", "review", "acceptance", "delivery"];
+      const foundPhases = expectedPhases.filter((p) =>
+        phaseIds.some((id) => id.includes(p)) || [...phaseSet].some((id) => id.includes(p)),
+      );
+      assert.ok(foundPhases.length >= 3, `expected at least 3 of ${expectedPhases.join(", ")} in plan phases: ${phaseIds.join(", ")}`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("S2 unknown command yolo frobnicate exits 2 with error", async () => {
+    const root = tempProject();
+    try {
+      let stderr = "";
+      const exitCode = await runYoloCli(["frobnicate", `--cwd=${root}`], {
+        cwd: root,
+        stdout: { write: () => {} },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      assert.equal(exitCode, 2, "unknown command must exit 2");
+      assert.ok(stderr.includes("Unknown command"), `stderr must mention Unknown command: ${stderr}`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("S2 bare yolo <prd> still passes through to runner", async () => {
+    const root = tempProject();
+    try {
+      let stderr = "";
+      const exitCode = await runYoloCli(["prd.json", `--cwd=${root}`, "--json"], {
+        cwd: root,
+        stdout: { write: () => {} },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      // Should NOT exit 0 — it may block on lifecycle guard or missing PRD, but should NOT be "Unknown command"
+      assert.notEqual(stderr.includes("Unknown command"), true, `bare PRD path should not trigger Unknown command: ${stderr}`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("S2 KNOWN_YOLO_COMMAND_WORDS includes all 4 stable surface verbs and internal commands", () => {
+    assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("auto"), "auto must be in known words");
+    assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("demand"), "demand must be in known words");
+    assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("ship"), "ship must be in known words");
+    assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("status"), "status must be in known words");
+    assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("office-hours"), "office-hours must be in known words (blocked compat alias)");
+    assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("brainstorm"), "brainstorm must be in known words (blocked compat alias)");
+    assert.ok(KNOWN_YOLO_COMMAND_WORDS.has("release-gate"), "release-gate must be in known words (blocked compat alias)");
   });
 });

@@ -18,7 +18,8 @@ import { refreshMemoryCenter } from "../runtime/memory/center.js";
 import { buildProgressDashboardUiEvidence } from "../runtime/progress/ui-evidence.js";
 import { runRunnerRuntime } from "../runtime/runner-runtime.js";
 import { runPiRuntime } from "../runtime/pi-runtimes.js";
-import { runPiAgent } from "../agents/pi.js";
+import { runPiAgent, createPiRunPlan } from "../agents/pi.js";
+import { DEFAULT_YOLO_PUBLIC_COMMAND_NAMES } from "../workflows/command-registry.js";
 import { scanProject } from "../review/scanner.js";
 import {
   runDiscoveryPlanRuntime,
@@ -2657,6 +2658,80 @@ export async function runYoloReleaseCli(argv = [], io = {}) {
   return runYoloReleaseCandidateCli(argv, { ...io, releaseCandidateCommand: "release", releaseCandidateStage: "release-candidate" });
 }
 
+export async function runYoloAutoCli(argv = [], io = {}) {
+  const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
+  const yoloRoot = io.yoloRoot || defaultYoloRoot;
+  const { input, options } = parseYoloArgs(argv);
+  const cliProjectRoot = resolve(input.cwd || io.cwd || process.cwd());
+  const requirement = input.idea || input.requirement || input.objective || input.prdPath || "";
+
+  if (options.help) {
+    stdout.write([
+      "yolo auto <idea or requirement> [--dry-run] [--json] [--cwd <dir>]",
+      "",
+      "Auto-run the full YOLO pipeline: clarify → spec → check → implement → review → deliver.",
+      "Each stage is independently gated by the lifecycle guard.",
+    ].join("\n") + "\n");
+    return 0;
+  }
+
+  if (!requirement.trim()) {
+    const result = {
+      status: "error",
+      summary: "yolo auto requires an idea or requirement.",
+      exit_code: 2,
+      code: "AUTO_MISSING_REQUIREMENT",
+      next_actions: ["Provide a requirement, e.g. yolo auto \"Add low-stock alerts to inventory dashboard\"."],
+    };
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stderr.write(`${result.summary}\n${(result.next_actions || []).join("\n")}\n`);
+    return result.exit_code;
+  }
+
+  const plan = createPiRunPlan({ ...input, requirement }, {
+    yoloRoot,
+    projectRoot: cliProjectRoot,
+    stateRoot: join(cliProjectRoot, ".yolo"),
+  });
+
+  if (options.dryRun) {
+    const result = {
+      status: "dry_run",
+      code: "AUTO_PLAN_READY",
+      summary: "Auto plan created; execution was not started.",
+      exit_code: 2,
+      next_actions: plan.next_actions || ["Review the plan, then run without --dry-run to execute."],
+      artifacts: plan.artifacts,
+      plan,
+    };
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stdout.write(`${formatPiRuntimeText("auto", result)}\n`);
+    return result.exit_code;
+  }
+
+  const result = await runPiAgent({ ...input, requirement }, {
+    yoloRoot,
+    projectRoot: cliProjectRoot,
+    stateRoot: join(cliProjectRoot, ".yolo"),
+    execute: true,
+  });
+
+  if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  else stdout.write(`${formatPiRuntimeText("auto", result)}\n`);
+  return result.exit_code ?? (result.status === "success" ? 0 : 2);
+}
+
+export const KNOWN_YOLO_COMMAND_WORDS = new Set([
+  ...DEFAULT_YOLO_PUBLIC_COMMAND_NAMES,
+  "status", "demand", "auto", "ship",
+  "spec", "tasks", "run", "runner", "check", "review", "release", "init", "setup", "install", "doctor", "eval",
+  "progress-ui-evidence", "memory", "learn",
+  "office-hours", "brainstorm", "discover", "discuss", "next", "accept", "ui-review",
+  "release-candidate", "release-gate", "candidate", "gate", "rc", "publish",
+  "interview", "plan", "prd", "ui-evidence",
+]);
+
 export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
@@ -2684,6 +2759,9 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
   }
   if (argv[0] === "doctor") {
     return runYoloDoctorCli(argv.slice(1), io);
+  }
+  if (argv[0] === "auto") {
+    return runYoloAutoCli(argv.slice(1), io);
   }
   if (argv[0] === "office-hours") return runYoloDemandCli(["--mode", "office-hours", ...argv.slice(1)], io);
   if (argv[0] === "brainstorm") return runYoloBrainstormCli(argv.slice(1), io);
@@ -2723,10 +2801,21 @@ export async function runYoloCli(argv = process.argv.slice(2), io = {}) {
   if (argv[0] === "learn") {
     return runYoloLearnCli(argv.slice(1), io);
   }
+
   if (argv[0] === "runner") {
     argv = [...argv.slice(1), "--engine-only"];
   } else if (argv[0] === "run") {
     argv = argv.slice(1);
+  }
+
+  const firstArg = argv[0];
+  if (firstArg && !firstArg.startsWith("-")) {
+    const looksLikePath = firstArg.includes("/") || firstArg.includes(".") || firstArg.includes("\\");
+    if (!looksLikePath) {
+      stderr.write(`Unknown command: yolo ${firstArg}\n`);
+      stderr.write(`Available commands: ${DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.map((c) => `yolo ${c}`).join(", ")}\n`);
+      return 2;
+    }
   }
 
   const { input, options } = parseYoloArgs(argv);
