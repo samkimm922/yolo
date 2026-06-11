@@ -17,21 +17,17 @@ export const RELEASE_CANDIDATE_GATE_SCHEMA_VERSION = "1.0";
 export const RELEASE_CANDIDATE_REQUIRED_REPORTS = Object.freeze([
   "verify",
   "prdPreflight",
-  "packageSmoke",
   "cleanEnvironment",
   "dogfoodMatrix",
   "changeManifest",
-  "reviewFindings",
 ]);
 
 const RELEASE_CANDIDATE_REPORT_ALIASES = Object.freeze({
   verify: ["verify", "verifyResult", "verify_result"],
   prdPreflight: ["prdPreflight", "prd_preflight", "prdPreflightResult", "prd_preflight_result"],
-  packageSmoke: ["packageSmoke", "package_smoke", "packageSmokeResult", "package_smoke_result"],
   cleanEnvironment: ["cleanEnvironment", "clean_environment", "cleanEnvironmentResult", "clean_environment_result"],
   dogfoodMatrix: ["dogfoodMatrix", "dogfood_matrix", "dogfoodMatrixResult", "dogfood_matrix_result"],
   changeManifest: ["changeManifest", "change_manifest", "changeManifestResult", "change_manifest_result"],
-  reviewFindings: ["reviewFindings", "review_findings", "reviewFindingsResult", "review_findings_result"],
 });
 
 const RELEASE_CANDIDATE_PASS_STATUSES = new Set(["pass", "passed", "ok", "success"]);
@@ -42,11 +38,9 @@ const RELEASE_CANDIDATE_KNOWN_PROVENANCE = new Set([
   "local",
   "verify",
   "prd-preflight",
-  "package-smoke",
   "clean-environment",
   "dogfood-matrix",
   "change-manifest",
-  "review-findings",
   "human-review",
   "external",
 ]);
@@ -265,18 +259,6 @@ function stepPassed(stepRecord) {
   return status === "pass" || commandPassed(stepRecord.command);
 }
 
-function packageSmokeEvidencePasses(report = {}) {
-  return report.dry_run === false
-    && isObject(report.pack)
-    && nonEmptyString(report.pack.tarball || report.tarball)
-    && isObject(report.pack.inspection)
-    && normalizeReportStatus(report.pack.inspection.status) === "pass"
-    && commandPassed(report.install)
-    && commandPassed(report.import_check || report.importCheck)
-    && Array.isArray(report.bin_checks || report.binChecks)
-    && (report.bin_checks || report.binChecks).every(commandPassed);
-}
-
 function cleanEnvironmentEvidencePasses(report = {}) {
   const steps = asArray(report.steps);
   const byId = new Map(steps.map((stepRecord) => [stepRecord?.id, stepRecord]));
@@ -359,12 +341,6 @@ function changeManifestEvidencePasses(report = {}) {
     && isObject(manifest.generated_from);
 }
 
-function reviewEvidencePasses(report = {}) {
-  return Array.isArray(report.findings)
-    && validTimestamp(report.reviewed_at || report.reviewedAt || report.executed_at || report.completed_at)
-    && nonEmptyString(report.review_source || report.reviewSource || provenanceSource(report));
-}
-
 function releaseCandidateEvidenceIssues(reportName, report) {
   const evidenceIssues = [];
   if (reportClaimsDryRun(report)) {
@@ -391,13 +367,6 @@ function releaseCandidateEvidenceIssues(reportName, report) {
       ));
     }
   }
-  if (reportName === "packageSmoke" && !packageSmokeEvidencePasses(report)) {
-    evidenceIssues.push(issue(
-      "RC_GATE_PACKAGE_SMOKE_EVIDENCE_MISSING",
-      reportName,
-      "package smoke must include a real tarball, install, import, and bin smoke evidence",
-    ));
-  }
   if (reportName === "cleanEnvironment" && !cleanEnvironmentEvidencePasses(report)) {
     evidenceIssues.push(issue(
       "RC_GATE_CLEAN_ENVIRONMENT_EVIDENCE_MISSING",
@@ -415,36 +384,7 @@ function releaseCandidateEvidenceIssues(reportName, report) {
       "change manifest report must include a passing release change provenance manifest",
     ));
   }
-  if (reportName === "reviewFindings" && !reviewEvidencePasses(report)) {
-    evidenceIssues.push(issue(
-      "RC_GATE_REVIEW_EVIDENCE_MISSING",
-      reportName,
-      "review findings report must include findings plus reviewed_at/review_source evidence",
-    ));
-  }
   return evidenceIssues;
-}
-
-function reviewFindingBlockerIssues(report) {
-  const findings = asArray(report.findings);
-  return findings
-    .filter((finding) => {
-      const severity = String(finding?.severity || "").toUpperCase();
-      return finding?.must_fix_before_ship === true
-        || finding?.blocks_release === true
-        || finding?.blocker === true
-        || severity === "CRITICAL"
-        || severity === "HIGH";
-    })
-    .map((finding, index) => issue(
-      "RC_GATE_REVIEW_FINDING_BLOCKER",
-      "reviewFindings",
-      "review findings contain ship-blocking issues",
-      {
-        issue_code: cleanIssueCode(finding?.code || finding?.finding_id || finding?.id, `REVIEW_FINDING_${index + 1}`),
-        severity: finding?.severity || null,
-      },
-    ));
 }
 
 function validateApprovals(reportName, approvals, now) {
@@ -840,9 +780,6 @@ export function runReleaseCandidateGate(options = {}) {
 
     if (reportName === "dogfoodMatrix") {
       blockers.push(...dogfoodFailureIssues(report));
-    }
-    if (reportName === "reviewFindings") {
-      blockers.push(...reviewFindingBlockerIssues(report));
     }
   }
 

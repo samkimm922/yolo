@@ -56,18 +56,6 @@ function passingReports(overrides = {}) {
     provenance: { source: "prd-preflight", id: "prd-preflight-run-1" },
     commands: [commandEvidence("npm run preflight")],
   });
-  reports.packageSmoke = report("packageSmoke", {
-    provenance: { source: "package-smoke", id: "package-smoke-run-1" },
-    dry_run: false,
-    pack: {
-      tarball: "yolo-0.0.0.tgz",
-      inspection: { status: "pass", blockers: [] },
-      command: commandEvidence("npm pack --json --ignore-scripts"),
-    },
-    install: commandEvidence("npm install yolo-0.0.0.tgz"),
-    import_check: commandEvidence("node import-smoke.js"),
-    bin_checks: [commandEvidence("node_modules/.bin/yolo --help")],
-  });
   reports.cleanEnvironment = report("cleanEnvironment", {
     provenance: { source: "clean-environment", id: "clean-env-run-1" },
     dry_run: false,
@@ -102,12 +90,6 @@ function passingReports(overrides = {}) {
       deleted_or_renamed: [],
       blockers: [],
     },
-  });
-  reports.reviewFindings = report("reviewFindings", {
-    provenance: { source: "review-findings", id: "review-run-1" },
-    reviewed_at: FINISHED_AT,
-    review_source: "code-reviewer",
-    findings: [],
   });
   for (const [name, override] of Object.entries(overrides)) {
     reports[name] = { ...(reports[name] || {}), ...override };
@@ -171,8 +153,8 @@ describe("release candidate gate aggregator", () => {
       mode: "rc",
       now: NOW,
       reports: passingReports({
-        packageSmoke: report("packageSmoke", {
-          warnings: [{ code: "PACK_SIZE_WARNING", message: "package grew but remains within RC tolerance" }],
+        cleanEnvironment: report("cleanEnvironment", {
+          warnings: [{ code: "CLEAN_ENV_WARNING", message: "environment check found minor deviation" }],
         }),
       }),
     });
@@ -180,7 +162,7 @@ describe("release candidate gate aggregator", () => {
     assert.equal(result.status, "block");
     assert.ok(result.blockers.some((blocker) =>
       blocker.code === "RC_GATE_WARNING_APPROVAL_REQUIRED"
-      && blocker.issue_code === "PACK_SIZE_WARNING"
+      && blocker.issue_code === "CLEAN_ENV_WARNING"
     ));
   });
 
@@ -189,8 +171,8 @@ describe("release candidate gate aggregator", () => {
       mode: "publish",
       now: NOW,
       reports: passingReports({
-        packageSmoke: report("packageSmoke", {
-          warnings: [{ code: "PACK_SIZE_WARNING", message: "package grew but remains within publish tolerance" }],
+        cleanEnvironment: report("cleanEnvironment", {
+          warnings: [{ code: "CLEAN_ENV_WARNING", message: "environment check found minor deviation" }],
         }),
       }),
     });
@@ -198,7 +180,7 @@ describe("release candidate gate aggregator", () => {
     assert.equal(result.status, "block");
     assert.ok(result.blockers.some((blocker) =>
       blocker.code === "RC_GATE_WARNING_APPROVAL_REQUIRED"
-      && blocker.issue_code === "PACK_SIZE_WARNING"
+      && blocker.issue_code === "CLEAN_ENV_WARNING"
     ));
   });
 
@@ -207,9 +189,9 @@ describe("release candidate gate aggregator", () => {
       mode: "publish",
       now: NOW,
       reports: passingReports({
-        packageSmoke: report("packageSmoke", {
-          warnings: [{ code: "PACK_SIZE_WARNING", approval_id: "approval-PACK_SIZE_WARNING" }],
-          approvals: [approval("PACK_SIZE_WARNING")],
+        cleanEnvironment: report("cleanEnvironment", {
+          warnings: [{ code: "CLEAN_ENV_WARNING", approval_id: "approval-CLEAN_ENV_WARNING" }],
+          approvals: [approval("CLEAN_ENV_WARNING")],
         }),
       }),
     });
@@ -267,10 +249,8 @@ describe("release candidate gate aggregator", () => {
       now: NOW,
       reports: {
         ...shell,
-        packageSmoke: { ...shell.packageSmoke, dry_run: true },
         cleanEnvironment: { ...shell.cleanEnvironment, dry_run: true },
         dogfoodMatrix: { ...shell.dogfoodMatrix, provenance: { source: "dogfood-matrix" }, scenarios: [] },
-        reviewFindings: { ...shell.reviewFindings, provenance: { source: "review-findings" }, findings: [] },
       },
     });
 

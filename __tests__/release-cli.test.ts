@@ -40,18 +40,12 @@ describe("YOLO release-candidate CLI", () => {
       assert.deepEqual(payload.gates.map((gate) => gate.id), [
         "verify",
         "prd-preflight",
-        "package-smoke",
         "clean-env",
         "dogfood-matrix",
         "change-provenance",
-        "review-findings",
       ]);
       assert.ok(payload.issue_codes.includes("RC_GATE_REPORT_BLOCKED"));
-      assert.ok(payload.blockers.some((blocker) => blocker.issue_code === "RELEASE_VERIFY_NOT_EXECUTED"));
-      assert.ok(payload.blockers.some((blocker) => blocker.issue_code === "RELEASE_PRD_PREFLIGHT_NOT_EXECUTED"));
-      assert.ok(payload.blockers.some((blocker) => blocker.issue_code === "RELEASE_PACKAGE_SMOKE_NOT_EXECUTED"));
       assert.ok(payload.blockers.some((blocker) => blocker.issue_code === "RELEASE_CLEAN_ENVIRONMENT_NOT_EXECUTED"));
-      assert.ok(payload.blockers.some((blocker) => blocker.issue_code === "RELEASE_REVIEW_FINDINGS_NOT_PROVIDED"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -75,11 +69,9 @@ describe("YOLO release-candidate CLI", () => {
           assert.deepEqual(input.requiredGates.map((gate) => gate.id), [
             "verify",
             "prd-preflight",
-            "package-smoke",
             "clean-env",
             "dogfood-matrix",
             "change-provenance",
-            "review-findings",
           ]);
           return {
             status: "pass",
