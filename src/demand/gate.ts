@@ -497,32 +497,19 @@ function roleScenarioCoverage(roles = [], scenarios = []) {
   };
 }
 
-function scenarioExceptionCoverage(scenarios = [], session = {}) {
-  // Check if exceptions were collected at all (session-level check)
-  const sessionExceptions = asArray(
-    session.prd_intake?.exceptions || session.nontechnical_intake?.exceptions || session.exceptions
-  ).filter((item) => clean(typeof item === "string" ? item : item.text).length > 0);
-  const anyScenarioHasExceptions = scenarios.some(
-    (scenario) => asArray(scenario.exceptions).map(clean).filter(Boolean).length > 0
-  );
-  // Only flag missing exceptions if the session had exception data collected
-  // or if at least one scenario has exceptions (making the omission visible)
-  const shouldCheck = sessionExceptions.length > 0 || anyScenarioHasExceptions;
-
+function scenarioExceptionCoverage(scenarios = [], _session = {}) {
   const missing = [];
-  if (shouldCheck) {
-    for (const scenario of scenarios) {
-      const exceptions = asArray(scenario.exceptions).map(clean).filter(Boolean);
-      if (exceptions.length === 0) {
-        missing.push({ scenario_id: scenario.id || null, actor: clean(scenario.actor) || "unknown" });
-      }
+  for (const scenario of scenarios) {
+    const exceptions = asArray(scenario.exceptions).map(clean).filter(Boolean);
+    if (exceptions.length === 0) {
+      missing.push({ scenario_id: scenario.id || null, actor: clean(scenario.actor) || "unknown" });
     }
   }
   return {
     scenarios_total: scenarios.length,
     scenarios_with_exceptions: scenarios.length - missing.length,
     scenarios_missing_exceptions: missing,
-    check_active: shouldCheck,
+    check_active: true,
   };
 }
 

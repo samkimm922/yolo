@@ -156,4 +156,25 @@ describe("demand gate completeness matrix", () => {
     assert.equal(prdCheck.severity, "error", "must be error at PRD phase");
     assert.equal(prdCheck.passed, false);
   });
+
+  test("blocks when session has zero exceptions across all scenarios", () => {
+    const session = sessionWithFullCoverage();
+    // Remove all exceptions from every scenario (zero-exception session)
+    for (const scenario of session.scenario_matrix.scenarios) {
+      scenario.exceptions = [];
+    }
+    delete session.prd_intake;
+
+    const result = inspectDemandReadiness(session, { phase: "prd" });
+    const matrixCheck = result.checks.find((c) => c.code === "COMPLETENESS_MATRIX");
+    assert.ok(matrixCheck);
+    assert.equal(matrixCheck.passed, false, "must block when no scenario has exceptions");
+    assert.equal(matrixCheck.severity, "error");
+
+    const matrix = matrixCheck.completeness_matrix;
+    assert.equal(matrix.status, "blocked");
+    assert.equal(matrix.error_count, session.scenario_matrix.scenarios.length);
+    assert.ok(matrix.errors.every((e) => e.code === "SCENARIO_WITHOUT_EXCEPTIONS"));
+    assert.equal(matrix.coverage.exceptions.scenarios_missing_exceptions.length, session.scenario_matrix.scenarios.length);
+  });
 });
