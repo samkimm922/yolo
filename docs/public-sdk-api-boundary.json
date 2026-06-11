@@ -139,13 +139,13 @@
     },
     {
       "export": "./evidence/ledger",
-      "target": "./dist/src/evidence/ledger.js",
+      "target": "./dist/src/runtime/evidence/ledger.js",
       "tier": "experimental",
       "reason": "Ledger facade is usable, but evidence schema evolution is still active."
     },
     {
       "export": "./evidence/report",
-      "target": "./dist/src/evidence/report.js",
+      "target": "./dist/src/runtime/evidence/report.js",
       "tier": "experimental",
       "reason": "Run report generation is usable, but report schema is still active."
     },

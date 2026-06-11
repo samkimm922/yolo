@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// Compatibility entrypoint. Runner implementation lives in src/runtime/runner-core.js.
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runYoloCli } from "./src/cli/yolo.js";

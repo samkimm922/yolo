@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
-const runnerEntrySource = readFileSync(resolve(YOLO_DIR, "runner.ts"), "utf8");
+const runnerEntrySource = readFileSync(resolve(YOLO_DIR, "src/cli/yolo.ts"), "utf8");
 const runnerCoreSource = readFileSync(resolve(YOLO_DIR, "src/runtime/runner-core.ts"), "utf8");
 const runnerCoreHelperSource = readFileSync(resolve(YOLO_DIR, "src/runtime/runner-core-helpers.ts"), "utf8");
 const runnerContextSource = readFileSync(resolve(YOLO_DIR, "src/runtime/run-lifecycle/context.ts"), "utf8");

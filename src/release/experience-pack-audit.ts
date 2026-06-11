@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { appendLearningRecord, retrieveRelevantLearningRecords } from "../runtime/learning/center.js";
-import { generatePrompt } from "../../prompt.js";
+import { generatePrompt } from "../cli/prompt.js";
 
 export const EXPERIENCE_PACK_AUDIT_SCHEMA_VERSION = "1.0";
 

@@ -10,7 +10,7 @@ import {
   setTaskLogsDir,
   TASK_LOGS_DIR,
   writeTaskLog,
-} from "../task-logger.js";
+} from "../src/runtime/logging/task-logger.js";
 import { getTaskLogsDir as getSrcTaskLogsDir } from "../src/runtime/logging/task-logger.js";
 
 describe("task logger", () => {
