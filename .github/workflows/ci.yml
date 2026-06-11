@@ -43,6 +43,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: npm test --silent
 
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: npm run verify --silent
+
   docs-warning-truth:
     runs-on: ubuntu-latest
     steps:

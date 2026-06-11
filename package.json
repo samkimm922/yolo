@@ -106,7 +106,7 @@
     "memory:refresh": "npm run build --silent && node ./dist/src/devtools/memory-center.js --legacy-pointers",
     "test": "npm run build --silent && node --import tsx --test __tests__/*.test.ts",
     "soak": "node --import tsx scripts/soak/run.ts",
-    "verify": "npm run typecheck --silent && npm run test --silent && node --import tsx scripts/source-grep-meta.ts && node --import tsx scripts/ci-guard.ts && npm run preflight --silent && node -e \"import {config} from'./dist/lib/config.js';process.exit(config.version==='2.0'?0:1)\"",
+    "verify": "npm run typecheck --silent && npm run test --silent && node --import tsx scripts/source-grep-meta.ts && node --import tsx scripts/ci-guard.ts && npm run preflight --silent && node -e \"import {config} from'./dist/src/lib/config.js';process.exit(config.version==='2.0'?0:1)\"",
     "prepack": "npm run build --silent",
     "lint:fix": "echo 'use project root lint:fix for src/'",
     "clean": "node -e \"const{existsSync,readFileSync,writeFileSync}=require('fs');const{join}=require('path');['.yolo/state/events.jsonl','.yolo/state/changes.jsonl','.yolo/state/runs.jsonl'].forEach(f=>{const p=join(process.cwd(),f);if(existsSync(p)){const c=readFileSync(p,'utf8').split('\\n').filter(Boolean).slice(-50);writeFileSync(p,c.join('\\n')+'\\n')}});console.log('state cleaned')\""
