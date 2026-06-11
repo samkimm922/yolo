@@ -963,4 +963,142 @@ describe("acceptance report", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("S1 manual acceptance: all manual criteria covered by matching evidence → unblocked", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      const prdWithManual = prd({
+        post_conditions: [{
+          id: "POST-ACCEPT-MANUAL",
+          type: "acceptance_criteria",
+          severity: "FAIL",
+          params: { text: "Product owner confirms inventory UX matches brand guidelines." },
+        }],
+      });
+
+      const report = buildAcceptanceReport({
+        prd: prdWithManual,
+        runReport: {
+          status: "success",
+          summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 },
+          fixtures: { fail_count: 0 },
+        },
+        reviewReport: { findings: [] },
+        uiEvidence: {
+          page_reachable: true,
+          critical_path_passed: true,
+          required_state_present: true,
+          screenshots: ["state/evidence/ui.png"],
+        },
+        resolver: { selected: { acceptance_adapter: { id: "local-browser" } }, blockers: [] },
+        projectRoot: root,
+        stateRoot,
+      });
+
+      assert.equal(report.manual_criteria.length, 1);
+
+      initLifecycleState({ projectRoot: root });
+      writeRunPass(root);
+      writeReviewPass(root);
+      writeLifecycleStageReport("acceptance", {
+        status: "pass",
+        summary: "acceptance passed with manual criteria resolved",
+        evidence: [
+          { path: "state/acceptance/evidence.json" },
+          {
+            type: "manual_acceptance",
+            task_id: "FEAT-ACCEPT-001",
+            condition_id: "POST-ACCEPT-MANUAL",
+            accepted_by: "user",
+            note: "UX matches brand guidelines per review",
+            at: new Date().toISOString(),
+          },
+        ],
+        manual_criteria: report.manual_criteria,
+      }, lifecycleWriteOptions(root));
+
+      const guard = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
+      assert.equal(
+        guard.blockers.some((blocker) => blocker.code === "ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED"),
+        false,
+        `ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED should NOT be present when all criteria are covered`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("S1 manual acceptance: partial coverage → still blocked", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      const prdWithTwoManual = prd({
+        post_conditions: [
+          {
+            id: "POST-ACCEPT-MANUAL-1",
+            type: "acceptance_criteria",
+            severity: "FAIL",
+            params: { text: "Product owner confirms inventory UX matches brand guidelines." },
+          },
+          {
+            id: "POST-ACCEPT-MANUAL-2",
+            type: "acceptance_criteria",
+            severity: "FAIL",
+            params: { text: "QA lead signs off on performance benchmarks." },
+          },
+        ],
+      });
+
+      const report = buildAcceptanceReport({
+        prd: prdWithTwoManual,
+        runReport: {
+          status: "success",
+          summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 },
+          fixtures: { fail_count: 0 },
+        },
+        reviewReport: { findings: [] },
+        uiEvidence: {
+          page_reachable: true,
+          critical_path_passed: true,
+          required_state_present: true,
+          screenshots: ["state/evidence/ui.png"],
+        },
+        resolver: { selected: { acceptance_adapter: { id: "local-browser" } }, blockers: [] },
+        projectRoot: root,
+        stateRoot,
+      });
+
+      assert.equal(report.manual_criteria.length, 2);
+
+      initLifecycleState({ projectRoot: root });
+      writeRunPass(root);
+      writeReviewPass(root);
+      writeLifecycleStageReport("acceptance", {
+        status: "pass",
+        summary: "acceptance passed but only one manual criterion resolved",
+        evidence: [
+          { path: "state/acceptance/evidence.json" },
+          {
+            type: "manual_acceptance",
+            task_id: "FEAT-ACCEPT-001",
+            condition_id: "POST-ACCEPT-MANUAL-1",
+            accepted_by: "user",
+            note: "UX matches brand guidelines",
+            at: new Date().toISOString(),
+          },
+        ],
+        manual_criteria: report.manual_criteria,
+      }, lifecycleWriteOptions(root));
+
+      const guard = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
+      assert.equal(guard.status, "blocked");
+      assert.ok(
+        guard.blockers.some((blocker) => blocker.code === "ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED"),
+        `expected ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED when only partially covered: ${JSON.stringify(guard.blockers)}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

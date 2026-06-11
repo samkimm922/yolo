@@ -147,10 +147,25 @@ function meaningfulEvidenceEntry(entry) {
 
 function hasManualAcceptanceCriteria(report = {}) {
   const manualCriteria = Array.isArray(report.manual_criteria) ? report.manual_criteria : [];
-  if (manualCriteria.length > 0) return true;
-  // When read from lifecycle artifact, the acceptance report is nested inside .report
   const nested = Array.isArray(report.report?.manual_criteria) ? report.report.manual_criteria : [];
-  return nested.length > 0;
+  const allManual = [...manualCriteria, ...nested];
+  if (allManual.length === 0) return false;
+
+  const evidence = reportEvidenceEntries(report);
+  const manualEvidence = evidence.filter(
+    (e) => e && e.type === "manual_acceptance" && e.task_id && e.condition_id,
+  );
+
+  const unresolved = allManual.filter((criterion) => {
+    const taskId = criterion.task_id;
+    const conditionId = criterion.condition_id;
+    if (!taskId || !conditionId) return true;
+    return !manualEvidence.some(
+      (record) => record.task_id === taskId && record.condition_id === conditionId,
+    );
+  });
+
+  return unresolved.length > 0;
 }
 
 function reportEvidenceEntries(report = {}) {
