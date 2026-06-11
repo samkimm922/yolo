@@ -14,6 +14,8 @@ import {
   writeExpandedTasksSnapshot,
 } from "./side-effects.js";
 import { expandTasksForMainLoop } from "./expansion.js";
+import { buildTaskSummary } from "../execution/task-summary.js";
+import { buildRelayInjection } from "../execution/summary-relay.js";
 
 function noop() {}
 
@@ -35,6 +37,7 @@ export async function runMainLoopWithRuntime({
   taskIsSplitParent,
   skippedTaskPostconditionsPass,
   log = noop,
+  writeRelayArtifact = null,
 } = {}) {
   const prd = loadPRD(prdPath);
   const results = { completed: [], failed: [], skipped: [], blocked: [], contractReview: [], remediation: [], immediateRemediationQueue: [] };
@@ -63,6 +66,9 @@ export async function runMainLoopWithRuntime({
     completedIds,
   });
 
+  const completedTaskSummaries = [];
+  let relayText = "";
+
   let lastFailKey = "";
   for (const task of expanded) {
     const preRun = handleTaskPreRun({
@@ -79,7 +85,8 @@ export async function runMainLoopWithRuntime({
       continue;
     }
 
-    const outcome = await runTask(task, prdPath);
+    // P2.18: inject relay from prior tasks into the current task run
+    const outcome = await runTask(task, prdPath, { relayText });
     const outcomeResult = handleTaskOutcome({
       task,
       outcome,
@@ -115,7 +122,20 @@ export async function runMainLoopWithRuntime({
       stopForImmediateRemediation: true,
     });
     lastFailKey = outcomeResult.lastFailKey;
+
+    // P2.18: write task-summary with Forward Intelligence after each task
+    const summary = buildTaskSummary({
+      task,
+      outcome,
+      projectRoot: rootDir,
+    });
+    completedTaskSummaries.push(summary);
+    relayText = buildRelayInjection(completedTaskSummaries, { maxTokens: 2500 });
+
     if (outcomeResult.action === "stop") {
+      if (writeRelayArtifact && completedTaskSummaries.length) {
+        writeRelayArtifact(relayText, completedTaskSummaries);
+      }
       return results;
     }
 
@@ -127,5 +147,11 @@ export async function runMainLoopWithRuntime({
 
     runLessonsAnalyzer({ yoloRoot });
   }
+
+  // P2.18: write final relay artifact for batch rollup
+  if (writeRelayArtifact && completedTaskSummaries.length) {
+    writeRelayArtifact(relayText, completedTaskSummaries);
+  }
+
   return results;
 }
