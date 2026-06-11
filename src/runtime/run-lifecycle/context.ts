@@ -1,4 +1,5 @@
 import { join, resolve } from "node:path";
+import { baselineFileName } from "../execution/baselines.js";
 
 export function resolveRunnerContext(options = Object(), {
   packageRoot,
@@ -16,8 +17,8 @@ export function resolveRunnerContext(options = Object(), {
     stateRoot: resolvedStateRoot,
     stateDir,
     runtimeDir,
-    tscBaselinePath: join(runtimeDir, "tsc-baseline.json"),
-    eslintBaselinePath: join(runtimeDir, "eslint-baseline.json"),
+    tscBaselinePath: join(runtimeDir, baselineFileName("tsc")),
+    eslintBaselinePath: join(runtimeDir, baselineFileName("eslint")),
     resultsFile: yoloPath("taskResults", resolvedStateRoot),
     worktreeRoot: join(rootDir, "..", ".yolo-worktrees"),
     currentRunFile: yoloPath("currentRun", resolvedStateRoot),

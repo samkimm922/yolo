@@ -1014,6 +1014,51 @@
           "summarizeReviewFindings": "experimental",
           "validateReviewFinding": "experimental"
         }
+      },
+      {
+        "namespace": "stable",
+        "tier": "stable",
+        "shape": "object",
+        "entries": {
+          "agents": "stable",
+          "config": "stable",
+          "contract": "stable",
+          "paths": "stable",
+          "prd": "stable",
+          "provider": "stable",
+          "review": "stable",
+          "task": "stable"
+        }
+      },
+      {
+        "namespace": "experimental",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "acceptance": "experimental",
+          "agents": "experimental",
+          "commands": "experimental",
+          "demand": "experimental",
+          "discovery": "experimental",
+          "doctor": "experimental",
+          "eval": "experimental",
+          "evidence": "experimental",
+          "fixtures": "experimental",
+          "lifecycle": "experimental",
+          "packs": "experimental",
+          "parallel": "experimental",
+          "pi": "experimental",
+          "prd": "experimental",
+          "progress": "experimental",
+          "project": "experimental",
+          "provider": "experimental",
+          "release": "experimental",
+          "review": "experimental",
+          "runtime": "experimental",
+          "spec": "experimental",
+          "task": "experimental",
+          "workflows": "experimental"
+        }
       }
     ]
   },

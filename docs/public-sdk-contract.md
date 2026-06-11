@@ -36,6 +36,7 @@ Package exports:
 
 Stable SDK namespaces from `createYoloSdk()`:
 
+- `sdk.stable`: stable-only façade for long-lived integrations. It contains only stable namespaces or stable subsets from mixed namespaces.
 - `sdk.config`
 - `sdk.paths`
 - `sdk.paths.stateRoot`
@@ -55,6 +56,8 @@ Stable SDK namespaces from `createYoloSdk()`:
 ## Experimental
 
 Experimental 表示当前可用，但 API shape、返回字段或执行语义仍可能变化。
+
+`sdk.experimental` is the explicit experimental façade. It groups beta/runtime/release/workflow/demand surfaces and the experimental subsets from mixed namespaces so callers do not have to infer stability from the legacy all-in-one SDK object.
 
 | Export / API | Reason |
 |---|---|
@@ -160,6 +163,13 @@ Phase 1A 起，package bin 都指向 `bin/`。当前状态：
 
 - `yolo run <prd.json>` 和 `yolo --prd <prd.json>` 默认进入 PI 主线：preflight -> runner -> review -> final schema gate -> acceptance -> ship -> learn；`yolo runner <prd.json>` 或 `yolo run --engine-only` 才是底层 runner 调试入口。
 - `yolo progress-ui-evidence [path]` 会生成 progress dashboard UI/UX 本地 evidence；默认写入目标项目 `.yolo/state/evidence/progress-dashboard-ui/`，可被 `yolo run` / `yolo accept` 的 adapter bridge 消费。
+
+Exit-code policy:
+
+- `0` 表示命令完成且 gate/report 没有阻断项。
+- `1` 表示执行失败、测试失败、运行期错误或 release gate 被阻断。
+- `exit 2` 是 fail-closed / deprecated-stub 退出码：用于未知或废弃命令、warning 被硬阻断、dry-run readiness、缺少生命周期前置、hook 阻断和只保留给迁移提示的兼容桩。`exit 2` 永远不能被上层当作成功。
+- 废弃命令桩只能输出稳定入口迁移说明并退出 `2`；不得继续执行旧路径。
 
 ## Compatibility Rules
 

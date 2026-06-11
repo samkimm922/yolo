@@ -2,66 +2,20 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  BEHAVIOR_VERIFICATION_CONDITION_TYPES as BEHAVIOR_VERIFICATION_CONDITION_TYPE_LIST,
+  CONDITION_TYPES,
+  MANUAL_ONLY_CONDITION_TYPES as MANUAL_ONLY_CONDITION_TYPE_LIST,
+  TARGET_COVERAGE_CONDITION_TYPES as TARGET_COVERAGE_CONDITION_TYPE_LIST,
+} from "../../prd/condition-catalog.js";
 import { inspectAtomicTask } from "../execution/atomic-task-doctor.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const SUPPORTED_CONDITION_TYPES = new Set([
-  "acceptance_criteria",
-  "build_pass",
-  "business_code_min",
-  "code_contains",
-  "code_matches",
-  "code_not_contains",
-  "dir_exists",
-  "file_exists",
-  "file_lines_max",
-  "file_not_exists",
-  "files_modified_max",
-  "ast_callback_uses_param",
-  "ast_find_by_property",
-  "function_contains_call",
-  "function_contains_text",
-  "no_file_over_max_lines",
-  "no_forbidden_patterns",
-  "no_new_dead_code",
-  "no_new_lint_errors",
-  "no_new_type_errors",
-  "required_imports_present",
-  "target_file_modified",
-  "type_errors_contain",
-  "test_file_passes",
-  "tests_pass",
-]);
-
-const MANUAL_ONLY_CONDITION_TYPES = new Set([
-  "acceptance_criteria",
-]);
-
-const BEHAVIOR_VERIFICATION_CONDITION_TYPES = new Set([
-  "build_pass",
-  "no_new_lint_errors",
-  "no_new_type_errors",
-  "test_file_passes",
-  "tests_pass",
-]);
-
-const TARGET_COVERAGE_CONDITION_TYPES = new Set([
-  "ast_callback_uses_param",
-  "ast_find_by_property",
-  "code_contains",
-  "code_matches",
-  "code_not_contains",
-  "dir_exists",
-  "file_exists",
-  "file_lines_max",
-  "file_not_exists",
-  "function_contains_call",
-  "function_contains_text",
-  "no_file_over_max_lines",
-  "required_imports_present",
-  "target_file_modified",
-]);
+const SUPPORTED_CONDITION_TYPES = new Set(CONDITION_TYPES);
+const MANUAL_ONLY_CONDITION_TYPES = new Set(MANUAL_ONLY_CONDITION_TYPE_LIST);
+const BEHAVIOR_VERIFICATION_CONDITION_TYPES = new Set(BEHAVIOR_VERIFICATION_CONDITION_TYPE_LIST);
+const TARGET_COVERAGE_CONDITION_TYPES = new Set(TARGET_COVERAGE_CONDITION_TYPE_LIST);
 
 const STRICT_EXECUTION_MODES = new Set(["runner", "release"]);
 

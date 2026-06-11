@@ -373,6 +373,31 @@ describe("yolo sdk", () => {
     assert.ok(supportedConditionTypes().includes("function_contains_text"));
   });
 
+  test("stable and experimental SDK facades split compatibility promises", () => {
+    const sdk = createYoloSdk();
+
+    assert.deepEqual(Object.keys(sdk.stable).sort(), [
+      "agents",
+      "config",
+      "contract",
+      "paths",
+      "prd",
+      "provider",
+      "review",
+      "task",
+    ]);
+    assert.equal(typeof sdk.stable.prd.preflightPrd, "function");
+    assert.equal(typeof sdk.stable.provider.detectModelProvider, "function");
+    assert.equal(Object.hasOwn(sdk.stable, "runtime"), false);
+    assert.equal(Object.hasOwn(sdk.stable, "release"), false);
+    assert.equal(Object.hasOwn(sdk.stable, "pi"), false);
+
+    assert.equal(typeof sdk.experimental.runtime.runRunner, "function");
+    assert.equal(typeof sdk.experimental.release.runReleaseCandidateGate, "function");
+    assert.equal(typeof sdk.experimental.pi.run, "function");
+    assert.equal(Object.hasOwn(sdk.experimental.prd, "preflightPrd"), false);
+  });
+
   test("keeps package root separate from project state root", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-sdk-state-root-"));
     try {

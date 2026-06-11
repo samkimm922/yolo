@@ -118,6 +118,10 @@ describe("public SDK API boundary", () => {
 
     assert.match(contract, /public-sdk-api-boundary\.json/);
     assert.match(contract, /## Version Policy/);
+    assert.match(contract, /sdk\.stable/);
+    assert.match(contract, /sdk\.experimental/);
+    assert.match(contract, /exit 2[\s\S]*fail-closed/);
+    assert.match(contract, /废弃命令桩[\s\S]*退出 `2`/);
   });
 
   test("release candidate exports are classified and documented", () => {

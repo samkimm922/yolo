@@ -8,12 +8,12 @@ import {
 } from "node:fs";
 import { spawnSync as defaultSpawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
+import { BASELINE_RUNTIME_FILES } from "../execution/baselines.js";
 
 const PERSIST_RUNTIME_FILES = new Set([
   "learn-stats.json",
   "condition-stats.json",
-  "tsc-baseline.json",
-  "eslint-baseline.json",
+  ...BASELINE_RUNTIME_FILES,
   "task-results.jsonl",
   "task-logs",
 ]);

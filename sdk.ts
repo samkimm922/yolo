@@ -331,6 +331,96 @@ import { preflightAllPrds, preflightPrd } from "./src/prd/preflight.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+function buildStableSdkFacade(sdk) {
+  return {
+    agents: {
+      createPlan: sdk.agents.createPlan,
+      getPreset: sdk.agents.getPreset,
+      listPresets: sdk.agents.listPresets,
+    },
+    config: sdk.config,
+    contract: sdk.contract,
+    paths: sdk.paths,
+    prd: {
+      preflightAllPrds: sdk.prd.preflightAllPrds,
+      preflightPrd: sdk.prd.preflightPrd,
+      validatePrdPath: sdk.prd.validatePrdPath,
+    },
+    provider: {
+      detectModelProvider: sdk.provider.detectModelProvider,
+    },
+    review: {
+      scanFile: sdk.review.scanFile,
+      scanProject: sdk.review.scanProject,
+    },
+    task: {
+      inspectAtomicTask: sdk.task.inspectAtomicTask,
+      inspectTaskFromPrd: sdk.task.inspectTaskFromPrd,
+    },
+  };
+}
+
+function buildExperimentalSdkFacade(sdk) {
+  return {
+    acceptance: sdk.acceptance,
+    agents: {
+      createPiAgent: sdk.agents.createPiAgent,
+      createPiPlan: sdk.agents.createPiPlan,
+      runPi: sdk.agents.runPi,
+    },
+    commands: sdk.commands,
+    demand: sdk.demand,
+    discovery: sdk.discovery,
+    doctor: sdk.doctor,
+    eval: sdk.eval,
+    evidence: sdk.evidence,
+    fixtures: sdk.fixtures,
+    lifecycle: sdk.lifecycle,
+    packs: sdk.packs,
+    parallel: sdk.parallel,
+    pi: sdk.pi,
+    prd: {
+      convertAuditToPrd: sdk.prd.convertAuditToPrd,
+      createPrdMigrationAdvice: sdk.prd.createPrdMigrationAdvice,
+      generateFindingsFromRequirement: sdk.prd.generateFindingsFromRequirement,
+      migratePrdFile: sdk.prd.migratePrdFile,
+      migratePrdGates: sdk.prd.migratePrdGates,
+    },
+    progress: sdk.progress,
+    project: sdk.project,
+    provider: {
+      buildAgentAdapterCapabilities: sdk.provider.buildAgentAdapterCapabilities,
+      buildAgentAdapterContract: sdk.provider.buildAgentAdapterContract,
+      buildProviderCliDryRunMatrix: sdk.provider.buildProviderCliDryRunMatrix,
+      buildProviderRuntimeMatrix: sdk.provider.buildProviderRuntimeMatrix,
+      inspectAgentAdapterContract: sdk.provider.inspectAgentAdapterContract,
+      inspectProviderCliDryRunMatrix: sdk.provider.inspectProviderCliDryRunMatrix,
+      inspectProviderRuntimeMatrix: sdk.provider.inspectProviderRuntimeMatrix,
+      normalizeAgentProvider: sdk.provider.normalizeAgentProvider,
+    },
+    release: sdk.release,
+    review: {
+      REVIEW_FINDING_SCHEMA: sdk.review.REVIEW_FINDING_SCHEMA,
+      REVIEW_OUTPUT_SCHEMA: sdk.review.REVIEW_OUTPUT_SCHEMA,
+      buildReviewFixPrd: sdk.review.buildReviewFixPrd,
+      buildReviewOutput: sdk.review.buildReviewOutput,
+      inspectReviewFixLoop: sdk.review.inspectReviewFixLoop,
+      normalizeReviewFinding: sdk.review.normalizeReviewFinding,
+      normalizeReviewFindings: sdk.review.normalizeReviewFindings,
+      summarizeReviewFindings: sdk.review.summarizeReviewFindings,
+      validateReviewFinding: sdk.review.validateReviewFinding,
+    },
+    runtime: sdk.runtime,
+    spec: sdk.spec,
+    task: {
+      classifyTaskExecution: sdk.task.classifyTaskExecution,
+      validateDiffQuality: sdk.task.validateDiffQuality,
+      validateTestGeneration: sdk.task.validateTestGeneration,
+    },
+    workflows: sdk.workflows,
+  };
+}
+
 export function createYoloSdk(options = Object()) {
   const cfg = options.config || loadConfig({
     forceReload: Boolean(options.forceConfigReload),
@@ -887,7 +977,10 @@ export function createYoloSdk(options = Object()) {
       validateReviewFinding,
     },
   };
-  return sdk;
+  return Object.assign(sdk, {
+    stable: buildStableSdkFacade(sdk),
+    experimental: buildExperimentalSdkFacade(sdk),
+  });
 }
 
 export {

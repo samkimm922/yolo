@@ -12,6 +12,8 @@ import {
 import { execFileSync as defaultExecFileSync, execSync as defaultExecSync } from "node:child_process";
 import { basename, join, resolve } from "node:path";
 import {
+  BASELINE_TOOLS,
+  baselineFileName,
   buildBaselineArtifact,
   parseEslintBaselineErrorKeys,
   parseTscBaselineKeys,
@@ -152,8 +154,8 @@ export function initializeMissingBaselines({
   nowIso = () => new Date().toISOString(),
 } = Object()) {
   const initialized = [];
-  for (const tool of ["tsc", "eslint"]) {
-    const baselinePath = join(runtimeDir, `${tool}-baseline.json`);
+  for (const tool of BASELINE_TOOLS) {
+    const baselinePath = join(runtimeDir, baselineFileName(tool));
     if (existsSync(baselinePath)) continue;
     log("BASELINE", "init", `初始化 ${tool} baseline...`);
     try {

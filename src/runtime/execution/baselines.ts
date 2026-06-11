@@ -10,6 +10,17 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+export const BASELINE_TOOLS = ["tsc", "eslint"];
+export const BASELINE_FILE_NAMES = {
+  tsc: "tsc-baseline.json",
+  eslint: "eslint-baseline.json",
+};
+export const BASELINE_RUNTIME_FILES = Object.values(BASELINE_FILE_NAMES);
+
+export function baselineFileName(tool) {
+  return BASELINE_FILE_NAMES[tool] || `${tool}-baseline.json`;
+}
+
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
   if (!value || typeof value !== "object") return JSON.stringify(value);

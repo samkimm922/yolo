@@ -8,6 +8,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { supportedConditionTypes as catalogSupportedConditionTypes } from "./condition-catalog.js";
 import {
   evalAstCallbackUsesParam,
   evalAstFindByProperty,
@@ -62,20 +63,6 @@ function createExec(root) {
       };
     }
   };
-}
-
-// ── 从 schema 加载合法 condition type 列表 ────────────────────
-import { join } from "node:path";
-
-function loadValidConditionTypes() {
-  try {
-    const schemaPath = join(PACKAGE_ROOT, "schemas", "prd-v2.schema.json");
-    const schema = JSON.parse(readFileSync(schemaPath, "utf8"));
-    return schema["x-vocabulary"]?.conditionType || [];
-  } catch {
-    console.warn('[contract] 无法加载 schema condition types，使用 evaluator keys');
-    return Object.keys(createEvaluators(ROOT));
-  }
 }
 
 // ── 条件类型调度表 ──────────────────────────────────────────────
@@ -194,7 +181,11 @@ function createEvaluators(root) {
 }
 
 export function supportedConditionTypes() {
-  return Object.keys(createEvaluators(ROOT)).sort();
+  return catalogSupportedConditionTypes();
+}
+
+export function evaluatorConditionTypes(options = Object()) {
+  return Object.keys(createEvaluators(scopedRoot(options))).sort();
 }
 
 /**

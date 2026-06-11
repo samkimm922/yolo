@@ -1,7 +1,11 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  BASELINE_FILE_NAMES,
+  BASELINE_RUNTIME_FILES,
+  BASELINE_TOOLS,
   baselineArtifactHash,
+  baselineFileName,
   captureExecutionBaselines,
   parseEslintBaselineErrorKeys,
   parseEslintBaselineKeys,
@@ -11,6 +15,13 @@ import {
 } from "../src/runtime/execution/baselines.js";
 
 describe("execution baseline helpers", () => {
+  test("baseline runtime file names come from one catalog", () => {
+    assert.deepEqual(BASELINE_TOOLS, ["tsc", "eslint"]);
+    assert.equal(baselineFileName("tsc"), BASELINE_FILE_NAMES.tsc);
+    assert.equal(baselineFileName("eslint"), BASELINE_FILE_NAMES.eslint);
+    assert.deepEqual([...BASELINE_RUNTIME_FILES].sort(), ["eslint-baseline.json", "tsc-baseline.json"]);
+  });
+
   test("parseTscBaselineKeys extracts stable file:line:code keys", () => {
     assert.deepEqual(parseTscBaselineKeys([
       "src/a.ts(10,5): error TS2322: bad assignment",
