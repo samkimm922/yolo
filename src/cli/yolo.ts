@@ -1081,7 +1081,16 @@ function interviewNextActions(state = {}, extra = {}) {
     return actions;
   }
   if (!extra.demand_dir) actions.push(`Create demand artifacts: yolo interview to-demand --session ${path}`);
-  if (extra.demand_dir) actions.push(`Continue to PRD when ready: yolo prd --demand ${extra.demand_dir}`);
+  if (extra.demand_dir) {
+    const hasRoadmap = Array.isArray(state.roadmap)
+      ? state.roadmap.length > 0
+      : ((state.roadmap?.mvp?.length > 0) || (state.roadmap?.phases?.length > 0));
+    if (hasRoadmap) {
+      actions.push(`Continue to PRD when ready: yolo prd --demand ${extra.demand_dir}`);
+    } else {
+      actions.push(`Roadmap not yet created. Generate roadmap: yolo tasks --demand ${extra.demand_dir}`);
+    }
+  }
   for (const action of extra.runtime_next_actions || []) {
     if (actions.length >= 3) break;
     if (!actions.includes(action)) actions.push(action);
