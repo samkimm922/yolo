@@ -752,6 +752,27 @@
               "items": {
                 "type": "object"
               }
+            },
+            "must_haves": {
+              "type": "object",
+              "description": "Non-bypassable triad that must survive into every execution session.",
+              "properties": {
+                "truths": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Verified project facts, assumptions, and constraints the agent must not contradict."
+                },
+                "artifacts": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Concrete file paths the task must produce."
+                },
+                "key_links": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Traceability links back to demand/requirement/scenario/surface."
+                }
+              }
             }
           }
         },
@@ -788,6 +809,16 @@
         },
         "must_fix_before_ship": {
           "type": "boolean"
+        },
+        "inputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Concrete input file paths the task consumes. Machine-parsed for dependency derivation."
+        },
+        "expected_output": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Concrete output file paths the task must produce. Machine-parsed for dependency derivation."
         }
       }
     },

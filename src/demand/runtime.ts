@@ -689,6 +689,17 @@ function modifiedFileCondition(taskId, index, file) {
 function acceptanceCondition(taskId, index, scenario) {
   const params = { text: scenario.then || scenario.text || scenario };
   const verifyCommand = scenario.verify_command || scenario.verifyCommand;
+  // P0.4 compile-time validation: reject verify commands with pipe/redirect/semicolon
+  if (verifyCommand && /[;&|>]/.test(verifyCommand)) {
+    // Strip the unsafe command; acceptance stays WARN (manual)
+    return {
+      id: `POST-${taskId}-SCENARIO-${index + 1}`,
+      type: "acceptance_criteria",
+      severity: "WARN",
+      params,
+      message: `${scenario.then || scenario.text || scenario} [verify_command rejected at compile time: pipe/redirect/semicolon forbidden]`,
+    };
+  }
   if (verifyCommand) params.verify_command = verifyCommand;
   return {
     id: `POST-${taskId}-SCENARIO-${index + 1}`,
@@ -858,6 +869,8 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
           source_finding_ids: [scenario.requirement_id || requirement.id].filter(Boolean),
           source_question_ids: sourceQuestions,
           verification_hint: taskVerificationHint,
+          inputs: readFirst,
+          expected_output: files,
           ...(uiTask ? {
             state_matrix: uiStateMatrixForTask({ scenario, surface, proof }),
             evidence_plan: uiEvidencePlanForTask({ scenario, surface, proof, files }),
@@ -920,6 +933,25 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
               surface_id: surface.id,
               approval_reason: session.approval_reason || session.approval?.reason || session.approval?.note || "",
             },
+            must_haves: {
+              truths: [
+                ...projectFacts.assumptions.map((a) => (typeof a === "string" ? a : a.text || "")).filter(Boolean),
+                ...projectFacts.constraints.filter(Boolean),
+                ...projectFacts.evidence.filter(Boolean),
+              ].slice(0, 20),
+              artifacts: [
+                sessionPlan.state_path,
+                sessionPlan.handoff_path,
+                sessionPlan.evidence_path,
+                ...sessionPlan.memory_update_paths,
+              ],
+              key_links: [
+                `demand:${session.id}`,
+                `requirement:${scenario.requirement_id || requirement.id}`,
+                `scenario:${scenario.id}`,
+                `surface:${surface.id}`,
+              ],
+            },
           },
           scope: {
             targets: files.map((file) => ({ file, description })),
@@ -933,7 +965,7 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
           post_conditions: [
             ...files.map((file, fileIndex) => modifiedFileCondition(taskId, fileIndex, file)),
             ...behaviorCodeConditions(taskId, files, behaviorText, uiTask),
-            acceptanceCondition(taskId, 0, { then: proof || description }),
+            acceptanceCondition(taskId, 0, { then: proof || description, verify_command: scenario.verify_command || scenario.verifyCommand }),
             ...(files.some((file) => fileKind(file) === "test") ? [testsPassCondition(taskId)] : []),
           ],
           trace: {
