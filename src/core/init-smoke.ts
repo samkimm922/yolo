@@ -220,18 +220,18 @@ export async function runInitToFirstPrdSmoke(options = {}) {
     status: "success",
     summary: "Init-to-first-PRD smoke captured bootstrap discovery.",
     artifacts: bootstrap.artifacts,
-  }, { projectRoot, stateRoot: smokeStateRoot, source: "init-smoke", writeSessionMemory: false, skipSequenceCheck: true });
+  }, { projectRoot, stateRoot: smokeStateRoot, source: "init-smoke", writeSessionMemory: false });
   writeLifecycleStageReport("roadmap", {
     status: "success",
     summary: "Init-to-first-PRD smoke generated a traceable first PRD plan.",
     artifacts: [plan.prd_path],
-  }, { projectRoot, stateRoot: smokeStateRoot, source: "init-smoke", writeSessionMemory: false, skipSequenceCheck: true });
+  }, { projectRoot, stateRoot: smokeStateRoot, source: "init-smoke", writeSessionMemory: false });
   writeLifecycleStageReport("prd", {
     status: "success",
     summary: "Init-to-first-PRD smoke wrote the first executable PRD.",
     prd_path: prdAbsolutePath,
     artifacts: [prdAbsolutePath],
-  }, { projectRoot, stateRoot: smokeStateRoot, source: "init-smoke", writeSessionMemory: false, skipSequenceCheck: true });
+  }, { projectRoot, stateRoot: smokeStateRoot, source: "init-smoke", writeSessionMemory: false });
   const preflight = preflightPrd(prdAbsolutePath);
   const stateRoot = join(projectRoot, ".yolo");
   const check = inspectYoloCheck({

@@ -28,7 +28,7 @@
 | 测试文件 | 160 | 持续增加真实项目 fixture/e2e | 进行中 |
 | package exports | 52 | stable/experimental/internal 分层明确 | 已建 manifest，root migration debt 清零，继续冻结 experimental API |
 | package bins | 6 | CLI public surface 明确 | 已登记 |
-| `docs/**/*.md` 文件 | 28 | 公开 docs / memory mirrors 与当前结构同步 | 进行中 |
+| `docs/**/*.md` 文件 | 29 | 公开 docs / memory mirrors 与当前结构同步 | 进行中 |
 | package public release | `private: true` | public beta 可发布 | P39 UX doctor、P38 experience audit、P37 dogfood pack/document governance、P33 memory center 和 P32 evidence bundle gate 已建，真实包仍阻断中 |
 
 ## 自动执行规则

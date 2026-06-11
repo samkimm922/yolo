@@ -93,6 +93,21 @@ describe("docs truth sync", () => {
     assert.doesNotMatch(treeText, /package exports: 50|src \.js files: 0|test files: 0/);
   });
 
+  test("README references docs/quickstart.md at canonical path", () => {
+    const readmePath = join(YOLO_DIR, "README.md");
+    const quickstartPath = join(YOLO_DIR, "docs/quickstart.md");
+    assert.equal(existsSync(quickstartPath), true, "docs/quickstart.md must exist as canonical quickstart");
+    const readme = readFileSync(readmePath, "utf8");
+    assert.ok(readme.includes("docs/quickstart.md"), "README must reference docs/quickstart.md");
+  });
+
+  test("init-to-first-prd smoke does not bypass lifecycle sequence check", () => {
+    const initSmokePath = join(YOLO_DIR, "src/core/init-smoke.ts");
+    const content = readFileSync(initSmokePath, "utf8");
+    assert.ok(!content.includes("skipSequenceCheck"), "init-smoke must not use skipSequenceCheck bypass");
+    assert.ok(!content.includes("skip_sequence_check"), "init-smoke must not use skip_sequence_check bypass");
+  });
+
   test("demand doctrine documents the nontechnical-to-atomic-task flow", () => {
     const doctrinePath = join(YOLO_DIR, "docs/yolo-demand-doctrine.md");
     const planPath = join(YOLO_DIR, "docs/yolo-demand-implementation-plan.md");
