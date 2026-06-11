@@ -468,6 +468,146 @@ function scenarioHasProof(scenario = {}) {
   return clean(scenario.proof || scenario.acceptance).length >= 10;
 }
 
+// ── Completeness matrix (P2.15b): deterministic gate rules ──
+
+function extractRoles(session = {}) {
+  const raw = asArray(session.vision?.target_users || session.project?.target_users || session.target_users);
+  return raw
+    .map((entry) => {
+      if (typeof entry === "string") return clean(entry);
+      return clean(entry.role || entry.name || entry.title || entry.label || entry.id);
+    })
+    .filter(Boolean);
+}
+
+function roleScenarioCoverage(roles = [], scenarios = []) {
+  const uncovered = [];
+  for (const role of roles) {
+    const matchingScenarios = scenarios.filter(
+      (scenario) => clean(scenario.actor).toLowerCase() === role.toLowerCase()
+    );
+    if (matchingScenarios.length === 0) {
+      uncovered.push({ role, scenario_count: 0 });
+    }
+  }
+  return {
+    roles_total: roles.length,
+    roles_covered: roles.length - uncovered.length,
+    roles_uncovered: uncovered,
+  };
+}
+
+function scenarioExceptionCoverage(scenarios = [], session = {}) {
+  // Check if exceptions were collected at all (session-level check)
+  const sessionExceptions = asArray(
+    session.prd_intake?.exceptions || session.nontechnical_intake?.exceptions || session.exceptions
+  ).filter((item) => clean(typeof item === "string" ? item : item.text).length > 0);
+  const anyScenarioHasExceptions = scenarios.some(
+    (scenario) => asArray(scenario.exceptions).map(clean).filter(Boolean).length > 0
+  );
+  // Only flag missing exceptions if the session had exception data collected
+  // or if at least one scenario has exceptions (making the omission visible)
+  const shouldCheck = sessionExceptions.length > 0 || anyScenarioHasExceptions;
+
+  const missing = [];
+  if (shouldCheck) {
+    for (const scenario of scenarios) {
+      const exceptions = asArray(scenario.exceptions).map(clean).filter(Boolean);
+      if (exceptions.length === 0) {
+        missing.push({ scenario_id: scenario.id || null, actor: clean(scenario.actor) || "unknown" });
+      }
+    }
+  }
+  return {
+    scenarios_total: scenarios.length,
+    scenarios_with_exceptions: scenarios.length - missing.length,
+    scenarios_missing_exceptions: missing,
+    check_active: shouldCheck,
+  };
+}
+
+function requirementAcceptanceEvidence(requirements = [], scenarios = []) {
+  const missing = [];
+  for (const requirement of requirements) {
+    const acceptanceScenarios = asArray(requirement.acceptance_scenarios || requirement.scenarios);
+    const hasDirectProof = acceptanceScenarios.some(
+      (scenario) => clean(scenario.proof || scenario.acceptance || scenario.evidence).length > 0
+    );
+    // Also check if any scenario in the matrix covers this requirement with proof
+    const hasScenarioProof = scenarios.some(
+      (scenario) =>
+        (scenario.requirement_id === requirement.id || !requirement.id) &&
+        clean(scenario.proof || scenario.acceptance).length > 0
+    );
+    if (!hasDirectProof && !hasScenarioProof) {
+      missing.push({
+        requirement_id: requirement.id || null,
+        requirement_text: clean(requirement.text || requirement.title).slice(0, 80) || null,
+      });
+    }
+  }
+  return {
+    requirements_total: requirements.length,
+    requirements_with_proof: requirements.length - missing.length,
+    requirements_missing_proof: missing,
+  };
+}
+
+function inspectCompletenessMatrix(session = {}) {
+  const roles = extractRoles(session);
+  const scenarios = scenarioMatrix(session);
+  const requirements = requirementItems(session);
+
+  const roleCoverage = roleScenarioCoverage(roles, scenarios);
+  const exceptionCoverage = scenarioExceptionCoverage(scenarios, session);
+  const evidenceCoverage = requirementAcceptanceEvidence(requirements, scenarios);
+
+  const errors = [];
+  if (roleCoverage.roles_uncovered.length > 0) {
+    for (const item of roleCoverage.roles_uncovered) {
+      errors.push({
+        code: "ROLE_WITHOUT_SCENARIO",
+        rule: "Each identified role must have at least one scenario",
+        role: item.role,
+        message: `Role "${item.role}" has no matching scenario in the scenario matrix.`,
+      });
+    }
+  }
+  if (exceptionCoverage.scenarios_missing_exceptions.length > 0) {
+    for (const item of exceptionCoverage.scenarios_missing_exceptions) {
+      errors.push({
+        code: "SCENARIO_WITHOUT_EXCEPTIONS",
+        rule: "Each scenario must have at least one exception / edge-case Q&A",
+        scenario_id: item.scenario_id,
+        actor: item.actor,
+        message: `Scenario (actor="${item.actor}") has no exception Q&A entries.`,
+      });
+    }
+  }
+  if (evidenceCoverage.requirements_missing_proof.length > 0) {
+    for (const item of evidenceCoverage.requirements_missing_proof) {
+      errors.push({
+        code: "REQUIREMENT_WITHOUT_ACCEPTANCE_EVIDENCE",
+        rule: "Each requirement must have user-visible acceptance evidence",
+        requirement_id: item.requirement_id,
+        message: `Requirement "${item.requirement_text || item.requirement_id}" has no acceptance scenario with proof.`,
+      });
+    }
+  }
+
+  return {
+    passed: errors.length === 0,
+    status: errors.length === 0 ? "pass" : "blocked",
+    coverage: {
+      roles: roleCoverage,
+      exceptions: exceptionCoverage,
+      evidence: evidenceCoverage,
+    },
+    errors,
+    error_count: errors.length,
+  };
+}
+
 function scenarioSurfaces(session = {}) {
   return scenarioMatrix(session).flatMap((scenario) => asArray(scenario.surfaces));
 }
@@ -617,6 +757,16 @@ export function inspectDemandReadiness(session = {}, options = {}) {
       scenarioSurfaceCount(session) >= Math.max(1, scenarios.length),
       prdMode ? "error" : "warning",
       "Every scenario must map to at least one implementation surface for atomic task slicing.",
+    ),
+    check(
+      "COMPLETENESS_MATRIX",
+      (() => {
+        const matrix = inspectCompletenessMatrix(session);
+        return matrix.passed;
+      })(),
+      prdMode ? "error" : "warning",
+      "Completeness matrix must pass: each role must have ≥1 scenario, each scenario ≥1 exception Q&A, each requirement must have user-visible acceptance evidence.",
+      { completeness_matrix: inspectCompletenessMatrix(session) },
     ),
     check(
       "SURFACE_SESSION_BUDGET_EXECUTABLE",
