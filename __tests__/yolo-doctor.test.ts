@@ -8,7 +8,7 @@ import {
   buildYoloDoctorReport,
   formatYoloDoctorText,
   runYoloDoctorCli,
-} from "../src/runtime/devtools/doctor.js";
+} from "../src/devtools/doctor.js";
 
 function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-doctor-"));

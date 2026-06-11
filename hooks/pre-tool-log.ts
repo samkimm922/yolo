@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync, existsSync, openSync, mkdirSync } from 'no
 
 const YOLO_DIR = resolve(import.meta.dirname, '..');
 const LOG_CHANGE = join(YOLO_DIR, 'dist/src/runtime/evidence/log-change.js');
-const MEMORY_CENTER = join(YOLO_DIR, 'dist/src/runtime/devtools/memory-center.js');
+const MEMORY_CENTER = join(YOLO_DIR, 'dist/src/devtools/memory-center.js');
 
 function reportHookFailure({ hook, classification, stage, error }) {
   const payload = {

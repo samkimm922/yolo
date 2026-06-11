@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { refreshMemoryCenter } from "../memory/center.js";
+import { refreshMemoryCenter } from "../runtime/memory/center.js";
 
 export function runGenerateTreeCli(argv = process.argv.slice(2), io = {}) {
   const result = refreshMemoryCenter({

@@ -711,7 +711,7 @@ export function buildCurrentHandoffMarkdown(options = {}) {
     "- Overflow from active ledgers is archived under `state/archive/jsonl/YYYY-MM/` or `.yolo/state/archive/jsonl/YYYY-MM/` before the active files are trimmed.",
     "- Learning records are unified under `state/learning.jsonl` or `.yolo/state/learning.jsonl`; legacy closed-loop knowledge files are read-only migration sources.",
     "- Compatibility docs such as `PROJECT_TREE.md`, `SYSTEM_STATE.md`, and `ROADMAP.md` are mirrors or pointers, not the source of truth.",
-    "- Hook-triggered refresh now targets `src/runtime/devtools/memory-center.js` instead of removed root scripts.",
+    "- Hook-triggered refresh now targets `src/devtools/memory-center.js` instead of removed root scripts.",
     "",
     "## Next Operator Actions",
     "",

@@ -138,9 +138,9 @@ describe("memory center", () => {
     const stopHook = readFileSync(join(YOLO_DIR, "hooks/stop-update-docs.ts"), "utf8");
 
     assert.match(preToolLog, /src\/runtime\/evidence\/log-change\.js/);
-    assert.match(preToolLog, /src\/runtime\/devtools\/memory-center\.js/);
+    assert.match(preToolLog, /src\/devtools\/memory-center\.js/);
     assert.match(preToolTaskLog, /src\/runtime\/evidence\/log-change\.js/);
-    assert.match(stopHook, /src\/runtime\/devtools\/memory-center\.js/);
+    assert.match(stopHook, /src\/devtools\/memory-center\.js/);
     assert.doesNotMatch(preToolLog, /\.\.', 'log-change\.js'/);
     assert.doesNotMatch(stopHook, /generate-tree\.js'\)/);
   });

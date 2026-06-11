@@ -3,7 +3,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildAgentBridgeInstallPlan } from "../../../tools/install-agent-bridge.js";
+import { buildAgentBridgeInstallPlan } from "../../tools/install-agent-bridge.js";
 import {
   DEFAULT_YOLO_PUBLIC_COMMAND_NAMES,
   buildYoloCommandRegistry,
@@ -11,11 +11,11 @@ import {
   listYoloCommandNames,
   listYoloCommands,
   YOLO_COMMAND_SURFACE_BUDGET,
-} from "../../workflows/command-registry.js";
+} from "../workflows/command-registry.js";
 import {
   lifecycleStatusPath,
   readLifecycleState,
-} from "../../lifecycle/state.js";
+} from "../lifecycle/state.js";
 
 export const YOLO_DOCTOR_SCHEMA_VERSION = "1.0";
 export const YOLO_DOCTOR_SCHEMA = "yolo.doctor.report.v1";
@@ -103,7 +103,7 @@ function lifecycleInspection(projectRoot) {
 
 export function buildYoloDoctorReport(options = {}) {
   const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
-  const yoloRoot = resolve(options.yoloRoot || options.yolo_root || join(__dirname, "../../.."));
+  const yoloRoot = resolve(options.yoloRoot || options.yolo_root || join(__dirname, "../.."));
   const homeDir = resolve(options.homeDir || options.home_dir || homedir());
   const targets = options.targets || options.target || "both";
   const scope = options.scope || options.installScope || options.install_scope || "project";

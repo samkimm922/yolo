@@ -322,7 +322,7 @@ import {
   buildYoloDoctorReport,
   formatYoloDoctorText,
   YOLO_DOCTOR_SCHEMA_VERSION,
-} from "./src/runtime/devtools/doctor.js";
+} from "./src/devtools/doctor.js";
 import { generateFindingsFromRequirement } from "./src/demand/findings-generator.js";
 import { convertAuditToPrd } from "./src/prd/audit-to-prd.js";
 import { validatePrdPath } from "./src/prd/validate.js";

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { initProject } from "../core/bootstrap.js";
 import { formatProjectSetupText, runProjectSetup } from "../core/setup.js";
 import { prdSearchDirs, resolvePrdPath } from "../core/paths.js";
-import { runYoloDoctorCli } from "../runtime/devtools/doctor.js";
+import { runYoloDoctorCli } from "../devtools/doctor.js";
 import { buildAcceptanceReport, formatAcceptanceReportText } from "../runtime/acceptance/report.js";
 import { runYoloBenchmarkCli } from "../eval/benchmark.js";
 import { buildDogfoodMatrixReport } from "../release/dogfood-matrix.js";

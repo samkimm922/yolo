@@ -44,7 +44,7 @@ export const DEFAULT_PACKAGE_SMOKE_REQUIRED_ENTRIES = [
   "dist/src/runtime/learning/center.js",
   "dist/src/runtime/memory/center.js",
   "dist/src/runtime/memory/retention.js",
-  "dist/src/runtime/devtools/memory-center.js",
+  "dist/src/devtools/memory-center.js",
   "dist/src/release/readiness.js",
   "dist/src/release/decision-gate.js",
   "dist/src/release/change-provenance.js",

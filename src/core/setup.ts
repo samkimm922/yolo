@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildProjectBootstrapPlan, initProject } from "./bootstrap.js";
-import { buildYoloDoctorReport } from "../runtime/devtools/doctor.js";
+import { buildYoloDoctorReport } from "../devtools/doctor.js";
 import {
   installAgentBridge,
   normalizeAgentTargets,

@@ -6,7 +6,7 @@ import { resolve, join } from 'node:path';
 import { existsSync } from 'node:fs';
 
 const YOLO_DIR = resolve(import.meta.dirname, '..');
-const MEMORY_CENTER = join(YOLO_DIR, 'dist/src/runtime/devtools/memory-center.js');
+const MEMORY_CENTER = join(YOLO_DIR, 'dist/src/devtools/memory-center.js');
 
 // 不在 yolo 环境中时静默退出（worktree 已清理等场景）
 if (!existsSync(MEMORY_CENTER)) process.exit(0);
