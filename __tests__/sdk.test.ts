@@ -44,7 +44,7 @@ import {
   runCleanEnvironmentVerify,
   runReleaseCandidateGate,
 } from "../sdk.js";
-import { DEFAULT_CONFIG_PATH, loadConfig } from "../lib/config.js";
+import { DEFAULT_CONFIG_PATH, loadConfig } from "../src/lib/config.js";
 
 const YOLO_DIR = fileURLToPath(new URL("..", import.meta.url));
 

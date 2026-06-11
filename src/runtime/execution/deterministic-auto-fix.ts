@@ -1,4 +1,4 @@
-import { applyAutoFixTasks as defaultApplyAutoFixTasks } from "../../../lib/auto-fix.js";
+import { applyAutoFixTasks as defaultApplyAutoFixTasks } from "../../lib/auto-fix.js";
 import {
   failTaskTransition,
   passTaskTransition,

@@ -20,7 +20,7 @@ const PATH_KEYS = {
   currentRun: "state/current-run.json",
 };
 
-const DEFAULT_YOLO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const DEFAULT_YOLO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 export function ensureCanonicalDirs(yoloRoot = DEFAULT_YOLO_ROOT) {
   for (const dir of CANONICAL_DIRS) {

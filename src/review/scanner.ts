@@ -7,7 +7,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { extname, resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
-import { config } from "../../lib/config.js";
+import { config } from "../lib/config.js";
 import { buildReviewOutput, normalizeReviewFindings } from "./findings.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

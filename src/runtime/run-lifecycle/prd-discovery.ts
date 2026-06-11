@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { prdSearchDirs, resolvePrdPath } from "../../../lib/paths.js";
+import { prdSearchDirs, resolvePrdPath } from "../../lib/paths.js";
 
 export function findLatestPrd({ yoloRoot, searchDirs = prdSearchDirs(yoloRoot) } = {}) {
   try {

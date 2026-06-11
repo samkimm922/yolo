@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, isAbsolute, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DEFAULT_CONFIG_PATH = resolve(__dirname, '..', 'config.yaml');
+const DEFAULT_CONFIG_PATH = resolve(__dirname, '..', '..', '..', 'config.yaml');
 const ENV_CONFIG_PATH = process.env.YOLO_CONFIG ? resolve(process.env.YOLO_CONFIG) : null;
 const CONFIG_PATH = ENV_CONFIG_PATH || DEFAULT_CONFIG_PATH;
 

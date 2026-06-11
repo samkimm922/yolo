@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { evalFileLinesMax, evalFilesModifiedMax } from "../lib/evaluators/file-check.js";
-import { evalCodeContains } from "../lib/evaluators/code-check.js";
-import { evalNoNewDeadCode } from "../lib/evaluators/quality-check.js";
+import { evalFileLinesMax, evalFilesModifiedMax } from "../src/lib/evaluators/file-check.js";
+import { evalCodeContains } from "../src/lib/evaluators/code-check.js";
+import { evalNoNewDeadCode } from "../src/lib/evaluators/quality-check.js";
 import { evaluatePreConditions } from "../src/prd/contract.js";
-import { evalBusinessCodeMin } from "../lib/evaluators/runtime-check.js";
+import { evalBusinessCodeMin } from "../src/lib/evaluators/runtime-check.js";
 
 function fakeExec(outputs) {
   return (cmd) => ({ ok: true, out: outputs[cmd] || "" });

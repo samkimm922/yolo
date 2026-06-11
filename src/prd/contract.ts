@@ -15,10 +15,10 @@ import {
   evalCodeNotContains,
   evalFunctionContainsCall,
   evalFunctionContainsText,
-} from "../../lib/evaluators/code-check.js";
-import { evalFileExists, evalFileNotExists, evalDirExists, evalFilesModifiedMax, evalFileLinesMax, evalNoFileOverMaxLines } from "../../lib/evaluators/file-check.js";
-import { evalNoForbiddenPatterns, evalNoNewTypeErrors, evalTypeErrorsContain, evalNoNewLintErrors, evalNoNewDeadCode } from "../../lib/evaluators/quality-check.js";
-import { evalTestsPass, evalBuildPass, evalBusinessCodeMin } from "../../lib/evaluators/runtime-check.js";
+} from "../lib/evaluators/code-check.js";
+import { evalFileExists, evalFileNotExists, evalDirExists, evalFilesModifiedMax, evalFileLinesMax, evalNoFileOverMaxLines } from "../lib/evaluators/file-check.js";
+import { evalNoForbiddenPatterns, evalNoNewTypeErrors, evalTypeErrorsContain, evalNoNewLintErrors, evalNoNewDeadCode } from "../lib/evaluators/quality-check.js";
+import { evalTestsPass, evalBuildPass, evalBusinessCodeMin } from "../lib/evaluators/runtime-check.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");

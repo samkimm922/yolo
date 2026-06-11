@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { classifyTaskExecution } from "../src/runtime/task-loop/router.js";
 import { validateDiffQuality } from "../src/runtime/gates/diff-quality-gate.js";
-import { applyAutoFixTasks } from "../lib/auto-fix.js";
+import { applyAutoFixTasks } from "../src/lib/auto-fix.js";
 
 function makeGitRepo() {
   const root = mkdtempSync(join(tmpdir(), "yolo-diff-quality-"));
