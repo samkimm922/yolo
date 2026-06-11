@@ -4,6 +4,12 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { runDemandDiscussRuntime, runDemandPrdRuntime } from "../src/demand/runtime.js";
+import { planControlledParallelWaves } from "../src/runtime/parallel/wave-planner.js";
+
+function isTestFile(file = "") {
+  const path = String(file).toLowerCase();
+  return /(^|\/)(__tests__|tests?|specs?)\//.test(path) || /\.(test|spec)\./.test(path);
+}
 
 function writeProjectFile(root, file, content) {
   const path = join(root, file);
@@ -41,6 +47,7 @@ function baseDiscussInput(root, overrides = {}) {
     target_files: ["src/pages/inventory-list.tsx"],
     decisions: ["Start with an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
     roadmap: ["MVP badge in inventory list."],
+    exceptions: ["What if the inventory system is down?"],
     approve: true,
     playback: { confirmed: true, confirmed_by: "user" },
     writeArtifacts: true,
@@ -114,70 +121,62 @@ describe("P2.16 task schema enhancement", () => {
       const tasks = getTasks(prd);
       assert.ok(tasks.length > 0, `must have tasks (status=${prd.status}, code=${prd.code})`);
 
-      // Derive dependency graph from inputs/expected_output
-      // Rule: task B depends on task A if B.inputs intersects A.expected_output
-      const derivedDeps = new Map();
-      for (const task of tasks) derivedDeps.set(task.id, []);
-
+      // Production tasks must have depends_on derived from non-test inputs ∩ expected_output
       for (const taskB of tasks) {
         for (const taskA of tasks) {
           if (taskA.id === taskB.id) continue;
-          const aOutputs = new Set(taskA.expected_output || []);
-          const bInputs = taskB.inputs || [];
-          if (bInputs.some((input) => aOutputs.has(input))) {
-            derivedDeps.get(taskB.id).push(taskA.id);
+          const aOutputs = new Set((taskA.expected_output || []).filter((f) => !isTestFile(f)));
+          const bInputs = (taskB.inputs || []).filter((f) => !isTestFile(f));
+          const hasOverlap = bInputs.some((input) => aOutputs.has(input));
+          if (hasOverlap) {
+            assert.ok(taskB.depends_on.includes(taskA.id),
+              `task ${taskB.id} must depend on ${taskA.id} because its non-test inputs overlap with ${taskA.id}'s expected_output`);
           }
         }
       }
 
-      // Verify that derivation is possible: at least one task must have inputs
-      const allInputs = tasks.flatMap((t) => t.inputs || []);
-      const allOutputs = tasks.flatMap((t) => t.expected_output || []);
-      assert.ok(allInputs.length > 0, "at least one task must have inputs");
-      assert.ok(allOutputs.length > 0, "at least one task must have expected_output");
+      // No false positives: tasks without non-test overlap must not have file-derived dependency
+      for (const taskB of tasks) {
+        for (const taskA of tasks) {
+          if (taskA.id === taskB.id) continue;
+          const aOutputs = new Set((taskA.expected_output || []).filter((f) => !isTestFile(f)));
+          const bInputs = (taskB.inputs || []).filter((f) => !isTestFile(f));
+          const hasOverlap = bInputs.some((input) => aOutputs.has(input));
+          if (!hasOverlap) {
+            assert.equal(taskB.depends_on.includes(taskA.id), false,
+              `task ${taskB.id} must NOT depend on ${taskA.id} because there is no non-test input/output overlap`);
+          }
+        }
+      }
 
-      // Verify that test tasks depend on implementation tasks via input/output overlap
+      // Wave-planner consumption: dependent tasks must not share the same wave
       const testTasks = tasks.filter((t) =>
         (t.expected_output || []).some((f) => /\.(test|spec)\./.test(f)),
       );
       const implTasks = tasks.filter((t) =>
         (t.expected_output || []).some((f) => !/\.(test|spec)\./.test(f)),
       );
+      assert.ok(testTasks.length > 0, "must have test tasks");
+      assert.ok(implTasks.length > 0, "must have implementation tasks");
 
-      // A test task's inputs should include the implementation file it tests
-      for (const testTask of testTasks) {
-        const testInputs = testTask.inputs || [];
-        const implOutputs = implTasks.flatMap((t) => t.expected_output || []);
-        const overlap = testInputs.filter((input) => implOutputs.includes(input));
-        assert.ok(overlap.length > 0,
-          `test task ${testTask.id} inputs ${JSON.stringify(testInputs)} must overlap with implementation outputs ${JSON.stringify(implOutputs)}`);
-      }
+      // With no completed tasks, dependent tasks should be unscheduled
+      const pendingPlan = planControlledParallelWaves({ tasks });
+      assert.equal(pendingPlan.status, "blocked");
+      const dependentTask = tasks.find((t) => t.depends_on.length > 0);
+      assert.ok(dependentTask, "must have at least one task with derived dependency");
+      assert.equal(pendingPlan.waves.some((w) => w.task_ids.includes(dependentTask.id)), false,
+        `dependent task ${dependentTask.id} must not be scheduled when its dependency is pending`);
+      assert.ok(pendingPlan.blockers.some((b) => b.task_id === dependentTask.id),
+        `dependent task ${dependentTask.id} must appear in blockers when dependency is pending`);
 
-      // The derived graph must be non-empty when file overlap exists
-      const totalDerived = [...derivedDeps.values()].reduce((sum, deps) => sum + deps.length, 0);
-      // At minimum, we can prove the inputs/expected_output data is machine-parsable
-      assert.ok(totalDerived >= 0, "dependency derivation must produce countable results");
-
-      // Verify every dependency derivation is deterministic (same inputs → same result)
-      const derived2 = new Map();
-      for (const task of tasks) derived2.set(task.id, []);
-      for (const taskB of tasks) {
-        for (const taskA of tasks) {
-          if (taskA.id === taskB.id) continue;
-          const aOutputs = new Set(taskA.expected_output || []);
-          const bInputs = taskB.inputs || [];
-          if (bInputs.some((input) => aOutputs.has(input))) {
-            derived2.get(taskB.id).push(taskA.id);
-          }
-        }
-      }
-      for (const task of tasks) {
-        assert.deepEqual(
-          derivedDeps.get(task.id) || [],
-          derived2.get(task.id) || [],
-          `dependency derivation must be deterministic for task ${task.id}`,
-        );
-      }
+      // With dependency completed, dependent task should be scheduled
+      const dependencyId = dependentTask.depends_on[0];
+      const completedPlan = planControlledParallelWaves({ tasks, completedTaskIds: [dependencyId] });
+      assert.equal(completedPlan.waves.some((w) => w.task_ids.includes(dependentTask.id)), true,
+        `dependent task ${dependentTask.id} must be scheduled when its dependency ${dependencyId} is completed`);
+      // Wave-planner graph must include the derived dependency edge
+      assert.ok(completedPlan.graph.edges.some((e) => e.from === dependencyId && e.to === dependentTask.id),
+        `wave-planner graph must include edge from ${dependencyId} to ${dependentTask.id}`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -243,19 +242,13 @@ describe("P2.16 task schema enhancement", () => {
         writeArtifacts: false,
       });
 
-      const tasks = getTasks(prd);
-      assert.ok(tasks.length > 0, `must have tasks (status=${prd.status}, code=${prd.code})`);
-
-      for (const task of tasks) {
-        const acceptCond = task.post_conditions.find((c) => c.type === "acceptance_criteria");
-        assert.ok(acceptCond, `task ${task.id} must have acceptance_criteria`);
-        assert.equal(acceptCond.params.verify_command, undefined,
-          `task ${task.id} acceptance_criteria must not contain verify_command with pipe`);
-        assert.equal(acceptCond.severity, "WARN",
-          `task ${task.id} must be WARN after verify_command rejection`);
-        assert.ok(acceptCond.message.includes("rejected at compile time"),
-          `acceptance message must indicate compile-time rejection: ${acceptCond.message}`);
-      }
+      assert.equal(prd.status, "blocked");
+      assert.ok(prd.blockers.some((b) => b.code === "ILLEGAL_VERIFY_COMMAND"));
+      const blocker = prd.blockers.find((b) => b.code === "ILLEGAL_VERIFY_COMMAND");
+      assert.ok(blocker.message.includes("npm test | grep PASS"));
+      assert.ok(blocker.message.includes("|"));
+      assert.ok(blocker.message.includes("single safe command"));
+      assert.equal(prd.prd, null);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -277,15 +270,12 @@ describe("P2.16 task schema enhancement", () => {
         writeArtifacts: false,
       });
 
-      const tasks = getTasks(prd);
-      assert.ok(tasks.length > 0, `must have tasks (status=${prd.status}, code=${prd.code})`);
-
-      for (const task of tasks) {
-        const acceptCond = task.post_conditions.find((c) => c.type === "acceptance_criteria");
-        assert.equal(acceptCond.params.verify_command, undefined);
-        assert.equal(acceptCond.severity, "WARN");
-        assert.ok(acceptCond.message.includes("rejected at compile time"));
-      }
+      assert.equal(prd.status, "blocked");
+      assert.ok(prd.blockers.some((b) => b.code === "ILLEGAL_VERIFY_COMMAND"));
+      const blocker = prd.blockers.find((b) => b.code === "ILLEGAL_VERIFY_COMMAND");
+      assert.ok(blocker.message.includes("npm test > output.txt"));
+      assert.ok(blocker.message.includes(">"));
+      assert.equal(prd.prd, null);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -307,15 +297,12 @@ describe("P2.16 task schema enhancement", () => {
         writeArtifacts: false,
       });
 
-      const tasks = getTasks(prd);
-      assert.ok(tasks.length > 0, `must have tasks (status=${prd.status}, code=${prd.code})`);
-
-      for (const task of tasks) {
-        const acceptCond = task.post_conditions.find((c) => c.type === "acceptance_criteria");
-        assert.equal(acceptCond.params.verify_command, undefined);
-        assert.equal(acceptCond.severity, "WARN");
-        assert.ok(acceptCond.message.includes("rejected at compile time"));
-      }
+      assert.equal(prd.status, "blocked");
+      assert.ok(prd.blockers.some((b) => b.code === "ILLEGAL_VERIFY_COMMAND"));
+      const blocker = prd.blockers.find((b) => b.code === "ILLEGAL_VERIFY_COMMAND");
+      assert.ok(blocker.message.includes("npm test; echo done"));
+      assert.ok(blocker.message.includes(";"));
+      assert.equal(prd.prd, null);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

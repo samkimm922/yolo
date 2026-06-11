@@ -760,8 +760,6 @@ function relatedReadFirst(files = [], scenarioFiles = [], surface = {}) {
     related.push(...scenarioFiles.filter((file) => fileKind(file) !== "test"));
   } else if (kind === "ui") {
     related.push(...scenarioFiles.filter((file) => ["service", "api", "data", "code"].includes(fileKind(file))));
-  } else {
-    related.push(...scenarioFiles.filter((file) => fileKind(file) === "test"));
   }
   return [...new Set([...own, ...readonly, ...related].filter(Boolean))];
 }
@@ -789,11 +787,29 @@ function addTaskDependencies(tasks = []) {
   return tasks;
 }
 
+function deriveFileDependencies(tasks = []) {
+  for (const taskB of tasks) {
+    const bInputs = asArray(taskB.inputs).map(clean).filter(Boolean);
+    for (const taskA of tasks) {
+      if (taskA.id === taskB.id) continue;
+      const aOutputs = new Set(asArray(taskA.expected_output).map(clean).filter(Boolean));
+      const overlap = bInputs.filter((input) => aOutputs.has(input));
+      // Only derive dependencies from non-test file overlaps to avoid impl→test cycles
+      const meaningfulOverlap = overlap.filter((file) => fileKind(file) !== "test");
+      if (meaningfulOverlap.length > 0) {
+        taskB.depends_on = [...new Set([...(taskB.depends_on || []), taskA.id])];
+      }
+    }
+  }
+  return tasks;
+}
+
 function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
   const requirements = requirementById(session);
   const scenarios = scenarioMatrix(session).length ? scenarioMatrix(session) : fallbackScenarios(session);
   const allFiles = targetFiles(session);
   const tasks = [];
+  const compileErrors = [];
   for (const [scenarioIndex, scenario] of scenarios.entries()) {
     const requirement = requirements.get(scenario.requirement_id) || {};
     const surfaces = asArray(scenario.surfaces).length
@@ -806,6 +822,16 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
       const fileChunks = chunk(surfaceFiles, maxFiles);
       for (const [chunkIndex, files] of fileChunks.entries()) {
         const taskId = `DEMAND-${scenario.requirement_id || "REQ"}-${String(scenarioIndex + 1).padStart(3, "0")}${String(surfaceIndex + 1).padStart(2, "0")}${String(chunkIndex + 1).padStart(2, "0")}`;
+        const verifyCommand = scenario.verify_command || scenario.verifyCommand;
+        if (verifyCommand && /[;&|>]/.test(verifyCommand)) {
+          const illegalChars = [...verifyCommand.match(/[;&|>]/g)].join(", ");
+          compileErrors.push({
+            task_id: taskId,
+            original_command: verifyCommand,
+            illegal_chars: illegalChars,
+            suggestion: `Replace "${verifyCommand}" with a single safe command without pipe, redirect, or semicolon.`,
+          });
+        }
         const proof = clean(surface.proof || scenario.proof || requirement.text || scenario.desired_behavior);
         const description = clean(scenario.desired_behavior || requirement.text || proof);
         const sourceQuestions = sourceQuestionIds(session, scenario, requirement);
@@ -990,7 +1016,9 @@ function buildAtomicDemandTasks(session = {}, input = {}, options = {}) {
       }
     }
   }
-  return addTaskDependencies(tasks);
+  addTaskDependencies(tasks);
+  deriveFileDependencies(tasks);
+  return { tasks, compileErrors };
 }
 
 function inspectAtomicity(tasks = [], input = {}, options = {}) {
@@ -1067,7 +1095,24 @@ function buildDemandPrd(session = {}, input = {}, options = {}) {
   const now = clean(options.now || input.now) || new Date().toISOString();
   const baseCommit = readBaseCommit(input, options);
   const prdId = clean(input.prd_id || input.prdId) || `PRD-${now.slice(0, 10).replace(/-/g, "")}-${asciiIdPart(session.id.replace(/^DEMAND-/, ""), "DEMAND")}`;
-  const tasks = buildAtomicDemandTasks(session, { ...input, projectRoot: input.projectRoot || input.project_root }, options);
+  const { tasks, compileErrors } = buildAtomicDemandTasks(session, { ...input, projectRoot: input.projectRoot || input.project_root }, options);
+  if (compileErrors.length > 0) {
+    return {
+      status: "blocked",
+      code: "DEMAND_VERIFY_COMMAND_BLOCKED",
+      summary: "PRD compilation blocked by illegal verify_command in task acceptance criteria.",
+      readiness,
+      blockers: compileErrors.map((err) => ({
+        code: "ILLEGAL_VERIFY_COMMAND",
+        task_id: err.task_id,
+        message: `Task ${err.task_id} contains illegal verify_command: "${err.original_command}". Illegal characters: ${err.illegal_chars}. ${err.suggestion}`,
+        ...err,
+      })),
+      warnings: readiness.warnings,
+      prd: null,
+      next_actions: compileErrors.map((err) => `Fix verify_command for task ${err.task_id}: ${err.suggestion}`),
+    };
+  }
   const atomicity = inspectAtomicity(tasks, input, options);
   const sessionHandoff = summarizeTaskSessionPlans(tasks);
   const quality = inspectDemandQuality(session, {
