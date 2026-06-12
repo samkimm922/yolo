@@ -11,12 +11,32 @@
  *   const custom = loadConfig({ path: './yolo.config.yaml', forceReload: true });
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DEFAULT_CONFIG_PATH = resolve(__dirname, '..', '..', '..', 'config.yaml');
+
+function findProjectRoot(startDir) {
+  let dir = resolve(startDir);
+  const root = resolve('/');
+  while (dir !== root) {
+    if (existsSync(join(dir, 'package.json'))) {
+      // A dist/package.json copied by the build is not the project root;
+      // prefer the parent directory when it also contains package.json.
+      if (basename(dir) === 'dist') {
+        const parent = dirname(dir);
+        if (existsSync(join(parent, 'package.json'))) return parent;
+      }
+      return dir;
+    }
+    dir = dirname(dir);
+  }
+  // Fallback to the legacy heuristic when no package.json is found.
+  return resolve(__dirname, '..', '..', '..');
+}
+
+const DEFAULT_CONFIG_PATH = resolve(findProjectRoot(__dirname), 'config.yaml');
 const ENV_CONFIG_PATH = process.env.YOLO_CONFIG ? resolve(process.env.YOLO_CONFIG) : null;
 const CONFIG_PATH = ENV_CONFIG_PATH || DEFAULT_CONFIG_PATH;
 
