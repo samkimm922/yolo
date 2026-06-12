@@ -1,6 +1,8 @@
 import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, relative, resolve, join, normalize } from "node:path";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import { spawnSync as defaultSpawnSync } from "node:child_process";
 import { buildEvidenceArtifact, createEvidenceLedger, evidenceArtifactDigest, validateEvidenceArtifact } from "../runtime/evidence/ledger.js";
 import {
@@ -8,6 +10,38 @@ import {
   getFixtureDefinition,
   inspectFixtureDefinition,
 } from "./registry.js";
+
+// Resolve yolo's bundled tsx loader once at module load. Fixture commands
+// stay as bare `node src/index.ts` (no caller churn), but the child node
+// process is launched with `--import <tsx loader>`, so the TypeScript source
+// is compiled by tsx/esbuild instead of relying on whatever native
+// `--experimental-strip-types` (or lack thereof) the host node provides.
+// This makes fixture execution deterministic across node 20/22/25 and
+// across any future node version bump.
+//
+// tsx 4.x maps the package main entry (`"exports"."."`) to
+// `dist/loader.mjs`, so `require.resolve("tsx")` is the supported path.
+// The subpath `tsx/dist/loader.mjs` is not in the exports map and would
+// throw ERR_PACKAGE_PATH_NOT_EXPORTED.
+const _require = createRequire(import.meta.url);
+let TSX_LOADER_FLAG = "";
+try {
+  const loaderUrl = pathToFileURL(_require.resolve("tsx")).href;
+  TSX_LOADER_FLAG = `--import ${loaderUrl}`;
+} catch {
+  // tsx is not resolvable in this environment (e.g. user runs the SDK
+  // without dev deps). The harness still works — fixture commands fall
+  // back to whatever `node xxx.ts` does on the host. We deliberately
+  // do not throw here: this module is part of the public SDK surface
+  // and must not hard-depend on tsx.
+  TSX_LOADER_FLAG = "";
+}
+
+function buildChildEnv() {
+  const existing = process.env.NODE_OPTIONS;
+  const merged = [existing, TSX_LOADER_FLAG].filter(Boolean).join(" ");
+  return { ...process.env, NODE_OPTIONS: merged };
+}
 
 function fixtureWorkspace(id, options = Object()) {
   return mkdtempSync(join(resolve(options.tmpRoot || tmpdir()), `yolo-fixture-${id}-`));
@@ -75,6 +109,7 @@ function runCommand(command, cwd, timeout_ms, spawnSync = defaultSpawnSync) {
     encoding: "utf8",
     timeout: timeout_ms,
     stdio: ["ignore", "pipe", "pipe"],
+    env: buildChildEnv(),
   });
   const spawnError = result.error ? Object.assign(Object(), result.error) : null;
   const commandResult = Object.assign(Object(), {
