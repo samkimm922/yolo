@@ -1,0 +1,5 @@
+{"timestamp":"2026-05-08T22:54:10.522Z","attack_type":"as any","filename":"bad-as-any.ts","blocked":true,"exit_code":2}
+{"timestamp":"2026-05-08T22:54:10.522Z","attack_type":"console.log","filename":"bad-console-log.ts","blocked":true,"exit_code":2}
+{"timestamp":"2026-05-08T22:54:10.522Z","attack_type":"硬编码密钥","filename":"bad-hardcoded-secret.ts","blocked":true,"exit_code":2}
+{"timestamp":"2026-05-08T22:54:10.522Z","attack_type":"文件超 200 行","filename":"bad-long-file.ts","blocked":true,"exit_code":2}
+{"timestamp":"2026-05-08T22:54:10.522Z","attack_type":"window/document","filename":"bad-window-document.ts","blocked":true,"exit_code":2}

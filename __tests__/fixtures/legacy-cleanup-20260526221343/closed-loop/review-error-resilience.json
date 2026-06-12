@@ -1,0 +1,10 @@
+{
+  "findings": [],
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "_error": "Command failed: claude -p '你是容错系统设计专家。对盲盒库存管理微信小程序（Taro + React + TypeScript + 微信云数据库）进行【错误边界与韧性】专项审查。\n\n## 审查范围\n全部 src/ 目录下文件\n\n## 重点检查\n1. React ErrorBoundary：\n   - 是否有全局 ErrorBoundary 包裹路由\n   - 关键组件是否有局部 ErrorBoundary\n   - ErrorBoundary 的 fallback 是否用户友好\n2. 未处理的 Promise 拒绝：\n   - async 函数中缺少 .catch 或"
+}

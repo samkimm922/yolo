@@ -9,7 +9,7 @@ const YOLO_DIR = resolve(import.meta.dirname, "..");
 
 describe("atomic task doctor", () => {
   test("classifies P36-003 as must_split with evidence and split suggestions", () => {
-    const result = inspectTaskFromPrd(".yolo/archive/legacy-cleanup-20260526221343/data/prd/current/prd-yolo-p36-real-task-soak.json", "FIX-P36-003", {
+    const result = inspectTaskFromPrd("__tests__/fixtures/legacy-cleanup-20260526221343/data/prd/current/prd-yolo-p36-real-task-soak.json", "FIX-P36-003", {
       root: YOLO_DIR,
       writeEvidence: true,
     });
@@ -96,7 +96,7 @@ describe("atomic task doctor", () => {
   });
 
   test("P36 round2 craft db singleton task is not split just because it mentions database/use", () => {
-    const result = inspectTaskFromPrd(".yolo/archive/legacy-cleanup-20260526221343/data/prd/current/prd-yolo-p36-round2-real-bugfix.json", "FIX-P36R2-001", {
+    const result = inspectTaskFromPrd("__tests__/fixtures/legacy-cleanup-20260526221343/data/prd/current/prd-yolo-p36-round2-real-bugfix.json", "FIX-P36R2-001", {
       root: YOLO_DIR,
       writeEvidence: false,
     });

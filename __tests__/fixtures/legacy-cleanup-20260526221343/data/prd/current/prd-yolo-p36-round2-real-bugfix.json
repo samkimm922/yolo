@@ -1,0 +1,52 @@
+{
+  "$schema": "https://yolo.dev/schemas/prd-v2.schema.json",
+  "version": "2.0",
+  "id": "PRD-20260524-P36R2-BUGFIX",
+  "title": "P36 round 2 atomic bugfix fixture",
+  "description": "Fixture for a narrow single-file task that should not require split.",
+  "project": {
+    "name": "Yolo",
+    "language": "typescript",
+    "framework": "generic",
+    "package_manager": "pnpm",
+    "test_framework": "vitest",
+    "lint_tool": "eslint",
+    "type_checker": "tsc --noEmit"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-05-24T00:00:00.000Z",
+  "base_commit": "0000000",
+  "tasks": [
+    {
+      "id": "FIX-P36R2-001",
+      "title": "收紧 runner checkpoint 文案",
+      "priority": "P1",
+      "type": "bugfix",
+      "status": "pending",
+      "description": "更新一个 yolo runner 状态文案，保持输出稳定。",
+      "scope": {
+        "targets": [
+          {
+            "file": "scripts/yolo/runner.mjs",
+            "description": "runner 状态文案"
+          }
+        ],
+        "allow_new_files": false,
+        "max_files": 1,
+        "max_lines_per_file": 40
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-P36R2-001",
+          "type": "files_modified_max",
+          "params": {
+            "max": 1
+          },
+          "message": "只修改一个文件",
+          "severity": "FAIL"
+        }
+      ]
+    }
+  ]
+}
