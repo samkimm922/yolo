@@ -77,6 +77,7 @@ jobs:
           cache: pnpm
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
+      - run: npm run build --silent
       - run: node --import tsx --test __tests__/package-install-smoke.test.ts
 
   repo-hygiene:
