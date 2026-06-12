@@ -32,7 +32,6 @@ gate:
   timeout:
     type_check: 120000
     lint: 90000
-    dead_code: 30000
     test: 120000
     build: 240000
   max_files: 5
