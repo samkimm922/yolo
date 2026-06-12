@@ -1,4 +1,4 @@
-import { describe, test } from "node:test";
+import { before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -36,7 +36,7 @@ function repoTruth() {
     packageJson,
     srcModules: countFiles(join(YOLO_DIR, "src"), (path) => path.endsWith(".ts")),
     testFiles: countFiles(join(YOLO_DIR, "__tests__"), (path) => path.endsWith(".test.ts")),
-    docsMarkdown: countFiles(join(YOLO_DIR, "docs"), (path) => path.endsWith(".md")),
+    docsMarkdown: countFiles(join(YOLO_DIR, "docs"), (path) => path.endsWith(".md") && !path.startsWith(join(YOLO_DIR, "docs", "memory"))),
     rootTs: countRootFiles(YOLO_DIR, (path) => path.endsWith(".ts")),
     rootJs: countRootFiles(YOLO_DIR, (path) => path.endsWith(".js")),
     runnerLines: lineCount(join(YOLO_DIR, "runner.ts")),
@@ -56,6 +56,15 @@ function extractCodeBlockAfter(text, label) {
 }
 
 describe("docs truth sync", () => {
+  // Generate docs/memory once before any assertion. docs/memory is gitignored
+  // (P5.H5), so on a clean checkout the canonical status/tree files do not exist
+  // until refreshMemoryCenter writes them. Running it here makes both the
+  // structure-number tests order-independent instead of relying on another
+  // test (or another suite) having refreshed first.
+  before(() => {
+    refreshMemoryCenter({ projectRoot: YOLO_DIR, stateRoot: YOLO_DIR });
+  });
+
   test("progress and gap docs track current structure numbers", () => {
     const truth = repoTruth();
     const progress = readFileSync(join(YOLO_DIR, "docs/yolo-public-sdk-progress.md"), "utf8");
@@ -83,8 +92,6 @@ describe("docs truth sync", () => {
     assert.ok(truth.testFiles > 0, "test file count must be non-zero in this repository");
     assert.ok(truth.docsMarkdown > 0, "docs markdown count must be non-zero in this repository");
     assert.ok(truth.rootTs > 0, "root .ts count must be non-zero in this repository");
-
-    refreshMemoryCenter({ projectRoot: YOLO_DIR, stateRoot: YOLO_DIR });
 
     const statusText = readFileSync(join(YOLO_DIR, "docs/memory/CURRENT_STATUS.md"), "utf8");
     assert.match(statusText, new RegExp(`SDK surface: ${truth.exportCount} package exports and ${truth.binCount} bins\\.`));

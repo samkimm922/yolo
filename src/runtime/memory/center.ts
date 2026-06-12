@@ -416,7 +416,7 @@ function sourceCounts(projectRoot) {
     src_ts: countFiles(projectRoot, (path) => path.startsWith("src/") && path.endsWith(".ts")),
     src_mjs: countFiles(projectRoot, (path) => path.startsWith("src/") && path.endsWith(".js")),
     test_files: countFiles(projectRoot, (path) => path.startsWith("__tests__/") && path.endsWith(".test.ts")),
-    docs_md: countFiles(projectRoot, (path) => path.startsWith("docs/") && path.endsWith(".md")),
+    docs_md: countFiles(projectRoot, (path) => path.startsWith("docs/") && !path.startsWith("docs/memory/") && path.endsWith(".md")),
   };
 }
 
