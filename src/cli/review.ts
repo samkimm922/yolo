@@ -142,6 +142,13 @@ if (result.status !== 0 && result.status !== null) {
   process.exit(1);
 }
 
+if (result.signal) {
+  console.error(`[yolo-review] claude 被信号 ${result.signal} 终止 (round ${round})`);
+  if (result.stderr) console.error(result.stderr.slice(0, 500));
+  console.log('[]');
+  process.exit(1);
+}
+
 const rawOutput = result.stdout || '';
 const bugs = extractJsonArray(rawOutput);
 
