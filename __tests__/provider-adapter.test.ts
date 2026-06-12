@@ -130,14 +130,14 @@ describe("provider execution adapter", () => {
     assert.equal(invocation.settingsFile, null);
   });
 
-  test("legacy default claude settings path also resolves to the YOLO package root", () => {
+  test("explicit root default claude settings path resolves to the YOLO package root", () => {
     const targetRoot = "/tmp/yolo-consumer-project";
     const invocation = buildProviderInvocation({
       provider: "claude",
       config: {
         ai: {
           model: "claude-sonnet-4",
-          settings: "scripts/yolo/settings-minimal.json",
+          settings: "settings-minimal.json",
         },
       },
       workDir: targetRoot,

@@ -25,7 +25,6 @@ function findPackageRoot(startDir) {
 
 export const YOLO_PACKAGE_ROOT = findPackageRoot(MODULE_DIR);
 export const DEFAULT_CLAUDE_SETTINGS_FILE = "settings-minimal.json";
-export const LEGACY_DEFAULT_CLAUDE_SETTINGS_FILE = "scripts/yolo/settings-minimal.json";
 export const DEFAULT_CLAUDE_SETTINGS_PATH = resolve(YOLO_PACKAGE_ROOT, DEFAULT_CLAUDE_SETTINGS_FILE);
 
 function selectedProvider(value) {
@@ -236,7 +235,7 @@ export function resolveClaudeSettings(rootDir, value, { packageRoot = YOLO_PACKA
     path: null,
     default_settings: false,
   };
-  const isDefaultSettings = settings === DEFAULT_CLAUDE_SETTINGS_FILE || settings === LEGACY_DEFAULT_CLAUDE_SETTINGS_FILE;
+  const isDefaultSettings = settings === DEFAULT_CLAUDE_SETTINGS_FILE;
   if (isDefaultSettings) {
     // Dynamically generate settings with absolute hook path so the hook
     // works regardless of the target project's cwd or tsx availability.

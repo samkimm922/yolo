@@ -467,7 +467,7 @@ function parseJson(raw) {
 // ── 执行单维度 Claude 审查 ─────────────────────────────────
 function runClaudeReview(dimension) {
   const prompt = dimension.buildPrompt();
-  const cmd = `claude -p ${sh(prompt)} --dangerously-skip-permissions --settings scripts/yolo/settings-minimal.json --output-format text 2>/dev/null`;
+  const cmd = `claude -p ${sh(prompt)} --dangerously-skip-permissions --settings settings-minimal.json --output-format text 2>/dev/null`;
 
   try {
     const raw = execSync(cmd, {
