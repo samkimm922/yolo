@@ -18,8 +18,7 @@ project:
 
 build:
   type_check: "npm run build --silent"
-  lint: "node --test __tests__/progress-dashboard.test.ts __tests__/progress-dashboard-ui-evidence.test.ts"
-  dead_code: "node -e \"process.exit(0)\""
+  lint: "node --import tsx scripts/source-grep-meta.ts"
   test: "node --import tsx --test __tests__/*.test.ts"
   build: "npm run build --silent"
 

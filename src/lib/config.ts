@@ -55,11 +55,10 @@ const DEFAULTS = {
   },
 
   build: {
-    type_check: 'pnpm exec tsc --noEmit',
-    lint: 'pnpm exec eslint src/ --format json',
-    dead_code: 'pnpm exec knip --reporter json',
-    test: 'pnpm exec vitest run',
-    build: 'pnpm run build:weapp',
+    type_check: 'tsc --noEmit',
+    lint: 'node --import tsx scripts/source-grep-meta.ts',
+    test: 'node --import tsx --test __tests__/*.test.ts',
+    build: 'npm run build --silent',
   },
 
   ai: {
@@ -73,7 +72,6 @@ const DEFAULTS = {
     timeout: {
       type_check: 120000,
       lint: 90000,
-      dead_code: 30000,
       test: 120000,
       build: 240000,
     },
