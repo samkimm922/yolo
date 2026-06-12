@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -185,6 +185,7 @@ describe("fixture execution harness", () => {
     ["monorepo", "node --test packages/app/test.ts"],
     ["dirty-tree", "node scripts/check-dirty-marker.ts"],
     ["failing-baseline", "node scripts/check-baseline.ts"],
+    ["typescript-enum-probe", "node src/index.ts"],
   ]) {
     test(`runFixtureHarness executes ${fixtureId}`, () => {
       const result = runFixtureHarness(fixtureId, {
@@ -202,4 +203,45 @@ describe("fixture execution harness", () => {
       }
     });
   }
+
+  // Version-independence proof. The typescript-enum-probe fixture ships a
+  // source file that uses `export enum`. node 20 has no native TS support
+  // (.ts → ERR_UNKNOWN_FILE_EXTENSION). node 22+ runs
+  // --experimental-strip-types by default, which rejects enum with
+  // ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX. The only way `node src/index.ts` can
+  // return exit 0 here is if a real TypeScript transpiler (tsx/esbuild,
+  // resolved from yolo's own devDependencies) is on the loader path.
+  //
+  // If anyone later "simplifies" the harness by removing the tsx loader
+  // injection, this test will fail on the host that loses TS support.
+  // It is the lock against node-version regression.
+  test("typescript-enum-probe proves fixtures execute full TypeScript via tsx, not native strip", () => {
+    const fixtureId = "typescript-enum-probe";
+    const fixture = getFixtureDefinition(fixtureId, { yoloRoot: YOLO_DIR });
+    const sourcePath = join(fixture.fixture_dir, "src", "index.ts");
+    const source = readFileSync(sourcePath, "utf8");
+    assert.match(
+      source,
+      /export\s+enum\b/,
+      "probe source must contain `export enum` to fail under node native strip-types"
+    );
+
+    const result = runFixtureHarness(fixtureId, {
+      yoloRoot: YOLO_DIR,
+      keepWorkspace: true,
+    });
+    try {
+      assert.equal(result.status, "pass", `expected pass, got ${result.status}`);
+      assert.equal(result.commands[0].command, "node src/index.ts");
+      assert.equal(result.commands[0].exit_code, 0);
+      assert.match(result.commands[0].stdout_tail, /pass/);
+      assert.equal(
+        result.commands[0].failure,
+        undefined,
+        "command must not be classified as failed/blocked"
+      );
+    } finally {
+      rmSync(result.workspace, { recursive: true, force: true });
+    }
+  });
 });

@@ -26,6 +26,7 @@ describe("fixture registry", () => {
       "node-basic",
       "python-basic",
       "python-service",
+      "typescript-enum-probe",
     ]);
     assert.ok(fixtures.every((fixture) => fixture.fixture_file.endsWith("fixture.json")));
   });
@@ -89,7 +90,7 @@ describe("fixture registry", () => {
     const result = inspectFixtureRegistry({ yoloRoot: YOLO_DIR });
 
     assert.equal(result.status, "pass");
-    assert.equal(result.fixture_count, 9);
+    assert.equal(result.fixture_count, 10);
     assert.ok(result.fixtures.every((fixture) => fixture.status === "pass"));
   });
 

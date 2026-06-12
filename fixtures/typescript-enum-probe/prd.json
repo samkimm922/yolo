@@ -1,0 +1,62 @@
+{
+  "version": "2.0",
+  "id": "PRD-20260612-ENUM-PROBE",
+  "title": "TypeScript enum probe fixture",
+  "project": {
+    "name": "yolo-fixture-typescript-enum-probe",
+    "language": "javascript",
+    "package_manager": "npm"
+  },
+  "generated_by": "other",
+  "generated_at": "2026-06-12T00:00:00.000Z",
+  "base_commit": "abcdef0",
+  "requirements": [
+    {
+      "id": "REQ-ENUM-001",
+      "text": "Execute a fixture that uses a TypeScript enum to prove the harness runs full TypeScript, not native strip-types."
+    }
+  ],
+  "designs": [
+    {
+      "id": "DES-ENUM-001",
+      "text": "Run a single TS file containing `export enum` and assert pass; any host node that lacks a real TS transpiler (node 20) or only does strip-types (node 22/25 default) will fail with ERR_UNKNOWN_FILE_EXTENSION or ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "FIX-ENUM-001",
+      "title": "Verify fixture executes enum-bearing TypeScript",
+      "type": "feature",
+      "priority": "P2",
+      "status": "pending",
+      "requirement_ids": [
+        "REQ-ENUM-001"
+      ],
+      "design_ids": [
+        "DES-ENUM-001"
+      ],
+      "scope": {
+        "targets": [
+          {
+            "file": "src/index.ts"
+          }
+        ],
+        "expected_zero_business_code": true
+      },
+      "pre_conditions": [],
+      "post_conditions": [
+        {
+          "id": "POST-FILE",
+          "type": "file_exists",
+          "severity": "FAIL",
+          "params": {
+            "file": "src/index.ts"
+          }
+        }
+      ],
+      "acceptance_criteria": [
+        "node src/index.ts prints pass"
+      ]
+    }
+  ]
+}
