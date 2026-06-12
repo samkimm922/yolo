@@ -2,6 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { refreshMemoryCenter } from "../src/runtime/memory/center.js";
 import {
   inspectPackageReadiness,
   inspectPublicBetaReadiness,
@@ -148,6 +149,7 @@ describe("release readiness", () => {
   });
 
   test("release docs keep manual external, billable, public dogfood, and private blockers explicit", () => {
+    refreshMemoryCenter({ projectRoot: YOLO_DIR, stateRoot: YOLO_DIR });
     const docs = [
       "docs/api-reference.md",
       "docs/public-sdk-contract.md",

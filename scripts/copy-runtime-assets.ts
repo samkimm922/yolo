@@ -2,6 +2,8 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statS
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { refreshMemoryCenter } from "../src/runtime/memory/center.js";
+
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const distRoot = join(sourceRoot, "dist");
 
@@ -61,6 +63,9 @@ function prunePythonCaches(dir: string): void {
 }
 
 mkdirSync(distRoot, { recursive: true });
+
+// Regenerate canonical memory docs before copying into dist.
+refreshMemoryCenter({ projectRoot: sourceRoot, stateRoot: sourceRoot });
 
 for (const path of ["docs", "schemas", "fixtures"]) {
   rmSync(join(distRoot, path), { recursive: true, force: true });

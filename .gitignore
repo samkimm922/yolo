@@ -24,7 +24,10 @@ tmp/
 *.log
 
 # Local session handoff files (runtime artifacts, not committed).
-docs/memory/SESSION.md
-docs/memory/SNAPSHOT.md
-docs/memory/DELIVERY_LOG.md
+docs/memory/
+learned-rules.json
+scripts/yolo/closed-loop/retry-count.json
+SESSION.md
+SNAPSHOT.md
+DELIVERY_LOG.md
 .claude/worktrees/

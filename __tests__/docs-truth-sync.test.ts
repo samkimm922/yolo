@@ -4,6 +4,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { buildAgentBridgeInstallPlan } from "../tools/install-agent-bridge.js";
 import { listYoloCommands } from "../src/workflows/command-registry.js";
+import { refreshMemoryCenter } from "../src/runtime/memory/center.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 
@@ -82,6 +83,8 @@ describe("docs truth sync", () => {
     assert.ok(truth.testFiles > 0, "test file count must be non-zero in this repository");
     assert.ok(truth.docsMarkdown > 0, "docs markdown count must be non-zero in this repository");
     assert.ok(truth.rootTs > 0, "root .ts count must be non-zero in this repository");
+
+    refreshMemoryCenter({ projectRoot: YOLO_DIR, stateRoot: YOLO_DIR });
 
     const statusText = readFileSync(join(YOLO_DIR, "docs/memory/CURRENT_STATUS.md"), "utf8");
     assert.match(statusText, new RegExp(`SDK surface: ${truth.exportCount} package exports and ${truth.binCount} bins\\.`));

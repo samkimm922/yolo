@@ -400,8 +400,8 @@ function countFiles(projectRoot, predicate) {
 
 function sourceCounts(projectRoot) {
   const packageJson = readJson(join(projectRoot, "package.json"), {});
-  const rootMjs = existsSync(projectRoot)
-    ? readdirSync(projectRoot).filter((file) => file.endsWith(".js")).sort()
+  const rootFiles = existsSync(projectRoot)
+    ? readdirSync(projectRoot).filter((file) => statSync(join(projectRoot, file)).isFile()).sort()
     : [];
   return {
     package_name: packageJson.name || null,
@@ -409,10 +409,13 @@ function sourceCounts(projectRoot) {
     package_private: packageJson.private === true,
     package_exports: Object.keys(packageJson.exports || {}).length,
     package_bins: Object.keys(packageJson.bin || {}).length,
-    root_mjs: rootMjs.length,
-    root_mjs_files: rootMjs,
+    root_js: rootFiles.filter((file) => file.endsWith(".js")).length,
+    root_ts: rootFiles.filter((file) => file.endsWith(".ts")).length,
+    root_mjs: rootFiles.filter((file) => file.endsWith(".js")).length,
+    root_mjs_files: rootFiles.filter((file) => file.endsWith(".js")),
+    src_ts: countFiles(projectRoot, (path) => path.startsWith("src/") && path.endsWith(".ts")),
     src_mjs: countFiles(projectRoot, (path) => path.startsWith("src/") && path.endsWith(".js")),
-    test_files: countFiles(projectRoot, (path) => path.startsWith("__tests__/") && path.endsWith(".test.js")),
+    test_files: countFiles(projectRoot, (path) => path.startsWith("__tests__/") && path.endsWith(".test.ts")),
     docs_md: countFiles(projectRoot, (path) => path.startsWith("docs/") && path.endsWith(".md")),
   };
 }
@@ -569,8 +572,9 @@ export function buildProjectTreeMarkdown(options = Object()) {
     `- package private: ${counts.package_private}`,
     `- package exports: ${counts.package_exports}`,
     `- package bins: ${counts.package_bins}`,
-    `- root .js files: ${counts.root_mjs} (${counts.root_mjs_files.join(", ") || "none"})`,
-    `- src .js files: ${counts.src_mjs}`,
+    `- root .js files: ${counts.root_js} (${counts.root_mjs_files.join(", ") || "none"})`,
+    `- root .ts files: ${counts.root_ts}`,
+    `- src .ts files: ${counts.src_ts}`,
     `- test files: ${counts.test_files}`,
     `- docs markdown files: ${counts.docs_md}`,
     "",
@@ -605,9 +609,9 @@ export function buildCurrentStatusMarkdown(options = Object()) {
     `- Public package state: ${counts.package_private ? "`private: true` blocks release" : "public package metadata is not private"}.`,
     `- Version: ${counts.package_version || "unknown"}.`,
     `- Latest recorded full validation: ${latestValidationText(paths.projectRoot)}.`,
-    `- Root .js budget: ${counts.root_mjs} files.`,
+    `- Root .js budget: ${counts.root_js} files.`,
     `- SDK surface: ${counts.package_exports} package exports and ${counts.package_bins} bins.`,
-    `- Source/test surface: ${counts.src_mjs} src modules, ${counts.test_files} test files.`,
+    `- Source/test/docs surface: ${counts.src_ts} src modules, ${counts.test_files} test files, ${counts.docs_md} docs markdown files, ${counts.root_ts} root .ts files.`,
     "",
   ] : [
     "## Project Brain",
