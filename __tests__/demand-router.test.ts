@@ -16,7 +16,28 @@ function writeJson(file, value) {
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function projectEvidence(summary, why, overrides = {}) {
+interface RoutedState {
+  context_type: string;
+  route: string;
+  evidence_policy: string;
+  stage: string;
+  reason_codes: string[];
+  missing_slots: string[];
+  needed_evidence_agents: string[];
+  next_question: { slot: string; text: string } | null;
+  question_queue: { slot: string }[];
+  next_action: string;
+  prd_ready: boolean;
+  submode: string;
+}
+
+function assertRoutedState(result: { state: unknown }): asserts result is { state: RoutedState } {
+  if (typeof result.state !== "object" || result.state === null || !("context_type" in result.state)) {
+    throw new Error("expected routed state with context_type");
+  }
+}
+
+function projectEvidence(summary: string, why: string, overrides: Record<string, unknown> = {}) {
   return {
     path: "src/api/accounts.ts",
     line: "1",
@@ -36,6 +57,7 @@ describe("demand router", () => {
       success_criteria: ["API returns lowStockThreshold for product responses."],
     });
 
+    assertRoutedState(result);
     assert.equal(result.state.context_type, "hybrid");
     assert.equal(result.state.route, "careful");
     assert.equal(result.state.evidence_policy, "cross_check");
@@ -51,6 +73,7 @@ describe("demand router", () => {
       success_criteria: ["They can see today's habit checklist."],
     });
 
+    assertRoutedState(result);
     assert.equal(result.state.context_type, "greenfield");
     assert.equal(result.state.route, "fast");
     assert.equal(result.state.evidence_policy, "none");
@@ -63,6 +86,7 @@ describe("demand router", () => {
       objective: "我想优化库存预警，让它更智能",
     });
 
+    assertRoutedState(result);
     assert.equal(result.state.context_type, "greenfield");
     assert.notEqual(result.state.stage, "approval");
     assert.equal(result.state.stage, "clarify");
@@ -104,6 +128,7 @@ describe("demand router", () => {
       ],
     });
 
+    assertRoutedState(result);
     assert.equal(result.state.stage, "approval");
     assert.deepEqual(result.state.missing_slots, ["approval"]);
     assert.equal(result.state.next_question.slot, "approval");
@@ -118,6 +143,7 @@ describe("demand router", () => {
       desired_outcome: "店长能提前看到需要处理的低库存商品。",
     });
 
+    assertRoutedState(result);
     assert.equal(result.state.stage, "requirements");
     assert.notEqual(result.state.stage, "approval");
     assert.equal(result.state.next_question.slot, "scope_in");
@@ -140,6 +166,7 @@ describe("demand router", () => {
         success_criteria: ["They can see today's habit checklist."],
       });
 
+      assertRoutedState(result);
       assert.equal(result.state.context_type, "greenfield");
       assert.equal(result.state.route, "fast");
       assert.equal(result.state.evidence_policy, "none");
@@ -154,6 +181,7 @@ describe("demand router", () => {
     });
 
     assert.equal(result.status, "blocked");
+    assertRoutedState(result);
     assert.ok(["clarify", "requirements"].includes(result.state.stage));
     assert.notEqual(result.state.stage, "approval");
     assert.equal(result.state.next_question.slot, "target_user");
@@ -175,6 +203,7 @@ describe("demand router", () => {
       risks: ["Missing checklist steps can delay client onboarding."],
     });
 
+    assertRoutedState(result);
     assert.equal(result.state.stage, "approval");
     assert.equal(result.state.next_question.slot, "approval");
     assert.match(result.state.next_question.text, /批准/);
@@ -190,6 +219,7 @@ describe("demand router", () => {
       approve: true,
     });
 
+    assertRoutedState(result);
     assert.equal(result.state.stage, "requirements");
     assert.equal(result.state.next_question.slot, "scope_in");
     assert.match(result.state.next_question.text, /覆盖|范围/);
@@ -203,6 +233,7 @@ describe("demand router", () => {
       success_criteria: ["Checkout state persists through refresh."],
     });
 
+    assertRoutedState(result);
     assert.notEqual(result.state.context_type, "greenfield");
     assert.ok(["brownfield", "hybrid"].includes(result.state.context_type));
     assert.equal(result.state.route, "careful");
@@ -757,6 +788,7 @@ describe("demand router", () => {
       success_criteria: ["Visitor sees clearer copy."],
     });
 
+    assertRoutedState(result);
     assert.equal(result.state.route, "fast");
     assert.equal(result.state.evidence_policy, "none");
   });
@@ -790,6 +822,7 @@ describe("demand router", () => {
       const after = readFileSyncUtf8(sessionPath);
 
       assert.equal(before, after);
+      assertRoutedState(result);
       assert.equal(result.state.route, "careful");
       assert.equal(result.state.evidence_policy, "cross_check");
     } finally {
@@ -805,8 +838,10 @@ describe("demand router", () => {
 
       assert.equal(result.status, "blocked");
       assert.equal(result.code, "DEMAND_SESSION_MISSING");
-      assert.equal(result.state.prd_ready, false);
-      assert.ok(result.blockers.some((blocker) => blocker.message.includes(missingPath)));
+      if ("prd_ready" in result.state) {
+        assert.equal(result.state.prd_ready, false);
+      }
+      assert.ok(result.blockers.some((blocker: { message: string }) => blocker.message.includes(missingPath)));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "*.ts",
+    "bin/**/*.ts",
+    "hooks/**/*.ts",
+    "lib/**/*.ts",
+    "scripts/**/*.ts",
+    "skills/**/*.ts",
+    "src/**/*.ts",
+    "tools/**/*.ts",
+    "fixtures/**/*.ts",
+    "__tests__/**/*.ts"
+  ],
+  "exclude": [
+    "__tests__/fixtures/**/red-team-cases/*",
+    ".yolo",
+    "dist",
+    "node_modules"
+  ]
+}

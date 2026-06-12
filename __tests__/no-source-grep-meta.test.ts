@@ -4,7 +4,7 @@ import {
   CRITICAL_TEST_FILES,
   scanSourceGrepMeta,
   SOURCE_ONLY_ALLOWLIST,
-} from "../scripts/source-grep-meta.ts";
+} from "../scripts/source-grep-meta.js";
 
 const REQUIRED_CRITICAL_FILES = [
   "__tests__/evidence-ledger.test.ts",

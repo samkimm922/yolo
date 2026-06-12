@@ -16,7 +16,7 @@ function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-memory-center-"));
 }
 
-function write(file, content) {
+function write(file, content, _encoding?: string) {
   mkdirSync(resolve(file, ".."), { recursive: true });
   writeFileSync(file, content, "utf8");
 }

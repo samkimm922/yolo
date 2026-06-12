@@ -20,6 +20,7 @@ describe("gate failure retry decision helpers", () => {
     });
 
     assert.equal(decision.action, "contract_suspect");
+    if (!("stopLog" in decision)) throw new Error("expected stopLog");
     assert.deepEqual(decision.stopLog, {
       id: "FIX-1",
       marker: "!! 停机",
@@ -27,9 +28,10 @@ describe("gate failure retry decision helpers", () => {
     });
     assert.equal(decision.errorTitle, "连续同因停机");
     assert.equal(decision.errorDetail, "gate exit 1: code_contains: missing text");
+    if (!("learnMessage" in decision)) throw new Error("expected learnMessage");
     assert.equal(decision.learnMessage, "连续同因停机: code_contains: missing text");
     assert.equal(decision.cleanupWorktree, true);
-    assert.equal(decision.transition, undefined);
+    assert.equal("transition" in decision ? decision.transition : undefined, undefined);
   });
 
   test("returns stuck transition when repeated failures are not contract-like", () => {
@@ -43,10 +45,13 @@ describe("gate failure retry decision helpers", () => {
     });
 
     assert.equal(decision.action, "stuck");
+    if (!("transition" in decision)) throw new Error("expected transition");
     assert.equal(decision.transition.result.status, "FAIL");
     assert.equal(decision.transition.result.reason, "连续同因");
     assert.equal(decision.transition.result.retries, 3);
+    if (!("doneReason" in decision)) throw new Error("expected doneReason");
     assert.equal(decision.doneReason, "连续同因停机");
+    if (!("result" in decision)) throw new Error("expected result");
     assert.deepEqual(decision.result, {
       status: "stuck",
       reason: "连续同因",
@@ -69,9 +74,11 @@ describe("gate failure retry decision helpers", () => {
     assert.equal(decision.action, "max_retry");
     assert.equal(decision.errorTitle, "闸门 exit 2, 重试 4 次仍失败");
     assert.equal(decision.errorDetail, "long gate output");
+    if (!("transition" in decision)) throw new Error("expected transition");
     assert.equal(decision.transition.result.status, "FAIL");
     assert.equal(decision.transition.result.reason, "闸门 exit 2, 重试 4 次仍失败");
     assert.equal(decision.transition.prd_update.retry, 4);
+    if (!("result" in decision)) throw new Error("expected result");
     assert.deepEqual(decision.result, {
       status: "failed",
       reason: "闸门 exit 2, 重试 4 次仍失败",

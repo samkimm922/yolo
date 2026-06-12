@@ -96,7 +96,7 @@ describe("execution baseline helpers", () => {
       if (command === "git stash apply stash-ref") return "";
       if (command === "git rev-parse HEAD") return "abc123\n";
       if (command.startsWith("tsc")) {
-        const error = new Error("tsc failed");
+        const error = new Error("tsc failed") as Error & { status: number; stdout: string; stderr: string };
         error.status = 2;
         error.stdout = "src/a.ts(1,1): error TS1000: bad\n";
         error.stderr = "typecheck stderr\n";
@@ -146,7 +146,7 @@ describe("execution baseline helpers", () => {
       if (command === "git status --porcelain") return "";
       if (command === "git rev-parse HEAD") return "abc123\n";
       if (command.startsWith("missing-tsc")) {
-        const error = new Error("missing-tsc: command not found");
+        const error = new Error("missing-tsc: command not found") as Error & { status: number; stderr: string };
         error.status = 127;
         error.stderr = "missing-tsc: command not found\n";
         throw error;

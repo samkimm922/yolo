@@ -25,8 +25,8 @@ function writeJson(path, value) {
 function capture() {
   let text = "";
   return {
-    stream: { write: (chunk) => { text += chunk; } },
-    json: () => JSON.parse(text),
+    stream: { write: (chunk: string) => { text += chunk; } },
+    json: (): Record<string, unknown> => JSON.parse(text),
     text: () => text,
   };
 }
@@ -347,7 +347,13 @@ describe("lifecycle guard", () => {
 
       assert.equal(exitCode, 0);
       assert.equal(result.recommended_command, "/yolo-doctor");
-      assert.equal(result.guard.current_stage, null);
+      const guard = result.guard;
+      assert.equal(
+        typeof guard === "object" && guard !== null && "current_stage" in guard
+          ? (guard as Record<string, unknown>).current_stage
+          : undefined,
+        null,
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -443,7 +449,7 @@ describe("lifecycle guard", () => {
 
       assert.equal(pi.status, "error");
       assert.equal(pi.stop_condition, "lifecycle_guard");
-      assert.deepEqual(pi.lifecycle_guard.missing_required_stages, ["discovery", "roadmap", "check"]);
+      assert.deepEqual((pi as { lifecycle_guard: { missing_required_stages: string[] } }).lifecycle_guard.missing_required_stages, ["discovery", "roadmap", "check"]);
       assert.deepEqual(seen, ["pi.prd.preflight"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -575,7 +581,8 @@ describe("lifecycle guard", () => {
       assert.equal(exitCode, 2, "auto --dry-run returns exit 2 for dry-run plan ready");
       assert.equal(result.code, "AUTO_PLAN_READY");
       assert.ok(result.plan, "result must contain a plan");
-      const phaseIds = (result.plan.actions || []).map((a) => a.phase || a.id || "");
+      const actions = (result.plan as Record<string, unknown>).actions as Record<string, unknown>[] | undefined;
+      const phaseIds = (actions || []).map((a) => (a.phase || a.id || "") as string);
       const phaseSet = new Set(phaseIds);
       const expectedPhases = ["prd_contract", "implementation", "review", "acceptance", "delivery"];
       const foundPhases = expectedPhases.filter((p) =>

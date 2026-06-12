@@ -4,8 +4,12 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
-const inventory = JSON.parse(readFileSync(resolve(YOLO_DIR, "docs/root-entrypoint-inventory.json"), "utf8"));
-const packageJson = JSON.parse(readFileSync(resolve(YOLO_DIR, "package.json"), "utf8"));
+const inventory: {
+  schema_version: number;
+  policy: { new_root_ts_allowed: boolean };
+  entries: { file: string; role: string; status: string; reason: string; target: string; public_export?: boolean; package_script?: boolean }[];
+} = JSON.parse(readFileSync(resolve(YOLO_DIR, "docs/root-entrypoint-inventory.json"), "utf8"));
+const packageJson: { exports: Record<string, string>; scripts: Record<string, string> } = JSON.parse(readFileSync(resolve(YOLO_DIR, "package.json"), "utf8"));
 
 const ALLOWED_ROLES = new Set([
   "compat_cli",

@@ -32,7 +32,7 @@ describe("dry-run artifact execution helpers", () => {
     const fail = runDryRunCommand("bad", {
       cwd: "/tmp",
       execFileSync: () => {
-        const error = new Error("boom");
+        const error = new Error("boom") as Error & { status: number; stdout: string; stderr: string };
         error.status = 7;
         error.stdout = " partial ";
         error.stderr = " failed ";

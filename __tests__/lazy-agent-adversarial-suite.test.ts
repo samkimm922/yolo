@@ -274,7 +274,7 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     assert.deepEqual(invalid, [], "all command registry lifecycle stages must exist in schema");
 
     const alignment = validateCommandLifecycleStageAlignment();
-    assert.equal(alignment.valid, true, `vocabulary mismatch: ${alignment.errors?.map((e) => e.message).join("; ") || ""}`);
+    assert.equal(alignment.valid, true, `vocabulary mismatch: ${alignment.violations?.map((e) => e.message).join("; ") || ""}`);
   });
 
   // ── F13: atomicity doctor blocks system-level whole-feature requests ──

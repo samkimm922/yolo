@@ -344,6 +344,7 @@ export function buildReleaseCandidateChangeManifest({
       diff_command: "git diff --name-status -z --find-renames HEAD --",
     },
     clean: entries.length === 0,
+    error: null,
     tracked_modified: trackedModified,
     untracked,
     deleted_or_renamed: deletedOrRenamed,

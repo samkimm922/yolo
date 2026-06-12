@@ -508,9 +508,10 @@ describe("yolo sdk", () => {
       });
 
       assert.equal(result.status, "not_run");
-      assert.equal(result.code, "PI_PLAN_NOT_EXECUTED");
-      assert.equal(result.exit_code, 2);
-      assert.equal(result.plan.input_source, "requirement");
+      const piResult = result as { code: string; exit_code: number; plan: { input_source: string } };
+      assert.equal(piResult.code, "PI_PLAN_NOT_EXECUTED");
+      assert.equal(piResult.exit_code, 2);
+      assert.equal(piResult.plan.input_source, "requirement");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -1405,8 +1406,9 @@ describe("yolo sdk", () => {
       });
 
       assert.equal(result.status, "dry_run");
-      assert.equal(result.code, "PI_DRY_RUN_READY");
-      assert.equal(result.exit_code, 2);
+      const dryResult = result as { code: string; exit_code: number };
+      assert.equal(dryResult.code, "PI_DRY_RUN_READY");
+      assert.equal(dryResult.exit_code, 2);
       assert.equal(result.stop_condition, "dry_run_after_runner");
       assert.ok(seen.includes("pi.execute.runner"));
       assert.ok(!seen.includes("pi.review.scan"));

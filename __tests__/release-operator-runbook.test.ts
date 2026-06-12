@@ -28,8 +28,8 @@ function decisionGate(approvedActions = ["remove_private", "publish_public_beta"
   };
 }
 
-function operatorState(overrides = {}) {
-  const gate = overrides.decision_gate || decisionGate();
+function operatorState(overrides: Record<string, unknown> = {}) {
+  const gate = (overrides.decision_gate || decisionGate()) as Record<string, unknown>;
   return {
     status: "applied",
     guarantees: {

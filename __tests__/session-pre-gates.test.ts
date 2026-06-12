@@ -2,6 +2,8 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { inspectSessionPreGateChecks } from "../src/runtime/execution/session-pre-gates.js";
 
+type SessionPreGateResult = Awaited<ReturnType<typeof inspectSessionPreGateChecks>>;
+
 const baseTask = { id: "FIX-PREGATE", scope: { targets: [{ file: "src/a.ts" }] } };
 const baseWt = { path: "/tmp/wt", branch: "yolo/FIX-PREGATE" };
 
@@ -100,8 +102,8 @@ describe("session pre-gate checks", () => {
     }));
 
     assert.equal(result.action, "retry");
-    assert.match(result.lastGateError, /diff-quality-gate blocked: DIFF_TOO_LARGE/);
-    assert.deepEqual(result.historyEntry, {
+    assert.match((result as SessionPreGateResult & { lastGateError: string }).lastGateError, /diff-quality-gate blocked: DIFF_TOO_LARGE/);
+    assert.deepEqual((result as SessionPreGateResult & { historyEntry: unknown }).historyEntry, {
       gate: 1,
       fingerprint: "diff-quality:DIFF_TOO_LARGE",
       message: "diff-quality-gate blocked: DIFF_TOO_LARGE",

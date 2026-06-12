@@ -2,6 +2,73 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { detectProjectState } from "./project-state-detector.js";
 
+export interface DemandTriageResult {
+  schema_version: string;
+  schema: string;
+  context_type: string;
+  route: string;
+  evidence_policy: string;
+  reason_codes: string[];
+  blocking: boolean;
+  explanation: string;
+}
+
+export interface DemandQuestion {
+  slot: string;
+  text: string;
+}
+
+export interface DemandBlocker {
+  code: string;
+  slot?: string;
+  message: string;
+  role?: string;
+}
+
+export interface DemandPrdReadinessResult {
+  schema_version: string;
+  schema: string;
+  required_slots: string[];
+  slot_values: Record<string, string[]>;
+  missing_slots: string[];
+  next_question: DemandQuestion | null;
+  question_queue: DemandQuestion[];
+  blockers: DemandBlocker[];
+  assumptions: string[];
+  required_evidence_agents: string[];
+  evidence_agreement: { status: string; conflicts: DemandBlocker[] };
+  prd_ready: boolean;
+}
+
+export interface DemandSessionStateResult {
+  status: string;
+  code: string;
+  summary: string;
+  triage: DemandTriageResult;
+  readiness: DemandPrdReadinessResult;
+  state: {
+    schema_version: string;
+    schema: string;
+    context_type: string;
+    route: string;
+    evidence_policy: string;
+    stage: string;
+    submode: string;
+    reason_codes: string[];
+    missing_slots: string[];
+    blockers: DemandBlocker[];
+    assumptions: string[];
+    next_question: DemandQuestion | null;
+    question_queue: DemandQuestion[];
+    evidence_tasks: { role: string; protocol: unknown; reason: string }[];
+    needed_evidence_agents: string[];
+    prd_ready: boolean;
+    next_action: string;
+  };
+  next_question: DemandQuestion | null;
+  question_queue: DemandQuestion[];
+}
+
 export const DEMAND_ROUTER_SCHEMA_VERSION = "1.0";
 export const DEMAND_ROUTER_SCHEMA = "yolo.demand.router.v1";
 export const DEMAND_SESSION_STATE_SCHEMA_VERSION = "1.0";
@@ -701,7 +768,7 @@ function hasPrdIntent(text) {
   return /\b(prd|requirements?|acceptance|ship|implement|execute|build now)\b|需求文档|验收|执行|实现|交付/.test(text);
 }
 
-export function inspectDemandTriage(input = Object(), options = Object()) {
+export function inspectDemandTriage(input = Object(), options = Object()): DemandTriageResult {
   const session = options.session || buildStatusSession(input, options);
   const files = targetFiles(session, input);
   const sourceText = textFrom(...demandTextItems(input, session));
@@ -759,7 +826,7 @@ export function inspectDemandTriage(input = Object(), options = Object()) {
   };
 }
 
-export function inspectDemandPrdReadiness(input = Object(), options = Object()) {
+export function inspectDemandPrdReadiness(input = Object(), options = Object()): DemandPrdReadinessResult {
   const session = options.session || buildStatusSession(input, options);
   const triage = options.triage || inspectDemandTriage(input, { ...options, session });
   const slots = slotValues(session, input);
@@ -915,7 +982,7 @@ function nextActionFor(stage, triage = Object(), readiness = Object(), evidenceT
   return triage.route === "careful" ? "Discuss risks and evidence blockers before PRD." : "Continue fast demand clarification.";
 }
 
-export function buildDemandSessionState(input = Object(), options = Object()) {
+export function buildDemandSessionState(input = Object(), options = Object()): DemandSessionStateResult {
   const session = buildStatusSession(input, options);
   const triage = inspectDemandTriage(input, { ...options, session });
   const readiness = inspectDemandPrdReadiness(input, { ...options, session, triage });

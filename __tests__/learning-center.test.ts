@@ -89,7 +89,7 @@ describe("learning center", () => {
 
       const first = migrateLegacyLearning({ projectRoot: root, stateRoot: root });
       const second = migrateLegacyLearning({ projectRoot: root, stateRoot: root });
-      const records = readFileSync(join(root, "state/learning.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
+      const records = readFileSync(join(root, "state/learning.jsonl"), "utf8").trim().split("\n").map((text: string) => JSON.parse(text));
 
       assert.equal(first.status, "ok");
       assert.equal(second.total_count, first.total_count);

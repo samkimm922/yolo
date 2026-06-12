@@ -415,6 +415,7 @@ function qualityDimension({ code, label, weight = 20, critical = false, checks =
     warning_threshold: warnBelow,
     checks,
     failed_checks,
+    evidence_grounded: undefined as boolean | undefined,
   };
 }
 

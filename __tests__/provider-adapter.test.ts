@@ -29,15 +29,19 @@ const baseConfig = {
 
 function fakeProviderSpawn({ stdout = "", stderr = "", code = 0, signal = null, close = true } = {}) {
   return () => {
-    const child = new EventEmitter();
-    child.pid = 4242;
-    child.stdin = new PassThrough();
-    child.stdout = new PassThrough();
-    child.stderr = new PassThrough();
+    const stdin = new PassThrough();
+    const stdoutStream = new PassThrough();
+    const stderrStream = new PassThrough();
+    const child: EventEmitter & { pid: number; stdin: PassThrough; stdout: PassThrough; stderr: PassThrough } = Object.assign(new EventEmitter(), {
+      pid: 4242,
+      stdin,
+      stdout: stdoutStream,
+      stderr: stderrStream,
+    });
     if (close) {
       setImmediate(() => {
-        if (stdout) child.stdout.write(stdout);
-        if (stderr) child.stderr.write(stderr);
+        if (stdout) stdoutStream.write(stdout);
+        if (stderr) stderrStream.write(stderr);
         child.emit("close", code, signal);
       });
     }

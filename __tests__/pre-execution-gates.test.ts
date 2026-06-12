@@ -98,6 +98,7 @@ describe("pre-execution gates", () => {
         prdPath: paths.prdPath,
         stateDir: paths.stateDir,
         projectRoot: paths.projectRoot,
+        config: {},
       });
 
       assert.equal(result.status, "blocked");
@@ -124,6 +125,7 @@ describe("pre-execution gates", () => {
         prdPath: paths.prdPath,
         stateDir: paths.stateDir,
         projectRoot: paths.projectRoot,
+        config: {},
       });
 
       assert.equal(result.status, "blocked");
@@ -151,6 +153,7 @@ describe("pre-execution gates", () => {
         prdPath: paths.prdPath,
         stateDir: paths.stateDir,
         projectRoot: paths.projectRoot,
+        config: {},
       });
 
       assert.equal(result.status, "blocked");
@@ -186,6 +189,7 @@ describe("pre-execution gates", () => {
         prdPath: paths.prdPath,
         stateDir: paths.stateDir,
         projectRoot: paths.projectRoot,
+        config: {},
       });
 
       assert.equal(result.status, "blocked");
@@ -218,6 +222,7 @@ describe("pre-execution gates", () => {
         prdPath: paths.prdPath,
         stateDir: paths.stateDir,
         projectRoot: paths.projectRoot,
+        config: {},
       });
 
       assert.equal(result.status, "blocked");
@@ -237,7 +242,7 @@ describe("pre-execution gates", () => {
         id: "POST-MANUAL",
         type: "acceptance_criteria",
         severity: "FAIL",
-        params: { text: "Human review is still required." },
+        params: { command: "manual review" },
       });
 
       const result = inspectPreExecutionGates({
@@ -245,6 +250,7 @@ describe("pre-execution gates", () => {
         prdPath: paths.prdPath,
         stateDir: paths.stateDir,
         projectRoot: paths.projectRoot,
+        config: {},
       });
 
       assert.equal(result.status, "blocked");
@@ -266,6 +272,7 @@ describe("pre-execution gates", () => {
         prdPath: paths.prdPath,
         stateDir: paths.stateDir,
         projectRoot: paths.projectRoot,
+        config: {},
       });
 
       assert.equal(result.status, "pass");

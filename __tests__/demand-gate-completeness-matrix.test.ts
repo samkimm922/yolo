@@ -45,6 +45,7 @@ function sessionWithFullCoverage() {
         },
       ],
     },
+    prd_intake: { exceptions: ["What if the inventory system is down?"] },
   };
 }
 
@@ -163,7 +164,7 @@ describe("demand gate completeness matrix", () => {
     for (const scenario of session.scenario_matrix.scenarios) {
       scenario.exceptions = [];
     }
-    delete session.prd_intake;
+    session.prd_intake = undefined;
 
     const result = inspectDemandReadiness(session, { phase: "prd" });
     const matrixCheck = result.checks.find((c) => c.code === "COMPLETENESS_MATRIX");

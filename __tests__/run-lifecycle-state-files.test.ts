@@ -31,7 +31,7 @@ describe("run lifecycle state files", () => {
       prd: "data/prd/current/plan.json",
     });
 
-    assert.equal(buildCurrentRunPayload({ runId: "run-1" }).prd, "auto");
+    assert.equal(buildCurrentRunPayload({ runId: "run-1", prdPath: undefined, projectRoot: undefined }).prd, "auto");
   });
 
   test("writeCurrentRunFile writes atomically to nested state path", () => {
@@ -99,6 +99,7 @@ describe("run lifecycle state files", () => {
       const result = archiveCurrentRunFile({
         currentRunFile,
         stateDir: root,
+        runId: undefined,
         interrupted: true,
         now: "2026-05-24T15:30:00.000Z",
       });

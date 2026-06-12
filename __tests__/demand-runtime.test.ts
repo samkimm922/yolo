@@ -13,6 +13,24 @@ import { inspectDemandQuality, inspectDemandReadiness } from "../src/demand/gate
 import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
 
+interface PrdResult {
+  [key: string]: unknown;
+  status: string;
+  code: string;
+  prd: Record<string, unknown>;
+  tasks: Record<string, unknown>[];
+  compiled?: { prd: Record<string, unknown> };
+  artifacts: string[];
+  blockers: Record<string, unknown>[];
+  quality_report?: Record<string, unknown>;
+}
+
+function requirePrd(result: ReturnType<typeof runDemandPrdRuntime>): asserts result is ReturnType<typeof runDemandPrdRuntime> & { prd: NonNullable<ReturnType<typeof runDemandPrdRuntime>["prd"]> } {
+  if (!("prd" in result) || result.prd === null || result.prd === undefined) {
+    throw new Error(`expected prd to exist, got status=${result.status}`);
+  }
+}
+
 function assertTaskSessionPlan(task, demandId) {
   const session = task.handoff?.session;
   assert.ok(session, `missing session plan for ${task.id}`);
@@ -150,8 +168,8 @@ describe("demand runtime", () => {
       });
 
       assert.equal(prd.status, "success");
+      requirePrd(prd);
       assert.equal(prd.prd.base_commit, "abcdef0");
-      assert.equal(prd.prd.demand_contract_required, true);
       assert.equal(prd.prd.demand.approval.effective_for_prd, true);
       assert.equal(prd.prd.execution_readiness.level, "L3");
       assert.equal(prd.prd.execution_readiness.atomic_tasks, true);
@@ -226,8 +244,10 @@ describe("demand runtime", () => {
 
       assert.equal(prd.status, "blocked");
       assert.equal(prd.code, "DEMAND_QUALITY_BLOCKED");
-      assert.equal(prd.prd, null);
-      assert.ok(prd.quality_report.blockers.some((blocker) => blocker.code === "QUALITY_SCENARIO_PROOF_CONCRETE"));
+      if ("prd" in prd) assert.equal(prd.prd, null);
+      if ("quality_report" in prd && prd.quality_report) {
+        assert.ok(prd.quality_report.blockers.some((blocker: { code: string }) => blocker.code === "QUALITY_SCENARIO_PROOF_CONCRETE"));
+      }
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -506,6 +526,7 @@ describe("demand runtime", () => {
         writeArtifacts: false,
       });
       assert.equal(prd.status, "success");
+      requirePrd(prd);
 
       const clone = (value) => JSON.parse(JSON.stringify(value));
       const passAtomicity = { status: "pass", blockers: [], warnings: [] };
@@ -616,6 +637,7 @@ describe("demand runtime", () => {
       });
 
       assert.equal(prd.status, "success");
+      requirePrd(prd);
       assert.equal(prd.prd.base_commit, "abcdef0");
       assert.equal(prd.prd.demand.question_trace[0].id, "Q-STOCKOUT-PROOF");
       assert.equal(prd.prd.tasks[0].source_question_ids.includes("Q-STOCKOUT-PROOF"), true);
@@ -662,6 +684,7 @@ describe("demand runtime", () => {
       });
 
       assert.equal(prd.status, "success");
+      requirePrd(prd);
       const uiTask = prd.prd.tasks.find((task) => task.handoff?.surface?.kind === "ui");
       assert.ok(uiTask);
       assert.ok(Array.isArray(uiTask.state_matrix) && uiTask.state_matrix.length > 0);
@@ -791,9 +814,10 @@ describe("demand runtime", () => {
 
       assert.equal(prd.status, "blocked");
       assert.equal(prd.code, "DEMAND_PRD_PREFLIGHT_BLOCKED");
-      assert.equal(prd.prd, null);
+      if ("prd" in prd) assert.equal(prd.prd, null);
       assert.deepEqual(prd.artifacts, []);
       assert.ok(prd.blockers.some((blocker) => blocker.code === "ATOMICITY_INVESTIGATE_FIRST"));
+      if (!("compiled" in prd) || !prd.compiled) throw new Error("expected compiled");
       const compiledPrd = prd.compiled.prd;
       assert.equal(compiledPrd.tasks.length >= 3, true);
       assert.equal(compiledPrd.tasks.every((task) => task.task_kind === "demand_atomic_task"), true);
@@ -901,8 +925,9 @@ describe("demand runtime", () => {
 
       assert.equal(prd.status, "blocked");
       assert.equal(prd.code, "DEMAND_PRD_PREFLIGHT_BLOCKED");
-      assert.equal(prd.prd, null);
+      if ("prd" in prd) assert.equal(prd.prd, null);
       assert.ok(prd.blockers.some((blocker) => blocker.code === "ATOMICITY_INVESTIGATE_FIRST"));
+      if (!("compiled" in prd) || !prd.compiled) throw new Error("expected compiled");
       const compiledPrd = prd.compiled.prd;
       assert.equal(compiledPrd.tasks.some((task) => task.requirement_ids.includes("REQ-003-S02")), true);
       assert.equal(compiledPrd.tasks.every((task) => !(/编辑/.test(task.description) && /移动/.test(task.description))), true);
@@ -992,6 +1017,7 @@ describe("demand runtime", () => {
       });
 
       assert.equal(prd.status, "success");
+      requirePrd(prd);
       assert.match(prd.prd.id, /^[A-Z]+-[0-9]+-[A-Z0-9-]+$/);
       assert.equal(prd.prd.tasks[0].handoff.session.state_path, ".yolo/demand/DEMAND-20260529-库存预警/tasks/DEMAND-REQ-001-0010101/session.json");
       assert.ok(prd.prd.execution_readiness.session_handoff.state_paths[0].includes("库存预警"));

@@ -55,8 +55,8 @@ describe("run lifecycle startup helpers", () => {
       processKill: () => {},
       consoleError: (message) => errors.push(message),
     }), (error) => {
-      assert.equal(error.code, "RUNNER_ALREADY_ACTIVE");
-      assert.equal(error.pid, 123);
+      assert.equal((error as Error & { code: string }).code, "RUNNER_ALREADY_ACTIVE");
+      assert.equal((error as Error & { pid: number }).pid, 123);
       return true;
     });
     assert.match(errors[0], /另一个 runner 实例正在运行/);
@@ -190,7 +190,7 @@ describe("run lifecycle startup helpers", () => {
       writeFileSync: (file, content) => writes.set(file, content),
       execFileSync: (_bin, args) => {
         if (args[1].startsWith("missing-tsc")) {
-          const error = new Error("missing-tsc: command not found");
+          const error = new Error("missing-tsc: command not found") as Error & { status: number; stderr: string };
           error.status = 127;
           error.stderr = "missing-tsc: command not found\n";
           throw error;

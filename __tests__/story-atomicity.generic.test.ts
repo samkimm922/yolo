@@ -2,6 +2,29 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { inspectStoryAtomicityText } from "../src/demand/story-atomicity.js";
 
+interface StoryAtomicityFinding {
+  code: string;
+  severity: string;
+  kind: string;
+  item_id: string | null;
+  task_id: string | null;
+  requirement_id: string | null;
+  scenario_id: string | null;
+  message: string;
+  text_excerpt: string;
+  story_count: number;
+  story_signatures: { id: string; label: string }[];
+  split_suggestions?: string[];
+  capability_nouns?: string[];
+}
+
+function hasFindingProps(
+  finding: StoryAtomicityFinding | null,
+  _props: string[],
+): finding is StoryAtomicityFinding & Record<string, unknown> {
+  return finding !== null;
+}
+
 describe("story atomicity generic (domain-agnostic) detection", () => {
   test("auth + email verification + OAuth is non-atomic", () => {
     const result = inspectStoryAtomicityText(
@@ -10,7 +33,7 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
     );
     assert.equal(result.status, "blocked");
     assert.ok(result.finding);
-    assert.ok(result.finding.split_suggestions.length > 0);
+    assert.ok(result.finding && "split_suggestions" in result.finding && result.finding.split_suggestions!.length > 0);
   });
 
   test("file parse + validate + upload is non-atomic", () => {
@@ -64,7 +87,7 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
     assert.equal(result.status, "warn");
     assert.ok(result.finding);
     assert.equal(result.finding.code, "STORY_ATOMICITY_CAPABILITY_NOUN");
-    assert.ok(result.finding.capability_nouns.includes("支付"));
+    assert.ok(result.finding && "capability_nouns" in result.finding && (result.finding as { capability_nouns: string[] }).capability_nouns.includes("支付"));
   });
 
   test("single verb + 权限 capability noun warns", () => {
@@ -74,7 +97,7 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
     );
     assert.equal(result.status, "warn");
     assert.equal(result.finding.code, "STORY_ATOMICITY_CAPABILITY_NOUN");
-    assert.ok(result.finding.capability_nouns.some((n) => n.includes("权限") || n.includes("permission")));
+    assert.ok(result.finding && "capability_nouns" in result.finding && (result.finding as { capability_nouns: string[] }).capability_nouns.some((n: string) => n.includes("权限") || n.includes("permission")));
   });
 
   test("single verb without capability noun still passes", () => {
@@ -93,7 +116,7 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
     );
     assert.equal(result.status, "warn");
     assert.equal(result.finding.code, "STORY_ATOMICITY_CAPABILITY_NOUN");
-    assert.ok(result.finding.capability_nouns.includes("payment"));
+    assert.ok(result.finding && "capability_nouns" in result.finding && (result.finding as { capability_nouns: string[] }).capability_nouns.includes("payment"));
   });
 
   test("single verb + 配置 capability noun warns", () => {
@@ -103,7 +126,7 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
     );
     assert.equal(result.status, "warn");
     assert.equal(result.finding.code, "STORY_ATOMICITY_CAPABILITY_NOUN");
-    assert.ok(result.finding.capability_nouns.some((n) => n.includes("配置") || n.includes("config")));
+    assert.ok(result.finding && "capability_nouns" in result.finding && (result.finding as { capability_nouns: string[] }).capability_nouns.some((n: string) => n.includes("配置") || n.includes("config")));
   });
 
   test("capability noun with zero verbs does not warn (no verb to flag)", () => {

@@ -67,8 +67,8 @@ function scenarioReports() {
   }));
 }
 
-function passingReports(overrides = {}) {
-  const reports = Object.fromEntries(RELEASE_CANDIDATE_REQUIRED_REPORTS.map((name) => [name, report(name, {
+function passingReports(overrides: Record<string, Record<string, unknown>> = {}) {
+  const reports: Record<string, Record<string, unknown>> = Object.fromEntries(RELEASE_CANDIDATE_REQUIRED_REPORTS.map((name) => [name, report(name, {
     commands: [commandEvidence(`run ${name}`)],
   })]));
   reports.verify = report("verify", {
@@ -115,7 +115,7 @@ function passingReports(overrides = {}) {
     },
   });
   for (const [name, override] of Object.entries(overrides)) {
-    reports[name] = { ...(reports[name] || {}), ...override };
+    reports[name] = { ...(reports[name]), ...override };
   }
   return reports;
 }

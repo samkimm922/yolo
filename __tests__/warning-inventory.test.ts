@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
 
-const TOKEN_PATTERNS = [
+const TOKEN_PATTERNS: [string, RegExp][] = [
   ["WARN", /\bWARN\b/g],
   ["warning", /\bwarning\b/g],
   ["best-effort", /best[- ]effort/g],

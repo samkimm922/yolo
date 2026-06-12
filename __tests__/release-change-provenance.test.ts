@@ -103,7 +103,7 @@ describe("release change provenance manifest", () => {
     const calls = [];
     const execFileSync = (command, args) => {
       calls.push([command, ...args]);
-      const error = new Error("git missing");
+      const error = new Error("git missing") as Error & { stderr: string };
       error.stderr = "fatal: not a git repository\n";
       throw error;
     };

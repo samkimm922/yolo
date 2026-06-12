@@ -2,7 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { createRunnerProgressLogger } from "../src/runtime/run-lifecycle/progress-log.js";
 
-function makeLogger({ quiet } = {}) {
+function makeLogger({ quiet }: { quiet?: boolean } = {}) {
   const consoleLogs = [];
   const fileLogs = [];
   const progress = { done: 1, failed: 0, total: 5 };

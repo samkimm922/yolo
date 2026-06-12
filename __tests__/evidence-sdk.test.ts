@@ -70,6 +70,6 @@ describe("public evidence ledger facade", () => {
   });
 
   test("createEvidenceLedger requires an explicit stateDir", () => {
-    assert.throws(() => createEvidenceLedger({}), /stateDir/);
+    assert.throws(() => createEvidenceLedger({ stateDir: undefined }), /stateDir/);
   });
 });

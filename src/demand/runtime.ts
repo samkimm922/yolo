@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { buildDemandSession, demandMarkdownArtifacts } from "./artifacts.js";
 import { inspectDemandQuality, inspectDemandReadiness } from "./gate.js";
-import { buildDemandSessionState } from "./router.js";
+import { buildDemandSessionState, type DemandSessionStateResult, type DemandTriageResult, type DemandPrdReadinessResult, type DemandBlocker } from "./router.js";
 import { inspectAtomicTask } from "../runtime/execution/atomic-task-doctor.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
 import { preflightPrdDocument } from "../prd/preflight.js";
@@ -225,7 +225,20 @@ export function runDemandDiscussRuntime(input = Object(), options = Object()) {
   return result;
 }
 
-export function runDemandStatusRuntime(input = Object(), options = Object()) {
+export type DemandStatusRuntimeResult = DemandSessionStateResult & {
+  guarantees: {
+    writes_business_code: boolean;
+    writes_project_state: boolean;
+    prd_execution: boolean;
+    provider_execution: boolean;
+    source: string;
+  };
+  blockers?: DemandBlocker[];
+  warnings?: string[];
+  demand_path?: string;
+};
+
+export function runDemandStatusRuntime(input = Object(), options = Object()): DemandStatusRuntimeResult {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const explicitDemandPath = input.demandPath || input.demand_path || input.demand || input.sessionPath || input.session_path;
@@ -234,27 +247,50 @@ export function runDemandStatusRuntime(input = Object(), options = Object()) {
     const read = readDemandSession(demandPath);
     if (!read.ok) {
       const blocker = { code: "DEMAND_SESSION_MISSING", message: read.error, path: read.path };
+      const emptyTriage: DemandTriageResult = {
+        schema_version: "1.0", schema: "yolo.demand.router.v1",
+        context_type: "unknown", route: "fast", evidence_policy: "none",
+        reason_codes: [], blocking: false, explanation: "",
+      };
+      const emptyReadiness: DemandPrdReadinessResult = {
+        schema_version: "1.0", schema: "yolo.demand.prd_readiness.v1",
+        required_slots: [], slot_values: {}, missing_slots: [],
+        next_question: null, question_queue: [],
+        blockers: [blocker], assumptions: [],
+        required_evidence_agents: [],
+        evidence_agreement: { status: "blocked", conflicts: [] },
+        prd_ready: false,
+      };
       return {
         status: "blocked",
         code: "DEMAND_SESSION_MISSING",
         summary: read.error,
-        demand_path: read.path,
-        blockers: [blocker],
-        warnings: [],
-        triage: null,
-        readiness: {
-          status: "blocked",
-          prd_ready: false,
-          blockers: [blocker],
-          warnings: [],
-        },
+        triage: emptyTriage,
+        readiness: emptyReadiness,
         state: {
+          schema_version: "1.0",
           schema: "yolo.demand.session_state.v1",
+          context_type: "unknown",
+          route: "fast",
+          evidence_policy: "none",
           stage: "blocked",
+          submode: "fast_intake",
+          reason_codes: [],
+          missing_slots: [],
           blockers: [blocker],
+          assumptions: [],
+          next_question: null,
+          question_queue: [],
+          evidence_tasks: [],
+          needed_evidence_agents: [],
           prd_ready: false,
           next_action: "Run yolo brainstorm/discuss first, or pass --demand <session.json|dir>.",
         },
+        next_question: null,
+        question_queue: [],
+        blockers: [blocker],
+        warnings: [],
+        demand_path: read.path,
         guarantees: {
           writes_business_code: false,
           writes_project_state: false,
@@ -1076,7 +1112,20 @@ function inspectAtomicity(tasks = [], input = Object(), options = Object()) {
   };
 }
 
-function buildDemandPrd(session = Object(), input = Object(), options = Object()) {
+export interface DemandPrdCompiledResult {
+  status: string;
+  code: string;
+  summary: string;
+  readiness: ReturnType<typeof inspectDemandReadiness>;
+  atomicity?: ReturnType<typeof inspectAtomicity>;
+  quality_report: ReturnType<typeof inspectDemandQuality>;
+  blockers: ReturnType<typeof inspectDemandReadiness>["blockers"];
+  warnings: ReturnType<typeof inspectDemandReadiness>["warnings"];
+  prd: Record<string, unknown> | null;
+  next_actions: string[];
+}
+
+function buildDemandPrd(session = Object(), input = Object(), options = Object()): DemandPrdCompiledResult {
   const projectRoot = input.projectRoot || input.project_root || options.projectRoot || options.project_root;
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const stateDir = join(stateRoot, "state");
@@ -1113,6 +1162,7 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
       code: "DEMAND_VERIFY_COMMAND_BLOCKED",
       summary: "PRD compilation blocked by illegal verify_command in task acceptance criteria.",
       readiness,
+      quality_report: { status: "blocked", warnings: [], blockers: compileErrors.map((err) => err.task_id) } as ReturnType<typeof inspectDemandQuality>,
       blockers: compileErrors.map((err) => ({
         code: "ILLEGAL_VERIFY_COMMAND",
         task_id: err.task_id,
@@ -1300,6 +1350,13 @@ export function runDemandPrdRuntime(input = Object(), options = Object()) {
       status: "blocked",
       code: "DEMAND_SESSION_MISSING",
       summary: read.error,
+      demand_path: demandPath,
+      demand_id: undefined,
+      compiled: { status: "blocked", code: "DEMAND_SESSION_MISSING", summary: read.error, readiness: undefined, quality_report: undefined, blockers: [{ code: "DEMAND_SESSION_MISSING", message: read.error }], warnings: [], prd: null, next_actions: [] },
+      prd: null,
+      preflight: null,
+      readiness: undefined,
+      quality_report: undefined,
       blockers: [{ code: "DEMAND_SESSION_MISSING", message: read.error }],
       warnings: [],
       artifacts: [],

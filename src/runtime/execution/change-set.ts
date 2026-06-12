@@ -65,7 +65,7 @@ export function classifyChangedFiles(files = []) {
   return { business, metadata };
 }
 
-export function scopedOutOfScopeFiles(files = [], task = Object(), { isFileAllowedByScope } = Object()) {
+export function scopedOutOfScopeFiles(files = [], task = Object(), { isFileAllowedByScope } = Object()): { targetFiles: string[]; outOfScope: string[]; unscoped?: boolean } {
   const targetFiles = (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
   if (targetFiles.length === 0 || files.length === 0) {
     const unscoped = targetFiles.length === 0;

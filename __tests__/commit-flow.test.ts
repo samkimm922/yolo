@@ -377,6 +377,7 @@ describe("commit flow helpers", () => {
       },
     });
 
+    if (!("warning" in failed)) throw new Error("expected warning property");
     assert.equal(failed.updated, false);
     assert.equal(failed.skipped, true);
     assert.equal(failed.warning, true);
@@ -788,9 +789,7 @@ describe("commit flow helpers", () => {
       if (args[0] === "commit") {
         commitAttempts += 1;
         if (commitAttempts === 1) {
-          const error = new Error("commit failed");
-          error.stderr = "doc-update-check failed";
-          throw error;
+          throw Object.assign(new Error("commit failed"), { stderr: "doc-update-check failed" });
         }
       }
       if (args[0] === "rev-parse") return "def456\n";
@@ -822,9 +821,7 @@ describe("commit flow helpers", () => {
       calls.push([bin, ...args]);
       if (args[0] === "commit") {
         commitAttempts += 1;
-        const error = new Error("commit failed");
-        error.stderr = commitAttempts === 1 ? "SNAPSHOT.md 未暂存" : "retry failed";
-        throw error;
+        throw Object.assign(new Error("commit failed"), { stderr: commitAttempts === 1 ? "SNAPSHOT.md 未暂存" : "retry failed" });
       }
       return "";
     };
@@ -851,9 +848,7 @@ describe("commit flow helpers", () => {
     const execFileSync = (bin, args) => {
       calls.push([bin, ...args]);
       if (args[0] === "commit") {
-        const error = new Error("commit failed");
-        error.stderr = "normal failure";
-        throw error;
+        throw Object.assign(new Error("commit failed"), { stderr: "normal failure" } as Error & { stderr: string });
       }
       return "";
     };
@@ -883,9 +878,7 @@ describe("commit flow helpers", () => {
     const execFileSync = (bin, args) => {
       calls.push([bin, ...args]);
       if (args[0] === "add") {
-        const error = new Error("add failed");
-        error.stderr = "fatal: this operation must be run in a work tree";
-        throw error;
+        throw Object.assign(new Error("add failed"), { stderr: "fatal: this operation must be run in a work tree" } as Error & { stderr: string });
       }
       return "";
     };

@@ -15,10 +15,10 @@ describe("worktree execution session helpers", () => {
   test("scope helpers allow explicit targets and sibling new files only when requested", () => {
     const scope = { targets: [{ file: "src/a.ts" }], allow_new_files: true };
 
-    assert.equal(isFileAllowedByScope("src/a.ts", scope), true);
-    assert.equal(isFileAllowedByScope("src/a.helper.ts", scope), true);
-    assert.equal(isFileAllowedByScope("other/b.ts", scope), false);
-    assert.equal(isFileAllowedByScope("src/a.helper.ts", { ...scope, allow_new_files: false }), false);
+    assert.equal(isFileAllowedByScope("src/a.ts", scope as unknown as Parameters<typeof isFileAllowedByScope>[1]), true);
+    assert.equal(isFileAllowedByScope("src/a.helper.ts", scope as unknown as Parameters<typeof isFileAllowedByScope>[1]), true);
+    assert.equal(isFileAllowedByScope("other/b.ts", scope as unknown as Parameters<typeof isFileAllowedByScope>[1]), false);
+    assert.equal(isFileAllowedByScope("src/a.helper.ts", { ...scope, allow_new_files: false } as unknown as Parameters<typeof isFileAllowedByScope>[1]), false);
   });
 
   test("git entry parsers preserve rename destinations and delete flags", () => {
@@ -45,8 +45,7 @@ describe("worktree execution session helpers", () => {
 
   test("gitLines strict failure throws instead of returning empty success", () => {
     const execFileSync = () => {
-      const error = new Error("git failed");
-      error.stderr = "fatal: not a git repository";
+      const error: Error & { stderr: string } = Object.assign(new Error("git failed"), { stderr: "fatal: not a git repository" });
       throw error;
     };
 
@@ -196,8 +195,9 @@ describe("worktree execution session helpers", () => {
       log: (phase, detail) => logs.push({ phase, detail }),
     });
 
+    const mergedResult = result as string[] & { outOfScopeSkipped: string[] };
     assert.deepEqual(result, ["src/a.ts"]);
-    assert.deepEqual(result.outOfScopeSkipped, ["src/b.ts"]);
+    assert.deepEqual(mergedResult.outOfScopeSkipped, ["src/b.ts"]);
     assert.deepEqual(copied, [{ src: "/wt/FIX-1/src/a.ts", dst: "/repo/src/a.ts" }]);
     assert.ok(logs.some((entry) => entry.phase === "BLOCK" && entry.detail.includes("src/b.ts")));
     assert.ok(logs.some((entry) => entry.phase === "MERGED" && entry.detail.includes("跳过 1 个运行时文件")));
@@ -210,8 +210,7 @@ describe("worktree execution session helpers", () => {
       if (args[0] === "-C" && args[2] === "status") return " M src/a.ts\n";
       if (args[0] === "-C" && args[2] === "ls-files") return "";
       if (args[0] === "diff") {
-        const error = new Error("diff exploded");
-        error.stderr = "fatal: diff exploded";
+        const error: Error & { stderr: string } = Object.assign(new Error("diff exploded"), { stderr: "fatal: diff exploded" });
         throw error;
       }
       if (args[0] === "ls-files") return "";
@@ -272,8 +271,9 @@ describe("worktree execution session helpers", () => {
       log: (phase, detail) => logs.push({ phase, detail }),
     });
 
+    const pkgResult = result as string[] & { outOfScopeSkipped: string[] };
     assert.deepEqual(result, ["src/a.ts"]);
-    assert.deepEqual(result.outOfScopeSkipped, [
+    assert.deepEqual(pkgResult.outOfScopeSkipped, [
       "packages/app/lib/page.ts",
       "app/page.tsx",
       "lib/db.ts",

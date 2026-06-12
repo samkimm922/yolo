@@ -128,7 +128,7 @@ describe("post-precheck helpers", () => {
     const readers = createFileReaders({
       "/repo/src/a.ts": "export const fixed = true;\n",
     });
-    const error = new Error("typecheck failed");
+    const error = new Error("typecheck failed") as Error & { stdout: string };
     error.stdout = "src/a.ts(1,2): error TS2322: bad\nsrc/other.ts(1,1): error TS7006: bad";
     const outcome = inspectPostPrecheckSkip({
       task: {
@@ -155,7 +155,7 @@ describe("post-precheck helpers", () => {
     const readers = createFileReaders({
       "/repo/src/a.ts": "export const fixed = true;\n",
     });
-    const error = new Error("typecheck failed");
+    const error = new Error("typecheck failed") as Error & { stderr: string };
     error.stderr = "src/other.ts(1,1): error TS7006: bad";
     const outcome = inspectPostPrecheckSkip({
       task: {

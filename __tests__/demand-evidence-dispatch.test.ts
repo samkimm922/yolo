@@ -23,6 +23,16 @@ const completeRiskyDemand = {
   approve: true,
 };
 
+interface EvidenceRecord {
+  path?: string;
+  line?: string;
+  url?: string;
+  scope: string;
+  source: string;
+  summary: string;
+  why: string;
+}
+
 function fakeAgentOutput(role, overrides = {}) {
   return {
     schema_version: "1.0",
@@ -39,7 +49,7 @@ function fakeAgentOutput(role, overrides = {}) {
       source: "project_code",
       summary: `${role} checked inventory API schema.`,
       why: "This is the current contract affected by the demand.",
-    }],
+    }] as EvidenceRecord[],
     assumptions: [],
     risks: [],
     missing: [],
@@ -828,7 +838,7 @@ describe("demand evidence dispatch", () => {
         spawnProviderPrompt: async (prompt) => {
           const role = roleFromPrompt(prompt);
           const output = fakeAgentOutput(role);
-          output.evidence = output.evidence.map(({ scope, ...record }) => record);
+          output.evidence = output.evidence.map(({ scope: _scope, ...record }: EvidenceRecord): Omit<EvidenceRecord, "scope"> => record) as EvidenceRecord[];
           return {
             success: true,
             provider: "claude",

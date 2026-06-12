@@ -44,6 +44,7 @@ describe("discovery runtime artifact chain", () => {
       });
 
       assert.equal(planResult.status, "success");
+      if (!("plan" in planResult)) throw new Error("expected plan");
       assert.equal(planResult.plan.steps[0].requirement_id, "R001");
       assert.equal(existsSync(planResult.artifacts[0]), true);
 
@@ -55,8 +56,10 @@ describe("discovery runtime artifact chain", () => {
       });
 
       assert.equal(prdResult.status, "draft");
+      if (!("executable" in prdResult)) throw new Error("expected executable");
       assert.equal(prdResult.executable, false);
       assert.equal(prdResult.prd, null);
+      if (!("draft_prd" in prdResult) || !prdResult.draft_prd) throw new Error("expected draft_prd");
       assert.equal(prdResult.draft_prd.tasks[0].source_finding_ids[0], "R001");
       assert.equal(prdResult.draft_prd.tasks[0].status, "needs_contract_review");
       assert.equal(prdResult.draft_prd.demand.approval.approved, false);

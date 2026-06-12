@@ -12,7 +12,7 @@ import { runInitToFirstPrdSmoke } from "../src/core/init-smoke.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
-const packageJson = JSON.parse(readFileSync(resolve(YOLO_DIR, "package.json"), "utf8"));
+const packageJson: { exports: Record<string, string>; bin: Record<string, string>; scripts: Record<string, string> } = JSON.parse(readFileSync(resolve(YOLO_DIR, "package.json"), "utf8"));
 
 describe("public package entrypoints", () => {
   test("Phase 1A public exports route through src boundaries", () => {

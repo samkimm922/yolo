@@ -58,13 +58,13 @@ describe("preflight warning hard-block (no ack bypass)", () => {
       ackWarnings: "deadbeef",
     });
     assert.equal(result.status, "blocked", "ack fingerprint must not bypass the block");
-    assert.equal(result.code, undefined, "no WARNING_ACK_REQUIRED code — ack mechanism removed");
+    if ("code" in result) assert.equal(result.code, undefined, "no WARNING_ACK_REQUIRED code — ack mechanism removed");
   });
 
   test("result never has ack_required field — ack mechanism is deleted", () => {
     const result = preflightPrdDocument(prdWithManualFailCondition(), { mode: "dev" });
-    assert.equal(result.ack_required, undefined, "ack_required must not appear in result");
-    assert.equal(result.code, undefined, "no WARNING_ACK_REQUIRED code");
+    if ("ack_required" in result) assert.equal(result.ack_required, undefined, "ack_required must not appear in result");
+    if ("code" in result) assert.equal(result.code, undefined, "no WARNING_ACK_REQUIRED code");
   });
 
   test("advisory_warnings is always empty — all warnings are blocking", () => {

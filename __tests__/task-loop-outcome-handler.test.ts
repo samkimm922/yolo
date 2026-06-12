@@ -6,17 +6,27 @@ import {
   handleTaskPreRun,
 } from "../src/runtime/task-loop/outcome-handler.js";
 
+interface LoopResults {
+  completed: string[];
+  failed: string[];
+  skipped: string[];
+  blocked: string[];
+  contractReview: string[];
+  remediation: { task_id: string; schema: string; action: string; status: string; automation_can_continue: boolean }[];
+  immediateRemediationQueue: { source_task_id: string; routing: string; reason: string; action: string; status: string; next_actions: string[] }[];
+}
+
 function makeLoopState() {
   return {
-    results: { completed: [], failed: [], skipped: [], blocked: [], contractReview: [] },
-    runResultsTracker: { completed: new Set(), failed: [] },
+    results: { completed: [], failed: [], skipped: [], blocked: [], contractReview: [], remediation: [], immediateRemediationQueue: [] } as LoopResults,
+    runResultsTracker: { completed: new Set<string>(), failed: [] as string[] },
     progress: { done: 0, failed: 0 },
-    completedIds: new Set(),
-    childTaskMap: new Map(),
+    completedIds: new Set<string>(),
+    childTaskMap: new Map<string, unknown>(),
   };
 }
 
-function makeOutcomeCallbacks(options = {}) {
+function makeOutcomeCallbacks(options: { prd?: { tasks: { id: string; status: string }[] }; post?: { passed: boolean; failed: string[] }; sourceIds?: string[] } = {}) {
   const calls = {
     logs: [],
     mergedUpdates: [],
