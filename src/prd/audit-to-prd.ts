@@ -510,9 +510,16 @@ export function runAuditToPrdCli() {
   const inputArg = args[0];
   const force = args.includes("--force");
 
-  if (!inputArg) {
-    console.error("用法: node audit-to-prd.js <audit.json> [--title=xxx] [--output=prd.json] [--force]");
-    process.exit(1);
+  if (!inputArg || inputArg === "--help" || inputArg === "-h") {
+    console.log("用法: yolo audit-to-prd <audit.json> [--title=xxx] [--output=prd.json] [--force]");
+    console.log("");
+    console.log("将结构化审计 JSON 转换为原子化 PRD（按调用链合并同类发现）。");
+    console.log("");
+    console.log("选项:");
+    console.log("  --title=xxx    PRD 标题（默认: 审计修复）");
+    console.log("  --output=FILE  输出文件路径（默认: prd.json）");
+    console.log("  --force        覆盖已有 PRD");
+    process.exit(inputArg ? 0 : 1);
   }
 
   if (!force) {
