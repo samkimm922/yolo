@@ -11,11 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: pnpm
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: npm run typecheck --silent
 
@@ -23,11 +23,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: pnpm
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: npm run build --silent
 
@@ -35,11 +35,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: pnpm
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: npm test --silent
 
@@ -47,11 +47,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: pnpm
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: npm run verify --silent
 
@@ -59,11 +59,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: pnpm
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: node --import tsx --test __tests__/docs-truth-sync.test.ts __tests__/warning-inventory.test.ts
 
@@ -71,11 +71,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: pnpm
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: npm run build --silent
       - run: node --import tsx --test __tests__/package-install-smoke.test.ts
@@ -91,11 +91,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: pnpm
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: node --import tsx scripts/source-grep-meta.ts
       - run: node --import tsx --test __tests__/no-source-grep-meta.test.ts
@@ -104,11 +104,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: pnpm
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: node --import tsx scripts/ci-guard.ts actionlint
       - run: node --import tsx scripts/ci-guard.ts security
