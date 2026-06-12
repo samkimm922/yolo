@@ -54,6 +54,7 @@ describe("package install smoke", () => {
     assert.equal(result.exit_code, 0);
     assert.equal(result.pack.inspection.status, "pass");
     assert.equal(result.pack.inspection.forbidden_entries.length, 0);
+    assert.ok(result.pack.info.files.some((file) => file.path === "dist/hooks/pre-tool-block-yolo-write.js"), "tarball must ship dist/hooks/pre-tool-block-yolo-write.js");
     assert.equal(result.install.status, "pass");
     assert.equal(result.import_check.status, "pass");
     assert.equal(result.bin_checks[0].status, "pass");

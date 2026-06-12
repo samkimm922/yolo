@@ -12,6 +12,7 @@
     "dist/fixtures/",
     "dist/schemas/",
     "dist/docs/",
+    "dist/hooks/",
     "dist/*.js",
     "dist/*.d.ts",
     "dist/*.js.map",
