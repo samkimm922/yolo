@@ -114,7 +114,7 @@
     "clean": "node -e \"const{existsSync,readFileSync,writeFileSync,readdirSync,rmSync,statSync}=require('fs');const{join}=require('path');['.yolo/state/events.jsonl','.yolo/state/changes.jsonl','.yolo/state/runs.jsonl'].forEach(f=>{const p=join(process.cwd(),f);if(existsSync(p)){const c=readFileSync(p,'utf8').split('\\n').filter(Boolean).slice(-50);writeFileSync(p,c.join('\\n')+'\\n')}});const d=join(process.cwd(),'dist');if(existsSync(d)){(function rm(ts){readdirSync(ts).forEach(e=>{const p=join(ts,e);statSync(p).isDirectory()?rm(p):e.endsWith('.d.ts')&&rmSync(p)})})(d);console.log('dist .d.ts cleaned')}else{console.log('state cleaned')}\""
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "keywords": [
     "automation",
