@@ -1,4 +1,8 @@
 #!/usr/bin/env tsx
+// CI guard rails — custom workflow and secret checks, not actionlint.
+// Renaming from generic "ci-guard" to clarify this is a project-specific guard
+// (tab indent detection, pull_request_target ban, secret scanning, prompt-injection phrases).
+// actionlint is not wired here; this script provides equivalent YAML/security guards.
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
