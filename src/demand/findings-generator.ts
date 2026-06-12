@@ -5,10 +5,11 @@
  * 从 src/pm/index.ts 迁移，demand 管道是唯一主线。
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { createReadStream, readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { resolveClaudeSettings, YOLO_PACKAGE_ROOT } from "../runtime/execution/provider-adapter.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -129,16 +130,35 @@ export async function generateFindings(prompt, timeout = 300000, options = Objec
   try { mkdirSync(dirname(tmpFile), { recursive: true }); } catch {}
   writeFileSync(tmpFile, prompt, "utf8");
 
+  const settingsRaw = options.settings || "settings-minimal.json";
+  const resolvedSettings = resolveClaudeSettings(projectRoot, settingsRaw, { packageRoot: YOLO_PACKAGE_ROOT });
+  let settingsArg = resolvedSettings.value;
+  let settingsTempFile = null;
+  if (resolvedSettings.type === "inline") {
+    settingsTempFile = join(projectRoot, "tmp", `yolo-pm-settings-${Date.now()}.json`);
+    writeFileSync(settingsTempFile, settingsArg, "utf8");
+    settingsArg = settingsTempFile;
+  }
+
   return new Promise((res) => {
     let done = false;
-    const child = spawn("sh", [
-      "-c",
-      `cat "${tmpFile}" | claude --model ${options.model || "claude-sonnet-4-6"} --dangerously-skip-permissions --settings ${options.settings || "scripts/yolo/settings-minimal.json"}`,
-    ], { cwd: projectRoot, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("claude", [
+      "--model", options.model || "claude-sonnet-4-6",
+      "--dangerously-skip-permissions",
+      "--settings", settingsArg,
+    ], { cwd: projectRoot, stdio: ["pipe", "pipe", "pipe"] });
 
     let out = "", err = "";
     child.stdout.on("data", d => out += d);
     child.stderr.on("data", d => err += d);
+
+    // Stream prompt file to stdin
+    const promptStream = createReadStream(tmpFile);
+    promptStream.pipe(child.stdin);
+    promptStream.on("error", e => {
+      child.stdin.end();
+      err += `\n[stdin error:${e.message}]`;
+    });
 
     const timer = setTimeout(() => {
       if (!done) { done = true; child.kill("SIGKILL"); res({ ok: false, error: "timeout" }); }
@@ -147,6 +167,7 @@ export async function generateFindings(prompt, timeout = 300000, options = Objec
     child.on("close", code => {
       clearTimeout(timer);
       try { unlinkSync(tmpFile); } catch {}
+      try { if (settingsTempFile) unlinkSync(settingsTempFile); } catch {}
       if (done) return;
       done = true;
 
@@ -172,6 +193,7 @@ export async function generateFindings(prompt, timeout = 300000, options = Objec
     child.on("error", e => {
       clearTimeout(timer);
       try { unlinkSync(tmpFile); } catch {}
+      try { if (settingsTempFile) unlinkSync(settingsTempFile); } catch {}
       if (!done) { done = true; res({ ok: false, error: e.message }); }
     });
   });

@@ -22,6 +22,7 @@
     "dist/config.yaml",
     "dist/config.example.yaml",
     "dist/settings-minimal.json",
+    "settings-minimal.json",
     "README.md",
     "CHANGELOG.md"
   ],

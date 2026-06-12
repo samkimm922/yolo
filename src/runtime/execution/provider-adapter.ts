@@ -1,11 +1,29 @@
 import { existsSync as defaultExistsSync, readFileSync as defaultReadFileSync } from "node:fs";
 import { spawn as defaultSpawn, spawnSync } from "node:child_process";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectAgentAdapterContract, normalizeAgentProvider } from "../adapters/agent-contract.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
-export const YOLO_PACKAGE_ROOT = resolve(MODULE_DIR, "../../..");
+
+function findPackageRoot(startDir) {
+  let dir = resolve(startDir);
+  const root = resolve("/");
+  while (dir !== root) {
+    if (defaultExistsSync(join(dir, "package.json"))) {
+      // The build copies package.json into dist/; the real package root is its parent.
+      if (basename(dir) === "dist") {
+        const parent = dirname(dir);
+        if (defaultExistsSync(join(parent, "package.json"))) return parent;
+      }
+      return dir;
+    }
+    dir = dirname(dir);
+  }
+  return resolve(MODULE_DIR, "../../..");
+}
+
+export const YOLO_PACKAGE_ROOT = findPackageRoot(MODULE_DIR);
 export const DEFAULT_CLAUDE_SETTINGS_FILE = "settings-minimal.json";
 export const LEGACY_DEFAULT_CLAUDE_SETTINGS_FILE = "scripts/yolo/settings-minimal.json";
 export const DEFAULT_CLAUDE_SETTINGS_PATH = resolve(YOLO_PACKAGE_ROOT, DEFAULT_CLAUDE_SETTINGS_FILE);
