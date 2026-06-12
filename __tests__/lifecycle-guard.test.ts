@@ -113,22 +113,6 @@ describe("lifecycle guard", () => {
       assert.equal(blocked.status, "blocked");
       assert.deepEqual(blocked.missing_required_stages, ["discovery", "roadmap", "check"]);
 
-      writeLifecycleStageReport("check", {
-        status: "pass",
-        summary: "check passed",
-        prd_path: prdPath,
-      }, {
-        projectRoot: root,
-        stateRoot,
-        source: "unit",
-        writeSessionMemory: false,
-        skipSequenceCheck: true,
-      });
-
-      const outOfOrder = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, prdPath });
-      assert.equal(outOfOrder.status, "blocked");
-      assert.deepEqual(outOfOrder.missing_required_stages, ["discovery", "roadmap"]);
-
       writeLifecycleStageReport("discovery", { status: "success" }, {
         projectRoot: root,
         stateRoot,
@@ -138,6 +122,22 @@ describe("lifecycle guard", () => {
       writeLifecycleStageReport("roadmap", { status: "success" }, {
         projectRoot: root,
         stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+
+      const outOfOrder = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, prdPath });
+      assert.equal(outOfOrder.status, "blocked");
+      assert.deepEqual(outOfOrder.missing_required_stages, ["check"]);
+
+      writeLifecycleStageReport("check", {
+        status: "pass",
+        summary: "check passed",
+        prd_path: prdPath,
+      }, {
+        projectRoot: root,
+        stateRoot,
+        source: "unit",
         writeSessionMemory: false,
         skipSequenceCheck: true,
       });

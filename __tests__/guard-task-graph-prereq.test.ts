@@ -35,6 +35,7 @@ describe("yolo-prd prerequisite after task-graph removal", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-guard-prd-"));
     mkdirSync(join(root, ".yolo/lifecycle"), { recursive: true });
     writeStatus(root, { discovery: "completed", roadmap: "completed" });
+    writeFileSync(join(root, ".yolo/lifecycle/discovery.json"), JSON.stringify({ status: "completed", summary: "discovery done" }));
     writeFileSync(join(root, ".yolo/lifecycle/roadmap.json"), JSON.stringify({ status: "completed", summary: "roadmap done" }));
     const result = inspectLifecycleGuard({ command: "yolo-prd", projectRoot: root });
     assert.equal(result.status, "pass", "yolo-prd must pass when roadmap is completed");

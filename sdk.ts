@@ -1057,7 +1057,6 @@ export {
   mergeParallelEvidence,
   planControlledParallelWaves,
   buildLifecycleStageReport,
-  writeLifecycleStageReport,
   buildDiscoveryArtifact,
   buildDiscoveryPlan,
   buildPrdFromDiscovery,

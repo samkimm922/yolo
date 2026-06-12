@@ -2,10 +2,11 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import createYoloSdk, { ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION, buildAcceptanceReport, buildAdapterEvidencePlan, buildAgentIntegrationDoctorPlan, buildControlledBetaReleaseDecisionPlan, buildEvidenceArtifact, buildInitToFirstPrdSmokePlan, buildLifecycleStageReport, buildManualExternalReleasePlan, buildOperatorReleaseRunbookPlan, buildOperatorReleaseStatePlan, buildPackageInstallSmokePlan, buildPiExecutionDrillPlan, buildPostReleaseAuditPlan, buildProgressDashboardUiEvidence, buildPublicBetaEvidencePlan, buildPublicBetaHardeningDrillPlan, buildRealProjectDogfoodPlan, buildReviewFixPrd, buildReviewOutput, buildRunFinalAnswer, buildRunReport, buildRuntimeBoundaryDecisionPlan, buildStableGraduationPlan, buildTraceabilityMatrix, buildYoloBenchmarkPlan, createEvidenceLedger, createPrdMigrationAdvice, discoverPackManifests, formatAcceptanceReportText, formatRunFinalAnswerMarkdown, formatYoloBenchmarkText, formatYoloCheckText, inspectAcceptanceReport, inspectPackageReadiness, inspectPackedPackage, inspectPrdContract, inspectProgressDashboardUiEvidence, inspectReviewFixLoop, inspectYoloCheck, listAgentPresets, listBenchmarkFixtures, listFixtureDefinitions, listWorkflows, migratePrdFile, migratePrdGates, normalizeReviewFinding, preflightPrd, PROGRESS_DASHBOARD_UI_EVIDENCE_SCHEMA_VERSION, readPackManifest, resolveProjectContext, runAdapterEvidenceCollector, runAgentIntegrationDoctor, runBenchmark, runControlledBetaReleaseDecisionGate, runFixtureHarness, runInitToFirstPrdSmoke, runManualExternalReleaseGate, runOperatorReleaseRunbookGate, runOperatorReleaseStateMutation, runPackageInstallSmoke, runPiAgent, runPiExecutionDrillGate, runPiRuntime, runPostReleaseAuditGate, runProgressDashboardUiEvidence, runPublicBetaEvidenceGate, runPublicBetaHardeningDrill, runRealProjectDogfoodGate, runRunnerRuntime, runRuntimeBoundaryDecisionGate, runStableGraduationGate, runYoloBenchmark, scanProject, scoreBenchmarkScenario, supportedConditionTypes, validatePackManifest, writeLifecycleStageReport, writeRunReport, YOLO_BENCHMARK_SCHEMA_VERSION } from "../sdk.js";
+import createYoloSdk, { ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION, buildAcceptanceReport, buildAdapterEvidencePlan, buildAgentIntegrationDoctorPlan, buildControlledBetaReleaseDecisionPlan, buildEvidenceArtifact, buildInitToFirstPrdSmokePlan, buildLifecycleStageReport, buildManualExternalReleasePlan, buildOperatorReleaseRunbookPlan, buildOperatorReleaseStatePlan, buildPackageInstallSmokePlan, buildPiExecutionDrillPlan, buildPostReleaseAuditPlan, buildProgressDashboardUiEvidence, buildPublicBetaEvidencePlan, buildPublicBetaHardeningDrillPlan, buildRealProjectDogfoodPlan, buildReviewFixPrd, buildReviewOutput, buildRunFinalAnswer, buildRunReport, buildRuntimeBoundaryDecisionPlan, buildStableGraduationPlan, buildTraceabilityMatrix, buildYoloBenchmarkPlan, createEvidenceLedger, createPrdMigrationAdvice, discoverPackManifests, formatAcceptanceReportText, formatRunFinalAnswerMarkdown, formatYoloBenchmarkText, formatYoloCheckText, inspectAcceptanceReport, inspectPackageReadiness, inspectPackedPackage, inspectPrdContract, inspectProgressDashboardUiEvidence, inspectReviewFixLoop, inspectYoloCheck, listAgentPresets, listBenchmarkFixtures, listFixtureDefinitions, listWorkflows, migratePrdFile, migratePrdGates, normalizeReviewFinding, preflightPrd, PROGRESS_DASHBOARD_UI_EVIDENCE_SCHEMA_VERSION, readPackManifest, resolveProjectContext, runAdapterEvidenceCollector, runAgentIntegrationDoctor, runBenchmark, runControlledBetaReleaseDecisionGate, runFixtureHarness, runInitToFirstPrdSmoke, runManualExternalReleaseGate, runOperatorReleaseRunbookGate, runOperatorReleaseStateMutation, runPackageInstallSmoke, runPiAgent, runPiExecutionDrillGate, runPiRuntime, runPostReleaseAuditGate, runProgressDashboardUiEvidence, runPublicBetaEvidenceGate, runPublicBetaHardeningDrill, runRealProjectDogfoodGate, runRunnerRuntime, runRuntimeBoundaryDecisionGate, runStableGraduationGate, runYoloBenchmark, scanProject, scoreBenchmarkScenario, supportedConditionTypes, validatePackManifest, writeRunReport, YOLO_BENCHMARK_SCHEMA_VERSION } from "../sdk.js";
+import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
 import {
   buildControlledParallelExecutionPlan,
   buildTaskDependencyGraph,
@@ -276,7 +277,6 @@ describe("yolo sdk", () => {
     assert.equal(typeof buildRunFinalAnswer, "function");
     assert.equal(typeof buildRunReport, "function");
     assert.equal(typeof buildLifecycleStageReport, "function");
-    assert.equal(typeof writeLifecycleStageReport, "function");
     assert.equal(typeof inspectYoloCheck, "function");
     assert.equal(typeof formatYoloCheckText, "function");
     assert.equal(typeof discoverPackManifests, "function");
@@ -756,6 +756,12 @@ describe("yolo sdk", () => {
           }],
         }],
       }), "utf8");
+      const runEvidencePath = join(root, "state/reports/pi-lifecycle/run-report.json");
+      mkdirSync(dirname(runEvidencePath), { recursive: true });
+      writeFileSync(runEvidencePath, JSON.stringify({ status: "success" }), "utf8");
+      const reviewEvidencePath = join(root, "state/review/pi-lifecycle/review-report.json");
+      mkdirSync(dirname(reviewEvidencePath), { recursive: true });
+      writeFileSync(reviewEvidencePath, JSON.stringify({ status: "success", findings: [] }), "utf8");
       writeLifecycleStageReport("run", {
         status: "success",
         summary: { failed: 0, blocked: 0 },

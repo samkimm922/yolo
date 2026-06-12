@@ -390,6 +390,8 @@ async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: 
       "to-demand",
       "--session",
       sessionPath,
+      "--cwd",
+      projectRoot,
       "--json",
     ]);
     if (failures.length) return { reports, failures, commands };
@@ -410,7 +412,7 @@ async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: 
       return { reports, failures, commands };
     }
 
-    await step("tasks", ["tasks", "--demand", demandDir, "--json"]);
+    await step("tasks", ["tasks", "--demand", demandDir, "--cwd", projectRoot, "--json"]);
     if (failures.length) return { reports, failures, commands };
 
     const prd = await step("prd", ["spec", "--demand", demandDir, "--json"]);

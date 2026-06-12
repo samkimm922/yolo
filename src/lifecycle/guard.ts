@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { lifecycleStageForCommand, validateLifecycleState } from "./schema.js";
+import { LIFECYCLE_STAGES, getLifecycleStage, lifecycleStageForCommand, validateLifecycleState } from "./schema.js";
 import { lifecycleArtifactPath, lifecycleStatusPath, resolveLifecycleStateRoot } from "./state.js";
 
 export const LIFECYCLE_GUARD_SCHEMA_VERSION = "1.0";
@@ -145,6 +145,43 @@ function meaningfulEvidenceEntry(entry) {
   return Object.keys(entry).length > 0;
 }
 
+function evidencePathExists(projectRoot, entry) {
+  if (!entry || typeof entry !== "object") return { exists: false, empty: true };
+  const rawPath = entry.path || entry.file || entry.file_path || entry.filePath;
+  if (!rawPath) return { exists: false, empty: true };
+  const absPath = isAbsolute(rawPath) ? rawPath : resolve(projectRoot, rawPath);
+  if (!existsSync(absPath)) return { exists: false, empty: true, path: absPath };
+  try {
+    const stats = statSync(absPath);
+    return { exists: true, empty: stats.size === 0, path: absPath };
+  } catch {
+    return { exists: false, empty: true, path: absPath };
+  }
+}
+
+function validateEvidencePaths(projectRoot, report = Object(), stageId = "") {
+  const blockers = [];
+  const entries = reportEvidenceEntries(report);
+  if (entries.length === 0) return blockers;
+  for (const entry of entries) {
+    const { exists, empty, path } = evidencePathExists(projectRoot, entry);
+    if (!exists) {
+      blockers.push(makeBlocker(
+        `${stageId.toUpperCase()}_EVIDENCE_PATH_MISSING`,
+        stageId,
+        `${stageId} evidence path does not exist: ${path || entry.path || entry.file || "unknown"}`,
+      ));
+    } else if (empty) {
+      blockers.push(makeBlocker(
+        `${stageId.toUpperCase()}_EVIDENCE_PATH_EMPTY`,
+        stageId,
+        `${stageId} evidence file is empty: ${path}`,
+      ));
+    }
+  }
+  return blockers;
+}
+
 function hasManualAcceptanceCriteria(report = Object()) {
   const manualCriteria = Array.isArray(report.manual_criteria) ? report.manual_criteria : [];
   const nested = Array.isArray(report.report?.manual_criteria) ? report.report.manual_criteria : [];
@@ -225,7 +262,7 @@ function makeBlocker(code, stage, message) {
   return { code, stage, message };
 }
 
-function deliveryHardGateBlockers(stateRoot) {
+function deliveryHardGateBlockers(stateRoot, projectRoot) {
   const blockers = [];
   const run = readLifecycleReport(stateRoot, "run");
   if (run.error) {
@@ -236,6 +273,9 @@ function deliveryHardGateBlockers(stateRoot) {
       "run",
       `Run report status is ${reportStatusForMessage(run.report, BLOCKING_REPORT_STATUSES)}; delivery cannot pass until run is clean.`,
     ));
+  }
+  if (run.report) {
+    blockers.push(...validateEvidencePaths(projectRoot, run.report, "run"));
   }
 
   const review = readLifecycleReport(stateRoot, "review-fix");
@@ -276,6 +316,7 @@ function deliveryHardGateBlockers(stateRoot) {
         "Acceptance report evidence is empty; external E2E output cannot replace YOLO lifecycle evidence.",
       ));
     }
+    blockers.push(...validateEvidencePaths(projectRoot, acceptance.report, "acceptance"));
     if (hasManualAcceptanceCriteria(acceptance.report)) {
       blockers.push(makeBlocker(
         "ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED",
@@ -481,6 +522,17 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
     blockers.push(...validation.errors.map((error) => makeBlocker(error.code, "setup", error.message)));
   }
 
+  const drift = inspectLifecycleDrift(projectRoot);
+  if (drift.has_drift) {
+    for (const record of drift.drift_records) {
+      blockers.push(makeBlocker(
+        `LIFECYCLE_DRIFT_${record.code}`,
+        record.stage,
+        record.message,
+      ));
+    }
+  }
+
   const requirements = requiredStagesFor(command, input);
   for (const requirement of requirements) {
     if (!requirementSatisfied(requirement, state, projectRoot, stateRoot, { ...options, ...input, projectRoot, stateRoot, input })) {
@@ -488,7 +540,7 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
     }
   }
   if (command === "yolo-ship") {
-    blockers.push(...deliveryHardGateBlockers(stateRoot));
+    blockers.push(...deliveryHardGateBlockers(stateRoot, projectRoot));
   }
 
   const missing = [...new Set(blockers.map((blocker) => blocker.stage).filter(Boolean))];
@@ -536,8 +588,10 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
 
 export interface DriftRecord {
   stage: string;
+  code: string;
   declared: string;
-  actual: "missing" | "corrupt";
+  actual: string;
+  message: string;
 }
 
 export interface LifecycleDriftResult {
@@ -557,19 +611,43 @@ const STAGE_ARTIFACTS: Record<string, string[]> = {
   learn: ["retrospective.json"],
 };
 
+function readArtifactTimestamp(stateRoot: string, stageId: string): string | null {
+  const path = lifecycleArtifactPath(stageId, { stateRoot });
+  if (!existsSync(path)) return null;
+  try {
+    const artifact = JSON.parse(readFileSync(path, "utf8"));
+    return artifact.updated_at || artifact.timestamp || null;
+  } catch {
+    return null;
+  }
+}
+
+function parseTimestamp(value: string | null): number | null {
+  if (!value) return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
 export function inspectLifecycleDrift(projectRoot: string): LifecycleDriftResult {
   const stateRoot = resolveLifecycleStateRoot({ projectRoot });
   const statusPath = lifecycleStatusPath({ projectRoot, stateRoot });
+  const drift_records: DriftRecord[] = [];
   if (!existsSync(statusPath)) {
-    return { has_drift: false, drift_records: [] };
+    return { has_drift: false, drift_records };
   }
   let status: { stages?: Array<{ id: string; status: string }> };
   try {
     status = JSON.parse(readFileSync(statusPath, "utf8"));
   } catch {
-    return { has_drift: false, drift_records: [] };
+    return { has_drift: false, drift_records };
   }
-  const drift_records: DriftRecord[] = [];
+  const completedStages = new Set(
+    (status.stages || [])
+      .filter((entry) => entry.status === "completed")
+      .map((entry) => entry.id),
+  );
+
+  // Check artifact presence for declared completed stages.
   for (const stageEntry of status.stages || []) {
     if (stageEntry.status !== "completed") continue;
     const artifacts = STAGE_ARTIFACTS[stageEntry.id];
@@ -577,9 +655,36 @@ export function inspectLifecycleDrift(projectRoot: string): LifecycleDriftResult
     const lifecycleDir = join(stateRoot, "lifecycle");
     const anyPresent = artifacts.some((rel) => existsSync(join(lifecycleDir, rel)));
     if (!anyPresent) {
-      drift_records.push({ stage: stageEntry.id, declared: "completed", actual: "missing" });
+      drift_records.push({
+        stage: stageEntry.id,
+        code: "ARTIFACT_MISSING",
+        declared: "completed",
+        actual: "missing",
+        message: `Stage ${stageEntry.id} is declared completed but its artifact is missing.`,
+      });
     }
   }
+
+  // Check artifact presence for declared completed stages and timestamp monotonicity.
+  const orderedCompleted = LIFECYCLE_STAGES.filter((s) => completedStages.has(s.id));
+  let previousStage: { id: string; sequence: number } | null = null;
+  let previousTimestamp: number | null = null;
+  for (const stage of orderedCompleted) {
+    const ts = parseTimestamp(readArtifactTimestamp(stateRoot, stage.id));
+    // Tolerate small clock jitter between rapid successive writes; only flag meaningful contradictions.
+    if (previousTimestamp != null && ts != null && previousTimestamp - ts > 1000) {
+      drift_records.push({
+        stage: stage.id,
+        code: "TIMESTAMP_CONTRADICTION",
+        declared: "completed",
+        actual: "earlier_than_prior",
+        message: `Stage ${stage.id} artifact timestamp is earlier than prior completed stage ${previousStage.id}.`,
+      });
+    }
+    previousStage = stage;
+    if (ts != null) previousTimestamp = ts;
+  }
+
   return { has_drift: drift_records.length > 0, drift_records };
 }
 

@@ -15,6 +15,7 @@ import { inspectStoryAtomicityFromDemand } from "../src/demand/story-atomicity.j
 import { parseYoloArgs } from "../src/cli/yolo.js";
 import { buildInitToFirstPrdSmokePlan } from "../src/core/init-smoke.js";
 import { buildYoloCommandRegistry, validateCommandLifecycleStageAlignment } from "../src/workflows/command-registry.js";
+import { createYoloSdk } from "../sdk.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, "..");
@@ -352,6 +353,121 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
       assert.ok(
         !guard.blockers.some((b) => b.code === "ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED"),
         "manual_acceptance evidence must resolve the delivery blocker"
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // ── P6.C1: lifecycle self-certification bypasses are blocked ──
+  test("P6.C1: skipSequenceCheck + fake missing evidence paths → ship blocked by evidence validation", () => {
+    const root = tempProject();
+    try {
+      const statusPath = join(root, ".yolo", "lifecycle", "status.json");
+      mkdirSync(dirname(statusPath), { recursive: true });
+      writeJson(statusPath, {
+        schema: "yolo.lifecycle.state.v1",
+        current_stage: "delivery",
+        project: { name: "test" },
+        stages: [
+          { id: "idea", sequence: 1, status: "completed" },
+          { id: "discovery", sequence: 2, status: "completed" },
+          { id: "setup", sequence: 3, status: "completed" },
+          { id: "roadmap", sequence: 4, status: "completed" },
+          { id: "prd", sequence: 5, status: "completed" },
+          { id: "check", sequence: 6, status: "completed" },
+          { id: "run", sequence: 7, status: "completed" },
+          { id: "review-fix", sequence: 8, status: "completed" },
+          { id: "acceptance", sequence: 9, status: "completed" },
+          { id: "delivery", sequence: 10, status: "active" },
+          { id: "learn", sequence: 11, status: "pending" },
+        ],
+      });
+      writeLifecycleStageReport("run", { status: "success", evidence: [{ path: "missing-run.json" }] }, { ...lifecycleWriteOptions(root), skipSequenceCheck: true });
+      writeLifecycleStageReport("acceptance", { status: "pass", evidence: [{ path: "missing-acceptance.json" }] }, { ...lifecycleWriteOptions(root), skipSequenceCheck: true });
+
+      const guard = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot: join(root, ".yolo") });
+      assert.equal(guard.status, "blocked", "ship must be blocked when evidence paths are fake");
+      assert.ok(
+        guard.blockers.some((b) => b.code === "RUN_EVIDENCE_PATH_MISSING"),
+        "missing run evidence path must be a blocker"
+      );
+      assert.ok(
+        guard.blockers.some((b) => b.code === "ACCEPTANCE_EVIDENCE_PATH_MISSING"),
+        "missing acceptance evidence path must be a blocker"
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("P6.C1: contradictory lifecycle reports → drift blocker", () => {
+    const root = tempProject();
+    try {
+      const stateRoot = join(root, ".yolo");
+      const statusPath = join(stateRoot, "lifecycle", "status.json");
+      mkdirSync(dirname(statusPath), { recursive: true });
+      writeJson(statusPath, {
+        schema: "yolo.lifecycle.state.v1",
+        current_stage: "run",
+        project: { name: "test" },
+        stages: [
+          { id: "idea", sequence: 1, status: "completed" },
+          { id: "discovery", sequence: 2, status: "completed" },
+          { id: "setup", sequence: 3, status: "completed" },
+          { id: "roadmap", sequence: 4, status: "completed" },
+          { id: "prd", sequence: 5, status: "completed" },
+          { id: "check", sequence: 6, status: "pending" },
+          { id: "run", sequence: 7, status: "completed" },
+          { id: "review-fix", sequence: 8, status: "pending" },
+          { id: "acceptance", sequence: 9, status: "pending" },
+          { id: "delivery", sequence: 10, status: "pending" },
+          { id: "learn", sequence: 11, status: "pending" },
+        ],
+      });
+      // Write run artifact with an earlier timestamp than prd to trigger timestamp contradiction.
+      writeLifecycleStageReport("prd", { status: "success" }, { ...lifecycleWriteOptions(root), skipSequenceCheck: true, now: "2026-01-02T00:00:00.000Z" });
+      writeLifecycleStageReport("run", { status: "success" }, { ...lifecycleWriteOptions(root), skipSequenceCheck: true, now: "2026-01-01T00:00:00.000Z" });
+
+      const guard = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
+      assert.equal(guard.status, "blocked", "ship must be blocked when lifecycle drift is detected");
+      assert.ok(
+        guard.blockers.some((b) => b.code === "LIFECYCLE_DRIFT_TIMESTAMP_CONTRADICTION"),
+        "timestamp contradiction must be a drift blocker"
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("P6.C1: SDK public lifecycle.writeStageReport strips skipSequenceCheck → cannot bypass sequence validation", () => {
+    const root = tempProject();
+    try {
+      const statusPath = join(root, ".yolo", "lifecycle", "status.json");
+      mkdirSync(dirname(statusPath), { recursive: true });
+      writeJson(statusPath, {
+        schema: "yolo.lifecycle.state.v1",
+        current_stage: "setup",
+        project: { name: "test" },
+        stages: [
+          { id: "idea", sequence: 1, status: "completed" },
+          { id: "discovery", sequence: 2, status: "completed" },
+          { id: "setup", sequence: 3, status: "completed" },
+          { id: "roadmap", sequence: 4, status: "pending" },
+          { id: "prd", sequence: 5, status: "pending" },
+          { id: "check", sequence: 6, status: "pending" },
+          { id: "run", sequence: 7, status: "pending" },
+          { id: "review-fix", sequence: 8, status: "pending" },
+          { id: "acceptance", sequence: 9, status: "pending" },
+          { id: "delivery", sequence: 10, status: "pending" },
+          { id: "learn", sequence: 11, status: "pending" },
+        ],
+      });
+      const sdk = createYoloSdk({ projectRoot: root, ensureDirs: false });
+      assert.throws(
+        () => sdk.lifecycle.writeStageReport("run", { status: "success" }, { skipSequenceCheck: true }),
+        /prior stages not completed/,
+        "SDK public surface must not allow skipSequenceCheck to bypass validation"
       );
     } finally {
       rmSync(root, { recursive: true, force: true });
