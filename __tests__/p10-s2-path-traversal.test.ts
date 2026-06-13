@@ -114,8 +114,19 @@ describe("P10.S2 code-check path traversal", () => {
   });
 
   test("rejects traversal path (returns not found, no read)", () => {
-    const r = mod.evalCodeContains({ file: "../../../etc/hosts", text: "localhost" }, {}, tmpRoot);
-    assert.equal(r.passed, false);
+    // Hermetic: write a real "localhost" file just outside tmpRoot (in its parent).
+    // A single `..` always escapes tmpRoot regardless of root depth — unlike a fixed
+    // `../../../etc/hosts` which only reached a real file on shallow CI roots, so the
+    // old test false-passed on deep macOS mkdtemp roots ("not found", not containment).
+    const outsideName = `p10s2-outside-${Date.now()}.txt`;
+    const outsideFile = join(tmpRoot, "..", outsideName);
+    writeFileSync(outsideFile, "localhost\n", "utf8");
+    try {
+      const r = mod.evalCodeContains({ file: `../${outsideName}`, text: "localhost" }, {}, tmpRoot);
+      assert.equal(r.passed, false);
+    } finally {
+      try { rmSync(outsideFile, { force: true }); } catch {}
+    }
   });
 });
 

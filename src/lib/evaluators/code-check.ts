@@ -111,7 +111,7 @@ export function evalCodeContains(params, taskScope, ROOT) {
 
   for (const file of targetFiles) {
     const absPath = resolve(ROOT, file);
-    if (!existsSync(absPath) || statSync(absPath).isDirectory()) continue;
+    if (!isWithin(absPath, ROOT) || !existsSync(absPath) || statSync(absPath).isDirectory()) continue;
     filesChecked++;
 
     const content = readFileSync(absPath, "utf8");
@@ -294,7 +294,7 @@ export function evalCodeNotContains(params, taskScope, ROOT) {
 
   const existingFiles = targetFiles.filter((file) => {
     const absPath = resolve(ROOT, file);
-    return existsSync(absPath) && !statSync(absPath).isDirectory();
+    return isWithin(absPath, ROOT) && existsSync(absPath) && !statSync(absPath).isDirectory();
   });
 
   if (existingFiles.length === 0) {
