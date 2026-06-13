@@ -77,14 +77,20 @@ function countAddedLines(cwd, file, isNew) {
     return { ok: true, addedLines: readFileSync(resolve(cwd, file), "utf8").split("\n").length };
   }
   try {
-    const diff = execFileSync("git", ["-C", cwd, "diff", "--", file], {
+    const unstaged = execFileSync("git", ["-C", cwd, "diff", "--", file], {
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 10000,
     });
+    const staged = execFileSync("git", ["-C", cwd, "diff", "--cached", "--", file], {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 10000,
+    });
+    const combined = `${unstaged || ""}\n${staged || ""}`;
     return {
       ok: true,
-      addedLines: diff.split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).length,
+      addedLines: combined.split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).length,
     };
   } catch (error) {
     return { ok: false, addedLines: 0, error: gitErrorDetail(error) };
