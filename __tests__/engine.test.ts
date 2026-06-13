@@ -239,7 +239,7 @@ describe("file_exists / file_not_exists", () => {
   });
 
   test("file_not_exists non-existing → PASS", () => {
-    const r = pre([{ id: "c1", type: "file_not_exists", severity: "FAIL", params: { file: "/no/file.ts" }, message: "" }]);
+    const r = pre([{ id: "c1", type: "file_not_exists", severity: "FAIL", params: { file: "no-such-file.ts" }, message: "" }]);
     expect(r.results[0].passed).toBe(true);
   });
 

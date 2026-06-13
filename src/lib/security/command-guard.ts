@@ -2,18 +2,12 @@
 // Parses PRD/config-supplied commands into argv and rejects shell metacharacters
 // outside quoting so that sh -c is never needed for untrusted input.
 
-export interface ArgvParseOK {
-  ok: true;
-  argv: string[];
+export interface ArgvParseResult {
+  ok: boolean;
+  argv?: string[];
+  reason?: string;
+  detail?: string;
 }
-
-export interface ArgvParseFail {
-  ok: false;
-  reason: "shell_metachar" | "unclosed_quote" | "empty";
-  detail: string;
-}
-
-export type ArgvParseResult = ArgvParseOK | ArgvParseFail;
 
 // Shell metacharacters that are dangerous when unquoted.
 const DANGEROUS_CHARS = new Set([
@@ -25,7 +19,7 @@ const DANGEROUS_CHARS = new Set([
  * Parse a command string into an argv array, respecting single/double quotes.
  * Rejects unquoted shell metacharacters to prevent injection.
  *
- * Returns {ok, argv} on success, or {ok: false, reason, detail} on failure.
+ * Returns {ok: true, argv} on success, or {ok: false, reason, detail} on failure.
  */
 export function parseCommandToArgv(command: unknown): ArgvParseResult {
   const input = String(command ?? "").trim();
@@ -107,6 +101,6 @@ export function hasUnquotedShellMetacharacters(command: unknown): boolean {
 export function unquotedShellMetacharactersIn(command: unknown): string[] {
   const result = parseCommandToArgv(command);
   if (result.ok || result.reason !== "shell_metachar") return [];
-  const match = result.detail.match(/"(.+?)"/);
+  const match = (result.detail || "").match(/"(.+?)"/);
   return match ? [match[1]] : [];
 }
