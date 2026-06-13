@@ -21,15 +21,16 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
     (taskScope?.targets || []).map((t) => t.file).filter(Boolean);
 
   if (targets.length === 0 && scanScope === "diff") {
-    const diffFiles = exec("git diff --name-only");
-    if (!diffFiles.ok) {
+    const unstagedFiles = exec("git diff --name-only");
+    const stagedFiles = exec("git diff --cached --name-only");
+    if (!unstagedFiles.ok && !stagedFiles.ok) {
       return { passed: false, status: "indeterminate", detail: "无法获取 diff，无法验证禁用模式", type: "no_forbidden_patterns" };
     }
-    if (diffFiles.out) {
-      targets = diffFiles.out.split("\n").filter(
-        (f) => f && /\.(ts|tsx|js|jsx)$/.test(f) && !f.includes("node_modules"),
-      );
-    }
+    const collect = (out) => String(out || "").split("\n").filter(
+      (f) => f && /\.(ts|tsx|js|jsx)$/.test(f) && !f.includes("node_modules"),
+    );
+    targets = [...new Set([...collect(unstagedFiles.out), ...collect(stagedFiles.out)])];
+
     const untracked = exec("git ls-files --others --exclude-standard");
     if (!untracked.ok) {
       return { passed: false, status: "indeterminate", detail: "无法获取未跟踪文件列表，无法验证禁用模式", type: "no_forbidden_patterns" };
@@ -49,13 +50,15 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
   const violations = [];
   for (const file of targets) {
     if (!existsSync(resolve(ROOT, file))) continue;
-    const diff = exec(`git diff -- "${file}"`);
-    if (!diff.ok) {
+    const unstagedDiff = exec(`git diff -- "${file}"`);
+    const stagedDiff = exec(`git diff --cached -- "${file}"`);
+    if (!unstagedDiff.ok && !stagedDiff.ok) {
       return { passed: false, status: "indeterminate", detail: `无法获取 ${file} 的 diff，无法验证禁用模式`, type: "no_forbidden_patterns" };
     }
-    if (!diff.out) continue;
+    const diffOut = `${unstagedDiff.out || ""}\n${stagedDiff.out || ""}`;
+    if (!diffOut.trim()) continue;
 
-    const addedLines = diff.out
+    const addedLines = diffOut
       .split("\n")
       .filter((l) => /^\+[^+]/.test(l))
       .join("\n");

@@ -19,6 +19,18 @@ function targetFiles(task = Object()) {
   return (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
 }
 
+function mergeNumstat(unstagedOutput, stagedOutput) {
+  const map = new Map();
+  for (const line of [...unstagedOutput.split("\n"), ...stagedOutput.split("\n")].filter(Boolean)) {
+    const [addedRaw, removedRaw, file] = line.split("\t");
+    const added = addedRaw === "-" ? 0 : Number(addedRaw) || 0;
+    const removed = removedRaw === "-" ? 0 : Number(removedRaw) || 0;
+    const existing = map.get(file) || { file, added: 0, removed: 0 };
+    map.set(file, { file, added: existing.added + added, removed: existing.removed + removed });
+  }
+  return [...map.values()];
+}
+
 function parseNumstat(output) {
   return output.split("\n").filter(Boolean).map((line) => {
     const [addedRaw, removedRaw, file] = line.split("\t");
@@ -31,9 +43,10 @@ function parseNumstat(output) {
 }
 
 function changedFiles(cwd) {
-  const tracked = execGit(cwd, ["diff", "--name-only"]).split("\n").filter(Boolean);
+  const unstaged = execGit(cwd, ["diff", "--name-only"]).split("\n").filter(Boolean);
+  const staged = execGit(cwd, ["diff", "--cached", "--name-only"]).split("\n").filter(Boolean);
   const untracked = execGit(cwd, ["ls-files", "--others", "--exclude-standard"]).split("\n").filter(Boolean);
-  return [...new Set([...tracked, ...untracked])];
+  return [...new Set([...staged, ...unstaged, ...untracked])];
 }
 
 export function validateDiffQuality(task = Object(), options = Object()) {
@@ -51,7 +64,10 @@ export function validateDiffQuality(task = Object(), options = Object()) {
   }
 
   const targets = targetFiles(task);
-  const numstat = parseNumstat(execGit(cwd, ["diff", "--numstat", "--", ...targets]));
+  const numstat = mergeNumstat(
+    execGit(cwd, ["diff", "--numstat", "--", ...targets]),
+    execGit(cwd, ["diff", "--cached", "--numstat", "--", ...targets]),
+  );
   const changed = changedFiles(cwd).filter((file) => targets.includes(file));
   const untracked = execGit(cwd, ["ls-files", "--others", "--exclude-standard", "--", ...targets])
     .split("\n")
