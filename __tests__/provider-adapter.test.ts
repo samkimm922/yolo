@@ -445,13 +445,13 @@ describe("provider execution adapter", () => {
       const passResult = spawnSync("node", [hookPath], { input: passPayload, timeout: 5000 });
       assert.equal(passResult.status, 0, `expected exit 0 for normal path, got ${passResult.status}`);
 
-      // Allow non-Write/Edit tools
+      // Any non-yolo-CLI Bash subcommand that references a .yolo path is blocked.
       const bashPayload = JSON.stringify({
         tool_name: "Bash",
         tool_input: { command: "echo .yolo" },
       });
       const bashResult = spawnSync("node", [hookPath], { input: bashPayload, timeout: 5000 });
-      assert.equal(bashResult.status, 0, `expected exit 0 for harmless Bash, got ${bashResult.status}`);
+      assert.equal(bashResult.status, 2, `expected exit 2 for Bash .yolo mention, got ${bashResult.status}`);
 
       const bashRedirectPayload = JSON.stringify({
         tool_name: "Bash",

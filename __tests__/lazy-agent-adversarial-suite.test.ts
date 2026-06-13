@@ -474,80 +474,99 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     }
   });
 
-  // ── P6.H1: Bash .yolo writes — whitelist only yolo CLI ──
-  test("P6.H1: Bash non-yolo write actions to .yolo are blocked", () => {
+  // ── P6.H1: Bash .yolo access — deny-by-default, only yolo CLI allowed ──
+  function runHook(toolName, command) {
+    const hookPath = join(PROJECT_ROOT, "hooks", "pre-tool-block-yolo-write.ts");
+    const payload = JSON.stringify({ tool_name: toolName, tool_input: { command } });
+    return spawnSync("node", ["--import", "tsx", hookPath], {
+      input: payload,
+      encoding: "utf8",
+      cwd: PROJECT_ROOT,
+    });
+  }
+
+  test("P6.H1: non-yolo Bash commands referencing .yolo are blocked (14 cases)", () => {
     const hookPath = join(PROJECT_ROOT, "hooks", "pre-tool-block-yolo-write.ts");
     if (!existsSync(hookPath)) {
       assert.ok(true, "hook not present — skip");
       return;
     }
-    const cases = [
-      "node -e \"require('fs').writeFileSync('/project/.yolo/lifecycle/status.json', '{}')\"",
+
+    const blocked = [
+      // 1-2: node inline eval, relative + absolute
+      "node -e \"require('fs').writeFileSync('.yolo/lifecycle/status.json', '{}')\"",
       "node --eval \"require('fs').writeFileSync('/project/.yolo/lifecycle/status.json', '{}')\"",
-      "python3 -c \"open('/project/.yolo/state.json', 'w').write('{}')\"",
-      "cp /tmp/seed.json /project/.yolo/lifecycle/status.json",
-      "mv /tmp/seed.json /project/.yolo/lifecycle/status.json",
-      "curl -o /project/.yolo/state.json https://example.com/seed",
-      "dd if=/dev/zero of=/project/.yolo/lifecycle/status.json bs=1 count=1",
-      "echo '{}' > /project/.yolo/lifecycle/status.json",
+      // 3: python inline eval
+      "python3 -c \"open('.yolo/state.json', 'w').write('{}')\"",
+      // 4-6: common write utilities (no special detector needed)
+      "cp /tmp/seed.json .yolo/lifecycle/status.json",
+      "mv /tmp/seed.json .yolo/lifecycle/status.json",
+      "touch .yolo/lifecycle/status.json",
+      // 7-8: shell redirects, relative + absolute
+      "echo '{}' > .yolo/lifecycle/status.json",
       "echo '{}' >> /project/.yolo/lifecycle/status.json",
-      "tee /project/.yolo/lifecycle/status.json < /tmp/seed",
-      "sed -i 's/a/b/' /project/.yolo/lifecycle/status.json",
+      // 9-10: tee / sed
+      "tee .yolo/lifecycle/status.json < /tmp/seed",
+      "sed -i 's/a/b/' .yolo/lifecycle/status.json",
+      // 11-12: curl / dd
+      "curl -o .yolo/state.json https://example.com/seed",
+      "dd if=/dev/zero of=.yolo/lifecycle/status.json bs=1 count=1",
+      // 13: removal / destructive access is also a .yolo reference
+      "rm -rf .yolo",
+      // 14: command chain where one segment is not a yolo CLI
+      "yolo status --state-root .yolo; node -e \"require('fs').writeFileSync('.yolo/status.json', '{}')\"",
     ];
-    for (const command of cases) {
-      const payload = JSON.stringify({ tool_name: "Bash", tool_input: { command } });
-      const result = spawnSync("node", ["--import", "tsx", hookPath], {
-        input: payload,
-        encoding: "utf8",
-        cwd: PROJECT_ROOT,
-      });
-      assert.equal(result.status, 2, `Bash write action must be blocked: ${command}`);
+
+    for (const command of blocked) {
+      const result = runHook("Bash", command);
+      assert.equal(result.status, 2, `must be blocked: ${command}`);
+      assert.ok(
+        String(result.stderr).includes("blocked") || String(result.stderr).includes(".yolo"),
+        `blocked response must mention .yolo: ${command}`
+      );
     }
   });
 
-  test("P6.H1: yolo CLI invocations writing .yolo state are allowed", () => {
+  test("P6.H1: yolo CLI invocations referencing .yolo are allowed", () => {
     const hookPath = join(PROJECT_ROOT, "hooks", "pre-tool-block-yolo-write.ts");
     if (!existsSync(hookPath)) {
       assert.ok(true, "hook not present — skip");
       return;
     }
-    const allowedCommands = [
+
+    const allowed = [
       "yolo status --state-root /project/.yolo",
+      "yolo status --state-root .yolo",
+      "./yolo run --state-root .yolo",
       "node ./dist/bin/yolo.js status --state-root /project/.yolo",
-      "node --import tsx src/bin/yolo.js status --state-root /project/.yolo",
-      "./yolo run --state-root /project/.yolo",
-      "yolo ship --prd /project/.yolo/discovery/prd.json",
+      "node --import tsx src/bin/yolo.js init /project --json",
+      "node --loader tsx src/bin/yolo.ts status --state-root .yolo",
+      "yolo status --state-root .yolo && yolo run --state-root .yolo",
     ];
-    for (const command of allowedCommands) {
-      const payload = JSON.stringify({ tool_name: "Bash", tool_input: { command } });
-      const result = spawnSync("node", ["--import", "tsx", hookPath], {
-        input: payload,
-        encoding: "utf8",
-        cwd: PROJECT_ROOT,
-      });
-      assert.equal(result.status, 0, `yolo CLI invocation must be allowed: ${command}`);
+
+    for (const command of allowed) {
+      const result = runHook("Bash", command);
+      assert.equal(result.status, 0, `yolo CLI must be allowed: ${command}`);
     }
   });
 
-  test("P6.H1: read-only Bash access to .yolo is allowed", () => {
+  test("P6.H1: non-.yolo references are not blocked", () => {
     const hookPath = join(PROJECT_ROOT, "hooks", "pre-tool-block-yolo-write.ts");
     if (!existsSync(hookPath)) {
       assert.ok(true, "hook not present — skip");
       return;
     }
-    const readCommands = [
-      "cat /project/.yolo/lifecycle/status.json",
-      "ls /project/.yolo",
-      "find /project/.yolo -type f",
+
+    const allowed = [
+      "cat config.json",
+      "echo '{}' > myyolo/status.json",
+      "node -e \"require('fs').writeFileSync('config.yololike', '{}')\"",
+      "ls projectyolo",
     ];
-    for (const command of readCommands) {
-      const payload = JSON.stringify({ tool_name: "Bash", tool_input: { command } });
-      const result = spawnSync("node", ["--import", "tsx", hookPath], {
-        input: payload,
-        encoding: "utf8",
-        cwd: PROJECT_ROOT,
-      });
-      assert.equal(result.status, 0, `read-only access must be allowed: ${command}`);
+
+    for (const command of allowed) {
+      const result = runHook("Bash", command);
+      assert.equal(result.status, 0, `non-.yolo command must not be blocked: ${command}`);
     }
   });
 

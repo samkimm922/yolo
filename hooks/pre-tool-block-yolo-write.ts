@@ -17,10 +17,10 @@ process.stdin.on('end', () => {
   const toolName = (data.tool_name || '').toLowerCase();
   if (toolName === 'bash') {
     const command = data.tool_input?.command || '';
-    if (typeof command === "string" && commandWritesYoloState(command)) {
+    if (typeof command === "string" && commandTouchesYoloState(command)) {
       block(
         "YOLO_STATE_BASH_WRITE_BLOCKED",
-        "Direct Bash writes to .yolo state are blocked. Use yolo CLI commands to modify lifecycle state.",
+        "Direct Bash access to .yolo state is blocked. Use yolo CLI commands to interact with lifecycle state.",
         command,
       );
       return;
@@ -57,6 +57,7 @@ function isWriteLikeTool(toolName) {
   return ["write", "edit", "multiedit", "notebookedit"].includes(toolName);
 }
 
+// Used for clean file paths from Write/Edit tools.
 function pathTouchesYoloState(filePath) {
   const normalized = String(filePath || "").replace(/\\/g, '/');
   return normalized.split('/').includes('.yolo');
@@ -72,14 +73,66 @@ function block(code, message, file = null) {
   process.exit(2);
 }
 
-function commandWritesYoloState(command) {
-  // Only the yolo CLI itself is allowed to mutate .yolo state via Bash.
-  // Everything else that performs a write action against a .yolo path is blocked.
-  if (isYoloCliInvocation(command)) return false;
-  return commandHasYoloWriteAction(command);
+// ── Bash branch: deny-by-default per subcommand ──
+
+const YOLO_PATH_RE = /(?<![A-Za-z0-9_.])\.yolo(?=\/|$|['"\s);&|])/;
+
+function commandTouchesYoloState(command) {
+  const subcommands = splitSubcommands(command);
+  for (const sub of subcommands) {
+    const trimmed = sub.trim();
+    if (!trimmed) continue;
+    if (isYoloCliInvocation(trimmed)) continue;
+    if (YOLO_PATH_RE.test(trimmed)) return true;
+  }
+  return false;
 }
 
-// Whitelist: direct yolo CLI entrypoints and `node … <yolo-script>` invocations.
+function splitSubcommands(command) {
+  const subs = [];
+  let current = "";
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i];
+    const next = command[i + 1];
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+      current += ch;
+      continue;
+    }
+    if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+      current += ch;
+      continue;
+    }
+    if (!inSingle && !inDouble) {
+      if (ch === "&" && next === "&") {
+        if (current.trim()) subs.push(current.trim());
+        current = "";
+        i += 1;
+        continue;
+      }
+      if (ch === "|" && next === "|") {
+        if (current.trim()) subs.push(current.trim());
+        current = "";
+        i += 1;
+        continue;
+      }
+      if (ch === ";" || ch === "|" || ch === "&" || ch === "\n") {
+        if (current.trim()) subs.push(current.trim());
+        current = "";
+        continue;
+      }
+    }
+    current += ch;
+  }
+  if (current.trim()) subs.push(current.trim());
+  return subs.length > 0 ? subs : [command.trim()];
+}
+
+// Whitelist: only direct yolo CLI entrypoints and `node … <yolo-script>` are allowed
+// to reference .yolo paths. Everything else is denied.
 function isYoloCliInvocation(command) {
   const tokens = splitShellTokens(command);
   if (tokens.length === 0) return false;
@@ -89,11 +142,11 @@ function isYoloCliInvocation(command) {
     i += 1;
   }
 
-  // Direct entrypoint: yolo, ./yolo, /path/to/yolo, yolo.js, etc.
+  // Direct entrypoint: yolo, ./yolo, /path/to/yolo, yolo.js/mjs/cjs/ts/tsx
   if (isYoloScriptPath(tokens[i])) return true;
 
   // node … yolo CLI: the first non-flag, non-env positional argument after node
-  // must be a yolo script. Inline eval/print/check is not a CLI invocation.
+  // must be a yolo script. Inline eval/print/check is never a CLI invocation.
   if (!/(?:^|\/)node$/.test(tokens[i])) return false;
 
   for (let j = i + 1; j < tokens.length; j += 1) {
@@ -125,98 +178,6 @@ function isYoloScriptPath(token) {
   const segments = String(token || "").split("/").filter(Boolean);
   const last = segments[segments.length - 1] || "";
   return /^yolo(\.js|\.mjs|\.cjs|\.ts|\.tsx)?$/.test(last);
-}
-
-function commandHasYoloWriteAction(command) {
-  if (!pathTouchesYoloState(command)) return false;
-  return redirectsToYoloState(command)
-    || teeWritesYoloState(command)
-    || sedInPlaceTouchesYoloState(command)
-    || copiesOrMovesToYoloState(command)
-    || curlDownloadsToYoloState(command)
-    || ddWritesToYoloState(command)
-    || nodeInlineWritesYoloState(command)
-    || pythonInlineWritesYoloState(command);
-}
-
-function redirectsToYoloState(command) {
-  const pattern = /(?:^|[\s;&|])\d*>{1,2}\s*(["']?)([^"'\s;&|]+)\1/g;
-  let match;
-  while ((match = pattern.exec(command)) !== null) {
-    if (pathTouchesYoloState(match[2])) return true;
-  }
-  return false;
-}
-
-function teeWritesYoloState(command) {
-  const pattern = /(?:^|[\s;&|])tee(?:\s+-[A-Za-z]+)*\s+(["']?)([^"'\s;&|]+)\1/g;
-  let match;
-  while ((match = pattern.exec(command)) !== null) {
-    if (pathTouchesYoloState(match[2])) return true;
-  }
-  return false;
-}
-
-function sedInPlaceTouchesYoloState(command) {
-  return /(?:^|[\s;&|])sed\b[\s\S]*\s-i\b[\s\S]*\.yolo(?:\/|$)/.test(command.replace(/\\/g, "/"));
-}
-
-function copiesOrMovesToYoloState(command) {
-  const tokens = splitShellTokens(command);
-  const programIndex = tokens.findIndex((t) => /(?:^|\/)cp$/.test(t) || /(?:^|\/)mv$/.test(t));
-  if (programIndex === -1) return false;
-  let targetDir = null;
-  let lastPositional = null;
-  for (let i = programIndex + 1; i < tokens.length; i += 1) {
-    const t = tokens[i];
-    if (t.startsWith("-")) {
-      if (t === "--target-directory" || t === "-t") {
-        targetDir = tokens[i + 1] || null;
-        i += 1;
-      }
-      continue;
-    }
-    if (/^[A-Z_][A-Z0-9_]*=/.test(t)) continue;
-    lastPositional = t;
-  }
-  return (targetDir != null && pathTouchesYoloState(targetDir))
-    || (lastPositional != null && pathTouchesYoloState(lastPositional));
-}
-
-function curlDownloadsToYoloState(command) {
-  const tokens = splitShellTokens(command);
-  const programIndex = tokens.findIndex((t) => /(?:^|\/)curl$/.test(t));
-  if (programIndex === -1) return false;
-  for (let i = programIndex + 1; i < tokens.length; i += 1) {
-    const t = tokens[i];
-    if (t === "-o" || t === "--output") {
-      return pathTouchesYoloState(tokens[i + 1] || "");
-    }
-  }
-  return false;
-}
-
-function ddWritesToYoloState(command) {
-  const tokens = splitShellTokens(command);
-  const programIndex = tokens.findIndex((t) => /(?:^|\/)dd$/.test(t));
-  if (programIndex === -1) return false;
-  for (let i = programIndex + 1; i < tokens.length; i += 1) {
-    const t = tokens[i];
-    if (t.startsWith("of=")) {
-      return pathTouchesYoloState(t.slice(3));
-    }
-  }
-  return false;
-}
-
-function nodeInlineWritesYoloState(command) {
-  return /\bnode(?:\s+\S+)*\s+(?:-[ec]|--eval|--check)(?:=|\b)/.test(command)
-    && pathTouchesYoloState(command);
-}
-
-function pythonInlineWritesYoloState(command) {
-  return /\bpython3?(?:\s+\S+)*\s+-c(?:=|\b)/.test(command)
-    && pathTouchesYoloState(command);
 }
 
 function splitShellTokens(command) {
