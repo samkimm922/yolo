@@ -4,15 +4,11 @@ import { execFileSync } from "node:child_process";
 import { classifyTaskExecution } from "../task-loop/router.js";
 
 function execGit(cwd, args) {
-  try {
-    return execFileSync("git", ["-C", cwd, ...args], {
-      encoding: "utf8",
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: 10000,
-    }).trim();
-  } catch {
-    return "";
-  }
+  return execFileSync("git", ["-C", cwd, ...args], {
+    encoding: "utf8",
+    stdio: ["pipe", "pipe", "pipe"],
+    timeout: 10000,
+  }).trim();
 }
 
 function targetFiles(task = Object()) {
@@ -64,14 +60,32 @@ export function validateDiffQuality(task = Object(), options = Object()) {
   }
 
   const targets = targetFiles(task);
-  const numstat = mergeNumstat(
-    execGit(cwd, ["diff", "--numstat", "--", ...targets]),
-    execGit(cwd, ["diff", "--cached", "--numstat", "--", ...targets]),
-  );
-  const changed = changedFiles(cwd).filter((file) => targets.includes(file));
-  const untracked = execGit(cwd, ["ls-files", "--others", "--exclude-standard", "--", ...targets])
-    .split("\n")
-    .filter(Boolean);
+  let numstat;
+  let changed;
+  let untracked;
+  try {
+    numstat = mergeNumstat(
+      execGit(cwd, ["diff", "--numstat", "--", ...targets]),
+      execGit(cwd, ["diff", "--cached", "--numstat", "--", ...targets]),
+    );
+    changed = changedFiles(cwd).filter((file) => targets.includes(file));
+    untracked = execGit(cwd, ["ls-files", "--others", "--exclude-standard", "--", ...targets])
+      .split("\n")
+      .filter(Boolean);
+  } catch (gitError) {
+    return {
+      status: "fail",
+      blocks_execution: true,
+      route,
+      failures: [
+        {
+          code: "DIFF_QUALITY_GIT_UNAVAILABLE",
+          detail: `无法确定 diff（git 失败）: ${gitError?.message || String(gitError)}`,
+        },
+      ],
+      recovery_hint: "diff-quality-gate 依赖 git 探测变更范围，git 不可用时拒绝放行。",
+    };
+  }
 
   const added = numstat.reduce((sum, item) => sum + item.added, 0);
   const removed = numstat.reduce((sum, item) => sum + item.removed, 0);
