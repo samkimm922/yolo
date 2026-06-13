@@ -3,6 +3,7 @@ import { spawn as defaultSpawn, spawnSync } from "node:child_process";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectAgentAdapterContract, normalizeAgentProvider } from "../adapters/agent-contract.js";
+import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -212,6 +213,9 @@ function modelValue(ai = Object()) {
 
 function renderCustomCommand(command, ai = Object()) {
   const model = modelValue(ai);
+  if (model && !parseCommandToArgv(model).ok) {
+    throw new Error(`ai.model contains shell metacharacters, refusing to substitute into custom_command: ${model}`);
+  }
   return cleanString(command).replaceAll("${model}", model);
 }
 

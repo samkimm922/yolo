@@ -20,6 +20,7 @@ import {
 import { evalFileExists, evalFileNotExists, evalDirExists, evalFilesModifiedMax, evalFileLinesMax, evalNoFileOverMaxLines } from "../lib/evaluators/file-check.js";
 import { evalNoForbiddenPatterns, evalNoNewTypeErrors, evalTypeErrorsContain, evalNoNewLintErrors, evalNoNewDeadCode } from "../lib/evaluators/quality-check.js";
 import { evalTestsPass, evalBuildPass, evalBusinessCodeMin } from "../lib/evaluators/runtime-check.js";
+import { parseCommandToArgv } from "../lib/security/command-guard.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -95,20 +96,38 @@ function createEvaluators(root) {
     acceptance_criteria: (params, _taskScope) => {
       const verifyCommand = (params && params.verify_command) || null;
       if (verifyCommand && typeof verifyCommand === "string") {
-        // Reject commands containing pipe, redirect, or semicolon (gsd-2 rule)
-        if (/[;&|>]/.test(verifyCommand)) {
+        const parsed = parseCommandToArgv(verifyCommand);
+        if (!parsed.ok) {
           return {
             passed: false,
             status: "fail",
-            detail: `验收标准 verify_command 不允许 pipe/redirect/分号: ${verifyCommand}`,
+            detail: `验收标准 verify_command 被拒绝: ${parsed.detail}`,
           };
         }
-        const result = createExec(root)(verifyCommand, { timeout: 60000 });
-        return {
-          passed: result.ok,
-          status: result.ok ? "pass" : "fail",
-          detail: result.ok ? `验收命令通过: ${verifyCommand}` : `验收命令失败: ${verifyCommand}${result.err ? " — " + result.err : ""}`,
-        };
+        try {
+          const out = execFileSync(parsed.argv[0], parsed.argv.slice(1), {
+            cwd: root,
+            timeout: 60000,
+            encoding: "utf8",
+            stdio: ["pipe", "pipe", "pipe"],
+          }).trim();
+          return {
+            passed: true,
+            status: "pass",
+            detail: `验收命令通过: ${verifyCommand}`,
+          };
+        } catch (e) {
+          const errMsg = ((e.stderr || "") + (e.message || "")).toLowerCase();
+          const commandNotFound = errMsg.includes("command not found") ||
+                                  errMsg.includes("enoent") ||
+                                  e.code === "ENOENT";
+          return {
+            passed: false,
+            status: "fail",
+            detail: `验收命令失败: ${verifyCommand}${e.stderr ? " — " + String(e.stderr).trim() : ""}`,
+            commandNotFound,
+          };
+        }
       }
       // No executable verify command — mark as manual (blocked at delivery gate)
       return {
