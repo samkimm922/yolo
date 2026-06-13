@@ -73,7 +73,7 @@ pnpm install
 ```text
 /yolo-demand 我想把库存预警需求聊清楚，先不要生成 PRD。
 /yolo-auto 我确认执行已检查通过的库存预警 PRD。
-/yolo-ship specs/prd-low-stock-alert.json
+/yolo-ship <你的 PRD 路径>
 /yolo-status
 ```
 
