@@ -250,4 +250,62 @@ describe("task-loop outcome handler", () => {
     assert.equal(callbacks.calls.parentBlocked[0].reason, "same root cause");
     assert.match(callbacks.calls.logs[0][2], /连续 2 个 task 同因失败/);
   });
+
+  test("handleTaskOutcome persists a PRD failed transition for terminal failures (prompt/gate/etc.)", () => {
+    const state = makeLoopState();
+    const callbacks = makeOutcomeCallbacks();
+
+    const result = handleTaskOutcome({
+      ...state,
+      task: { id: "FIX-P36-007" },
+      outcome: { status: "failed", reason: "prompt 生成失败" },
+      ...callbacks,
+      now: "2026-06-13T00:00:00.000Z",
+    });
+
+    assert.equal(result.action, "continue");
+    const failedTransition = callbacks.calls.transitions.find(
+      (transition) => transition.task_id === "FIX-P36-007" && transition.prd_update?.status === "failed",
+    );
+    assert.ok(failedTransition, "a PRD transition with status=failed must be recorded");
+    assert.equal(failedTransition.prd_update.phase, "failed");
+    assert.equal(failedTransition.prd_update.counts_as_completed, false);
+    assert.equal(failedTransition.prd_update.failReason, "prompt 生成失败");
+    assert.equal(failedTransition.result.status, "FAIL");
+  });
+
+  test("handleTaskOutcome does not record a failed transition for completed tasks", () => {
+    const state = makeLoopState();
+    const callbacks = makeOutcomeCallbacks();
+
+    handleTaskOutcome({
+      ...state,
+      task: { id: "FIX-P36-008" },
+      outcome: { status: "completed" },
+      ...callbacks,
+    });
+
+    const failedTransition = callbacks.calls.transitions.find(
+      (transition) => transition.prd_update?.status === "failed",
+    );
+    assert.equal(failedTransition, undefined, "completed tasks must not emit a failed PRD transition");
+  });
+
+  test("handleTaskOutcome records the failed transition even when the repeated-failure fuse trips", () => {
+    const state = makeLoopState();
+    const callbacks = makeOutcomeCallbacks();
+
+    handleTaskOutcome({
+      ...state,
+      task: { id: "FIX-P36-009" },
+      outcome: { status: "failed", reason: "same root cause" },
+      lastFailKey: "failed:same root cause",
+      ...callbacks,
+    });
+
+    const failedTransition = callbacks.calls.transitions.find(
+      (transition) => transition.task_id === "FIX-P36-009" && transition.prd_update?.status === "failed",
+    );
+    assert.ok(failedTransition, "the fuse trip must still persist the failure to the PRD");
+  });
 });
