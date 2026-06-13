@@ -4,6 +4,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { resolveProjectContext } from "../../packs/resolver.js";
 import { asArray, selectedAcceptanceAdapter } from "../gates/readiness-policy.js";
 import { isWithin } from "../../lib/security/path-guard.js";
+import { redact } from "../../lib/security/redact.js";
 
 export const ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION = "1.0";
 export const ADAPTER_EVIDENCE_COLLECTOR_SCHEMA = "yolo.adapter.evidence_collector.v1";
@@ -373,8 +374,8 @@ export function runAdapterEvidenceCollector(input = Object(), options = Object()
       exit_code: executed.status,
       signal: executed.signal || null,
       error: executed.error?.message || null,
-      stdout: truncate(executed.stdout),
-      stderr: truncate(executed.stderr),
+      stdout: redact(truncate(executed.stdout)),
+      stderr: redact(truncate(executed.stderr)),
       evidence_path: evidencePath || null,
       evidence_file: evidencePath ? repoRelative(evidencePath, plan.project_root) : null,
       evidence_found: evidencePath ? existsSync(evidencePath) : null,

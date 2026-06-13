@@ -7,6 +7,7 @@ import { appendFileSync, mkdirSync, readdirSync, unlinkSync, existsSync } from "
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isSafePathComponent } from "../../lib/security/path-guard.js";
+import { redact } from "../../lib/security/redact.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "../../..");
@@ -92,7 +93,7 @@ export function logTaskEdit(taskId, file, detail) {
 }
 
 export function logTaskBash(taskId, cmd, result, output) {
-  writeTaskLog(taskId, { type: "BASH", cmd, result, output: output?.slice(0, 500) });
+  writeTaskLog(taskId, { type: "BASH", cmd, result, output: redact(output?.slice(0, 500) || "") });
 }
 
 export function logTaskGate(taskId, check, result, errors) {

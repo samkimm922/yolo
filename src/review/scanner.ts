@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import { config } from "../lib/config.js";
 import { buildReviewOutput, normalizeReviewFindings } from "./findings.js";
+import { redact } from "../lib/security/redact.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -280,9 +281,9 @@ export function scanFile(absPath, options = Object()) {
         fix_type: rule.fix_type,
         file: relPath,
         line: lineNum,
-        match: matches[0],
+        match: redact(matches[0]),
         description: rule.description,
-        context: line.trim().slice(0, 120),
+        context: redact(line.trim().slice(0, 120)),
       });
     }
   }
