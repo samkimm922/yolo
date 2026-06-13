@@ -58,7 +58,7 @@ scripts/yolo/
 
 ## 前提条件
 
-- **Node.js ≥ 18**（`node -v` 确认）
+- **Node.js ≥ 22**（`node -v` 确认；对齐 `engines >=22.0.0` 与 `.nvmrc`）
 - **Claude Code**（推荐）或 Codex 作为 AI 执行环境
 - 克隆本仓库后在项目根目录运行：
 
