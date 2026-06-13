@@ -1,13 +1,16 @@
 import {
+  closeSync as defaultCloseSync,
   copyFileSync as defaultCopyFileSync,
   existsSync as defaultExistsSync,
   mkdirSync as defaultMkdirSync,
+  openSync as defaultOpenSync,
   readFileSync as defaultReadFileSync,
   readdirSync as defaultReaddirSync,
   renameSync as defaultRenameSync,
   rmSync as defaultRmSync,
   unlinkSync as defaultUnlinkSync,
   writeFileSync as defaultWriteFileSync,
+  writeSync as defaultWriteSync,
 } from "node:fs";
 import { execFileSync as defaultExecFileSync, execSync as defaultExecSync } from "node:child_process";
 import { basename, join, resolve, sep } from "node:path";
@@ -29,36 +32,71 @@ export function acquireRunnerPidLock({
   pidFile,
   pid,
   exitOnComplete = true,
-  existsSync = defaultExistsSync,
   readFileSync = defaultReadFileSync,
-  writeFileSync = defaultWriteFileSync,
+  openSync = defaultOpenSync,
+  writeSync = defaultWriteSync,
+  closeSync = defaultCloseSync,
   unlinkSync = defaultUnlinkSync,
   processKill = process.kill,
   processExit = process.exit,
   makeError = createRunnerError,
   consoleError = (...args) => console.error(...args),
 } = Object()) {
-  if (existsSync(pidFile)) {
-    const oldPid = parseInt(readFileSync(pidFile, "utf8").trim(), 10);
-    try {
-      processKill(oldPid, 0);
-    } catch {
-      try { unlinkSync(pidFile); } catch (_) {}
+  // P9.H1: claim the pid file atomically with O_EXCL (openSync "wx") so two
+  // runners cannot both pass an existsSync check and then race on the write —
+  // the TOCTOU that let two runners both "acquire" the lock (verified: two
+  // acquires both returned acquired:true and wrote [111,222]). openSync("wx")
+  // either creates the file exclusively or throws EEXIST.
+  const tryCreate = () => {
+    const fd = openSync(pidFile, "wx");
+    writeSync(fd, String(pid));
+    closeSync(fd);
+  };
+
+  const rejectActive = (oldPid) => {
+    consoleError(`[yolo-runner] 另一个 runner 实例正在运行 (PID ${oldPid})。如确认已停止，删除 ${pidFile}`);
+    if (exitOnComplete) {
+      processExit(1);
+      return { acquired: false, pid: oldPid, exited: true };
     }
-    if (existsSync(pidFile)) {
-      consoleError(`[yolo-runner] 另一个 runner 实例正在运行 (PID ${oldPid})。如确认已停止，删除 ${pidFile}`);
-      if (exitOnComplete) {
-        processExit(1);
-        return { acquired: false, pid: oldPid, exited: true };
-      }
-      throw makeError(`Another runner instance is active (PID ${oldPid})`, 1, {
-        code: "RUNNER_ALREADY_ACTIVE",
-        pid: oldPid,
-      });
-    }
+    throw makeError(`Another runner instance is active (PID ${oldPid})`, 1, {
+      code: "RUNNER_ALREADY_ACTIVE",
+      pid: oldPid,
+    });
+  };
+
+  // Fast path: exclusive create succeeds when no pid file exists yet.
+  try {
+    tryCreate();
+    return { acquired: true, pid };
+  } catch (error) {
+    if (!error || error.code !== "EEXIST") throw error;
   }
-  writeFileSync(pidFile, String(pid), "utf8");
-  return { acquired: true, pid };
+
+  // pid file exists — read the owner and check whether it is alive.
+  let oldPid = NaN;
+  try {
+    oldPid = parseInt(readFileSync(pidFile, "utf8").trim(), 10);
+  } catch (_) {
+    return rejectActive(oldPid);
+  }
+  try {
+    processKill(oldPid, 0);
+    return rejectActive(oldPid);
+  } catch (_) {
+    // owner is dead — fall through to takeover
+  }
+
+  // Stale lock from a dead process: remove it and retry the exclusive create
+  // once. If another runner grabbed it in the gap, fail as already-active.
+  try { unlinkSync(pidFile); } catch (_) {}
+  try {
+    tryCreate();
+    return { acquired: true, pid };
+  } catch (error) {
+    if (!error || error.code !== "EEXIST") throw error;
+    return rejectActive(oldPid);
+  }
 }
 
 export function rotateTaskResults({

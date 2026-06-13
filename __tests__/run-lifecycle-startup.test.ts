@@ -20,15 +20,25 @@ function tempDir() {
 }
 
 describe("run lifecycle startup helpers", () => {
-  test("acquireRunnerPidLock removes stale pid files and writes the current pid", () => {
+  test("acquireRunnerPidLock takes over a stale pid file (dead owner) via exclusive create", () => {
     const files = new Map([["/state/runner.pid", "123"]]);
     const unlinked = [];
+    let fdCounter = 100;
     const result = acquireRunnerPidLock({
       pidFile: "/state/runner.pid",
       pid: 456,
-      existsSync: (file) => files.has(file),
+      openSync: (file, flags) => {
+        if (flags === "wx" && files.has(file)) {
+          const err = new Error("EEXIST");
+          (err as Error & { code: string }).code = "EEXIST";
+          throw err;
+        }
+        files.set(file, "456");
+        return ++fdCounter;
+      },
       readFileSync: (file) => files.get(file),
-      writeFileSync: (file, value) => files.set(file, value),
+      writeSync: () => {},
+      closeSync: () => {},
       unlinkSync: (file) => {
         unlinked.push(file);
         files.delete(file);
@@ -49,9 +59,15 @@ describe("run lifecycle startup helpers", () => {
       pidFile: "/state/runner.pid",
       pid: 456,
       exitOnComplete: false,
-      existsSync: () => true,
+      openSync: () => {
+        const err = new Error("EEXIST");
+        (err as Error & { code: string }).code = "EEXIST";
+        throw err;
+      },
       readFileSync: () => "123",
-      writeFileSync: () => {},
+      writeSync: () => {},
+      closeSync: () => {},
+      unlinkSync: () => {},
       processKill: () => {},
       consoleError: (message) => errors.push(message),
     }), (error) => {
@@ -60,6 +76,83 @@ describe("run lifecycle startup helpers", () => {
       return true;
     });
     assert.match(errors[0], /另一个 runner 实例正在运行/);
+  });
+
+  test("acquireRunnerPidLock is race-free: only the first contender acquires when both face an existing file (TOCTOU fix)", () => {
+    const files = new Map();
+    let fdCounter = 200;
+    function acquireAs(runnerPid) {
+      return acquireRunnerPidLock({
+        pidFile: "/state/runner.pid",
+        pid: runnerPid,
+        exitOnComplete: false,
+        openSync: (file, flags) => {
+          if (flags === "wx" && files.has(file)) {
+            const err = new Error("EEXIST");
+            (err as Error & { code: string }).code = "EEXIST";
+            throw err;
+          }
+          files.set(file, String(runnerPid));
+          return ++fdCounter;
+        },
+        readFileSync: (file) => files.get(file),
+        writeSync: () => {},
+        closeSync: () => {},
+        unlinkSync: () => {},
+        processKill: () => {}, // first owner always reports alive
+      });
+    }
+
+    const first = acquireAs(111);
+    assert.deepEqual(first, { acquired: true, pid: 111 });
+
+    let second = null;
+    let thrown = null;
+    try {
+      second = acquireAs(222);
+    } catch (error) {
+      thrown = error;
+    }
+
+    assert.equal(second, null, "the second contender must not acquire the lock");
+    assert.ok(thrown, "the second contender must throw");
+    assert.equal((thrown as Error & { code: string }).code, "RUNNER_ALREADY_ACTIVE");
+    assert.equal((thrown as Error & { pid: number }).pid, 111);
+    // the pid file must keep the first owner — it must never flip to 222
+    assert.equal(files.get("/state/runner.pid"), "111");
+  });
+
+  test("acquireRunnerPidLock reclaims the lock after a dead owner when no other runner contends", () => {
+    const files = new Map([["/state/runner.pid", "999"]]);
+    const unlinked = [];
+    let fdCounter = 300;
+    const result = acquireRunnerPidLock({
+      pidFile: "/state/runner.pid",
+      pid: 321,
+      openSync: (file, flags) => {
+        if (flags === "wx" && files.has(file)) {
+          const err = new Error("EEXIST");
+          (err as Error & { code: string }).code = "EEXIST";
+          throw err;
+        }
+        files.set(file, "321");
+        return ++fdCounter;
+      },
+      readFileSync: (file) => files.get(file),
+      writeSync: () => {},
+      closeSync: () => {},
+      unlinkSync: (file) => {
+        unlinked.push(file);
+        files.delete(file);
+      },
+      processKill: () => {
+        throw new Error("no such process");
+      },
+    });
+
+    assert.deepEqual(result, { acquired: true, pid: 321 });
+    assert.deepEqual(unlinked, ["/state/runner.pid"]);
+    assert.equal(files.get("/state/runner.pid"), "321");
   });
 
   test("rotateTaskResults backs up and deletes stale result files", () => {
