@@ -2,7 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   appendJsonlRecord,
   appendRunEvent,
@@ -178,5 +178,44 @@ describe("evidence ledger", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("P8.M4: JSON schema requires the same hash fields as the runtime validator", async () => {
+    const Ajv = (await import("ajv")).default;
+    const ajv = new Ajv({ allErrors: true, strict: false, validateFormats: false });
+    const schema = JSON.parse(readFileSync(resolve(import.meta.dirname, "../schemas/evidence-ledger-v1.schema.json"), "utf8"));
+    const validate = ajv.compile(schema);
+
+    // Real ledger record and artifact built by the runtime must pass the schema.
+    const record = buildLedgerRecord("gate.failed", { task_id: "T1" }, {
+      now: "2026-05-24T15:00:02.000Z", ledger: "state", source: "gate",
+    });
+    const artifact = buildEvidenceArtifact("gate.failure", { status: "fail", task_id: "T1" }, {
+      now: "2026-05-24T15:00:03.000Z", source: "gate",
+    });
+    assert.equal(validate(record), true, `real record should satisfy schema: ${JSON.stringify(validate.errors)}`);
+    assert.equal(validate(artifact), true, `real artifact should satisfy schema: ${JSON.stringify(validate.errors)}`);
+
+    // Records missing the required hash fields must fail the schema, matching the runtime validator.
+    const recordWithoutHashes = { ...record };
+    delete recordWithoutHashes.prev_hash;
+    delete recordWithoutHashes.record_hash;
+    assert.equal(validate(recordWithoutHashes), false, "schema must reject record without prev_hash/record_hash");
+
+    const recordWithoutPrevHash = { ...record };
+    delete recordWithoutPrevHash.prev_hash;
+    assert.equal(validate(recordWithoutPrevHash), false, "schema must reject record without prev_hash");
+
+    const recordWithoutRecordHash = { ...record };
+    delete recordWithoutRecordHash.record_hash;
+    assert.equal(validate(recordWithoutRecordHash), false, "schema must reject record without record_hash");
+
+    const artifactWithoutDigest = { ...artifact };
+    delete artifactWithoutDigest.artifact_digest;
+    assert.equal(validate(artifactWithoutDigest), false, "schema must reject artifact without artifact_digest");
+
+    // Runtime validator must reject the same tampered payloads.
+    assert.equal(validateLedgerRecord(recordWithoutHashes).ok, false);
+    assert.equal(validateEvidenceArtifact(artifactWithoutDigest).ok, false);
   });
 });

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://yolo.dev/schemas/evidence-ledger-v1.schema.json",
   "title": "YOLO Evidence Ledger v1",
   "oneOf": [
@@ -9,7 +9,7 @@
   "$defs": {
     "ledgerEvent": {
       "type": "object",
-      "required": ["schema_version", "schema", "ts", "ledger", "event", "source"],
+      "required": ["schema_version", "schema", "ts", "ledger", "event", "source", "prev_hash", "record_hash"],
       "properties": {
         "schema_version": { "const": "1.0" },
         "schema": { "const": "yolo.ledger.event.v1" },
@@ -25,13 +25,21 @@
         "artifact_type": { "type": "string" },
         "code": { "type": "string" },
         "message": { "type": "string" },
-        "suggested_fix": { "type": "string" }
+        "suggested_fix": { "type": "string" },
+        "prev_hash": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 1 }
+          ],
+          "description": "Hash of the previous ledger record. null for the genesis record."
+        },
+        "record_hash": { "type": "string", "minLength": 1, "description": "SHA-256 hash of the canonical record payload." }
       },
       "additionalProperties": true
     },
     "evidenceArtifact": {
       "type": "object",
-      "required": ["schema_version", "schema", "artifact_type", "generated_at", "source"],
+      "required": ["schema_version", "schema", "artifact_type", "generated_at", "source", "artifact_digest"],
       "properties": {
         "schema_version": { "const": "1.0" },
         "schema": { "const": "yolo.evidence.artifact.v1" },
@@ -45,7 +53,8 @@
         "evidence_file": { "type": "string" },
         "code": { "type": "string" },
         "message": { "type": "string" },
-        "suggested_fix": { "type": "string" }
+        "suggested_fix": { "type": "string" },
+        "artifact_digest": { "type": "string", "minLength": 1, "description": "SHA-256 hash of the canonical artifact payload." }
       },
       "additionalProperties": true
     }
