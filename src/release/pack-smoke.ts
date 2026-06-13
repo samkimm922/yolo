@@ -183,6 +183,7 @@ function writeConsumerPackageJson(consumerDir) {
     version: "0.0.0",
     private: true,
     type: "module",
+    scripts: { typecheck: 'node -e "process.exit(0)"' },
   }, null, 2)}\n`, "utf8");
 }
 

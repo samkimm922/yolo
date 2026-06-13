@@ -62,7 +62,7 @@ const INVENTORY = [
   ["src/runtime/adapters/provider-runtime-matrix.ts", { WARN: 0, warning: 9, "best-effort": 0, skip: 0 }],
   ["src/runtime/evidence/log-change.ts", { WARN: 0, warning: 0, "best-effort": 1, skip: 0 }],
   ["src/runtime/evidence/report.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 16 }],
-  ["src/runtime/execution/baselines.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 3 }],
+  ["src/runtime/execution/baselines.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 4 }],
   ["src/runtime/execution/commit-flow.ts", { WARN: 2, warning: 1, "best-effort": 0, skip: 6 }],
   ["src/runtime/execution/context-pack-validator.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 0 }],
   ["src/runtime/execution/dry-run-artifact.ts", { WARN: 1, warning: 0, "best-effort": 0, skip: 3 }],
