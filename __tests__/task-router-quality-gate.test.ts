@@ -182,4 +182,11 @@ describe("diff quality gate", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("fails closed when git is unavailable (P7.H3)", () => {
+    const result = validateDiffQuality(r6Task, { cwd: "/definitely/missing/path" });
+    assert.notEqual(result.status, "pass");
+    assert.equal(result.blocks_execution, true);
+    assert.equal(result.failures[0].code, "DIFF_QUALITY_GIT_UNAVAILABLE");
+  });
 });

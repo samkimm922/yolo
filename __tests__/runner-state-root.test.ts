@@ -120,6 +120,11 @@ describe("runner state root", () => {
     try {
       mkdirSync(join(stateRoot, "data/prd/current"), { recursive: true });
       writeFileSync(join(projectRoot, "README.md"), "# state root smoke\n", "utf8");
+      writeFileSync(join(projectRoot, "package.json"), JSON.stringify({
+        name: "state-root-smoke",
+        version: "0.0.0",
+        scripts: { typecheck: 'node -e "process.exit(0)"' },
+      }, null, 2), "utf8");
       writeDryRunArtifactPrd(prdPath);
       const check = prepareLifecycle(projectRoot, stateRoot, prdPath);
       assert.notEqual(check.status, "blocked");

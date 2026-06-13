@@ -107,7 +107,8 @@ function extractJsonArray(text) {
       }
     }
   }
-  return [];
+  // 非空输出但全部解析失败 → 返回 null，由调用方判为工具失败
+  return null;
 }
 
 // --- 调用 claude -p（全新窗口，10 分钟超时） ---
@@ -152,13 +153,20 @@ if (result.signal) {
 const rawOutput = result.stdout || '';
 const bugs = extractJsonArray(rawOutput);
 
-// 输出到 stdout（供 runner 读取）
-console.log(JSON.stringify(bugs));
-
 // 写日志（包含原始输出，便于调试解析失败）
 if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
 const logFile = join(LOG_DIR, `review-round${round}-${Date.now()}.json`);
 writeFileSync(logFile, JSON.stringify({ bugs, rawOutputLength: rawOutput.length, rawOutputPreview: rawOutput.slice(0, 500) }, null, 2));
+
+// 非空输出无法解析为 JSON → 工具失败，拒绝 []+exit0 的假绿
+if (bugs === null) {
+  console.error(`[yolo-review] claude 输出无法解析为 JSON (round ${round})，原始长度 ${rawOutput.length}`);
+  console.error(`[yolo-review] preview: ${rawOutput.slice(0, 200)}`);
+  process.exit(1);
+}
+
+// 输出到 stdout（供 runner 读取）
+console.log(JSON.stringify(bugs));
 
 // 写到指定路径（如果 --output 参数存在）
 if (outputPath) {

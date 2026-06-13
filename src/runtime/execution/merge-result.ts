@@ -1,5 +1,9 @@
 import { execFileSync as defaultExecFileSync } from "node:child_process";
 
+export type WorktreeDiffStats =
+  | { added: number; removed: number }
+  | { added: null; removed: null; error: string };
+
 export function parseGitNumstat(output = "") {
   let added = 0;
   let removed = 0;
@@ -15,7 +19,7 @@ export function readWorktreeDiffStats({
   wtPath,
   baseRef = null,
   execFileSync = defaultExecFileSync,
-} = Object()) {
+} = Object()): WorktreeDiffStats {
   try {
     const committed = baseRef
       ? execFileSync("git", ["-C", wtPath, "diff", "--numstat", baseRef, "HEAD"], {
@@ -28,8 +32,12 @@ export function readWorktreeDiffStats({
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
     return parseGitNumstat([committed, uncommitted].filter(Boolean).join("\n"));
-  } catch {
-    return { added: 0, removed: 0 };
+  } catch (error) {
+    return {
+      added: null,
+      removed: null,
+      error: `git diff 统计失败: ${error?.message || String(error)}`,
+    };
   }
 }
 
@@ -55,16 +63,18 @@ export function buildTaskExecutionBaseRecord({
   nowIso = () => new Date().toISOString(),
 } = Object()) {
   const coverage = buildScopeTargetCoverage(scopeTargets, [...businessFiles, ...metadataFiles]);
+  const statsFailed = diffStats.added === null || diffStats.removed === null;
   return {
     id: taskId,
     timestamp: nowIso(),
     duration_sec: ((now() - startedAtMs) / 1000).toFixed(1),
-    diff_lines_added: diffStats.added || 0,
-    diff_lines_removed: diffStats.removed || 0,
+    diff_lines_added: statsFailed ? null : (diffStats.added || 0),
+    diff_lines_removed: statsFailed ? null : (diffStats.removed || 0),
     files_changed_total: businessFiles.length + metadataFiles.length,
     files_changed_business: businessFiles.length,
     files_changed_metadata: metadataFiles.length,
     ...coverage,
     out_of_scope_files: outOfScope,
+    ...(diffStats.error ? { diff_stats_error: diffStats.error } : {}),
   };
 }

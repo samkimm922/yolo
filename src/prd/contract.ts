@@ -60,6 +60,7 @@ function createExec(root) {
         out: (e.stdout || "").trim(),
         err: (e.stderr || "").trim(),
         commandNotFound,
+        exitCode: Number.isInteger(e.status) ? e.status : null,
       };
     }
   };
