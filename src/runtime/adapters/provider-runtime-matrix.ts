@@ -1,6 +1,11 @@
+import { existsSync as defaultExistsSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { detectModelProvider } from "./provider-doctor.js";
-import { buildProviderInvocation } from "../execution/provider-adapter.js";
+import {
+  buildProviderInvocation,
+  inspectProviderInvocationPreflight,
+  YOLO_PACKAGE_ROOT,
+} from "../execution/provider-adapter.js";
 import { inspectAgentAdapterContract, normalizeAgentProvider } from "./agent-contract.js";
 
 export const PROVIDER_RUNTIME_MATRIX_SCHEMA_VERSION = "1.0";
@@ -21,14 +26,14 @@ function pathInside(child, parent) {
   return resolvedChild === resolvedParent || resolvedChild.startsWith(withTrailingSeparator(resolvedParent));
 }
 
-function providerOverrides(options = {}, provider) {
+function providerOverrides(options = Object(), provider) {
   return {
     ...(options.providerConfigs?.[provider] || {}),
     ...(options.provider_configs?.[provider] || {}),
   };
 }
 
-function providerConfig(baseConfig = {}, provider, options = {}) {
+function providerConfig(baseConfig = Object(), provider, options = Object()) {
   const override = providerOverrides(options, provider);
   const ai = {
     ...(baseConfig.ai || {}),
@@ -69,6 +74,8 @@ function serializeInvocation(invocation) {
     provider: invocation.provider,
     command: invocation.command,
     args: invocation.args,
+    settings_file: invocation.settingsFile || null,
+    settings: invocation.settings || null,
     output_file: invocation.outputFile || null,
     custom_command: invocation.customCommand || null,
   };
@@ -78,7 +85,7 @@ function cliArgsInclude(args = [], value) {
   return Array.isArray(args) && args.includes(value);
 }
 
-export function buildProviderRuntimeMatrix(options = {}) {
+export function buildProviderRuntimeMatrix(options = Object()) {
   const config = options.config || {};
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const stateRoot = resolve(options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
@@ -87,6 +94,8 @@ export function buildProviderRuntimeMatrix(options = {}) {
   const workDir = resolve(options.workDir || options.work_dir || projectRoot);
   const rootDir = resolve(options.rootDir || options.root_dir || projectRoot);
   const commandExists = options.commandExists || (() => null);
+  const existsSync = options.existsSync || defaultExistsSync;
+  const packageRoot = resolve(options.packageRoot || options.package_root || YOLO_PACKAGE_ROOT);
 
   const entries = providerList(options.providers).map((provider) => {
     const entryConfig = providerConfig(config, provider, options);
@@ -96,9 +105,18 @@ export function buildProviderRuntimeMatrix(options = {}) {
       provider,
       providerDetection: detection,
       commandExists,
+      rootDir,
+      workDir,
+      runtimeDir,
     });
     let invocation = null;
     let invocationError = null;
+    let invocationPreflight = {
+      status: "pass",
+      blocks_execution: false,
+      blockers: [],
+      warnings: [],
+    };
     try {
       invocation = buildProviderInvocation({
         provider,
@@ -108,10 +126,20 @@ export function buildProviderRuntimeMatrix(options = {}) {
         runtimeDir,
         now: options.now,
         random: options.random,
+        packageRoot,
       });
+      invocationPreflight = inspectProviderInvocationPreflight(invocation, { existsSync, commandExists });
     } catch (error) {
       invocationError = error?.message || String(error);
     }
+    const blockers = [
+      ...(inspection.blockers || []),
+      ...(invocationPreflight.blockers || []),
+    ];
+    const warnings = [
+      ...(inspection.warnings || []),
+      ...(invocationPreflight.warnings || []),
+    ];
 
     return {
       provider,
@@ -119,13 +147,14 @@ export function buildProviderRuntimeMatrix(options = {}) {
       requested_provider: detection.requested,
       detection_reason: detection.reason,
       available: detection.available,
-      status: invocationError ? "blocked" : inspection.status,
-      blocks_execution: Boolean(invocationError || inspection.blocks_execution),
+      status: invocationError || invocationPreflight.blocks_execution ? "blocked" : inspection.status,
+      blocks_execution: Boolean(invocationError || inspection.blocks_execution || invocationPreflight.blocks_execution),
       contract: inspection.contract,
       invocation: serializeInvocation(invocation),
       invocation_error: invocationError,
-      blockers: inspection.blockers,
-      warnings: inspection.warnings,
+      invocation_preflight: invocationPreflight,
+      blockers,
+      warnings,
     };
   });
 
@@ -136,6 +165,7 @@ export function buildProviderRuntimeMatrix(options = {}) {
     state_root: stateRoot,
     runtime_dir: runtimeDir,
     gate_log_dir: gateLogDir,
+    package_root: packageRoot,
     runner_runtime: {
       project_root: projectRoot,
       state_root: stateRoot,
@@ -147,7 +177,7 @@ export function buildProviderRuntimeMatrix(options = {}) {
   };
 }
 
-export function inspectProviderRuntimeMatrix(options = {}) {
+export function inspectProviderRuntimeMatrix(options = Object()) {
   const matrix = buildProviderRuntimeMatrix(options);
   const blockers = [];
   const warnings = [];
@@ -212,7 +242,7 @@ export function inspectProviderRuntimeMatrix(options = {}) {
   };
 }
 
-export function buildProviderCliDryRunMatrix(options = {}) {
+export function buildProviderCliDryRunMatrix(options = Object()) {
   const runtimeMatrix = buildProviderRuntimeMatrix(options);
   const requireExplicitBudget = options.requireExplicitBudget === true || options.require_explicit_budget === true;
   const workDir = resolve(options.workDir || options.work_dir || runtimeMatrix.project_root);
@@ -288,7 +318,7 @@ export function buildProviderCliDryRunMatrix(options = {}) {
   };
 }
 
-export function inspectProviderCliDryRunMatrix(options = {}) {
+export function inspectProviderCliDryRunMatrix(options = Object()) {
   const runtimeInspection = options.matrix ? null : inspectProviderRuntimeMatrix(options);
   const matrix = options.matrix || buildProviderCliDryRunMatrix(options);
   const blockers = [];

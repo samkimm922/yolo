@@ -9,6 +9,7 @@ import {
   formatYoloBenchmarkText,
   listBenchmarkFixtures,
   runYoloBenchmark,
+  runYoloBenchmarkCli,
   scoreBenchmarkScenario,
 } from "../src/eval/benchmark.js";
 
@@ -122,5 +123,34 @@ describe("YOLO eval benchmark", () => {
 
     const help = execFileSync(process.execPath, [join(YOLO_DIR, "dist/bin/yolo.js"), "eval", "--help"], { cwd: YOLO_DIR, encoding: "utf8" });
     assert.match(help, /yolo eval/);
+  });
+
+  test("yolo eval CLI exits 2 for benchmark warnings", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-eval-cli-warning-"));
+    const resultsPath = join(root, "results.json");
+    const baselinePath = join(root, "baseline.json");
+    let stdout = "";
+    writeFileSync(resultsPath, JSON.stringify(passingResults(90)), "utf8");
+    writeFileSync(baselinePath, JSON.stringify({
+      overall_score: 92,
+      scenario_results: listBenchmarkFixtures().map((fixture) => ({ fixture_id: fixture.id, score: 96 })),
+    }), "utf8");
+
+    const exitCode = await runYoloBenchmarkCli([
+      "--results", resultsPath,
+      "--baseline", baselinePath,
+      "--max-regression", "3",
+      "--cwd", root,
+      "--json",
+      "--no-write",
+    ], {
+      cwd: root,
+      stdout: { write: (chunk) => { stdout += chunk; } },
+    });
+    const report = JSON.parse(stdout);
+
+    assert.equal(exitCode, 2);
+    assert.equal(report.status, "warning");
+    assert.equal(report.code, "BENCHMARK_WARNING");
   });
 });

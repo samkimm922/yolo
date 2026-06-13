@@ -7,6 +7,8 @@ import { pathToFileURL } from "node:url";
 import { buildAcceptanceReport } from "../src/runtime/acceptance/report.js";
 import { buildProgressDashboardUiEvidence } from "../src/runtime/progress/ui-evidence.js";
 import { runRunnerRuntime } from "../src/runtime/runner-runtime.js";
+import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 
@@ -24,12 +26,72 @@ function writeText(file, text) {
   writeFileSync(file, text, "utf8");
 }
 
+function approvedDemandFields(targetFiles = []) {
+  const quality = {
+    schema_version: "1.0",
+    schema: "yolo.demand.quality.v1",
+    status: "pass",
+    total_score: 100,
+    dimensions: [],
+  };
+  return {
+    source: "approved_demand",
+    demand_contract_required: true,
+    demand: {
+      id: "DEMAND-PROGRESS-UI-TEST",
+      approval: { approved: true, effective_for_prd: true },
+      project_facts: {
+        target_files: targetFiles.map((file) => ({ file, status: "verified" })),
+        assumptions: [],
+      },
+      quality_report: quality,
+    },
+    execution_readiness: {
+      level: "L3",
+      afk_ready: true,
+      quality_status: "pass",
+      quality_report: quality,
+    },
+  };
+}
+
+function tracedRequirement(id, text) {
+  return {
+    id,
+    text,
+    demand_trace: { evidence: [`EVID-${id}`] },
+  };
+}
+
+function prepareRunLifecycle(projectRoot, stateRoot, prdPath) {
+  writeLifecycleStageReport("discovery", { status: "success" }, {
+    projectRoot,
+    stateRoot,
+    writeSessionMemory: false,
+    skipSequenceCheck: true,
+  });
+  writeLifecycleStageReport("roadmap", { status: "success" }, {
+    projectRoot,
+    stateRoot,
+    writeSessionMemory: false,
+    skipSequenceCheck: true,
+  });
+  writeLifecycleStageReport("prd", { status: "success", prd_path: prdPath, artifacts: [prdPath] }, {
+    projectRoot,
+    stateRoot,
+    writeSessionMemory: false,
+    skipSequenceCheck: true,
+  });
+  return inspectYoloCheck({ prdPath, projectRoot, stateRoot, writeLifecycle: true });
+}
+
 function progressUiPrd() {
   return {
     version: "2.0", id: "PRD-20260526-PROGRESS-UI", title: "Progress dashboard UI evidence",
     project: { name: "progress-ui", language: "javascript" },
     generated_by: "yolo-review-agent", generated_at: "2026-05-26T00:00:00.000Z", base_commit: "abcdef0",
-    requirements: [{ id: "REQ-UI-1", text: "Progress dashboard must provide usable UI evidence." }],
+    ...approvedDemandFields(["src/runtime/progress/server.ts"]),
+    requirements: [tracedRequirement("REQ-UI-1", "Progress dashboard must provide usable UI evidence.")],
     designs: [{ id: "DES-UI-1", text: "Use a DESIGN.md/UI-SPEC style UI contract." }],
     state_matrix: { loading: "SSE connected.", empty: "Idle lifecycle visible.", success: "Active run progress visible.", mobile: "Responsive below 640px.", desktop: "Desktop from 640px." },
     evidence_plan: { ui: ["progress dashboard HTML snapshot", "runtime error evidence", "responsive evidence"] },
@@ -38,7 +100,10 @@ function progressUiPrd() {
       requirement_ids: ["REQ-UI-1"], design_ids: ["DES-UI-1"],
       scope: { targets: [{ file: "src/runtime/progress/server.ts" }], allow_new_files: true },
       acceptance_criteria: ["Progress dashboard exposes active and idle state UI evidence.", "Task and gate data are escaped before entering HTML."],
-      post_conditions: [{ id: "POST-SERVER", type: "target_file_modified", severity: "FAIL", params: { file: "src/runtime/progress/server.ts" } }],
+      post_conditions: [
+        { id: "POST-SERVER", type: "target_file_modified", severity: "FAIL", params: { file: "src/runtime/progress/server.ts" } },
+        { id: "POST-TYPECHECK", type: "no_new_type_errors", severity: "FAIL", params: { command: "npm run typecheck" } },
+      ],
     }],
   };
 }
@@ -131,6 +196,8 @@ describe("progress dashboard UI evidence", () => {
       writeJson(join(stateRoot, "adapters/progress-dashboard-ui.manifest.json"), adapterManifest());
       writeJson(prdPath, progressUiPrd());
       writeProgressEvidenceTool(root);
+      const check = prepareRunLifecycle(root, stateRoot, prdPath);
+      assert.notEqual(check.status, "blocked", JSON.stringify(check.blockers, null, 2));
 
       const result = await runRunnerRuntime({
         prdPath,
@@ -143,7 +210,9 @@ describe("progress dashboard UI evidence", () => {
         writeLifecycle: false,
       });
 
-      assert.equal(result.status, "success");
+      assert.equal(result.status, "dry_run");
+      assert.equal(result.code, "RUNNER_DRY_RUN_READY");
+      assert.equal(result.exit_code, 2);
       assert.equal(result.adapter_evidence.status, "pass");
       assert.equal(result.adapter_evidence.ui_evidence.required_state_present, true);
       assert.equal(existsSync(join(stateRoot, "state/events.jsonl")), true);

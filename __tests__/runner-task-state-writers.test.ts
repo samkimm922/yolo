@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { appendTaskResult, updatePrdTaskStatusFile } from "../src/runtime/task-state/writers.js";
@@ -21,10 +21,19 @@ describe("runner task state writers", () => {
       const result = appendTaskResult(resultsFile, {
         id: "FIX-STATE-001",
         status: "PASS",
-      }, { now: "2026-05-24T00:00:00.000Z" });
+      }, {
+        now: "2026-05-24T00:00:00.000Z",
+        runId: "RUN-STATE",
+        workspaceRoot: root,
+        allowInitialAttempt: true,
+      });
 
       assert.deepEqual(result, {
         id: "FIX-STATE-001",
+        task_id: "FIX-STATE-001",
+        run_id: "RUN-STATE",
+        attempt_id: "FIX-STATE-001-attempt-0",
+        workspace_root: root,
         status: "PASS",
         timestamp: "2026-05-24T00:00:00.000Z",
       });
@@ -42,9 +51,50 @@ describe("runner task state writers", () => {
         id: "FIX-STATE-002",
         status: "FAIL",
         timestamp: "2026-05-23T00:00:00.000Z",
-      }, { now: "2026-05-24T00:00:00.000Z" });
+      }, {
+        now: "2026-05-24T00:00:00.000Z",
+        runId: "RUN-STATE",
+        workspaceRoot: root,
+        attemptId: "FIX-STATE-002-attempt-1",
+      });
 
       assert.equal(result.timestamp, "2026-05-23T00:00:00.000Z");
+      assert.equal(result.attempt_id, "FIX-STATE-002-attempt-1");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("YB-006 rejects task result writes missing evidence chain fields", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-state-"));
+    try {
+      const resultsFile = join(root, "task-results.jsonl");
+      assert.throws(() => appendTaskResult(resultsFile, {
+        id: "FIX-STATE-MISSING",
+        status: "PASS",
+      }, {
+        runId: "RUN-STATE",
+        workspaceRoot: root,
+      }), /attempt_id/);
+      assert.equal(existsSync(resultsFile), false);
+
+      assert.throws(() => appendTaskResult(resultsFile, {
+        id: "FIX-STATE-MISSING",
+        status: "PASS",
+        attempt_id: "FIX-STATE-MISSING-attempt-1",
+      }, {
+        workspaceRoot: root,
+      }), /run_id/);
+      assert.equal(existsSync(resultsFile), false);
+
+      assert.throws(() => appendTaskResult(resultsFile, {
+        id: "FIX-STATE-MISSING",
+        status: "PASS",
+        attempt_id: "FIX-STATE-MISSING-attempt-1",
+      }, {
+        runId: "RUN-STATE",
+      }), /workspace_root/);
+      assert.equal(existsSync(resultsFile), false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

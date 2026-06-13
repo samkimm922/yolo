@@ -8,6 +8,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { supportedConditionTypes as catalogSupportedConditionTypes } from "./condition-catalog.js";
 import {
   evalAstCallbackUsesParam,
   evalAstFindByProperty,
@@ -15,10 +16,10 @@ import {
   evalCodeNotContains,
   evalFunctionContainsCall,
   evalFunctionContainsText,
-} from "../../lib/evaluators/code-check.js";
-import { evalFileExists, evalFileNotExists, evalDirExists, evalFilesModifiedMax, evalFileLinesMax, evalNoFileOverMaxLines } from "../../lib/evaluators/file-check.js";
-import { evalNoForbiddenPatterns, evalNoNewTypeErrors, evalTypeErrorsContain, evalNoNewLintErrors, evalNoNewDeadCode } from "../../lib/evaluators/quality-check.js";
-import { evalTestsPass, evalBuildPass, evalBusinessCodeMin } from "../../lib/evaluators/runtime-check.js";
+} from "../lib/evaluators/code-check.js";
+import { evalFileExists, evalFileNotExists, evalDirExists, evalFilesModifiedMax, evalFileLinesMax, evalNoFileOverMaxLines } from "../lib/evaluators/file-check.js";
+import { evalNoForbiddenPatterns, evalNoNewTypeErrors, evalTypeErrorsContain, evalNoNewLintErrors, evalNoNewDeadCode } from "../lib/evaluators/quality-check.js";
+import { evalTestsPass, evalBuildPass, evalBusinessCodeMin } from "../lib/evaluators/runtime-check.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -34,12 +35,12 @@ export function setContractRoot(newRoot) {
 
 // ── 工具函数 ────────────────────────────────────────────────────
 
-function scopedRoot(options = {}) {
+function scopedRoot(options = Object()) {
   return resolve(options.root || options.cwd || ROOT);
 }
 
 function createExec(root) {
-  return function exec(cmd, opts = {}) {
+  return function exec(cmd, opts = Object()) {
     const timeout = opts.timeout || 60000;
     try {
       const out = execFileSync("sh", ["-c", cmd], {
@@ -62,20 +63,6 @@ function createExec(root) {
       };
     }
   };
-}
-
-// ── 从 schema 加载合法 condition type 列表 ────────────────────
-import { join } from "node:path";
-
-function loadValidConditionTypes() {
-  try {
-    const schemaPath = join(PACKAGE_ROOT, "schemas", "prd-v2.schema.json");
-    const schema = JSON.parse(readFileSync(schemaPath, "utf8"));
-    return schema["x-vocabulary"]?.conditionType || [];
-  } catch {
-    console.warn('[contract] 无法加载 schema condition types，使用 evaluator keys');
-    return Object.keys(createEvaluators(ROOT));
-  }
 }
 
 // ── 条件类型调度表 ──────────────────────────────────────────────
@@ -104,32 +91,89 @@ function createEvaluators(root) {
     test_file_passes: (params, ts) => evalTestsPass(params, ts, root),
     build_pass: (params, ts) => evalBuildPass(params, ts, root),
     business_code_min: (params, ts) => evalBusinessCodeMin(params, ts, root, exec),
-    acceptance_criteria: (_params, _taskScope) => ({
-      passed: true,
-      detail: "验收标准（人工复核）",
-      warn: true,
-    }),
+    acceptance_criteria: (params, _taskScope) => {
+      const verifyCommand = (params && params.verify_command) || null;
+      if (verifyCommand && typeof verifyCommand === "string") {
+        // Reject commands containing pipe, redirect, or semicolon (gsd-2 rule)
+        if (/[;&|>]/.test(verifyCommand)) {
+          return {
+            passed: false,
+            status: "fail",
+            detail: `验收标准 verify_command 不允许 pipe/redirect/分号: ${verifyCommand}`,
+          };
+        }
+        const result = createExec(root)(verifyCommand, { timeout: 60000 });
+        return {
+          passed: result.ok,
+          status: result.ok ? "pass" : "fail",
+          detail: result.ok ? `验收命令通过: ${verifyCommand}` : `验收命令失败: ${verifyCommand}${result.err ? " — " + result.err : ""}`,
+        };
+      }
+      // No executable verify command — mark as manual (blocked at delivery gate)
+      return {
+        passed: true,
+        status: "pass",
+        detail: params?.text || "验收标准（需人工复核）",
+        manual: true,
+        warn: true,
+      };
+    },
     code_matches: (params, ts) => evalCodeContains({ ...params, is_regex: true }, ts, root),
     target_file_modified: (params, ts) => {
       const targetFile = params.file || ts?.targets?.[0]?.file;
-      if (!targetFile) return { passed: true, detail: "无目标文件指定，跳过检查" };
+      if (!targetFile) {
+        return {
+          passed: false,
+          status: "not_run",
+          detail: "无目标文件指定，无法验证目标文件是否修改",
+        };
+      }
       const r = exec("git diff --name-only HEAD", { timeout: 10000 });
-      if (!r.ok) return { passed: true, detail: "无法获取 git diff，跳过检查" };
+      if (!r.ok) {
+        return {
+          passed: false,
+          status: "indeterminate",
+          detail: "无法获取 git diff，无法验证目标文件是否修改",
+        };
+      }
       const modified = r.out.split("\n").filter(Boolean);
       const found = modified.some((f) => f === targetFile || f.endsWith(targetFile));
       return { passed: found, detail: found ? `目标文件 ${targetFile} 已修改` : `目标文件 ${targetFile} 未在修改列表中`, found: found ? 1 : 0 };
     },
     required_imports_present: (params, ts) => {
-      const files = params.files || params.file ? [params.file || params.files].flat() : ts?.targets?.map((t) => t.file) || [];
-      if (!files.length) return { passed: true, detail: "无文件指定，跳过检查" };
+      const files = params.files || params.file
+        ? [params.file || params.files].flat()
+        : ts?.targets?.map((t) => t.file) || [];
+      if (!files.length) {
+        return {
+          passed: false,
+          status: "not_run",
+          detail: "无文件指定，无法验证 required_imports_present",
+        };
+      }
       const importPath = params.import_path;
       if (!importPath) return { passed: false, detail: "缺少 import_path 参数" };
+      const missingFiles = [];
+      const checkedFiles = [];
       for (const f of files) {
         const absPath = resolve(root, f);
-        if (!existsSync(absPath)) continue;
+        if (!existsSync(absPath)) {
+          missingFiles.push(f);
+          continue;
+        }
+        checkedFiles.push(f);
         const content = readFileSync(absPath, "utf8");
         const re = new RegExp(`import\\b.*from\\s*['"]${importPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}['"]`);
         if (!re.test(content)) return { passed: false, detail: `${f} 缺少导入: ${importPath}` };
+      }
+      if (missingFiles.length > 0) {
+        return {
+          passed: false,
+          status: "indeterminate",
+          detail: `指定文件不存在，无法验证导入 ${importPath}: ${missingFiles.join(", ")}`,
+          checked_files: checkedFiles,
+          missing_files: missingFiles,
+        };
       }
       return { passed: true, detail: `所有文件已导入: ${importPath}` };
     },
@@ -137,15 +181,32 @@ function createEvaluators(root) {
 }
 
 export function supportedConditionTypes() {
-  return Object.keys(createEvaluators(ROOT)).sort();
+  return catalogSupportedConditionTypes();
+}
+
+export function evaluatorConditionTypes(options = Object()) {
+  return Object.keys(createEvaluators(scopedRoot(options))).sort();
 }
 
 /**
  * 评估单个条件
  * @returns {{ id, type, passed, severity, detail, ... }}
  */
-function evaluateCondition(condition, taskScope, options = {}) {
-  const { id, type, params = {}, severity = "FAIL", invert = false } =
+const NON_PASS_STATUSES = new Set(["fail", "warning", "not_run", "indeterminate", "blocked", "error"]);
+const INVERTIBLE_STATUSES = new Set(["pass", "fail"]);
+
+function normalizeEvaluatorStatus(result = Object()) {
+  if (result.status === "pass" || NON_PASS_STATUSES.has(result.status)) return result.status;
+  if (result.error) return "error";
+  if (result.blocked) return "blocked";
+  if (result.indeterminate) return "indeterminate";
+  if (result.not_run) return "not_run";
+  if (result.warn) return "warning";
+  return result.passed ? "pass" : "fail";
+}
+
+function evaluateCondition(condition, taskScope, options = Object()) {
+  const { id, type, params = Object(), severity = "FAIL", invert = false } =
     condition;
 
   const fn = createEvaluators(scopedRoot(options))[condition.type];
@@ -161,12 +222,18 @@ function evaluateCondition(condition, taskScope, options = {}) {
 
   try {
     const result = fn(params, taskScope);
-    const passed = invert ? !result.passed : result.passed;
-    const { passed: _p, ...rest } = result;
+    let status = normalizeEvaluatorStatus(result);
+    let passed = status === "pass";
+    if (invert && INVERTIBLE_STATUSES.has(status)) {
+      status = status === "pass" ? "fail" : "pass";
+      passed = status === "pass";
+    }
+    const { passed: _p, status: _status, ...rest } = result;
     return {
       id,
       type,
       passed,
+      status,
       severity,
       detail: result.detail || "",
       invert,
@@ -177,6 +244,7 @@ function evaluateCondition(condition, taskScope, options = {}) {
       id,
       type,
       passed: false,
+      status: "error",
       severity,
       detail: `评估异常: ${e.message}`,
       error: true,
@@ -188,17 +256,21 @@ function evaluateCondition(condition, taskScope, options = {}) {
  * 评估一组条件
  * @returns {{ allPass, failConditions, warnConditions, results }}
  */
-function evaluateConditions(conditions, taskScope, options = {}) {
+function evaluateConditions(conditions, taskScope, options = Object()) {
   const results = conditions.map((c) => evaluateCondition(c, taskScope, options));
+  const nonPassConditions = results.filter((r) => r.status !== "pass" || r.passed !== true);
   const failConditions = results.filter(
-    (r) => !r.passed && r.severity === "FAIL" && !r.unknown,
+    (r) => (r.status !== "pass" || r.passed !== true) &&
+      (r.severity === "FAIL" || (r.status !== "warning" && r.status !== "pass")) &&
+      !r.unknown,
   );
   const warnConditions = results.filter(
-    (r) => !r.passed && r.severity === "WARN",
+    (r) => (r.status !== "pass" || r.passed !== true) &&
+      (r.severity === "WARN" || r.status === "warning"),
   );
-  const allPass = failConditions.length === 0;
+  const allPass = nonPassConditions.length === 0;
 
-  return { allPass, failConditions, warnConditions, results };
+  return { allPass, failConditions, warnConditions, nonPassConditions, results };
 }
 
 // ── 主要 API ────────────────────────────────────────────────────
@@ -216,10 +288,10 @@ function loadTask(prdPath, taskId) {
 /**
  * 评估 pre_conditions（修前验证）
  */
-export function evaluatePreConditions(task, prd, options = {}) {
+export function evaluatePreConditions(task, prd, options = Object()) {
   const conditions = task.pre_conditions || [];
   if (conditions.length === 0) {
-    return { allPass: true, failConditions: [], warnConditions: [], results: [] };
+    return { allPass: true, failConditions: [], warnConditions: [], nonPassConditions: [], results: [] };
   }
   return evaluateConditions(conditions, task.scope, options);
 }
@@ -228,7 +300,7 @@ export function evaluatePreConditions(task, prd, options = {}) {
  * 评估 post_conditions（修后验证）
  * 自动追加 auto-conditions
  */
-export function evaluatePostConditions(task, prd, options = {}) {
+export function evaluatePostConditions(task, prd, options = Object()) {
   const explicitConditions = task.post_conditions || [];
   const scope = task.scope || {};
 
@@ -306,6 +378,7 @@ export function toGateFormat(result) {
     gates.push({
       name: r.id,
       passed: r.passed,
+      status: r.status || (r.passed ? "pass" : "fail"),
       severity: r.severity,
       detail: r.detail || "",
       type: r.type,
@@ -313,9 +386,9 @@ export function toGateFormat(result) {
   }
 
   const failHigh = gates.some(
-    (g) => !g.passed && g.severity === "FAIL",
+    (g) => g.status !== "pass" && (g.severity === "FAIL" || g.status !== "warning"),
   );
-  const allPass = gates.every((g) => g.passed);
+  const allPass = gates.every((g) => g.status === "pass" && g.passed === true);
 
   return {
     allPass,
@@ -329,7 +402,7 @@ export function toGateFormat(result) {
 // ── CLI ──────────────────────────────────────────────────────────
 
 function parseArgs() {
-  const args = {};
+  const args = Object();
   for (const a of process.argv.slice(2)) {
     const m = a.match(/^--(\w[\w-]*)=(.*)$/);
     if (m) args[m[1]] = m[2];

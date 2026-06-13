@@ -10,7 +10,7 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -44,7 +44,7 @@ export function exportedRunCallsProcessExit(source = "") {
   return /\bprocess\.exit\s*\(/.test(exportedRunBody(source));
 }
 
-export function inspectRunnerRuntimeApiFreeze(options = {}) {
+export function inspectRunnerRuntimeApiFreeze(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const apiBoundary = options.apiBoundary || readJson(join(yoloRoot, "docs/public-sdk-api-boundary.json"));

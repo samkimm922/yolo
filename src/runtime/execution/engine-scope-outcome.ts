@@ -2,11 +2,11 @@ import { blockedTaskTransition } from "../task-state/transitions.js";
 
 export const DEFAULT_ENGINE_PATHS = ["scripts/yolo/", ".yolo-backup/", ".claude/"];
 
-export function isAllowedDryRunArtifactTarget(task = {}, file = "") {
+export function isAllowedDryRunArtifactTarget(task = Object(), file = "") {
   return task.task_kind === "dry_run_artifact" && String(file || "").startsWith("scripts/yolo/state/dry-run/");
 }
 
-export function taskTargetsEngineFiles(task = {}, enginePaths = DEFAULT_ENGINE_PATHS) {
+export function taskTargetsEngineFiles(task = Object(), enginePaths = DEFAULT_ENGINE_PATHS) {
   return (task.scope?.targets || []).some((target) => {
     const file = target.file || "";
     return enginePaths.some((enginePath) => file.startsWith(enginePath)) && !isAllowedDryRunArtifactTarget(task, file);
@@ -14,9 +14,9 @@ export function taskTargetsEngineFiles(task = {}, enginePaths = DEFAULT_ENGINE_P
 }
 
 export function buildEngineSelfModificationBlockOutcome({
-  task = {},
+  task = Object(),
   reason = "engine_self_modify_blocked",
-} = {}) {
+} = Object()) {
   if (!taskTargetsEngineFiles(task)) {
     return { shouldBlock: false };
   }

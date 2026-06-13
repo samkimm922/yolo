@@ -1,1 +1,1 @@
-export * from "../../lib/agent-presets.js";
+export * from "../lib/agent-presets.js";

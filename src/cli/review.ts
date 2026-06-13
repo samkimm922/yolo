@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveClaudeSettings, YOLO_PACKAGE_ROOT } from '../runtime/execution/provider-adapter.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..', '..');
@@ -20,6 +21,8 @@ const roundArg = args.find(a => a.startsWith('--round='));
 const round = roundArg ? parseInt(roundArg.split('=')[1], 10) : 1;
 const outputArg = args.find(a => a.startsWith('--output='));
 const outputPath = outputArg ? outputArg.split('=')[1] : null;
+
+const claudeSettings = resolveClaudeSettings(ROOT, 'settings-minimal.json', { packageRoot: YOLO_PACKAGE_ROOT });
 
 // --- 审查 Prompt ---
 const REVIEW_PROMPT = `你是一个高级代码审查员。审查整个项目的 src/ 目录，找出所有 bug 和安全问题。
@@ -111,7 +114,7 @@ function extractJsonArray(text) {
 const result = spawnSync('claude', [
   '-p', REVIEW_PROMPT,
   '--dangerously-skip-permissions',
-  '--settings', 'scripts/yolo/settings-minimal.json',
+  '--settings', claudeSettings.value,
 ], {
   cwd: ROOT,
   encoding: 'utf8',
@@ -121,18 +124,26 @@ const result = spawnSync('claude', [
 
 // --- 处理结果 ---
 if (result.error) {
-  if (result.error.code === 'ETIMEDOUT') {
+  const spawnError = Object.assign(Object(), result.error);
+  if (spawnError.code === 'ETIMEDOUT') {
     console.error(`[yolo-review] claude 超时 (round ${round})`);
     console.log('[]');
     process.exit(2);
   }
-  console.error(`[yolo-review] claude 调用失败: ${result.error.message}`);
+  console.error(`[yolo-review] claude 调用失败: ${spawnError.message}`);
   console.log('[]');
   process.exit(1);
 }
 
 if (result.status !== 0 && result.status !== null) {
   console.error(`[yolo-review] claude 退出码 ${result.status} (round ${round})`);
+  if (result.stderr) console.error(result.stderr.slice(0, 500));
+  console.log('[]');
+  process.exit(1);
+}
+
+if (result.signal) {
+  console.error(`[yolo-review] claude 被信号 ${result.signal} 终止 (round ${round})`);
   if (result.stderr) console.error(result.stderr.slice(0, 500));
   console.log('[]');
   process.exit(1);

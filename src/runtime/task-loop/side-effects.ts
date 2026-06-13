@@ -20,7 +20,7 @@ export function buildExpandedTasksSnapshot({ source, tasks = [], completedIds = 
   };
 }
 
-export function writeExpandedTasksSnapshot({ filePath, source, tasks = [], completedIds = new Set(), now }) {
+export function writeExpandedTasksSnapshot({ filePath, source, tasks = [], completedIds = new Set(), now = undefined }) {
   try {
     const payload = buildExpandedTasksSnapshot({ source, tasks, completedIds, now });
     mkdirSync(dirname(filePath), { recursive: true });
@@ -75,7 +75,7 @@ export function runLessonsAnalyzer({
   nodeBin = process.execPath,
   timeout = 10000,
   execFile = execFileSync,
-} = {}) {
+} = Object()) {
   try {
     const scriptPath = join(yoloRoot, "lessons-analyzer.js");
     if (!existsSync(scriptPath)) return { ran: false, reason: "missing_script", scriptPath };

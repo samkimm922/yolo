@@ -26,12 +26,30 @@ const MEMORY_DOCS = [
   "MEMORY_INDEX.md",
   "CURRENT_STATUS.md",
   "CURRENT_HANDOFF.md",
+  "PROJECT_BRIEF.md",
+  "PROGRESS.md",
+  "OPEN_QUESTIONS.md",
+  "DECISION_LOG.md",
   "DOCUMENT_GOVERNANCE.md",
   "LEARNING_INDEX.md",
   "LESSONS_PLAYBOOK.md",
   "PROJECT_TREE.md",
   "MEMORY_AUDIT.md",
 ];
+
+const STAGE_COMMANDS = {
+  idea: "/yolo-brainstorm, /yolo-interview, or /yolo-discuss",
+  discovery: "/yolo-interview, /yolo-discuss, or /yolo-discover",
+  setup: "/yolo-init or /yolo-doctor",
+  roadmap: "/yolo-plan",
+  prd: "/yolo-prd",
+  check: "/yolo-check",
+  run: "/yolo-run",
+  "review-fix": "/yolo-review",
+  acceptance: "/yolo-accept",
+  delivery: "/yolo-ship",
+  learn: "/yolo-learn",
+};
 
 function toPosix(path) {
   return path.replaceAll("\\", "/");
@@ -72,12 +90,27 @@ function readJson(filePath, fallback = null) {
   }
 }
 
+function readJsonlTail(filePath, limit = 3) {
+  if (!existsSync(filePath)) return [];
+  return readFileSync(filePath, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .slice(-limit)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return { raw: line };
+      }
+    });
+}
+
 function isYoloPackageRoot(projectRoot) {
   const pkg = readJson(join(projectRoot, "package.json"), {});
   return pkg?.name === "yolo" && existsSync(join(projectRoot, "src/runtime"));
 }
 
-export function resolveMemoryPaths(options = {}) {
+export function resolveMemoryPaths(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.yoloRoot || options.cwd || process.cwd());
   const packageMode = options.packageMode ?? isYoloPackageRoot(projectRoot);
   const stateRoot = resolve(options.stateRoot || options.state_root || (packageMode ? projectRoot : join(projectRoot, ".yolo")));
@@ -92,7 +125,7 @@ export function resolveMemoryPaths(options = {}) {
   };
 }
 
-function walkFiles(root, options = {}) {
+function walkFiles(root, options = Object()) {
   const files = [];
   const includeHidden = options.includeHidden !== false;
   const includeArchive = options.includeArchive === true;
@@ -269,7 +302,7 @@ function classifyMemoryDocument(relativePath, content = "") {
   };
 }
 
-export function discoverMemoryDocuments(options = {}) {
+export function discoverMemoryDocuments(options = Object()) {
   const paths = resolveMemoryPaths(options);
   const files = walkFiles(paths.projectRoot, { includeArchive: true, includeHidden: true })
     .filter((file) => file.endsWith(".md") || file.endsWith(".jsonl"))
@@ -294,9 +327,9 @@ export function discoverMemoryDocuments(options = {}) {
   };
 }
 
-export function buildMemoryAudit(options = {}) {
+export function buildMemoryAudit(options = Object()) {
   const discovered = discoverMemoryDocuments(options);
-  const byAction = {};
+  const byAction = Object();
   for (const doc of discovered.documents) {
     byAction[doc.action] = (byAction[doc.action] || 0) + 1;
   }
@@ -315,7 +348,7 @@ export function buildMemoryAudit(options = {}) {
   };
 }
 
-function listTreeFiles(root, options = {}) {
+function listTreeFiles(root, options = Object()) {
   const maxFiles = options.maxFiles || 800;
   const files = [];
 
@@ -367,8 +400,8 @@ function countFiles(projectRoot, predicate) {
 
 function sourceCounts(projectRoot) {
   const packageJson = readJson(join(projectRoot, "package.json"), {});
-  const rootMjs = existsSync(projectRoot)
-    ? readdirSync(projectRoot).filter((file) => file.endsWith(".js")).sort()
+  const rootFiles = existsSync(projectRoot)
+    ? readdirSync(projectRoot).filter((file) => statSync(join(projectRoot, file)).isFile()).sort()
     : [];
   return {
     package_name: packageJson.name || null,
@@ -376,11 +409,14 @@ function sourceCounts(projectRoot) {
     package_private: packageJson.private === true,
     package_exports: Object.keys(packageJson.exports || {}).length,
     package_bins: Object.keys(packageJson.bin || {}).length,
-    root_mjs: rootMjs.length,
-    root_mjs_files: rootMjs,
+    root_js: rootFiles.filter((file) => file.endsWith(".js")).length,
+    root_ts: rootFiles.filter((file) => file.endsWith(".ts")).length,
+    root_mjs: rootFiles.filter((file) => file.endsWith(".js")).length,
+    root_mjs_files: rootFiles.filter((file) => file.endsWith(".js")),
+    src_ts: countFiles(projectRoot, (path) => path.startsWith("src/") && path.endsWith(".ts")),
     src_mjs: countFiles(projectRoot, (path) => path.startsWith("src/") && path.endsWith(".js")),
-    test_files: countFiles(projectRoot, (path) => path.startsWith("__tests__/") && path.endsWith(".test.js")),
-    docs_md: countFiles(projectRoot, (path) => path.startsWith("docs/") && path.endsWith(".md")),
+    test_files: countFiles(projectRoot, (path) => path.startsWith("__tests__/") && path.endsWith(".test.ts")),
+    docs_md: countFiles(projectRoot, (path) => path.startsWith("docs/") && !path.startsWith("docs/memory/") && path.endsWith(".md")),
   };
 }
 
@@ -396,6 +432,106 @@ function ledgerSummaries(stateDir) {
     "runtime/task-results.jsonl",
   ];
   return Object.fromEntries(ledgers.map((name) => [name, readJsonlSummary(join(stateDir, name))]));
+}
+
+function lifecycleSummary(paths) {
+  const statusPath = join(paths.stateRoot, "lifecycle", "status.json");
+  const status = readJson(statusPath, null);
+  if (!status) {
+    return {
+      exists: false,
+      status_path: statusPath,
+      current_stage: null,
+      active_stage: null,
+      blocked_stages: [],
+      completed_count: 0,
+      next_action: "Run /yolo-init to create project memory, lifecycle, and specs.",
+    };
+  }
+
+  const stages = Array.isArray(status.stages) ? status.stages : [];
+  const current = stages.find((stage) => stage.id === status.current_stage) || null;
+  const blocked = stages.filter((stage) => stage.status === "blocked");
+  return {
+    exists: true,
+    status_path: statusPath,
+    current_stage: status.current_stage || null,
+    active_stage: current,
+    blocked_stages: blocked,
+    completed_count: stages.filter((stage) => stage.status === "completed").length,
+    next_action: blocked.length
+      ? `Resolve blocked lifecycle stage(s): ${blocked.map((stage) => stage.id).join(", ")}.`
+      : `Continue with ${STAGE_COMMANDS[status.current_stage] || "/yolo-doctor"}.`,
+  };
+}
+
+function latestLifecycleReports(paths, limit = 3) {
+  const dir = join(paths.stateRoot, "lifecycle");
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => name.endsWith(".json") && name !== "status.json")
+    .map((name) => {
+      const file = join(dir, name);
+      const report = readJson(file, null);
+      if (!report) return null;
+      return {
+        path: rel(paths.projectRoot, file),
+        stage: report.stage?.id || name.replace(/\.json$/, ""),
+        status: report.status || "unknown",
+        summary: report.report?.summary || report.summary || "",
+        updated_at: report.updated_at || report.created_at || "",
+        mtime: statSync(file).mtimeMs,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.mtime - a.mtime)
+    .slice(0, limit);
+}
+
+function latestDemandSession(paths) {
+  const demandDir = join(paths.stateRoot, "demand");
+  if (!existsSync(demandDir)) return null;
+  const candidates = [];
+  for (const entry of readdirSync(demandDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const file = join(demandDir, entry.name, "session.json");
+    const session = readJson(file, null);
+    if (!session) continue;
+    candidates.push({
+      path: rel(paths.projectRoot, file),
+      id: session.id || entry.name,
+      phase: session.phase || "unknown",
+      readiness_level: session.readiness?.readiness_level || "unknown",
+      readiness_status: session.readiness?.status || "unknown",
+      quality_score: session.readiness?.quality_score ?? null,
+      blocker_count: Array.isArray(session.readiness?.blockers) ? session.readiness.blockers.length : 0,
+      next_actions: Array.isArray(session.readiness?.next_actions) ? session.readiness.next_actions : [],
+      mtime: statSync(file).mtimeMs,
+    });
+  }
+  candidates.sort((a, b) => b.mtime - a.mtime);
+  return candidates[0] || null;
+}
+
+function projectBrainSummary(paths) {
+  const lifecycle = lifecycleSummary(paths);
+  const latestDemand = latestDemandSession(paths);
+  const latestReports = latestLifecycleReports(paths);
+  const sessionTail = readJsonlTail(join(paths.stateDir, "session-memory.jsonl"), 3);
+  return {
+    lifecycle,
+    latest_demand: latestDemand,
+    latest_reports: latestReports,
+    session_tail: sessionTail,
+    next_action: latestDemand?.next_actions?.[0] || lifecycle.next_action,
+  };
+}
+
+function compactSessionMemoryLine(entry = Object()) {
+  const summary = entry.summary || entry.message || entry.event || entry.raw || "";
+  const source = entry.source || entry.type || "session";
+  const ts = entry.ts || entry.logged_at || entry.created_at || "";
+  return `- ${ts ? `${ts} ` : ""}${source}: ${String(summary).slice(0, 160) || "recorded checkpoint"}`;
 }
 
 function archiveSummary(stateDir) {
@@ -418,7 +554,7 @@ function latestValidationText(projectRoot) {
   return matches.length ? matches.at(-1)[1].replace(/\s+/g, " ") : "not recorded";
 }
 
-export function buildProjectTreeMarkdown(options = {}) {
+export function buildProjectTreeMarkdown(options = Object()) {
   const paths = resolveMemoryPaths(options);
   const counts = sourceCounts(paths.projectRoot);
   const ledgers = ledgerSummaries(paths.stateDir);
@@ -436,8 +572,9 @@ export function buildProjectTreeMarkdown(options = {}) {
     `- package private: ${counts.package_private}`,
     `- package exports: ${counts.package_exports}`,
     `- package bins: ${counts.package_bins}`,
-    `- root .js files: ${counts.root_mjs} (${counts.root_mjs_files.join(", ") || "none"})`,
-    `- src .js files: ${counts.src_mjs}`,
+    `- root .js files: ${counts.root_js} (${counts.root_mjs_files.join(", ") || "none"})`,
+    `- root .ts files: ${counts.root_ts}`,
+    `- src .ts files: ${counts.src_ts}`,
     `- test files: ${counts.test_files}`,
     `- docs markdown files: ${counts.docs_md}`,
     "",
@@ -458,26 +595,60 @@ export function buildProjectTreeMarkdown(options = {}) {
   ].filter((line) => line !== null).join("\n");
 }
 
-export function buildCurrentStatusMarkdown(options = {}) {
+export function buildCurrentStatusMarkdown(options = Object()) {
   const paths = resolveMemoryPaths(options);
   const counts = sourceCounts(paths.projectRoot);
   const ledgers = ledgerSummaries(paths.stateDir);
   const audit = buildMemoryAudit(paths);
   const archives = archiveSummary(paths.stateDir);
   const learning = summarizeLearningCenter(paths);
-  return [
-    "# YOLO Memory Current Status",
-    "",
-    `> Generated: ${options.now?.toISOString?.() || new Date().toISOString()}`,
-    "",
+  const brain = projectBrainSummary(paths);
+  const currentTruth = paths.packageMode ? [
     "## Current Truth",
     "",
     `- Public package state: ${counts.package_private ? "`private: true` blocks release" : "public package metadata is not private"}.`,
     `- Version: ${counts.package_version || "unknown"}.`,
     `- Latest recorded full validation: ${latestValidationText(paths.projectRoot)}.`,
-    `- Root .js budget: ${counts.root_mjs} files.`,
+    `- Root .js budget: ${counts.root_js} files.`,
     `- SDK surface: ${counts.package_exports} package exports and ${counts.package_bins} bins.`,
-    `- Source/test surface: ${counts.src_mjs} src modules, ${counts.test_files} test files.`,
+    `- Source/test/docs surface: ${counts.src_ts} src modules, ${counts.test_files} test files, ${counts.docs_md} docs markdown files, ${counts.root_ts} root .ts files.`,
+    "",
+  ] : [
+    "## Project Brain",
+    "",
+    `- Current lifecycle stage: ${brain.lifecycle.exists ? `\`${brain.lifecycle.current_stage}\` (${brain.lifecycle.active_stage?.label || "unknown"})` : "not initialized"}.`,
+    `- Completed lifecycle stages: ${brain.lifecycle.completed_count}.`,
+    `- Blocked lifecycle stages: ${brain.lifecycle.blocked_stages.length ? brain.lifecycle.blocked_stages.map((stage) => stage.id).join(", ") : "none"}.`,
+    `- Latest demand session: ${brain.latest_demand ? `\`${brain.latest_demand.id}\` phase=${brain.latest_demand.phase}, readiness=${brain.latest_demand.readiness_level}/${brain.latest_demand.readiness_status}, blockers=${brain.latest_demand.blocker_count}` : "none yet"}.`,
+    `- Next recommended entry: ${brain.next_action}`,
+    "",
+  ];
+  const releaseOrOperating = paths.packageMode ? [
+    "## Release Reality",
+    "",
+    "- Release-side automation remains evidence-only: no publish, no credential reads, and no billable provider execution inside SDK gates.",
+    "- Stable/public release still needs human operator evidence for external publish, billable execution, and public dogfood.",
+    "- Runtime implementation is freeze-ready, but `./runtime` remains experimental until explicit stable-boundary approval.",
+    "",
+  ] : [
+    "## Operating Rule",
+    "",
+    "- Treat `.yolo/lifecycle/status.json` and `.yolo/state/*.jsonl` as machine truth.",
+    "- Treat this file and `CURRENT_HANDOFF.md` as refreshed summaries, not competing source documents.",
+    "- Return to `/yolo-doctor` when the next entry is unclear.",
+    "",
+  ];
+  return [
+    "# YOLO Memory Current Status",
+    "",
+    `> Generated: ${options.now?.toISOString?.() || new Date().toISOString()}`,
+    "",
+    ...currentTruth,
+    "## Recent Lifecycle Reports",
+    "",
+    ...(brain.latest_reports.length
+      ? brain.latest_reports.map((report) => `- \`${report.stage}\` ${report.status}: ${report.summary || report.path}`)
+      : ["- No lifecycle reports have been written yet."]),
     "",
     "## Memory Health",
     "",
@@ -490,17 +661,48 @@ export function buildCurrentStatusMarkdown(options = {}) {
     `- Archived ledger files: ${archives.archived_jsonl_files}.`,
     `- Legacy generated archive snapshots: ${archives.generated_snapshots}.`,
     "",
-    "## Release Reality",
-    "",
-    "- Release-side automation remains evidence-only: no publish, no credential reads, and no billable provider execution inside SDK gates.",
-    "- Stable/public release still needs human operator evidence for external publish, billable execution, and public dogfood.",
-    "- Runtime implementation is freeze-ready, but `./runtime` remains experimental until explicit stable-boundary approval.",
-    "",
+    ...releaseOrOperating,
   ].join("\n");
 }
 
-export function buildCurrentHandoffMarkdown(options = {}) {
+export function buildCurrentHandoffMarkdown(options = Object()) {
   const paths = resolveMemoryPaths(options);
+  const brain = projectBrainSummary(paths);
+  if (!paths.packageMode) {
+    return [
+      "# YOLO Memory Handoff",
+      "",
+      `> Generated: ${options.now?.toISOString?.() || new Date().toISOString()}`,
+      "",
+      "## Current Context",
+      "",
+      `- Lifecycle stage: ${brain.lifecycle.exists ? `\`${brain.lifecycle.current_stage}\` (${brain.lifecycle.active_stage?.label || "unknown"})` : "not initialized"}.`,
+      `- Latest demand: ${brain.latest_demand ? `\`${brain.latest_demand.id}\` (${brain.latest_demand.phase}, ${brain.latest_demand.readiness_level}/${brain.latest_demand.readiness_status})` : "none yet"}.`,
+      `- Blockers: ${brain.lifecycle.blocked_stages.length ? brain.lifecycle.blocked_stages.map((stage) => stage.id).join(", ") : brain.latest_demand?.blocker_count ? `${brain.latest_demand.blocker_count} demand blocker(s)` : "none recorded"}.`,
+      "",
+      "## Recent Reports",
+      "",
+      ...(brain.latest_reports.length
+        ? brain.latest_reports.map((report) => `- \`${report.stage}\` ${report.status}: ${report.summary || report.path}`)
+        : ["- No lifecycle report has been written yet."]),
+      "",
+      "## Recent Session Memory",
+      "",
+      ...(brain.session_tail.length ? brain.session_tail.map(compactSessionMemoryLine) : ["- No session-memory checkpoint yet."]),
+      "",
+      "## Next Operator Action",
+      "",
+      `- ${brain.next_action}`,
+      "",
+      "## Key Paths",
+      "",
+      `- State root: \`${displayPath(paths.projectRoot, paths.stateRoot) || "."}\``,
+      `- Lifecycle status: \`${displayPath(paths.projectRoot, join(paths.stateRoot, "lifecycle", "status.json"))}\``,
+      `- Memory dir: \`${displayPath(paths.projectRoot, paths.memoryDir)}\``,
+      `- Session memory: \`${displayPath(paths.projectRoot, join(paths.stateDir, "session-memory.jsonl"))}\``,
+      "",
+    ].join("\n");
+  }
   return [
     "# YOLO Memory Handoff",
     "",
@@ -513,7 +715,7 @@ export function buildCurrentHandoffMarkdown(options = {}) {
     "- Overflow from active ledgers is archived under `state/archive/jsonl/YYYY-MM/` or `.yolo/state/archive/jsonl/YYYY-MM/` before the active files are trimmed.",
     "- Learning records are unified under `state/learning.jsonl` or `.yolo/state/learning.jsonl`; legacy closed-loop knowledge files are read-only migration sources.",
     "- Compatibility docs such as `PROJECT_TREE.md`, `SYSTEM_STATE.md`, and `ROADMAP.md` are mirrors or pointers, not the source of truth.",
-    "- Hook-triggered refresh now targets `src/runtime/devtools/memory-center.js` instead of removed root scripts.",
+    "- Hook-triggered refresh now targets `src/devtools/memory-center.js` instead of removed root scripts.",
     "",
     "## Next Operator Actions",
     "",
@@ -531,7 +733,7 @@ export function buildCurrentHandoffMarkdown(options = {}) {
   ].join("\n");
 }
 
-export function buildDocumentGovernanceMarkdown(options = {}) {
+export function buildDocumentGovernanceMarkdown(options = Object()) {
   const paths = resolveMemoryPaths(options);
   const memoryHome = paths.packageMode ? "docs/memory/" : ".yolo/memory/";
   const stateHome = paths.packageMode ? "state/" : ".yolo/state/";
@@ -592,7 +794,7 @@ export function buildDocumentGovernanceMarkdown(options = {}) {
   ].join("\n");
 }
 
-export function buildMemoryAuditMarkdown(options = {}) {
+export function buildMemoryAuditMarkdown(options = Object()) {
   const audit = buildMemoryAudit(options);
   const rows = audit.documents.map((doc) =>
     `| \`${doc.path}\` | ${doc.category} | ${doc.action} | ${doc.stale ? "yes" : "no"} | ${doc.reason.replaceAll("|", "\\|")} |`
@@ -622,7 +824,7 @@ export function buildMemoryAuditMarkdown(options = {}) {
   ].join("\n");
 }
 
-export function buildMemoryIndexMarkdown(options = {}) {
+export function buildMemoryIndexMarkdown(options = Object()) {
   const paths = resolveMemoryPaths(options);
   return [
     "# YOLO Memory Index",
@@ -635,6 +837,10 @@ export function buildMemoryIndexMarkdown(options = {}) {
     "",
     "- `CURRENT_STATUS.md`: current release/runtime/project state.",
     "- `CURRENT_HANDOFF.md`: handoff notes for the next agent/session.",
+    "- `PROJECT_BRIEF.md`: plain-language project purpose, users, and surfaces.",
+    "- `PROGRESS.md`: human-readable progress summary and next work.",
+    "- `OPEN_QUESTIONS.md`: product and execution questions that block PRD or implementation.",
+    "- `DECISION_LOG.md`: durable decisions and ADR promotion candidates.",
     "- `DOCUMENT_GOVERNANCE.md`: canonical document homes, naming rules, and anti-sprawl policy.",
     "- `PROJECT_TREE.md`: generated project structure tree and active ledger summary.",
     "- `MEMORY_AUDIT.md`: audit of `.md` and `.jsonl` files with keep/archive/delete-candidate classification.",
@@ -649,6 +855,9 @@ export function buildMemoryIndexMarkdown(options = {}) {
     "- `runs.jsonl`: run lifecycle events.",
     "- `learning.jsonl`: unified lessons, pitfalls, rules, and recovery records.",
     "- `session-memory.jsonl`: runner checkpoints and handoff memory.",
+    "- `questions.jsonl`: demand interview questions and answers.",
+    "- `decisions.jsonl`: structured product/technical decisions.",
+    "- `artifacts.jsonl`: generated artifacts and trace links.",
     "- `runtime/task-*.jsonl`: task audit/results/log records.",
     "- `archive/jsonl/YYYY-MM/*.jsonl`: old ledger records archived by retention before active files are trimmed.",
     "",
@@ -656,30 +865,6 @@ export function buildMemoryIndexMarkdown(options = {}) {
     "",
     "- Root `PROJECT_TREE.md`, `SYSTEM_STATE.md`, and `ROADMAP.md` are compatibility mirrors.",
     "- `docs/PROJECT_TREE.md`, `docs/SYSTEM_STATE.md`, and `docs/ROADMAP.md` point back to this canonical memory center.",
-    "",
-  ].join("\n");
-}
-
-function legacyRoadmapMarkdown(options = {}) {
-  return [
-    "# YOLO Roadmap",
-    "",
-    `> Refreshed: ${options.now?.toISOString?.() || new Date().toISOString()}`,
-    "",
-    "The active roadmap and ordered execution progress now live in `docs/yolo-public-sdk-progress.md`.",
-    "",
-    "Memory-system truth lives in `docs/memory/`:",
-    "",
-    "- `docs/memory/MEMORY_INDEX.md`",
-    "- `docs/memory/CURRENT_STATUS.md`",
-    "- `docs/memory/CURRENT_HANDOFF.md`",
-    "- `docs/memory/DOCUMENT_GOVERNANCE.md`",
-    "- `docs/memory/LEARNING_INDEX.md`",
-    "- `docs/memory/LESSONS_PLAYBOOK.md`",
-    "- `docs/memory/PROJECT_TREE.md`",
-    "- `docs/memory/MEMORY_AUDIT.md`",
-    "",
-    "Current remaining release blockers are still operator/external-evidence work: real publish, billable provider evidence, public dogfood, and explicit runtime stable-boundary approval.",
     "",
   ].join("\n");
 }
@@ -692,7 +877,7 @@ function writeDoc(filePath, content, dryRun) {
   return { path: filePath, bytes: Buffer.byteLength(content, "utf8") };
 }
 
-function buildDocs(options = {}) {
+function buildDocs(options = Object()) {
   return {
     "MEMORY_INDEX.md": buildMemoryIndexMarkdown(options),
     "CURRENT_STATUS.md": buildCurrentStatusMarkdown(options),
@@ -705,7 +890,7 @@ function buildDocs(options = {}) {
   };
 }
 
-export function refreshMemoryCenter(options = {}) {
+export function refreshMemoryCenter(options = Object()) {
   const paths = resolveMemoryPaths(options);
   const dryRun = options.dryRun === true || options.dry_run === true;
   const learningMigration = options.migrateLearning === false || options.migrate_learning === false
@@ -727,24 +912,8 @@ export function refreshMemoryCenter(options = {}) {
     });
   const docs = buildDocs({ ...options, ...paths });
   const written = [];
-  for (const name of MEMORY_DOCS) {
+  for (const name of Object.keys(docs)) {
     written.push(writeDoc(join(paths.memoryDir, name), docs[name], dryRun));
-  }
-
-  if (options.writeLegacyPointers === true || options.write_legacy_pointers === true) {
-    const tree = docs["PROJECT_TREE.md"];
-    const status = docs["CURRENT_STATUS.md"];
-    const roadmap = legacyRoadmapMarkdown(options);
-    for (const [relativePath, content] of [
-      ["PROJECT_TREE.md", tree],
-      ["SYSTEM_STATE.md", status],
-      ["ROADMAP.md", roadmap],
-      ["docs/PROJECT_TREE.md", tree],
-      ["docs/SYSTEM_STATE.md", status],
-      ["docs/ROADMAP.md", roadmap],
-    ]) {
-      written.push(writeDoc(join(paths.projectRoot, relativePath), content, dryRun));
-    }
   }
 
   const audit = buildMemoryAudit({ ...options, ...paths });
@@ -776,14 +945,14 @@ function argValue(argv, name) {
 }
 
 function parseMemoryCenterArgs(argv = []) {
-  const options = {
+  const options = Object.assign(Object(), {
     dryRun: argv.includes("--dry-run"),
     json: argv.includes("--json"),
     writeLegacyPointers: argv.includes("--legacy-pointers") || argv.includes("--write-legacy-pointers"),
     applyRetention: !argv.includes("--no-retention"),
     migrateLearning: !argv.includes("--no-learning-migration"),
     pruneGeneratedArchives: !argv.includes("--no-prune-generated-archives"),
-  };
+  });
   for (const key of ["project-root", "state-root", "state-dir", "memory-dir", "cwd"]) {
     const parsed = argValue(argv, key);
     if (parsed.value) options[key.replaceAll("-", "_")] = parsed.value;
@@ -795,7 +964,7 @@ function parseMemoryCenterArgs(argv = []) {
   return options;
 }
 
-export function runMemoryCenterCli(argv = process.argv.slice(2), io = {}) {
+export function runMemoryCenterCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   try {

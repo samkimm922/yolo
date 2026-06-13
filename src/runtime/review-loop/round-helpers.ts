@@ -23,7 +23,7 @@ export function shouldSkipReviewForPrd(prd) {
   return isDryRunPrd(prd) || prd?.review_policy?.mode === "report_only" || prd?.review_policy?.mode === "disabled";
 }
 
-export function reviewScopeFilesForPrd(prd, { normalizeRepoPath = (value) => value } = {}) {
+export function reviewScopeFilesForPrd(prd, { normalizeRepoPath = (value) => value } = Object()) {
   if (prd?.review_policy?.scope === "full") return [];
   const files = [];
   for (const task of prd?.tasks || []) {
@@ -88,7 +88,7 @@ export function reviewClassifierMeta({ round, findings = [], autoFixTasks = [], 
   };
 }
 
-export function reviewIssueLogInput(finding = {}) {
+export function reviewIssueLogInput(finding = Object()) {
   const normalized = normalizeReviewFinding(finding, { source: "review-log" });
   return {
     schema_version: normalized.schema_version,
@@ -127,6 +127,8 @@ export function mergeReviewResults({ taskResults, reviewResults }) {
   appendUnique(taskResults.completed, reviewResults.completed || []);
   appendUnique(taskResults.failed, reviewResults.failed || []);
   appendUnique(taskResults.skipped, reviewResults.skipped || []);
+  if (!Array.isArray(taskResults.blocked)) taskResults.blocked = [];
+  appendUnique(taskResults.blocked, reviewResults.blocked || []);
   return taskResults;
 }
 

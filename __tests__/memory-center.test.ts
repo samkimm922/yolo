@@ -16,7 +16,7 @@ function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-memory-center-"));
 }
 
-function write(file, content) {
+function write(file, content, _encoding?: string) {
   mkdirSync(resolve(file, ".."), { recursive: true });
   writeFileSync(file, content, "utf8");
 }
@@ -51,7 +51,7 @@ describe("memory center", () => {
     }
   });
 
-  test("refreshes canonical docs and compatibility mirrors", () => {
+  test("refreshes canonical docs under docs/memory", () => {
     const root = tempProject();
     try {
       write(join(root, "package.json"), JSON.stringify({
@@ -70,7 +70,6 @@ describe("memory center", () => {
         projectRoot: root,
         stateRoot: root,
         memoryDir: join(root, "docs/memory"),
-        writeLegacyPointers: true,
         now: FIXED_NOW,
       });
 
@@ -82,9 +81,7 @@ describe("memory center", () => {
       assert.match(readFileSync(join(root, "docs/memory/PROJECT_TREE.md"), "utf8"), /src\/runtime\/runner-core\.ts/);
       assert.match(readFileSync(join(root, "docs/memory/LEARNING_INDEX.md"), "utf8"), /Records: 0/);
       assert.match(readFileSync(join(root, "docs/memory/DOCUMENT_GOVERNANCE.md"), "utf8"), /one canonical home/);
-      assert.match(readFileSync(join(root, "PROJECT_TREE.md"), "utf8"), /Canonical memory dir: `docs\/memory`/);
-      assert.match(readFileSync(join(root, "SYSTEM_STATE.md"), "utf8"), /Public package state: `private: true` blocks release/);
-      assert.match(readFileSync(join(root, "ROADMAP.md"), "utf8"), /docs\/yolo-public-sdk-progress\.md/);
+      assert.match(readFileSync(join(root, "docs/memory/CURRENT_STATUS.md"), "utf8"), /Public package state: `private: true` blocks release/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -138,9 +135,9 @@ describe("memory center", () => {
     const stopHook = readFileSync(join(YOLO_DIR, "hooks/stop-update-docs.ts"), "utf8");
 
     assert.match(preToolLog, /src\/runtime\/evidence\/log-change\.js/);
-    assert.match(preToolLog, /src\/runtime\/devtools\/memory-center\.js/);
+    assert.match(preToolLog, /src\/devtools\/memory-center\.js/);
     assert.match(preToolTaskLog, /src\/runtime\/evidence\/log-change\.js/);
-    assert.match(stopHook, /src\/runtime\/devtools\/memory-center\.js/);
+    assert.match(stopHook, /src\/devtools\/memory-center\.js/);
     assert.doesNotMatch(preToolLog, /\.\.', 'log-change\.js'/);
     assert.doesNotMatch(stopHook, /generate-tree\.js'\)/);
   });

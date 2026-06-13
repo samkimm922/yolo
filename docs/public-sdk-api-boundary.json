@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "last_reviewed": "2026-05-26",
+  "last_reviewed": "2026-06-07",
   "purpose": "Machine-readable public SDK/API stability boundary. package.json exports, sdk.ts named exports, and createYoloSdk() namespaces must be classified here before they are treated as public.",
   "version_policy": {
     "stable": {
@@ -90,6 +90,12 @@
       "reason": "Project bootstrap structure is required for public beta but may expand as spec lifecycle matures."
     },
     {
+      "export": "./core/setup",
+      "target": "./dist/src/core/setup.js",
+      "tier": "experimental",
+      "reason": "Project setup orchestrator safely composes bootstrap, agent bridge install, and doctor checks; classification and report shape may expand before beta."
+    },
+    {
       "export": "./core/init-smoke",
       "target": "./dist/src/core/init-smoke.js",
       "tier": "experimental",
@@ -133,13 +139,13 @@
     },
     {
       "export": "./evidence/ledger",
-      "target": "./dist/src/evidence/ledger.js",
+      "target": "./dist/src/runtime/evidence/ledger.js",
       "tier": "experimental",
       "reason": "Ledger facade is usable, but evidence schema evolution is still active."
     },
     {
       "export": "./evidence/report",
-      "target": "./dist/src/evidence/report.js",
+      "target": "./dist/src/runtime/evidence/report.js",
       "tier": "experimental",
       "reason": "Run report generation is usable, but report schema is still active."
     },
@@ -196,6 +202,24 @@
       "target": "./dist/src/release/decision-gate.js",
       "tier": "experimental",
       "reason": "Controlled beta release decision gate requires a human decision record before private removal, publishing, credential, or billable provider actions are authorized."
+    },
+    {
+      "export": "./release/change-provenance",
+      "target": "./dist/src/release/change-provenance.js",
+      "tier": "experimental",
+      "reason": "Release candidate change provenance builds a dirty-diff manifest so release gates can fail closed when changed files lack reviewed evidence."
+    },
+    {
+      "export": "./release/clean-environment-verify",
+      "target": "./dist/src/release/clean-environment-verify.js",
+      "tier": "experimental",
+      "reason": "Clean-environment verification plans and optionally executes package install/build/test smoke checks without assuming the current workspace is clean."
+    },
+    {
+      "export": "./release/dogfood-matrix",
+      "target": "./dist/src/release/dogfood-matrix.js",
+      "tier": "experimental",
+      "reason": "Generic dogfood matrix captures project-independent scenario evidence and fail-closed outcomes before release candidate approval."
     },
     {
       "export": "./release/operator-state",
@@ -281,12 +305,7 @@
       "tier": "experimental",
       "reason": "Benchmark fixtures and rubric scoring are public beta readiness evidence, but fixture set and thresholds may evolve before stable."
     },
-    {
-      "export": "./pm",
-      "target": "./dist/src/pm/index.js",
-      "tier": "experimental",
-      "reason": "Requirement-to-findings PM module input contract is not frozen."
-    },
+
     {
       "export": "./audit-to-prd",
       "target": "./dist/src/prd/audit-to-prd.js",
@@ -358,6 +377,12 @@
       "EVIDENCE_SCHEMA_VERSION",
       "LEDGER_EVENT_SCHEMA",
       "PACKAGE_INSTALL_SMOKE_SCHEMA_VERSION",
+      "RELEASE_CANDIDATE_GATE_SCHEMA_VERSION",
+      "RELEASE_CANDIDATE_REQUIRED_REPORTS",
+      "RELEASE_CHANGE_DOMAINS",
+      "CLEAN_ENVIRONMENT_VERIFY_SCHEMA_VERSION",
+      "DOGFOOD_MATRIX_SCENARIO_IDS",
+      "DOGFOOD_MATRIX_SCHEMA_VERSION",
       "CONTROLLED_BETA_RELEASE_ACTIONS",
       "CONTROLLED_BETA_RELEASE_DECISION_SCHEMA_VERSION",
       "OPERATOR_RELEASE_OPERATIONS",
@@ -384,6 +409,10 @@
       "YOLO_COMMAND_REGISTRY_SCHEMA_VERSION",
       "YOLO_DOCTOR_SCHEMA_VERSION",
       "CONTROLLED_PARALLEL_SCHEMA_VERSION",
+      "DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION",
+      "DEMAND_GRAPH_SCHEMA_VERSION",
+      "DEMAND_READINESS_SCHEMA_VERSION",
+      "DEMAND_SESSION_SCHEMA_VERSION",
       "REVIEW_FINDING_SCHEMA",
       "REVIEW_OUTPUT_SCHEMA",
       "appendJsonlRecord",
@@ -395,6 +424,9 @@
       "buildAgentAdapterContract",
       "buildProgressDashboardUiEvidence",
       "buildControlledParallelExecutionPlan",
+      "buildDemandArtifactGraph",
+      "buildDemandEvidenceDispatchPlan",
+      "buildDemandSession",
       "buildTaskDependencyGraph",
       "buildYoloCommandRegistry",
       "buildYoloDoctorReport",
@@ -412,7 +444,13 @@
       "buildLedgerRecord",
       "buildLifecycleStageReport",
       "buildPackageInstallSmokePlan",
+      "buildReleaseCandidateChangeManifest",
+      "buildCleanEnvironmentVerifyPlan",
+      "buildDogfoodMatrixPlan",
+      "buildDogfoodMatrixReport",
+      "buildDogfoodMatrixEvidence",
       "buildProjectBootstrapPlan",
+      "buildProjectSetupPlan",
       "buildPublicBetaHardeningDrillPlan",
       "buildStableGraduationPlan",
       "buildManualExternalReleasePlan",
@@ -435,6 +473,7 @@
       "buildTraceabilityMatrix",
       "buildWorkflowSkillInstallPlan",
       "buildWorkflowSkillTargetSmokePlan",
+      "classifyReleaseChangeDomain",
       "convertAuditToPrd",
       "copyFixtureToWorkspace",
       "createEvidenceLedger",
@@ -445,8 +484,16 @@
       "defaultDiscoveryPath",
       "defaultDiscoveryPlanPath",
       "defaultDiscoveryPrdPath",
+      "defaultDemandSessionPath",
+      "demandBlockedArtifacts",
+      "demandBuildOrder",
+      "demandMarkdownArtifacts",
+      "demandReadyArtifacts",
+      "demandStateDir",
       "discoverPackManifests",
       "detectParallelConflicts",
+      "executeCleanEnvironmentVerifyPlan",
+      "evaluateReleaseCandidateGate",
       "fixtureEvidenceRecord",
       "formatAcceptanceReportText",
       "formatControlledParallelPlanText",
@@ -464,11 +511,13 @@
       "inspectPackageReadiness",
       "inspectPackedPackage",
       "inspectAgentBridgeDryRunDoctor",
+      "inspectDemandReadiness",
       "inspectParallelMergeGate",
       "inspectPublicBetaReadiness",
       "inspectAcceptanceReport",
       "inspectAgentAdapterContract",
       "inspectProgressDashboardUiEvidence",
+      "inspectProjectSetupTarget",
       "inspectReviewFixLoop",
       "inspectSpecGovernance",
       "inspectSpecLifecyclePackage",
@@ -478,6 +527,7 @@
       "runInitToFirstPrdSmoke",
       "installWorkflowSkills",
       "listBenchmarkFixtures",
+      "listDogfoodMatrixScenarios",
       "listFixtureDefinitions",
       "listYoloBridgeWorkflowIds",
       "listYoloCommandNames",
@@ -490,15 +540,20 @@
       "normalizeAgentProvider",
       "normalizeReviewFinding",
       "normalizeReviewFindings",
+      "readDemandSession",
       "readDiscoveryArtifact",
       "readPackManifest",
+      "readReleaseCandidateChangeManifest",
       "resolveProjectContext",
       "runFixtureHarness",
+      "runReleaseCandidateGate",
+      "runCleanEnvironmentVerify",
       "runControlledBetaReleaseDecisionGate",
       "runOperatorReleaseRunbookGate",
       "runPackageInstallSmoke",
       "runOperatorReleaseStateMutation",
       "runPostReleaseAuditGate",
+      "runProjectSetup",
       "runPublicBetaHardeningDrill",
       "runStableGraduationGate",
       "runManualExternalReleaseGate",
@@ -506,6 +561,10 @@
       "runAdapterEvidenceCollector",
       "runProgressDashboardUiEvidence",
       "runBenchmark",
+      "runDemandBrainstormRuntime",
+      "runDemandDiscussRuntime",
+      "runDemandEvidenceDispatchRuntime",
+      "runDemandPrdRuntime",
       "runDiscoveryPlanRuntime",
       "runDiscoveryPrdRuntime",
       "runDiscoveryRuntime",
@@ -534,7 +593,7 @@
       "validateWorkflowSkillDescriptor",
       "workflowToSkillDescriptor",
       "writeJsonArtifact",
-      "writeLifecycleStageReport",
+      "writeDemandArtifacts",
       "writeRunReport"
     ]
   },
@@ -565,8 +624,11 @@
         "entries": {
           "buildInitPlan": "experimental",
           "buildInitToFirstPrdSmokePlan": "experimental",
+          "buildSetupPlan": "experimental",
           "initProject": "experimental",
-          "runInitToFirstPrdSmoke": "experimental"
+          "inspectSetupTarget": "experimental",
+          "runInitToFirstPrdSmoke": "experimental",
+          "runSetup": "experimental"
         }
       },
       {
@@ -673,6 +735,44 @@
           "run": "experimental",
           "runPlan": "experimental",
           "runPrd": "experimental"
+        }
+      },
+      {
+        "namespace": "demand",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "blockedArtifacts": "experimental",
+          "buildArtifactGraph": "experimental",
+          "buildEvidenceDispatchPlan": "experimental",
+          "buildEvidenceTasks": "experimental",
+          "buildOrder": "experimental",
+          "buildSession": "experimental",
+          "buildSessionState": "experimental",
+          "defaultSessionPath": "experimental",
+          "dispatchEvidence": "experimental",
+          "evidenceAgentProtocols": "experimental",
+          "evidenceDispatchSchemaVersion": "experimental",
+          "evidenceResultSchema": "experimental",
+          "graphSchemaVersion": "experimental",
+          "inspectEvidenceAgreement": "experimental",
+          "inspectPrdReadiness": "experimental",
+          "inspectReadiness": "experimental",
+          "inspectTriage": "experimental",
+          "markdownArtifacts": "experimental",
+          "playbackUnderstanding": "experimental",
+          "prdReadinessSchemaVersion": "experimental",
+          "readSession": "experimental",
+          "readinessSchemaVersion": "experimental",
+          "readyArtifacts": "experimental",
+          "routerSchemaVersion": "experimental",
+          "runBrainstorm": "experimental",
+          "runDiscuss": "experimental",
+          "runPrd": "experimental",
+          "schemaVersion": "experimental",
+          "status": "experimental",
+          "stateDir": "experimental",
+          "writeArtifacts": "experimental"
         }
       },
       {
@@ -797,6 +897,11 @@
         "shape": "object",
         "entries": {
           "buildPackageInstallSmokePlan": "experimental",
+          "buildReleaseCandidateChangeManifest": "experimental",
+          "buildCleanEnvironmentVerifyPlan": "experimental",
+          "buildDogfoodMatrixPlan": "experimental",
+          "buildDogfoodMatrixReport": "experimental",
+          "buildDogfoodMatrixEvidence": "experimental",
           "buildControlledBetaReleaseDecisionPlan": "experimental",
           "buildOperatorReleaseRunbookPlan": "experimental",
           "buildOperatorReleaseStatePlan": "experimental",
@@ -812,11 +917,18 @@
           "buildRealProjectDogfoodPackPlan": "experimental",
           "buildExperiencePackEffectivenessAuditPlan": "experimental",
           "buildNonTechnicalUxDoctorPlan": "experimental",
+          "classifyReleaseChangeDomain": "experimental",
+          "evaluateReleaseCandidateGate": "experimental",
+          "executeCleanEnvironmentVerifyPlan": "experimental",
           "inspectAgentBridgeDryRunDoctor": "experimental",
           "inspectPackedPackage": "experimental",
           "inspectPackageReadiness": "experimental",
           "inspectPublicBetaReadiness": "experimental",
+          "listDogfoodMatrixScenarios": "experimental",
+          "readReleaseCandidateChangeManifest": "experimental",
           "runPackageInstallSmoke": "experimental",
+          "runReleaseCandidateGate": "experimental",
+          "runCleanEnvironmentVerify": "experimental",
           "runControlledBetaReleaseDecisionGate": "experimental",
           "runOperatorReleaseRunbookGate": "experimental",
           "runOperatorReleaseStateMutation": "experimental",
@@ -900,6 +1012,51 @@
           "scanProject": "stable",
           "summarizeReviewFindings": "experimental",
           "validateReviewFinding": "experimental"
+        }
+      },
+      {
+        "namespace": "stable",
+        "tier": "stable",
+        "shape": "object",
+        "entries": {
+          "agents": "stable",
+          "config": "stable",
+          "contract": "stable",
+          "paths": "stable",
+          "prd": "stable",
+          "provider": "stable",
+          "review": "stable",
+          "task": "stable"
+        }
+      },
+      {
+        "namespace": "experimental",
+        "tier": "experimental",
+        "shape": "object",
+        "entries": {
+          "acceptance": "experimental",
+          "agents": "experimental",
+          "commands": "experimental",
+          "demand": "experimental",
+          "discovery": "experimental",
+          "doctor": "experimental",
+          "eval": "experimental",
+          "evidence": "experimental",
+          "fixtures": "experimental",
+          "lifecycle": "experimental",
+          "packs": "experimental",
+          "parallel": "experimental",
+          "pi": "experimental",
+          "prd": "experimental",
+          "progress": "experimental",
+          "project": "experimental",
+          "provider": "experimental",
+          "release": "experimental",
+          "review": "experimental",
+          "runtime": "experimental",
+          "spec": "experimental",
+          "task": "experimental",
+          "workflows": "experimental"
         }
       }
     ]

@@ -71,7 +71,7 @@ export function applySplitSuggestionsToPrd({
   yoloRoot,
   projectRoot,
   writeRecoveryCheckpoint,
-} = {}) {
+} = Object()) {
   const suggestions = Array.isArray(doctor?.split_suggestions) ? doctor.split_suggestions : [];
   if (!suggestions.length) return { applied: false, reason: "missing_split_suggestions", childIds: [] };
   const raw = readFileSync(prdPath, "utf8");

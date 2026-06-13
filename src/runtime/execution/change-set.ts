@@ -1,6 +1,6 @@
 import { execFileSync as defaultExecFileSync } from "node:child_process";
 
-export const DEFAULT_COMMIT_EXCLUDE_FILES = ["SESSION.md", "SNAPSHOT.md", "DELIVERY_LOG.md"];
+export const DEFAULT_COMMIT_EXCLUDE_FILES = ["docs/memory/SESSION.md", "docs/memory/SNAPSHOT.md", "docs/memory/DELIVERY_LOG.md"];
 export const DEFAULT_FALLBACK_CHANGED_FILE_EXCLUDES = ["dist-h5/", ".gstack/", ".yolo-backup/"];
 export const DEFAULT_BINARY_FILE_PATTERN = /\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|eot|mp4|webm|pdf|zip|gz|lock|jar)$/i;
 
@@ -13,7 +13,7 @@ export function readTaskChangedFiles({
   worktreeFiles = null,
   execFileSync = defaultExecFileSync,
   fallbackExcludes = DEFAULT_FALLBACK_CHANGED_FILE_EXCLUDES,
-} = {}) {
+} = Object()) {
   if (worktreeFiles?.length > 0) return worktreeFiles;
 
   const diff = execFileSync("git", ["diff", "--name-only"], {
@@ -47,7 +47,7 @@ export function filterCommittableFiles(
   {
     excludeFiles = DEFAULT_COMMIT_EXCLUDE_FILES,
     binaryFilePattern = DEFAULT_BINARY_FILE_PATTERN,
-  } = {},
+  } = Object(),
 ) {
   return files.filter(
     (file) => file && !excludeFiles.includes(file) && !binaryFilePattern.test(file),
@@ -65,10 +65,11 @@ export function classifyChangedFiles(files = []) {
   return { business, metadata };
 }
 
-export function scopedOutOfScopeFiles(files = [], task = {}, { isFileAllowedByScope } = {}) {
+export function scopedOutOfScopeFiles(files = [], task = Object(), { isFileAllowedByScope } = Object()): { targetFiles: string[]; outOfScope: string[]; unscoped?: boolean } {
   const targetFiles = (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
   if (targetFiles.length === 0 || files.length === 0) {
-    return { targetFiles, outOfScope: [] };
+    const unscoped = targetFiles.length === 0;
+    return { targetFiles, outOfScope: [], ...(unscoped ? { unscoped: true } : {}) };
   }
   const scope = task.scope || { targets: targetFiles };
   return {
@@ -79,13 +80,13 @@ export function scopedOutOfScopeFiles(files = [], task = {}, { isFileAllowedBySc
 
 export function buildCommitChangeContext({
   rootDir,
-  task = {},
+  task = Object(),
   worktreeFiles = null,
   execFileSync = defaultExecFileSync,
   isFileAllowedByScope,
   fallbackExcludes,
   committableOptions,
-} = {}) {
+} = Object()) {
   const allChanged = readTaskChangedFiles({
     rootDir,
     worktreeFiles,
@@ -100,6 +101,7 @@ export function buildCommitChangeContext({
   const { targetFiles: auditTargets, outOfScope } = scopedOutOfScopeFiles(code, task, {
     isFileAllowedByScope,
   });
+  const worktreeSkipped = worktreeFiles?.outOfScopeSkipped || [];
   return {
     allChanged,
     code,
@@ -107,6 +109,6 @@ export function buildCommitChangeContext({
     metadataFiles,
     hasRealCode,
     auditTargets,
-    outOfScope,
+    outOfScope: [...outOfScope, ...worktreeSkipped],
   };
 }

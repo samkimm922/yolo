@@ -51,7 +51,7 @@ function readTextFileIfPresent(projectRoot, path) {
   return readFileSync(resolved, "utf8").trim();
 }
 
-function normalizeDiscoveryInput(input = {}, projectRoot) {
+function normalizeDiscoveryInput(input = Object(), projectRoot) {
   const fileText = readTextFileIfPresent(projectRoot, input.requirementFile || input.requirement_file || input.inputFile || input.input_file);
   const objective = clean(input.objective || input.requirement || input.idea || input.text || fileText);
   return {
@@ -69,13 +69,14 @@ function normalizeDiscoveryInput(input = {}, projectRoot) {
   };
 }
 
-function lifecycleFor(stageId, result, params = {}) {
+function lifecycleFor(stageId, result, params = Object()) {
   if (params.writeLifecycle === false || params.write_lifecycle === false) return null;
   return writeLifecycleStageReport(stageId, result, {
     projectRoot: params.projectRoot,
     stateRoot: params.stateRoot,
     source: params.source || `yolo-${stageId}`,
     writeSessionMemory: params.writeSessionMemory,
+    skipSequenceCheck: true,
   });
 }
 
@@ -107,7 +108,7 @@ export function readDiscoveryArtifact(path) {
   }
 }
 
-export function runDiscoveryRuntime(input = {}, options = {}) {
+export function runDiscoveryRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const discoveryInput = normalizeDiscoveryInput(input, projectRoot);
@@ -147,7 +148,7 @@ export function runDiscoveryRuntime(input = {}, options = {}) {
   return { ...result, lifecycle };
 }
 
-export function runDiscoveryPlanRuntime(input = {}, options = {}) {
+export function runDiscoveryPlanRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const discoveryPath = resolveOutputPath(projectRoot, input.discoveryPath || input.discovery_path || input.discovery || defaultDiscoveryPath(stateRoot));
@@ -196,7 +197,7 @@ export function runDiscoveryPlanRuntime(input = {}, options = {}) {
   return { ...result, lifecycle };
 }
 
-export function runDiscoveryPrdRuntime(input = {}, options = {}) {
+export function runDiscoveryPrdRuntime(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const discoveryPath = resolveOutputPath(projectRoot, input.discoveryPath || input.discovery_path || input.discovery || defaultDiscoveryPath(stateRoot));
@@ -222,25 +223,34 @@ export function runDiscoveryPrdRuntime(input = {}, options = {}) {
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
   const artifacts = [];
   if (shouldWrite && compiled.prd) artifacts.push(writeJson(outputFile, compiled.prd));
+  const executable = compiled.status === "success" || compiled.executable === true;
 
   const result = {
     status: compiled.status,
-    code: compiled.status === "blocked" ? "DISCOVERY_PRD_BLOCKED" : "DISCOVERY_PRD_READY",
+    code: compiled.status === "blocked"
+      ? "DISCOVERY_PRD_BLOCKED"
+      : executable
+        ? "DISCOVERY_PRD_READY"
+        : "DISCOVERY_PRD_DRAFT",
     summary: compiled.status === "blocked"
       ? "Discovery is not ready for PRD compilation."
-      : "Discovery PRD artifact compiled.",
+      : executable
+        ? "Discovery PRD artifact compiled."
+        : "Discovery draft PRD artifact compiled; it is not executable until approved demand and runner preflight pass.",
     project_root: projectRoot,
     state_root: stateRoot,
     discovery_path: discoveryPath,
     compiled,
-    prd: compiled.prd || null,
+    prd: executable ? compiled.prd : null,
+    draft_prd: executable ? null : compiled.prd || null,
+    executable,
     blockers: compiled.blockers || [],
     warnings: compiled.warnings || [],
     artifacts,
-    outputs: artifacts.map((path) => ({ path, type: "prd" })),
+    outputs: artifacts.map((path) => ({ path, type: executable ? "prd" : "draft_prd" })),
     next_actions: compiled.next_actions || [],
   };
-  const lifecycle = shouldWrite ? lifecycleFor("prd", result, {
+  const lifecycle = shouldWrite && executable ? lifecycleFor("prd", result, {
     projectRoot,
     stateRoot,
     source: input.source || "yolo-prd",

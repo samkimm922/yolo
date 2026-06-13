@@ -4,18 +4,23 @@ import {
   passTaskTransition,
 } from "../task-state/transitions.js";
 
-export function shouldRunPostCommitPostconditions(commitResult = {}) {
+export function shouldRunPostCommitPostconditions(commitResult = Object()) {
   return commitResult.blocked !== true
     && commitResult.hasRealCode === true
-    && (commitResult.committed === true || commitResult.nonBlocking === true);
+    && commitResult.committed === true;
+}
+
+function buildCommitFailureReason(commitResult = Object()) {
+  const reason = commitResult.commitFailure || commitResult.reason || commitResult.commitWarning || "commit_failed";
+  return reason === "commit_failed" ? "commit 失败" : `commit 失败: ${reason}`;
 }
 
 export function buildPostCommitOutcome({
-  task = {},
-  commitResult = {},
-  baseRecord = {},
+  task = Object(),
+  commitResult = Object(),
+  baseRecord = Object(),
   postResult = null,
-} = {}) {
+} = Object()) {
   const taskId = task.id;
   if (commitResult.blocked) {
     const reason = commitResult.blockReason || "scope audit blocked";
@@ -58,14 +63,12 @@ export function buildPostCommitOutcome({
     }
     return {
       status: "completed",
-      reason: commitResult.nonBlocking ? `commit warning: ${commitResult.commitWarning || "commit_failed"}` : undefined,
+      reason: undefined,
       doneStatus: "completed",
-      doneReason: commitResult.nonBlocking ? `commit warning: ${commitResult.commitWarning || "commit_failed"}` : undefined,
+      doneReason: undefined,
       transition: passTaskTransition({
         taskId,
-        result: commitResult.nonBlocking
-          ? { ...baseRecord, commit_warning: commitResult.commitWarning || "commit_failed" }
-          : baseRecord,
+        result: baseRecord,
       }),
     };
   }
@@ -91,14 +94,20 @@ export function buildPostCommitOutcome({
     };
   }
 
+  const reason = buildCommitFailureReason(commitResult);
   return {
     status: "failed",
-    reason: "commit 失败",
+    reason,
     doneStatus: "failed",
-    doneReason: "commit 失败",
-    transition: createTaskTransition({
+    doneReason: reason,
+    transition: failTaskTransition({
       taskId,
-      result: { ...baseRecord, status: "FAIL", reason: "commit 失败" },
+      reason,
+      result: {
+        ...baseRecord,
+        commit_failure: commitResult.commitFailure || commitResult.reason || commitResult.commitWarning || "commit_failed",
+        ...(commitResult.commitError || commitResult.error ? { commit_error: commitResult.commitError || commitResult.error } : {}),
+      },
     }),
   };
 }

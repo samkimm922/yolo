@@ -7,13 +7,13 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { extname, resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
-import { config } from "../../lib/config.js";
+import { config } from "../lib/config.js";
 import { buildReviewOutput, normalizeReviewFindings } from "./findings.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
 
-function scannerSettings(options = {}) {
+function scannerSettings(options = Object()) {
   const cfg = options.config || config;
   const root = resolve(options.root || resolve(PACKAGE_ROOT, cfg.project.root));
   const sourceRoots = options.source_roots || options.sourceRoots || cfg.project.source_roots || [cfg.project.src || "src"];
@@ -222,7 +222,7 @@ function getAllSourceFiles(dir, settings) {
 
 // ── 扫描单个文件 ──────────────────────────────────────────────
 
-export function scanFile(absPath, options = {}) {
+export function scanFile(absPath, options = Object()) {
   const settings = scannerSettings(options);
   const relPath = absPath.replace(settings.root + "/", "");
   const findings = [];
@@ -449,7 +449,7 @@ export function scanFile(absPath, options = {}) {
 
 // ── 主入口 ────────────────────────────────────────────────────
 
-export function scanProject(options = {}) {
+export function scanProject(options = Object()) {
   const settings = scannerSettings(options);
   const files = settings.files.length > 0
     ? settings.files
@@ -563,8 +563,8 @@ export function scanProject(options = {}) {
   const normalizedFindings = reviewOutput.findings;
 
   // 统计
-  const byDimension = {};
-  const bySeverity = {};
+  const byDimension = Object();
+  const bySeverity = Object();
   const fileCount = files.length;
 
   for (const f of normalizedFindings) {

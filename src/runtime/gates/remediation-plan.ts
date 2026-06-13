@@ -20,9 +20,16 @@ const HUMAN_CODES = new Set([
   "PRD_PREFLIGHT_BLOCKED",
   "PRD_CONTRACT_BLOCKED",
   "PRD_SPEC_GOVERNANCE_BLOCKED",
+  "BROWSER_RENDER_UNAVAILABLE_RELEASE",
+  "PUBLIC_DOGFOOD_MISSING",
 ]);
 
 const AUTO_REMEDIATE_CODES = new Set([
+  "FIXTURE_EVIDENCE_MISSING",
+  "FIXTURE_EXPECTED_ARTIFACT_MISSING",
+  "HARNESS_EVIDENCE_SCHEMA_INVALID",
+  "ADAPTER_EVIDENCE_MISSING",
+  "UI_SCREENSHOT_MISSING",
   "PM_TASK_ACCEPTANCE_MISSING",
   "UI_STATE_MATRIX_MISSING",
   "UI_EVIDENCE_PLAN_MISSING",
@@ -63,15 +70,15 @@ function asArray(value) {
   return [value];
 }
 
-function issueCode(issue = {}) {
+function issueCode(issue = Object()) {
   return clean(issue.code || issue.id || issue.rule_id || issue.type || issue.name || "GATE_FAILURE");
 }
 
-function issueMessage(issue = {}) {
+function issueMessage(issue = Object()) {
   return clean(issue.message || issue.detail || issue.summary || issue.reason || issue.description || issue.type || issue.code || "Gate issue");
 }
 
-function issueText(issue = {}) {
+function issueText(issue = Object()) {
   return lower([
     issueCode(issue),
     issue.type,
@@ -82,19 +89,19 @@ function issueText(issue = {}) {
   ].join(" "));
 }
 
-function isUnsafeIssue(issue = {}) {
+function isUnsafeIssue(issue = Object()) {
   const text = issueText(issue);
-  return /credential|secret|api[_ -]?key|password|token|publish|release|permission|sandbox|delete|destructive|unsafe|dangerous|innerhtml/.test(text);
+  return /credential|secret|api[_ -]?key|password|token|publish|release|permission|sandbox|delete|destructive|unsafe|dangerous|innerhtml|billable|npm publish|curl|wget/.test(text);
 }
 
-function isHumanRequiredIssue(issue = {}) {
+function isHumanRequiredIssue(issue = Object()) {
   const code = issueCode(issue);
   const text = issueText(issue);
   return HUMAN_CODES.has(code) ||
     /discovery|requirement|scope missing|target missing|adapter.*missing|contract_suspect|contract review|needs_contract_review|user approval/.test(text);
 }
 
-function isAutoRemediableIssue(issue = {}) {
+function isAutoRemediableIssue(issue = Object()) {
   const code = issueCode(issue);
   const text = issueText(issue);
   if (/adapter/.test(text)) return false;
@@ -102,14 +109,14 @@ function isAutoRemediableIssue(issue = {}) {
     /acceptance.*missing|post.?condition.*missing|state matrix|evidence plan|must split|atomicity/.test(text);
 }
 
-function isRetryableFailure(issue = {}) {
+function isRetryableFailure(issue = Object()) {
   const type = clean(issue.type || issue.gate || issue.source);
   const text = issueText(issue);
   return RETRYABLE_FAILURE_TYPES.has(type) ||
     /eslint|tsc|typescript|test.*fail|vitest|postcondition|file scope|file_scope|lint/.test(text);
 }
 
-function actionForIssue(issue = {}, context = {}) {
+function actionForIssue(issue = Object(), context = Object()) {
   const decisionAction = clean(context.decisionAction || context.gateFailureDecision?.action);
   if (isUnsafeIssue(issue)) return GATE_REMEDIATION_ACTIONS.STOP_UNSAFE;
   if (decisionAction === "contract_suspect") return GATE_REMEDIATION_ACTIONS.ASK_HUMAN;
@@ -146,7 +153,7 @@ function actionAutomationCanContinue(action) {
   ].includes(action);
 }
 
-export function classifyGateRemediationIssue(issue = {}, context = {}) {
+export function classifyGateRemediationIssue(issue = Object(), context = Object()) {
   const action = actionForIssue(issue, context);
   const taskId = issue.task_id || issue.taskId || context.task?.id || context.taskId || null;
   return {
@@ -159,7 +166,7 @@ export function classifyGateRemediationIssue(issue = {}, context = {}) {
     automation_can_continue: actionAutomationCanContinue(action),
     requires_human: action === GATE_REMEDIATION_ACTIONS.ASK_HUMAN,
     unsafe_stop: action === GATE_REMEDIATION_ACTIONS.STOP_UNSAFE,
-    blocks_ship: action !== GATE_REMEDIATION_ACTIONS.PASS,
+    blocks_ship: true,
     rationale: actionRationale(action),
   };
 }
@@ -236,10 +243,10 @@ function nextActionsFor(summary) {
     return ["Ask for the missing product, scope, adapter, or contract decision before executing code."];
   }
   if (summary.action === GATE_REMEDIATION_ACTIONS.REROUTE_REVIEW_FIX) {
-    return ["Create a scoped review/fix task from this gate failure, then run the same strict gate again."];
+    return ["Create an immediate scoped review/fix task from this gate failure before starting unrelated feature work, then run the same strict gate again."];
   }
   if (summary.action === GATE_REMEDIATION_ACTIONS.AUTO_REMEDIATE) {
-    return ["Generate a bounded remediation task, apply it, then rerun the strict gate."];
+    return ["Generate a bounded remediation task now, apply it before new feature work, then rerun the strict gate."];
   }
   return ["Retry with the gate failure context injected, then rerun the strict gate."];
 }
@@ -257,7 +264,7 @@ export function buildGateRemediationPlan({
   blockers = [],
   warnings = [],
   summary = "",
-} = {}) {
+} = Object()) {
   const issues = [...asArray(blockers), ...asArray(failures)];
   const items = issues.map((issue, index) => classifyGateRemediationIssue(issue, {
     source,
@@ -270,14 +277,23 @@ export function buildGateRemediationPlan({
     decisionAction,
     gateFailureDecision,
   }));
-  const aggregateResult = aggregate(items);
   const warningCount = asArray(warnings).length;
+  const aggregateResult = items.length === 0 && warningCount > 0
+    ? {
+      status: "human_required",
+      action: GATE_REMEDIATION_ACTIONS.ASK_HUMAN,
+      automation_can_continue: false,
+      requires_human: true,
+      unsafe_stop: false,
+      blocks_ship: true,
+    }
+    : aggregate(items);
   return {
     schema_version: GATE_REMEDIATION_SCHEMA_VERSION,
     schema: GATE_REMEDIATION_SCHEMA,
     source,
     gate_strength: "strict",
-    policy: "strong_gate_non_blocking_remediation",
+    policy: "strong_gate_fail_closed_remediation",
     status: aggregateResult.status,
     action: aggregateResult.action,
     automation_can_continue: aggregateResult.automation_can_continue,
@@ -294,7 +310,7 @@ export function buildGateRemediationPlan({
       items.length
         ? "Strict gate produced remediation work; ship remains blocked until it passes."
         : warningCount
-          ? "Strict gate passed with warnings; warnings do not block automation."
+          ? "Strict gate produced warnings; automation is blocked until the warnings are reviewed or remediated."
           : "Strict gate passed."
     ),
     items,

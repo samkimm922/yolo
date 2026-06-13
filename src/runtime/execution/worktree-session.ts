@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 
 import {
+  buildBaselineArtifact,
   parseEslintBaselineKeys,
   parseTscBaselineKeys,
 } from "./baselines.js";
@@ -31,7 +32,7 @@ export function isFileInScopeTargets(filePath, targets = []) {
 }
 
 export function isFileAllowedByScope(filePath, scopeOrTargets = []) {
-  const scope = Array.isArray(scopeOrTargets) ? { targets: scopeOrTargets } : (scopeOrTargets || {});
+  const scope = Object.assign(Object(), Array.isArray(scopeOrTargets) ? { targets: scopeOrTargets } : (scopeOrTargets || {}));
   const targets = scope.targets || [];
   if (isFileInScopeTargets(filePath, targets)) return true;
   if (scope.allow_new_files !== true) return false;
@@ -43,7 +44,17 @@ export function isFileAllowedByScope(filePath, scopeOrTargets = []) {
 }
 
 export function isBusinessLikeFile(filePath) {
-  return filePath.startsWith("src/") || filePath.startsWith("cloudfunctions/") || filePath.startsWith("config/");
+  return [
+    "src/",
+    "cloudfunctions/",
+    "config/",
+    "packages/",
+    "app/",
+    "lib/",
+    "prisma/",
+    "migrations/",
+    "public/",
+  ].some((prefix) => filePath.startsWith(prefix));
 }
 
 export function parseGitStatusEntries(output = "") {
@@ -64,14 +75,23 @@ export function parseGitNameStatusEntries(output = "") {
   }).filter((entry) => entry.path);
 }
 
-export function gitLines(cwd, args, { execFileSync = defaultExecFileSync } = {}) {
+function describeCommandFailure(error) {
+  const stderr = String(error?.stderr || "").trim();
+  const stdout = String(error?.stdout || "").trim();
+  return stderr || stdout || error?.message || String(error);
+}
+
+export function gitLines(cwd, args, { execFileSync = defaultExecFileSync, strict = true } = Object()) {
   try {
     const output = execFileSync("git", ["-C", cwd, ...args], {
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
     }).replace(/\n+$/, "");
     return output ? output.split("\n").filter(Boolean) : [];
-  } catch {
+  } catch (error) {
+    if (strict) {
+      throw new Error(`git ${args.join(" ")} failed: ${describeCommandFailure(error)}`);
+    }
     return [];
   }
 }
@@ -84,7 +104,7 @@ function ensureWorktreeRoot(worktreeRoot, { existsSync, mkdirSync }) {
   if (!existsSync(worktreeRoot)) mkdirSync(worktreeRoot, { recursive: true });
 }
 
-function isInsideGitWorkTree(rootDir, { execSync = defaultExecSync } = {}) {
+function isInsideGitWorkTree(rootDir, { execSync = defaultExecSync } = Object()) {
   try {
     return execSync("git rev-parse --is-inside-work-tree", {
       cwd: rootDir,
@@ -96,7 +116,7 @@ function isInsideGitWorkTree(rootDir, { execSync = defaultExecSync } = {}) {
   }
 }
 
-function removePath(path, { existsSync, rmSync, execSync } = {}) {
+function removePath(path, { existsSync, rmSync, execSync } = Object()) {
   if (!existsSync(path)) return;
   try {
     rmSync(path, { recursive: true, force: true });
@@ -119,9 +139,9 @@ function writeFilesystemLineBaseline({
   readdirSync,
   statSync,
   writeFileSync,
-} = {}) {
-  const lineCounts = {};
-  const hashes = {};
+} = Object()) {
+  const lineCounts = Object();
+  const hashes = Object();
   const sourceExt = /\.(mjs|cjs|js|jsx|ts|tsx|css|scss|html)$/i;
   const walk = (relativeDir = "") => {
     const absoluteDir = join(wtPath, relativeDir);
@@ -222,20 +242,58 @@ function writeWorktreeBaselines({
 }) {
   const wtBaselineDir = join(wtPath, "scripts", "yolo", "state", "runtime");
   if (!existsSync(wtBaselineDir)) mkdirSync(wtBaselineDir, { recursive: true });
+  const run = (command, timeout) => {
+    try {
+      const output = execFileSync("sh", ["-c", `cd ${shellQuote(wtPath)} && ${command} 2>&1`], {
+        encoding: "utf8",
+        timeout,
+      });
+      return { output, stderr: "", exitCode: 0, status: "pass", reason: null };
+    } catch (error) {
+      const output = `${error?.stdout || ""}${error?.stderr || ""}`;
+      const exitCode = Number.isInteger(error?.status) ? error.status : 1;
+      const blocked = Boolean(error?.signal) ||
+        exitCode === 127 ||
+        /\bnot found\b|is not recognized|command not found/i.test(output) ||
+        !output.trim();
+      return {
+        output,
+        stderr: String(error?.stderr || ""),
+        exitCode,
+        status: blocked ? "blocked" : "pass",
+        reason: blocked ? (error?.signal ? "baseline_command_timeout_or_signal" : "baseline_command_unavailable") : null,
+      };
+    }
+  };
   try {
-    const tscResult = execFileSync("sh", ["-c", `cd ${shellQuote(wtPath)} && ${config.build.type_check} 2>&1 || true`], {
-      encoding: "utf8",
-      timeout: 120000,
-    });
-    writeFileSync(join(wtBaselineDir, "tsc-baseline.json"), JSON.stringify({ keys: parseTscBaselineKeys(tscResult) }, null, 2), "utf8");
+    const result = run(config.build.type_check, 120000);
+    const keys = parseTscBaselineKeys(result.output);
+    writeFileSync(join(wtBaselineDir, "tsc-baseline.json"), JSON.stringify(buildBaselineArtifact({
+      tool: "tsc",
+      keys,
+      command: config.build.type_check,
+      exitCode: result.exitCode,
+      stdout: result.output,
+      stderr: result.stderr,
+      commit: null,
+      status: result.status,
+      reason: result.reason,
+    }), null, 2), "utf8");
   } catch {}
   try {
-    const eslintResult = execFileSync("sh", ["-c", `cd ${shellQuote(wtPath)} && ${config.build.lint} 2>&1 || true`], {
-      encoding: "utf8",
-      timeout: 90000,
-    });
+    const result = run(config.build.lint, 90000);
     writeFileSync(join(wtBaselineDir, "eslint-baseline.json"), JSON.stringify({
-      keys: parseEslintBaselineKeys(eslintResult, wtPath),
+      ...buildBaselineArtifact({
+        tool: "eslint",
+        keys: parseEslintBaselineKeys(result.output, wtPath),
+        command: config.build.lint,
+        exitCode: result.exitCode,
+        stdout: result.output,
+        stderr: result.stderr,
+        commit: null,
+        status: result.status,
+        reason: result.reason,
+      }),
     }, null, 2), "utf8");
   } catch {}
 }
@@ -256,7 +314,7 @@ export function createTaskWorktree({
   statSync = defaultStatSync,
   cpSync = defaultCpSync,
   writeFileSync = defaultWriteFileSync,
-} = {}) {
+} = Object()) {
   const wtBranch = `yolo-${taskId}-${now()}`;
   const wtPath = join(worktreeRoot, taskId);
   const insideGitWorkTree = isInsideGitWorkTree(rootDir, { execSync });
@@ -366,9 +424,10 @@ export function cleanupTaskWorktree({
   statSync = defaultStatSync,
   mkdirSync = defaultMkdirSync,
   copyFileSync = defaultCopyFileSync,
-  log = () => {},
-} = {}) {
+  log = (..._args) => {},
+} = Object()) {
   const copiedFiles = [];
+  const outOfScopeSkipped = [];
   const allowedTargets = Array.isArray(allowedScope) ? allowedScope : (allowedScope?.targets || []);
   const insideGitWorkTree = isInsideGitWorkTree(wtPath, { execSync });
   const rootInsideGitWorkTree = isInsideGitWorkTree(rootDir, { execSync });
@@ -378,11 +437,11 @@ export function cleanupTaskWorktree({
     let allFilePaths = [];
 
     if (insideGitWorkTree) {
-      const dirtyEntries = parseGitStatusEntries(gitLines(wtPath, ["status", "--porcelain"], { execFileSync }).join("\n"));
+      const dirtyEntries = parseGitStatusEntries(gitLines(wtPath, ["status", "--porcelain"], { execFileSync, strict: true }).join("\n"));
       const committedEntries = baseRef
-        ? parseGitNameStatusEntries(gitLines(wtPath, ["diff", "--name-status", baseRef, "HEAD"], { execFileSync }).join("\n"))
+        ? parseGitNameStatusEntries(gitLines(wtPath, ["diff", "--name-status", baseRef, "HEAD"], { execFileSync, strict: true }).join("\n"))
         : [];
-      const untrackedEntries = gitLines(wtPath, ["ls-files", "--others", "--exclude-standard"], { execFileSync })
+      const untrackedEntries = gitLines(wtPath, ["ls-files", "--others", "--exclude-standard"], { execFileSync, strict: true })
         .map((path) => ({ path, isDeleted: false }));
 
       for (const { path, isDeleted } of [...dirtyEntries, ...committedEntries, ...untrackedEntries]) {
@@ -426,6 +485,7 @@ export function cleanupTaskWorktree({
         }
         if (isBusinessLikeFile(filePath) && !isFileAllowedByScope(filePath, allowedScope)) {
           outOfScopeSkippedCount++;
+          outOfScopeSkipped.push(filePath);
           log("BLOCK", `跳过越界文件: ${filePath}`);
           continue;
         }
@@ -473,8 +533,7 @@ export function cleanupTaskWorktree({
           }
           log("VERIFY", `合并验证通过: ${changedCopied.size}/${copiedFiles.length} 个本次复制文件有改动`);
         } catch (error) {
-          if (error.message.includes("worktree merge produced no diff")) throw error;
-          log("WARN", `合并验证: git diff 命令执行异常 (${error.message})`);
+          throw new Error(`worktree merge verification failed: ${describeCommandFailure(error)}`);
         }
       }
     }
@@ -494,5 +553,9 @@ export function cleanupTaskWorktree({
   }
   removePath(wtPath, { existsSync, rmSync, execSync });
 
+  Object.defineProperty(copiedFiles, "outOfScopeSkipped", {
+    value: outOfScopeSkipped,
+    enumerable: false,
+  });
   return copiedFiles;
 }

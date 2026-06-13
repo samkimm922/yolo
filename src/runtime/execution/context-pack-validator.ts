@@ -38,7 +38,7 @@ function conditionSummary(condition) {
   };
 }
 
-function normalizeTargets(scope = {}) {
+function normalizeTargets(scope = Object()) {
   return Array.isArray(scope.targets)
     ? scope.targets.map((target) => ({
       file: normalizePath(target?.file),
@@ -48,7 +48,7 @@ function normalizeTargets(scope = {}) {
     : [];
 }
 
-export function buildContextPackForTask(task, options = {}) {
+export function buildContextPackForTask(task, options = Object()) {
   const scope = task?.scope || {};
   const targets = normalizeTargets(scope);
   const readonlyFiles = uniqueStrings(scope.readonly_files || []);
@@ -88,15 +88,15 @@ export function buildContextPackForTask(task, options = {}) {
   };
 }
 
-function addFailure(failures, code, detail, extra = {}) {
+function addFailure(failures, code, detail, extra = Object()) {
   failures.push({ code, detail, ...extra });
 }
 
-function addWarning(warnings, code, detail, extra = {}) {
+function addWarning(warnings, code, detail, extra = Object()) {
   warnings.push({ code, detail, ...extra });
 }
 
-export function validateContextPack(pack, options = {}) {
+export function validateContextPack(pack, options = Object()) {
   const failures = [];
   const warnings = [];
   const root = options.root ? resolve(options.root) : pack?.root || null;

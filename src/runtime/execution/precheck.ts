@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { evaluatePreConditions, setContractRoot } from "../../prd/contract.js";
-import { getArg } from "../../../lib/cli-utils.js";
+import { getArg } from "../../lib/cli-utils.js";
 
 const taskId = getArg("--task=");
 const prdPath = getArg("--prd=");

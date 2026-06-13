@@ -1,11 +1,12 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import createYoloSdk, { ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION, buildAcceptanceReport, buildAdapterEvidencePlan, buildAgentIntegrationDoctorPlan, buildControlledBetaReleaseDecisionPlan, buildEvidenceArtifact, buildInitToFirstPrdSmokePlan, buildLifecycleStageReport, buildManualExternalReleasePlan, buildOperatorReleaseRunbookPlan, buildOperatorReleaseStatePlan, buildPackageInstallSmokePlan, buildPiExecutionDrillPlan, buildPostReleaseAuditPlan, buildProgressDashboardUiEvidence, buildPublicBetaEvidencePlan, buildPublicBetaHardeningDrillPlan, buildRealProjectDogfoodPlan, buildReviewFixPrd, buildReviewOutput, buildRunFinalAnswer, buildRunReport, buildRuntimeBoundaryDecisionPlan, buildStableGraduationPlan, buildTraceabilityMatrix, buildYoloBenchmarkPlan, createEvidenceLedger, createPrdMigrationAdvice, discoverPackManifests, formatAcceptanceReportText, formatRunFinalAnswerMarkdown, formatYoloBenchmarkText, formatYoloCheckText, inspectAcceptanceReport, inspectPackageReadiness, inspectPackedPackage, inspectPrdContract, inspectProgressDashboardUiEvidence, inspectReviewFixLoop, inspectYoloCheck, listAgentPresets, listBenchmarkFixtures, listFixtureDefinitions, listWorkflows, migratePrdFile, migratePrdGates, normalizeReviewFinding, preflightPrd, PROGRESS_DASHBOARD_UI_EVIDENCE_SCHEMA_VERSION, readPackManifest, resolveProjectContext, runAdapterEvidenceCollector, runAgentIntegrationDoctor, runBenchmark, runControlledBetaReleaseDecisionGate, runFixtureHarness, runInitToFirstPrdSmoke, runManualExternalReleaseGate, runOperatorReleaseRunbookGate, runOperatorReleaseStateMutation, runPackageInstallSmoke, runPiAgent, runPiExecutionDrillGate, runPiRuntime, runPostReleaseAuditGate, runProgressDashboardUiEvidence, runPublicBetaEvidenceGate, runPublicBetaHardeningDrill, runRealProjectDogfoodGate, runRunnerRuntime, runRuntimeBoundaryDecisionGate, runStableGraduationGate, runYoloBenchmark, scanProject, scoreBenchmarkScenario, supportedConditionTypes, validatePackManifest, writeLifecycleStageReport, writeRunReport, YOLO_BENCHMARK_SCHEMA_VERSION } from "../sdk.js";
+import createYoloSdk, { ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION, buildAcceptanceReport, buildAdapterEvidencePlan, buildAgentIntegrationDoctorPlan, buildControlledBetaReleaseDecisionPlan, buildEvidenceArtifact, buildInitToFirstPrdSmokePlan, buildLifecycleStageReport, buildManualExternalReleasePlan, buildOperatorReleaseRunbookPlan, buildOperatorReleaseStatePlan, buildPackageInstallSmokePlan, buildPiExecutionDrillPlan, buildPostReleaseAuditPlan, buildProgressDashboardUiEvidence, buildPublicBetaEvidencePlan, buildPublicBetaHardeningDrillPlan, buildRealProjectDogfoodPlan, buildReviewFixPrd, buildReviewOutput, buildRunFinalAnswer, buildRunReport, buildRuntimeBoundaryDecisionPlan, buildStableGraduationPlan, buildTraceabilityMatrix, buildYoloBenchmarkPlan, createEvidenceLedger, createPrdMigrationAdvice, discoverPackManifests, formatAcceptanceReportText, formatRunFinalAnswerMarkdown, formatYoloBenchmarkText, formatYoloCheckText, inspectAcceptanceReport, inspectPackageReadiness, inspectPackedPackage, inspectPrdContract, inspectProgressDashboardUiEvidence, inspectReviewFixLoop, inspectYoloCheck, listAgentPresets, listBenchmarkFixtures, listFixtureDefinitions, listWorkflows, migratePrdFile, migratePrdGates, normalizeReviewFinding, preflightPrd, PROGRESS_DASHBOARD_UI_EVIDENCE_SCHEMA_VERSION, readPackManifest, resolveProjectContext, runAdapterEvidenceCollector, runAgentIntegrationDoctor, runBenchmark, runControlledBetaReleaseDecisionGate, runFixtureHarness, runInitToFirstPrdSmoke, runManualExternalReleaseGate, runOperatorReleaseRunbookGate, runOperatorReleaseStateMutation, runPackageInstallSmoke, runPiAgent, runPiExecutionDrillGate, runPiRuntime, runPostReleaseAuditGate, runProgressDashboardUiEvidence, runPublicBetaEvidenceGate, runPublicBetaHardeningDrill, runRealProjectDogfoodGate, runRunnerRuntime, runRuntimeBoundaryDecisionGate, runStableGraduationGate, runYoloBenchmark, scanProject, scoreBenchmarkScenario, supportedConditionTypes, validatePackManifest, writeRunReport, YOLO_BENCHMARK_SCHEMA_VERSION } from "../sdk.js";
+import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
 import {
   buildControlledParallelExecutionPlan,
   buildTaskDependencyGraph,
@@ -17,20 +18,137 @@ import {
   planControlledParallelWaves,
 } from "../sdk.js";
 import {
+  buildDemandArtifactGraph,
+  buildDemandSession,
   buildDiscoveryArtifact,
   buildYoloCommandRegistry,
   buildYoloDoctorReport,
+  DEMAND_SESSION_SCHEMA_VERSION,
   formatYoloDoctorText,
   getYoloCommand,
+  inspectDemandReadiness,
   listYoloCommandNames,
   renderYoloCommandUsage,
+  runDemandBrainstormRuntime,
+  runDemandDiscussRuntime,
+  runDemandPrdRuntime,
   runDiscoveryRuntime,
   YOLO_COMMAND_REGISTRY_SCHEMA_VERSION,
   YOLO_DOCTOR_SCHEMA_VERSION,
 } from "../sdk.js";
-import { DEFAULT_CONFIG_PATH, loadConfig } from "../lib/config.js";
+import {
+  buildCleanEnvironmentVerifyPlan,
+  buildDogfoodMatrixReport,
+  buildReleaseCandidateChangeManifest,
+  classifyReleaseChangeDomain,
+  readReleaseCandidateChangeManifest,
+  runCleanEnvironmentVerify,
+  runReleaseCandidateGate,
+} from "../sdk.js";
+import { DEFAULT_CONFIG_PATH, loadConfig } from "../src/lib/config.js";
 
 const YOLO_DIR = fileURLToPath(new URL("..", import.meta.url));
+
+function approvedDemandFields(targetFiles = []) {
+  const quality = {
+    schema_version: "1.0",
+    schema: "yolo.demand.quality.v1",
+    status: "pass",
+    total_score: 100,
+    dimensions: [],
+  };
+  return {
+    source: "approved_demand",
+    demand_contract_required: true,
+    demand: {
+      id: "DEMAND-SDK-TEST",
+      approval: { approved: true, effective_for_prd: true },
+      project_facts: {
+        target_files: targetFiles.map((file) => ({ file, status: "verified" })),
+        assumptions: [],
+      },
+      quality_report: quality,
+    },
+    execution_readiness: {
+      level: "L3",
+      afk_ready: true,
+      quality_status: "pass",
+      quality_report: quality,
+    },
+  };
+}
+
+function tracedRequirement(id, text) {
+  return {
+    id,
+    text,
+    demand_trace: { evidence: [`EVID-${id}`] },
+  };
+}
+
+function writePiRunnablePrdFixture(root, stateRoot, { id = "PRD-20260530-PI-RUNNABLE" } = {}) {
+  const prdPath = join(root, "prd.json");
+  writeFileSync(prdPath, `${JSON.stringify({
+    version: "2.0",
+    id,
+    title: "PI runnable action",
+    project: { name: "pi", language: "javascript" },
+    generated_by: "yolo-review-agent",
+    generated_at: "2026-05-30T00:00:00.000Z",
+    base_commit: "abcdef0",
+    review_policy: { mode: "disabled" },
+    ...approvedDemandFields(["artifacts/pi.md"]),
+    requirements: [tracedRequirement("REQ-PI-001", "PI executes a deterministic artifact task.")],
+    designs: [{ id: "DES-PI-001", text: "Use a deterministic dry-run artifact task." }],
+    tasks: [{
+      id: "FIX-PI-001",
+      title: "Write PI artifact",
+      priority: "P3",
+      type: "cleanup",
+      task_kind: "dry_run_artifact",
+      status: "pending",
+      requirement_ids: ["REQ-PI-001"],
+      design_ids: ["DES-PI-001"],
+      scope: {
+        targets: [{ file: "artifacts/pi.md" }],
+        allow_new_files: true,
+        expected_zero_business_code: true,
+      },
+      post_conditions: [{
+        id: "POST-FILE",
+        type: "file_exists",
+        severity: "FAIL",
+        params: { file: "artifacts/pi.md" },
+      }, {
+        id: "POST-TYPECHECK",
+        type: "no_new_type_errors",
+        severity: "FAIL",
+        params: { command: "npm run typecheck" },
+      }],
+    }],
+  }, null, 2)}\n`, "utf8");
+  writeLifecycleStageReport("discovery", { status: "success" }, {
+    projectRoot: root,
+    stateRoot,
+    writeSessionMemory: false,
+    skipSequenceCheck: true,
+  });
+  writeLifecycleStageReport("roadmap", { status: "success" }, {
+    projectRoot: root,
+    stateRoot,
+    writeSessionMemory: false,
+    skipSequenceCheck: true,
+  });
+  writeLifecycleStageReport("prd", { status: "success", prd_path: prdPath, artifacts: [prdPath] }, {
+    projectRoot: root,
+    stateRoot,
+    writeSessionMemory: false,
+    skipSequenceCheck: true,
+  });
+  const check = inspectYoloCheck({ prdPath, projectRoot: root, stateRoot, writeLifecycle: true });
+  assert.notEqual(check.status, "blocked", JSON.stringify(check.blockers, null, 2));
+  return prdPath;
+}
 
 describe("yolo sdk", () => {
   test("exports stable contract and scanner APIs", () => {
@@ -51,6 +169,9 @@ describe("yolo sdk", () => {
     assert.equal(typeof sdk.pi.createPlan, "function");
     assert.equal(typeof sdk.pi.run, "function");
     assert.equal(typeof sdk.project.buildInitToFirstPrdSmokePlan, "function");
+    assert.equal(typeof sdk.project.buildSetupPlan, "function");
+    assert.equal(typeof sdk.project.inspectSetupTarget, "function");
+    assert.equal(typeof sdk.project.runSetup, "function");
     assert.equal(typeof sdk.project.runInitToFirstPrdSmoke, "function");
     assert.equal(typeof sdk.spec.buildTraceabilityMatrix, "function");
     assert.equal(typeof sdk.spec.inspectSpecGovernance, "function");
@@ -65,6 +186,14 @@ describe("yolo sdk", () => {
     assert.equal(typeof sdk.discovery.run, "function");
     assert.equal(typeof sdk.discovery.runPlan, "function");
     assert.equal(typeof sdk.discovery.runPrd, "function");
+    assert.equal(typeof sdk.demand.buildSession, "function");
+    assert.equal(typeof sdk.demand.inspectReadiness, "function");
+    assert.equal(typeof sdk.demand.runBrainstorm, "function");
+    assert.equal(typeof sdk.demand.runDiscuss, "function");
+    assert.equal(typeof sdk.demand.runPrd, "function");
+    assert.equal(typeof sdk.demand.buildEvidenceDispatchPlan, "function");
+    assert.equal(typeof sdk.demand.dispatchEvidence, "function");
+    assert.equal(sdk.demand.schemaVersion, "1.0");
     assert.equal(typeof sdk.packs.resolveProjectContext, "function");
     assert.equal(typeof sdk.packs.validateManifest, "function");
     assert.equal(typeof sdk.acceptance.buildReport, "function");
@@ -80,7 +209,7 @@ describe("yolo sdk", () => {
     assert.equal(typeof sdk.commands.listBridgeWorkflowIds, "function");
     assert.equal(typeof sdk.commands.listNames, "function");
     assert.equal(typeof sdk.commands.renderUsage, "function");
-    assert.equal(sdk.commands.schemaVersion, "1.0");
+    assert.equal(sdk.commands.schemaVersion, "1.1");
     assert.equal(typeof sdk.doctor.buildReport, "function");
     assert.equal(typeof sdk.doctor.formatReportText, "function");
     assert.equal(sdk.doctor.schemaVersion, "1.0");
@@ -106,7 +235,12 @@ describe("yolo sdk", () => {
     assert.equal(typeof sdk.fixtures.inspectFixtureRegistry, "function");
     assert.equal(typeof sdk.fixtures.runFixtureHarness, "function");
     assert.equal(typeof sdk.release.buildPackageInstallSmokePlan, "function");
+    assert.equal(typeof sdk.release.buildReleaseCandidateChangeManifest, "function");
+    assert.equal(typeof sdk.release.buildCleanEnvironmentVerifyPlan, "function");
+    assert.equal(typeof sdk.release.buildDogfoodMatrixReport, "function");
     assert.equal(typeof sdk.release.inspectPackedPackage, "function");
+    assert.equal(typeof sdk.release.classifyReleaseChangeDomain, "function");
+    assert.equal(typeof sdk.release.listDogfoodMatrixScenarios, "function");
     assert.equal(typeof sdk.release.inspectPublicBetaReadiness, "function");
     assert.equal(typeof sdk.release.runPackageInstallSmoke, "function");
     assert.equal(typeof sdk.release.buildControlledBetaReleaseDecisionPlan, "function");
@@ -122,6 +256,9 @@ describe("yolo sdk", () => {
     assert.equal(typeof sdk.release.buildRuntimeBoundaryDecisionPlan, "function");
     assert.equal(typeof sdk.release.buildPublicBetaEvidencePlan, "function");
     assert.equal(typeof sdk.release.runControlledBetaReleaseDecisionGate, "function");
+    assert.equal(typeof sdk.release.runReleaseCandidateGate, "function");
+    assert.equal(typeof sdk.release.readReleaseCandidateChangeManifest, "function");
+    assert.equal(typeof sdk.release.runCleanEnvironmentVerify, "function");
     assert.equal(typeof sdk.release.runOperatorReleaseRunbookGate, "function");
     assert.equal(typeof sdk.release.runOperatorReleaseStateMutation, "function");
     assert.equal(typeof sdk.release.runPostReleaseAuditGate, "function");
@@ -140,7 +277,6 @@ describe("yolo sdk", () => {
     assert.equal(typeof buildRunFinalAnswer, "function");
     assert.equal(typeof buildRunReport, "function");
     assert.equal(typeof buildLifecycleStageReport, "function");
-    assert.equal(typeof writeLifecycleStageReport, "function");
     assert.equal(typeof inspectYoloCheck, "function");
     assert.equal(typeof formatYoloCheckText, "function");
     assert.equal(typeof discoverPackManifests, "function");
@@ -168,12 +304,19 @@ describe("yolo sdk", () => {
     assert.equal(typeof getYoloCommand, "function");
     assert.equal(typeof listYoloCommandNames, "function");
     assert.equal(typeof renderYoloCommandUsage, "function");
-    assert.equal(YOLO_COMMAND_REGISTRY_SCHEMA_VERSION, "1.0");
+    assert.equal(YOLO_COMMAND_REGISTRY_SCHEMA_VERSION, "1.1");
     assert.equal(typeof buildYoloDoctorReport, "function");
     assert.equal(typeof formatYoloDoctorText, "function");
     assert.equal(YOLO_DOCTOR_SCHEMA_VERSION, "1.0");
     assert.equal(typeof buildDiscoveryArtifact, "function");
     assert.equal(typeof runDiscoveryRuntime, "function");
+    assert.equal(typeof buildDemandArtifactGraph, "function");
+    assert.equal(typeof buildDemandSession, "function");
+    assert.equal(typeof inspectDemandReadiness, "function");
+    assert.equal(typeof runDemandBrainstormRuntime, "function");
+    assert.equal(typeof runDemandDiscussRuntime, "function");
+    assert.equal(typeof runDemandPrdRuntime, "function");
+    assert.equal(DEMAND_SESSION_SCHEMA_VERSION, "1.0");
     assert.equal(typeof buildControlledParallelExecutionPlan, "function");
     assert.equal(typeof buildTaskDependencyGraph, "function");
     assert.equal(CONTROLLED_PARALLEL_SCHEMA_VERSION, "1.0");
@@ -220,7 +363,39 @@ describe("yolo sdk", () => {
     assert.equal(typeof runPiExecutionDrillGate, "function");
     assert.equal(typeof runRuntimeBoundaryDecisionGate, "function");
     assert.equal(typeof runPublicBetaEvidenceGate, "function");
+    assert.equal(typeof buildReleaseCandidateChangeManifest, "function");
+    assert.equal(typeof buildCleanEnvironmentVerifyPlan, "function");
+    assert.equal(typeof buildDogfoodMatrixReport, "function");
+    assert.equal(typeof classifyReleaseChangeDomain, "function");
+    assert.equal(typeof runReleaseCandidateGate, "function");
+    assert.equal(typeof readReleaseCandidateChangeManifest, "function");
+    assert.equal(typeof runCleanEnvironmentVerify, "function");
     assert.ok(supportedConditionTypes().includes("function_contains_text"));
+  });
+
+  test("stable and experimental SDK facades split compatibility promises", () => {
+    const sdk = createYoloSdk();
+
+    assert.deepEqual(Object.keys(sdk.stable).sort(), [
+      "agents",
+      "config",
+      "contract",
+      "paths",
+      "prd",
+      "provider",
+      "review",
+      "task",
+    ]);
+    assert.equal(typeof sdk.stable.prd.preflightPrd, "function");
+    assert.equal(typeof sdk.stable.provider.detectModelProvider, "function");
+    assert.equal(Object.hasOwn(sdk.stable, "runtime"), false);
+    assert.equal(Object.hasOwn(sdk.stable, "release"), false);
+    assert.equal(Object.hasOwn(sdk.stable, "pi"), false);
+
+    assert.equal(typeof sdk.experimental.runtime.runRunner, "function");
+    assert.equal(typeof sdk.experimental.release.runReleaseCandidateGate, "function");
+    assert.equal(typeof sdk.experimental.pi.run, "function");
+    assert.equal(Object.hasOwn(sdk.experimental.prd, "preflightPrd"), false);
   });
 
   test("keeps package root separate from project state root", () => {
@@ -318,13 +493,37 @@ describe("yolo sdk", () => {
     assert.ok(result.discovery.blockers.some((blocker) => blocker.code === "DISCOVERY_SUCCESS_CRITERIA_PRESENT"));
   });
 
+  test("PI agent run API marks plan-only work as not run", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-pi-plan-only-"));
+    try {
+      const result = await runPiAgent({
+        requirement: "For store managers, build inventory alerts in src/inventory/alerts.js so an alert appears when stock is below threshold; success criteria: alert appears below threshold.",
+        title: "Inventory alerts",
+        outputDir: "state/dry-run/pi-plan-test",
+      }, {
+        yoloRoot: YOLO_DIR,
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        execute: false,
+      });
+
+      assert.equal(result.status, "not_run");
+      const piResult = result as { code: string; exit_code: number; plan: { input_source: string } };
+      assert.equal(piResult.code, "PI_PLAN_NOT_EXECUTED");
+      assert.equal(piResult.exit_code, 2);
+      assert.equal(piResult.plan.input_source, "requirement");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("runner runtime reports missing PRD without spawning a CLI process", async () => {
     const result = await runRunnerRuntime();
     assert.equal(result.status, "error");
     assert.equal(result.code, "MISSING_PRD_PATH");
   });
 
-  test("runner runtime preflight blocks weak PRDs with migration advice before execution", async () => {
+  test("runner runtime fails closed before weak PRDs can bypass lifecycle guard", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-runner-preflight-"));
     try {
       const prdPath = join(root, "prd.json");
@@ -360,12 +559,108 @@ describe("yolo sdk", () => {
       const result = await runRunnerRuntime({ prdPath });
 
       assert.equal(result.status, "error");
-      assert.equal(result.code, "PRD_CONTRACT_BLOCKED");
-      assert.equal(result.migration.available, true);
-      assert.equal(result.migration.would_fix_contract, true);
-      assert.equal(result.remediation_plan.action, "AUTO_REMEDIATE");
-      assert.equal(result.remediation_plan.automation_can_continue, true);
-      assert.ok(result.next_actions.some((action) => action.includes("--apply")));
+      assert.equal(result.code, "LIFECYCLE_NOT_INITIALIZED");
+      assert.equal(result.exit_code, 2);
+      assert.ok(result.lifecycle_guard);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("runner runtime adapter evidence uses PRD platform during collect-evidence", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-runner-adapter-platform-"));
+    const stateRoot = join(root, ".yolo");
+    try {
+      const prdPath = join(stateRoot, "data/prd/current/ui-weapp.json");
+      mkdirSync(join(stateRoot, "data/prd/current"), { recursive: true });
+      mkdirSync(join(stateRoot, "adapters"), { recursive: true });
+      writeFileSync(join(stateRoot, "adapters/local-browser.manifest.json"), JSON.stringify({
+        schema: "yolo.manifest.v1",
+        id: "local-browser",
+        kind: "acceptance_adapter",
+        description: "Local browser adapter",
+        inputs: ["url", "prd"],
+        outputs: ["ui_evidence"],
+        commands: [{
+          command: "node tools/write-evidence.cjs",
+          evidence_path: ".yolo/state/evidence/ui/latest.json",
+          platform: "h5",
+        }],
+        evidence: ["screenshot", "runtime_log"],
+        capabilities: ["page_reachable", "screenshot", "runtime_errors"],
+        applies_to: ["ui", "weapp"],
+      }, null, 2), "utf8");
+      writeFileSync(prdPath, JSON.stringify({
+        version: "2.0",
+        id: "PRD-20260605-WEAPP-UI",
+        title: "Weapp UI evidence",
+        platform: "weapp",
+        project: { name: "test", language: "typescript", platform: "weapp" },
+        generated_by: "yolo-review-agent",
+        generated_at: "2026-06-05T00:00:00.000Z",
+        base_commit: "abcdef0",
+        ...approvedDemandFields(["src/pages/inventory.tsx"]),
+        requirements: [tracedRequirement("REQ-UI-001", "User can inspect the inventory page.")],
+        designs: [{ id: "DES-UI-001", text: "Use platform-specific UI evidence." }],
+        tasks: [{
+          id: "FEAT-UI-001",
+          title: "Build inventory page",
+          priority: "P1",
+          type: "feature",
+          task_kind: "atomic_fix",
+          status: "pending",
+          requirement_ids: ["REQ-UI-001"],
+          design_ids: ["DES-UI-001"],
+          scope: { targets: [{ file: "src/pages/inventory.tsx" }] },
+          state_matrix: [{ state: "loaded" }],
+          evidence_plan: [{ type: "screenshot" }],
+          acceptance_criteria: ["Inventory page renders on the target platform."],
+          post_conditions: [{
+            id: "POST-PAGE",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "src/pages/inventory.tsx" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          }],
+        }],
+      }, null, 2), "utf8");
+      writeLifecycleStageReport("discovery", { status: "success" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      writeLifecycleStageReport("roadmap", { status: "success" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      writeLifecycleStageReport("prd", { status: "success", prd_path: prdPath, artifacts: [prdPath] }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      const check = inspectYoloCheck({ prdPath, projectRoot: root, stateRoot, writeLifecycle: true });
+      assert.notEqual(check.status, "blocked");
+
+      const result = await runRunnerRuntime({
+        prdPath,
+        projectRoot: root,
+        stateRoot,
+        dryRun: true,
+        collectEvidence: true,
+      });
+
+      assert.equal(result.status, "error");
+      assert.equal(result.code, "ADAPTER_COMMAND_PLATFORM_MISMATCH");
+      assert.equal(result.adapter_evidence.required_platform, "weapp");
+      assert.equal(result.adapter_evidence.platform_coverage.command_blockers[0].command_platforms[0], "h5");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -390,6 +685,11 @@ describe("yolo sdk", () => {
             type: "file_exists",
             severity: "FAIL",
             params: { file: "src/pages/inventory-alerts.tsx" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           }],
         }],
       }), "utf8");
@@ -399,6 +699,7 @@ describe("yolo sdk", () => {
         output: prdPath,
         title: "Inventory alerts",
         projectRoot: root,
+        demandContract: approvedDemandFields(["src/pages/inventory-alerts.tsx"]),
       });
       assert.equal(generated.status, "success");
 
@@ -447,14 +748,42 @@ describe("yolo sdk", () => {
             type: "file_exists",
             severity: "FAIL",
             params: { file: "src/service.ts" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           }],
         }],
       }), "utf8");
-      writeFileSync(join(stateRoot, "lifecycle/run-report.json"), JSON.stringify({
+      const runEvidencePath = join(root, "state/reports/pi-lifecycle/run-report.json");
+      mkdirSync(dirname(runEvidencePath), { recursive: true });
+      writeFileSync(runEvidencePath, JSON.stringify({ status: "success" }), "utf8");
+      const reviewEvidencePath = join(root, "state/review/pi-lifecycle/review-report.json");
+      mkdirSync(dirname(reviewEvidencePath), { recursive: true });
+      writeFileSync(reviewEvidencePath, JSON.stringify({ status: "success", findings: [] }), "utf8");
+      writeLifecycleStageReport("run", {
         status: "success",
         summary: { failed: 0, blocked: 0 },
-      }), "utf8");
-      writeFileSync(join(stateRoot, "lifecycle/review-report.json"), JSON.stringify({ findings: [] }), "utf8");
+        evidence: [{ path: "state/reports/pi-lifecycle/run-report.json" }],
+      }, {
+        projectRoot: root,
+        stateRoot,
+        source: "sdk-test",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      writeLifecycleStageReport("review-fix", {
+        status: "success",
+        findings: [],
+        evidence: [{ path: "state/review/pi-lifecycle/review-report.json" }],
+      }, {
+        projectRoot: root,
+        stateRoot,
+        source: "sdk-test",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
 
       const acceptance = await runPiRuntime("acceptance", { prdPath, projectRoot: root, stateRoot });
       assert.equal(acceptance.status, "success");
@@ -475,6 +804,8 @@ describe("yolo sdk", () => {
   test("PRD generation injects target coverage when findings only include generic gates", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-pi-target-coverage-"));
     try {
+      mkdirSync(join(root, "src/lib"), { recursive: true });
+      writeFileSync(join(root, "src/lib/format-label.ts"), "export function formatLabel(value: string) { return value.trim(); }\n", "utf8");
       const findingsPath = join(root, "findings.json");
       const prdPath = join(root, "prd.json");
       writeFileSync(findingsPath, JSON.stringify({
@@ -482,9 +813,9 @@ describe("yolo sdk", () => {
           id: "DEV-001",
           severity: "HIGH",
           kind: "atomic_fix",
-          type: "service_fix",
-          description: "Fix inventory alert logic",
-          files: ["src/services/inventory-alerts.ts:10-20"],
+          type: "formatter_fix",
+          description: "Update label formatter trimming logic",
+          files: ["src/lib/format-label.ts:1-1"],
           post_conditions: [{
             id: "POST-TSC",
             type: "no_new_type_errors",
@@ -497,13 +828,40 @@ describe("yolo sdk", () => {
       const generated = await runPiRuntime("prd.generate", {
         findingsPath,
         output: prdPath,
-        title: "Inventory alerts",
+        title: "Label formatter",
         projectRoot: root,
+        demandContract: approvedDemandFields(["src/lib/format-label.ts"]),
       });
       assert.equal(generated.status, "success");
 
       const contract = await runPiRuntime("prd.contract_gate", { prdPath });
       assert.equal(contract.status, "success");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("audit-generated PRDs keep target facts as candidates until human verification", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-audit-generated-prd-"));
+    const sdk = createYoloSdk({ projectRoot: root });
+    try {
+      const result = sdk.prd.convertAuditToPrd({
+        findings: [{
+          id: "AUDIT-001",
+          severity: "HIGH",
+          kind: "atomic_fix",
+          type: "formatter_fix",
+          description: "Update label formatter trimming logic",
+          files: ["src/lib/format-label.ts"],
+        }],
+      }, { output: join(root, "prd.json"), force: true });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.prd.source, "audit_generated");
+      assert.equal(result.prd.demand.approval.approved, false);
+      assert.equal(result.prd.demand.approval.effective_for_prd, false);
+      assert.deepEqual(result.prd.demand.project_facts.target_files.map((fact) => fact.status), ["candidate"]);
+      assert.equal(result.prd.demand.project_facts.target_files[0].needs_verification, true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -550,12 +908,20 @@ describe("yolo sdk", () => {
       version: "2.0",
       tasks: [{
         ...baseTask,
-        post_conditions: [{
-          id: "POST-FILE",
-          type: "file_exists",
-          severity: "FAIL",
-          params: { file: "src/pages/inventory-alerts.tsx" },
-        }],
+        post_conditions: [
+          {
+            id: "POST-FILE",
+            type: "file_exists",
+            severity: "FAIL",
+            params: { file: "src/pages/inventory-alerts.tsx" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
       }],
     });
     assert.equal(executable.blocks_execution, false);
@@ -592,12 +958,20 @@ describe("yolo sdk", () => {
       version: "2.0",
       tasks: [{
         ...baseTask,
-        post_conditions: [{
-          id: "POST-PAGE",
-          type: "file_exists",
-          severity: "FAIL",
-          params: { file: "src/pages/inventory-alerts.tsx" },
-        }],
+        post_conditions: [
+          {
+            id: "POST-PAGE",
+            type: "file_exists",
+            severity: "FAIL",
+            params: { file: "src/pages/inventory-alerts.tsx" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
       }],
     });
     assert.equal(partial.blocks_execution, true);
@@ -622,6 +996,12 @@ describe("yolo sdk", () => {
             type: "target_file_modified",
             severity: "FAIL",
             params: { file: "src/services/inventory-alerts.ts" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           },
         ],
       }],
@@ -725,6 +1105,8 @@ describe("yolo sdk", () => {
   test("PRD preflight passes runner readiness for strict executable target gates", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-prd-preflight-pass-"));
     try {
+      mkdirSync(join(root, "src/lib"), { recursive: true });
+      writeFileSync(join(root, "src/lib/format-label.ts"), "export function formatLabel(value: string) { return value.trim(); }\n", "utf8");
       const prdPath = join(root, "prd.json");
       writeFileSync(prdPath, JSON.stringify({
         version: "2.0",
@@ -734,23 +1116,29 @@ describe("yolo sdk", () => {
         generated_by: "yolo-review-agent",
         generated_at: "2026-05-24T00:00:00.000Z",
         base_commit: "abcdef0",
-        requirements: [{ id: "REQ-AUTO-001", text: "Fix inventory alerts" }],
+        ...approvedDemandFields(["src/lib/format-label.ts"]),
+        requirements: [tracedRequirement("REQ-AUTO-001", "Update label formatter")],
         designs: [{ id: "DES-AUTO-001", text: "Use executable target coverage gates." }],
         tasks: [{
           id: "FIX-AUTO-001",
-          title: "Fix inventory alerts",
+          title: "Update label formatter",
           priority: "P2",
           type: "bugfix",
           task_kind: "atomic_fix",
           status: "pending",
           requirement_ids: ["REQ-AUTO-001"],
           design_ids: ["DES-AUTO-001"],
-          scope: { targets: [{ file: "src/services/inventory-alerts.ts" }] },
+          scope: { targets: [{ file: "src/lib/format-label.ts" }] },
           post_conditions: [{
             id: "POST-TARGET",
             type: "target_file_modified",
             severity: "FAIL",
-            params: { file: "src/services/inventory-alerts.ts" },
+            params: { file: "src/lib/format-label.ts" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           }],
         }],
       }), "utf8");
@@ -770,6 +1158,8 @@ describe("yolo sdk", () => {
   test("PRD preflight blocks weak spec governance before runner execution", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-prd-preflight-spec-"));
     try {
+      mkdirSync(join(root, "src/lib"), { recursive: true });
+      writeFileSync(join(root, "src/lib/format-label.ts"), "export function formatLabel(value: string) { return value.trim(); }\n", "utf8");
       const prdPath = join(root, "prd.json");
       writeFileSync(prdPath, JSON.stringify({
         version: "2.0",
@@ -779,19 +1169,27 @@ describe("yolo sdk", () => {
         generated_by: "yolo-review-agent",
         generated_at: "2026-05-24T00:00:00.000Z",
         base_commit: "abcdef0",
+        ...approvedDemandFields(["src/lib/format-label.ts"]),
+        requirements: [tracedRequirement("REQ-SPEC-001", "Update label formatter")],
+        designs: [{ id: "DES-SPEC-001", text: "Use executable target coverage gates." }],
         tasks: [{
           id: "FIX-SPEC-001",
-          title: "Fix inventory alerts",
+          title: "Update label formatter",
           priority: "P2",
           type: "bugfix",
           task_kind: "atomic_fix",
           status: "pending",
-          scope: { targets: [{ file: "src/services/inventory-alerts.ts" }] },
+          scope: { targets: [{ file: "src/lib/format-label.ts" }] },
           post_conditions: [{
             id: "POST-TARGET",
             type: "target_file_modified",
             severity: "FAIL",
-            params: { file: "src/services/inventory-alerts.ts" },
+            params: { file: "src/lib/format-label.ts" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           }],
         }],
       }), "utf8");
@@ -811,7 +1209,7 @@ describe("yolo sdk", () => {
     }
   });
 
-  test("runner runtime reports spec governance blocks separately from contract blocks", async () => {
+  test("runner runtime fails closed before spec-weak PRDs can bypass lifecycle guard", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-runner-spec-"));
     try {
       const prdPath = join(root, "prd.json");
@@ -836,6 +1234,11 @@ describe("yolo sdk", () => {
             type: "target_file_modified",
             severity: "FAIL",
             params: { file: "src/services/inventory-alerts.ts" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           }],
         }],
       }), "utf8");
@@ -843,10 +1246,9 @@ describe("yolo sdk", () => {
       const result = await runRunnerRuntime({ prdPath });
 
       assert.equal(result.status, "error");
-      assert.equal(result.code, "PRD_SPEC_GOVERNANCE_BLOCKED");
-      assert.equal(result.spec_governance.blocks_execution, true);
-      assert.equal(result.remediation_plan.action, "AUTO_REMEDIATE");
-      assert.ok(result.next_actions.some((action) => action.includes("requirement_ids")));
+      assert.equal(result.code, "LIFECYCLE_NOT_INITIALIZED");
+      assert.equal(result.exit_code, 2);
+      assert.ok(result.lifecycle_guard);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -934,20 +1336,20 @@ describe("yolo sdk", () => {
     }
   });
 
-  test("runner module is import-safe for SDK runtime use", () => {
+  test("runner module does not export bare run/runCli — use SDK runtime instead", () => {
     const output = execFileSync(process.execPath, [
       "-e",
-      "import('./dist/runner.js').then((m)=>console.log(typeof m.run))",
+      "import('./dist/runner.js').then((m)=>console.log(typeof m.run, typeof m.runCli))",
     ], { cwd: YOLO_DIR, encoding: "utf8" }).trim();
 
-    assert.equal(output, "function");
+    assert.equal(output, "undefined undefined");
   });
 
   test("PM, PRD conversion, PRD preflight, and PRD validator modules are import-safe", () => {
     const output = execFileSync(process.execPath, [
       "-e",
       [
-        "Promise.all([import('./dist/src/pm/index.js'), import('./dist/src/prd/audit-to-prd.js'), import('./dist/src/prd/validate.js'), import('./dist/src/prd/migration.js'), import('./dist/src/prd/preflight.js')])",
+        "Promise.all([import('./dist/src/demand/findings-generator.js'), import('./dist/src/prd/audit-to-prd.js'), import('./dist/src/prd/validate.js'), import('./dist/src/prd/migration.js'), import('./dist/src/prd/preflight.js')])",
         ".then(([pm,audit,validate,migrate,preflight])=>console.log([typeof pm.generateFindingsFromRequirement, typeof audit.convertAuditToPrd, typeof validate.validatePrdPath, typeof migrate.migratePrdGates, typeof migrate.createPrdMigrationAdvice, typeof preflight.preflightPrd].join(',')))",
       ].join(""),
     ], { cwd: YOLO_DIR, encoding: "utf8" }).trim();
@@ -958,12 +1360,15 @@ describe("yolo sdk", () => {
   test("PI agent execute mode stops at the first failed action", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-pi-agent-"));
     try {
+      const stateRoot = join(root, ".yolo");
+      const prdPath = writePiRunnablePrdFixture(root, stateRoot, { id: "PRD-20260530-PI-FIRST-FAILED" });
       const seen = [];
       const result = await runPiAgent({
-        prdPath: "prd.json",
+        prdPath,
       }, {
         yoloRoot: root,
         projectRoot: root,
+        stateRoot,
         execute: true,
         executor: async (action) => {
           seen.push(action.id);
@@ -983,18 +1388,57 @@ describe("yolo sdk", () => {
     }
   });
 
+  test("PI agent execute mode stops on camelCase dryRun observations", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-pi-agent-dryrun-"));
+    try {
+      const stateRoot = join(root, ".yolo");
+      const prdPath = writePiRunnablePrdFixture(root, stateRoot, { id: "PRD-20260530-PI-DRYRUN" });
+      const seen = [];
+      const result = await runPiAgent({
+        prdPath,
+      }, {
+        yoloRoot: root,
+        projectRoot: root,
+        stateRoot,
+        execute: true,
+        executor: async (action) => {
+          seen.push(action.id);
+          return {
+            status: "success",
+            summary: action.id,
+            dryRun: action.id === "pi.execute.runner",
+          };
+        },
+      });
+
+      assert.equal(result.status, "dry_run");
+      const dryResult = result as { code: string; exit_code: number };
+      assert.equal(dryResult.code, "PI_DRY_RUN_READY");
+      assert.equal(dryResult.exit_code, 2);
+      assert.equal(result.stop_condition, "dry_run_after_runner");
+      assert.ok(seen.includes("pi.execute.runner"));
+      assert.ok(!seen.includes("pi.review.scan"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("PI CLI accepts --prd value form and skips requirement generation", () => {
-    const output = execFileSync(process.execPath, [
+    const result = spawnSync(process.execPath, [
       join(YOLO_DIR, "dist/bin/yolo-pi.js"),
       "--prd",
       "data/prd/current/prd-yolo-p40-progress-dashboard.json",
       "--json",
     ], { cwd: YOLO_DIR, encoding: "utf8" });
-    const result = JSON.parse(output);
+    assert.equal(result.stderr, "");
+    assert.equal(result.status, 2);
+    const payload = JSON.parse(result.stdout);
 
-    assert.equal(result.plan.input_source, "prd");
-    assert.ok(!result.plan.actions.some((action) => action.id === "pi.findings.generate"));
-    assert.ok(result.plan.actions.some((action) => action.id === "pi.execute.runner"));
+    assert.equal(payload.status, "not_run");
+    assert.equal(payload.code, "PI_PLAN_NOT_EXECUTED");
+    assert.equal(payload.plan.input_source, "prd");
+    assert.ok(!payload.plan.actions.some((action) => action.id === "pi.findings.generate"));
+    assert.ok(payload.plan.actions.some((action) => action.id === "pi.execute.runner"));
   });
 
   test("loads SDK config from an explicit config path", () => {
@@ -1175,6 +1619,58 @@ describe("yolo sdk", () => {
     } finally {
       rmSync(rootA, { recursive: true, force: true });
       rmSync(rootB, { recursive: true, force: true });
+    }
+  });
+
+  test("R5 SDK lifecycle.writeStageReport rejects skipSequenceCheck when writing out-of-order stage", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-sdk-r5-"));
+    const stateRoot = join(root, ".yolo");
+    try {
+      const sdk = createYoloSdk({ projectRoot: root, stateRoot, ensureCanonicalDirs: true });
+
+      // Write the first few lifecycle stages so we're at a known position
+      writeLifecycleStageReport("idea", { status: "completed" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      writeLifecycleStageReport("discovery", { status: "completed" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      writeLifecycleStageReport("setup", { status: "completed" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      writeLifecycleStageReport("roadmap", { status: "completed" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+
+      // Now try to write "delivery" (stage 10) via SDK with skipSequenceCheck:true —
+      // SDK must strip the flag so sequence validation catches the gap (stages 5-9 missing)
+      assert.throws(
+        () => sdk.lifecycle.writeStageReport("delivery", { status: "success" }, { skipSequenceCheck: true }),
+        /Cannot write delivery report: prior stages not completed/i,
+      );
+
+      // Verify the direct import WITH skipSequenceCheck still works (internal path intact)
+      const result = writeLifecycleStageReport("delivery", { status: "success" }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      assert.equal(result.stage, "delivery");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

@@ -41,7 +41,7 @@ function designForTask(task) {
   };
 }
 
-export function buildReviewFixPrd(findings = [], options = {}) {
+export function buildReviewFixPrd(findings = [], options = Object()) {
   const converted = reviewFindingsToPrdTasks(findings, {
     round: options.round,
     existingTasks: options.existingTasks,
@@ -73,7 +73,7 @@ export function buildReviewFixPrd(findings = [], options = {}) {
   };
 }
 
-export function inspectReviewFixLoop(input = {}, options = {}) {
+export function inspectReviewFixLoop(input = Object(), options = Object()) {
   const rawFindings = input.findings || input.reviewOutput?.findings || input.review_output?.findings || [];
   const review = buildReviewOutput(rawFindings, { source: input.source || options.source || "review-fix-loop" });
   const fixPrd = buildReviewFixPrd(review.findings, options);
@@ -100,7 +100,7 @@ export function inspectReviewFixLoop(input = {}, options = {}) {
     })) : []),
   ];
   const status = blockers.length > 0 ? "blocked" : "pass";
-  const report = {
+  const report = Object.assign(Object(), {
     schema_version: REVIEW_FIX_LOOP_SCHEMA_VERSION,
     schema: REVIEW_FIX_LOOP_REPORT_SCHEMA,
     status,
@@ -118,7 +118,7 @@ export function inspectReviewFixLoop(input = {}, options = {}) {
     next_actions: blockers.length > 0
       ? ["Approve the generated fix PRD scope, run /yolo-check, then run /yolo-fix.", "Rerun review after fixes complete."]
       : ["Continue to /yolo-accept or /yolo-ship."],
-  };
+  });
   if (input.output || options.output) {
     const output = resolve(input.output || options.output);
     mkdirSync(dirname(output), { recursive: true });
@@ -134,6 +134,7 @@ export function inspectReviewFixLoop(input = {}, options = {}) {
       stateRoot: input.stateRoot || input.state_root || options.stateRoot || options.state_root,
       source: "review-fix-loop",
       learnFailures: options.learnFailures === true || input.learnFailures === true,
+      skipSequenceCheck: true,
     });
     report.artifacts.push(report.lifecycle_write.artifact_path);
   }

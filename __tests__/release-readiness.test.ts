@@ -1,14 +1,100 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { refreshMemoryCenter } from "../src/runtime/memory/center.js";
 import {
   inspectPackageReadiness,
   inspectPublicBetaReadiness,
+  inspectYoloReliabilityReadiness,
+  REQUIRED_RELIABILITY_INCIDENT_IDS,
 } from "../src/release/readiness.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 
 describe("release readiness", () => {
+  test("inspectYoloReliabilityReadiness blocks missing incident evidence", () => {
+    const result = inspectYoloReliabilityReadiness();
+
+    assert.equal(result.status, "blocked");
+    assert.ok(result.blockers.some((item) => item.code === "YOLO_RELIABILITY_INCIDENT_EVIDENCE_PRESENT"));
+    assert.ok(result.blockers.some((item) => item.code === "YOLO_RELIABILITY_INCIDENT_COVERAGE"));
+  });
+
+  test("inspectYoloReliabilityReadiness blocks fake success reports and contaminated external remediation", () => {
+    const result = inspectYoloReliabilityReadiness({
+      incidentEvidence: {
+        incidents: REQUIRED_RELIABILITY_INCIDENT_IDS.map((id) => ({ id, status: "pass", evidence: `fixtures/${id}.json` })),
+      },
+      runReports: [{
+        run_id: "run-bad",
+        status: "error",
+        summary: { task_success_rate: 100, run_success_rate: 100 },
+      }],
+      externalRemediation: [{ id: "manual-claude-p", counts_as_yolo_success: true }],
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.ok(result.blockers.some((item) => item.code === "YOLO_RELIABILITY_NO_FAKE_SUCCESS_REPORTS"));
+    assert.ok(result.blockers.some((item) => item.code === "YOLO_RELIABILITY_EXTERNAL_REMEDIATION_ISOLATED"));
+  });
+
+  test("伪造 PASS 但无文件变更会计入 fake_success", () => {
+    const result = inspectYoloReliabilityReadiness({
+      incidentEvidence: {
+        incidents: REQUIRED_RELIABILITY_INCIDENT_IDS.map((id) => ({ id, status: "pass", evidence: `fixtures/${id}.json` })),
+      },
+      runReports: [
+        {
+          run_id: "run-fake-pass-no-change",
+          status: "PASS",
+          summary: {
+            task_success_rate: 100,
+            run_success_rate: 100,
+            files_changed_total: 0,
+          },
+          changed_files: [],
+        },
+        {
+          run_id: "run-real-pass",
+          status: "success",
+          summary: {
+            task_success_rate: 100,
+            run_success_rate: 100,
+            files_changed_total: 2,
+          },
+          changed_files: ["src/inventory-alerts.ts", "__tests__/inventory-alerts.test.ts"],
+        },
+      ],
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.summary.fake_success, 1);
+    assert.equal(result.summary.fake_success_rate, 50);
+    const fakeSuccessCheck = result.checks.find((item) => item.code === "YOLO_RELIABILITY_NO_FAKE_SUCCESS_REPORTS");
+    assert.equal(fakeSuccessCheck.passed, false);
+    assert.equal(fakeSuccessCheck.fake_success_reports[0].run_id, "run-fake-pass-no-change");
+    assert.deepEqual(fakeSuccessCheck.fake_success_reports[0].reasons, ["pass_without_file_changes"]);
+  });
+
+  test("inspectYoloReliabilityReadiness passes complete project-independent incident evidence", () => {
+    const result = inspectYoloReliabilityReadiness({
+      incidentEvidence: {
+        incidents: REQUIRED_RELIABILITY_INCIDENT_IDS.map((id) => ({ id, status: "fixed", evidence: `fixtures/${id}.json` })),
+      },
+      runReports: [{
+        run_id: "run-good",
+        status: "success",
+        summary: { task_success_rate: 100, run_success_rate: 100 },
+      }],
+      externalRemediation: [{ id: "manual-claude-p", counts_as_yolo_success: false }],
+    });
+
+    assert.equal(result.status, "pass", JSON.stringify(result.blockers, null, 2));
+    assert.equal(result.blocks_release, false);
+    assert.equal(result.summary.fake_success, 0);
+  });
+
   test("inspectPackageReadiness blocks public release while package is private", () => {
     const result = inspectPackageReadiness({
       name: "yolo",
@@ -57,6 +143,23 @@ describe("release readiness", () => {
     assert.ok(result.checks.some((item) => item.code === "API_BOUNDARY_VERSION_POLICY" && item.passed === true));
     assert.ok(result.checks.some((item) => item.code === "API_BOUNDARY_SDK_SURFACE" && item.passed === true));
     assert.ok(result.checks.some((item) => item.code === "FIXTURE_REGISTRY_PASS" && item.passed === true));
+    assert.ok(result.checks.some((item) => item.code === "YOLO_RELIABILITY_INCIDENT_EVIDENCE_PRESENT" && item.passed === false));
+    assert.ok(result.blockers.some((item) => item.code === "YOLO_RELIABILITY_INCIDENT_COVERAGE"));
     assert.ok(result.blockers.some((item) => item.code === "PACKAGE_PRIVATE_RELEASE_BLOCK"));
+  });
+
+  test("release docs keep manual external, billable, public dogfood, and private blockers explicit", () => {
+    refreshMemoryCenter({ projectRoot: YOLO_DIR, stateRoot: YOLO_DIR });
+    const docs = [
+      "docs/api-reference.md",
+      "docs/public-sdk-contract.md",
+      "docs/memory/CURRENT_STATUS.md",
+    ].map((relativePath) => readFileSync(resolve(YOLO_DIR, relativePath), "utf8")).join("\n");
+
+    assert.match(docs, /private: true/);
+    assert.match(docs, /manual external|external publish/i);
+    assert.match(docs, /billable provider|billable execution/i);
+    assert.match(docs, /public dogfood/i);
+    assert.doesNotMatch(docs, /release-ready now|ready for public release|stable release is ready/i);
   });
 });

@@ -22,20 +22,20 @@ function asArray(value) {
   return [value];
 }
 
-function stateRootCandidates(options = {}) {
+function stateRootCandidates(options = Object()) {
   if (options.stateRoot || options.state_root) return [resolve(options.stateRoot || options.state_root)];
   const roots = unique([
     ...asArray(options.stateRoots || options.state_roots),
     ...asArray(options.stateRootCandidates || options.state_root_candidates),
-  ].map((root) => resolve(root)));
+  ].map((root) => resolve(String(root)))).map(String);
   const projectRoots = unique([
     ...asArray(options.projectRoots || options.project_roots),
     options.projectRoot || options.project_root || options.cwd || process.cwd(),
-  ].map((root) => resolve(root)));
+  ].map((root) => resolve(String(root)))).map(String);
   const yoloRoots = unique([
     ...asArray(options.yoloRoots || options.yolo_roots),
     options.yoloRoot || options.yolo_root || options.packageRoot || options.package_root,
-  ].filter(Boolean).map((root) => resolve(root)));
+  ].filter(Boolean).map((root) => resolve(String(root)))).map(String);
   return unique([
     ...roots,
     ...projectRoots.map((root) => join(root, ".yolo")),
@@ -44,8 +44,8 @@ function stateRootCandidates(options = {}) {
   ]);
 }
 
-function stateRoot(options = {}) {
-  const candidates = stateRootCandidates(options);
+function stateRoot(options = Object()) {
+  const candidates = stateRootCandidates(options).map(String);
   return candidates.find((root) => existsSync(join(root, "lifecycle", "status.json"))) || candidates[0];
 }
 
@@ -83,13 +83,13 @@ function countStages(stages = []) {
   return counts;
 }
 
-function reportStatus(report = {}) { return clean(report.status || report.verdict || report.outcome).toLowerCase() || "unknown"; }
+function reportStatus(report = Object()) { return clean(report.status || report.verdict || report.outcome).toLowerCase() || "unknown"; }
 
-function reportStageId(report = {}) {
+function reportStageId(report = Object()) {
   return typeof report.stage === "object" && report.stage ? clean(report.stage.id) : clean(report.stage_id || report.stageId || report.stage);
 }
 
-function reportBlockers(report = {}) {
+function reportBlockers(report = Object()) {
   const blocked = (items) => (Array.isArray(items) ? items.filter((item) => item.status === "blocked") : []);
   const raw = [
     ...(Array.isArray(report.blockers) ? report.blockers : []),
@@ -109,7 +109,7 @@ function reportBlockers(report = {}) {
   );
 }
 
-function reportEvidence(report = {}) {
+function reportEvidence(report = Object()) {
   return [
     ...(Array.isArray(report.evidence) ? report.evidence : []),
     ...(Array.isArray(report.artifacts) ? report.artifacts.map((path) => ({ path })) : []),
@@ -118,7 +118,7 @@ function reportEvidence(report = {}) {
   ].filter(Boolean);
 }
 
-function reportTimestamp(report = {}, filePath = "") {
+function reportTimestamp(report = Object(), filePath = "") {
   return clean(report.updated_at || report.completed_at || report.created_at || report.timestamp) || statSync(filePath).mtime.toISOString();
 }
 
@@ -157,12 +157,12 @@ function readEvents(root, limit) {
         .map((line) => ({ path, event: parseJson(line) }))
         .filter(({ event }) => event && typeof event === "object" && !Array.isArray(event)),
     )
-    .map(({ path, event }) => ({ ...event, path: normalizePath(root, path) }))
+    .map(({ path, event }) => Object.assign(Object(), event, { path: normalizePath(root, path) }))
     .sort((a, b) => clean(b.created_at || b.timestamp || b.ts).localeCompare(clean(a.created_at || a.timestamp || a.ts)))
     .slice(0, limit);
 }
 
-export function readLifecycleDashboard(options = {}) {
+export function readLifecycleDashboard(options = Object()) {
   const root = stateRoot(options);
   const statusPath = join(root, "lifecycle", "status.json");
   const reportLimit = Number(options.reportLimit || options.report_limit || 5);

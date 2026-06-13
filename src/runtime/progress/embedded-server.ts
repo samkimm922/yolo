@@ -1,6 +1,6 @@
 let progressApiServer = null;
 
-export async function startEmbeddedProgressServer(port, { log = console.log, error = console.error } = {}) {
+export async function startEmbeddedProgressServer(port, { log = console.log, error = console.error } = Object()) {
   if (progressApiServer) return;
   try {
     const ps = await import("./server.js");
@@ -10,10 +10,11 @@ export async function startEmbeddedProgressServer(port, { log = console.log, err
       log(`[yolo-runner] 内嵌看板已启动: http://localhost:${port}`);
       if (startWatchers) startWatchers();
     }).on("error", (err) => {
-      if (err.code === "EADDRINUSE") {
+      const dynamicError = Object.assign(Object(), err);
+      if (dynamicError.code === "EADDRINUSE") {
         log(`[yolo-runner] port ${port} 已被占用，跳过内嵌看板`);
       } else {
-        error(`[yolo-runner] 内嵌看板启动失败: ${err.message}`);
+        error(`[yolo-runner] 内嵌看板启动失败: ${dynamicError.message}`);
       }
     });
     progressApiServer = server;

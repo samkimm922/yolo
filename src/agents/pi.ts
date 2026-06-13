@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectDiscoveryReadiness } from "../discovery/gate.js";
 import { createLifecycleStateSnapshot } from "../lifecycle/schema.js";
+import { inspectLifecycleGuard } from "../lifecycle/guard.js";
 import { buildTeamDispatchPlan } from "./team-contracts.js";
 
 const DEFAULT_YOLO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -42,7 +43,7 @@ function commandAction({ id, phase, summary, command, args = [], cwd, stdin, cre
   };
 }
 
-function runtimeAction({ id, phase, summary, runtime, params = {}, timeout_ms = 120000 }) {
+function runtimeAction({ id, phase, summary, runtime, params = Object(), timeout_ms = 120000 }) {
   return {
     id,
     phase,
@@ -51,6 +52,8 @@ function runtimeAction({ id, phase, summary, runtime, params = {}, timeout_ms = 
     summary,
     runtime,
     params,
+    artifacts: [],
+    next_actions: [],
     timeout_ms,
   };
 }
@@ -67,7 +70,7 @@ function observeAction({ id, phase, summary, artifacts = [], next_actions = [] }
   };
 }
 
-function resolvePiArtifacts(input = {}, context = {}) {
+function resolvePiArtifacts(input = Object(), context = Object()) {
   const yoloRoot = resolve(context.yoloRoot || DEFAULT_YOLO_ROOT);
   const projectRoot = resolve(context.projectRoot || resolve(yoloRoot, "../.."));
   const stateRoot = resolve(context.stateRoot || context.state_root || yoloRoot);
@@ -97,7 +100,7 @@ function readRequirementForDiscovery(requirement, requirementFile) {
   return "";
 }
 
-function discoveryInputForPi(input = {}, artifacts = {}, requirement = "") {
+function discoveryInputForPi(input = Object(), artifacts = Object(), requirement = "") {
   const sourceRequirement = readRequirementForDiscovery(requirement, artifacts.requirementFile);
   return {
     requirement: sourceRequirement,
@@ -115,7 +118,7 @@ function discoveryInputForPi(input = {}, artifacts = {}, requirement = "") {
   };
 }
 
-function executionConfigForPi(input = {}) {
+function executionConfigForPi(input = Object()) {
   const model = input.model;
   const agentCommand = input.agentCommand || input.agent_command || input.customCommand || input.custom_command;
   const executor = input.executor || input.provider || (agentCommand ? "custom" : null);
@@ -132,7 +135,7 @@ function executionConfigForPi(input = {}) {
   };
 }
 
-function adapterEvidenceConfigForPi(input = {}) {
+function adapterEvidenceConfigForPi(input = Object()) {
   return {
     ...(input.collectEvidence === true || input.collect_evidence === true ? { collectEvidence: true } : {}),
     ...(input.executeAdapter === true || input.execute_adapter === true ? { executeAdapter: true } : {}),
@@ -140,7 +143,7 @@ function adapterEvidenceConfigForPi(input = {}) {
   };
 }
 
-export function createPiRunPlan(input = {}, context = {}) {
+export function createPiRunPlan(input = Object(), context = Object()) {
   const artifacts = resolvePiArtifacts(input, context);
   const mode = input.mode || "dev";
   const title = input.title || "PI implementation";
@@ -250,6 +253,8 @@ export function createPiRunPlan(input = {}, context = {}) {
         requirementFile: artifacts.requirementFile,
         outputFile: artifacts.findingsPath,
         projectRoot: artifacts.projectRoot,
+        stateRoot: artifacts.stateRoot,
+        writeLifecycle: true,
       },
       timeout_ms: context.pmTimeoutMs || 300000,
     }));
@@ -266,6 +271,8 @@ export function createPiRunPlan(input = {}, context = {}) {
         output: artifacts.prdPath,
         title,
         projectRoot: artifacts.projectRoot,
+        stateRoot: artifacts.stateRoot,
+        writeLifecycle: true,
       },
       timeout_ms: context.prdTimeoutMs || 120000,
     }));
@@ -277,7 +284,12 @@ export function createPiRunPlan(input = {}, context = {}) {
       phase: "prd_contract",
       summary: "Validate PRD schema, contract, migration advice, and runner readiness before implementation.",
       runtime: "prd.preflight",
-      params: { prdPath: executablePrdPath },
+      params: {
+        prdPath: executablePrdPath,
+        projectRoot: artifacts.projectRoot,
+        stateRoot: artifacts.stateRoot,
+        writeLifecycle: true,
+      },
       timeout_ms: context.preflightTimeoutMs || context.schemaTimeoutMs || 30000,
     }),
     runtimeAction({
@@ -379,7 +391,7 @@ export function createPiRunPlan(input = {}, context = {}) {
   };
 }
 
-export async function defaultPiExecutor(action, context = {}) {
+export async function defaultPiExecutor(action, context = Object()) {
   if (action.kind === "runtime") {
     const { runPiRuntime } = await import("../runtime/pi-runtimes.js");
     return runPiRuntime(action.runtime, action.params || {}, {
@@ -418,13 +430,21 @@ export async function defaultPiExecutor(action, context = {}) {
   };
 }
 
-export async function runPiAgent(input = {}, options = {}) {
+function isDryRunObservation(observation = Object()) {
+  return observation.dry_run === true ||
+    observation.dryRun === true ||
+    observation.code === "RUNNER_DRY_RUN_READY";
+}
+
+export async function runPiAgent(input = Object(), options = Object()) {
   const plan = createPiRunPlan(input, options);
   if (plan.status !== "success") return plan;
 
   if (options.execute !== true) {
     return {
-      status: "success",
+      status: "not_run",
+      code: "PI_PLAN_NOT_EXECUTED",
+      exit_code: 2,
       summary: "PI plan created; execution was not started.",
       next_actions: ["Pass execute=true or use yolo-pi --execute to run the plan."],
       artifacts: plan.artifacts,
@@ -448,6 +468,39 @@ export async function runPiAgent(input = {}, options = {}) {
   writeState("running", "PI execution started.");
 
   for (const action of plan.actions) {
+    if (action.id === "pi.execute.runner") {
+      const guard = inspectLifecycleGuard({
+        command: "yolo-run",
+        projectRoot: plan.artifacts.projectRoot,
+        stateRoot: plan.artifacts.stateRoot,
+        prdPath: action.params?.prdPath || plan.artifacts.prdPath,
+      });
+      if (guard.status !== "pass") {
+        const observation = {
+          action_id: action.id,
+          status: "error",
+          summary: guard.summary,
+          code: guard.code || "LIFECYCLE_GUARD_BLOCKED",
+          lifecycle_guard: guard,
+          blockers: guard.blockers || [],
+          next_actions: guard.next_actions || ["Run /yolo-next before starting implementation."],
+        };
+        observations.push(observation);
+        writeState("error", observation.summary);
+        return {
+          status: "error",
+          summary: "PI stopped before implementation because lifecycle prerequisites failed.",
+          code: observation.code,
+          next_actions: observation.next_actions,
+          artifacts: plan.artifacts,
+          plan,
+          observations,
+          lifecycle_guard: guard,
+          stop_condition: "lifecycle_guard",
+        };
+      }
+    }
+
     if (action.kind === "observe") {
       observations.push({
         action_id: action.id,
@@ -462,6 +515,21 @@ export async function runPiAgent(input = {}, options = {}) {
 
     const observation = await executor(action, { plan, input, options });
     observations.push({ action_id: action.id, ...observation });
+    if (isDryRunObservation(observation)) {
+      writeState("dry_run", `PI dry-run stopped at ${action.id}.`);
+      return {
+        status: "dry_run",
+        summary: `PI dry-run stopped at ${action.id}.`,
+        code: "PI_DRY_RUN_READY",
+        exit_code: 2,
+        next_actions: observation.next_actions || ["Run without dryRun to continue execution."],
+        artifacts: plan.artifacts,
+        plan,
+        observations,
+        stop_condition: action.id === "pi.execute.runner" ? "dry_run_after_runner" : "dry_run_action",
+        dry_run: true,
+      };
+    }
     writeState(observation.status === "success" ? "running" : "error", observation.summary);
     if (observation.status !== "success") {
       return {
@@ -473,19 +541,6 @@ export async function runPiAgent(input = {}, options = {}) {
         plan,
         observations,
         stop_condition: "first_failed_action",
-      };
-    }
-    if (action.id === "pi.execute.runner" && (observation.dry_run === true || observation.code === "RUNNER_DRY_RUN_READY")) {
-      writeState("success", "PI dry-run stopped after runner readiness passed.");
-      return {
-        status: "success",
-        summary: "PI dry-run stopped after runner readiness passed.",
-        next_actions: observation.next_actions || ["Run without dryRun to start implementation."],
-        artifacts: plan.artifacts,
-        plan,
-        observations,
-        stop_condition: "dry_run_after_runner",
-        dry_run: true,
       };
     }
   }
@@ -501,11 +556,11 @@ export async function runPiAgent(input = {}, options = {}) {
   };
 }
 
-export function createPiAgent(context = {}) {
+export function createPiAgent(context = Object()) {
   return {
     id: "pi",
     label: "Product Implementation Agent",
-    createPlan: (input = {}) => createPiRunPlan(input, context),
-    run: (input = {}, options = {}) => runPiAgent(input, { ...context, ...options }),
+    createPlan: (input = Object()) => createPiRunPlan(input, context),
+    run: (input = Object(), options = Object()) => runPiAgent(input, { ...context, ...options }),
   };
 }

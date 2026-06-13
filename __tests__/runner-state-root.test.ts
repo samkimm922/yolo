@@ -5,8 +5,47 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import createYoloSdk from "../sdk.js";
+import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 
 const YOLO_DIR = fileURLToPath(new URL("..", import.meta.url));
+
+function approvedDemandFields(targetFiles = []) {
+  const quality = {
+    schema_version: "1.0",
+    schema: "yolo.demand.quality.v1",
+    status: "pass",
+    total_score: 100,
+    dimensions: [],
+  };
+  return {
+    source: "approved_demand",
+    demand_contract_required: true,
+    demand: {
+      id: "DEMAND-STATE-ROOT-TEST",
+      approval: { approved: true, effective_for_prd: true },
+      project_facts: {
+        target_files: targetFiles.map((file) => ({ file, status: "verified" })),
+        assumptions: [],
+      },
+      quality_report: quality,
+    },
+    execution_readiness: {
+      level: "L3",
+      afk_ready: true,
+      quality_status: "pass",
+      quality_report: quality,
+    },
+  };
+}
+
+function tracedRequirement(id, text) {
+  return {
+    id,
+    text,
+    demand_trace: { evidence: [`EVID-${id}`] },
+  };
+}
 
 function writeDryRunArtifactPrd(prdPath) {
   writeFileSync(prdPath, `${JSON.stringify({
@@ -18,7 +57,8 @@ function writeDryRunArtifactPrd(prdPath) {
     generated_at: "2026-05-24T00:00:00.000Z",
     base_commit: "abcdef0",
     review_policy: { mode: "disabled" },
-    requirements: [{ id: "REQ-STATE-ROOT-001", text: "Runner execution state must stay out of package root." }],
+    ...approvedDemandFields(["artifacts/state-root-smoke.md"]),
+    requirements: [tracedRequirement("REQ-STATE-ROOT-001", "Runner execution state must stay out of package root.")],
     designs: [{ id: "DES-STATE-ROOT-001", text: "Use caller supplied stateRoot for run artifacts." }],
     tasks: [{
       id: "FIX-STATE-ROOT-001",
@@ -39,9 +79,36 @@ function writeDryRunArtifactPrd(prdPath) {
         type: "file_exists",
         severity: "FAIL",
         params: { file: "artifacts/state-root-smoke.md" },
+      }, {
+        id: "POST-TYPECHECK",
+        type: "no_new_type_errors",
+        severity: "FAIL",
+        params: { command: "npm run typecheck" },
       }],
     }],
   }, null, 2)}\n`, "utf8");
+}
+
+function prepareLifecycle(projectRoot, stateRoot, prdPath) {
+  writeLifecycleStageReport("discovery", { status: "success" }, {
+    projectRoot,
+    stateRoot,
+    writeSessionMemory: false,
+    skipSequenceCheck: true,
+  });
+  writeLifecycleStageReport("roadmap", { status: "success" }, {
+    projectRoot,
+    stateRoot,
+    writeSessionMemory: false,
+    skipSequenceCheck: true,
+  });
+  writeLifecycleStageReport("prd", { status: "success", prd_path: prdPath, artifacts: [prdPath] }, {
+    projectRoot,
+    stateRoot,
+    writeSessionMemory: false,
+    skipSequenceCheck: true,
+  });
+  return inspectYoloCheck({ prdPath, projectRoot, stateRoot, writeLifecycle: true });
 }
 
 describe("runner state root", () => {
@@ -54,6 +121,8 @@ describe("runner state root", () => {
       mkdirSync(join(stateRoot, "data/prd/current"), { recursive: true });
       writeFileSync(join(projectRoot, "README.md"), "# state root smoke\n", "utf8");
       writeDryRunArtifactPrd(prdPath);
+      const check = prepareLifecycle(projectRoot, stateRoot, prdPath);
+      assert.notEqual(check.status, "blocked");
 
       const sdk = createYoloSdk({ projectRoot });
       const result = await sdk.runtime.runRunner({

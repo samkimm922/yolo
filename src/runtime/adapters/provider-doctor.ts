@@ -29,7 +29,7 @@ function normalizeProvider(value) {
   return null;
 }
 
-export function detectModelProvider(options = {}) {
+export function detectModelProvider(options = Object()) {
   const config = options.config || {};
   const commandExists = options.commandExists || defaultCommandExists;
   const customCommand = commandName(config.ai?.custom_command || config.ai?.command);

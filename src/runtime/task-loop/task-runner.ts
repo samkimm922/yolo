@@ -43,7 +43,7 @@ export async function runTaskWithRuntime({
   logTaskFix = noop,
   logTaskError = noop,
   logTaskDone = noop,
-} = {}) {
+} = Object()) {
   const defaultMaxRetry = config.runner.max_retries;
   const taskMaxRetry = task.retry?.max_retries;
   const maxRetry = taskMaxRetry != null
@@ -125,6 +125,7 @@ export async function runTaskWithRuntime({
         spawnProviderInWorktree,
         logTaskBash,
         logProgress,
+        logEvent,
         onWorktreeCreated: (wt) => {
           currentWorktreePath = wt.path;
           currentWorktreeBranch = wt.branch;
@@ -140,7 +141,7 @@ export async function runTaskWithRuntime({
       currentWorktreePath = wt.path;
       currentWorktreeBranch = wt.branch;
 
-      const preGate = await inspectSessionPreGateChecks({
+      const preGate = Object.assign(Object(), await inspectSessionPreGateChecks({
         task,
         attempt,
         wt,
@@ -155,7 +156,7 @@ export async function runTaskWithRuntime({
         logTaskError,
         logTaskBash,
         logTaskDone,
-      });
+      }));
       if (preGate.lastGateError) lastGateError = preGate.lastGateError;
       if (preGate.historyEntry) history.push(preGate.historyEntry);
       if (preGate.action === "return") {

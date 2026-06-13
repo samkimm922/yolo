@@ -2,10 +2,8 @@ import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 
-export function createRunnerError(message, exitCode = 1, details = {}) {
-  const error = new Error(message);
-  error.exitCode = exitCode;
-  Object.assign(error, details);
+export function createRunnerError(message, exitCode = 1, details = Object()) {
+  const error = Object.assign(new Error(message), { exitCode }, details);
   return error;
 }
 
@@ -13,7 +11,7 @@ function cleanOption(value) {
   return String(value ?? "").trim();
 }
 
-export function withExecutionConfig(baseConfig, options = {}) {
+export function withExecutionConfig(baseConfig, options = Object()) {
   const agentCommand = cleanOption(options.agentCommand || options.agent_command || options.customCommand || options.custom_command);
   const executor = cleanOption(options.executor || options.provider || (agentCommand ? "custom" : ""));
   const provider = cleanOption(options.provider || options.executor || (agentCommand ? "custom" : ""));
@@ -28,7 +26,7 @@ export function withExecutionConfig(baseConfig, options = {}) {
   return { ...baseConfig, ai };
 }
 
-export function loadRunnerPrd(prdPath, { runnerError = createRunnerError } = {}) {
+export function loadRunnerPrd(prdPath, { runnerError = createRunnerError } = Object()) {
   const prd = JSON.parse(readFileSync(resolve(prdPath), "utf8"));
   if (!prd.version || prd.version !== "2.0") {
     const message = `[yolo-runner] PRD ${prdPath} 不是 v2 格式（version=${prd.version || "缺失"}）。请先用 convert.js --write 转换。`;
@@ -51,7 +49,7 @@ export function computeTaskTimeout(targets, { rootDir }) {
   return Math.max(480000, Math.min(totalLines * 2500, 1800000));
 }
 
-export function execNodeScript(script, args = [], { toolsRoot, cwd, timeout = 120000 } = {}) {
+export function execNodeScript(script, args = [], { toolsRoot, cwd, timeout = 120000 } = Object()) {
   try {
     return {
       ok: true,

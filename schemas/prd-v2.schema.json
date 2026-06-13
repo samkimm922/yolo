@@ -70,6 +70,7 @@
       "code-review-agent",
       "security-review-agent",
       "yolo-review-agent",
+      "yolo-demand",
       "other"
     ],
     "retryStrategy": [
@@ -187,6 +188,7 @@
         "code-review-agent",
         "security-review-agent",
         "yolo-review-agent",
+        "yolo-demand",
         "other"
       ],
       "description": "What generated this PRD (traceability)"
@@ -200,6 +202,129 @@
       "type": "string",
       "pattern": "^[a-f0-9]{7,40}$",
       "description": "Git SHA at generation time. Runner warns if HEAD has diverged."
+    },
+    "source": {
+      "type": "string",
+      "description": "Source workflow that produced this PRD, e.g. approved_demand."
+    },
+    "demand_contract_required": {
+      "type": "boolean",
+      "description": "When true, demand.id, demand.approval, and execution_readiness are required by runtime gates."
+    },
+    "demand": {
+      "type": "object",
+      "description": "Approved demand-session contract. Kept intentionally extensible for backward-compatible demand metadata.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "approval": {
+          "type": "object",
+          "properties": {
+            "approved": {
+              "type": "boolean"
+            },
+            "approved_by": {
+              "type": "string"
+            },
+            "approved_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        },
+        "approval_reason": {
+          "type": "string"
+        },
+        "interview": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "question_trace": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "prd_intake": {
+          "type": "object"
+        },
+        "scenario_matrix": {
+          "type": "object"
+        },
+        "atomicity_contract": {
+          "type": "object",
+          "properties": {
+            "session_handoff": {
+              "$ref": "#/definitions/sessionHandoffStats"
+            }
+          }
+        },
+        "quality_report": {
+          "$ref": "#/definitions/demandQualityReport"
+        },
+        "execution_readiness": {
+          "type": "object",
+          "properties": {
+            "quality_report": {
+              "$ref": "#/definitions/demandQualityReport"
+            }
+          }
+        }
+      }
+    },
+    "execution_readiness": {
+      "type": "object",
+      "description": "Runtime readiness summary for approved-demand PRDs.",
+      "properties": {
+        "level": {
+          "type": "string"
+        },
+        "afk_ready": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string"
+        },
+        "atomic_tasks": {
+          "type": "boolean"
+        },
+        "expected_task_session": {
+          "type": "string"
+        },
+        "quality_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "quality_status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "warning",
+            "blocked"
+          ]
+        },
+        "quality_report": {
+          "$ref": "#/definitions/demandQualityReport"
+        },
+        "session_handoff": {
+          "$ref": "#/definitions/sessionHandoffStats"
+        }
+      }
     },
     "tasks": {
       "type": "array",
@@ -249,6 +374,233 @@
     }
   },
   "definitions": {
+    "demandQualityReport": {
+      "type": "object",
+      "description": "Approved-demand PRD quality score across clarity, atomicity, evidence, executability, and handoff completeness.",
+      "required": [
+        "schema_version",
+        "schema",
+        "status",
+        "total_score",
+        "dimensions"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "warning",
+            "blocked"
+          ]
+        },
+        "total_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "pass_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "block_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "code",
+              "label",
+              "status",
+              "score",
+              "checks"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "warning",
+                  "blocked"
+                ]
+              },
+              "score": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "failed_checks": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "next_actions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "sessionHandoffStats": {
+      "type": "object",
+      "description": "Summary of planned one-task execution sessions and their handoff/update targets.",
+      "properties": {
+        "planned": {
+          "type": "boolean"
+        },
+        "task_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "session_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tasks_with_session_plan": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "state_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "handoff_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "memory_update_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "progress_update_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "sessionPlan": {
+      "type": "object",
+      "description": "Planned handoff/update targets for executing one atomic task in one fresh session.",
+      "required": [
+        "session_id",
+        "state_path",
+        "handoff_path",
+        "evidence_path",
+        "memory_update_paths",
+        "progress_update_path",
+        "resume_instructions"
+      ],
+      "properties": {
+        "schema": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "demand_id": {
+          "type": "string"
+        },
+        "requirement_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scenario_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "surface_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state_path": {
+          "type": "string"
+        },
+        "handoff_path": {
+          "type": "string"
+        },
+        "evidence_path": {
+          "type": "string"
+        },
+        "memory_update_paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "progress_update_path": {
+          "type": "string"
+        },
+        "resume_instructions": {
+          "type": "string"
+        }
+      }
+    },
     "task": {
       "type": "object",
       "required": [
@@ -375,11 +727,98 @@
             "type": "string"
           }
         },
+        "source_question_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Interview or discussion question IDs that produced this executable task."
+        },
+        "handoff": {
+          "type": "object",
+          "description": "Agent handoff payload for a fresh execution session.",
+          "properties": {
+            "session": {
+              "$ref": "#/definitions/sessionPlan"
+            },
+            "state_matrix": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "evidence_plan": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "must_haves": {
+              "type": "object",
+              "description": "Non-bypassable triad that must survive into every execution session.",
+              "properties": {
+                "truths": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Verified project facts, assumptions, and constraints the agent must not contradict."
+                },
+                "artifacts": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Concrete file paths the task must produce."
+                },
+                "key_links": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Traceability links back to demand/requirement/scenario/surface."
+                }
+              }
+            }
+          }
+        },
+        "session_plan": {
+          "$ref": "#/definitions/sessionPlan",
+          "description": "Optional task-level alias for planned session handoff/update targets."
+        },
+        "state_matrix": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "UI state matrix required for UI acceptance readiness."
+        },
+        "evidence_plan": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "UI or acceptance evidence plan required before executable UI PRDs run."
+        },
+        "verification_hint": {
+          "type": "string",
+          "description": "Plain-language hint for verifying this task from the originating scenario proof."
+        },
+        "trace": {
+          "type": "object"
+        },
+        "atomicity": {
+          "type": "object"
+        },
         "dedupe_key": {
           "type": "string"
         },
         "must_fix_before_ship": {
           "type": "boolean"
+        },
+        "inputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Concrete input file paths the task consumes. Machine-parsed for dependency derivation."
+        },
+        "expected_output": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Concrete output file paths the task must produce. Machine-parsed for dependency derivation."
         }
       }
     },
@@ -516,7 +955,7 @@
             "WARN",
             "FAIL"
           ],
-          "description": "FAIL blocks task completion, WARN logs but allows"
+          "description": "FAIL blocks task completion. WARN is advisory for manual review and cannot satisfy executable acceptance."
         },
         "is_regex": {
           "type": "boolean",
@@ -627,7 +1066,7 @@
             "WARN"
           ],
           "default": "FAIL",
-          "description": "WARN failures are logged but do not block task completion"
+          "description": "WARN failures are recorded as non-pass and cannot satisfy executable acceptance."
         }
       }
     },

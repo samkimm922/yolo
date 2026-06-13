@@ -104,6 +104,26 @@ function targetCoverageFiles(conditions = []) {
   return new Set(files.filter(Boolean));
 }
 
+const BEHAVIOR_VERIFICATION_CONDITION_TYPES = new Set([
+  "build_pass",
+  "no_new_lint_errors",
+  "no_new_type_errors",
+  "test_file_passes",
+  "tests_pass",
+]);
+
+function conditionVerifyCommand(condition) {
+  const params = condition?.params || {};
+  return String(condition?.verify_command || condition?.verifyCommand || params.verify_command || params.verifyCommand || "").trim();
+}
+
+function hasBehaviorVerificationCondition(conditions = []) {
+  return conditions.some((condition) =>
+    condition?.severity === "FAIL" &&
+    (BEHAVIOR_VERIFICATION_CONDITION_TYPES.has(condition.type) || conditionVerifyCommand(condition))
+  );
+}
+
 function withTargetCoverageConditions(conditions, targetFiles, taskId, kind) {
   const normalizedTargets = targetFiles.map(normalizeTargetPath).filter(Boolean);
   const covered = targetCoverageFiles(conditions);
@@ -122,6 +142,125 @@ function withTargetCoverageConditions(conditions, targetFiles, taskId, kind) {
   }
 
   return next;
+}
+
+function withBehaviorVerificationConditions(conditions, taskId) {
+  if (hasBehaviorVerificationCondition(conditions)) return conditions;
+  return [
+    ...conditions,
+    {
+      id: `POST-${taskId}-TYPECHECK`,
+      type: "no_new_type_errors",
+      severity: "FAIL",
+      params: { command: "npm run typecheck" },
+      message: "项目 typecheck 必须通过。",
+    },
+  ];
+}
+
+function demandQualityReport(status = "pass") {
+  return {
+    schema_version: "1.0",
+    schema: "yolo.demand.quality.v1",
+    status,
+    total_score: status === "pass" ? 100 : 0,
+    dimensions: [],
+  };
+}
+
+function uniqueTaskTargetFiles(tasks = []) {
+  return [...new Set(tasks.flatMap((task) =>
+    (task.scope?.targets || []).map((target) => target.file).filter(Boolean)
+  ))];
+}
+
+function cloneJson(value) {
+  return value ? JSON.parse(JSON.stringify(value)) : value;
+}
+
+function explicitDemandContractOption(options = Object()) {
+  return options.approvedDemandContract
+    || options.approved_demand_contract
+    || options.demandContract
+    || options.demand_contract
+    || options.approvedDemand
+    || options.approved_demand
+    || null;
+}
+
+function requireApprovedDemandContract(input, tasks = []) {
+  if (!input) return null;
+  const contract = cloneJson(input);
+  const demand = contract.demand || null;
+  const readiness = contract.execution_readiness || null;
+  const qualityStatuses = [
+    demand?.quality_report?.status,
+    demand?.execution_readiness?.quality_report?.status,
+    demand?.execution_readiness?.quality_status,
+    readiness?.quality_report?.status,
+    readiness?.quality_status,
+  ].filter(Boolean);
+  const taskTargets = uniqueTaskTargetFiles(tasks);
+  const verifiedTargets = new Set(
+    (demand?.project_facts?.target_files || [])
+      .filter((fact) => fact?.status === "verified")
+      .map((fact) => fact.file)
+      .filter(Boolean),
+  );
+  const missingVerifiedTargets = taskTargets.filter((file) => !verifiedTargets.has(file));
+
+  if (!demand?.id) {
+    throw new Error("approved demand contract requires demand.id");
+  }
+  if (demand?.approval?.approved !== true || demand?.approval?.effective_for_prd !== true) {
+    throw new Error("approved demand contract requires approval.approved=true and effective_for_prd=true");
+  }
+  if (readiness?.level !== "L3" || readiness?.afk_ready !== true) {
+    throw new Error("approved demand contract requires execution_readiness level=L3 and afk_ready=true");
+  }
+  if (!qualityStatuses.length || qualityStatuses.some((status) => status !== "pass")) {
+    throw new Error("approved demand contract requires passing demand quality reports");
+  }
+  if (missingVerifiedTargets.length > 0) {
+    throw new Error(`approved demand contract is missing verified target facts: ${missingVerifiedTargets.join(", ")}`);
+  }
+
+  return {
+    source: contract.source || "approved_demand",
+    demand_contract_required: true,
+    demand,
+    execution_readiness: readiness,
+  };
+}
+
+function buildGeneratedDemandContract({ tasks = [], source = "audit" } = Object()) {
+  const targetFiles = uniqueTaskTargetFiles(tasks);
+  const quality = demandQualityReport("blocked");
+  return {
+    source: "audit_generated",
+    demand_contract_required: true,
+    demand: {
+      id: `DEMAND-${Date.now()}-AUTO`,
+      source,
+      approval: {
+        approved: false,
+        effective_for_prd: false,
+        approval_source: "audit_generated_pending_human_approval",
+      },
+      project_facts: {
+        target_files: targetFiles.map((file) => ({ file, status: "candidate", source: "audit_generated", needs_verification: true })),
+        assumptions: [],
+      },
+      quality_report: quality,
+    },
+    execution_readiness: {
+      level: "draft",
+      afk_ready: false,
+      source: "audit_generated_pending_approval",
+      quality_status: "blocked",
+      quality_report: quality,
+    },
+  };
 }
 
 function groupFindings(findings) {
@@ -173,11 +312,14 @@ function buildTask(kind, findingsList, index) {
   const existingPre = findingsList.find((finding) => Array.isArray(finding.pre_conditions) && finding.pre_conditions.length > 0)?.pre_conditions;
   const existingPost = findingsList.find((finding) => Array.isArray(finding.post_conditions) && finding.post_conditions.length > 0)?.post_conditions;
   const preConditions = normalizeConditionList(existingPre || [], `PRE-${id}`);
-  const postConditions = withTargetCoverageConditions(
-    normalizeConditionList(existingPost || [], `POST-${id}`),
-    targetFiles,
+  const postConditions = withBehaviorVerificationConditions(
+    withTargetCoverageConditions(
+      normalizeConditionList(existingPost || [], `POST-${id}`),
+      targetFiles,
+      id,
+      kind,
+    ),
     id,
-    kind,
   );
 
   return {
@@ -201,7 +343,7 @@ function buildTask(kind, findingsList, index) {
   };
 }
 
-export function buildPrdFromFindings(findings, options = {}) {
+export function buildPrdFromFindings(findings, options = Object()) {
   const groups = groupFindings(findings);
   const tasks = [];
   let taskIndex = 0;
@@ -209,9 +351,16 @@ export function buildPrdFromFindings(findings, options = {}) {
   for (const [, group] of groups.mechanical) tasks.push(buildTask("mechanical", group, ++taskIndex));
   for (const [, group] of groups.atomic_fix) tasks.push(buildTask("atomic_fix", group, ++taskIndex));
   for (const finding of groups.atomic_feature) tasks.push(buildTask("atomic_feature", [finding], ++taskIndex));
+  const explicitDemandContract = requireApprovedDemandContract(explicitDemandContractOption(options), tasks);
+  for (const task of tasks) task.status = explicitDemandContract ? "pending" : "needs_contract_review";
   const requirements = tasks.map((task) => ({
     id: task.requirement_ids[0],
     text: task.description || task.title,
+    demand_trace: {
+      source: "structured_finding",
+      task_id: task.id,
+      evidence: task.scope?.targets?.map((target) => target.file).filter(Boolean) || [],
+    },
   }));
   const designs = tasks.map((task) => ({
     id: task.design_ids[0],
@@ -231,6 +380,7 @@ export function buildPrdFromFindings(findings, options = {}) {
   }
 
   const source = options.source || "audit";
+  const demandContract = explicitDemandContract || buildGeneratedDemandContract({ tasks, source });
   return {
     prd: {
       version: "2.0",
@@ -249,7 +399,10 @@ export function buildPrdFromFindings(findings, options = {}) {
       generated_by: options.generated_by || "yolo-review-agent",
       generated_at: new Date().toISOString(),
       base_commit,
-      source,
+      source: demandContract.source,
+      demand_contract_required: demandContract.demand_contract_required,
+      demand: demandContract.demand,
+      execution_readiness: demandContract.execution_readiness,
       requirements,
       designs,
       tasks,
@@ -263,7 +416,7 @@ export function buildPrdFromFindings(findings, options = {}) {
   };
 }
 
-export function convertAuditToPrd(input, options = {}) {
+export function convertAuditToPrd(input, options = Object()) {
   const audit = typeof input === "string"
     ? JSON.parse(readFileSync(resolve(input), "utf8"))
     : input;
@@ -280,7 +433,18 @@ export function convertAuditToPrd(input, options = {}) {
   }
 
   const source = typeof input === "string" ? input : options.source || "audit";
-  const built = buildPrdFromFindings(findings, { ...options, source });
+  let built;
+  try {
+    built = buildPrdFromFindings(findings, { ...options, source });
+  } catch (error) {
+    return {
+      ok: false,
+      error: error.message,
+      prd: null,
+      output: null,
+      counts: { tasks: 0, mechanical: 0, atomic_fix: 0, atomic_feature: 0 },
+    };
+  }
   const output = options.output ? resolve(options.output) : null;
 
   if (output) {
@@ -346,9 +510,16 @@ export function runAuditToPrdCli() {
   const inputArg = args[0];
   const force = args.includes("--force");
 
-  if (!inputArg) {
-    console.error("用法: node audit-to-prd.js <audit.json> [--title=xxx] [--output=prd.json] [--force]");
-    process.exit(1);
+  if (!inputArg || inputArg === "--help" || inputArg === "-h") {
+    console.log("用法: yolo audit-to-prd <audit.json> [--title=xxx] [--output=prd.json] [--force]");
+    console.log("");
+    console.log("将结构化审计 JSON 转换为原子化 PRD（按调用链合并同类发现）。");
+    console.log("");
+    console.log("选项:");
+    console.log("  --title=xxx    PRD 标题（默认: 审计修复）");
+    console.log("  --output=FILE  输出文件路径（默认: prd.json）");
+    console.log("  --force        覆盖已有 PRD");
+    process.exit(inputArg ? 0 : 1);
   }
 
   if (!force) {

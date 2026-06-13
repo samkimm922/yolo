@@ -21,7 +21,7 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -57,7 +57,7 @@ function evidencePresent(value) {
     || (Array.isArray(value.evidence) && value.evidence.length > 0);
 }
 
-function externalOnly(record = {}) {
+function externalOnly(record = Object()) {
   const summary = isObject(record) ? record : {};
   return summary.executed_by_sdk !== true
     && summary.published_by_sdk !== true
@@ -66,13 +66,13 @@ function externalOnly(record = {}) {
     && summary.dogfood_report_published_by_sdk !== true;
 }
 
-function manualCommandsOnly(runbook = {}) {
+function manualCommandsOnly(runbook = Object()) {
   const commands = Array.isArray(runbook.manual_commands) ? runbook.manual_commands : [];
   return commands.length > 0
     && commands.every((command) => command.execute === false && command.requires_human === true);
 }
 
-function credentialEvidenceApproved(evidence = {}) {
+function credentialEvidenceApproved(evidence = Object()) {
   const summary = isObject(evidence) ? evidence : {};
   return summary.status === "pass"
     && nonEmptyString(summary.operator)
@@ -84,7 +84,7 @@ function credentialEvidenceApproved(evidence = {}) {
     && !nonEmptyString(summary.raw_token);
 }
 
-function billableProviderEvidenceApproved(evidence = {}) {
+function billableProviderEvidenceApproved(evidence = Object()) {
   const summary = isObject(evidence) ? evidence : {};
   return summary.status === "pass"
     && nonEmptyString(summary.operator)
@@ -96,7 +96,7 @@ function billableProviderEvidenceApproved(evidence = {}) {
     && externalOnly(summary);
 }
 
-function dogfoodPublicationApproved(evidence = {}) {
+function dogfoodPublicationApproved(evidence = Object()) {
   const summary = isObject(evidence) ? evidence : {};
   return summary.status === "pass"
     && evidencePresent(summary)
@@ -107,7 +107,21 @@ function dogfoodPublicationApproved(evidence = {}) {
     && externalOnly(summary);
 }
 
-function manualReleaseRecordApproved(record = {}, packageJson = {}) {
+function externalRemediationEvidenceApproved(evidence = Object()) {
+  const summary = isObject(evidence) ? evidence : {};
+  return summary.status === "pass"
+    && nonEmptyString(summary.operator)
+    && validTimestamp(summary.executed_at)
+    && evidencePresent(summary)
+    && externalOnly(summary)
+    && summary.executed_by_yolo_runner !== true
+    && summary.yolo_runner_evidence !== true
+    && !isObject(summary.runner_evidence)
+    && !nonEmptyString(summary.runner_run_id)
+    && !nonEmptyString(summary.yolo_run_id);
+}
+
+function manualReleaseRecordApproved(record = Object(), packageJson = Object()) {
   const summary = isObject(record) ? record : {};
   return nonEmptyString(summary.operator)
     && validTimestamp(summary.published_at || summary.executed_at)
@@ -117,7 +131,7 @@ function manualReleaseRecordApproved(record = {}, packageJson = {}) {
     && externalOnly(summary);
 }
 
-function noReleaseSideEffects(result = {}) {
+function noReleaseSideEffects(result = Object()) {
   return result.guarantees?.published === false
     && result.guarantees?.credential_access === false
     && result.guarantees?.provider_execution === false
@@ -126,7 +140,7 @@ function noReleaseSideEffects(result = {}) {
     && result.guarantees?.dogfood_report_published === false;
 }
 
-export function buildManualExternalReleasePlan(options = {}) {
+export function buildManualExternalReleasePlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const requestedOperations = normalizeRequestedOperations(options.requestedOperations || options.requested_operations);
   return {
@@ -160,7 +174,7 @@ export function buildManualExternalReleasePlan(options = {}) {
   };
 }
 
-export function runManualExternalReleaseGate(options = {}) {
+export function runManualExternalReleaseGate(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const plan = options.plan || buildManualExternalReleasePlan({
@@ -178,6 +192,11 @@ export function runManualExternalReleaseGate(options = {}) {
     || options.dogfood_publication_evidence
     || options.dogfoodAudit
     || options.dogfood_audit
+    || null;
+  const externalRemediationEvidence = options.externalRemediationEvidence
+    || options.external_remediation_evidence
+    || options.claudePRemediation
+    || options.claude_p_remediation
     || null;
   const operatorRunbook = options.operatorRunbook || options.operator_runbook || (options.runOperatorReleaseRunbookGate || runOperatorReleaseRunbookGate)({
     yoloRoot,
@@ -300,6 +319,11 @@ export function runManualExternalReleaseGate(options = {}) {
       "dogfood publication evidence must pass, be privacy reviewed, approved, linked, and external-only",
     ),
     check(
+      "MANUAL_EXTERNAL_RELEASE_EXTERNAL_REMEDIATION_SEPARATE",
+      !externalRemediationEvidence || externalRemediationEvidenceApproved(externalRemediationEvidence),
+      "external remediation evidence must be external-only and must not be mixed with YOLO runner evidence",
+    ),
+    check(
       "MANUAL_EXTERNAL_RELEASE_POST_RELEASE_AUDIT_PASS",
       postReleaseAudit.status === "pass",
       "post-release audit must pass after manual external execution",
@@ -324,6 +348,18 @@ export function runManualExternalReleaseGate(options = {}) {
   ];
 
   const blockers = checks.filter((item) => item.passed !== true);
+  const externalEvidence = {
+    manual_release_record: manualReleaseRecord,
+    credential_evidence: credentialEvidence,
+    billable_provider_evidence: billableProviderEvidence,
+    dogfood_publication_evidence: dogfoodPublicationEvidence,
+    external_remediation_evidence: externalRemediationEvidence,
+  };
+  const runnerEvidence = {
+    operator_runbook: operatorRunbook,
+    post_release_audit: postReleaseAudit,
+    stable_graduation: stableGraduation,
+  };
   return {
     schema_version: MANUAL_EXTERNAL_RELEASE_SCHEMA_VERSION,
     schema: "yolo.release.manual_external_release_result.v1",
@@ -339,12 +375,9 @@ export function runManualExternalReleaseGate(options = {}) {
     plan,
     checks,
     blockers,
-    evidence: {
-      manual_release_record: manualReleaseRecord,
-      credential_evidence: credentialEvidence,
-      billable_provider_evidence: billableProviderEvidence,
-      dogfood_publication_evidence: dogfoodPublicationEvidence,
-    },
+    evidence: externalEvidence,
+    external_evidence: externalEvidence,
+    runner_evidence: runnerEvidence,
     components: {
       operator_runbook: operatorRunbook,
       post_release_audit: postReleaseAudit,

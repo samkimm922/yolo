@@ -11,7 +11,7 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -38,7 +38,7 @@ function evidencePresent(value) {
     || (Array.isArray(value.evidence) && value.evidence.length > 0);
 }
 
-function dogfoodAuditApproved(audit = {}) {
+function dogfoodAuditApproved(audit = Object()) {
   const summary = isObject(audit) ? audit : {};
   return summary.status === "pass"
     && evidencePresent(summary)
@@ -47,20 +47,20 @@ function dogfoodAuditApproved(audit = {}) {
     && nonEmptyString(summary.approver);
 }
 
-function packageInstallStatus(postReleaseChecks = {}, hardeningDrill = {}) {
+function packageInstallStatus(postReleaseChecks = Object(), hardeningDrill = Object()) {
   return postReleaseChecks.package_install_smoke?.status
     || postReleaseChecks.packageInstallSmoke?.status
     || hardeningDrill.components?.package_install?.status
     || null;
 }
 
-function hardeningNoReleaseSideEffects(hardeningDrill = {}) {
+function hardeningNoReleaseSideEffects(hardeningDrill = Object()) {
   return hardeningDrill.guarantees?.published === false
     && hardeningDrill.guarantees?.credential_access === false
     && hardeningDrill.guarantees?.billable_provider_execution === false;
 }
 
-function manualReleaseExternalOnly(record = {}) {
+function manualReleaseExternalOnly(record = Object()) {
   return record.executed_by_sdk !== true
     && record.published_by_sdk !== true
     && record.token_read_by_sdk !== true
@@ -68,7 +68,7 @@ function manualReleaseExternalOnly(record = {}) {
     && record.dogfood_report_published_by_sdk !== true;
 }
 
-export function buildPostReleaseAuditPlan(options = {}) {
+export function buildPostReleaseAuditPlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   return {
     schema_version: POST_RELEASE_AUDIT_SCHEMA_VERSION,
@@ -98,7 +98,7 @@ export function buildPostReleaseAuditPlan(options = {}) {
   };
 }
 
-export function runPostReleaseAuditGate(options = {}) {
+export function runPostReleaseAuditGate(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const plan = options.plan || buildPostReleaseAuditPlan({

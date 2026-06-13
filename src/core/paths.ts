@@ -1,1 +1,1 @@
-export * from "../../lib/paths.js";
+export * from "../lib/paths.js";

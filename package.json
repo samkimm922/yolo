@@ -1,9 +1,9 @@
 {
   "name": "yolo",
   "version": "0.1.0",
+  "private": true,
   "description": "YOLO — 自动化 coding 管道（PRD → 修复 → 闸门 → 提交）",
   "type": "module",
-  "private": true,
   "files": [
     "dist/bin/",
     "dist/src/",
@@ -12,6 +12,7 @@
     "dist/fixtures/",
     "dist/schemas/",
     "dist/docs/",
+    "dist/hooks/",
     "dist/*.js",
     "dist/*.d.ts",
     "dist/*.js.map",
@@ -21,6 +22,7 @@
     "dist/config.yaml",
     "dist/config.example.yaml",
     "dist/settings-minimal.json",
+    "settings-minimal.json",
     "README.md",
     "CHANGELOG.md"
   ],
@@ -34,6 +36,7 @@
     "./runtime/adapter-evidence": "./dist/src/runtime/adapters/evidence-collector.js",
     "./runtime/progress-ui-evidence": "./dist/src/runtime/progress/ui-evidence.js",
     "./core/bootstrap": "./dist/src/core/bootstrap.js",
+    "./core/setup": "./dist/src/core/setup.js",
     "./core/init-smoke": "./dist/src/core/init-smoke.js",
     "./core/config": "./dist/src/core/config.js",
     "./core/paths": "./dist/src/core/paths.js",
@@ -41,8 +44,8 @@
     "./prd/preflight": "./dist/src/prd/preflight.js",
     "./spec/lifecycle": "./dist/src/spec/lifecycle.js",
     "./spec/traceability": "./dist/src/spec/traceability.js",
-    "./evidence/ledger": "./dist/src/evidence/ledger.js",
-    "./evidence/report": "./dist/src/evidence/report.js",
+    "./evidence/ledger": "./dist/src/runtime/evidence/ledger.js",
+    "./evidence/report": "./dist/src/runtime/evidence/report.js",
     "./review/findings": "./dist/src/review/findings.js",
     "./workflows": "./dist/src/workflows/registry.js",
     "./workflows/install": "./dist/src/workflows/install.js",
@@ -52,6 +55,9 @@
     "./release/pack-smoke": "./dist/src/release/pack-smoke.js",
     "./release/hardening-drill": "./dist/src/release/hardening-drill.js",
     "./release/decision-gate": "./dist/src/release/decision-gate.js",
+    "./release/change-provenance": "./dist/src/release/change-provenance.js",
+    "./release/clean-environment-verify": "./dist/src/release/clean-environment-verify.js",
+    "./release/dogfood-matrix": "./dist/src/release/dogfood-matrix.js",
     "./release/operator-state": "./dist/src/release/operator-state.js",
     "./release/operator-runbook": "./dist/src/release/operator-runbook.js",
     "./release/post-release-audit": "./dist/src/release/post-release-audit.js",
@@ -66,7 +72,7 @@
     "./release/experience-pack-audit": "./dist/src/release/experience-pack-audit.js",
     "./release/nontechnical-ux-doctor": "./dist/src/release/nontechnical-ux-doctor.js",
     "./eval/benchmark": "./dist/src/eval/benchmark.js",
-    "./pm": "./dist/src/pm/index.js",
+
     "./audit-to-prd": "./dist/src/prd/audit-to-prd.js",
     "./prd-migrate-gates": "./dist/src/prd/migration.js",
     "./prd-preflight": "./dist/src/prd/preflight.js",
@@ -85,29 +91,30 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && tsx scripts/copy-runtime-assets.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "runner": "npm run build --silent && node ./dist/runner.js",
     "pi": "npm run build --silent && node ./dist/bin/yolo-pi.js",
     "gate": "npm run build --silent && node ./dist/gate.js",
     "contract": "npm run build --silent && node ./dist/src/prd/contract.js",
     "prompt": "npm run build --silent && node ./dist/prompt.js",
-    "pm": "npm run build --silent && node ./dist/src/pm/index.js",
+
     "migrate-gates": "npm run build --silent && node ./dist/bin/yolo-prd-migrate-gates.js",
     "preflight": "npm run build --silent && node ./dist/bin/yolo-prd-preflight.js --check-all",
     "review": "npm run build --silent && node ./dist/src/cli/review.js",
     "learn": "npm run build --silent && node ./dist/learn.js",
     "audit-to-prd": "npm run build --silent && node ./dist/src/prd/audit-to-prd.js",
     "progress": "npm run build --silent && node ./dist/src/runtime/progress/server.js",
-    "generate-tree": "npm run build --silent && node ./dist/src/runtime/devtools/generate-tree.js",
-    "memory:refresh": "npm run build --silent && node ./dist/src/runtime/devtools/memory-center.js --legacy-pointers",
+    "generate-tree": "npm run build --silent && node ./dist/src/devtools/generate-tree.js",
+    "memory:refresh": "npm run build --silent && node ./dist/src/devtools/memory-center.js --legacy-pointers",
     "test": "npm run build --silent && node --import tsx --test __tests__/*.test.ts",
-    "verify": "npm run test --silent && npm run preflight --silent && node -e \"import {config} from'./dist/lib/config.js';process.exit(config.version==='2.0'?0:1)\"",
+    "soak": "node --import tsx scripts/soak/run.ts",
+    "verify": "npm run typecheck --silent && npm run test --silent && node --import tsx scripts/source-grep-meta.ts && node --import tsx scripts/ci-guard.ts && npm run preflight --silent && node -e \"import {config} from'./dist/src/lib/config.js';process.exit(config.version==='2.0'?0:1)\"",
     "prepack": "npm run build --silent",
-    "lint:fix": "echo 'use project root lint:fix for src/'",
-    "clean": "node -e \"const{existsSync,readFileSync,writeFileSync}=require('fs');const{join}=require('path');['.yolo/state/events.jsonl','.yolo/state/changes.jsonl','.yolo/state/runs.jsonl'].forEach(f=>{const p=join(process.cwd(),f);if(existsSync(p)){const c=readFileSync(p,'utf8').split('\\n').filter(Boolean).slice(-50);writeFileSync(p,c.join('\\n')+'\\n')}});console.log('state cleaned')\""
+    "lint": "node --import tsx scripts/source-grep-meta.ts",
+    "clean": "node -e \"const{existsSync,readFileSync,writeFileSync,readdirSync,rmSync,statSync}=require('fs');const{join}=require('path');['.yolo/state/events.jsonl','.yolo/state/changes.jsonl','.yolo/state/runs.jsonl'].forEach(f=>{const p=join(process.cwd(),f);if(existsSync(p)){const c=readFileSync(p,'utf8').split('\\n').filter(Boolean).slice(-50);writeFileSync(p,c.join('\\n')+'\\n')}});const d=join(process.cwd(),'dist');if(existsSync(d)){(function rm(ts){readdirSync(ts).forEach(e=>{const p=join(ts,e);statSync(p).isDirectory()?rm(p):e.endsWith('.d.ts')&&rmSync(p)})})(d);console.log('dist .d.ts cleaned')}else{console.log('state cleaned')}\""
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "keywords": [
     "automation",

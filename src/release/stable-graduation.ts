@@ -13,7 +13,7 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -36,7 +36,7 @@ function countRootMjs(yoloRoot) {
     .length;
 }
 
-function stabilityReviewApproved(review = {}) {
+function stabilityReviewApproved(review = Object()) {
   return review.approved === true
     && nonEmptyString(review.approver)
     && validTimestamp(review.approved_at)
@@ -47,13 +47,13 @@ function stabilityReviewApproved(review = {}) {
     && nonEmptyString(review.rollback_plan);
 }
 
-function dogfoodEvidencePublic(postReleaseAudit = {}) {
+function dogfoodEvidencePublic(postReleaseAudit = Object()) {
   const dogfoodAudit = postReleaseAudit.components?.dogfood_audit || postReleaseAudit.dogfood_audit || {};
   return dogfoodAudit.status === "pass"
     && nonEmptyString(dogfoodAudit.public_url || dogfoodAudit.report_path || dogfoodAudit.artifact_path);
 }
 
-export function buildStableGraduationPlan(options = {}) {
+export function buildStableGraduationPlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   return {
     schema_version: STABLE_GRADUATION_SCHEMA_VERSION,
@@ -85,7 +85,7 @@ export function buildStableGraduationPlan(options = {}) {
   };
 }
 
-export function runStableGraduationGate(options = {}) {
+export function runStableGraduationGate(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const plan = options.plan || buildStableGraduationPlan({

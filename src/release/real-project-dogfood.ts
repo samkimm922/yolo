@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { runAgentIntegrationDoctor } from "./agent-integration-doctor.js";
+import { buildDogfoodMatrixPlan, buildDogfoodMatrixReport } from "./dogfood-matrix.js";
 
 export const REAL_PROJECT_DOGFOOD_SCHEMA_VERSION = "1.0";
 
@@ -19,7 +20,7 @@ function unique(values = []) {
 
 function commandForMode(mode) {
   if (mode === "idea") return "/yolo";
-  if (mode === "discovery") return "/yolo-discover";
+  if (mode === "discovery") return "/yolo-demand";
   if (mode === "plan") return "/yolo-plan";
   if (mode === "prd") return "/yolo-prd";
   if (mode === "check") return "/yolo-check";
@@ -29,7 +30,7 @@ function commandForMode(mode) {
   return `/yolo-${mode.replace(/_/g, "-")}`;
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -37,7 +38,7 @@ function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function evidencePresent(value = {}) {
+function evidencePresent(value = Object()) {
   return Boolean(value.artifact_path)
     || Boolean(value.report_path)
     || Boolean(value.public_url)
@@ -45,7 +46,7 @@ function evidencePresent(value = {}) {
     || (Array.isArray(value.evidence) && value.evidence.length > 0);
 }
 
-function noExecutionSideEffects(value = {}) {
+function noExecutionSideEffects(value = Object()) {
   return value.writes_workspace !== true
     && value.mutates_workspace !== true
     && value.edits_code !== true
@@ -55,7 +56,7 @@ function noExecutionSideEffects(value = {}) {
     && value.executed_by_sdk !== true;
 }
 
-function evidenceForMode(mode, options = {}) {
+function evidenceForMode(mode, options = Object()) {
   const dogfoodEvidence = options.dogfoodEvidence || options.dogfood_evidence || {};
   if (isObject(dogfoodEvidence[mode])) return dogfoodEvidence[mode];
   if (mode === "plan") return options.planEvidence || options.plan_evidence || null;
@@ -73,16 +74,18 @@ function dogfoodModePassed(mode, evidence) {
     && noExecutionSideEffects(evidence);
 }
 
-export function buildRealProjectDogfoodPlan(options = {}) {
+export function buildRealProjectDogfoodPlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const modes = unique(options.modes || DOGFOOD_MODES);
+  const dogfoodMatrix = options.dogfoodMatrixPlan || options.dogfood_matrix_plan || buildDogfoodMatrixPlan({ yoloRoot, projectRoot });
   return {
     schema_version: REAL_PROJECT_DOGFOOD_SCHEMA_VERSION,
     schema: "yolo.release.real_project_dogfood_plan.v1",
     yolo_root: yoloRoot,
     project_root: projectRoot,
     modes,
+    dogfood_matrix: dogfoodMatrix,
     writes_workspace: false,
     publishes: false,
     reads_credentials: false,
@@ -92,16 +95,19 @@ export function buildRealProjectDogfoodPlan(options = {}) {
       "a real external project root that is not the YOLO package root",
       "native Codex/Claude YOLO integration doctor pass for the requested scope",
       ...modes.map((mode) => `chat-driven ${commandForMode(mode)} evidence with no workspace mutation or provider execution`),
+      "generic dogfood matrix report covering node-basic, frontend-vite, backend-api, python-service, monorepo, dirty-tree, and failing-baseline",
     ],
     stop_conditions: [
       "dogfood evidence comes only from the YOLO repository itself",
       "plan/check/review evidence is missing, failed, or unlinked",
+      "generic dogfood matrix evidence is missing or any scenario fails its expected outcome",
+      "dirty-tree or failing-baseline is accepted as a smooth pass instead of fail-closed",
       "any dogfood evidence claims code edits, provider execution, or billable execution",
     ],
   };
 }
 
-export function runRealProjectDogfoodGate(options = {}) {
+export function runRealProjectDogfoodGate(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const plan = options.plan || buildRealProjectDogfoodPlan({ yoloRoot, projectRoot });
@@ -122,6 +128,14 @@ export function runRealProjectDogfoodGate(options = {}) {
     status: dogfoodModePassed(mode, modeEvidence[mode]) ? "pass" : "blocked",
     evidence: modeEvidence[mode],
   }));
+  const dogfoodMatrix = options.dogfoodMatrixReport
+    || options.dogfood_matrix_report
+    || buildDogfoodMatrixReport({
+      plan: options.dogfoodMatrixPlan || options.dogfood_matrix_plan || plan.dogfood_matrix,
+      evidenceByScenario: options.dogfoodMatrixEvidence || options.dogfood_matrix_evidence,
+      yoloRoot,
+      projectRoot,
+    });
 
   const checks = [
     check(
@@ -151,6 +165,16 @@ export function runRealProjectDogfoodGate(options = {}) {
       "native Codex/Claude YOLO integration must pass before real-project dogfood is accepted",
       { agent_integration_status: agentIntegration.status, agent_integration_blockers: (agentIntegration.blockers || []).map((item) => item.code) },
     ),
+    check(
+      "REAL_PROJECT_DOGFOOD_GENERIC_MATRIX_PASS",
+      dogfoodMatrix.status === "pass",
+      "generic dogfood matrix must pass with failure scenarios fail-closed",
+      {
+        matrix_status: dogfoodMatrix.status,
+        matrix_blockers: (dogfoodMatrix.blocked_reasons || []).map((item) => item.code),
+        missing_evidence: dogfoodMatrix.missing_evidence || [],
+      },
+    ),
     ...modeResults.map((entry) => check(
       `REAL_PROJECT_DOGFOOD_${entry.mode.toUpperCase()}_PASS`,
       entry.status === "pass",
@@ -172,6 +196,7 @@ export function runRealProjectDogfoodGate(options = {}) {
     components: {
       agent_integration: agentIntegration,
       mode_results: modeResults,
+      dogfood_matrix: dogfoodMatrix,
     },
     plan,
     guarantees: {

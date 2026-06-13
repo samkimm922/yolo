@@ -14,6 +14,7 @@ import {
 import { runPiExecutionDrillGate } from "../src/release/pi-execution-drill.js";
 import { runPublicBetaEvidenceGate as runPublicBetaEvidenceGateDirect } from "../src/release/public-beta-evidence.js";
 import { runRealProjectDogfoodGate } from "../src/release/real-project-dogfood.js";
+import { buildDogfoodMatrixEvidence } from "../src/release/dogfood-matrix.js";
 import { runRuntimeBoundaryDecisionGate } from "../src/release/runtime-boundary-decision.js";
 
 const tmpRoots = [];
@@ -39,6 +40,16 @@ function writeExpectedArtifacts(plan) {
   for (const artifact of plan.expected_artifacts) {
     writeArtifact(artifact.path);
   }
+}
+
+function hostDiscoveryEvidence(targets = ["codex"], overrides = {}) {
+  return {
+    status: "pass",
+    targets,
+    discovered_at: "2026-05-25T00:00:00.000Z",
+    discovery_run_id: "host-discovery-test",
+    ...overrides,
+  };
 }
 
 function agentIntegrationPass(overrides = {}) {
@@ -159,7 +170,7 @@ describe("P28-P32 release evidence gates", () => {
     assert.equal(result.guarantees.provider_execution, false);
   });
 
-  test("agent integration doctor passes when requested artifacts exist", () => {
+  test("agent integration doctor passes when requested artifacts and fresh host discovery exist", () => {
     const root = tempRoot("yolo-p28-pass");
     const projectRoot = join(root, "project");
     const homeDir = join(root, "home");
@@ -174,11 +185,48 @@ describe("P28-P32 release evidence gates", () => {
     });
     writeExpectedArtifacts(plan);
 
-    const result = runAgentIntegrationDoctor({ yoloRoot: root, projectRoot, homeDir, plan });
+    const result = runAgentIntegrationDoctor({
+      yoloRoot: root,
+      projectRoot,
+      homeDir,
+      plan,
+      hostDiscoveryEvidence: hostDiscoveryEvidence(["codex"]),
+      nowMs: Date.parse("2026-05-25T00:05:00.000Z"),
+    });
 
     assert.equal(result.status, "pass", JSON.stringify(result.blockers, null, 2));
     assert.equal(result.artifacts_present, result.artifact_count);
     assert.equal(result.guarantees.writes_user_home, false);
+    assert.equal(result.guarantees.host_discovery_fresh, true);
+  });
+
+  test("agent integration doctor blocks stale host discovery even when artifacts exist", () => {
+    const root = tempRoot("yolo-p28-stale-host");
+    const projectRoot = join(root, "project");
+    const homeDir = join(root, "home");
+    mkdirSync(projectRoot, { recursive: true });
+    mkdirSync(homeDir, { recursive: true });
+    const plan = buildAgentIntegrationDoctorPlan({
+      yoloRoot: root,
+      projectRoot,
+      homeDir,
+      targets: ["codex"],
+      scope: "user",
+    });
+    writeExpectedArtifacts(plan);
+
+    const result = runAgentIntegrationDoctor({
+      yoloRoot: root,
+      projectRoot,
+      homeDir,
+      plan,
+      hostDiscoveryEvidence: hostDiscoveryEvidence(["codex"], { discovered_at: "2026-05-25T00:00:00.000Z" }),
+      nowMs: Date.parse("2026-05-25T02:00:00.000Z"),
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.ok(result.blockers.some((blocker) => blocker.code === "AGENT_INTEGRATION_DOCTOR_HOST_DISCOVERY_FRESH"));
+    assert.ok(result.host_discovery.blockers.some((blocker) => blocker.code === "AGENT_INTEGRATION_DOCTOR_HOST_DISCOVERY_STALE"));
   });
 
   test("real-project dogfood requires plan/check/review evidence from an external project", () => {
@@ -203,6 +251,7 @@ describe("P28-P32 release evidence gates", () => {
       planEvidence: dogfoodEvidence("plan"),
       checkEvidence: dogfoodEvidence("check"),
       reviewEvidence: dogfoodEvidence("review"),
+      dogfoodMatrixEvidence: buildDogfoodMatrixEvidence(),
     });
     assert.equal(passed.status, "pass", JSON.stringify(passed.blockers, null, 2));
     assert.equal(passed.guarantees.code_edited, false);

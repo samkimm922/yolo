@@ -12,14 +12,14 @@ export function normalizeFile(value) {
   return clean(value).replace(/\\/g, "/").replace(/^\.\//, "").replace(/:\d+(?:-\d+)?$/, "");
 }
 
-export function taskFiles(task = {}) {
+export function taskFiles(task = Object()) {
   return [
     ...asArray(task.scope?.targets).map((target) => normalizeFile(target.file || target.path || target)),
     ...asArray(task.files).map(normalizeFile),
   ].filter(Boolean);
 }
 
-export function taskText(task = {}) {
+export function taskText(task = Object()) {
   return [
     task.id,
     task.title,
@@ -32,7 +32,7 @@ export function taskText(task = {}) {
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
-function manifestSignals(manifest = {}) {
+function manifestSignals(manifest = Object()) {
   return new Set([
     ...asArray(manifest.applies_to),
     ...asArray(manifest.capabilities),
@@ -40,12 +40,12 @@ function manifestSignals(manifest = {}) {
   ].map((value) => clean(value).toLowerCase()).filter(Boolean));
 }
 
-function resolverAcceptanceAdapter(resolver = {}) {
+function resolverAcceptanceAdapter(resolver = Object()) {
   const adapter = resolver?.selected?.acceptance_adapter;
   return adapter?.id && adapter.id !== "unknown/custom" ? adapter : null;
 }
 
-export function isUiTask(task = {}, context = {}) {
+export function isUiTask(task = Object(), context = Object()) {
   if (task.ui === false || task.interface === false) return false;
   if (task.ui === true || task.interface === "ui" || task.surface || task.ui_surface || task.ui?.surface) return true;
 
@@ -62,39 +62,39 @@ export function isUiTask(task = {}, context = {}) {
     || /页面|组件|界面|前端/.test(text);
 }
 
-export function uiTasks(prd = {}, context = {}) {
+export function uiTasks(prd = Object(), context = Object()) {
   const source = prd || {};
   return asArray(source.tasks).filter((task) => isUiTask(task, context));
 }
 
-export function hasTaskAcceptance(task = {}) {
+export function hasTaskAcceptance(task = Object()) {
   return asArray(task.acceptance_criteria).length > 0
     || Boolean(clean(task.acceptance))
     || Boolean(clean(task.success_criteria))
     || asArray(task.post_conditions).length > 0;
 }
 
-export function uiSurface(task = {}) {
+export function uiSurface(task = Object()) {
   return clean(task.surface || task.ui?.surface || task.ui_surface)
     || taskFiles(task).find((file) => file.includes("/pages/") || file.includes("/screens/") || file.includes("/components/"))
     || "";
 }
 
-export function hasStateMatrix(task = {}, prd = {}, manifest = {}) {
+export function hasStateMatrix(task = Object(), prd = Object(), manifest = Object()) {
   return Boolean(task.state_matrix || task.ui?.state_matrix || prd.state_matrix || prd.ui_state_matrix || manifest.state_matrix || manifest.ui_state_matrix);
 }
 
-export function hasEvidencePlan(task = {}, prd = {}, manifest = {}) {
+export function hasEvidencePlan(task = Object(), prd = Object(), manifest = Object()) {
   const evidenceTypes = new Set(["screenshot_exists", "playwright_check", "visual_regression", "ui_state_assertion", "runtime_log_absent"]);
   return Boolean(task.evidence_plan || task.ui_evidence_plan || task.ui?.evidence_plan || prd.evidence_plan || manifest.evidence_plan)
     || asArray(task.post_conditions).some((condition) => evidenceTypes.has(condition.type));
 }
 
-export function selectedAcceptanceAdapter(resolver = {}) {
+export function selectedAcceptanceAdapter(resolver = Object()) {
   return resolverAcceptanceAdapter(resolver);
 }
 
-export function hasAcceptanceAdapter({ options = {}, manifest = {}, resolver = {} } = {}) {
+export function hasAcceptanceAdapter({ options = Object(), manifest = Object(), resolver = Object() } = Object()) {
   return Boolean(
     selectedAcceptanceAdapter(resolver) ||
     options.acceptanceAdapter ||
@@ -107,7 +107,7 @@ export function hasAcceptanceAdapter({ options = {}, manifest = {}, resolver = {
   );
 }
 
-export function summarizeTaskSurfaces(prd = {}, context = {}) {
+export function summarizeTaskSurfaces(prd = Object(), context = Object()) {
   const source = prd || {};
   const tasks = asArray(source.tasks);
   const ui = tasks.filter((task) => isUiTask(task, context));

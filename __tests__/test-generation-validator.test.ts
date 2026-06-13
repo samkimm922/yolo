@@ -1,5 +1,8 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseStatusLine, validateTestGeneration } from "../src/runtime/gates/test-generation-validator.js";
 
 const changed = (...files) => files.map((file) => ({ file, status: "A", isNew: true }));
@@ -51,6 +54,52 @@ describe("test generation validator", () => {
       },
     }, { changedFiles: changed("__tests__/allowed.test.js") });
     assert.equal(result.status, "pass");
+  });
+
+  test("test-generation warnings block execution", () => {
+    const result = validateTestGeneration({ test_generation: { mode: "add_minimal", max_new_test_files: 1 } }, {
+      changedFiles: changed("__tests__/needs-reason.test.js"),
+    });
+
+    assert.equal(result.status, "warning");
+    assert.equal(result.blocks_execution, true);
+    assert.equal(result.next_action, "blocked");
+    assert.equal(result.warnings[0].code, "MISSING_TEST_GENERATION_REASON");
+  });
+
+  test("git status failures block execution instead of passing as no test changes", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-test-generation-no-git-"));
+    try {
+      const result = validateTestGeneration({ test_generation: { mode: "reuse_existing" } }, { cwd: root });
+
+      assert.equal(result.status, "fail");
+      assert.equal(result.blocks_execution, true);
+      assert.equal(result.failures[0].code, "TEST_GENERATION_GIT_STATUS_UNAVAILABLE");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("git diff failures block max line validation instead of counting zero added lines", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-test-generation-diff-fail-"));
+    try {
+      const result = validateTestGeneration({
+        test_generation: {
+          mode: "add_minimal",
+          reason: "Validate diff failure handling.",
+          max_test_lines_changed: 1,
+        },
+      }, {
+        cwd: root,
+        changedFiles: [{ file: "__tests__/existing.test.js", status: " M", isNew: false }],
+      });
+
+      assert.equal(result.status, "fail");
+      assert.equal(result.blocks_execution, true);
+      assert.ok(result.failures.some((failure) => failure.code === "TEST_GENERATION_DIFF_UNAVAILABLE"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("add_minimal blocks too many test files", () => {

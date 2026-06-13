@@ -130,7 +130,7 @@ function fixConditionFormat(cond, role, index) {
 
   // 确保 params 存在
   if (!fixed.params) {
-    fixed.params = {};
+    fixed.params = Object();
     // 从旧字段迁移 common params
     if (fixed.file) { fixed.params.file = fixed.file; delete fixed.file; }
     if (fixed.text) { fixed.params.text = fixed.text; delete fixed.text; }

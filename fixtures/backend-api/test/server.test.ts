@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startApiServer } from "../src/server.ts";
+import { startApiServer } from "../src/server.js";
 
 async function withServer(assertions) {
   const { server, url } = await startApiServer();
   try {
     await assertions(url);
   } finally {
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       server.close((error) => {
         if (error) {
           reject(error);

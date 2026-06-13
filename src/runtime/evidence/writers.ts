@@ -4,6 +4,8 @@ import { inspectPrdContract } from "../gates/prd-contract-doctor.js";
 import { gateFailureFingerprint } from "../gates/failure-analysis.js";
 import { buildEvidenceArtifact, writeJsonArtifact } from "./ledger.js";
 
+export { evidenceArtifactDigest } from "./ledger.js";
+
 export function normalizeRepoPath(filePath, projectRoot) {
   const rootPrefix = projectRoot ? `${projectRoot}/` : "";
   return String(filePath || "").replace(rootPrefix, "").replace(/^\.\//, "");

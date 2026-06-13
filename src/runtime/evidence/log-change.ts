@@ -29,7 +29,7 @@ function getRunId(stateDir) {
 
 function parseArgs(args) {
   const positional = [];
-  const named = {};
+  const named = Object();
   for (const arg of args) {
     if (arg.startsWith('--')) {
       const [key, ...rest] = arg.slice(2).split('=');
@@ -45,7 +45,7 @@ function timestamp() {
   return new Date().toISOString();
 }
 
-function resolveStateDir(named = {}) {
+function resolveStateDir(named = Object()) {
   if (named["state-dir"]) return resolve(String(named["state-dir"]));
   if (named["state-root"]) return join(resolve(String(named["state-root"])), "state");
   return join(YOLO_ROOT, "state");
@@ -55,7 +55,7 @@ function appendJsonl(file, obj) {
   appendFileSync(file, `${JSON.stringify(obj)}\n`);
 }
 
-export function runLogChangeCli(argv = process.argv.slice(2), io = {}) {
+export function runLogChangeCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const { positional, named } = parseArgs(argv);

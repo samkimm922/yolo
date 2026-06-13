@@ -88,6 +88,10 @@ export function validateFile(prdPath, schema, ajv) {
     return { ok: false, error: `JSON 解析失败: ${e.message}` };
   }
 
+  return validatePrdDocument(prd, schema, ajv, { file: prdPath });
+}
+
+export function validatePrdDocument(prd, schema, ajv, options = Object()) {
   const validate = ajv.compile(schema);
   const valid = validate(prd);
 
@@ -195,9 +199,15 @@ export function checkAllPrds(schema, ajv) {
   return results;
 }
 
-export function validatePrdPath(prdPath, options = {}) {
+export function validatePrdPath(prdPath, options = Object()) {
   if (!Ajv) {
-    return { ok: true, skipped: true, warnings: ["ajv 未安装，跳过验证"] };
+    return {
+      ok: false,
+      skipped: false,
+      code: "PRD_SCHEMA_VALIDATOR_UNAVAILABLE",
+      error: "ajv 未安装，无法执行 PRD schema 验证",
+      warnings: [],
+    };
   }
   const schema = options.schema || loadSchema();
   if (!schema) return { ok: false, error: "Schema 文件不存在或无法解析" };
@@ -205,9 +215,34 @@ export function validatePrdPath(prdPath, options = {}) {
   return validateFile(resolve(prdPath), schema, ajv);
 }
 
-export function validateAllPrds(options = {}) {
+export function validatePrdObject(prd, options = Object()) {
   if (!Ajv) {
-    return { passed: 0, failed: 0, skipped: true, results: [] };
+    return {
+      ok: false,
+      skipped: false,
+      code: "PRD_SCHEMA_VALIDATOR_UNAVAILABLE",
+      error: "ajv 未安装，无法执行 PRD schema 验证",
+      warnings: [],
+    };
+  }
+  const schema = options.schema || loadSchema();
+  if (!schema) return { ok: false, error: "Schema 文件不存在或无法解析" };
+  const ajv = options.ajv || new Ajv({ allErrors: true, strict: false, validateFormats: false });
+  return validatePrdDocument(prd, schema, ajv, options);
+}
+
+export function validateAllPrds(options = Object()) {
+  if (!Ajv) {
+    return {
+      passed: 0,
+      failed: 1,
+      skipped: false,
+      results: [{
+        ok: false,
+        code: "PRD_SCHEMA_VALIDATOR_UNAVAILABLE",
+        error: "ajv 未安装，无法执行 PRD schema 验证",
+      }],
+    };
   }
   const schema = options.schema || loadSchema();
   if (!schema) return { passed: 0, failed: 1, results: [{ ok: false, error: "Schema 文件不存在或无法解析" }] };
@@ -245,7 +280,16 @@ export function runValidatePrdCli() {
   const jsonOutput = args.includes('--json');
   const prdPath = args.find(a => !a.startsWith('--'));
 
-  if (!Ajv) process.exit(0);
+  if (!Ajv) {
+    const result = {
+      ok: false,
+      code: "PRD_SCHEMA_VALIDATOR_UNAVAILABLE",
+      error: "ajv 未安装，无法执行 PRD schema 验证",
+    };
+    if (jsonOutput) console.log(JSON.stringify(result, null, 2));
+    else console.error(`[validate-prd] ✗ ${result.error}`);
+    process.exit(1);
+  }
 
   if (checkAll) {
     const result = validateAllPrds();

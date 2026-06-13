@@ -2,13 +2,14 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runPiAgent } from "../agents/pi.js";
+import { formatLifecycleGuardText, inspectLifecycleGuard } from "../lifecycle/guard.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const defaultYoloRoot = resolve(__dirname, "../..");
 
 export function parsePiArgs(argv = process.argv.slice(2)) {
-  const input = {};
-  const options = {};
+  const input = Object();
+  const options = Object();
   let json = false;
 
   const readValue = (index, prefix) => {
@@ -102,10 +103,25 @@ export function formatPiText(result) {
   return lines.join("\n");
 }
 
-export async function runPiCli(argv = process.argv.slice(2), io = {}) {
+export async function runPiCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
   const { input, options, json } = parsePiArgs(argv);
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+  if (options.execute === true) {
+    const guard = inspectLifecycleGuard({
+      ...input,
+      command: "yolo-run",
+      projectRoot,
+      stateRoot: join(projectRoot, ".yolo"),
+      prdPath: input.prdPath ? resolve(projectRoot, input.prdPath) : input.prdPath,
+    });
+    if (guard.status !== "pass") {
+      if (json) stdout.write(`${JSON.stringify(guard, null, 2)}\n`);
+      else stderr.write(`${formatLifecycleGuardText(guard)}\n`);
+      return 2;
+    }
+  }
   const result = await runPiAgent(input, {
     yoloRoot: io.yoloRoot || defaultYoloRoot,
     projectRoot,
@@ -116,5 +132,6 @@ export async function runPiCli(argv = process.argv.slice(2), io = {}) {
   if (json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatPiText(result)}\n`);
 
-  return result.status === "success" ? 0 : 1;
+  const dynamicResult = Object.assign(Object(), result);
+  return dynamicResult.exit_code ?? (dynamicResult.status === "success" ? 0 : 1);
 }

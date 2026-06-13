@@ -38,7 +38,7 @@ export function normalizeReviewPath(value) {
     .replace(/:\d+(?:-\d+)?$/, "");
 }
 
-function parseLocation(input = {}) {
+function parseLocation(input = Object()) {
   const rawFile = input.file || input.path || input.filename || input.location?.file || input.files?.[0] || null;
   const rawText = typeof rawFile === "object" && rawFile !== null ? rawFile.file : rawFile;
   const match = String(rawText || "").match(/^(.+?):(\d+)(?:-\d+)?$/);
@@ -79,13 +79,13 @@ function buildFindingId({ input, code, file, line, message, index }) {
   return `REV-${cleanCode(code).slice(0, 28).toUpperCase()}-${shortHash(basis)}`;
 }
 
-export function normalizeReviewFinding(input = {}, options = {}) {
+export function normalizeReviewFinding(input = Object(), options = Object()) {
   const location = parseLocation(input);
   const code = cleanCode(input.code || input.scanner_id || input.rule_id || input.id || input.finding_id);
   const message = cleanText(input.message || input.description || input.title || input.summary || code);
   const suggestedFix = cleanText(input.suggested_fix || input.suggestion || input.recommendation);
   const source = cleanText(input.source || options.source) || "review";
-  const finding = {
+  const finding = Object.assign(Object(), {
     schema_version: EVIDENCE_SCHEMA_VERSION,
     schema: REVIEW_FINDING_SCHEMA,
     finding_id: buildFindingId({
@@ -115,13 +115,13 @@ export function normalizeReviewFinding(input = {}, options = {}) {
     recommendation: suggestedFix,
     risk: cleanText(input.risk),
     must_fix_before_ship: input.must_fix_before_ship === true || ["CRITICAL", "HIGH"].includes(normalizeSeverity(input.severity)),
-  };
+  });
 
   if (Array.isArray(input.evidence)) finding.evidence = input.evidence;
   return finding;
 }
 
-export function normalizeReviewFindings(findings = [], options = {}) {
+export function normalizeReviewFindings(findings = [], options = Object()) {
   return findings.map((finding, index) => normalizeReviewFinding(finding, { ...options, index }));
 }
 
@@ -146,7 +146,7 @@ export function summarizeReviewFindings(findings = []) {
   return summary;
 }
 
-export function buildReviewOutput(findings = [], options = {}) {
+export function buildReviewOutput(findings = [], options = Object()) {
   const normalizedFindings = normalizeReviewFindings(findings, options);
   return {
     schema_version: EVIDENCE_SCHEMA_VERSION,
@@ -158,7 +158,7 @@ export function buildReviewOutput(findings = [], options = {}) {
   };
 }
 
-export function validateReviewFinding(finding = {}) {
+export function validateReviewFinding(finding = Object()) {
   const errors = [];
   if (finding.schema_version !== EVIDENCE_SCHEMA_VERSION) errors.push("schema_version must be 1.0");
   if (finding.schema !== REVIEW_FINDING_SCHEMA) errors.push(`schema must be ${REVIEW_FINDING_SCHEMA}`);

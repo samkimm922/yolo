@@ -31,15 +31,19 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function statusForReport(report = {}) {
-  const status = clean(report.status || report.verdict || report.outcome).toLowerCase();
-  if (["pass", "passed", "success", "succeeded", "ready", "completed", "done"].includes(status)) return "completed";
+function normalizedReportStatus(report = Object()) {
+  return clean(report.status || report.verdict || report.outcome).toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+function statusForReport(report = Object()) {
+  const status = normalizedReportStatus(report);
+  if (["pass", "passed", "success", "succeeded", "completed", "done"].includes(status)) return "completed";
   if (["warning", "warn"].includes(status)) return "warning";
-  if (["blocked", "error", "failed", "fail"].includes(status)) return "blocked";
+  if (["blocked", "error", "failed", "fail", "skipped", "not_run", "indeterminate"].includes(status)) return "blocked";
   return "active";
 }
 
-function reportBlockers(report = {}) {
+function reportBlockers(report = Object()) {
   const raw = [
     ...(Array.isArray(report.blockers) ? report.blockers : []),
     ...(Array.isArray(report.blocked_reasons) ? report.blocked_reasons : []),
@@ -57,7 +61,7 @@ function reportBlockers(report = {}) {
   });
 }
 
-function reportEvidence(report = {}) {
+function reportEvidence(report = Object()) {
   return [
     ...(Array.isArray(report.evidence) ? report.evidence : []),
     ...(Array.isArray(report.artifacts) ? report.artifacts.map((path) => ({ path })) : []),
@@ -66,7 +70,7 @@ function reportEvidence(report = {}) {
   ].filter(Boolean);
 }
 
-function stateDirFor(options = {}) {
+function stateDirFor(options = Object()) {
   if (options.stateDir || options.state_dir) return resolve(options.stateDir || options.state_dir);
   return join(resolveLifecycleStateRoot(options), "state");
 }
@@ -77,7 +81,7 @@ function nextStageId(stageId) {
   return LIFECYCLE_STAGES[index + 1]?.id || stageId;
 }
 
-function loadOrCreateStatus(stageId, options = {}) {
+function loadOrCreateStatus(stageId, options = Object()) {
   const projectName = clean(options.projectName || options.project_name) || "project";
   const statusPath = lifecycleStatusPath(options);
   if (existsSync(statusPath)) {
@@ -90,12 +94,10 @@ function loadOrCreateStatus(stageId, options = {}) {
   return createLifecycleStateSnapshot({ projectName, currentStage: stageId, now: options.now });
 }
 
-function updateStatusForStage(stageId, stageStatus, options = {}) {
+function updateStatusForStage(stageId, stageStatus, options = Object()) {
   const now = clean(options.now) || new Date().toISOString();
   const status = loadOrCreateStatus(stageId, { ...options, now });
   const activeStage = stageStatus === "completed" ? nextStageId(stageId) : stageId;
-  const stageOrder = new Map(LIFECYCLE_STAGES.map((stage) => [stage.id, stage.sequence]));
-  const activeSequence = stageOrder.get(activeStage) || stageOrder.get(stageId) || 1;
 
   status.current_stage = activeStage;
   status.updated_at = now;
@@ -103,9 +105,8 @@ function updateStatusForStage(stageId, stageStatus, options = {}) {
     const existing = (status.stages || []).find((item) => item.id === stage.id) || {};
     let nextStatus = existing.status || "pending";
     if (stage.id === stageId) nextStatus = stageStatus;
-    else if (stage.sequence < activeSequence && nextStatus !== "blocked") nextStatus = "completed";
     else if (stage.id === activeStage) nextStatus = "active";
-    else if (stage.sequence > activeSequence && nextStatus !== "blocked") nextStatus = "pending";
+    else if (nextStatus === "active") nextStatus = "pending";
     return {
       id: stage.id,
       sequence: stage.sequence,
@@ -123,7 +124,7 @@ function updateStatusForStage(stageId, stageStatus, options = {}) {
   return { path, state: status, validation };
 }
 
-export function buildLifecycleStageReport(stageId, report = {}, options = {}) {
+export function buildLifecycleStageReport(stageId, report = Object(), options = Object()) {
   const now = clean(options.now) || new Date().toISOString();
   const stage = getLifecycleStage(stageId);
   const stageStatus = options.stageStatus || options.stage_status || statusForReport(report);
@@ -147,9 +148,25 @@ export function buildLifecycleStageReport(stageId, report = {}, options = {}) {
   };
 }
 
-export function writeLifecycleStageReport(stageId, report = {}, options = {}) {
+export function writeLifecycleStageReport(stageId, report = Object(), options = Object()) {
   const stateRoot = resolveLifecycleStateRoot(options);
   const now = clean(options.now) || new Date().toISOString();
+
+  // Sequence validation: reject writes when prior stages have not completed
+  if (options.skipSequenceCheck !== true && options.skip_sequence_check !== true) {
+    const targetStage = getLifecycleStage(stageId);
+    const status = loadOrCreateStatus(stageId, { ...options, stateRoot, now });
+    const stageStatusMap = new Map((status.stages || []).map((s) => [s.id, s.status]));
+    const incomplete = LIFECYCLE_STAGES.filter(
+      (s) => s.sequence >= 5 && s.sequence < targetStage.sequence && stageStatusMap.get(s.id) !== "completed",
+    );
+    if (incomplete.length > 0) {
+      throw new Error(
+        `Cannot write ${stageId} report: prior stages not completed: ${incomplete.map((s) => s.id).join(", ")}`,
+      );
+    }
+  }
+
   const stageReport = buildLifecycleStageReport(stageId, report, { ...options, stateRoot, now });
   const stageStatus = stageReport.status;
   const artifactPath = lifecycleArtifactPath(stageId, { ...options, stateRoot });

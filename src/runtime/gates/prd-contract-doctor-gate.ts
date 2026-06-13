@@ -27,7 +27,12 @@ export function inspectPrdContractDoctorGate({ prd, prdPath, stateDir, projectRo
     };
   }
 
-  const doctor = inspectPrdContract(prd);
+  const doctor = inspectPrdContract(prd, {
+    mode: "runner",
+    strictExecution: true,
+    requireDemandContract: true,
+    projectRoot,
+  });
   let evidenceFile = null;
   let evidencePath = null;
   try {

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
-const runnerEntrySource = readFileSync(resolve(YOLO_DIR, "runner.ts"), "utf8");
+const runnerEntrySource = readFileSync(resolve(YOLO_DIR, "src/cli/yolo.ts"), "utf8");
 const runnerCoreSource = readFileSync(resolve(YOLO_DIR, "src/runtime/runner-core.ts"), "utf8");
 const runnerCoreHelperSource = readFileSync(resolve(YOLO_DIR, "src/runtime/runner-core-helpers.ts"), "utf8");
 const runnerContextSource = readFileSync(resolve(YOLO_DIR, "src/runtime/run-lifecycle/context.ts"), "utf8");
@@ -153,6 +153,7 @@ describe("runner review fix execution flow", () => {
     assert.match(worktreeSessionSource, /existsSync\(join\(wtPath,\s*targetPath\)\)/);
     assert.match(runnerSource, /runTaskCommitFlow\(\{/);
     assert.match(executionCommitFlowSource, /buildDryRunOutOfScopeBlock\(\{/);
+    assert.match(executionCommitFlowSource, /buildOutOfScopeBlock\(\{/);
     assert.match(executionCommitFlowSource, /buildCommitSkipDecision\(\{/);
     assert.match(executionCommitFlowSource, /task\.task_kind !== "dry_run_artifact" \|\| outOfScope\.length === 0/);
     assert.match(executionCommitFlowSource, /dry-run artifact 已写入工作区/);

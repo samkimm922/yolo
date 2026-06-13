@@ -612,7 +612,7 @@ Manifest 类型：
 
 目标：文档不再散乱，所有文档围绕唯一产品主线。
 
-当前实现状态：foundation built。README 已改为 lifecycle-first，Codex/Claude 使用说明和 non-technical guide 已收束到 `/yolo 你的需求，先只生成计划，不要改代码。`，non-technical UX doctor 会用机器检查这个入口和 chat-first artifacts，旧 `docs/yolo-discovery-ui-acceptance-plan.md` 已标记为 historical reference，active truth 归到本文件、progress 表和 gap matrix。
+当前实现状态：foundation built。README 已改为 lifecycle-first，Codex/Claude 使用说明和 non-technical guide 已收束到 `/yolo 你的需求，先读状态并选择安全阶段，不要改代码。`，non-technical UX doctor 会用机器检查这个入口和 chat-first artifacts，旧 `docs/yolo-discovery-ui-acceptance-plan.md` 已标记为 historical reference，active truth 归到本文件、progress 表和 gap matrix。
 
 交付：
 

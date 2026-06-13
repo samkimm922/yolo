@@ -19,7 +19,7 @@ function writeJsonAtomic(filePath, value) {
   renameSync(tmpPath, filePath);
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -36,7 +36,7 @@ function publishRequested(actions) {
   return actions.includes("publish_public_beta");
 }
 
-function privateBlockerCodes(readiness = {}) {
+function privateBlockerCodes(readiness = Object()) {
   return (readiness.blockers || []).map((blocker) => blocker.code).filter((code) => code === PRIVATE_RELEASE_BLOCKER);
 }
 
@@ -49,7 +49,7 @@ function buildNextPackageJson(packageJson, actions) {
   return next;
 }
 
-export function buildOperatorReleaseStatePlan(options = {}) {
+export function buildOperatorReleaseStatePlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const requestedActions = normalizeRequestedActions(options.requestedActions || options.requested_actions);
   const apply = options.apply === true;
@@ -79,7 +79,7 @@ export function buildOperatorReleaseStatePlan(options = {}) {
   };
 }
 
-export function runOperatorReleaseStateMutation(options = {}) {
+export function runOperatorReleaseStateMutation(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJsonPath = join(yoloRoot, "package.json");
   const packageBefore = readJson(packageJsonPath);
@@ -156,13 +156,13 @@ export function runOperatorReleaseStateMutation(options = {}) {
   ];
 
   const preApplyBlockers = checks.filter((item) => item.passed !== true);
-  let mutation = {
+  let mutation = Object.assign(Object(), {
     applied: false,
     file: "package.json",
     private_before: packageBefore.private === true,
     private_after: packageBefore.private === true,
     changed_fields: [],
-  };
+  });
 
   if (preApplyBlockers.length === 0 && apply && removePrivateRequested(requestedActions)) {
     writeJsonAtomic(packageJsonPath, nextPackageJson);

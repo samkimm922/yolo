@@ -2,6 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { join, resolve } from "node:path";
 import { detectModelProvider } from "../src/runtime/adapters/provider-doctor.js";
+import { DEFAULT_CLAUDE_SETTINGS_PATH } from "../src/runtime/execution/provider-adapter.js";
 import { createYoloSdk } from "../sdk.js";
 import {
   buildProviderCliDryRunMatrix,
@@ -82,6 +83,15 @@ describe("provider runtime matrix", () => {
     assert.deepEqual(matrix.providers.map((entry) => entry.provider), ["claude", "codex", "custom"]);
     assert.deepEqual(matrix.providers.map((entry) => entry.selected_provider), ["claude", "codex", "custom"]);
 
+    const claude = matrix.providers.find((entry) => entry.provider === "claude");
+    const settingsIndex = claude.invocation.args.indexOf("--settings");
+    assert.notEqual(settingsIndex, -1);
+    const settingsArg = claude.invocation.args[settingsIndex + 1];
+    // Default settings are now inline JSON with absolute hook path
+    assert.equal(settingsArg.startsWith("{"), true);
+    assert.ok(settingsArg.includes("pre-tool-block-yolo-write.js"));
+    assert.equal(claude.invocation.settings_file, null);
+
     const codex = matrix.providers.find((entry) => entry.provider === "codex");
     assert.equal(codex.invocation.command, "codex");
     assert.equal(codex.invocation.output_file, join(stateRoot, "state", "runtime", "codex-output-123-8.txt"));
@@ -105,6 +115,34 @@ describe("provider runtime matrix", () => {
     assert.ok(blocked.blockers.some((blocker) => blocker.code === "PROVIDER_MATRIX_GATE_LOG_DIR_MISMATCH"));
     assert.ok(blocked.blockers.some((blocker) => blocker.code === "PROVIDER_MATRIX_SELECTION_MISMATCH"));
     assert.ok(blocked.blockers.some((blocker) => blocker.code === "AGENT_COMMAND_UNAVAILABLE"));
+  });
+
+  test("inspectProviderRuntimeMatrix blocks missing claude settings before provider execution", () => {
+    const result = inspectProviderRuntimeMatrix({
+      config: {
+        ai: {
+          provider: "claude",
+          model: "claude-sonnet-4",
+          settings: "missing-settings.json",
+        },
+      },
+      providers: ["claude"],
+      projectRoot,
+      stateRoot,
+      commandExists,
+      existsSync: () => false,
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.blocks_execution, true);
+    assert.ok(result.blockers.some((blocker) => (
+      blocker.code === "CLAUDE_SETTINGS_FILE_MISSING"
+      && blocker.provider === "claude"
+      && blocker.message.includes(join(projectRoot, "missing-settings.json"))
+    )));
+    const claude = result.matrix.providers[0];
+    assert.equal(claude.status, "blocked");
+    assert.equal(claude.invocation_preflight.status, "blocked");
   });
 
   test("buildProviderCliDryRunMatrix describes real provider CLI contracts without spawning", () => {
@@ -186,8 +224,9 @@ describe("provider runtime matrix", () => {
       random: () => 0.5,
     });
 
-    assert.equal(result.blocks_execution, false);
-    assert.equal(result.status, "warning");
+    assert.equal(result.blocks_execution, true);
+    assert.equal(result.status, "blocked");
+    assert.ok(result.blockers.some((blocker) => blocker.code === "AGENT_BUDGET_NOT_ENFORCEABLE" && blocker.provider === "codex"));
     assert.equal(result.matrix.state_root, stateRoot);
     assert.equal(result.matrix.gate_log_dir, join(stateRoot, "state", "runtime"));
     assert.equal(result.matrix.providers.length, 3);
@@ -197,7 +236,8 @@ describe("provider runtime matrix", () => {
       now: () => 456,
       random: () => 0.5,
     });
-    assert.equal(dryRun.blocks_execution, false);
+    assert.equal(dryRun.blocks_execution, true);
+    assert.ok(dryRun.blockers.some((blocker) => blocker.code === "CLI_DRY_RUN_AGENT_BUDGET_NOT_ENFORCEABLE" && blocker.provider === "codex"));
     assert.equal(dryRun.matrix.state_root, stateRoot);
     assert.equal(dryRun.matrix.providers.find((entry) => entry.provider === "codex").will_spawn, false);
   });

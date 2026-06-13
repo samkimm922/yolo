@@ -32,13 +32,13 @@ export function loadExpandedTasksForRetryFile(expandedTasksFile) {
   }
 }
 
-export function findRetryTaskById(id, prd = {}, expandedTasks = []) {
+export function findRetryTaskById(id, prd = Object(), expandedTasks = []) {
   return (prd.tasks || []).find((task) => task.id === id) ||
     expandedTasks.find((task) => task.id === id) ||
     null;
 }
 
-export function prepareRetryTasks({ failedIds = [], prd = {}, expandedTasks = [] }) {
+export function prepareRetryTasks({ failedIds = [], prd = Object(), expandedTasks = [] }) {
   const missingRetryTaskIds = [];
   const retryTasks = failedIds
     .map((id) => {
@@ -88,18 +88,18 @@ export function buildRetryCompletedSet({ resumeCompleted = new Set(), completed 
   ]);
 }
 
-export function retryBlockedFailureIds(retryResults = {}) {
+export function retryBlockedFailureIds(retryResults = Object()) {
   const contractReview = new Set(retryResults.contractReview || []);
   return (retryResults.blocked || []).filter((id) => !contractReview.has(id));
 }
 
 export function syncRetryCompletions({
-  retryResults = {},
-  prd = {},
+  retryResults = Object(),
+  prd = Object(),
   taskResults,
   taskPostconditionsPass,
   updateTaskStatus,
-  log = () => {},
+  log = (..._args) => {},
 }) {
   const synced = [];
   const blocked = [];

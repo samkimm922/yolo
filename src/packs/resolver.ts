@@ -26,12 +26,12 @@ function unknownSelection(kind) {
   };
 }
 
-export function resolveProjectContext(options = {}) {
+export function resolveProjectContext(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
   const stateRoot = resolve(options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
   const discovery = discoverPackManifests({ ...options, projectRoot, stateRoot });
   const invalid = discovery.manifests.filter((entry) => !entry.validation.valid);
-  const selected = {};
+  const selected = Object();
   for (const kind of PACK_MANIFEST_KINDS) {
     selected[kind] = firstValidByKind(discovery.manifests, kind) || unknownSelection(kind);
   }
@@ -52,7 +52,8 @@ export function resolveProjectContext(options = {}) {
 
   const warnings = [];
   for (const [kind, manifest] of Object.entries(selected)) {
-    if (manifest.id === "unknown/custom") {
+    const item = Object.assign(Object(), manifest);
+    if (item.id === "unknown/custom") {
       warnings.push({ code: "RESOLVER_UNKNOWN_CONTEXT", kind, message: `${kind} resolved to unknown/custom.` });
     }
   }
@@ -72,8 +73,8 @@ export function resolveProjectContext(options = {}) {
     state_root: stateRoot,
     manifest_roots: discovery.roots,
     selected,
-    selected_packs: Object.values(selected).filter((manifest) => !String(manifest.kind).endsWith("_adapter")),
-    selected_adapters: Object.values(selected).filter((manifest) => String(manifest.kind).endsWith("_adapter")),
+    selected_packs: Object.values(selected).filter((manifest) => !String(Object.assign(Object(), manifest).kind).endsWith("_adapter")),
+    selected_adapters: Object.values(selected).filter((manifest) => String(Object.assign(Object(), manifest).kind).endsWith("_adapter")),
     blockers,
     warnings,
     manifests: discovery.manifests.map((entry) => ({

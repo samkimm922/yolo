@@ -4,8 +4,12 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
-const inventory = JSON.parse(readFileSync(resolve(YOLO_DIR, "docs/root-entrypoint-inventory.json"), "utf8"));
-const packageJson = JSON.parse(readFileSync(resolve(YOLO_DIR, "package.json"), "utf8"));
+const inventory: {
+  schema_version: number;
+  policy: { new_root_ts_allowed: boolean };
+  entries: { file: string; role: string; status: string; reason: string; target: string; public_export?: boolean; package_script?: boolean }[];
+} = JSON.parse(readFileSync(resolve(YOLO_DIR, "docs/root-entrypoint-inventory.json"), "utf8"));
+const packageJson: { exports: Record<string, string>; scripts: Record<string, string> } = JSON.parse(readFileSync(resolve(YOLO_DIR, "package.json"), "utf8"));
 
 const ALLOWED_ROLES = new Set([
   "compat_cli",
@@ -100,5 +104,16 @@ describe("root entrypoint inventory", () => {
     for (const entry of inventory.entries.filter((item) => item.status === "shim_to_src")) {
       assert.equal(existsSync(resolve(YOLO_DIR, entry.target)), true, `${entry.file} shim target is missing: ${entry.target}`);
     }
+  });
+
+  test("root shell launchers point at current yolo CLI instead of stale .mjs targets", () => {
+    const start = readFileSync(resolve(YOLO_DIR, "start.sh"), "utf8");
+    const startHere = readFileSync(resolve(YOLO_DIR, "START_HERE.command"), "utf8");
+
+    assert.doesNotMatch(start, /runner\.mjs|server\.mjs/);
+    assert.doesNotMatch(startHere, /runner\.mjs|server\.mjs|yolo-wizard/);
+    assert.match(start, /dist\/bin\/yolo\.js/);
+    assert.match(startHere, /dist\/bin\/yolo\.js/);
+    assert.match(startHere, /status \| demand \| spec \| tasks \| run \| check \| review \| release/);
   });
 });

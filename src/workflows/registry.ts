@@ -1,7 +1,84 @@
 export const WORKFLOW_SKILL_DESCRIPTOR_SCHEMA_VERSION = "1.0";
 export const WORKFLOW_SKILL_DESCRIPTOR_SCHEMA = "yolo.workflow.skill_descriptor.v1";
 
+export const STABLE_WORKFLOW_COMMAND_SURFACES = {
+  status: ["doctor"],
+  demand: ["demand"],
+  spec: ["prd"],
+  tasks: ["plan"],
+  run: ["pi", "fix"],
+  check: ["check"],
+  review: ["review"],
+  release: ["accept", "ship", "eval"],
+};
+
+const WORKFLOW_SURFACE_BY_ID = Object.fromEntries(
+  Object.entries(STABLE_WORKFLOW_COMMAND_SURFACES).flatMap(([surface, ids]) =>
+    ids.map((id) => [id, surface])
+  )
+);
+
+const WORKFLOW_ALIAS_FOR = {
+  brainstorm: "demand",
+  interview: "demand",
+  discover: "demand",
+  discuss: "demand",
+  learn: "release",
+};
+
 const WORKFLOWS = {
+  demand: {
+    id: "demand",
+    label: "Demand router workflow",
+    purpose: "Route early demand work through fast/careful triage, PRD readiness, evidence policy, and explicit evidence-agent dispatch before brainstorm, interview, discuss, plan, or PRD.",
+    preset: "planner",
+    sub_modes: ["brainstorm", "interview", "discover", "discuss"],
+    triggers: ["idea.received", "demand.status.requested", "cli.yolo-demand-status"],
+    inputs: ["idea?", "demandSession?", "projectFacts?", "acceptanceCriteria?", "approval?"],
+    outputs: ["demand status", "dispatch plan", "agent evidence results", "context_type", "route", "evidence_policy", "missing_slots", "blockers", "needed_evidence_agents", "next_action"],
+    sdk_namespaces: ["demand", "evidence", "spec"],
+    phases: ["intake", "clarify", "evidence", "discuss", "requirements", "roadmap", "approval", "prd_ready"],
+    verification: ["fast_by_default", "factual_evidence_policy", "risky_cross_check", "assumptions_not_facts", "status_read_only", "dispatch_explicitly_authorized"],
+    entrypoints: {
+      sdk: "sdk.demand.status({ objective }) / sdk.demand.dispatchEvidence({ objective, executeAgents, allowAgentDispatch })",
+      cli: "yolo demand status / yolo demand dispatch",
+      skill: "yolo.demand",
+    },
+  },
+  brainstorm: {
+    id: "brainstorm",
+    label: "Demand brainstorm workflow",
+    purpose: "Explore a new product idea before discovery by challenging demand reality, target user, status quo, assumptions, and alternatives.",
+    preset: "planner",
+    triggers: ["idea.received", "new_project.started", "cli.yolo-brainstorm"],
+    inputs: ["idea", "targetUsers?", "statusQuo?", "evidence?", "assumptions?", "alternatives?"],
+    outputs: ["VISION.md", "REFLECTION.md", "INVESTIGATION.md", "REQUIREMENTS.md", "CONTEXT.md", "ROADMAP.md", "READINESS.json"],
+    sdk_namespaces: ["demand", "discovery", "evidence"],
+    phases: ["vision", "reflection", "investigation", "initial_requirements", "readiness_verdict"],
+    verification: ["target_user.present", "status_quo.present", "evidence_or_assumption.present", "no_code_change", "demand.artifact_graph"],
+    entrypoints: {
+      sdk: "sdk.workflows.createWorkflowPlan({ workflow: 'brainstorm' })",
+      cli: "yolo brainstorm",
+      skill: "yolo.brainstorm",
+    },
+  },
+  interview: {
+    id: "interview",
+    label: "Demand interview workflow",
+    purpose: "Collect non-technical requirements one question at a time before demand discussion, planning, or executable PRD generation.",
+    preset: "planner",
+    triggers: ["idea.received", "nontechnical_user.needs_interview", "cli.yolo-interview", "cli.yolo-interview-answer"],
+    inputs: ["idea", "interviewSession?", "questionId?", "answer?", "approval?"],
+    outputs: ["interview.json", "answers.jsonl", "coverage report", "demand session?", "question handoff state"],
+    sdk_namespaces: ["demand", "discovery", "evidence"],
+    phases: ["start", "ask_next_question", "record_answer", "coverage_check", "to_demand"],
+    verification: ["one_question_at_a_time", "answers.preserved", "coverage.reported", "handoff_state.present", "no_code_change"],
+    entrypoints: {
+      sdk: "sdk.workflows.createWorkflowPlan({ workflow: 'interview' })",
+      cli: "yolo interview",
+      skill: "yolo.interview",
+    },
+  },
   discover: {
     id: "discover",
     label: "Discovery workflow",
@@ -17,6 +94,23 @@ const WORKFLOWS = {
       sdk: "sdk.workflows.createWorkflowPlan({ workflow: 'discover' })",
       cli: "yolo discover",
       skill: "yolo.discover",
+    },
+  },
+  discuss: {
+    id: "discuss",
+    label: "Demand discussion workflow",
+    purpose: "Close the front-end demand loop through vision, reflection, investigation, questioning rounds, depth verification, and requirements confirmation.",
+    preset: "planner",
+    triggers: ["demand.needs_discussion", "requirement.gray_area", "cli.yolo-discuss"],
+    inputs: ["idea", "evidence?", "decisions?", "targetFiles?", "approval?"],
+    outputs: ["VISION.md", "REFLECTION.md", "INVESTIGATION.md", "DISCUSSION-LOG.md", "REQUIREMENTS.md", "CONTEXT.md", "ROADMAP.md", "APPROVAL.json", "READINESS.json"],
+    sdk_namespaces: ["demand", "discovery", "spec", "evidence"],
+    phases: ["vision", "reflection", "investigation", "questioning_rounds", "depth_verification", "requirements_confirmation", "approval_gate"],
+    verification: ["vision.present", "questioning_rounds.complete", "depth_verification.pass", "requirements.confirmed", "human.approval", "no_code_change"],
+    entrypoints: {
+      sdk: "sdk.workflows.createWorkflowPlan({ workflow: 'discuss' })",
+      cli: "yolo discuss",
+      skill: "yolo.discuss",
     },
   },
   plan: {
@@ -212,8 +306,33 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function workflowSurfaceMetadata(id) {
+  const surface = WORKFLOW_SURFACE_BY_ID[id] || null;
+  if (surface) {
+    return {
+      surface,
+      stability: "stable",
+      visibility: "default",
+      alias_for: null,
+    };
+  }
+  return {
+    surface: WORKFLOW_ALIAS_FOR[id] || "internal",
+    stability: WORKFLOW_ALIAS_FOR[id] ? "compat" : "internal",
+    visibility: "hidden",
+    alias_for: WORKFLOW_ALIAS_FOR[id] || null,
+  };
+}
+
+function cloneWorkflow(workflow) {
+  return {
+    ...clone(workflow),
+    ...workflowSurfaceMetadata(workflow.id),
+  };
+}
+
 export function listWorkflows() {
-  return Object.values(WORKFLOWS).map(clone);
+  return Object.values(WORKFLOWS).map(cloneWorkflow);
 }
 
 export function getWorkflow(id = "pi") {
@@ -221,10 +340,17 @@ export function getWorkflow(id = "pi") {
   if (!workflow) {
     throw new Error(`Unknown YOLO workflow "${id}". Available workflows: ${Object.keys(WORKFLOWS).join(", ")}`);
   }
-  return clone(workflow);
+  return cloneWorkflow(workflow);
 }
 
-export function createWorkflowPlan(input = {}) {
+export function listWorkflowCommandSurfaces() {
+  return Object.entries(STABLE_WORKFLOW_COMMAND_SURFACES).map(([command, workflows]) => ({
+    command,
+    workflows: [...workflows],
+  }));
+}
+
+export function createWorkflowPlan(input = Object()) {
   const workflow = getWorkflow(input.workflow || input.id || "pi");
   const objective = input.objective || "";
   return {
@@ -232,6 +358,10 @@ export function createWorkflowPlan(input = {}) {
     label: workflow.label,
     objective,
     preset: workflow.preset,
+    surface: workflow.surface,
+    stability: workflow.stability,
+    visibility: workflow.visibility,
+    alias_for: workflow.alias_for,
     sdk_namespaces: workflow.sdk_namespaces,
     entrypoints: workflow.entrypoints,
     steps: workflow.phases.map((phase, index) => ({
@@ -243,7 +373,7 @@ export function createWorkflowPlan(input = {}) {
   };
 }
 
-export function workflowToSkillDescriptor(workflowInput, options = {}) {
+export function workflowToSkillDescriptor(workflowInput, options = Object()) {
   const workflow = typeof workflowInput === "string" ? getWorkflow(workflowInput) : getWorkflow(workflowInput.id);
   const agent = options.agent || "generic";
   return {
@@ -253,6 +383,10 @@ export function workflowToSkillDescriptor(workflowInput, options = {}) {
     name: workflow.label,
     workflow: workflow.id,
     agent,
+    surface: workflow.surface,
+    stability: workflow.stability,
+    visibility: workflow.visibility,
+    alias_for: workflow.alias_for,
     purpose: workflow.purpose,
     trigger: workflow.triggers,
     inputs: workflow.inputs,
@@ -264,6 +398,6 @@ export function workflowToSkillDescriptor(workflowInput, options = {}) {
   };
 }
 
-export function listWorkflowSkillDescriptors(options = {}) {
+export function listWorkflowSkillDescriptors(options = Object()) {
   return listWorkflows().map((workflow) => workflowToSkillDescriptor(workflow, options));
 }

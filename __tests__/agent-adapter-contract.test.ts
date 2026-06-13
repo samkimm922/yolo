@@ -36,6 +36,7 @@ describe("agent adapter contract", () => {
     });
 
     assert.equal(contract.schema, "yolo.runtime.agent_adapter_contract.v1");
+    assert.equal(contract.schema_version, "1.1");
     assert.equal(contract.provider, "claude");
     assert.equal(contract.command, "claude");
     assert.equal(contract.budget.enforceable, true);
@@ -43,6 +44,12 @@ describe("agent adapter contract", () => {
     assert.equal(contract.sandbox.approval_policy, "default");
     assert.equal(contract.capabilities.stdin_prompt, true);
     assert.equal(contract.capabilities.output_capture_mode, "stdout");
+    assert.equal(contract.timeout.required, true);
+    assert.equal(contract.retry_policy.fail_closed, true);
+    assert.equal(contract.output_schema.schema, "yolo.runtime.provider_run_result.v1");
+    assert.ok(contract.failure_codes.includes("AGENT_PERMISSION_UNSAFE"));
+    assert.ok(contract.allowed_roots.length > 0);
+    assert.equal(contract.permission_policy.fail_closed, true);
   });
 
   test("buildAgentAdapterCapabilities captures codex sandbox and approval policy", () => {
@@ -72,7 +79,8 @@ describe("agent adapter contract", () => {
       commandExists: () => false,
     });
     assert.equal(unavailable.status, "blocked");
-    assert.deepEqual(unavailable.blockers.map((blocker) => blocker.code), ["AGENT_COMMAND_UNAVAILABLE"]);
+    assert.ok(unavailable.blockers.some((blocker) => blocker.code === "AGENT_COMMAND_UNAVAILABLE"));
+    assert.ok(unavailable.blockers.some((blocker) => blocker.code === "AGENT_BUDGET_NOT_ENFORCEABLE"));
 
     const unsafeClaude = inspectAgentAdapterContract({
       provider: "claude",
@@ -91,16 +99,16 @@ describe("agent adapter contract", () => {
     assert.ok(unsafeCodex.blockers.some((blocker) => blocker.code === "AGENT_SANDBOX_UNSAFE"));
   });
 
-  test("inspectAgentAdapterContract warns when configured budget is not enforceable", () => {
+  test("inspectAgentAdapterContract blocks when configured budget is not enforceable", () => {
     const result = inspectAgentAdapterContract({
       provider: "codex",
       config: baseConfig,
       commandExists: () => true,
     });
 
-    assert.equal(result.status, "warning");
-    assert.equal(result.blocks_execution, false);
-    assert.deepEqual(result.warnings.map((warning) => warning.code), ["AGENT_BUDGET_NOT_ENFORCEABLE"]);
+    assert.equal(result.status, "blocked");
+    assert.equal(result.blocks_execution, true);
+    assert.deepEqual(result.blockers.map((blocker) => blocker.code), ["AGENT_BUDGET_NOT_ENFORCEABLE"]);
   });
 
   test("custom adapters require explicit command verification", () => {

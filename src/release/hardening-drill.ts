@@ -16,15 +16,15 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
-function packagePrivateBlocker(readiness = {}) {
+function packagePrivateBlocker(readiness = Object()) {
   return (readiness.blockers || []).some((item) => item.code === "PACKAGE_PRIVATE_RELEASE_BLOCK");
 }
 
-function providerDryRunSafe(providerCliDryRun = {}) {
+function providerDryRunSafe(providerCliDryRun = Object()) {
   const matrix = providerCliDryRun.matrix || {};
   return matrix.dry_run === true
     && matrix.execution_allowed === false
@@ -33,7 +33,7 @@ function providerDryRunSafe(providerCliDryRun = {}) {
     );
 }
 
-function providerCredentialStopConditionPresent(providerCliDryRun = {}) {
+function providerCredentialStopConditionPresent(providerCliDryRun = Object()) {
   const matrix = providerCliDryRun.matrix || {};
   const text = [
     ...(matrix.stop_conditions || []),
@@ -53,7 +53,7 @@ function allPassed(items = []) {
 function runWorkflowTargetSmokeInTemp({
   yoloRoot,
   runWorkflowSkillTargetSmokeImpl = runWorkflowSkillTargetSmoke,
-} = {}) {
+} = Object()) {
   const workspace = mkdtempSync(join(tmpdir(), "yolo-release-workflow-smoke-"));
   try {
     return runWorkflowSkillTargetSmokeImpl({
@@ -68,7 +68,7 @@ function runWorkflowTargetSmokeInTemp({
   }
 }
 
-export function buildPublicBetaHardeningDrillPlan(options = {}) {
+export function buildPublicBetaHardeningDrillPlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   return {
     schema_version: PUBLIC_BETA_HARDENING_DRILL_SCHEMA_VERSION,
@@ -129,7 +129,7 @@ export function buildPublicBetaHardeningDrillPlan(options = {}) {
   };
 }
 
-export function runPublicBetaHardeningDrill(options = {}) {
+export function runPublicBetaHardeningDrill(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJsonPath = join(yoloRoot, "package.json");
   const packageBefore = readJson(packageJsonPath);

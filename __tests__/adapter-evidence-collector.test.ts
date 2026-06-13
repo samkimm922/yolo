@@ -58,6 +58,55 @@ describe("adapter evidence collector", () => {
     }
   });
 
+  test("blocks the plan when the adapter does not cover the required platform", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      writeJson(join(stateRoot, "adapters/local-browser.manifest.json"), adapterManifest());
+      const plan = buildAdapterEvidencePlan({
+        projectRoot: root,
+        stateRoot,
+        requiresAcceptanceAdapter: true,
+        requiredPlatform: "weapp",
+      });
+
+      assert.equal(plan.status, "blocked");
+      assert.equal(plan.code, "ADAPTER_PLATFORM_NOT_COVERED");
+      assert.equal(plan.required_platform, "weapp");
+      assert.deepEqual(plan.adapter.applies_to, ["ui", "browser"]);
+      assert.deepEqual(plan.platform_coverage.missing_adapter_platforms, ["weapp"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks the plan when adapter commands do not declare required platform coverage", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      writeJson(join(stateRoot, "adapters/local-browser.manifest.json"), {
+        ...adapterManifest(),
+        applies_to: ["ui", "h5", "weapp"],
+        commands: [{
+          command: "node tools/write-evidence.cjs",
+          evidence_path: ".yolo/state/evidence/ui/latest.json",
+        }],
+      });
+      const plan = buildAdapterEvidencePlan({
+        projectRoot: root,
+        stateRoot,
+        requiresAcceptanceAdapter: true,
+        requiredPlatform: "weapp",
+      });
+
+      assert.equal(plan.status, "blocked");
+      assert.equal(plan.code, "ADAPTER_COMMAND_PLATFORM_MISSING");
+      assert.equal(plan.platform_coverage.command_blockers[0].command_id, "command-1");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("requires explicit command authorization before executing", () => {
     const root = tempProject();
     const stateRoot = join(root, ".yolo");
@@ -75,6 +124,54 @@ describe("adapter evidence collector", () => {
       assert.equal(result.status, "blocked");
       assert.equal(result.code, "ADAPTER_COMMAND_EXECUTION_NOT_ALLOWED");
       assert.equal(existsSync(join(stateRoot, "state/evidence/ui/latest.json")), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks executed evidence when it proves a different platform", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      writeJson(join(stateRoot, "adapters/local-browser.manifest.json"), {
+        ...adapterManifest(),
+        applies_to: ["ui", "h5", "weapp"],
+        commands: [{
+          command: "node tools/write-evidence.cjs",
+          evidence_path: ".yolo/state/evidence/ui/latest.json",
+          platform: "weapp",
+        }],
+      });
+      writeText(join(root, "tools/write-evidence.cjs"), [
+        "const fs = require('fs');",
+        "fs.mkdirSync('.yolo/state/evidence/ui', { recursive: true });",
+        "fs.writeFileSync('.yolo/state/evidence/ui/latest.json', JSON.stringify({",
+        "  platform: 'h5',",
+        "  page_reachable: true,",
+        "  critical_path_passed: true,",
+        "  required_state_present: true,",
+        "  screenshots: ['.yolo/state/evidence/ui/inventory.png']",
+        "}));",
+        "",
+      ].join("\n"));
+
+      const result = runAdapterEvidenceCollector({
+        projectRoot: root,
+        stateRoot,
+        requiresAcceptanceAdapter: true,
+        required_platform: "weapp",
+        execute: true,
+        allowAdapterCommands: true,
+      });
+
+      assert.equal(result.status, "blocked");
+      assert.equal(result.code, "ADAPTER_EVIDENCE_PLATFORM_MISMATCH");
+      assert.equal(result.required_platform, "weapp");
+      assert.deepEqual(result.adapter.applies_to, ["ui", "h5", "weapp"]);
+      assert.equal(result.command_results[0].required_platform, "weapp");
+      assert.equal(result.collected_evidence[0].required_platform, "weapp");
+      assert.deepEqual(result.platform_coverage.evidence_covered_platforms, ["h5"]);
+      assert.deepEqual(result.platform_coverage.missing_evidence_platforms, ["weapp"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

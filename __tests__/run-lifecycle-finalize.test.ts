@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildRunReturnResult,
+  buildRunFinalVerdict,
   cleanDirByPattern,
   cleanupRunArtifacts,
   cleanupWorktreeRoot,
@@ -119,8 +120,15 @@ describe("run lifecycle finalization helpers", () => {
         prdPath,
         completionStatus: "success",
         consoleLog: () => {},
+        now: new Date("2026-05-24T00:00:00.000Z"),
       });
 
+      const archiveDir = join(stateDir, "archive", "raw-runtime", "20260524T000000Z");
+      assert.equal(result.rawEvidenceArchive.archived, true);
+      assert.equal(existsSync(join(archiveDir, "runtime", "codex-output-1.txt")), true);
+      assert.equal(existsSync(join(archiveDir, "runtime", "task-logs", "FEAT-1.jsonl")), true);
+      assert.equal(existsSync(join(archiveDir, "runtime", "gate-FEAT-1-1.json")), true);
+      assert.equal(existsSync(join(archiveDir, "state", "yolo-output.log")), true);
       assert.equal(existsSync(join(runtimeDir, "codex-output-1.txt")), false);
       assert.equal(existsSync(join(runtimeDir, "task-results.jsonl")), false);
       assert.equal(existsSync(join(runtimeDir, "task-logs")), false);
@@ -189,7 +197,7 @@ describe("run lifecycle finalization helpers", () => {
     const result = buildRunReturnResult({
       runId: "run-1",
       prdPath: "/repo/prd.json",
-      taskResults: { completed: ["A"], failed: ["B"], skipped: ["C"], blocked: ["D"] },
+      taskResults: { completed: ["A"], failed: ["B"], skipped: ["C"], blocked: ["D"], contractReview: [] },
       runReportResult: {
         json_path: "/repo/state/report.json",
         markdown_path: "/repo/state/report.md",
@@ -201,7 +209,7 @@ describe("run lifecycle finalization helpers", () => {
 
     assert.deepEqual(result, {
       status: "error",
-      summary: "runner completed with 1 failed task(s)",
+      summary: "runner failed closed: FAILED_TASKS=1, BLOCKED_TASKS=1",
       exit_code: 1,
       run_id: "run-1",
       prd: "/repo/prd.json",
@@ -209,12 +217,184 @@ describe("run lifecycle finalization helpers", () => {
       failed: ["B"],
       skipped: ["C"],
       blocked: ["D"],
+      contract_review: [],
       remediation: [],
+      immediate_remediation_queue: [],
+      final_verdict: {
+        status: "error",
+        exit_code: 1,
+        summary: "runner failed closed: FAILED_TASKS=1, BLOCKED_TASKS=1",
+        issues: [
+          { code: "FAILED_TASKS", count: 1, detail: "runner has failed tasks" },
+          { code: "BLOCKED_TASKS", count: 1, detail: "runner has blocked tasks" },
+        ],
+      },
       report_file: "state/report.json",
       report_markdown: "state/report.md",
       final_answer_file: "state/final-answer.json",
       final_answer_markdown: "state/final-answer.md",
     });
+  });
+
+  test("buildRunReturnResult fails closed for blocked-only runs", () => {
+    const result = buildRunReturnResult({
+      runId: "run-blocked",
+      prdPath: "/repo/prd.json",
+      taskResults: { completed: ["A"], failed: [], skipped: [], blocked: ["B"], contractReview: [] },
+      runReportResult: {
+        json_path: "/repo/state/report.json",
+        markdown_path: "/repo/state/report.md",
+        report: { status: "success", summary: { failed: 0, blocked: 0, evidence_failures: 0 } },
+      },
+      normalizeRepoPath: (value) => value.replace("/repo/", ""),
+    });
+
+    assert.equal(result.status, "error");
+    assert.equal(result.exit_code, 1);
+    assert.deepEqual(result.final_verdict.issues.map((issue) => issue.code), ["BLOCKED_TASKS"]);
+  });
+
+  test("buildRunReturnResult fails closed for contract-review-only runs", () => {
+    const result = buildRunReturnResult({
+      runId: "run-contract",
+      prdPath: "/repo/prd.json",
+      taskResults: { completed: ["A"], failed: [], skipped: [], blocked: [], contractReview: ["C"] },
+      runReportResult: {
+        json_path: "/repo/state/report.json",
+        markdown_path: "/repo/state/report.md",
+        report: { status: "success", summary: { failed: 0, blocked: 0, evidence_failures: 0 } },
+      },
+      normalizeRepoPath: (value) => value.replace("/repo/", ""),
+    });
+
+    assert.equal(result.status, "error");
+    assert.equal(result.exit_code, 1);
+    assert.deepEqual(result.contract_review, ["C"]);
+    assert.deepEqual(result.final_verdict.issues.map((issue) => issue.code), ["CONTRACT_REVIEW_TASKS"]);
+  });
+
+  test("buildRunReturnResult fails closed when the run report has errors", () => {
+    const result = buildRunReturnResult({
+      runId: "run-report-error",
+      prdPath: "/repo/prd.json",
+      taskResults: { completed: ["A"], failed: [], skipped: [], blocked: [], contractReview: [] },
+      runReportResult: {
+        json_path: "/repo/state/report.json",
+        markdown_path: "/repo/state/report.md",
+        report: {
+          status: "error",
+          summary: { failed: 0, blocked: 0, evidence_failures: 1 },
+          review: { error_count: 1 },
+        },
+      },
+      normalizeRepoPath: (value) => value.replace("/repo/", ""),
+    });
+
+    assert.equal(result.status, "error");
+    assert.equal(result.exit_code, 1);
+    assert.ok(result.final_verdict.issues.some((issue) => issue.code === "RUN_REPORT_STATUS_ERROR"));
+    assert.ok(result.final_verdict.issues.some((issue) => issue.code === "EVIDENCE_FAILURES"));
+    assert.ok(result.final_verdict.issues.some((issue) => issue.code === "REVIEW_ERRORS"));
+  });
+
+  test("buildRunFinalVerdict fails closed for warning dry-run not-run and ready statuses", () => {
+    for (const status of ["warning", "dry_run", "not_run", "indeterminate", "draft", "ready"]) {
+      const resultIssue = buildRunFinalVerdict({
+        taskResults: { status, completed: ["A"], failed: [], skipped: [], blocked: [], contractReview: [] },
+        runReportResult: {
+          report: { status: "success", summary: { failed: 0, blocked: 0, evidence_failures: 0 } },
+          final_answer: { status: "success", outcome: "success", checks: [{ name: "tasks", status: "pass" }], blockers: [] },
+        },
+      });
+      assert.equal(resultIssue.status, "error", status);
+      assert.ok(resultIssue.issues.some((issue) => issue.code === "RUNNER_RESULT_STATUS_ERROR"), status);
+
+      const reportIssue = buildRunFinalVerdict({
+        taskResults: { completed: ["A"], failed: [], skipped: [], blocked: [], contractReview: [] },
+        runReportResult: {
+          report: { status, summary: { failed: 0, blocked: 0, evidence_failures: 0 } },
+          final_answer: { status: "success", outcome: "success", checks: [{ name: "tasks", status: "pass" }], blockers: [] },
+        },
+      });
+      assert.equal(reportIssue.status, "error", status);
+      assert.ok(reportIssue.issues.some((issue) => issue.code === "RUN_REPORT_STATUS_ERROR"), status);
+
+      const finalAnswerIssue = buildRunFinalVerdict({
+        taskResults: { completed: ["A"], failed: [], skipped: [], blocked: [], contractReview: [] },
+        runReportResult: {
+          report: { status: "success", summary: { failed: 0, blocked: 0, evidence_failures: 0 } },
+          final_answer: { status: "success", outcome: "success", checks: [{ name: "tasks", status }], blockers: [] },
+        },
+      });
+      assert.equal(finalAnswerIssue.status, "error", status);
+      assert.ok(finalAnswerIssue.issues.some((issue) => issue.code === "FINAL_ANSWER_CHECK_FAILURES"), status);
+    }
+  });
+
+  test("buildRunFinalVerdict treats completed and done final outcomes as non-clean", () => {
+    for (const outcome of ["completed", "done"]) {
+      const result = buildRunFinalVerdict({
+        taskResults: { status: "success", completed: ["A"], failed: [], skipped: [], blocked: [], contractReview: [] },
+        runReportResult: {
+          report: { status: "success", summary: { failed: 0, blocked: 0, evidence_failures: 0 } },
+          final_answer: { status: "success", outcome, checks: [{ name: "tasks", status: "pass" }], blockers: [] },
+        },
+      });
+
+      assert.equal(result.status, "error", outcome);
+      assert.ok(result.issues.some((issue) => issue.code === "FINAL_ANSWER_NEEDS_ATTENTION"), outcome);
+    }
+  });
+
+  test("buildRunFinalVerdict scans nested run report statuses and dry-run flags", () => {
+    const nestedStatus = buildRunFinalVerdict({
+      taskResults: { status: "success", completed: ["A"], failed: [], skipped: [], blocked: [], contractReview: [] },
+      runReportResult: {
+        report: {
+          status: "success",
+          summary: { failed: 0, blocked: 0, evidence_failures: 0 },
+          task_results: [{ task_id: "A", status: "failed" }],
+        },
+        final_answer: { status: "success", outcome: "success", checks: [{ name: "tasks", status: "pass" }], blockers: [] },
+      },
+    });
+    assert.equal(nestedStatus.status, "error");
+    assert.ok(nestedStatus.issues.some((issue) => issue.code === "RUN_REPORT_STATUS_ERROR"));
+
+    const nestedDryRun = buildRunFinalVerdict({
+      taskResults: { status: "success", completed: ["A"], failed: [], skipped: [], blocked: [], contractReview: [] },
+      runReportResult: {
+        report: {
+          status: "success",
+          summary: { failed: 0, blocked: 0, evidence_failures: 0 },
+          result: { runReport: { checks: [{ name: "deep", status: "pass", dryRun: true }] } },
+        },
+        final_answer: { status: "success", outcome: "success", checks: [{ name: "tasks", status: "pass" }], blockers: [] },
+      },
+    });
+    assert.equal(nestedDryRun.status, "error");
+    assert.ok(nestedDryRun.issues.some((issue) => issue.code === "RUN_REPORT_DRY_RUN"));
+  });
+
+  test("buildRunReturnResult fails closed when successful runs lack report artifacts", () => {
+    const result = buildRunReturnResult({
+      runId: "run-missing-report",
+      prdPath: "/repo/prd.json",
+      taskResults: { completed: ["A"], failed: [], skipped: [], blocked: [], contractReview: [] },
+      runReportResult: {},
+      normalizeRepoPath: (value) => value,
+    });
+
+    assert.equal(result.status, "error");
+    assert.equal(result.exit_code, 1);
+    assert.deepEqual(result.final_verdict.issues.map((issue) => issue.code), [
+      "RUN_REPORT_MISSING",
+      "FINAL_ANSWER_MISSING",
+      "RUN_REPORT_ARTIFACT_MISSING",
+      "RUN_REPORT_MARKDOWN_MISSING",
+      "FINAL_ANSWER_ARTIFACT_MISSING",
+      "FINAL_ANSWER_MARKDOWN_MISSING",
+    ]);
   });
 
   test("finalizeRun writes report, archives current run, kills progress server, and returns result", () => {
@@ -238,7 +418,10 @@ describe("run lifecycle finalization helpers", () => {
         writeRunReport: () => ({
           json_path: join(stateDir, "report.json"),
           markdown_path: join(stateDir, "report.md"),
-          report: { summary: { task_success_rate: 100, run_success_rate: 100 } },
+          final_answer_json_path: join(stateDir, "final-answer.json"),
+          final_answer_markdown_path: join(stateDir, "final-answer.md"),
+          report: { status: "success", summary: { task_success_rate: 100, run_success_rate: 100 } },
+          final_answer: { status: "success", outcome: "success", checks: [], blockers: [] },
         }),
         logRun: (...entry) => calls.logRun.push(entry),
         logProgress: (...entry) => calls.archives.push(entry),

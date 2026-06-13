@@ -23,7 +23,7 @@ function uniqueStrings(values) {
   return [...new Set(asArray(values).map((value) => clean(value)).filter(Boolean))];
 }
 
-function normalizeTask(input = {}, index = 1, refs = {}) {
+function normalizeTask(input = Object(), index = 1, refs = Object()) {
   return buildTaskArtifact({
     id: input.id || `TASK-${String(index).padStart(3, "0")}`,
     title: input.title || input.name || `Task ${index}`,
@@ -42,7 +42,7 @@ function normalizeTask(input = {}, index = 1, refs = {}) {
   }, { index });
 }
 
-export function compileDiscoveryPlanToSpec(input = {}, options = {}) {
+export function compileDiscoveryPlanToSpec(input = Object(), options = Object()) {
   const discovery = input.discovery || input.discoveryBrief || input.discovery_brief || {};
   const plan = input.plan || {};
   const tasksInput = asArray(input.tasks || plan.tasks);
@@ -100,7 +100,7 @@ export function compileDiscoveryPlanToSpec(input = {}, options = {}) {
   });
   const validation = inspectSpecLifecyclePackage(spec);
   const allBlockers = [...blockers, ...(validation.blockers || [])];
-  const status = allBlockers.length > 0 ? "blocked" : (validation.status === "warning" ? "warning" : "pass");
+  const status = allBlockers.length > 0 ? "blocked" : "draft";
   const prd = allBlockers.length === 0
     ? specLifecycleToPrd(spec, {
         id: options.prdId || `PRD-${spec.id}`,
@@ -113,6 +113,7 @@ export function compileDiscoveryPlanToSpec(input = {}, options = {}) {
     schema_version: PRD_SPEC_COMPILER_SCHEMA_VERSION,
     schema: PRD_SPEC_COMPILER_SCHEMA,
     status,
+    executable: false,
     spec,
     prd,
     validation: {
@@ -129,6 +130,6 @@ export function compileDiscoveryPlanToSpec(input = {}, options = {}) {
     },
     next_actions: allBlockers.length > 0
       ? ["Return to /yolo-discover or /yolo-plan until requirement, design, tasks, scope, and traceability are complete."]
-      : ["Run /yolo-check on the compiled PRD before implementation."],
+      : ["Treat this as a draft; collect approved demand and pass runner preflight before implementation."],
   };
 }

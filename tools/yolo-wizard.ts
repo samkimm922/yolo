@@ -5,8 +5,9 @@ import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { initProject } from "../src/core/bootstrap.js";
-import { preflightPrd } from "../src/prd/preflight.js";
 import { runPiAgent } from "../src/agents/pi.js";
+import { formatLifecycleGuardText, inspectLifecycleGuard } from "../src/lifecycle/guard.js";
+import { formatYoloCheckText, inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "..");
@@ -21,6 +22,26 @@ function defaultProjectRoot() {
 
 function stateRootFor(projectRoot) {
   return join(resolve(projectRoot), ".yolo");
+}
+
+export function inspectWizardRunGuard(projectRoot, prdPath) {
+  const resolvedProjectRoot = resolve(projectRoot);
+  return inspectLifecycleGuard({
+    command: "yolo-run",
+    projectRoot: resolvedProjectRoot,
+    stateRoot: stateRootFor(resolvedProjectRoot),
+    prdPath,
+  });
+}
+
+export function inspectWizardCheck(projectRoot, prdPath) {
+  const resolvedProjectRoot = resolve(projectRoot);
+  return inspectYoloCheck({
+    prdPath,
+    projectRoot: resolvedProjectRoot,
+    stateRoot: stateRootFor(resolvedProjectRoot),
+    writeLifecycle: true,
+  }, { learnFailures: true });
 }
 
 function print(lines = []) {
@@ -48,7 +69,7 @@ export function normalizeMenuChoice(value = "") {
   return "unknown";
 }
 
-export function planToMarkdown(result = {}) {
+export function planToMarkdown(result = Object()) {
   const actions = result.plan?.actions || [];
   const artifacts = result.artifacts || result.plan?.artifacts || {};
   const lines = [
@@ -79,7 +100,7 @@ export function planToMarkdown(result = {}) {
   return lines.join("\n");
 }
 
-export function friendlyPreflightSummary(result = {}) {
+export function friendlyPreflightSummary(result = Object()) {
   if (result.runner_readiness?.can_execute) {
     return {
       ok: true,
@@ -154,8 +175,9 @@ async function handlePlan(rl) {
     result.status === "success" ? "计划已生成，没有改代码。" : "计划生成失败。",
     `计划文件：${planPath}`,
   ]);
-  if (result.plan?.actions?.length) {
-    print(["YOLO 打算做这些事：", ...result.plan.actions.map((action) => `- ${action.summary}`)]);
+  const dynamicResult = Object.assign(Object(), result);
+  if (dynamicResult.plan?.actions?.length) {
+    print(["YOLO 打算做这些事：", ...dynamicResult.plan.actions.map((action) => `- ${action.summary}`)]);
   }
 }
 
@@ -168,12 +190,8 @@ async function handleCheck(rl) {
     return;
   }
 
-  const result = preflightPrd(prdPath);
-  const summary = friendlyPreflightSummary(result);
-  print(["", summary.title]);
-  if (summary.next.length) {
-    print(["下一步：", ...summary.next.map((item) => `- ${item}`)]);
-  }
+  const result = inspectWizardCheck(projectRoot, prdPath);
+  print(["", formatYoloCheckText(result)]);
 }
 
 async function handleRun(rl) {
@@ -192,6 +210,15 @@ async function handleRun(rl) {
   }
 
   const projectStateRoot = stateRootFor(projectRoot);
+  const guard = inspectWizardRunGuard(projectRoot, prdPath);
+  if (guard.status !== "pass") {
+    print([
+      "",
+      "生命周期检查没有通过，已停止执行。",
+      formatLifecycleGuardText(guard),
+    ]);
+    return;
+  }
   const result = await runPiAgent({
     prdPath,
     mode: "fix",

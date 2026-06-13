@@ -1,6 +1,12 @@
 import { blockedTaskTransition, failTaskTransition } from "../task-state/transitions.js";
 import { dependencyBlockers } from "./status-helpers.js";
 
+const IMMEDIATE_REMEDIATION_ACTIONS = new Set([
+  "AUTO_REMEDIATE",
+  "RETRY_WITH_CONTEXT",
+  "REROUTE_REVIEW_FIX",
+]);
+
 export function appendUniqueTaskIds(target, items = []) {
   const seen = new Set(target);
   for (const item of items) {
@@ -19,7 +25,7 @@ export function handleTaskPreRun({
   taskIsSplitParent,
   taskCountsAsCompleted,
   recordTaskTransition,
-  log = () => {},
+  log = (..._args) => {},
   now = new Date().toISOString(),
 }) {
   if (completedIds.has(task.id)) {
@@ -83,16 +89,35 @@ export function handleTaskOutcome({
   markParentCompleteIfAllChildrenDone,
   markParentBlockedByChildFailure,
   recordTaskTransition,
-  log = () => {},
+  log = (..._args) => {},
+  stopForImmediateRemediation = false,
   now = new Date().toISOString(),
 }) {
   const r = outcome;
+  let immediateRemediationRequired = false;
   if (r?.remediation) {
     if (!Array.isArray(results.remediation)) results.remediation = [];
-    results.remediation.push({
+    const remediationRecord = {
       task_id: task.id,
       ...r.remediation,
-    });
+    };
+    results.remediation.push(remediationRecord);
+    if (
+      r.remediation.automation_can_continue === true &&
+      r.remediation.blocks_ship !== false &&
+      IMMEDIATE_REMEDIATION_ACTIONS.has(r.remediation.action)
+    ) {
+      immediateRemediationRequired = true;
+      if (!Array.isArray(results.immediateRemediationQueue)) results.immediateRemediationQueue = [];
+      results.immediateRemediationQueue.push({
+        source_task_id: task.id,
+        routing: "before_next_feature_task",
+        reason: "harness_remediation_must_be_cleared_before_new_work",
+        action: r.remediation.action,
+        status: r.remediation.status,
+        next_actions: r.remediation.next_actions || [],
+      });
+    }
   }
 
   if (r.status === "completed") {
@@ -172,6 +197,9 @@ export function handleTaskOutcome({
     }
     progress.failed++;
     log(task.id, "BLOCKED", r.reason || "blocked");
+    if (stopForImmediateRemediation && immediateRemediationRequired) {
+      return { action: "stop", reason: "immediate_remediation_required", lastFailKey };
+    }
     return { action: "continue", lastFailKey };
   }
 
@@ -195,5 +223,8 @@ export function handleTaskOutcome({
   results.failed.push(task.id);
   appendUniqueTaskIds(results.failed, sourceIds);
   progress.failed++;
+  if (stopForImmediateRemediation && immediateRemediationRequired) {
+    return { action: "stop", reason: "immediate_remediation_required", lastFailKey: failKey };
+  }
   return { action: "continue", lastFailKey: failKey };
 }

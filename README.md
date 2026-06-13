@@ -4,35 +4,28 @@ YOLO 是面向 Codex / Claude Code 的项目生命周期 Team Agent 和公开 SD
 
 ## 核心流程
 
-用户在 Codex / Claude Code 里只需要说：
+YOLO 的公开用户命令面只有 4 个动词：
 
 ```text
-/yolo 我有一个想法，帮我从零开始规划这个项目，先不要改代码。
+demand -> auto -> ship -> status
 ```
 
-YOLO 的主线是：
+| 动词 | 用户入口 | 含义 | 写代码 |
+|---|---|---|---|
+| demand | `/yolo-demand` | 把想法聊清楚，缺槽位时只问一个 `next_question`，不进入 PRD | 否 |
+| auto | `/yolo-auto` | 在用户明确批准后，从需求/PRD 走 spec、check、实现、review、fix 和证据 | 是 |
+| ship | `/yolo-ship` | 用 gate、验收、证据和 review 结果给出 ship/no-ship 判断 | 否 |
+| status | `/yolo-status` | 只读当前项目状态，报告唯一安全下一步 | 否 |
 
-```text
-idea
-  -> discovery
-  -> project setup
-  -> roadmap / plan
-  -> PRD / spec
-  -> check
-  -> run
-  -> review / fix
-  -> acceptance
-  -> ship
-  -> learn
-```
+Codex 可以继续用 `/yolo 你的需求...` 作为统一 fallback，由 agent 路由到这 4 个动词之一。统一 fallback 原句保持为：`/yolo 你的需求，先读状态并选择安全阶段，不要改代码。` Claude Code 安装后会得到这 4 个 slash commands。`spec`、`tasks`、`run`、`check`、`review`、`release` 仍是内部生命周期路由或底层 CLI 能力，不再作为默认用户菜单。
 
-默认不会改业务代码。只有用户明确确认执行、PRD/spec 检查通过、gate 可运行、范围清楚时，`/yolo-run` 或 `/yolo-fix` 才能进入写代码路径。
+默认不会改业务代码。`/yolo-demand` 和 `/yolo-status` 是硬停止点；`/yolo-ship` 只给交付判断，不发布、不部署；只有 `/yolo-auto` 在范围清楚、检查通过、gate 可运行且用户明确批准执行时，才允许进入写代码路径。
 
 ## 产品形态
 
 | 层 | 作用 |
 |---|---|
-| Agent 入口 | Claude Code slash commands、Codex skills、source-command fallback，让用户在聊天里使用 `/yolo` |
+| Agent 入口 | Claude Code 4 动词 slash commands、Codex `/yolo` fallback，让用户在聊天里描述目标而不是从一串内部阶段里挑 |
 | PI / Team Agent | 由 PI 负责 lifecycle routing，按阶段调度 discovery、planner、spec、implementer、reviewer、QA、release、learning |
 | Gate / Evidence | PRD preflight、spec governance、adapter readiness、review/fix、acceptance、parallel merge gate 和 final evidence |
 | SDK | `createYoloSdk()` 暴露 project、lifecycle、commands、doctor、pi、spec、runtime、review、acceptance、packs、eval、parallel、release |
@@ -63,94 +56,28 @@ scripts/yolo/
   __tests__/          # 测试文件
 ```
 
-## 快速开始
+## 前提条件
 
-### Codex / Claude Code 用户
-
-先让 agent 安装 YOLO skill/command 集成：
-
-```text
-请把 YOLO 安装到当前项目和我的 Agent 工具里。我要能直接用 /yolo-discover、/yolo-plan、/yolo-check、/yolo-accept、/yolo-eval、/yolo-run、/yolo-doctor。执行前先告诉我会写哪些文件。
-YOLO 路径是 <你的 YOLO 安装目录>。
-```
-
-安装后你只需要在 Codex / Claude Code 里说：
-
-```text
-/yolo 我要给库存系统增加低库存预警，先只生成计划，不要改代码。
-```
-
-最容易记的一句话入口：
-
-```text
-/yolo 你的需求，先只生成计划，不要改代码。
-```
-
-不知道当前项目是否装好时：
-
-```text
-/yolo-doctor 检查当前项目的 YOLO 是否装好、能不能用。
-```
-
-Claude Code 会得到真实 `.claude/commands/yolo*.md` slash commands；Codex 会得到 `.codex/skills/yolo`、`~/.agents/skills/yolo` 和 `~/.agents/skills/source-command-yolo*` 入口。详细说明见 [docs/agent-chat-usage.md](docs/agent-chat-usage.md) 和 [docs/agent-native-integration.md](docs/agent-native-integration.md)。
-
-### 不懂命令行的本地菜单
-
-如果只想用本地菜单，可以双击：
-
-```text
-START_HERE.command
-```
-
-它会打开一个菜单：
-
-- `1` 初始化项目
-- `2` 只生成计划，不改代码
-- `3` 检查 PRD
-- `4` 执行 PRD，会要求二次确认
-- `5` 退出
-
-大白话说明见 [docs/non-technical-user-guide.md](docs/non-technical-user-guide.md)。
-
-### 开发者 / 自动化入口
+- **Node.js ≥ 18**（`node -v` 确认）
+- **Claude Code**（推荐）或 Codex 作为 AI 执行环境
+- 克隆本仓库后在项目根目录运行：
 
 ```bash
-# 进入 yolo 目录
-cd scripts/yolo
-
-# 构建公开 CLI
-npm run build --silent
-
-# 初始化陌生项目的 YOLO 基础结构
-node dist/bin/yolo.js init /path/to/project --name demo --json
-
-# 刷新项目记忆中心：任务计划、进度、结构树、交接和文档审计
-node dist/bin/yolo.js memory refresh /path/to/project --json
-
-# 运行 PI 主线（PRD -> check -> runner -> review -> acceptance -> ship -> learn）
-node dist/bin/yolo.js run <prd-file> --json
-
-# 单独运行闸门检查
-node dist/bin/yolo-gate.js
-
-# 生成 AI 提示词（不执行）
-node dist/bin/yolo-prompt.js --prd <prd-file>
-
-# PI agent：默认只生成计划，不执行模型/改代码
-node dist/bin/yolo-pi.js --requirement="加一个库存预警功能"
-
-# 显式执行完整链路：PM -> PRD -> preflight -> runner -> review -> final gate -> acceptance -> ship -> learn
-node dist/bin/yolo-pi.js --requirement="加一个库存预警功能" --execute
-
-# 检查旧 PRD 是否需要补 target coverage gates（默认不写盘）
-node dist/bin/yolo-prd-migrate-gates.js data/example-prd.json --json
-
-# 执行前统一检查 schema / contract / spec governance / migration advice / runner readiness
-node dist/bin/yolo-prd-preflight.js data/example-prd.json --json
-
-# 底层 runner 调试入口，普通集成优先使用 yolo run
-node dist/bin/yolo.js runner <prd-file> --dry-run --json
+npm install
 ```
+
+## 快速开始
+
+先装 agent bridge，再用 4 个动词推进：
+
+```text
+/yolo-demand 我想把库存预警需求聊清楚，先不要生成 PRD。
+/yolo-auto 我确认执行已检查通过的库存预警 PRD。
+/yolo-ship specs/prd-low-stock-alert.json
+/yolo-status
+```
+
+详细快速开始指南见 [docs/quickstart.md](docs/quickstart.md)。
 
 ## SDK 用法
 

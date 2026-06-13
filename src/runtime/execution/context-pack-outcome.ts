@@ -2,9 +2,9 @@ import { createTaskTransition } from "../task-state/transitions.js";
 
 export function buildContextPackFailureOutcome({
   taskId,
-  contextGate = {},
+  contextGate = Object(),
   attempt = 0,
-} = {}) {
+} = Object()) {
   const contextPackGate = contextGate.result || contextGate;
   const failReason = `context-pack-validator blocked: ${(contextPackGate.failures || []).map((failure) => failure.code).join(", ")}`;
   return {

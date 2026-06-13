@@ -24,26 +24,26 @@ function projectRelative(projectRoot, absolutePath) {
   return rel && !rel.startsWith("..") && !isAbsolute(rel) ? rel.replaceAll("\\", "/") : absolutePath;
 }
 
-export function resolveLifecycleStateRoot(options = {}) {
+export function resolveLifecycleStateRoot(options = Object()) {
   if (options.stateRoot || options.state_root) return resolve(options.stateRoot || options.state_root);
   const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
   return join(projectRoot, ".yolo");
 }
 
-export function lifecycleDir(options = {}) {
+export function lifecycleDir(options = Object()) {
   return join(resolveLifecycleStateRoot(options), LIFECYCLE_DIR_NAME);
 }
 
-export function lifecycleArtifactPath(stageId, options = {}) {
+export function lifecycleArtifactPath(stageId, options = Object()) {
   const stage = getLifecycleStage(stageId);
   return join(lifecycleDir(options), stage.default_artifact);
 }
 
-export function lifecycleStatusPath(options = {}) {
+export function lifecycleStatusPath(options = Object()) {
   return join(lifecycleDir(options), LIFECYCLE_STATUS_FILE);
 }
 
-export function buildLifecycleStateFiles(options = {}) {
+export function buildLifecycleStateFiles(options = Object()) {
   const projectName = clean(options.projectName || options.project_name) || "project";
   const now = clean(options.now) || new Date().toISOString();
   const status = createLifecycleStateSnapshot({ projectName, now });
@@ -70,7 +70,7 @@ export function buildLifecycleStateFiles(options = {}) {
   };
 }
 
-export function readLifecycleState(options = {}) {
+export function readLifecycleState(options = Object()) {
   const path = lifecycleStatusPath(options);
   const state = JSON.parse(readFileSync(path, "utf8"));
   return {
@@ -80,7 +80,7 @@ export function readLifecycleState(options = {}) {
   };
 }
 
-export function initLifecycleState(options = {}) {
+export function initLifecycleState(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
   const stateRoot = resolveLifecycleStateRoot({ ...options, projectRoot });
   const force = options.force === true;

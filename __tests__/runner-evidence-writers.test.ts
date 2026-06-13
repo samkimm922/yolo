@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { evidenceArtifactDigest } from "../src/runtime/evidence/ledger.js";
 import {
   writeContractSuspectEvidence,
   writePrdContractDoctorEvidence,
@@ -28,12 +29,15 @@ describe("runner evidence writers", () => {
 
       assert.equal(result.evidence_file, "scripts/yolo/state/evidence/FIX-EVIDENCE-001/split-applied.json");
       assert.equal(existsSync(result.evidence_path), true);
-      assert.deepEqual(readJson(result.evidence_path), {
+      const evidence = readJson(result.evidence_path);
+      assert.equal(evidence.artifact_digest, evidenceArtifactDigest(evidence));
+      assert.deepEqual({ ...evidence, artifact_digest: "<digest>" }, {
         schema_version: "1.0",
         schema: "yolo.evidence.artifact.v1",
         artifact_type: "task.split_applied",
         generated_at: "2026-05-24T00:00:00.000Z",
         source: "runner",
+        artifact_digest: "<digest>",
         task_id: "FIX-EVIDENCE-001",
         status: "split_applied",
         reason: "atomic_task_must_split",
@@ -60,6 +64,11 @@ describe("runner evidence writers", () => {
             type: "code_contains",
             severity: "FAIL",
             params: { file: "src/a.ts", text: "fixed" },
+          }, {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
           }],
         },
         prdPath: join(yoloRoot, "data/prd.json"),

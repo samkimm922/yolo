@@ -24,6 +24,7 @@ describe("lifecycle progress", () => {
         stateRoot,
         source: "unit",
         now: "2026-05-25T00:00:00.000Z",
+        skipSequenceCheck: true,
       });
 
       assert.equal(result.status, "ok");
@@ -34,6 +35,8 @@ describe("lifecycle progress", () => {
 
       const status = JSON.parse(readFileSync(join(stateRoot, "lifecycle/status.json"), "utf8"));
       assert.equal(status.current_stage, "run");
+      assert.equal(status.stages.find((stage) => stage.id === "idea").status, "pending");
+      assert.equal(status.stages.find((stage) => stage.id === "discovery").status, "pending");
       assert.equal(status.stages.find((stage) => stage.id === "check").status, "completed");
       assert.equal(status.stages.find((stage) => stage.id === "run").status, "active");
     } finally {
@@ -55,6 +58,7 @@ describe("lifecycle progress", () => {
         stateRoot,
         source: "unit",
         learnFailures: true,
+        skipSequenceCheck: true,
       });
 
       assert.equal(result.learning.status, "ok");
@@ -62,6 +66,32 @@ describe("lifecycle progress", () => {
       assert.match(learning, /UI evidence plan missing/);
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("negative: non-success report statuses do not complete lifecycle stages", () => {
+    for (const reportStatus of ["ready", "skipped", "not_run", "indeterminate"]) {
+      const root = tempProject();
+      const stateRoot = join(root, ".yolo");
+      try {
+        const result = writeLifecycleStageReport("check", {
+          status: reportStatus,
+          summary: `${reportStatus} is not executable success`,
+        }, {
+          projectRoot: root,
+          stateRoot,
+          source: "unit",
+          writeSessionMemory: false,
+          skipSequenceCheck: true,
+        });
+
+        const status = JSON.parse(readFileSync(join(stateRoot, "lifecycle/status.json"), "utf8"));
+        const checkStage = status.stages.find((stage) => stage.id === "check");
+        assert.notEqual(result.stage_status, "completed", `${reportStatus} must not normalize to completed`);
+        assert.notEqual(checkStage.status, "completed", `${reportStatus} must not mark lifecycle stage completed`);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     }
   });
 });

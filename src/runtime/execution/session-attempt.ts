@@ -19,13 +19,16 @@ export async function prepareProviderSession({
   createWorktree,
   computeTaskTimeout,
   spawnProviderInWorktree,
-  logTaskBash = () => {},
-  logProgress = () => {},
-  onWorktreeCreated = () => {},
+  logTaskBash = (..._args) => {},
+  logProgress = (..._args) => {},
+  logEvent = (..._args) => {},
+  onWorktreeCreated = (..._args) => {},
   nowMs = () => Date.now(),
+  createSessionId = ({ task, attempt }) => `${task?.id || "task"}-attempt-${attempt}`,
   validateContextPack = validateContextPackBeforeSession,
   captureBaselines = captureExecutionBaselines,
-} = {}) {
+} = Object()) {
+  const sessionId = createSessionId({ task, attempt });
   const contextGate = await validateContextPack({
     task,
     attempt,
@@ -57,10 +60,19 @@ export async function prepareProviderSession({
     prdPath,
     attempt,
     mode,
+    sessionId,
     lastGateError,
     learnStdout: learn.stdout,
     rootDir,
     stateRoot,
+  });
+  logEvent("task_session_start", {
+    task: task.id,
+    attempt,
+    session_id: promptSession.contextContract.session_id,
+    fresh_session: true,
+    allowed_context_refs: promptSession.contextContract.allowed_context_refs,
+    forbidden_context: promptSession.contextContract.forbidden_context,
   });
   if (promptSession.failureHintLog) {
     logProgress("", "├─", promptSession.failureHintLog);
@@ -101,6 +113,8 @@ export async function prepareProviderSession({
   return {
     action: "continue",
     wt,
+    sessionId: promptSession.contextContract.session_id,
+    contextContract: promptSession.contextContract,
     startedAtMs,
     providerRun,
     providerName,

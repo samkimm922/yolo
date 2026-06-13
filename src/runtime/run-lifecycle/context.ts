@@ -1,10 +1,11 @@
 import { join, resolve } from "node:path";
+import { baselineFileName } from "../execution/baselines.js";
 
-export function resolveRunnerContext(options = {}, {
+export function resolveRunnerContext(options = Object(), {
   packageRoot,
   config,
   yoloPath,
-} = {}) {
+} = Object()) {
   const projectRoot = resolve(packageRoot, config.project.root);
   const stateRoot = packageRoot;
   const rootDir = resolve(options.projectRoot || options.project_root || projectRoot);
@@ -16,8 +17,8 @@ export function resolveRunnerContext(options = {}, {
     stateRoot: resolvedStateRoot,
     stateDir,
     runtimeDir,
-    tscBaselinePath: join(runtimeDir, "tsc-baseline.json"),
-    eslintBaselinePath: join(runtimeDir, "eslint-baseline.json"),
+    tscBaselinePath: join(runtimeDir, baselineFileName("tsc")),
+    eslintBaselinePath: join(runtimeDir, baselineFileName("eslint")),
     resultsFile: yoloPath("taskResults", resolvedStateRoot),
     worktreeRoot: join(rootDir, "..", ".yolo-worktrees"),
     currentRunFile: yoloPath("currentRun", resolvedStateRoot),
@@ -30,7 +31,7 @@ export function applyRunnerContextSideEffects(context, {
   ensureCanonicalDirs,
   setContractRoot,
   setTaskLogsDir,
-} = {}) {
+} = Object()) {
   setContractRoot(context.rootDir);
   setTaskLogsDir(join(context.runtimeDir, "task-logs"));
   ensureCanonicalDirs(context.stateRoot);
@@ -40,7 +41,7 @@ export function createRunnerLifecycleState({
   getContext,
   getActiveGitSession,
   getProgressServerProc,
-} = {}) {
+} = Object()) {
   return {
     stateDir: () => getContext().stateDir,
     currentRunFile: () => getContext().currentRunFile,

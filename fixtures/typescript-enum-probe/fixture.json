@@ -1,0 +1,42 @@
+{
+  "id": "typescript-enum-probe",
+  "type": "typescript-enum-probe",
+  "label": "TypeScript enum probe fixture",
+  "description": "Version-independence probe: runs a TypeScript file that uses `export enum`. Native node strip-types (node 22/25 default) and node 20 both fail this; only a real transpiler (tsx/esbuild) on the loader path can pass.",
+  "files": [
+    "package.json",
+    "prd.json",
+    "src/index.ts"
+  ],
+  "project": {
+    "language": "javascript",
+    "package_manager": "npm",
+    "test_framework": null
+  },
+  "requirement": {
+    "id": "REQ-ENUM-001",
+    "text": "Execute a fixture that uses a TypeScript enum to prove the harness runs full TypeScript, not native strip-types."
+  },
+  "spec": {
+    "id": "SPEC-ENUM-001",
+    "requirement_id": "REQ-ENUM-001",
+    "design_id": "DES-ENUM-001",
+    "task_id": "FIX-ENUM-001"
+  },
+  "task": {
+    "id": "FIX-ENUM-001",
+    "prd": "prd.json"
+  },
+  "run": {
+    "mode": "dry-run",
+    "supports_dry_run": true,
+    "commands": [
+      "node src/index.ts"
+    ]
+  },
+  "evidence": {
+    "expected": [
+      "state/evidence/FIX-ENUM-001/run.json"
+    ]
+  }
+}

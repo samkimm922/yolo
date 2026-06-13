@@ -12,7 +12,7 @@ import {
 import { validatePrdPath } from "../src/prd/validate.js";
 
 describe("discovery runtime artifact chain", () => {
-  test("writes discovery, plan, and executable PRD artifacts from one main line", () => {
+  test("writes discovery, plan, and non-executable draft PRD artifacts from one main line", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-discovery-runtime-"));
     try {
       const discoveryResult = runDiscoveryRuntime({
@@ -44,6 +44,7 @@ describe("discovery runtime artifact chain", () => {
       });
 
       assert.equal(planResult.status, "success");
+      if (!("plan" in planResult)) throw new Error("expected plan");
       assert.equal(planResult.plan.steps[0].requirement_id, "R001");
       assert.equal(existsSync(planResult.artifacts[0]), true);
 
@@ -54,8 +55,14 @@ describe("discovery runtime artifact chain", () => {
         writeLifecycle: false,
       });
 
-      assert.equal(prdResult.status, "success");
-      assert.equal(prdResult.prd.tasks[0].source_finding_ids[0], "R001");
+      assert.equal(prdResult.status, "draft");
+      if (!("executable" in prdResult)) throw new Error("expected executable");
+      assert.equal(prdResult.executable, false);
+      assert.equal(prdResult.prd, null);
+      if (!("draft_prd" in prdResult) || !prdResult.draft_prd) throw new Error("expected draft_prd");
+      assert.equal(prdResult.draft_prd.tasks[0].source_finding_ids[0], "R001");
+      assert.equal(prdResult.draft_prd.tasks[0].status, "needs_contract_review");
+      assert.equal(prdResult.draft_prd.demand.approval.approved, false);
       assert.equal(existsSync(prdResult.artifacts[0]), true);
       assert.equal(validatePrdPath(prdResult.artifacts[0]).ok, true);
     } finally {

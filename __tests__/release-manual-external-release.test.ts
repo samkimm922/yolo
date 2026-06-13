@@ -100,6 +100,20 @@ function dogfoodEvidence(overrides = {}) {
   };
 }
 
+function externalRemediationEvidence(overrides = {}) {
+  return {
+    status: "pass",
+    operator: "release-owner",
+    executed_at: "2026-05-25T00:03:00.000Z",
+    provider: "claude-p",
+    command: "claude-p remediate release note evidence",
+    evidence_files: ["external/claude-p-remediation.json"],
+    executed_by_sdk: false,
+    billable_provider_executed_by_sdk: false,
+    ...overrides,
+  };
+}
+
 function postReleaseAudit(overrides = {}) {
   return {
     status: "pass",
@@ -239,5 +253,27 @@ describe("manual external release evidence gate", () => {
     assert.equal(result.guarantees.billable_provider_execution, false);
     assert.equal(result.guarantees.audited_manual_external_release_only, true);
     assert.equal(result.guarantees.stable_release_verified, true);
+  });
+
+  test("YB-011 keeps external claude-p remediation evidence separate from runner evidence", () => {
+    const result = gate({
+      externalRemediationEvidence: externalRemediationEvidence(),
+    });
+
+    assert.equal(result.status, "pass", JSON.stringify(result.blockers, null, 2));
+    assert.equal(result.evidence.external_remediation_evidence.provider, "claude-p");
+    assert.equal(result.external_evidence.external_remediation_evidence.provider, "claude-p");
+    assert.equal(result.runner_evidence.operator_runbook.status, "ready");
+    assert.equal(result.runner_evidence.post_release_audit.status, "pass");
+    assert.equal("external_remediation_evidence" in result.runner_evidence, false);
+
+    const mixed = gate({
+      externalRemediationEvidence: externalRemediationEvidence({
+        runner_run_id: "RUN-FAKE",
+        runner_evidence: { report_json: "state/reports/RUN-FAKE/run-report.json" },
+      }),
+    });
+    assert.equal(mixed.status, "blocked");
+    assert.ok(mixed.blockers.some((blocker) => blocker.code === "MANUAL_EXTERNAL_RELEASE_EXTERNAL_REMEDIATION_SEPARATE"));
   });
 });

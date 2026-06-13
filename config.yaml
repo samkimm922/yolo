@@ -17,9 +17,8 @@ project:
     - ".git"
 
 build:
-  type_check: "npm run build --silent"
-  lint: "node --test __tests__/progress-dashboard.test.ts __tests__/progress-dashboard-ui-evidence.test.ts"
-  dead_code: "node -e \"process.exit(0)\""
+  type_check: "tsc --noEmit"
+  lint: "node --import tsx scripts/source-grep-meta.ts"
   test: "node --import tsx --test __tests__/*.test.ts"
   build: "npm run build --silent"
 
@@ -33,7 +32,6 @@ gate:
   timeout:
     type_check: 120000
     lint: 90000
-    dead_code: 30000
     test: 120000
     build: 240000
   max_files: 5

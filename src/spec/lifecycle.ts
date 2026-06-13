@@ -17,7 +17,7 @@ function artifactId(input, prefix, index = 1) {
   return cleanText(input.id || input.key || input.ref || `${prefix}-${String(index).padStart(3, "0")}`);
 }
 
-export function buildRequirementArtifact(input = {}, options = {}) {
+export function buildRequirementArtifact(input = Object(), options = Object()) {
   return {
     schema_version: SPEC_LIFECYCLE_SCHEMA_VERSION,
     schema: "yolo.spec.requirement.v1",
@@ -32,7 +32,7 @@ export function buildRequirementArtifact(input = {}, options = {}) {
   };
 }
 
-export function buildDesignArtifact(input = {}, options = {}) {
+export function buildDesignArtifact(input = Object(), options = Object()) {
   return {
     schema_version: SPEC_LIFECYCLE_SCHEMA_VERSION,
     schema: "yolo.spec.design.v1",
@@ -48,7 +48,7 @@ export function buildDesignArtifact(input = {}, options = {}) {
   };
 }
 
-export function buildTaskArtifact(input = {}, options = {}) {
+export function buildTaskArtifact(input = Object(), options = Object()) {
   return {
     schema_version: SPEC_LIFECYCLE_SCHEMA_VERSION,
     schema: "yolo.spec.task.v1",
@@ -68,7 +68,7 @@ export function buildTaskArtifact(input = {}, options = {}) {
   };
 }
 
-export function buildChangeArtifact(input = {}, options = {}) {
+export function buildChangeArtifact(input = Object(), options = Object()) {
   return {
     schema_version: SPEC_LIFECYCLE_SCHEMA_VERSION,
     schema: "yolo.spec.change.v1",
@@ -86,7 +86,7 @@ export function buildChangeArtifact(input = {}, options = {}) {
   };
 }
 
-export function buildSpecLifecyclePackage(input = {}, options = {}) {
+export function buildSpecLifecyclePackage(input = Object(), options = Object()) {
   const requirements = asArray(input.requirements).map((item, index) =>
     buildRequirementArtifact(item, { index: index + 1 })
   );
@@ -117,7 +117,7 @@ function missingRefs(refs, validRefs) {
   return refs.filter((ref) => !validRefs.has(ref));
 }
 
-export function inspectSpecLifecyclePackage(specPackage = {}) {
+export function inspectSpecLifecyclePackage(specPackage = Object()) {
   const requirements = asArray(specPackage.requirements);
   const designs = asArray(specPackage.designs);
   const tasks = asArray(specPackage.tasks);
@@ -200,13 +200,55 @@ export function inspectSpecLifecyclePackage(specPackage = {}) {
   };
 }
 
-export function specLifecycleToPrd(specPackage = {}, options = {}) {
+function draftDemandQualityReport() {
+  return {
+    schema_version: "1.0",
+    schema: "yolo.demand.quality.v1",
+    status: "blocked",
+    total_score: 0,
+    dimensions: [],
+  };
+}
+
+export function specLifecycleToPrd(specPackage = Object(), options = Object()) {
+  const executable = options.executable === true;
+  const draftQuality = draftDemandQualityReport();
   return {
     version: "2.0",
     id: cleanText(options.id || `PRD-${specPackage.id || "SPEC-LIFECYCLE"}`),
     title: cleanText(options.title || specPackage.title || "Spec lifecycle PRD"),
-    generated_by: "yolo.spec.lifecycle",
+    project: options.project || {
+      name: cleanText(options.projectName || options.project_name || "project"),
+      language: cleanText(options.language || "other"),
+      framework: cleanText(options.framework || "generic"),
+    },
+    generated_by: "other",
     generated_at: options.generated_at || "1970-01-01T00:00:00.000Z",
+    base_commit: cleanText(options.base_commit || options.baseCommit || "0000000"),
+    source: executable ? "approved_demand" : "spec_lifecycle_draft",
+    execution_mode: executable ? "default" : "draft",
+    demand_contract_required: true,
+    demand: executable ? options.demand : {
+      id: specPackage.id || "SPEC-LIFECYCLE",
+      source: "spec_lifecycle",
+      approval: {
+        approved: false,
+        effective_for_prd: false,
+        approval_source: "pending_human_approval",
+      },
+      quality_report: draftQuality,
+      execution_readiness: {
+        quality_report: draftQuality,
+      },
+    },
+    execution_readiness: executable ? options.execution_readiness : {
+      level: "draft",
+      afk_ready: false,
+      source: "spec_lifecycle_draft",
+      atomic_tasks: false,
+      quality_status: "blocked",
+      quality_report: draftQuality,
+    },
     requirements: asArray(specPackage.requirements).map((requirement) => ({
       id: requirement.id,
       text: requirement.text || requirement.title || "",
@@ -220,7 +262,7 @@ export function specLifecycleToPrd(specPackage = {}, options = {}) {
       title: task.title,
       type: task.type,
       priority: task.priority,
-      status: task.status,
+      status: executable ? task.status : "needs_contract_review",
       requirement_ids: uniqueStrings(task.requirement_ids),
       design_ids: uniqueStrings(task.design_ids),
       scope: task.scope,

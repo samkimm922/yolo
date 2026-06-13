@@ -3,9 +3,9 @@ import {
   createTaskTransition,
   failTaskTransition,
 } from "../task-state/transitions.js";
-import { classifyProviderFailure } from "./provider-adapter.js";
+import { buildProviderAttemptLedgerEntry, classifyProviderFailure } from "./provider-adapter.js";
 
-export function providerFailureDiagnostic(providerRun = {}) {
+export function providerFailureDiagnostic(providerRun = Object()) {
   return [
     providerRun.exitCode !== null && providerRun.exitCode !== undefined ? `exit=${providerRun.exitCode}` : null,
     providerRun.signal ? `signal=${providerRun.signal}` : null,
@@ -13,33 +13,60 @@ export function providerFailureDiagnostic(providerRun = {}) {
   ].filter(Boolean).join(" ");
 }
 
+function terminalProviderPhase(reason) {
+  return reason === "provider_budget_exceeded" ? "provider_budget" : "provider_preflight";
+}
+
+function providerStatusFailureReason(providerName, providerRun = Object(), diagnostic = "", providerFailure = Object()) {
+  if (providerRun.status === "timed_out" || providerRun.timedOut === true) return `${providerName} 超时`;
+  if (providerRun.status === "no_output") return `${providerName} 输出为空`;
+  if (providerRun.status === "killed") return `${providerName} 被终止${diagnostic ? `: ${diagnostic}` : ""}`;
+  if (providerRun.status === "verification_failed") {
+    const detail = providerFailure.detail || providerRun.reason || "";
+    return `${providerName} 完成验证失败${detail ? `: ${detail.slice(0, 120)}` : ""}`;
+  }
+  if (!providerRun.success) {
+    return `${providerName} 退出失败${diagnostic ? `: ${diagnostic}` : ""}`;
+  }
+  return `${providerName} 输出为空`;
+}
+
 export function buildProviderFailureOutcome({
   taskId,
   providerName = "provider",
-  providerRun = {},
+  providerRun = Object(),
   attempt = 0,
   maxRetry = 0,
-} = {}) {
+} = Object()) {
   const providerFailure = classifyProviderFailure(providerRun);
   const diagnostic = providerFailureDiagnostic(providerRun);
-  const failReason = !providerRun.success
-    ? (providerRun.timedOut ? `${providerName} 超时` : `${providerName} 退出失败${diagnostic ? `: ${diagnostic}` : ""}`)
-    : `${providerName} 输出为空`;
+  const failReason = providerStatusFailureReason(providerName, providerRun, diagnostic, providerFailure);
   const recordedReason = providerFailure.terminal ? providerFailure.reason : failReason;
   const transitionBuilder = providerFailure.terminal ? blockedTaskTransition : failTaskTransition;
+  const attemptLedger = (providerRun.attempt_ledger && providerRun.attempt_ledger.length > 0
+    ? providerRun.attempt_ledger
+    : [buildProviderAttemptLedgerEntry(providerRun)]
+  ).map((entry) => ({
+    ...entry,
+    task_id: entry.task_id || taskId,
+    attempt: entry.attempt ?? attempt,
+  }));
   const transition = transitionBuilder({
     taskId,
     reason: recordedReason,
     result: {
       detail: providerFailure.detail || undefined,
       provider: providerName,
+      provider_status: providerFailure.status,
+      provider_reason: providerFailure.reason || providerRun.reason || undefined,
       exitCode: providerRun.exitCode,
       signal: providerRun.signal,
       timedOut: providerRun.timedOut,
       retries: attempt,
+      attempt_ledger: attemptLedger,
     },
     prdUpdate: {
-      phase: providerFailure.terminal ? "provider_budget" : "claude",
+      phase: providerFailure.terminal ? terminalProviderPhase(providerFailure.reason) : "claude",
       phaseDetail: providerFailure.terminal ? providerFailure.reason : undefined,
     },
   });
@@ -72,10 +99,10 @@ export function buildProviderFailureOutcome({
 
 export function buildDiffQualityFailureOutcome({
   taskId,
-  diffQualityGate = {},
+  diffQualityGate = Object(),
   attempt = 0,
   maxRetry = 1,
-} = {}) {
+} = Object()) {
   const failures = diffQualityGate.failures || [];
   const failReason = `diff-quality-gate blocked: ${failures.map((failure) => failure.code).join(", ")}`;
   const lastGateError = [
@@ -125,9 +152,9 @@ export function buildDiffQualityFailureOutcome({
 
 export function buildTestGenerationFailureOutcome({
   taskId,
-  testGenerationGate = {},
+  testGenerationGate = Object(),
   attempt = 0,
-} = {}) {
+} = Object()) {
   const failReason = `test-generation-validator blocked: ${(testGenerationGate.failures || []).map((failure) => failure.code).join(", ")}`;
   return {
     failReason,

@@ -12,6 +12,7 @@ import {
 } from "../src/release/experience-pack-audit.js";
 import {
   runNonTechnicalUxDoctor,
+  YOLO_STAGE_COMMAND_CONTRACT,
   YOLO_ONE_SENTENCE_ENTRY,
 } from "../src/release/nontechnical-ux-doctor.js";
 
@@ -31,7 +32,7 @@ function tempRoot(name) {
 }
 
 describe("P37-P39 dogfood, experience, and non-technical UX gates", () => {
-  test("real-project dogfood pack initializes an isolated project and validates full lifecycle dogfood evidence", () => {
+  test("real-project dogfood pack blocks dry-run-only lifecycle evidence", () => {
     const root = tempRoot("yolo-p37");
     const projectRoot = join(root, "external-project");
     const homeDir = join(root, "home");
@@ -45,16 +46,20 @@ describe("P37-P39 dogfood, experience, and non-technical UX gates", () => {
       now: "2026-05-25T00:00:00.000Z",
     });
 
-    assert.equal(result.status, "pass", JSON.stringify(result.blockers, null, 2));
+    assert.equal(result.status, "blocked");
     assert.equal(result.components.init.status, "success");
     assert.equal(result.components.bridge_dry_run.dry_run, true);
     assert.equal(result.components.dry_run_doctor.status, "pass");
     assert.equal(result.components.dogfood_lifecycle.discovery.status, "pass");
-    assert.equal(result.components.dogfood_lifecycle.compiled.status, "pass");
+    assert.equal(result.components.dogfood_lifecycle.compiled.status, "draft");
+    assert.equal(result.evidence.prd.status, "pass");
+    assert.equal(result.evidence.prd.payload.dogfood_prd_evidence.status, "pass");
     assert.equal(result.components.dogfood_lifecycle.check_report.status, "pass");
-    assert.equal(result.components.dogfood_lifecycle.acceptance_report.status, "pass");
-    assert.equal(result.components.dogfood_lifecycle.controlled_run.status, "pass");
-    assert.equal(result.components.dogfood_gate.status, "pass");
+    assert.equal(result.components.dogfood_lifecycle.run_report.status, "dry_run");
+    assert.equal(result.components.dogfood_lifecycle.acceptance_report.status, "blocked");
+    assert.equal(result.components.dogfood_lifecycle.controlled_run.status, "blocked");
+    assert.equal(result.components.dogfood_gate.status, "blocked");
+    assert.ok(result.blockers.some((blocker) => blocker.code === "REAL_PROJECT_DOGFOOD_PACK_CONTROLLED_RUN"));
     assert.equal(result.guarantees.agent_bridge_installed, false);
     assert.equal(result.guarantees.provider_execution, false);
     assert.ok(result.evidence.plan.artifact_path.includes(".yolo/state/reports/dogfood/plan.json"));
@@ -62,6 +67,35 @@ describe("P37-P39 dogfood, experience, and non-technical UX gates", () => {
     assert.ok(result.evidence.prd.artifact_path.includes(".yolo/state/reports/dogfood/prd.json"));
     assert.ok(result.evidence.accept.artifact_path.includes(".yolo/state/reports/dogfood/accept.json"));
     assert.ok(result.evidence.controlled_run.artifact_path.includes(".yolo/state/reports/dogfood/controlled_run.json"));
+  });
+
+  test("real-project dogfood pack blocks compiler results without executable PRD instead of throwing", () => {
+    const root = tempRoot("yolo-p37-blocked");
+    const result = runRealProjectDogfoodPack({
+      yoloRoot: YOLO_DIR,
+      projectRoot: join(root, "external-project"),
+      homeDir: join(root, "home"),
+      targets: ["codex", "claude"],
+      scope: "project",
+      now: "2026-05-25T00:00:00.000Z",
+      compiledRaw: {
+        status: "blocked",
+        spec: {
+          schema_version: "1.0",
+          schema: "yolo.spec.lifecycle.package.v1",
+          status: "blocked",
+        },
+        prd: null,
+        blockers: [{ code: "SPEC_COMPILER_BLOCKED", message: "blocked fixture" }],
+        validation: { status: "blocked", blockers: [{ code: "PRD_VALIDATION_BLOCKED" }] },
+      },
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.components.dogfood_lifecycle.check_report.status, "blocked");
+    assert.equal(result.components.dogfood_lifecycle.controlled_run.status, "blocked");
+    assert.equal(result.evidence.prd.status, "blocked");
+    assert.ok(result.blockers.some((blocker) => blocker.code === "REAL_PROJECT_DOGFOOD_PACK_LIFECYCLE"));
   });
 
   test("experience pack effectiveness audit injects only relevant bounded lessons and does not block prompt generation", () => {
@@ -86,6 +120,10 @@ describe("P37-P39 dogfood, experience, and non-technical UX gates", () => {
     assert.equal(result.report.one_sentence_entry, YOLO_ONE_SENTENCE_ENTRY);
     assert.match(result.report.user_visible_next_step, /\/yolo /);
     assert.equal(result.artifacts_sample.native_skill_contains_entry, true);
+    assert.equal(result.artifacts_sample.native_skill_stage_command_contract, true);
+    assert.equal(result.artifacts_sample.bridge_stage_commands_clear, true);
+    assert.equal(result.checks.find((item) => item.code === "NONTECH_UX_STAGE_COMMANDS_CLEAR")?.passed, true);
+    assert.equal(YOLO_STAGE_COMMAND_CONTRACT, "If the user asks to talk through a requirement, use `/yolo-demand` as the single demand-stage entry instead of asking them to choose brainstorm/interview/discover/discuss.");
     assert.equal(result.guarantees.provider_execution, false);
   });
 

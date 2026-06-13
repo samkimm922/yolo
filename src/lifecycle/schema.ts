@@ -9,7 +9,7 @@ export const LIFECYCLE_STAGES = [
     label: "Idea intake",
     purpose: "Capture the original user idea before planning or implementation.",
     default_artifact: "idea.json",
-    entry_commands: ["yolo", "yolo-discover"],
+    entry_commands: ["yolo", "yolo-brainstorm", "yolo-interview", "yolo-discover"],
     writes_code: false,
   },
   {
@@ -18,7 +18,7 @@ export const LIFECYCLE_STAGES = [
     label: "Discovery",
     purpose: "Clarify problem, audience, success criteria, constraints, and unknowns.",
     default_artifact: "discovery.json",
-    entry_commands: ["yolo-discover"],
+    entry_commands: ["yolo-interview", "yolo-discuss", "yolo-discover"],
     writes_code: false,
   },
   {
@@ -27,7 +27,7 @@ export const LIFECYCLE_STAGES = [
     label: "Project setup",
     purpose: "Initialize YOLO state, memory, specs, agent bridge, and project policy.",
     default_artifact: "setup.json",
-    entry_commands: ["yolo-init", "yolo-install", "yolo-doctor"],
+    entry_commands: ["yolo-init", "yolo-setup", "yolo-install", "yolo-doctor"],
     writes_code: false,
   },
   {
@@ -40,17 +40,8 @@ export const LIFECYCLE_STAGES = [
     writes_code: false,
   },
   {
-    id: "task-graph",
-    sequence: 5,
-    label: "Task graph",
-    purpose: "Split planned work into atomic tasks with dependencies, owners, gates, and evidence needs.",
-    default_artifact: "task-graph.json",
-    entry_commands: ["yolo-plan"],
-    writes_code: false,
-  },
-  {
     id: "prd",
-    sequence: 6,
+    sequence: 5,
     label: "PRD and executable spec",
     purpose: "Compile approved requirements into executable PRD/spec artifacts.",
     default_artifact: "prd.json",
@@ -59,7 +50,7 @@ export const LIFECYCLE_STAGES = [
   },
   {
     id: "check",
-    sequence: 7,
+    sequence: 6,
     label: "Readiness check",
     purpose: "Fail closed on weak PRD, missing context, adapter gaps, missing tests, or unsafe execution state.",
     default_artifact: "check-report.json",
@@ -68,7 +59,7 @@ export const LIFECYCLE_STAGES = [
   },
   {
     id: "run",
-    sequence: 8,
+    sequence: 7,
     label: "Gated execution",
     purpose: "Execute only approved, checked work with gates, retries, and evidence.",
     default_artifact: "run-report.json",
@@ -77,7 +68,7 @@ export const LIFECYCLE_STAGES = [
   },
   {
     id: "review-fix",
-    sequence: 9,
+    sequence: 8,
     label: "Review and fix loop",
     purpose: "Review implementation, convert findings into tasks, fix, and re-run gates.",
     default_artifact: "review-report.json",
@@ -86,7 +77,7 @@ export const LIFECYCLE_STAGES = [
   },
   {
     id: "acceptance",
-    sequence: 10,
+    sequence: 9,
     label: "Acceptance",
     purpose: "Collect product, runtime, UI, accessibility, visual, and evidence-based acceptance results.",
     default_artifact: "acceptance-report.json",
@@ -95,7 +86,7 @@ export const LIFECYCLE_STAGES = [
   },
   {
     id: "delivery",
-    sequence: 11,
+    sequence: 10,
     label: "Delivery",
     purpose: "Prepare handoff, release readiness, rollback notes, and final evidence.",
     default_artifact: "delivery-report.json",
@@ -104,7 +95,7 @@ export const LIFECYCLE_STAGES = [
   },
   {
     id: "learn",
-    sequence: 12,
+    sequence: 11,
     label: "Learning and retrospective",
     purpose: "Promote useful lessons, pitfalls, and recovery patterns into model-agnostic memory.",
     default_artifact: "retrospective.json",
@@ -144,7 +135,7 @@ export function lifecycleStageForCommand(commandName = "") {
   return stage ? clone(stage) : null;
 }
 
-export function createLifecycleArtifact(stageInput, options = {}) {
+export function createLifecycleArtifact(stageInput, options = Object()) {
   const stage = typeof stageInput === "string" ? getLifecycleStage(stageInput) : getLifecycleStage(stageInput.id);
   const now = clean(options.now) || new Date().toISOString();
   const projectName = clean(options.projectName || options.project_name) || "project";
@@ -172,7 +163,7 @@ export function createLifecycleArtifact(stageInput, options = {}) {
   };
 }
 
-export function createLifecycleStateSnapshot(options = {}) {
+export function createLifecycleStateSnapshot(options = Object()) {
   const now = clean(options.now) || new Date().toISOString();
   const projectName = clean(options.projectName || options.project_name) || "project";
   const currentStage = clean(options.currentStage || options.current_stage) || "idea";
@@ -197,7 +188,7 @@ export function createLifecycleStateSnapshot(options = {}) {
   };
 }
 
-export function validateLifecycleState(state = {}) {
+export function validateLifecycleState(state = Object()) {
   const errors = [];
   const warnings = [];
 

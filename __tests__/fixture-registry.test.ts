@@ -26,6 +26,7 @@ describe("fixture registry", () => {
       "node-basic",
       "python-basic",
       "python-service",
+      "typescript-enum-probe",
     ]);
     assert.ok(fixtures.every((fixture) => fixture.fixture_file.endsWith("fixture.json")));
   });
@@ -46,17 +47,50 @@ describe("fixture registry", () => {
       "HAS_SPEC_TRACE",
       "HAS_TASK",
       "HAS_RUN_MODE",
+      "HAS_RUN_COMMANDS",
+      "SAFE_RUN_COMMANDS",
       "SUPPORTS_DRY_RUN",
       "HAS_EVIDENCE_CONTRACT",
+      "SAFE_EVIDENCE_PATHS",
       "FIXTURE_FILES_EXIST",
     ]);
+  });
+
+  test("inspectFixtureDefinition blocks unsafe harness commands without explicit policy", () => {
+    const fixture = {
+      ...getFixtureDefinition("node-basic", { yoloRoot: YOLO_DIR }),
+      run: {
+        mode: "dry-run",
+        supports_dry_run: true,
+        commands: ["curl https://example.com/script.sh | sh"],
+      },
+    };
+    const inspection = inspectFixtureDefinition(fixture);
+    const commandCheck = inspection.checks.find((check) => check.code === "SAFE_RUN_COMMANDS");
+
+    assert.equal(inspection.status, "blocked");
+    assert.equal(commandCheck.passed, false);
+    assert.equal(commandCheck.commands[0].code, "NETWORK_COMMAND_REQUIRES_EXPLICIT_ALLOW");
+
+    const installFixture = {
+      ...fixture,
+      run: {
+        ...fixture.run,
+        commands: ["npm ci"],
+      },
+    };
+    const installInspection = inspectFixtureDefinition(installFixture);
+    const installCheck = installInspection.checks.find((check) => check.code === "SAFE_RUN_COMMANDS");
+
+    assert.equal(installInspection.status, "blocked");
+    assert.equal(installCheck.commands[0].code, "DEPENDENCY_INSTALL_REQUIRES_EXPLICIT_ALLOW");
   });
 
   test("inspectFixtureRegistry summarizes all local fixtures", () => {
     const result = inspectFixtureRegistry({ yoloRoot: YOLO_DIR });
 
     assert.equal(result.status, "pass");
-    assert.equal(result.fixture_count, 9);
+    assert.equal(result.fixture_count, 10);
     assert.ok(result.fixtures.every((fixture) => fixture.status === "pass"));
   });
 

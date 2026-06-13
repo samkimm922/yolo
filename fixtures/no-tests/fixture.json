@@ -29,6 +29,9 @@
   "run": {
     "mode": "dry-run",
     "supports_dry_run": true,
+    "release_eligible": false,
+    "dogfood_eligible": false,
+    "executable_gate_eligible": false,
     "commands": [
       "node src/index.ts"
     ],

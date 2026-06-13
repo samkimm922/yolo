@@ -11,7 +11,7 @@ function argValue(argv, prefix) {
   return arg ? arg.slice(prefix.length) : null;
 }
 
-export function appendSessionMemory({ argv = [], now = new Date() } = {}) {
+export function appendSessionMemory({ argv = [], now = new Date() } = Object()) {
   const record = {
     ts: now.toISOString(),
     type: argValue(argv, "--type=") || "note",
@@ -30,7 +30,7 @@ export function appendSessionMemory({ argv = [], now = new Date() } = {}) {
   return { status: "ok", file, record };
 }
 
-export function runSessionMemoryCli(argv = process.argv.slice(2), io = {}) {
+export function runSessionMemoryCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const result = appendSessionMemory({ argv });
   if (argv.includes("--json")) {

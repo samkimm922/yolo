@@ -34,6 +34,7 @@ export function parsePromptArgs(argv = process.argv.slice(2), env = process.env)
     includeTscContext: argv.includes("--include-tsc-context") || env.YOLO_PROMPT_TSC_CONTEXT === "1",
     learningsText: getArg(argv, "--learnings="),
     attempt: getArg(argv, "--attempt=") || "1",
+    sessionId: getArg(argv, "--session-id="),
     gate: getArg(argv, "--gate="),
     cwd: getArg(argv, "--cwd="),
     stateRoot: getArg(argv, "--state-root="),
@@ -346,13 +347,14 @@ function formatCondition(c) {
 
 // ── 组装 prompt ──────────────────────────────────────────────────
 
-export function generatePrompt(input = {}) {
+export function generatePrompt(input = Object()) {
   const taskId = input.taskId;
   const prdPath = input.prdPath;
   const isFix = input.isFix === true || input.fix === true;
   const includeTscContext = input.includeTscContext === true;
   const learningsText = input.learningsText || "";
   const attempt = input.attempt || "1";
+  const sessionId = input.sessionId || input.session_id || "";
   const gateFilter = input.gate || null;
   const stateRoot = input.stateRoot || input.state_root || null;
   ROOT = resolve(input.cwd || input.projectRoot || DEFAULT_ROOT);
@@ -436,6 +438,15 @@ if (workflowContent) {
 
 parts.push(
   `# ${task.id} — ${task.title}`,
+  "",
+  "## Fresh Session Contract",
+  "",
+  `- session_id: \`${sessionId || `${task.id}-attempt-${attempt}`}\``,
+  `- task_id: \`${task.id}\``,
+  `- attempt: \`${attempt}\``,
+  "- 每个 task / retry 必须是新的 provider session，禁止复用上一 task 的聊天上下文。",
+  "- 允许上下文：本 PRD task slice、scope targets、readonly files、post_conditions、bounded learning、上次 gate failure 摘要。",
+  "- 禁止上下文：上一 task 的完整 transcript、provider stdout、无界历史记忆、无关项目历史。",
   "",
   "---",
   "",
@@ -658,7 +669,7 @@ if (learningsText && !gateResult) {
   return parts.join("\n");
 }
 
-export function runPromptCli(argv = process.argv.slice(2), io = {}) {
+export function runPromptCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   try {

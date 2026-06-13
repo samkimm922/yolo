@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getArg, hasFlag } from "../../../lib/cli-utils.js";
+import { getArg, hasFlag } from "../../lib/cli-utils.js";
 import { buildEvidenceArtifact, writeJsonArtifact } from "../evidence/ledger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -84,6 +84,74 @@ function fileLayer(file) {
   return f.split("/")[0] || "unknown";
 }
 
+function buildLayerMap(projectRoot) {
+  const root = resolve(projectRoot);
+  const layers = new Map(); // path → category
+  const srcDir = resolve(root, "src");
+  const baseDir = existsSync(srcDir) ? srcDir : root;
+
+  function probe(dir, depth = 0) {
+    if (depth > 2) return;
+    try {
+      const entries = readdirSync(dir);
+      for (const entry of entries) {
+        const full = resolve(dir, entry);
+        try {
+          if (!statSync(full).isDirectory()) continue;
+        } catch { continue; }
+        const rel = relative(baseDir, full);
+        // Classify by naming conventions
+        const name = entry.toLowerCase();
+        if (/(^|\/)(pages?|views?|screens?|routes?|features?|modules?)$/i.test(rel)) {
+          layers.set(rel + "/", "pages");
+        } else if (/(^|\/)(services?|api|controllers?|server|domain)$/i.test(rel)) {
+          layers.set(rel + "/", "services");
+        } else if (/(^|\/)(components?|ui|widgets?)$/i.test(rel)) {
+          layers.set(rel + "/", "components");
+        } else if (/(^|\/)(hooks?|composables?|middleware)$/i.test(rel)) {
+          layers.set(rel + "/", "hooks");
+        } else if (/(^|\/)(types?|interfaces?|\.d\.ts)$/i.test(rel) || entry.endsWith(".d.ts")) {
+          layers.set(rel + "/", "types");
+        } else if (/(^|\/)(__tests__|tests?|specs?|e2e)$/i.test(rel)) {
+          layers.set(rel + "/", "test");
+        } else if (/(^|\/)(utils?|libs?|helpers?|shared|common)$/i.test(rel)) {
+          layers.set(rel + "/", "utils");
+        } else if (/(^|\/)(styles?|assets?|public|static)$/i.test(rel)) {
+          layers.set(rel + "/", "assets");
+        }
+        probe(full, depth + 1);
+      }
+    } catch { /* directory not readable */ }
+  }
+  probe(baseDir);
+
+  return {
+    root,
+    baseDir,
+    layers,
+    resolve(file) {
+      const f = normalizeFile(file);
+      for (const [prefix, category] of layers) {
+        if (f.startsWith(prefix)) return category;
+      }
+      // Fallback to hardcoded rules for well-known patterns
+      if (f.startsWith("src/pages/")) return "pages";
+      if (f.startsWith("src/services/")) return "services";
+      if (f.startsWith("src/components/")) return "components";
+      if (f.startsWith("src/hooks/") || f.includes("/hooks/")) return "hooks";
+      if (f.startsWith("src/types/") || f.endsWith(".d.ts")) return "types";
+      if (f.startsWith("cloudfunctions/")) return "cloudfunctions";
+      if (f.startsWith("scripts/yolo/")) return "yolo_engine";
+      return f.split("/")[0] || "unknown";
+    },
+  };
+}
+
+function fileLayerWithMap(file, layerMap) {
+  if (layerMap) return layerMap.resolve(file);
+  return fileLayer(file);
+}
+
 function countFailPostconditions(task) {
   return (task.post_conditions || []).filter((condition) => (condition.severity || "FAIL") === "FAIL").length;
 }
@@ -111,14 +179,14 @@ function includesAny(text, terms) {
 }
 
 function existingTargets(files, roots = [PROJECT_ROOT, YOLO_ROOT]) {
-  const resolvedRoots = unique(roots.map((root) => resolve(root)));
-  return files.filter((file) => resolvedRoots.some((root) => existsSync(resolve(root, normalizeFile(file)))));
+  const resolvedRoots = unique(roots.map((root) => resolve(String(root)))).map(String);
+  return files.map((file) => String(file)).filter((file) => resolvedRoots.some((root) => existsSync(resolve(root, normalizeFile(file)))));
 }
 
-function buildSplitSuggestions(task, files, layers, text) {
+function buildSplitSuggestions(task, files, layers, text, classify = fileLayer) {
   const suggestions = [];
-  const pageLike = files.filter((file) => ["pages", "components", "hooks"].includes(fileLayer(file)));
-  const serviceLike = files.filter((file) => ["services", "cloudfunctions"].includes(fileLayer(file)));
+  const pageLike = files.filter((file) => ["pages", "components", "hooks"].includes(classify(file)));
+  const serviceLike = files.filter((file) => ["services", "cloudfunctions"].includes(classify(file)));
   const base = task.id;
 
   if (pageLike.length) {
@@ -173,20 +241,23 @@ function buildSplitSuggestions(task, files, layers, text) {
   return suggestions;
 }
 
-export function inspectAtomicTask(task, options = {}) {
+export function inspectAtomicTask(task, options = Object()) {
   if (!task || !task.id) throw new Error("inspectAtomicTask requires task.id");
 
   const projectRoot = resolve(options.projectRoot || options.project_root || options.root || PROJECT_ROOT);
-  const targetRoots = unique([projectRoot, PROJECT_ROOT, YOLO_ROOT]);
+  const targetRoots = unique([projectRoot, PROJECT_ROOT, YOLO_ROOT]).map(String);
+  const layerMap = buildLayerMap(projectRoot);
+  const classify = (file) => fileLayerWithMap(file, layerMap);
   const targets = task.scope?.targets || [];
-  const files = unique(targets.map((target) => normalizeFile(target.file)));
-  const readonlyFiles = unique(task.scope?.readonly_files || []);
-  const layers = unique(files.map(fileLayer));
+  const files = unique(targets.map((target) => normalizeFile(target.file))).map(String);
+  const readonlyFiles = unique(task.scope?.readonly_files || []).map(String);
+  const layers = unique(files.map(classify)).map(String);
   const text = taskText(task);
   const failPostconditions = countFailPostconditions(task);
   const behavioralFailPostconditions = countBehavioralFailPostconditions(task);
   const structuralSingleFileTask = isStructuralSingleFileTask(task, files, behavioralFailPostconditions);
-  const dataTerms = DATA_TERMS.filter((term) => text.includes(term));
+  const uiOnlyTargets = files.length > 0 && files.every((file) => ["pages", "components", "hooks"].includes(classify(file)));
+  const dataTerms = uiOnlyTargets ? [] : DATA_TERMS.filter((term) => text.includes(term));
   const uiTerms = UI_TERMS.filter((term) => text.includes(term));
   const hookTerms = HOOK_TERMS.filter((term) => text.includes(term));
   const crossesPagesServices = layers.includes("pages") && layers.includes("services");
@@ -203,7 +274,7 @@ export function inspectAtomicTask(task, options = {}) {
 
   let score = 0;
   const reasons = [];
-  const add = (points, id, detail, evidence = {}) => {
+  const add = (points, id, detail, evidence = Object()) => {
     score += points;
     reasons.push({ id, points, detail, evidence });
   };
@@ -263,12 +334,13 @@ export function inspectAtomicTask(task, options = {}) {
     files,
     readonly_files: readonlyFiles,
     layers,
+    layer_map: { entries: [...layerMap.layers.entries()].map(([prefix, category]) => ({ prefix, category })), baseDir: layerMap.baseDir },
     behavior_domains: behaviorDomains,
     structural_single_file_task: structuralSingleFileTask,
     fail_postconditions: failPostconditions,
     behavioral_fail_postconditions: behavioralFailPostconditions,
     reasons,
-    split_suggestions: mode === "must_split" ? buildSplitSuggestions(task, files, layers, text) : [],
+    split_suggestions: mode === "must_split" ? buildSplitSuggestions(task, files, layers, text, classify) : [],
     next_action: mode === "must_split"
       ? "split_task_before_model_spawn"
       : mode === "investigate_then_patch"
@@ -294,7 +366,7 @@ export function inspectAtomicTask(task, options = {}) {
   };
 }
 
-export function inspectTaskFromPrd(prdPath, taskId, options = {}) {
+export function inspectTaskFromPrd(prdPath, taskId, options = Object()) {
   const resolved = resolvePrdPath(prdPath);
   const prd = readJson(resolved);
   const task = (prd.tasks || []).find((item) => item.id === taskId);
@@ -302,7 +374,7 @@ export function inspectTaskFromPrd(prdPath, taskId, options = {}) {
   return inspectAtomicTask(task, { ...options, prdPath: resolved });
 }
 
-export function runAtomicTaskDoctorCli(options = {}) {
+export function runAtomicTaskDoctorCli(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || YOLO_ROOT);
   const prdPath = getArg("--prd=");
   const taskId = getArg("--task=");

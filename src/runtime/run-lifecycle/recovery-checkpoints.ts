@@ -21,21 +21,26 @@ export const MEMORY_CHECKPOINT_STATUSES = new Set([
 
 export function createRunnerLedgerWriters({
   getStateDir,
+  getRunId = () => null,
   appendStateEvent,
   appendRunEvent,
   error = console.error,
-} = {}) {
+} = Object()) {
   return {
-    logEvent(event, data = {}) {
+    logEvent(event, data = Object()) {
       try {
-        appendStateEvent(getStateDir(), event, data);
+        const runId = getRunId();
+        const payload = runId && data?.run_id == null ? { ...data, run_id: runId } : data;
+        appendStateEvent(getStateDir(), event, payload);
       } catch (e) {
         error("[runner] logEvent 写入失败:", e.message);
       }
     },
-    logRun(event, data = {}) {
+    logRun(event, data = Object()) {
       try {
-        appendRunEvent(getStateDir(), event, data);
+        const runId = getRunId();
+        const payload = runId && data?.run_id == null ? { ...data, run_id: runId } : data;
+        appendRunEvent(getStateDir(), event, payload);
       } catch (e) {
         error("[runner] logRun 写入失败:", e.message);
       }
@@ -53,7 +58,7 @@ export function writeRunnerStateSnapshot({
   spawnSync,
   processExecPath,
   warn = console.warn,
-} = {}) {
+} = Object()) {
   try {
     const args = [runtimeScript(packageRoot, "src/runtime/evidence/state-snapshot.js"), `--state-root=${stateRoot}`];
     if (prdPath) args.push(`--prd=${normalizeRepoPath(prdPath, { rootDir }).replace(/^scripts\/yolo\//, "")}`);
@@ -76,7 +81,7 @@ export function recordRunnerMemoryCheckpoint({
   reason,
   prdPath,
   taskId,
-  update = {},
+  update = Object(),
   packageRoot,
   stateRoot,
   rootDir,
@@ -84,7 +89,7 @@ export function recordRunnerMemoryCheckpoint({
   spawnSync,
   processExecPath,
   warn = console.warn,
-} = {}) {
+} = Object()) {
   const status = update.status || "updated";
   if (!MEMORY_CHECKPOINT_STATUSES.has(status)) return;
   try {
@@ -120,7 +125,7 @@ export function recordRunnerMemoryCheckpoint({
   }
 }
 
-export function writeRunnerRecoveryCheckpoint(options = {}) {
+export function writeRunnerRecoveryCheckpoint(options = Object()) {
   recordRunnerMemoryCheckpoint(options);
   writeRunnerStateSnapshot(options);
 }

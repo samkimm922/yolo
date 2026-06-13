@@ -2,6 +2,7 @@ export const CONTROLLED_PARALLEL_SCHEMA_VERSION = "1.0";
 export const CONTROLLED_PARALLEL_PLAN_SCHEMA = "yolo.runtime.controlled_parallel_plan.v1";
 export const CONTROLLED_PARALLEL_MERGE_GATE_SCHEMA = "yolo.runtime.parallel_merge_gate.v1";
 export const CONTROLLED_PARALLEL_EVIDENCE_SCHEMA = "yolo.runtime.parallel_evidence_merge.v1";
+export const CONTROLLED_PARALLEL_WAVE_START_GATE_SCHEMA = "yolo.runtime.parallel_wave_start_gate.v1";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -21,15 +22,15 @@ function normalizePath(value = "") {
   return clean(value).replace(/\\/g, "/").replace(/^\.\//, "").replace(/:\d+(?:-\d+)?$/, "");
 }
 
-function taskId(task = {}) {
+function taskId(task = Object()) {
   return clean(task.id || task.task_id);
 }
 
-function taskStatus(task = {}) {
+function taskStatus(task = Object()) {
   return clean(task.status || "pending").toLowerCase();
 }
 
-function taskTargets(task = {}) {
+function taskTargets(task = Object()) {
   return [
     ...asArray(task.scope?.targets).map((target) => normalizePath(target.file || target.path || target)),
     ...asArray(task.files).map(normalizePath),
@@ -37,25 +38,25 @@ function taskTargets(task = {}) {
   ].filter(Boolean);
 }
 
-function taskDependencies(task = {}) {
+function taskDependencies(task = Object()) {
   return asArray(task.depends_on || task.dependencies).map(String).filter(Boolean);
 }
 
-function taskKind(task = {}) {
+function taskKind(task = Object()) {
   const text = [task.type, task.task_kind, task.title, task.description].filter(Boolean).join(" ").toLowerCase();
   if (/review|审查/.test(text)) return "review";
   if (/accept|qa|ui|验收/.test(text)) return "qa";
   return "implementation";
 }
 
-function agentForTask(task = {}) {
+function agentForTask(task = Object()) {
   const kind = taskKind(task);
   if (kind === "review") return "reviewer-agent";
   if (kind === "qa") return "qa-agent";
   return "implementer-agent";
 }
 
-function taskCanRun(task = {}) {
+function taskCanRun(task = Object()) {
   return !["done", "completed", "skipped", "merged_into"].includes(taskStatus(task));
 }
 
@@ -64,7 +65,7 @@ function intersects(a = [], b = []) {
   return b.filter((item) => set.has(item));
 }
 
-function isExclusiveTask(task = {}) {
+function isExclusiveTask(task = Object()) {
   const targets = taskTargets(task);
   if (targets.length === 0) return true;
   if (task.parallel === false || task.allow_parallel === false) return true;
@@ -72,7 +73,7 @@ function isExclusiveTask(task = {}) {
   return false;
 }
 
-function conflictBetween(left = {}, right = {}) {
+function conflictBetween(left = Object(), right = Object()) {
   const leftTargets = taskTargets(left);
   const rightTargets = taskTargets(right);
   const shared = intersects(leftTargets, rightTargets);
@@ -106,7 +107,7 @@ export function detectParallelConflicts(tasks = []) {
   return conflicts;
 }
 
-export function buildTaskDependencyGraph(input = {}) {
+export function buildTaskDependencyGraph(input = Object()) {
   const tasks = asArray(input.tasks || input.prd?.tasks).filter((task) => taskId(task));
   const ids = new Set(tasks.map(taskId));
   const nodes = tasks.map((task) => {
@@ -157,6 +158,72 @@ function worktreeForTask({ task, waveIndex, worktreeRoot }) {
   };
 }
 
+function statusIsPass(value) {
+  return ["pass", "passed", "success", "completed", "done"].includes(clean(value).toLowerCase());
+}
+
+function passedWaveIdsFromReports(waveReports = []) {
+  return new Set(asArray(waveReports)
+    .filter((report) => statusIsPass(report.status))
+    .map((report) => clean(report.wave_id || report.waveId || report.id))
+    .filter(Boolean));
+}
+
+function waveIdsBefore(waves = [], wave = Object()) {
+  return asArray(waves)
+    .filter((candidate) => Number(candidate.index || 0) < Number(wave.index || 0))
+    .map((candidate) => candidate.id)
+    .filter(Boolean);
+}
+
+export function inspectParallelWaveStartGate(input = Object(), options = Object()) {
+  const wave = input.wave || {};
+  const waves = asArray(input.waves || input.plan?.waves || options.waves || options.plan?.waves);
+  const completed = new Set(asArray(input.completedTaskIds || input.completed_task_ids || options.completedTaskIds || options.completed_task_ids).map(clean));
+  const passedTasks = new Set(asArray(input.passedTaskIds || input.passed_task_ids || options.passedTaskIds || options.passed_task_ids).map(clean));
+  const passedWaves = new Set([
+    ...asArray(input.passedWaveIds || input.passed_wave_ids || options.passedWaveIds || options.passed_wave_ids).map(clean),
+    ...passedWaveIdsFromReports(input.waveReports || input.wave_reports || options.waveReports || options.wave_reports),
+  ]);
+  const taskById = new Map(asArray(input.tasks || input.prd?.tasks || options.tasks || options.prd?.tasks).map((task) => [taskId(task), task]));
+  const blockers = [];
+
+  for (const previousWaveId of waveIdsBefore(waves, wave)) {
+    if (!passedWaves.has(previousWaveId)) {
+      blockers.push({
+        code: "PARALLEL_PREVIOUS_WAVE_NOT_PASSED",
+        message: "A later wave cannot start until every previous wave has terminal pass evidence.",
+        wave_id: wave.id || null,
+        dependency_wave_id: previousWaveId,
+      });
+    }
+  }
+
+  for (const id of asArray(wave.task_ids).map(clean)) {
+    const task = taskById.get(id);
+    for (const dependency of taskDependencies(task)) {
+      if (!completed.has(dependency) && !passedTasks.has(dependency)) {
+        blockers.push({
+          code: "PARALLEL_DEPENDENCY_NOT_PASSED",
+          message: "Task dependency requires pass evidence before this wave can start.",
+          wave_id: wave.id || null,
+          task_id: id,
+          dependency_id: dependency,
+        });
+      }
+    }
+  }
+
+  return {
+    schema_version: CONTROLLED_PARALLEL_SCHEMA_VERSION,
+    schema: CONTROLLED_PARALLEL_WAVE_START_GATE_SCHEMA,
+    status: blockers.length > 0 ? "blocked" : "pass",
+    wave_id: wave.id || null,
+    can_start: blockers.length === 0,
+    blockers,
+  };
+}
+
 function waveRecord({ waveIndex, tasks, worktreeRoot }) {
   const conflicts = detectParallelConflicts(tasks);
   return {
@@ -178,7 +245,7 @@ function waveRecord({ waveIndex, tasks, worktreeRoot }) {
   };
 }
 
-export function planControlledParallelWaves(input = {}, options = {}) {
+export function planControlledParallelWaves(input = Object(), options = Object()) {
   const projectRoot = clean(input.projectRoot || input.project_root || options.projectRoot || options.project_root || process.cwd());
   const worktreeRoot = normalizePath(input.worktreeRoot || input.worktree_root || options.worktreeRoot || options.worktree_root || `${projectRoot}/../.yolo-worktrees`);
   const graph = buildTaskDependencyGraph(input);
@@ -198,7 +265,7 @@ export function planControlledParallelWaves(input = {}, options = {}) {
     const ready = tasks.filter((task) => {
       const id = taskId(task);
       if (planned.has(id)) return false;
-      return taskDependencies(task).every((dependency) => completed.has(dependency) || planned.has(dependency));
+      return taskDependencies(task).every((dependency) => completed.has(dependency));
     });
     if (ready.length === 0) break;
 
@@ -218,7 +285,7 @@ export function planControlledParallelWaves(input = {}, options = {}) {
   for (const task of unscheduled) {
     const dependencies = taskDependencies(task);
     const missing = dependencies.filter((dependency) => !taskById.has(dependency) && !completed.has(dependency));
-    blockers.push({
+    blockers.push(Object.assign(Object(), {
       code: missing.length > 0 ? "TASK_DEPENDENCY_MISSING" : "TASK_DEPENDENCY_CYCLE_OR_BLOCKED",
       message: missing.length > 0
         ? "Task has missing dependencies and cannot be scheduled."
@@ -226,11 +293,28 @@ export function planControlledParallelWaves(input = {}, options = {}) {
       task_id: taskId(task),
       dependencies,
       missing_dependencies: missing,
-    });
+    }));
   }
 
+  const startGates = waves.map((wave) => inspectParallelWaveStartGate({
+    wave,
+    waves,
+    tasks: input.tasks || input.prd?.tasks,
+    completedTaskIds: [...completed],
+    passedTaskIds: input.passedTaskIds || input.passed_task_ids,
+    passedWaveIds: input.passedWaveIds || input.passed_wave_ids,
+    waveReports: input.waveReports || input.wave_reports,
+  }));
+  for (const wave of waves) {
+    const startGate = startGates.find((gate) => gate.wave_id === wave.id);
+    wave.start_gate = startGate;
+    if (startGate?.status === "blocked") wave.status = "waiting_previous_pass_evidence";
+  }
+
+  const startGateBlockers = startGates.flatMap((gate) => gate.blockers.map((blocker) => ({ ...blocker, wave_id: gate.wave_id })));
   const waveConflicts = waves.flatMap((wave) => wave.conflicts.map((conflict) => ({ ...conflict, wave_id: wave.id })));
   const status = blockers.length > 0 || waveConflicts.length > 0 ? "blocked" : "pass";
+  const executionStatus = status === "blocked" || startGateBlockers.length > 0 ? "blocked" : "pass";
   return {
     schema_version: CONTROLLED_PARALLEL_SCHEMA_VERSION,
     schema: CONTROLLED_PARALLEL_PLAN_SCHEMA,
@@ -239,20 +323,25 @@ export function planControlledParallelWaves(input = {}, options = {}) {
     worktree_root: worktreeRoot,
     task_count: tasks.length,
     wave_count: waves.length,
+    execution_status: executionStatus,
+    start_gates: startGates,
     graph,
     waves,
     blockers: [...blockers, ...waveConflicts],
+    execution_blockers: startGateBlockers,
     policies: {
-      dependency_policy: "dependencies must be completed in a prior planned wave",
+      dependency_policy: "dependencies must have completed task pass evidence before scheduling or starting a dependent wave",
       conflict_policy: "overlapping target files or exclusive/unscoped tasks cannot share a wave",
       merge_policy: "each wave must pass merge gate before the next wave starts",
       rollback_policy: "failed wave worktrees are removed without copying files back to mainline",
       retry_policy: "retry only the failed task or wave after fixing the blocker; do not continue later waves",
       escalation_policy: "stop on missing dependency, repeated gate failure, merge conflict, or review blocker",
     },
-    next_actions: status === "pass"
+    next_actions: status === "pass" && executionStatus === "pass"
       ? ["Execute waves sequentially; tasks inside each wave may run in isolated worktrees, then pass the merge gate before the next wave."]
-      : ["Fix dependency or conflict blockers before enabling parallel execution."],
+      : status === "pass"
+        ? ["Run only waves whose start_gate is pass; later waves require previous wave merge evidence before start."]
+        : ["Fix dependency or conflict blockers before enabling parallel execution."],
   };
 }
 
@@ -262,11 +351,7 @@ function reportForTask(taskIdValue, taskReports = []) {
   return taskReports.find((report) => clean(report.task_id || report.taskId || report.id) === taskIdValue);
 }
 
-function statusIsPass(value) {
-  return ["pass", "passed", "success", "completed", "done"].includes(clean(value).toLowerCase());
-}
-
-export function inspectParallelMergeGate(input = {}, options = {}) {
+export function inspectParallelMergeGate(input = Object(), options = Object()) {
   const wave = input.wave || {};
   const taskReports = asArray(input.taskReports || input.task_reports || options.taskReports || options.task_reports);
   const blockers = [];
@@ -310,7 +395,7 @@ export function inspectParallelMergeGate(input = {}, options = {}) {
   };
 }
 
-export function mergeParallelEvidence(input = {}, options = {}) {
+export function mergeParallelEvidence(input = Object(), options = Object()) {
   const waves = asArray(input.waves || input.plan?.waves || options.waves);
   const taskReports = asArray(input.taskReports || input.task_reports || options.taskReports || options.task_reports);
   const waveReports = waves.map((wave) => inspectParallelMergeGate({ wave, taskReports }));
@@ -336,7 +421,7 @@ export function mergeParallelEvidence(input = {}, options = {}) {
   };
 }
 
-export function formatControlledParallelPlanText(plan = {}) {
+export function formatControlledParallelPlanText(plan = Object()) {
   const lines = [`[yolo parallel] ${plan.status}: ${plan.wave_count || 0} wave(s), ${plan.task_count || 0} task(s)`];
   for (const wave of asArray(plan.waves)) {
     lines.push(`- ${wave.id}: ${wave.task_ids.join(", ")} (${wave.status})`);

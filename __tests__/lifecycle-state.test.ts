@@ -30,7 +30,6 @@ describe("lifecycle state", () => {
       "discovery",
       "setup",
       "roadmap",
-      "task-graph",
       "prd",
       "check",
       "run",
@@ -39,7 +38,7 @@ describe("lifecycle state", () => {
       "delivery",
       "learn",
     ]);
-    assert.equal(listLifecycleStages().length, 12);
+    assert.equal(listLifecycleStages().length, 11);
     assert.equal(getLifecycleStage("run").writes_code, true);
     assert.equal(lifecycleStageForCommand("/yolo-prd").id, "prd");
   });
@@ -67,7 +66,7 @@ describe("lifecycle state", () => {
     });
 
     assert.equal(plan.validation.status, "pass");
-    assert.equal(plan.files.length, 13);
+    assert.equal(plan.files.length, 12);
     assert.equal(plan.files[0].path, ".yolo/lifecycle/status.json");
     assert.equal(plan.files.some((file) => file.path === ".yolo/lifecycle/retrospective.json"), true);
   });
@@ -82,7 +81,7 @@ describe("lifecycle state", () => {
       });
 
       assert.equal(first.status, "success");
-      assert.equal(first.created.length, 13);
+      assert.equal(first.created.length, 12);
       assert.equal(existsSync(join(root, ".yolo/lifecycle/status.json")), true);
       assert.equal(existsSync(lifecycleArtifactPath("acceptance", { projectRoot: root })), true);
 

@@ -22,14 +22,14 @@ export async function handleGatePassFlow({
   cleanupWorktree,
   commitTask,
   recordTaskTransition,
-  logEvent = () => {},
-  logProgress = () => {},
-  logTaskError = () => {},
-  logTaskDone = () => {},
+  logEvent = (..._args) => {},
+  logProgress = (..._args) => {},
+  logTaskError = (..._args) => {},
+  logTaskDone = (..._args) => {},
   readDiffStats = readWorktreeDiffStats,
   buildBaseRecord = buildTaskExecutionBaseRecord,
   nowMs = () => Date.now(),
-} = {}) {
+} = Object()) {
   logEvent("gate_pass", { task: task.id });
 
   const prdForPreMergePostCheck = loadPRD(prdPath);
@@ -72,12 +72,8 @@ export async function handleGatePassFlow({
 
   let postResult = null;
   if (shouldRunPostCommitPostconditions(commitResult)) {
-    if (commitResult.nonBlocking === true) {
-      postResult = preMergePost;
-    } else {
-      const prdForCheck = loadPRD(prdPath);
-      postResult = taskPostconditionsPass(task, prdForCheck);
-    }
+    const prdForCheck = loadPRD(prdPath);
+    postResult = taskPostconditionsPass(task, prdForCheck);
   }
 
   const postCommitOutcome = buildPostCommitOutcome({

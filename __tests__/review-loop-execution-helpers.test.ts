@@ -4,8 +4,10 @@ import { join } from "node:path";
 import {
   autoFixErrorFallback,
   buildReviewScannerArgs,
+  inspectReviewScannerCoverage,
   normalizeAutoFixResult,
   parseReviewFindings,
+  scannerFailureDiagnostic,
   scannerStdoutFromError,
   shouldStopReviewAfterFailure,
 } from "../src/runtime/review-loop/execution-helpers.js";
@@ -31,6 +33,14 @@ describe("review-loop execution helpers", () => {
     assert.equal(scannerStdoutFromError(null), "");
   });
 
+  test("scannerFailureDiagnostic preserves stdout as diagnostic, not scan input", () => {
+    const diagnostic = scannerFailureDiagnostic({ message: "scanner crashed", stdout: " []\n", stderr: "boom" });
+    assert.equal(diagnostic.message, "scanner crashed");
+    assert.equal(diagnostic.stdout_sample, "[]");
+    assert.equal(diagnostic.stderr_sample, "boom");
+    assert.match(diagnostic.detail, /stdout: \[\]/);
+  });
+
   test("parseReviewFindings accepts arrays and object-wrapped findings", () => {
     const arrayFindings = parseReviewFindings(JSON.stringify([{ id: "A", message: "a" }]));
     assert.equal(arrayFindings[0].schema, "yolo.review.finding.v1");
@@ -42,6 +52,24 @@ describe("review-loop execution helpers", () => {
     assert.equal(wrappedFindings[0].finding_id, "B");
     assert.deepEqual(parseReviewFindings(JSON.stringify({ findings: null })), []);
     assert.throws(() => parseReviewFindings("{not-json"));
+  });
+
+  test("inspectReviewScannerCoverage blocks empty findings without complete coverage", () => {
+    const missing = inspectReviewScannerCoverage(JSON.stringify({ findings: [] }));
+    assert.equal(missing.status, "blocked");
+    assert.equal(missing.reason, "scanner_coverage_missing");
+    assert.ok(missing.missing_fields.includes("scanner_version"));
+
+    const complete = inspectReviewScannerCoverage(JSON.stringify({
+      scanner_version: "test-review-scanner@1",
+      scanned_files: ["src/app.ts"],
+      rules: ["R-test"],
+      expected_scope: ["src/app.ts"],
+      coverage_status: "complete",
+      findings: [],
+    }));
+    assert.equal(complete.status, "pass");
+    assert.equal(complete.blocks_execution, false);
   });
 
   test("shouldStopReviewAfterFailure follows the max failure threshold", () => {

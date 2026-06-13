@@ -176,4 +176,15 @@ describe("task-loop status helpers", () => {
 
     assert.deepEqual(deps, ["FIX-P36-003"]);
   });
+
+  test("dependencyBlockers also honors dependencies alias", () => {
+    const deps = dependencyBlockers({
+      task: { id: "FIX-P36-004", depends_on: [], dependencies: ["FIX-P36-003"] },
+      completedIds: new Set(),
+      tasks: [{ id: "FIX-P36-003", status: "pending" }],
+      taskCountsAsCompleted: (task) => task?.status === "done",
+    });
+
+    assert.deepEqual(deps, ["FIX-P36-003"]);
+  });
 });

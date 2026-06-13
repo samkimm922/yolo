@@ -8,6 +8,7 @@ import { describe, test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { resolve, join } from "node:path";
+import { CONDITION_TYPES, inspectConditionCatalogSync } from "../src/prd/condition-catalog.js";
 
 // ── expect shim (compatible with vitest expect API) ──────────────
 function expect(actual) {
@@ -149,9 +150,10 @@ describe("evalCodeContains", () => {
     expect(r.detail).toContain("缺少");
   });
 
-  test("no file → pass skip", () => {
+  test("no file → not_run", () => {
     const r = cc({ text: "console.error" });
-    expect(r.passed).toBe(true);
+    expect(r.passed).toBe(false);
+    expect(r.status).toBe("not_run");
   });
 
   test("non-existent file → fail", () => {
@@ -295,12 +297,13 @@ describe("file_lines_max", () => {
     expect(r.results[0].detail).toContain("限制 3 行");
   });
 
-  test("no files/targets → PASS", () => {
+  test("no files/targets → not_run", () => {
     const r = pre([{
       id: "c1", type: "file_lines_max", severity: "FAIL",
       params: { max: 150 }, message: "",
     }]);
-    expect(r.results[0].passed).toBe(true);
+    expect(r.results[0].passed).toBe(false);
+    expect(r.results[0].status).toBe("not_run");
   });
 });
 
@@ -385,10 +388,10 @@ describe("evaluatePreConditions", () => {
     expect(r.allPass).toBe(false);
   });
 
-  test("WARN only → allPass true (WARN doesn't block)", () => {
+  test("WARN only → allPass false", () => {
     const r = pre([{ id: "w1", type: "code_contains", severity: "WARN",
       params: { text: "DOES_NOT_EXIST", file: fileA }, message: "" }]);
-    expect(r.allPass).toBe(true);
+    expect(r.allPass).toBe(false);
   });
 
   test("empty pre_conditions → allPass true", () => {
@@ -569,13 +572,27 @@ describe("auto-conditions structure", () => {
 });
 
 describe("schema condition coverage", () => {
-  test("every schema condition type has an evaluator", () => {
+  test("condition catalog is the single source for schema and evaluators", () => {
     const schema = JSON.parse(readFileSync(resolve(import.meta.dirname, "../schemas/prd-v2.schema.json"), "utf8"));
     const schemaTypes = schema.definitions.condition.properties.type.enum;
-    const supported = new Set(engine.supportedConditionTypes());
-    for (const type of schemaTypes) {
-      assert.ok(supported.has(type), `schema condition type lacks evaluator: ${type}`);
-    }
+    const result = inspectConditionCatalogSync({
+      schemaTypes,
+      evaluatorTypes: engine.evaluatorConditionTypes(),
+    });
+
+    assert.equal(result.status, "pass");
+    assert.deepEqual(result.catalog, [...CONDITION_TYPES].sort());
+  });
+
+  test("negative: condition catalog drift is blocked instead of silently passing", () => {
+    const result = inspectConditionCatalogSync({
+      schemaTypes: CONDITION_TYPES.filter((type) => type !== "tests_pass"),
+      evaluatorTypes: [...CONDITION_TYPES, "fake_condition"],
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.ok(result.blockers.some((blocker) => blocker.code === "CONDITION_CATALOG_SCHEMA_DRIFT" && blocker.missing.includes("tests_pass")));
+    assert.ok(result.blockers.some((blocker) => blocker.code === "CONDITION_EVALUATOR_CATALOG_DRIFT" && blocker.missing.includes("fake_condition")));
   });
 
   test("function_contains_text and function_contains_call evaluate bounded function bodies", () => {

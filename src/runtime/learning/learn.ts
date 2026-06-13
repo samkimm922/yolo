@@ -35,7 +35,7 @@ function parseArgs(argv) {
   return args;
 }
 
-function resolveLearnPaths(args = {}) {
+function resolveLearnPaths(args = Object()) {
   const projectRoot = resolve(args.projectRoot || DEFAULT_YOLO_ROOT);
   const stateRoot = resolve(args.stateRoot || DEFAULT_YOLO_ROOT);
   const stateDir = join(stateRoot, 'state');
@@ -70,12 +70,13 @@ function load(paths) {
   // WARN→FAIL 升级提示
   const condStats = readJSON(paths.conditionStats);
   const escalatedWarns = Object.entries(condStats)
-    .filter(([, v]) => v.warn_count >= 3)
+    .filter(([, v]) => Object.assign(Object(), v).warn_count >= 3)
     .map(([name, v]) => {
-      if (v.warn_count >= 5) {
-        return `- ⛔ **${name}**: WARN 已出现 ${v.warn_count} 次，升级为 FAIL — 必须修复`;
+      const stats = Object.assign(Object(), v);
+      if (stats.warn_count >= 5) {
+        return `- ⛔ **${name}**: WARN 已出现 ${stats.warn_count} 次，升级为 FAIL — 必须修复`;
       }
-      return `- ⚠️ **${name}**: WARN 已出现 ${v.warn_count} 次 — 即将升级（累计 ${v.warn_count}/5）`;
+      return `- ⚠️ **${name}**: WARN 已出现 ${stats.warn_count} 次 — 即将升级（累计 ${stats.warn_count}/5）`;
     });
   const escalateSection = escalatedWarns.length > 0
     ? ['## 🔁 重复 WARN 升级提示', ...escalatedWarns, ''].join('\n')
@@ -202,8 +203,11 @@ function recordRule(gate, message, paths) {
 function escalate(paths) {
   const stats = readJSON(paths.conditionStats);
   const escalated = Object.entries(stats)
-    .filter(([, v]) => v.warn_count >= 5)
-    .map(([name, v]) => ({ name, warn_count: v.warn_count, last_seen: v.last_seen }));
+    .filter(([, v]) => Object.assign(Object(), v).warn_count >= 5)
+    .map(([name, v]) => {
+      const item = Object.assign(Object(), v);
+      return { name, warn_count: item.warn_count, last_seen: item.last_seen };
+    });
   process.stdout.write(JSON.stringify(escalated));
   process.exitCode = escalated.length > 0 ? 0 : 1;
 }

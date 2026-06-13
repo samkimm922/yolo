@@ -1,5 +1,14 @@
 {
   "permissions": {
     "allow": ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "Agent", "TaskCreate", "TaskUpdate"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "command": "node --import tsx hooks/pre-tool-block-yolo-write.ts",
+        "description": "Block LLM direct writes to .yolo state directory"
+      }
+    ]
   }
 }

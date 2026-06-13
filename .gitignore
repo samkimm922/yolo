@@ -8,18 +8,26 @@ __pycache__/
 .agents/
 
 # Append-only runtime state and generated evidence.
+.yolo/
 .yolo/state/
+.yolo/skills/
 state/*.jsonl
 state/archive/
 state/runtime/
 state/evidence/
+
+# Stress fixtures and demand evidence are runtime state; keep them on disk only.
 
 # Local logs and scratch files.
 logs/
 tmp/
 *.log
 
-# Local session handoff files.
-DELIVERY_LOG.md
+# Local session handoff files (runtime artifacts, not committed).
+docs/memory/
+learned-rules.json
+scripts/yolo/closed-loop/retry-count.json
 SESSION.md
 SNAPSHOT.md
+DELIVERY_LOG.md
+.claude/worktrees/

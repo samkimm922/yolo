@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { config, loadConfig } from "./src/core/config.js";
 import { buildProjectBootstrapPlan, initProject } from "./src/core/bootstrap.js";
 import { buildInitToFirstPrdSmokePlan, runInitToFirstPrdSmoke } from "./src/core/init-smoke.js";
+import { buildProjectSetupPlan, inspectProjectSetupTarget, runProjectSetup } from "./src/core/setup.js";
 import { ensureCanonicalDirs, resolvePrdPath, yoloPath } from "./src/core/paths.js";
 import {
   evaluatePostConditions,
@@ -81,6 +82,49 @@ import {
   runDiscoveryPrdRuntime,
   runDiscoveryRuntime,
 } from "./src/discovery/runtime.js";
+import {
+  buildDemandSession,
+  demandMarkdownArtifacts,
+  DEMAND_SESSION_SCHEMA_VERSION,
+} from "./src/demand/artifacts.js";
+import {
+  buildDemandArtifactGraph,
+  DEMAND_GRAPH_SCHEMA_VERSION,
+  demandBlockedArtifacts,
+  demandBuildOrder,
+  demandReadyArtifacts,
+} from "./src/demand/graph.js";
+import {
+  DEMAND_READINESS_SCHEMA_VERSION,
+  inspectDemandReadiness,
+} from "./src/demand/gate.js";
+import {
+  buildDemandEvidenceTasks,
+  buildDemandSessionState,
+  DEMAND_EVIDENCE_AGENT_PROTOCOLS,
+  DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION,
+  DEMAND_PRD_READINESS_SCHEMA_VERSION,
+  DEMAND_ROUTER_SCHEMA_VERSION,
+  inspectDemandPrdReadiness,
+  inspectDemandTriage,
+  inspectEvidenceAgreement,
+} from "./src/demand/router.js";
+import {
+  buildDemandEvidenceDispatchPlan,
+  DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION,
+  runDemandEvidenceDispatchRuntime,
+} from "./src/demand/evidence-dispatch.js";
+import {
+  defaultDemandSessionPath,
+  demandStateDir,
+  readDemandSession,
+  runDemandBrainstormRuntime,
+  runDemandDiscussRuntime,
+  runDemandPrdRuntime,
+  runDemandStatusRuntime,
+  writeDemandArtifacts,
+} from "./src/demand/runtime.js";
+import { buildUnderstandingPlayback } from "./src/demand/understanding-playback.js";
 import { discoverPackManifests, readPackManifest, validatePackManifest } from "./src/packs/manifest.js";
 import { resolveProjectContext } from "./src/packs/resolver.js";
 import { buildTraceabilityMatrix, inspectSpecGovernance } from "./src/spec/traceability.js";
@@ -106,7 +150,7 @@ import {
   validateEvidenceArtifact,
   validateLedgerRecord,
   writeJsonArtifact,
-} from "./src/evidence/ledger.js";
+} from "./src/runtime/evidence/ledger.js";
 import {
   buildReviewOutput,
   normalizeReviewFinding,
@@ -124,7 +168,7 @@ import {
   formatRunReportMarkdown,
   runReportPaths,
   writeRunReport,
-} from "./src/evidence/report.js";
+} from "./src/runtime/evidence/report.js";
 import {
   createWorkflowPlan,
   getWorkflow,
@@ -179,8 +223,32 @@ import {
   buildControlledBetaReleaseDecisionPlan,
   CONTROLLED_BETA_RELEASE_ACTIONS,
   CONTROLLED_BETA_RELEASE_DECISION_SCHEMA_VERSION,
+  evaluateReleaseCandidateGate,
+  RELEASE_CANDIDATE_GATE_SCHEMA_VERSION,
+  RELEASE_CANDIDATE_REQUIRED_REPORTS,
   runControlledBetaReleaseDecisionGate,
+  runReleaseCandidateGate,
 } from "./src/release/decision-gate.js";
+import {
+  buildReleaseCandidateChangeManifest,
+  classifyReleaseChangeDomain,
+  readReleaseCandidateChangeManifest,
+  RELEASE_CHANGE_DOMAINS,
+} from "./src/release/change-provenance.js";
+import {
+  buildCleanEnvironmentVerifyPlan,
+  CLEAN_ENVIRONMENT_VERIFY_SCHEMA_VERSION,
+  executeCleanEnvironmentVerifyPlan,
+  runCleanEnvironmentVerify,
+} from "./src/release/clean-environment-verify.js";
+import {
+  buildDogfoodMatrixEvidence,
+  buildDogfoodMatrixPlan,
+  buildDogfoodMatrixReport,
+  DOGFOOD_MATRIX_SCENARIO_IDS,
+  DOGFOOD_MATRIX_SCHEMA_VERSION,
+  listDogfoodMatrixScenarios,
+} from "./src/release/dogfood-matrix.js";
 import {
   buildOperatorReleaseStatePlan,
   OPERATOR_RELEASE_STATE_SCHEMA_VERSION,
@@ -254,8 +322,8 @@ import {
   buildYoloDoctorReport,
   formatYoloDoctorText,
   YOLO_DOCTOR_SCHEMA_VERSION,
-} from "./src/runtime/devtools/doctor.js";
-import { generateFindingsFromRequirement } from "./src/pm/index.js";
+} from "./src/devtools/doctor.js";
+import { generateFindingsFromRequirement } from "./src/demand/findings-generator.js";
 import { convertAuditToPrd } from "./src/prd/audit-to-prd.js";
 import { validatePrdPath } from "./src/prd/validate.js";
 import { createPrdMigrationAdvice, migratePrdFile, migratePrdGates } from "./src/prd/migration.js";
@@ -263,7 +331,97 @@ import { preflightAllPrds, preflightPrd } from "./src/prd/preflight.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export function createYoloSdk(options = {}) {
+function buildStableSdkFacade(sdk) {
+  return {
+    agents: {
+      createPlan: sdk.agents.createPlan,
+      getPreset: sdk.agents.getPreset,
+      listPresets: sdk.agents.listPresets,
+    },
+    config: sdk.config,
+    contract: sdk.contract,
+    paths: sdk.paths,
+    prd: {
+      preflightAllPrds: sdk.prd.preflightAllPrds,
+      preflightPrd: sdk.prd.preflightPrd,
+      validatePrdPath: sdk.prd.validatePrdPath,
+    },
+    provider: {
+      detectModelProvider: sdk.provider.detectModelProvider,
+    },
+    review: {
+      scanFile: sdk.review.scanFile,
+      scanProject: sdk.review.scanProject,
+    },
+    task: {
+      inspectAtomicTask: sdk.task.inspectAtomicTask,
+      inspectTaskFromPrd: sdk.task.inspectTaskFromPrd,
+    },
+  };
+}
+
+function buildExperimentalSdkFacade(sdk) {
+  return {
+    acceptance: sdk.acceptance,
+    agents: {
+      createPiAgent: sdk.agents.createPiAgent,
+      createPiPlan: sdk.agents.createPiPlan,
+      runPi: sdk.agents.runPi,
+    },
+    commands: sdk.commands,
+    demand: sdk.demand,
+    discovery: sdk.discovery,
+    doctor: sdk.doctor,
+    eval: sdk.eval,
+    evidence: sdk.evidence,
+    fixtures: sdk.fixtures,
+    lifecycle: sdk.lifecycle,
+    packs: sdk.packs,
+    parallel: sdk.parallel,
+    pi: sdk.pi,
+    prd: {
+      convertAuditToPrd: sdk.prd.convertAuditToPrd,
+      createPrdMigrationAdvice: sdk.prd.createPrdMigrationAdvice,
+      generateFindingsFromRequirement: sdk.prd.generateFindingsFromRequirement,
+      migratePrdFile: sdk.prd.migratePrdFile,
+      migratePrdGates: sdk.prd.migratePrdGates,
+    },
+    progress: sdk.progress,
+    project: sdk.project,
+    provider: {
+      buildAgentAdapterCapabilities: sdk.provider.buildAgentAdapterCapabilities,
+      buildAgentAdapterContract: sdk.provider.buildAgentAdapterContract,
+      buildProviderCliDryRunMatrix: sdk.provider.buildProviderCliDryRunMatrix,
+      buildProviderRuntimeMatrix: sdk.provider.buildProviderRuntimeMatrix,
+      inspectAgentAdapterContract: sdk.provider.inspectAgentAdapterContract,
+      inspectProviderCliDryRunMatrix: sdk.provider.inspectProviderCliDryRunMatrix,
+      inspectProviderRuntimeMatrix: sdk.provider.inspectProviderRuntimeMatrix,
+      normalizeAgentProvider: sdk.provider.normalizeAgentProvider,
+    },
+    release: sdk.release,
+    review: {
+      REVIEW_FINDING_SCHEMA: sdk.review.REVIEW_FINDING_SCHEMA,
+      REVIEW_OUTPUT_SCHEMA: sdk.review.REVIEW_OUTPUT_SCHEMA,
+      buildReviewFixPrd: sdk.review.buildReviewFixPrd,
+      buildReviewOutput: sdk.review.buildReviewOutput,
+      inspectReviewFixLoop: sdk.review.inspectReviewFixLoop,
+      normalizeReviewFinding: sdk.review.normalizeReviewFinding,
+      normalizeReviewFindings: sdk.review.normalizeReviewFindings,
+      summarizeReviewFindings: sdk.review.summarizeReviewFindings,
+      validateReviewFinding: sdk.review.validateReviewFinding,
+    },
+    runtime: sdk.runtime,
+    spec: sdk.spec,
+    task: {
+      classifyTaskExecution: sdk.task.classifyTaskExecution,
+      validateDiffQuality: sdk.task.validateDiffQuality,
+      validateTestGeneration: sdk.task.validateTestGeneration,
+    },
+    workflows: sdk.workflows,
+  };
+}
+
+export function createYoloSdk(options = Object()) {
   const cfg = options.config || loadConfig({
     forceReload: Boolean(options.forceConfigReload),
     path: options.configPath,
@@ -285,14 +443,17 @@ export function createYoloSdk(options = {}) {
       resolvePrdPath: (input) => resolvePrdPath(input, stateRoot),
     },
     project: {
-      buildInitPlan: (projectOptions = {}) => buildProjectBootstrapPlan({ projectRoot, ...projectOptions }),
-      buildInitToFirstPrdSmokePlan: (projectOptions = {}) => buildInitToFirstPrdSmokePlan({ projectRoot, ...projectOptions }),
-      initProject: (projectOptions = {}) => initProject({ projectRoot, ...projectOptions }),
-      runInitToFirstPrdSmoke: (projectOptions = {}) => runInitToFirstPrdSmoke({ projectRoot, ...projectOptions }),
+      buildInitPlan: (projectOptions = Object()) => buildProjectBootstrapPlan({ projectRoot, ...projectOptions }),
+      buildInitToFirstPrdSmokePlan: (projectOptions = Object()) => buildInitToFirstPrdSmokePlan({ projectRoot, ...projectOptions }),
+      buildSetupPlan: (projectOptions = Object()) => buildProjectSetupPlan({ projectRoot, yoloRoot, ...projectOptions }),
+      inspectSetupTarget: (projectOptions = Object()) => inspectProjectSetupTarget({ projectRoot, ...projectOptions }),
+      initProject: (projectOptions = Object()) => initProject({ projectRoot, ...projectOptions }),
+      runSetup: (projectOptions = Object()) => runProjectSetup({ projectRoot, yoloRoot, ...projectOptions }),
+      runInitToFirstPrdSmoke: (projectOptions = Object()) => runInitToFirstPrdSmoke({ projectRoot, ...projectOptions }),
     },
     contract: {
-      evaluatePreConditions: (task, prd, evalOptions = {}) => evaluatePreConditions(task, prd, { root: projectRoot, ...evalOptions }),
-      evaluatePostConditions: (task, prd, evalOptions = {}) => evaluatePostConditions(task, prd, { root: projectRoot, ...evalOptions }),
+      evaluatePreConditions: (task, prd, evalOptions = Object()) => evaluatePreConditions(task, prd, { root: projectRoot, ...evalOptions }),
+      evaluatePostConditions: (task, prd, evalOptions = Object()) => evaluatePostConditions(task, prd, { root: projectRoot, ...evalOptions }),
       supportedConditionTypes,
       toGateFormat,
       inspectPrdContract,
@@ -347,14 +508,19 @@ export function createYoloSdk(options = {}) {
     },
     lifecycle: {
       buildStageReport: buildLifecycleStageReport,
-      writeStageReport: (stageId, report = {}, lifecycleOptions = {}) => writeLifecycleStageReport(stageId, report, {
-        projectRoot,
-        stateRoot,
-        ...lifecycleOptions,
-      }),
+      writeStageReport: (stageId, report = Object(), lifecycleOptions = Object()) => {
+        // Strip skipSequenceCheck — SDK path always enforces sequence validation.
+        // Internal callers needing exemption must import writeLifecycleStageReport directly.
+        const { skipSequenceCheck, skip_sequence_check, ...safe } = lifecycleOptions;
+        return writeLifecycleStageReport(stageId, report, {
+          projectRoot,
+          stateRoot,
+          ...safe,
+        });
+      },
     },
     discovery: {
-      buildArtifact: (discoveryInput = {}, discoveryOptions = {}) => buildDiscoveryArtifact({
+      buildArtifact: (discoveryInput = Object(), discoveryOptions = Object()) => buildDiscoveryArtifact({
         projectRoot,
         stateRoot,
         ...discoveryInput,
@@ -364,7 +530,7 @@ export function createYoloSdk(options = {}) {
         ...discoveryOptions,
       }),
       buildPlan: buildDiscoveryPlan,
-      buildPrd: (discovery, prdInput = {}, prdOptions = {}) => buildPrdFromDiscovery(discovery, prdInput, {
+      buildPrd: (discovery, prdInput = Object(), prdOptions = Object()) => buildPrdFromDiscovery(discovery, prdInput, {
         projectRoot,
         stateRoot,
         ...prdOptions,
@@ -373,7 +539,7 @@ export function createYoloSdk(options = {}) {
       defaultPlanPath: () => defaultDiscoveryPlanPath(stateRoot),
       defaultPrdPath: () => defaultDiscoveryPrdPath(stateRoot),
       readArtifact: readDiscoveryArtifact,
-      run: (discoveryInput = {}, discoveryOptions = {}) => runDiscoveryRuntime({
+      run: (discoveryInput = Object(), discoveryOptions = Object()) => runDiscoveryRuntime({
         projectRoot,
         stateRoot,
         ...discoveryInput,
@@ -382,7 +548,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...discoveryOptions,
       }),
-      runPlan: (planInput = {}, planOptions = {}) => runDiscoveryPlanRuntime({
+      runPlan: (planInput = Object(), planOptions = Object()) => runDiscoveryPlanRuntime({
         projectRoot,
         stateRoot,
         ...planInput,
@@ -391,7 +557,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...planOptions,
       }),
-      runPrd: (prdInput = {}, prdOptions = {}) => runDiscoveryPrdRuntime({
+      runPrd: (prdInput = Object(), prdOptions = Object()) => runDiscoveryPrdRuntime({
         projectRoot,
         stateRoot,
         ...prdInput,
@@ -401,14 +567,127 @@ export function createYoloSdk(options = {}) {
         ...prdOptions,
       }),
     },
+    demand: {
+      buildArtifactGraph: buildDemandArtifactGraph,
+      buildOrder: demandBuildOrder,
+      buildSession: (demandInput = Object(), demandOptions = Object()) => buildDemandSession({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      blockedArtifacts: demandBlockedArtifacts,
+      defaultSessionPath: (id = "") => defaultDemandSessionPath(stateRoot, id),
+      inspectReadiness: inspectDemandReadiness,
+      inspectPrdReadiness: (demandInput = Object(), demandOptions = Object()) => inspectDemandPrdReadiness({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      inspectTriage: (demandInput = Object(), demandOptions = Object()) => inspectDemandTriage({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      markdownArtifacts: demandMarkdownArtifacts,
+      playbackUnderstanding: (session = Object()) => buildUnderstandingPlayback(session),
+      readSession: readDemandSession,
+      readyArtifacts: demandReadyArtifacts,
+      runBrainstorm: (demandInput = Object(), demandOptions = Object()) => runDemandBrainstormRuntime({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      runDiscuss: (demandInput = Object(), demandOptions = Object()) => runDemandDiscussRuntime({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      runPrd: (demandInput = Object(), demandOptions = Object()) => runDemandPrdRuntime({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      status: (demandInput = Object(), demandOptions = Object()) => runDemandStatusRuntime({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      buildEvidenceDispatchPlan: (demandInput = Object(), demandOptions = Object()) => buildDemandEvidenceDispatchPlan({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      dispatchEvidence: (demandInput = Object(), demandOptions = Object()) => runDemandEvidenceDispatchRuntime({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      buildSessionState: (demandInput = Object(), demandOptions = Object()) => buildDemandSessionState({
+        projectRoot,
+        stateRoot,
+        ...demandInput,
+      }, {
+        projectRoot,
+        stateRoot,
+        ...demandOptions,
+      }),
+      buildEvidenceTasks: buildDemandEvidenceTasks,
+      evidenceAgentProtocols: DEMAND_EVIDENCE_AGENT_PROTOCOLS,
+      evidenceResultSchema: DEMAND_EVIDENCE_RESULT_SCHEMA_DEFINITION,
+      inspectEvidenceAgreement,
+      schemaVersion: DEMAND_SESSION_SCHEMA_VERSION,
+      stateDir: (id = "") => demandStateDir(stateRoot, id),
+      graphSchemaVersion: DEMAND_GRAPH_SCHEMA_VERSION,
+      readinessSchemaVersion: DEMAND_READINESS_SCHEMA_VERSION,
+      routerSchemaVersion: DEMAND_ROUTER_SCHEMA_VERSION,
+      prdReadinessSchemaVersion: DEMAND_PRD_READINESS_SCHEMA_VERSION,
+      evidenceDispatchSchemaVersion: DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION,
+      writeArtifacts: writeDemandArtifacts,
+    },
     packs: {
-      discoverManifests: (packOptions = {}) => discoverPackManifests({ projectRoot, stateRoot, ...packOptions }),
+      discoverManifests: (packOptions = Object()) => discoverPackManifests({ projectRoot, stateRoot, ...packOptions }),
       readManifest: readPackManifest,
-      resolveProjectContext: (packOptions = {}) => resolveProjectContext({ projectRoot, stateRoot, ...packOptions }),
+      resolveProjectContext: (packOptions = Object()) => resolveProjectContext({ projectRoot, stateRoot, ...packOptions }),
       validateManifest: validatePackManifest,
     },
     acceptance: {
-      buildAdapterEvidencePlan: (adapterInput = {}, adapterOptions = {}) => buildAdapterEvidencePlan({
+      buildAdapterEvidencePlan: (adapterInput = Object(), adapterOptions = Object()) => buildAdapterEvidencePlan({
         projectRoot,
         stateRoot,
         ...adapterInput,
@@ -417,7 +696,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...adapterOptions,
       }),
-      buildReport: (acceptanceInput = {}, acceptanceOptions = {}) => buildAcceptanceReport({
+      buildReport: (acceptanceInput = Object(), acceptanceOptions = Object()) => buildAcceptanceReport({
         projectRoot,
         stateRoot,
         ...acceptanceInput,
@@ -426,7 +705,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...acceptanceOptions,
       }),
-      collectAdapterEvidence: (adapterInput = {}, adapterOptions = {}) => runAdapterEvidenceCollector({
+      collectAdapterEvidence: (adapterInput = Object(), adapterOptions = Object()) => runAdapterEvidenceCollector({
         projectRoot,
         stateRoot,
         ...adapterInput,
@@ -436,7 +715,7 @@ export function createYoloSdk(options = {}) {
         ...adapterOptions,
       }),
       formatReportText: formatAcceptanceReportText,
-      inspectReport: (acceptanceInput = {}, acceptanceOptions = {}) => inspectAcceptanceReport({
+      inspectReport: (acceptanceInput = Object(), acceptanceOptions = Object()) => inspectAcceptanceReport({
         projectRoot,
         stateRoot,
         ...acceptanceInput,
@@ -447,11 +726,11 @@ export function createYoloSdk(options = {}) {
       }),
     },
     eval: {
-      buildBenchmarkPlan: (evalOptions = {}) => buildYoloBenchmarkPlan({ projectRoot, stateRoot, ...evalOptions }),
+      buildBenchmarkPlan: (evalOptions = Object()) => buildYoloBenchmarkPlan({ projectRoot, stateRoot, ...evalOptions }),
       formatBenchmarkText: formatYoloBenchmarkText,
       listBenchmarkFixtures,
       rubric: YOLO_BENCHMARK_RUBRIC,
-      runBenchmark: (evalInput = {}, evalOptions = {}) => runYoloBenchmark({
+      runBenchmark: (evalInput = Object(), evalOptions = Object()) => runYoloBenchmark({
         projectRoot,
         stateRoot,
         ...evalInput,
@@ -472,7 +751,7 @@ export function createYoloSdk(options = {}) {
       schemaVersion: YOLO_COMMAND_REGISTRY_SCHEMA_VERSION,
     },
     doctor: {
-      buildReport: (doctorOptions = {}) => buildYoloDoctorReport({
+      buildReport: (doctorOptions = Object()) => buildYoloDoctorReport({
         yoloRoot,
         projectRoot,
         ...doctorOptions,
@@ -481,7 +760,7 @@ export function createYoloSdk(options = {}) {
       schemaVersion: YOLO_DOCTOR_SCHEMA_VERSION,
     },
     parallel: {
-      buildExecutionPlan: (parallelInput = {}, parallelOptions = {}) => buildControlledParallelExecutionPlan({
+      buildExecutionPlan: (parallelInput = Object(), parallelOptions = Object()) => buildControlledParallelExecutionPlan({
         projectRoot,
         stateRoot,
         ...parallelInput,
@@ -495,7 +774,7 @@ export function createYoloSdk(options = {}) {
       formatPlanText: formatControlledParallelPlanText,
       inspectMergeGate: inspectParallelMergeGate,
       mergeEvidence: mergeParallelEvidence,
-      planWaves: (parallelInput = {}, parallelOptions = {}) => planControlledParallelWaves({
+      planWaves: (parallelInput = Object(), parallelOptions = Object()) => planControlledParallelWaves({
         projectRoot,
         stateRoot,
         ...parallelInput,
@@ -506,93 +785,105 @@ export function createYoloSdk(options = {}) {
       }),
     },
     workflows: {
-      buildSkillInstallPlan: (workflowOptions = {}) => buildWorkflowSkillInstallPlan({ projectRoot, ...workflowOptions }),
-      buildSkillTargetSmokePlan: (workflowOptions = {}) => buildWorkflowSkillTargetSmokePlan({ projectRoot, ...workflowOptions }),
+      buildSkillInstallPlan: (workflowOptions = Object()) => buildWorkflowSkillInstallPlan({ projectRoot, ...workflowOptions }),
+      buildSkillTargetSmokePlan: (workflowOptions = Object()) => buildWorkflowSkillTargetSmokePlan({ projectRoot, ...workflowOptions }),
       createWorkflowPlan,
       getWorkflow,
-      installSkills: (workflowOptions = {}) => installWorkflowSkills({ projectRoot, ...workflowOptions }),
+      installSkills: (workflowOptions = Object()) => installWorkflowSkills({ projectRoot, ...workflowOptions }),
       inspectSkillInstallPlan: inspectWorkflowSkillInstallPlan,
       listWorkflowSkillDescriptors,
       listWorkflows,
-      runSkillTargetSmoke: (workflowOptions = {}) => runWorkflowSkillTargetSmoke({ projectRoot, ...workflowOptions }),
+      runSkillTargetSmoke: (workflowOptions = Object()) => runWorkflowSkillTargetSmoke({ projectRoot, ...workflowOptions }),
       validateSkillDescriptor: validateWorkflowSkillDescriptor,
       workflowToSkillDescriptor,
     },
     fixtures: {
       fixtureEvidenceRecord,
       copyFixtureToWorkspace,
-      getFixtureDefinition: (id, fixtureOptions = {}) => getFixtureDefinition(id, { yoloRoot, ...fixtureOptions }),
+      getFixtureDefinition: (id, fixtureOptions = Object()) => getFixtureDefinition(id, { yoloRoot, ...fixtureOptions }),
       inspectFixtureDefinition,
-      inspectFixtureRegistry: (fixtureOptions = {}) => inspectFixtureRegistry({ yoloRoot, ...fixtureOptions }),
-      listFixtureDefinitions: (fixtureOptions = {}) => listFixtureDefinitions({ yoloRoot, ...fixtureOptions }),
-      runFixtureHarness: (id, fixtureOptions = {}) => runFixtureHarness(id, { yoloRoot, ...fixtureOptions }),
+      inspectFixtureRegistry: (fixtureOptions = Object()) => inspectFixtureRegistry({ yoloRoot, ...fixtureOptions }),
+      listFixtureDefinitions: (fixtureOptions = Object()) => listFixtureDefinitions({ yoloRoot, ...fixtureOptions }),
+      runFixtureHarness: (id, fixtureOptions = Object()) => runFixtureHarness(id, { yoloRoot, ...fixtureOptions }),
     },
     release: {
-      buildPackageInstallSmokePlan: (releaseOptions = {}) => buildPackageInstallSmokePlan({ yoloRoot, ...releaseOptions }),
-      buildControlledBetaReleaseDecisionPlan: (releaseOptions = {}) => buildControlledBetaReleaseDecisionPlan({ yoloRoot, ...releaseOptions }),
-      buildOperatorReleaseRunbookPlan: (releaseOptions = {}) => buildOperatorReleaseRunbookPlan({ yoloRoot, ...releaseOptions }),
-      buildOperatorReleaseStatePlan: (releaseOptions = {}) => buildOperatorReleaseStatePlan({ yoloRoot, ...releaseOptions }),
-      buildPostReleaseAuditPlan: (releaseOptions = {}) => buildPostReleaseAuditPlan({ yoloRoot, ...releaseOptions }),
-      buildPublicBetaHardeningDrillPlan: (releaseOptions = {}) => buildPublicBetaHardeningDrillPlan({ yoloRoot, ...releaseOptions }),
-      buildStableGraduationPlan: (releaseOptions = {}) => buildStableGraduationPlan({ yoloRoot, ...releaseOptions }),
-      buildManualExternalReleasePlan: (releaseOptions = {}) => buildManualExternalReleasePlan({ yoloRoot, ...releaseOptions }),
-      buildAgentIntegrationDoctorPlan: (releaseOptions = {}) => buildAgentIntegrationDoctorPlan({ yoloRoot, projectRoot, ...releaseOptions }),
-      buildRealProjectDogfoodPlan: (releaseOptions = {}) => buildRealProjectDogfoodPlan({ yoloRoot, projectRoot, ...releaseOptions }),
-      buildPiExecutionDrillPlan: (releaseOptions = {}) => buildPiExecutionDrillPlan({ yoloRoot, projectRoot, ...releaseOptions }),
-      buildRuntimeBoundaryDecisionPlan: (releaseOptions = {}) => buildRuntimeBoundaryDecisionPlan({ yoloRoot, ...releaseOptions }),
-      buildPublicBetaEvidencePlan: (releaseOptions = {}) => buildPublicBetaEvidencePlan({ yoloRoot, projectRoot, ...releaseOptions }),
-      buildRealProjectDogfoodPackPlan: (releaseOptions = {}) => buildRealProjectDogfoodPackPlan({ yoloRoot, projectRoot, ...releaseOptions }),
-      buildExperiencePackEffectivenessAuditPlan: (releaseOptions = {}) => buildExperiencePackEffectivenessAuditPlan({ projectRoot, stateRoot, ...releaseOptions }),
-      buildNonTechnicalUxDoctorPlan: (releaseOptions = {}) => buildNonTechnicalUxDoctorPlan({ yoloRoot, ...releaseOptions }),
+      buildPackageInstallSmokePlan: (releaseOptions = Object()) => buildPackageInstallSmokePlan({ yoloRoot, ...releaseOptions }),
+      buildControlledBetaReleaseDecisionPlan: (releaseOptions = Object()) => buildControlledBetaReleaseDecisionPlan({ yoloRoot, ...releaseOptions }),
+      buildReleaseCandidateChangeManifest: (releaseOptions = Object()) => buildReleaseCandidateChangeManifest({ rootDir: yoloRoot, ...releaseOptions }),
+      buildCleanEnvironmentVerifyPlan: (releaseOptions = Object()) => buildCleanEnvironmentVerifyPlan({ yoloRoot, ...releaseOptions }),
+      buildDogfoodMatrixPlan: (releaseOptions = Object()) => buildDogfoodMatrixPlan({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildDogfoodMatrixReport: (releaseOptions = Object()) => buildDogfoodMatrixReport({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildDogfoodMatrixEvidence,
+      buildOperatorReleaseRunbookPlan: (releaseOptions = Object()) => buildOperatorReleaseRunbookPlan({ yoloRoot, ...releaseOptions }),
+      buildOperatorReleaseStatePlan: (releaseOptions = Object()) => buildOperatorReleaseStatePlan({ yoloRoot, ...releaseOptions }),
+      buildPostReleaseAuditPlan: (releaseOptions = Object()) => buildPostReleaseAuditPlan({ yoloRoot, ...releaseOptions }),
+      buildPublicBetaHardeningDrillPlan: (releaseOptions = Object()) => buildPublicBetaHardeningDrillPlan({ yoloRoot, ...releaseOptions }),
+      buildStableGraduationPlan: (releaseOptions = Object()) => buildStableGraduationPlan({ yoloRoot, ...releaseOptions }),
+      buildManualExternalReleasePlan: (releaseOptions = Object()) => buildManualExternalReleasePlan({ yoloRoot, ...releaseOptions }),
+      buildAgentIntegrationDoctorPlan: (releaseOptions = Object()) => buildAgentIntegrationDoctorPlan({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildRealProjectDogfoodPlan: (releaseOptions = Object()) => buildRealProjectDogfoodPlan({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildPiExecutionDrillPlan: (releaseOptions = Object()) => buildPiExecutionDrillPlan({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildRuntimeBoundaryDecisionPlan: (releaseOptions = Object()) => buildRuntimeBoundaryDecisionPlan({ yoloRoot, ...releaseOptions }),
+      buildPublicBetaEvidencePlan: (releaseOptions = Object()) => buildPublicBetaEvidencePlan({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildRealProjectDogfoodPackPlan: (releaseOptions = Object()) => buildRealProjectDogfoodPackPlan({ yoloRoot, projectRoot, ...releaseOptions }),
+      buildExperiencePackEffectivenessAuditPlan: (releaseOptions = Object()) => buildExperiencePackEffectivenessAuditPlan({ projectRoot, stateRoot, ...releaseOptions }),
+      buildNonTechnicalUxDoctorPlan: (releaseOptions = Object()) => buildNonTechnicalUxDoctorPlan({ yoloRoot, ...releaseOptions }),
       inspectAgentBridgeDryRunDoctor,
       inspectPackedPackage,
       inspectPackageReadiness,
-      inspectPublicBetaReadiness: (releaseOptions = {}) => inspectPublicBetaReadiness({ yoloRoot, ...releaseOptions }),
-      runPackageInstallSmoke: (releaseOptions = {}) => runPackageInstallSmoke({ yoloRoot, ...releaseOptions }),
-      runControlledBetaReleaseDecisionGate: (releaseOptions = {}) => runControlledBetaReleaseDecisionGate({ yoloRoot, ...releaseOptions }),
-      runOperatorReleaseRunbookGate: (releaseOptions = {}) => runOperatorReleaseRunbookGate({ yoloRoot, ...releaseOptions }),
-      runOperatorReleaseStateMutation: (releaseOptions = {}) => runOperatorReleaseStateMutation({ yoloRoot, ...releaseOptions }),
-      runPostReleaseAuditGate: (releaseOptions = {}) => runPostReleaseAuditGate({ yoloRoot, ...releaseOptions }),
-      runPublicBetaHardeningDrill: (releaseOptions = {}) => runPublicBetaHardeningDrill({ yoloRoot, ...releaseOptions }),
-      runStableGraduationGate: (releaseOptions = {}) => runStableGraduationGate({ yoloRoot, ...releaseOptions }),
-      runManualExternalReleaseGate: (releaseOptions = {}) => runManualExternalReleaseGate({ yoloRoot, ...releaseOptions }),
-      runAgentIntegrationDoctor: (releaseOptions = {}) => runAgentIntegrationDoctor({ yoloRoot, projectRoot, ...releaseOptions }),
-      runRealProjectDogfoodGate: (releaseOptions = {}) => runRealProjectDogfoodGate({ yoloRoot, projectRoot, ...releaseOptions }),
-      runPiExecutionDrillGate: (releaseOptions = {}) => runPiExecutionDrillGate({ yoloRoot, projectRoot, ...releaseOptions }),
-      runRuntimeBoundaryDecisionGate: (releaseOptions = {}) => runRuntimeBoundaryDecisionGate({ yoloRoot, ...releaseOptions }),
-      runPublicBetaEvidenceGate: (releaseOptions = {}) => runPublicBetaEvidenceGate({ yoloRoot, projectRoot, ...releaseOptions }),
-      runRealProjectDogfoodPack: (releaseOptions = {}) => runRealProjectDogfoodPack({ yoloRoot, projectRoot, ...releaseOptions }),
-      runExperiencePackEffectivenessAudit: (releaseOptions = {}) => runExperiencePackEffectivenessAudit({ projectRoot, stateRoot, ...releaseOptions }),
-      runNonTechnicalUxDoctor: (releaseOptions = {}) => runNonTechnicalUxDoctor({ yoloRoot, ...releaseOptions }),
+      inspectPublicBetaReadiness: (releaseOptions = Object()) => inspectPublicBetaReadiness({ yoloRoot, ...releaseOptions }),
+      classifyReleaseChangeDomain,
+      listDogfoodMatrixScenarios,
+      runPackageInstallSmoke: (releaseOptions = Object()) => runPackageInstallSmoke({ yoloRoot, ...releaseOptions }),
+      runControlledBetaReleaseDecisionGate: (releaseOptions = Object()) => runControlledBetaReleaseDecisionGate({ yoloRoot, ...releaseOptions }),
+      runReleaseCandidateGate,
+      evaluateReleaseCandidateGate,
+      readReleaseCandidateChangeManifest: (releaseOptions = Object()) => readReleaseCandidateChangeManifest({ rootDir: yoloRoot, ...releaseOptions }),
+      executeCleanEnvironmentVerifyPlan,
+      runCleanEnvironmentVerify: (releaseOptions = Object()) => runCleanEnvironmentVerify({ yoloRoot, ...releaseOptions }),
+      runOperatorReleaseRunbookGate: (releaseOptions = Object()) => runOperatorReleaseRunbookGate({ yoloRoot, ...releaseOptions }),
+      runOperatorReleaseStateMutation: (releaseOptions = Object()) => runOperatorReleaseStateMutation({ yoloRoot, ...releaseOptions }),
+      runPostReleaseAuditGate: (releaseOptions = Object()) => runPostReleaseAuditGate({ yoloRoot, ...releaseOptions }),
+      runPublicBetaHardeningDrill: (releaseOptions = Object()) => runPublicBetaHardeningDrill({ yoloRoot, ...releaseOptions }),
+      runStableGraduationGate: (releaseOptions = Object()) => runStableGraduationGate({ yoloRoot, ...releaseOptions }),
+      runManualExternalReleaseGate: (releaseOptions = Object()) => runManualExternalReleaseGate({ yoloRoot, ...releaseOptions }),
+      runAgentIntegrationDoctor: (releaseOptions = Object()) => runAgentIntegrationDoctor({ yoloRoot, projectRoot, ...releaseOptions }),
+      runRealProjectDogfoodGate: (releaseOptions = Object()) => runRealProjectDogfoodGate({ yoloRoot, projectRoot, ...releaseOptions }),
+      runPiExecutionDrillGate: (releaseOptions = Object()) => runPiExecutionDrillGate({ yoloRoot, projectRoot, ...releaseOptions }),
+      runRuntimeBoundaryDecisionGate: (releaseOptions = Object()) => runRuntimeBoundaryDecisionGate({ yoloRoot, ...releaseOptions }),
+      runPublicBetaEvidenceGate: (releaseOptions = Object()) => runPublicBetaEvidenceGate({ yoloRoot, projectRoot, ...releaseOptions }),
+      runRealProjectDogfoodPack: (releaseOptions = Object()) => runRealProjectDogfoodPack({ yoloRoot, projectRoot, ...releaseOptions }),
+      runExperiencePackEffectivenessAudit: (releaseOptions = Object()) => runExperiencePackEffectivenessAudit({ projectRoot, stateRoot, ...releaseOptions }),
+      runNonTechnicalUxDoctor: (releaseOptions = Object()) => runNonTechnicalUxDoctor({ yoloRoot, ...releaseOptions }),
     },
     provider: {
       buildAgentAdapterCapabilities,
-      buildAgentAdapterContract: (providerOptions = {}) => buildAgentAdapterContract({ config: cfg, ...providerOptions }),
-      buildProviderRuntimeMatrix: (providerOptions = {}) => buildProviderRuntimeMatrix({
+      buildAgentAdapterContract: (providerOptions = Object()) => buildAgentAdapterContract({ config: cfg, ...providerOptions }),
+      buildProviderRuntimeMatrix: (providerOptions = Object()) => buildProviderRuntimeMatrix({
         config: cfg,
         projectRoot,
         stateRoot,
         ...providerOptions,
       }),
-      buildProviderCliDryRunMatrix: (providerOptions = {}) => buildProviderCliDryRunMatrix({
+      buildProviderCliDryRunMatrix: (providerOptions = Object()) => buildProviderCliDryRunMatrix({
         config: cfg,
         projectRoot,
         stateRoot,
         ...providerOptions,
       }),
       detectModelProvider,
-      inspectAgentAdapterContract: (providerOptions = {}) => inspectAgentAdapterContract({
+      inspectAgentAdapterContract: (providerOptions = Object()) => inspectAgentAdapterContract({
         config: cfg,
         providerDetection: detectModelProvider({ config: cfg }),
         ...providerOptions,
       }),
-      inspectProviderRuntimeMatrix: (providerOptions = {}) => inspectProviderRuntimeMatrix({
+      inspectProviderRuntimeMatrix: (providerOptions = Object()) => inspectProviderRuntimeMatrix({
         config: cfg,
         projectRoot,
         stateRoot,
         ...providerOptions,
       }),
-      inspectProviderCliDryRunMatrix: (providerOptions = {}) => inspectProviderCliDryRunMatrix({
+      inspectProviderCliDryRunMatrix: (providerOptions = Object()) => inspectProviderCliDryRunMatrix({
         config: cfg,
         projectRoot,
         stateRoot,
@@ -602,7 +893,7 @@ export function createYoloSdk(options = {}) {
     },
     runtime: {
       runPiRuntime,
-      runRunner: (input = {}, runtimeOptions = {}) => runRunnerRuntime({
+      runRunner: (input = Object(), runtimeOptions = Object()) => runRunnerRuntime({
         projectRoot,
         stateRoot,
         ...input,
@@ -611,7 +902,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...runtimeOptions,
       }),
-      inspectCheck: (input = {}, checkOptions = {}) => inspectYoloCheck({
+      inspectCheck: (input = Object(), checkOptions = Object()) => inspectYoloCheck({
         projectRoot,
         stateRoot,
         ...input,
@@ -623,7 +914,7 @@ export function createYoloSdk(options = {}) {
       formatCheckText: formatYoloCheckText,
     },
     progress: {
-      buildUiEvidence: (progressInput = {}, progressOptions = {}) => buildProgressDashboardUiEvidence({
+      buildUiEvidence: (progressInput = Object(), progressOptions = Object()) => buildProgressDashboardUiEvidence({
         projectRoot,
         stateRoot,
         ...progressInput,
@@ -632,7 +923,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...progressOptions,
       }),
-      inspectUiEvidence: (progressInput = {}, progressOptions = {}) => inspectProgressDashboardUiEvidence({
+      inspectUiEvidence: (progressInput = Object(), progressOptions = Object()) => inspectProgressDashboardUiEvidence({
         projectRoot,
         stateRoot,
         ...progressInput,
@@ -641,7 +932,7 @@ export function createYoloSdk(options = {}) {
         stateRoot,
         ...progressOptions,
       }),
-      runUiEvidence: (progressInput = {}, progressOptions = {}) => runProgressDashboardUiEvidence({
+      runUiEvidence: (progressInput = Object(), progressOptions = Object()) => runProgressDashboardUiEvidence({
         projectRoot,
         stateRoot,
         ...progressInput,
@@ -655,21 +946,21 @@ export function createYoloSdk(options = {}) {
       createPlan: createAgentPlan,
       getPreset: getAgentPreset,
       listPresets: listAgentPresets,
-      createPiAgent: (agentOptions = {}) => createPiAgent({ yoloRoot, projectRoot, stateRoot, sdk, ...agentOptions }),
-      createPiPlan: (input = {}, agentOptions = {}) => createPiRunPlan(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
-      runPi: (input = {}, agentOptions = {}) => runPiAgent(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
+      createPiAgent: (agentOptions = Object()) => createPiAgent({ yoloRoot, projectRoot, stateRoot, sdk, ...agentOptions }),
+      createPiPlan: (input = Object(), agentOptions = Object()) => createPiRunPlan(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
+      runPi: (input = Object(), agentOptions = Object()) => runPiAgent(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
     },
     pi: {
-      createAgent: (agentOptions = {}) => createPiAgent({ yoloRoot, projectRoot, stateRoot, sdk, ...agentOptions }),
-      createPlan: (input = {}, agentOptions = {}) => createPiRunPlan(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
-      run: (input = {}, agentOptions = {}) => runPiAgent(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
+      createAgent: (agentOptions = Object()) => createPiAgent({ yoloRoot, projectRoot, stateRoot, sdk, ...agentOptions }),
+      createPlan: (input = Object(), agentOptions = Object()) => createPiRunPlan(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
+      run: (input = Object(), agentOptions = Object()) => runPiAgent(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
     },
     review: {
-      scanProject: (scanOptions = {}) => scanProject({ root: projectRoot, config: cfg, ...scanOptions }),
-      scanFile: (file, scanOptions = {}) => scanFile(file, { root: projectRoot, config: cfg, ...scanOptions }),
+      scanProject: (scanOptions = Object()) => scanProject({ root: projectRoot, config: cfg, ...scanOptions }),
+      scanFile: (file, scanOptions = Object()) => scanFile(file, { root: projectRoot, config: cfg, ...scanOptions }),
       buildReviewOutput,
       buildReviewFixPrd,
-      inspectReviewFixLoop: (input = {}, reviewOptions = {}) => inspectReviewFixLoop({
+      inspectReviewFixLoop: (input = Object(), reviewOptions = Object()) => inspectReviewFixLoop({
         projectRoot,
         stateRoot,
         ...input,
@@ -686,7 +977,10 @@ export function createYoloSdk(options = {}) {
       validateReviewFinding,
     },
   };
-  return sdk;
+  return Object.assign(sdk, {
+    stable: buildStableSdkFacade(sdk),
+    experimental: buildExperimentalSdkFacade(sdk),
+  });
 }
 
 export {
@@ -695,6 +989,9 @@ export {
   buildProjectBootstrapPlan,
   buildInitToFirstPrdSmokePlan,
   initProject,
+  inspectProjectSetupTarget,
+  buildProjectSetupPlan,
+  runProjectSetup,
   runInitToFirstPrdSmoke,
   evaluatePreConditions,
   evaluatePostConditions,
@@ -716,6 +1013,9 @@ export {
   ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION,
   buildAdapterEvidencePlan,
   runAdapterEvidenceCollector,
+  buildDemandEvidenceDispatchPlan,
+  runDemandEvidenceDispatchRuntime,
+  DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION,
   buildProgressDashboardUiEvidence,
   inspectProgressDashboardUiEvidence,
   PROGRESS_DASHBOARD_UI_EVIDENCE_SCHEMA_VERSION,
@@ -757,7 +1057,6 @@ export {
   mergeParallelEvidence,
   planControlledParallelWaves,
   buildLifecycleStageReport,
-  writeLifecycleStageReport,
   buildDiscoveryArtifact,
   buildDiscoveryPlan,
   buildPrdFromDiscovery,
@@ -768,6 +1067,23 @@ export {
   runDiscoveryPlanRuntime,
   runDiscoveryPrdRuntime,
   runDiscoveryRuntime,
+  buildDemandArtifactGraph,
+  buildDemandSession,
+  demandBlockedArtifacts,
+  demandBuildOrder,
+  demandMarkdownArtifacts,
+  demandReadyArtifacts,
+  demandStateDir,
+  defaultDemandSessionPath,
+  DEMAND_GRAPH_SCHEMA_VERSION,
+  DEMAND_READINESS_SCHEMA_VERSION,
+  DEMAND_SESSION_SCHEMA_VERSION,
+  inspectDemandReadiness,
+  readDemandSession,
+  runDemandBrainstormRuntime,
+  runDemandDiscussRuntime,
+  runDemandPrdRuntime,
+  writeDemandArtifacts,
   discoverPackManifests,
   readPackManifest,
   resolveProjectContext,
@@ -831,9 +1147,22 @@ export {
   buildPackageInstallSmokePlan,
   buildControlledBetaReleaseDecisionPlan,
   buildPublicBetaHardeningDrillPlan,
+  buildReleaseCandidateChangeManifest,
+  buildCleanEnvironmentVerifyPlan,
+  buildDogfoodMatrixEvidence,
+  buildDogfoodMatrixPlan,
+  buildDogfoodMatrixReport,
   inspectPackedPackage,
+  classifyReleaseChangeDomain,
+  listDogfoodMatrixScenarios,
   CONTROLLED_BETA_RELEASE_ACTIONS,
   CONTROLLED_BETA_RELEASE_DECISION_SCHEMA_VERSION,
+  RELEASE_CANDIDATE_GATE_SCHEMA_VERSION,
+  RELEASE_CANDIDATE_REQUIRED_REPORTS,
+  RELEASE_CHANGE_DOMAINS,
+  CLEAN_ENVIRONMENT_VERIFY_SCHEMA_VERSION,
+  DOGFOOD_MATRIX_SCHEMA_VERSION,
+  DOGFOOD_MATRIX_SCENARIO_IDS,
   buildOperatorReleaseRunbookPlan,
   buildOperatorReleaseStatePlan,
   buildPostReleaseAuditPlan,
@@ -868,6 +1197,11 @@ export {
   YOLO_ONE_SENTENCE_ENTRY,
   runPackageInstallSmoke,
   runControlledBetaReleaseDecisionGate,
+  runReleaseCandidateGate,
+  evaluateReleaseCandidateGate,
+  readReleaseCandidateChangeManifest,
+  executeCleanEnvironmentVerifyPlan,
+  runCleanEnvironmentVerify,
   runOperatorReleaseRunbookGate,
   runOperatorReleaseStateMutation,
   runPostReleaseAuditGate,

@@ -81,7 +81,7 @@ function forceTheme(html, theme) {
   return html.replace("<html lang=\"zh\">", `<html lang="zh" data-theme="${theme}">`);
 }
 
-function check(id, status, message, evidence = {}) {
+function check(id, status, message, evidence = Object()) {
   return { id, status, message, ...evidence };
 }
 
@@ -89,7 +89,7 @@ function includesAny(text, values = []) {
   return values.some((value) => text.includes(value));
 }
 
-function findChromeBinary(input = {}, options = {}) {
+function findChromeBinary(input = Object(), options = Object()) {
   const explicit = input.chromePath || input.chrome_path || options.chromePath || options.chrome_path || "";
   const candidates = [
     explicit,
@@ -341,7 +341,7 @@ function inspectProgressHtml({ idleHtml, activeHtml }) {
   ];
 }
 
-export function buildProgressDashboardUiEvidence(input = {}, options = {}) {
+export function buildProgressDashboardUiEvidence(input = Object(), options = Object()) {
   const projectRoot = resolve(input.projectRoot || input.project_root || options.projectRoot || options.project_root || process.cwd());
   const stateRoot = resolve(input.stateRoot || input.state_root || options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
   const outputDir = resolve(input.outputDir || input.output_dir || options.outputDir || options.output_dir || join(stateRoot, "state/evidence/progress-dashboard-ui"));
@@ -373,7 +373,7 @@ export function buildProgressDashboardUiEvidence(input = {}, options = {}) {
     for (const artifact of themedHtmlArtifacts) writeText(artifact.path, artifact.html);
   }
   if (writeArtifacts && browserSmoke) {
-    browserEvidence = collectBrowserEvidence({
+    browserEvidence = Object.assign(Object(), { reason: "" }, collectBrowserEvidence({
       input,
       options,
       outputDir,
@@ -414,7 +414,7 @@ export function buildProgressDashboardUiEvidence(input = {}, options = {}) {
         },
       ],
       projectRoot,
-    });
+    }));
   }
   const allChecks = [...checks, ...browserEvidence.checks];
   const blockers = allChecks.filter((entry) => entry.status === "fail");

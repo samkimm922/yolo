@@ -6,17 +6,27 @@ import {
   handleTaskPreRun,
 } from "../src/runtime/task-loop/outcome-handler.js";
 
+interface LoopResults {
+  completed: string[];
+  failed: string[];
+  skipped: string[];
+  blocked: string[];
+  contractReview: string[];
+  remediation: { task_id: string; schema: string; action: string; status: string; automation_can_continue: boolean }[];
+  immediateRemediationQueue: { source_task_id: string; routing: string; reason: string; action: string; status: string; next_actions: string[] }[];
+}
+
 function makeLoopState() {
   return {
-    results: { completed: [], failed: [], skipped: [], blocked: [], contractReview: [] },
-    runResultsTracker: { completed: new Set(), failed: [] },
+    results: { completed: [], failed: [], skipped: [], blocked: [], contractReview: [], remediation: [], immediateRemediationQueue: [] } as LoopResults,
+    runResultsTracker: { completed: new Set<string>(), failed: [] as string[] },
     progress: { done: 0, failed: 0 },
-    completedIds: new Set(),
-    childTaskMap: new Map(),
+    completedIds: new Set<string>(),
+    childTaskMap: new Map<string, unknown>(),
   };
 }
 
-function makeOutcomeCallbacks(options = {}) {
+function makeOutcomeCallbacks(options: { prd?: { tasks: { id: string; status: string }[] }; post?: { passed: boolean; failed: string[] }; sourceIds?: string[] } = {}) {
   const calls = {
     logs: [],
     mergedUpdates: [],
@@ -177,6 +187,44 @@ describe("task-loop outcome handler", () => {
       automation_can_continue: true,
     }]);
     assert.deepEqual(state.results.failed, ["FIX-P40-015"]);
+    assert.deepEqual(state.results.immediateRemediationQueue, [{
+      source_task_id: "FIX-P40-015",
+      routing: "before_next_feature_task",
+      reason: "harness_remediation_must_be_cleared_before_new_work",
+      action: "REROUTE_REVIEW_FIX",
+      status: "remediation_required",
+      next_actions: [],
+    }]);
+  });
+
+  test("handleTaskOutcome can stop new work when immediate remediation is required", () => {
+    const state = makeLoopState();
+    const callbacks = makeOutcomeCallbacks();
+
+    const result = handleTaskOutcome({
+      ...state,
+      task: { id: "FIX-HARNESS-001" },
+      outcome: {
+        status: "failed",
+        reason: "fixture evidence missing",
+        remediation: {
+          action: "AUTO_REMEDIATE",
+          status: "remediation_required",
+          automation_can_continue: true,
+          blocks_ship: true,
+          next_actions: ["Generate a bounded remediation task now."],
+        },
+      },
+      stopForImmediateRemediation: true,
+      ...callbacks,
+    });
+
+    assert.deepEqual(result, {
+      action: "stop",
+      reason: "immediate_remediation_required",
+      lastFailKey: "failed:fixture evidence missing",
+    });
+    assert.equal(state.results.immediateRemediationQueue[0].routing, "before_next_feature_task");
   });
 
   test("handleTaskOutcome stops the loop on repeated same failure", () => {

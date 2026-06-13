@@ -1,10 +1,10 @@
 import { mkdirSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { convertAuditToPrd } from "../prd/audit-to-prd.js";
 import { inspectPrdContract } from "./gates/prd-contract-doctor.js";
 import { scanProject } from "../review/scanner.js";
 import { validatePrdPath } from "../prd/validate.js";
-import { generateFindingsFromRequirement } from "../pm/index.js";
+import { generateFindingsFromRequirement } from "../demand/findings-generator.js";
 import { runRunnerRuntime } from "./runner-runtime.js";
 import { createPrdMigrationAdvice } from "../prd/migration.js";
 import { preflightPrd } from "../prd/preflight.js";
@@ -12,12 +12,14 @@ import { buildAcceptanceReport } from "./acceptance/report.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
 import { appendLearningRecord } from "./learning/center.js";
 import { runDiscoveryRuntime } from "../discovery/runtime.js";
+import { inspectYoloCheck } from "./gates/check-report.js";
+import { inspectLifecycleGuard } from "../lifecycle/guard.js";
 
-function ok(summary, extra = {}) {
+function ok(summary, extra = Object()) {
   return { status: "success", summary, artifacts: [], next_actions: [], ...extra };
 }
 
-function fail(summary, extra = {}) {
+function fail(summary, extra = Object()) {
   return {
     status: "error",
     summary,
@@ -27,7 +29,49 @@ function fail(summary, extra = {}) {
   };
 }
 
-async function runFindingsRuntime(params = {}) {
+function lifecycleWrite(stageId, report = Object(), params = Object(), source = "pi-runtime") {
+  if (params.writeLifecycle === false || params.write_lifecycle === false || !params.stateRoot) return null;
+  return writeLifecycleStageReport(stageId, report, {
+    projectRoot: params.projectRoot,
+    stateRoot: params.stateRoot,
+    source,
+    learnFailures: true,
+    skipSequenceCheck: true,
+  });
+}
+
+function summarizeCheckReport(report) {
+  if (!report) return null;
+  return {
+    schema_version: report.schema_version,
+    schema: report.schema,
+    status: report.status,
+    code: report.code,
+    summary: report.summary,
+    prd_path: report.prd_path,
+    blocker_count: report.blockers?.length || 0,
+    warning_count: report.warnings?.length || 0,
+    checks: (report.checks || []).map((check) => ({
+      name: check.name,
+      status: check.status,
+      summary: check.summary,
+    })),
+    blockers: (report.blockers || []).slice(0, 20),
+    warnings: (report.warnings || []).slice(0, 20),
+    artifacts: report.artifacts || [],
+    lifecycle_write: report.lifecycle_write
+      ? {
+        stage: report.lifecycle_write.stage,
+        stage_status: report.lifecycle_write.stage_status,
+        artifact_path: report.lifecycle_write.artifact_path,
+        status_path: report.lifecycle_write.status_path,
+      }
+      : null,
+    next_actions: report.next_actions || [],
+  };
+}
+
+async function runFindingsRuntime(params = Object()) {
   const requirement = params.requirementFile
     ? readFileSync(resolve(params.requirementFile), "utf8")
     : params.requirement;
@@ -47,33 +91,50 @@ async function runFindingsRuntime(params = {}) {
     });
   }
 
-  return ok(`Generated ${result.data.findings.length} finding(s).`, {
+  const report = ok(`Generated ${result.data.findings.length} finding(s).`, {
     artifacts: [result.output_file].filter(Boolean),
     findings_count: result.data.findings.length,
   });
+  const lifecycle = lifecycleWrite("roadmap", report, params, "pi-findings");
+  if (lifecycle) {
+    report.lifecycle_write = lifecycle;
+    report.artifacts.push(lifecycle.artifact_path);
+  }
+  return report;
 }
 
-function runPrdGenerateRuntime(params = {}) {
+function runPrdGenerateRuntime(params = Object()) {
   const output = resolve(params.output);
   mkdirSync(dirname(output), { recursive: true });
   const result = convertAuditToPrd(params.findingsPath, {
     output,
     title: params.title,
     cwd: params.projectRoot,
+    approvedDemandContract: params.approvedDemandContract
+      || params.approved_demand_contract
+      || params.demandContract
+      || params.demand_contract,
   });
 
   if (!result.ok) {
     return fail(`PRD generation failed: ${result.error}`, { code: "PI_PRD_GENERATION_FAILED" });
   }
 
-  return ok(`Generated PRD with ${result.counts.tasks} task(s).`, {
+  const report = ok(`Generated PRD with ${result.counts.tasks} task(s).`, {
     artifacts: [output],
     counts: result.counts,
+    prd_path: output,
   });
+  const lifecycle = lifecycleWrite("prd", report, params, "pi-prd-generate");
+  if (lifecycle) {
+    report.lifecycle_write = lifecycle;
+    report.artifacts.push(lifecycle.artifact_path);
+  }
+  return report;
 }
 
-function runSchemaGateRuntime(params = {}) {
-  const result = validatePrdPath(params.prdPath);
+function runSchemaGateRuntime(params = Object()) {
+  const result = Object.assign(Object(), validatePrdPath(params.prdPath));
   if (!result.ok) {
     return fail(`PRD schema gate failed: ${result.error}`, {
       code: "PI_PRD_SCHEMA_FAILED",
@@ -87,30 +148,50 @@ function runSchemaGateRuntime(params = {}) {
   });
 }
 
-function runPrdPreflightRuntime(params = {}) {
+function runPrdPreflightRuntime(params = Object()) {
   const result = preflightPrd(params.prdPath);
+  const check = params.stateRoot
+    ? inspectYoloCheck({
+      prdPath: params.prdPath,
+      projectRoot: params.projectRoot,
+      stateRoot: params.stateRoot,
+      writeLifecycle: params.writeLifecycle !== false,
+    }, { learnFailures: true })
+    : null;
   if (!result.runner_readiness.can_execute) {
     return fail(`PRD preflight blocked execution with ${result.blocked_count} blocker(s).`, {
       code: "PI_PRD_PREFLIGHT_BLOCKED",
       preflight: result,
+      check: summarizeCheckReport(check),
       contract: result.contract,
       migration: result.migration,
       artifacts: [params.prdPath].filter(Boolean),
       next_actions: result.runner_readiness.next_actions,
     });
   }
+  if (check && (check.status === "blocked" || check.status === "error")) {
+    return fail(check.summary, {
+      code: check.code || "PI_YOLO_CHECK_BLOCKED",
+      preflight: result,
+      check: summarizeCheckReport(check),
+      artifacts: check.artifacts || [params.prdPath].filter(Boolean),
+      next_actions: check.next_actions,
+    });
+  }
   return ok(`PRD preflight ${result.status}.`, {
     artifacts: [params.prdPath].filter(Boolean),
     preflight: result,
+    check: summarizeCheckReport(check),
     warnings: [
       ...(result.schema?.warnings || []),
       ...(result.contract?.warnings || []),
       ...(result.spec_governance?.warnings || []),
+      ...(check?.warnings || []),
     ],
   });
 }
 
-function runContractGateRuntime(params = {}) {
+function runContractGateRuntime(params = Object()) {
   const prd = JSON.parse(readFileSync(resolve(params.prdPath), "utf8"));
   const result = inspectPrdContract(prd);
   if (result.blocks_execution) {
@@ -129,7 +210,7 @@ function runContractGateRuntime(params = {}) {
   });
 }
 
-function runReviewScanRuntime(params = {}) {
+function runReviewScanRuntime(params = Object()) {
   const result = scanProject({
     root: params.projectRoot,
     config: params.config,
@@ -137,27 +218,28 @@ function runReviewScanRuntime(params = {}) {
   });
 
   const hasHigh = result.findings.some((finding) => finding.severity === "HIGH" || finding.severity === "CRITICAL" || finding.must_fix_before_ship === true);
-  const report = {
+  const report = Object.assign(Object(), {
     status: hasHigh ? "warning" : "success",
     summary: `Review scan found ${result.total_findings} finding(s).`,
     artifacts: [],
     next_actions: hasHigh ? ["Review HIGH/CRITICAL findings before shipping."] : [],
     scan: result,
     findings: result.findings,
-  };
+  });
   if (params.writeLifecycle !== false && params.stateRoot) {
     report.lifecycle_write = writeLifecycleStageReport("review-fix", report, {
       projectRoot: params.projectRoot,
       stateRoot: params.stateRoot,
       source: "pi-review-scan",
       learnFailures: true,
+      skipSequenceCheck: true,
     });
     report.artifacts.push(report.lifecycle_write.artifact_path);
   }
   return report;
 }
 
-function runAcceptanceRuntime(params = {}) {
+function runAcceptanceRuntime(params = Object()) {
   const report = buildAcceptanceReport({
     prdPath: params.prdPath,
     projectRoot: params.projectRoot,
@@ -192,11 +274,30 @@ function readJsonMaybe(path) {
   }
 }
 
-function runShipRuntime(params = {}) {
-  const stateRoot = params.stateRoot ? resolve(params.stateRoot) : undefined;
+function runShipRuntime(params = Object()) {
+  const expectedPrd = params.prdPath ? resolve(params.prdPath) : "";
+  const projectRoot = resolve(params.projectRoot || params.project_root || (expectedPrd ? dirname(expectedPrd) : process.cwd()));
+  const stateRoot = resolve(params.stateRoot || params.state_root || join(projectRoot, ".yolo"));
   const acceptancePath = params.acceptanceReportPath
     || params.acceptance_report_path
-    || (stateRoot ? resolve(stateRoot, "lifecycle", "acceptance-report.json") : "");
+    || resolve(stateRoot, "lifecycle", "acceptance-report.json");
+  const guard = inspectLifecycleGuard({
+    ...params,
+    command: "yolo-ship",
+    projectRoot,
+    stateRoot,
+    prdPath: expectedPrd,
+  });
+  if (guard.status !== "pass") {
+    return fail(guard.summary || "Ship gate blocked by YOLO lifecycle guard.", {
+      code: guard.code || "LIFECYCLE_GUARD_BLOCKED",
+      exit_code: 2,
+      artifacts: [acceptancePath].filter(Boolean),
+      blockers: guard.blockers || [],
+      lifecycle_guard: guard,
+      next_actions: guard.next_actions || ["Run /yolo-next before delivery."],
+    });
+  }
   const acceptanceReport = params.acceptanceReport || params.acceptance_report || readJsonMaybe(acceptancePath);
   const acceptanceStatus = acceptanceReport?.report?.status || acceptanceReport?.status;
   const blockers = [];
@@ -208,7 +309,6 @@ function runShipRuntime(params = {}) {
       message: `Acceptance status is ${acceptanceStatus || "unknown"}.`,
     });
   }
-  const expectedPrd = params.prdPath ? resolve(params.prdPath) : "";
   const acceptancePrd = acceptanceReport?.report?.prd_path || acceptanceReport?.prd_path || "";
   if (expectedPrd && acceptancePrd && resolve(acceptancePrd) !== expectedPrd) {
     blockers.push({
@@ -220,7 +320,7 @@ function runShipRuntime(params = {}) {
   }
 
   const status = blockers.length > 0 ? "blocked" : "success";
-  const report = {
+  const report = Object.assign(Object(), {
     status,
     code: status === "success" ? "SHIP_READY" : "SHIP_BLOCKED",
     summary: status === "success" ? "Ship gate passed; delivery is ready." : "Ship gate blocked by missing or failing evidence.",
@@ -231,13 +331,14 @@ function runShipRuntime(params = {}) {
     next_actions: status === "success"
       ? ["Prepare operator handoff and release notes."]
       : ["Fix ship blockers, then rerun PI or yolo ship."],
-  };
+  });
   if (params.writeLifecycle !== false && stateRoot) {
     report.lifecycle_write = writeLifecycleStageReport("delivery", report, {
       projectRoot: params.projectRoot,
       stateRoot,
       source: "pi-ship",
       learnFailures: true,
+      skipSequenceCheck: true,
     });
     report.artifacts.push(report.lifecycle_write.artifact_path);
   }
@@ -247,8 +348,28 @@ function runShipRuntime(params = {}) {
     : fail(report.summary, { code: report.code, artifacts: report.artifacts, blockers, ship: report, next_actions: report.next_actions });
 }
 
-function runLearnRuntime(params = {}) {
+function runLearnRuntime(params = Object()) {
   const stateRoot = params.stateRoot ? resolve(params.stateRoot) : undefined;
+  const projectRoot = resolve(params.projectRoot || params.project_root || (params.prdPath ? dirname(resolve(params.prdPath)) : process.cwd()));
+  if (stateRoot) {
+    const guard = inspectLifecycleGuard({
+      ...params,
+      command: "yolo-learn",
+      projectRoot,
+      stateRoot,
+      prdPath: params.prdPath ? resolve(params.prdPath) : undefined,
+    });
+    if (guard.status !== "pass") {
+      return fail(guard.summary || "Learn gate blocked by YOLO lifecycle guard.", {
+        code: guard.code || "LIFECYCLE_GUARD_BLOCKED",
+        exit_code: 2,
+        blockers: guard.blockers || [],
+        lifecycle_guard: guard,
+        next_actions: guard.next_actions || ["Run /yolo-next before learning."],
+      });
+    }
+  }
+
   const lesson = params.lesson || "PI lifecycle completed through delivery gate.";
   const record = appendLearningRecord({
     type: "retrospective",
@@ -265,23 +386,24 @@ function runLearnRuntime(params = {}) {
     ].filter(Boolean),
     tags: ["pi", "lifecycle", "learn"],
   }, {
-    projectRoot: params.projectRoot,
+    projectRoot,
     stateRoot,
   });
 
-  const report = {
+  const report = Object.assign(Object(), {
     status: "success",
     code: "LEARN_RECORDED",
     summary: "Learning record captured for the PI lifecycle.",
     artifacts: [record.file].filter(Boolean),
     learning: record,
     next_actions: [],
-  };
+  });
   if (params.writeLifecycle !== false && stateRoot) {
     report.lifecycle_write = writeLifecycleStageReport("learn", report, {
       projectRoot: params.projectRoot,
       stateRoot,
       source: "pi-learn",
+      skipSequenceCheck: true,
     });
     report.artifacts.push(report.lifecycle_write.artifact_path);
   }
@@ -292,7 +414,7 @@ function runLearnRuntime(params = {}) {
   });
 }
 
-export async function runPiRuntime(runtime, params = {}, context = {}) {
+export async function runPiRuntime(runtime, params = Object(), context = Object()) {
   switch (runtime) {
     case "discovery.write":
     case "discovery.inspect":

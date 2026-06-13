@@ -112,10 +112,11 @@ describe("runner lifecycle runtime modules", () => {
     assert.equal(spawns[2][1].some((arg) => String(arg).includes("state-snapshot.js")), true);
   });
 
-  test("ledger writers keep state events injectable", () => {
+  test("ledger writers keep state events injectable and scoped to the active run", () => {
     const events = [];
     const writers = createRunnerLedgerWriters({
       getStateDir: () => "/state",
+      getRunId: () => "RUN-ACTIVE",
       appendStateEvent: (dir, event, data) => events.push(["state", dir, event, data]),
       appendRunEvent: (dir, event, data) => events.push(["run", dir, event, data]),
     });
@@ -124,8 +125,8 @@ describe("runner lifecycle runtime modules", () => {
     writers.logRun("run_end", { passed: 1 });
 
     assert.deepEqual(events, [
-      ["state", "/state", "gate.pass", { task: "A" }],
-      ["run", "/state", "run_end", { passed: 1 }],
+      ["state", "/state", "gate.pass", { task: "A", run_id: "RUN-ACTIVE" }],
+      ["run", "/state", "run_end", { passed: 1, run_id: "RUN-ACTIVE" }],
     ]);
   });
 

@@ -7,14 +7,14 @@ function sourceFileMentions(text = "") {
   return [...new Set([...text.matchAll(SOURCE_FILE_PATTERN)].map((match) => match[0]))];
 }
 
-export function taskLooksLikeSplitWork(task = {}) {
+export function taskLooksLikeSplitWork(task = Object()) {
   const desc = `${task.description || ""} ${task.title || ""}`.toLowerCase();
   return /拆分|split|提取/.test(desc) ||
     (desc.includes("超") && desc.includes("行")) ||
     (desc.includes("超过") && desc.includes("行"));
 }
 
-export function prepareTaskForExpansion(task, { completedIds = new Set() } = {}) {
+export function prepareTaskForExpansion(task, { completedIds = new Set() } = Object()) {
   if (completedIds.has(task.id)) return { ...task, status: "completed" };
   if (!task.scope?.targets || task.scope.allow_new_files || !taskLooksLikeSplitWork(task)) {
     return task;
@@ -33,7 +33,7 @@ function scopedRelativePath(rootDir, absolutePath) {
   return relative(rootDir, absolutePath).replaceAll("\\", "/");
 }
 
-export function buildImportGraph(files, { rootDir = process.cwd(), readFile = readFileSync } = {}) {
+export function buildImportGraph(files, { rootDir = process.cwd(), readFile = readFileSync } = Object()) {
   const graph = new Map();
   for (const file of files) {
     const absPath = join(rootDir, file);
@@ -99,8 +99,8 @@ export function splitTask(task, {
   rootDir = process.cwd(),
   exists = existsSync,
   readFile = readFileSync,
-  log = () => {},
-} = {}) {
+  log = (..._args) => {},
+} = Object()) {
   if (mode === "dev") return [task];
   if (/-P\d+$/.test(task.id)) return [task];
 
@@ -181,8 +181,8 @@ export function splitTask(task, {
 export function mergeOverlappingTasks(tasks, {
   taskCountsAsCompleted = () => false,
   taskIsSplitParent = () => false,
-  log = () => {},
-} = {}) {
+  log = (..._args) => {},
+} = Object()) {
   const merged = [];
   const consumed = new Set();
 
@@ -294,15 +294,15 @@ export function mergeOverlappingTasks(tasks, {
 export function expandTasksForMainLoop({
   tasks = [],
   completedIds = new Set(),
-  priorityOrder = {},
+  priorityOrder = Object(),
   mode = "fix",
   rootDir = process.cwd(),
   exists = existsSync,
   readFile = readFileSync,
   taskCountsAsCompleted = () => false,
   taskIsSplitParent = () => false,
-  log = () => {},
-} = {}) {
+  log = (..._args) => {},
+} = Object()) {
   const sorted = [...tasks].sort(
     (a, b) => (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9),
   );

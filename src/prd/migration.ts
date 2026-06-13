@@ -105,7 +105,7 @@ function makeUniqueConditionId(existingIds, base) {
   return id;
 }
 
-function addIssue(issues, task, code, detail, extra = {}) {
+function addIssue(issues, task, code, detail, extra = Object()) {
   issues.push({
     task_id: task?.id || null,
     code,
@@ -142,7 +142,7 @@ function summarizeContract(result) {
   };
 }
 
-export function migratePrdGates(inputPrd, options = {}) {
+export function migratePrdGates(inputPrd, options = Object()) {
   const prd = deepClone(inputPrd || {});
   const issues = [];
   const tasksChanged = [];
@@ -266,7 +266,7 @@ export function createPrdMigrationAdvice(inputPrd, prdPath = "prd.json") {
   };
 }
 
-export function migratePrdFile(path, options = {}) {
+export function migratePrdFile(path, options = Object()) {
   const resolved = resolve(process.cwd(), path);
   if (!existsSync(resolved)) throw new Error(`PRD not found: ${path}`);
 
@@ -301,14 +301,19 @@ function collectPrdFiles(dir, files) {
       continue;
     }
     if (!file.endsWith(".json")) continue;
-    if (file.includes("baseline") || file.includes("learn") || file.includes("settings") || file === "package.json") continue;
     try {
       const data = JSON.parse(readFileSync(path, "utf8"));
-      if (Array.isArray(data?.tasks)) files.push(path);
+      if (isPrdDocument(data)) files.push(path);
     } catch {
       // Non-JSON or transient files are not PRD migration candidates.
     }
   }
+}
+
+function isPrdDocument(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return false;
+  if (typeof data.id !== "string" || !Array.isArray(data.tasks)) return false;
+  return data.tasks.every((task) => task && typeof task === "object" && typeof task.id === "string");
 }
 
 function defaultPrdDirs() {

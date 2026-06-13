@@ -11,7 +11,7 @@ import {
   passTaskTransition,
 } from "../task-state/transitions.js";
 
-export function dryRunArtifactTarget(task = {}) {
+export function dryRunArtifactTarget(task = Object()) {
   return task.scope?.targets?.[0]?.file || "";
 }
 
@@ -19,7 +19,7 @@ export function runDryRunCommand(command, {
   cwd,
   timeout = 120000,
   execFileSync = defaultExecFileSync,
-} = {}) {
+} = Object()) {
   try {
     const stdout = execFileSync("sh", ["-c", command], {
       cwd,
@@ -47,7 +47,7 @@ export function renderDryRunArtifact(task, prdPath, {
   projectRoot,
   now = new Date().toISOString(),
   runCommand = (command) => runDryRunCommand(command, { cwd: yoloRoot }),
-} = {}) {
+} = Object()) {
   const commands = task.test_generation?.required_commands || [];
   const commandResults = commands.map((command) => runCommand(command));
   const target = dryRunArtifactTarget(task);
@@ -90,7 +90,7 @@ export function buildDryRunArtifactBaseRecord({
   startedAtMs,
   timestamp = new Date().toISOString(),
   nowMs = Date.now(),
-} = {}) {
+} = Object()) {
   return {
     id: taskId,
     timestamp,
@@ -116,9 +116,9 @@ export function completeDryRunArtifactTask({
   loadPRD,
   taskPostconditionsPass,
   recordTaskTransition,
-  logTaskDone = () => {},
-  logProgress = () => {},
-} = {}) {
+  logTaskDone = (..._args) => {},
+  logProgress = (..._args) => {},
+} = Object()) {
   const target = dryRunArtifactTarget(task);
   if (!target) return { status: "failed", reason: "dry_run_artifact missing scope target" };
 

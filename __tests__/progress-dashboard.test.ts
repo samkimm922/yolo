@@ -123,9 +123,10 @@ test("active HTML escapes dangerous task data and renders uiEvidencePanel", () =
 });
 
 test("progress server exposes lifecycle json endpoint", async () => {
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
-    const { port } = server.address();
+    const addr = server.address();
+    const port = typeof addr === "string" ? 0 : (addr as { port: number }).port;
     const response = await fetch(`http://127.0.0.1:${port}/lifecycle.json`);
     const payload = await response.json();
 

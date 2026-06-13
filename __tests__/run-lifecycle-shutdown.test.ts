@@ -65,7 +65,7 @@ describe("run lifecycle shutdown helpers", () => {
     assert.deepEqual(calls.at(-1), ["exit", 2]);
   });
 
-  test("graceful shutdown handler records progress and exits cleanly", async () => {
+  test("graceful shutdown handler records progress and exits nonzero on signals", async () => {
     const calls = [];
     const shutdown = createGracefulShutdownHandler({
       progress: { done: 3, failed: 0 },
@@ -85,7 +85,7 @@ describe("run lifecycle shutdown helpers", () => {
 
     assert.equal(calls.some((call) => call[0] === "logRun" && call[2].exit_reason === "SIGTERM"), true);
     assert.equal(calls.some((call) => call[0] === "archive" && call[1].interrupted === true), true);
-    assert.deepEqual(calls.at(-1), ["exit", 0]);
+    assert.deepEqual(calls.at(-1), ["exit", 130]);
   });
 
   test("fatal error handler writes crash evidence and exits with failure", () => {

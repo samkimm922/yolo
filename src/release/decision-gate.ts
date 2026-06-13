@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { DOGFOOD_MATRIX_SCENARIO_IDS, listDogfoodMatrixScenarios } from "./dogfood-matrix.js";
 import { runPublicBetaHardeningDrill } from "./hardening-drill.js";
+import { verifyArtifactIntegrity } from "../runtime/evidence/artifact-integrity.js";
 
 export const CONTROLLED_BETA_RELEASE_DECISION_SCHEMA_VERSION = "1.0";
 
@@ -11,6 +13,50 @@ export const CONTROLLED_BETA_RELEASE_ACTIONS = Object.freeze([
   "billable_provider_execution",
 ]);
 
+export const RELEASE_CANDIDATE_GATE_SCHEMA_VERSION = "1.0";
+
+export const RELEASE_CANDIDATE_REQUIRED_REPORTS = Object.freeze([
+  "verify",
+  "prdPreflight",
+  "cleanEnvironment",
+  "dogfoodMatrix",
+  "changeManifest",
+]);
+
+const RELEASE_CANDIDATE_REPORT_ALIASES = Object.freeze({
+  verify: ["verify", "verifyResult", "verify_result"],
+  prdPreflight: ["prdPreflight", "prd_preflight", "prdPreflightResult", "prd_preflight_result"],
+  cleanEnvironment: ["cleanEnvironment", "clean_environment", "cleanEnvironmentResult", "clean_environment_result"],
+  dogfoodMatrix: ["dogfoodMatrix", "dogfood_matrix", "dogfoodMatrixResult", "dogfood_matrix_result"],
+  changeManifest: ["changeManifest", "change_manifest", "changeManifestResult", "change_manifest_result"],
+});
+
+const RELEASE_CANDIDATE_PASS_STATUSES = new Set(["pass", "passed", "ok", "success"]);
+const RELEASE_CANDIDATE_BLOCK_STATUSES = new Set(["block", "blocked", "fail", "failed", "error"]);
+const RELEASE_CANDIDATE_KNOWN_PROVENANCE = new Set([
+  "release",
+  "ci",
+  "local",
+  "verify",
+  "prd-preflight",
+  "clean-environment",
+  "dogfood-matrix",
+  "change-manifest",
+  "human-review",
+  "external",
+]);
+const CLEAN_ENVIRONMENT_REQUIRED_STEPS = [
+  "prepare_clean_source",
+  "install_dependencies",
+  "verify",
+  "pack",
+  "install_tarball",
+  "public_entrypoint_bin_smoke",
+];
+const DOGFOOD_EXPECTED_OUTCOME_BY_ID = new Map(
+  listDogfoodMatrixScenarios().map((scenario) => [scenario.id, scenario.expected?.outcome || "pass"])
+);
+
 const DEFAULT_RELEASE_SCOPE = "public-beta";
 const DEFAULT_REQUESTED_ACTIONS = ["remove_private", "publish_public_beta"];
 const PRIVATE_RELEASE_BLOCKER = "PACKAGE_PRIVATE_RELEASE_BLOCK";
@@ -19,7 +65,7 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -40,6 +86,419 @@ function validTimestamp(value) {
   return nonEmptyString(value) && !Number.isNaN(Date.parse(value));
 }
 
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function cleanIssueCode(value, fallback) {
+  return String(value || fallback || "")
+    .trim()
+    .replace(/[^A-Z0-9_.:-]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+}
+
+function issue(code, report, message, extra = Object()) {
+  return { code, report, message, ...extra };
+}
+
+function normalizeReleaseCandidateMode(value) {
+  return value === "publish" ? "publish" : "rc";
+}
+
+function getAliasedReport(source, reportName) {
+  for (const key of RELEASE_CANDIDATE_REPORT_ALIASES[reportName] || [reportName]) {
+    if (Object.hasOwn(source, key)) {
+      return source[key];
+    }
+  }
+  return undefined;
+}
+
+function normalizeReportStatus(status) {
+  const value = String(status || "").trim().toLowerCase();
+  if (RELEASE_CANDIDATE_PASS_STATUSES.has(value)) return "pass";
+  if (RELEASE_CANDIDATE_BLOCK_STATUSES.has(value)) return "block";
+  return null;
+}
+
+function provenanceSource(report) {
+  const provenance = report?.provenance;
+  if (typeof provenance === "string") return provenance.trim().toLowerCase();
+  if (!isObject(provenance)) return "";
+  return String(provenance.source || provenance.kind || provenance.system || provenance.tool || "").trim().toLowerCase();
+}
+
+function provenanceId(report) {
+  const provenance = report?.provenance;
+  if (isObject(provenance)) {
+    return String(provenance.id || provenance.run_id || provenance.runId || provenance.artifact_id || "").trim();
+  }
+  return String(report?.run_id || report?.runId || report?.artifact_id || "").trim();
+}
+
+function reportArtifactPaths(report = Object()) {
+  const provenance = report.provenance;
+  return [
+    report.artifact_path,
+    report.artifactPath,
+    report.report_path,
+    report.reportPath,
+    report.evidence_file,
+    ...(Array.isArray(report.artifacts) ? report.artifacts : []),
+    ...(isObject(provenance) ? [
+      provenance.artifact_path,
+      provenance.artifactPath,
+      provenance.report_path,
+      provenance.reportPath,
+      provenance.evidence_file,
+    ] : []),
+  ].map((item) => String(item || "").trim()).filter(Boolean);
+}
+
+function reportExpectedDigests(report = Object()) {
+  const expected = {
+    ...(isObject(report.artifact_digests) ? report.artifact_digests : {}),
+    ...(isObject(report.artifactDigests) ? report.artifactDigests : {}),
+    ...(isObject(report.expected_artifact_digests) ? report.expected_artifact_digests : {}),
+    ...(isObject(report.expectedArtifactDigests) ? report.expectedArtifactDigests : {}),
+  };
+  const path = report.artifact_path || report.artifactPath || report.report_path || report.reportPath;
+  const digest = report.artifact_sha256 || report.artifactSha256 || report.sha256;
+  if (path && digest) expected[path] = digest;
+  return expected;
+}
+
+function provenanceKnown(report) {
+  const provenance = report?.provenance;
+  if (!isObject(report) || provenance === "unknown" || provenance === null || provenance === undefined) {
+    return false;
+  }
+  if (isObject(provenance) && provenance.trusted === false) {
+    return false;
+  }
+  const source = provenanceSource(report);
+  return RELEASE_CANDIDATE_KNOWN_PROVENANCE.has(source);
+}
+
+function approvalIssueCodes(approval = Object()) {
+  const source = Array.isArray(approval.issue_codes)
+    ? approval.issue_codes
+    : Array.isArray(approval.issueCodes)
+      ? approval.issueCodes
+      : Array.isArray(approval.codes)
+        ? approval.codes
+        : [];
+  return source.map((code) => cleanIssueCode(code, "")).filter(Boolean);
+}
+
+function approvalId(approval = Object()) {
+  return String(approval.id || approval.approval_id || "").trim();
+}
+
+function approvalApprovedAt(approval = Object()) {
+  return approval.approved_at || approval.approvedAt || null;
+}
+
+function approvalExpiresAt(approval = Object()) {
+  return approval.expires_at || approval.expiresAt || approval.valid_until || approval.validUntil || null;
+}
+
+function approvalHasValidExpiry(approval = Object()) {
+  return validTimestamp(approvalExpiresAt(approval));
+}
+
+function approvalExpired(approval, now) {
+  const expiresAt = approvalExpiresAt(approval);
+  return validTimestamp(expiresAt) && Date.parse(expiresAt) <= now.getTime();
+}
+
+function approvalValidForIssue(approval, issueCode, now) {
+  return isObject(approval)
+    && nonEmptyString(approvalId(approval))
+    && nonEmptyString(approval.approved_by || approval.approvedBy)
+    && validTimestamp(approvalApprovedAt(approval))
+    && approvalHasValidExpiry(approval)
+    && approvalIssueCodes(approval).includes(issueCode)
+    && !approvalExpired(approval, now);
+}
+
+function warningIssueCode(warning, reportName, index) {
+  return cleanIssueCode(
+    isObject(warning) ? warning.code || warning.issue_code || warning.issueCode : warning,
+    `${reportName}_WARNING_${index + 1}`,
+  );
+}
+
+function warningHasApproval(warning, approvals, issueCode, now) {
+  if (isObject(warning) && isObject(warning.approval) && approvalValidForIssue(warning.approval, issueCode, now)) {
+    return true;
+  }
+  const requestedApprovalId = isObject(warning) ? warning.approval_id || warning.approvalId : null;
+  return approvals.some((approval) =>
+    approvalValidForIssue(approval, issueCode, now)
+    && (!requestedApprovalId || approvalId(approval) === requestedApprovalId)
+  );
+}
+
+function collectReportBlockerIssues(reportName, report) {
+  return asArray(report.blockers).map((blocker, index) => issue(
+    "RC_GATE_REPORT_BLOCKER",
+    reportName,
+    isObject(blocker) && blocker.message ? blocker.message : "release candidate input report contains a blocker",
+    {
+      issue_code: cleanIssueCode(isObject(blocker) ? blocker.code || blocker.issue_code : blocker, `${reportName}_BLOCKER_${index + 1}`),
+    },
+  ));
+}
+
+function reportClaimsDryRun(report = Object()) {
+  return report.dry_run === true
+    || report.dryRun === true
+    || report.plan_only === true
+    || (isObject(report.dry_run) && report.dry_run.dry_run === true)
+    || (isObject(report.dryRun) && report.dryRun.dry_run === true);
+}
+
+function commandPassed(record) {
+  if (!isObject(record)) return false;
+  const status = normalizeReportStatus(record.status);
+  return status === "pass" || record.exit_code === 0 || record.exitCode === 0;
+}
+
+function collectCommandEvidence(report = Object()) {
+  const commands = [];
+  for (const record of asArray(report.commands || report.command_results || report.commandResults)) {
+    if (isObject(record)) commands.push(record);
+  }
+  if (isObject(report.command)) commands.push(report.command);
+  if (nonEmptyString(report.command) && (report.exit_code !== undefined || report.exitCode !== undefined || report.status)) {
+    commands.push({ command: report.command, exit_code: report.exit_code ?? report.exitCode, status: report.status });
+  }
+  for (const stepRecord of asArray(report.steps)) {
+    if (isObject(stepRecord?.command)) commands.push(stepRecord.command);
+  }
+  return commands;
+}
+
+function hasPassingCommandEvidence(report = Object()) {
+  const commands = collectCommandEvidence(report);
+  return commands.length > 0 && commands.every(commandPassed);
+}
+
+function stepPassed(stepRecord) {
+  if (!isObject(stepRecord)) return false;
+  const status = normalizeReportStatus(stepRecord.status);
+  return status === "pass" || commandPassed(stepRecord.command);
+}
+
+function cleanEnvironmentEvidencePasses(report = Object()) {
+  const steps = asArray(report.steps);
+  const byId = new Map(steps.map((stepRecord) => [stepRecord?.id, stepRecord]));
+  return report.dry_run === false
+    && nonEmptyString(report.tarball || report.package_tarball || report.packageTarball)
+    && CLEAN_ENVIRONMENT_REQUIRED_STEPS.every((stepId) => stepPassed(byId.get(stepId)));
+}
+
+function scenarioId(scenario, index) {
+  return scenario?.id || scenario?.scenario || scenario?.name || `scenario-${index + 1}`;
+}
+
+function scenarioExpectedOutcome(scenario) {
+  if (scenario?.expected_outcome) return scenario.expected_outcome;
+  if (typeof scenario?.expected === "string") return scenario.expected;
+  if (isObject(scenario?.expected) && scenario.expected.outcome) return scenario.expected.outcome;
+  return DOGFOOD_EXPECTED_OUTCOME_BY_ID.get(scenarioId(scenario, 0)) || "pass";
+}
+
+function failClosedStatus(value) {
+  return ["blocked", "block", "fail", "failed", "fail_closed"].includes(String(value || "").trim().toLowerCase());
+}
+
+function dogfoodMatrixCompletenessIssues(report) {
+  const scenarios = asArray(report.scenarios || report.results || report.entries);
+  const ids = scenarios.map((scenario, index) => scenarioId(scenario, index));
+  const uniqueIds = new Set(ids);
+  const missing = DOGFOOD_MATRIX_SCENARIO_IDS.filter((id) => !uniqueIds.has(id));
+  const unexpected = ids.filter((id) => !DOGFOOD_MATRIX_SCENARIO_IDS.includes(id));
+  const countMismatch = report.scenario_count !== undefined && Number(report.scenario_count) !== DOGFOOD_MATRIX_SCENARIO_IDS.length;
+  if (missing.length === 0 && unexpected.length === 0 && !countMismatch && uniqueIds.size === DOGFOOD_MATRIX_SCENARIO_IDS.length) {
+    return [];
+  }
+  return [issue(
+    "RC_GATE_DOGFOOD_MATRIX_INCOMPLETE",
+    "dogfoodMatrix",
+    "dogfood matrix must include every generic scenario exactly once",
+    {
+      required_scenarios: DOGFOOD_MATRIX_SCENARIO_IDS,
+      present_scenarios: ids,
+      missing_scenarios: missing,
+      unexpected_scenarios: unexpected,
+      scenario_count: report.scenario_count ?? scenarios.length,
+    },
+  )];
+}
+
+function dogfoodFailureIssues(report) {
+  const scenarios = asArray(report.scenarios || report.results || report.entries);
+  return scenarios
+    .map((scenario, index) => ({
+      scenario,
+      index,
+      status: normalizeReportStatus(scenario?.status),
+      id: scenarioId(scenario, index),
+      expected_fail_closed: scenarioExpectedOutcome(scenario) === "fail_closed",
+    }))
+    .filter(({ scenario, status, expected_fail_closed: expectedFailClosed, id }) =>
+      status !== "pass"
+      && !(expectedFailClosed && DOGFOOD_EXPECTED_OUTCOME_BY_ID.get(id) === "fail_closed" && failClosedStatus(scenario?.status))
+    )
+    .map(({ scenario, index, id }) => issue(
+      "RC_GATE_DOGFOOD_FAILURE",
+      "dogfoodMatrix",
+      "dogfood matrix scenarios must all pass",
+      {
+        scenario_id: id || `scenario-${index + 1}`,
+        scenario_status: scenario?.status || null,
+      },
+    ));
+}
+
+function changeManifestEvidencePasses(report = Object()) {
+  const manifest = report.manifest || report.change_manifest || report.changeManifest;
+  return isObject(manifest)
+    && manifest.schema === "yolo.release_change_provenance.v1"
+    && normalizeReportStatus(manifest.status) === "pass"
+    && Array.isArray(manifest.blockers)
+    && manifest.blockers.length === 0
+    && isObject(manifest.generated_from);
+}
+
+function releaseCandidateEvidenceIssues(reportName, report) {
+  const evidenceIssues = [];
+  if (reportClaimsDryRun(report)) {
+    evidenceIssues.push(issue(
+      "RC_GATE_REPORT_DRY_RUN",
+      reportName,
+      "release candidate gate reports must be executed evidence, not dry-run plans",
+    ));
+  }
+  if (!nonEmptyString(provenanceId(report))) {
+    evidenceIssues.push(issue(
+      "RC_GATE_PROVENANCE_ID_MISSING",
+      reportName,
+      "release candidate gate report provenance must include a run, artifact, or evidence id",
+    ));
+  }
+
+  if (reportName === "verify" || reportName === "prdPreflight") {
+    if (!hasPassingCommandEvidence(report)) {
+      evidenceIssues.push(issue(
+        "RC_GATE_REPORT_EXECUTION_EVIDENCE_MISSING",
+        reportName,
+        "verify and PRD preflight reports must include passing command evidence",
+      ));
+    }
+  }
+  if (reportName === "cleanEnvironment" && !cleanEnvironmentEvidencePasses(report)) {
+    evidenceIssues.push(issue(
+      "RC_GATE_CLEAN_ENVIRONMENT_EVIDENCE_MISSING",
+      reportName,
+      "clean environment verification must include all required passing steps and a tarball",
+    ));
+  }
+  if (reportName === "dogfoodMatrix") {
+    evidenceIssues.push(...dogfoodMatrixCompletenessIssues(report));
+  }
+  if (reportName === "changeManifest" && !changeManifestEvidencePasses(report)) {
+    evidenceIssues.push(issue(
+      "RC_GATE_CHANGE_MANIFEST_EVIDENCE_MISSING",
+      reportName,
+      "change manifest report must include a passing release change provenance manifest",
+    ));
+  }
+  return evidenceIssues;
+}
+
+function releaseCandidateArtifactIssues(reportName, report, options = Object()) {
+  const paths = reportArtifactPaths(report);
+  if (paths.length === 0) {
+    return {
+      integrity: {
+        status: "fail",
+        checked_count: 0,
+        artifacts: [],
+        missing: [],
+        digest_mismatches: [],
+      },
+      issues: [issue(
+        "RC_GATE_ARTIFACT_MISSING",
+        reportName,
+        "release candidate gate reports must include a real artifact path for existence and digest verification",
+      )],
+    };
+  }
+  const integrity = verifyArtifactIntegrity(paths, {
+    rootDir: options.artifactRoot || options.artifact_root || options.cwd || process.cwd(),
+    expectedSha256ByPath: reportExpectedDigests(report),
+  });
+  const issues = [
+    ...integrity.missing.map((artifact) => issue(
+      "RC_GATE_ARTIFACT_MISSING",
+      reportName,
+      "release candidate gate report artifact path does not exist on disk",
+      { artifact_path: artifact.absolute_path },
+    )),
+    ...integrity.digest_mismatches.map((artifact) => issue(
+      "RC_GATE_ARTIFACT_DIGEST_MISMATCH",
+      reportName,
+      "release candidate gate report artifact digest does not match the expected sha256",
+      {
+        artifact_path: artifact.absolute_path,
+        expected_sha256: artifact.expected_sha256,
+        actual_sha256: artifact.sha256,
+      },
+    )),
+  ];
+  return { integrity, issues };
+}
+
+function validateApprovals(reportName, approvals, now) {
+  const approvalIssues = [];
+  for (const approval of approvals) {
+    if (!isObject(approval)
+      || !nonEmptyString(approvalId(approval))
+      || !nonEmptyString(approval.approved_by || approval.approvedBy)
+      || !validTimestamp(approvalApprovedAt(approval))
+      || approvalIssueCodes(approval).length === 0) {
+      approvalIssues.push(issue(
+        "RC_GATE_APPROVAL_UNBOUND",
+        reportName,
+        "approval records must bind to one or more machine-readable issue codes",
+        { approval_id: isObject(approval) ? approvalId(approval) || null : null },
+      ));
+      continue;
+    }
+    if (approvalExpired(approval, now)) {
+      approvalIssues.push(issue(
+        "RC_GATE_APPROVAL_EXPIRED",
+        reportName,
+        "approval record is expired",
+        { approval_id: approvalId(approval), expires_at: approvalExpiresAt(approval) },
+      ));
+    }
+    if (!approvalHasValidExpiry(approval)) {
+      approvalIssues.push(issue(
+        "RC_GATE_APPROVAL_EXPIRY_REQUIRED",
+        reportName,
+        "approval records must include a valid future expires_at or valid_until timestamp",
+        { approval_id: approvalId(approval) },
+      ));
+    }
+  }
+  return approvalIssues;
+}
+
 function actionApproved(decision, action) {
   const approvals = isObject(decision?.approvals) ? decision.approvals : {};
   const approvedActions = Array.isArray(decision?.approved_actions)
@@ -55,7 +514,7 @@ function riskAccepted(decision) {
     || (Array.isArray(decision?.risk_acceptance) && decision.risk_acceptance.length > 0);
 }
 
-function hardeningReleaseBlockerCodes(hardeningDrill = {}) {
+function hardeningReleaseBlockerCodes(hardeningDrill = Object()) {
   return (hardeningDrill.release_blockers || []).map((blocker) => blocker.code).filter(Boolean);
 }
 
@@ -84,7 +543,7 @@ function sanitizeDecision(decision) {
   };
 }
 
-export function buildControlledBetaReleaseDecisionPlan(options = {}) {
+export function buildControlledBetaReleaseDecisionPlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const releaseScope = options.releaseScope || options.release_scope || DEFAULT_RELEASE_SCOPE;
   const requestedActions = normalizeRequestedActions(options.requestedActions || options.requested_actions);
@@ -124,7 +583,7 @@ export function buildControlledBetaReleaseDecisionPlan(options = {}) {
   };
 }
 
-export function runControlledBetaReleaseDecisionGate(options = {}) {
+export function runControlledBetaReleaseDecisionGate(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJsonPath = join(yoloRoot, "package.json");
   const packageBefore = readJson(packageJsonPath);
@@ -293,3 +752,152 @@ export function runControlledBetaReleaseDecisionGate(options = {}) {
         ],
   };
 }
+
+export function runReleaseCandidateGate(options = Object()) {
+  const mode = normalizeReleaseCandidateMode(options.mode || options.releaseMode || options.release_mode);
+  const now = options.now ? new Date(options.now) : new Date();
+  const reportSource = isObject(options.reports) ? options.reports : options;
+  const blockers = [];
+  const warnings = [];
+  const normalizedReports = Object();
+
+  if (!["rc", "publish"].includes(String(options.mode || options.releaseMode || options.release_mode || "rc"))) {
+    blockers.push(issue(
+      "RC_GATE_MODE_INVALID",
+      "releaseCandidateGate",
+      "release candidate gate mode must be rc or publish",
+      { mode: options.mode || options.releaseMode || options.release_mode },
+    ));
+  }
+
+  for (const reportName of RELEASE_CANDIDATE_REQUIRED_REPORTS) {
+    const report = getAliasedReport(reportSource, reportName);
+    if (report === undefined || report === null) {
+      blockers.push(issue(
+        "RC_GATE_REPORT_MISSING",
+        reportName,
+        "required release candidate gate report is missing",
+      ));
+      continue;
+    }
+
+    if (!isObject(report)) {
+      blockers.push(issue(
+        "RC_GATE_REPORT_MALFORMED",
+        reportName,
+        "required release candidate gate report must be an object",
+      ));
+      continue;
+    }
+
+    const status = normalizeReportStatus(report.status);
+    const reportMalformed = [];
+    if (!status) {
+      reportMalformed.push("status must be one of pass, block, blocked, fail, failed, or error");
+    }
+    for (const field of ["blockers", "warnings", "approvals", "findings", "scenarios", "results", "entries"]) {
+      if (report[field] !== undefined && !Array.isArray(report[field])) {
+        reportMalformed.push(`${field} must be an array when present`);
+      }
+    }
+    if (reportMalformed.length > 0) {
+      blockers.push(issue(
+        "RC_GATE_REPORT_MALFORMED",
+        reportName,
+        "release candidate gate report is malformed",
+        { errors: reportMalformed },
+      ));
+    }
+
+    if (!provenanceKnown(report)) {
+      blockers.push(issue(
+        "RC_GATE_UNKNOWN_PROVENANCE",
+        reportName,
+        "release candidate gate report provenance is missing, unknown, or untrusted",
+        { provenance: report.provenance || null },
+      ));
+    }
+    blockers.push(...releaseCandidateEvidenceIssues(reportName, report));
+    const artifactIntegrity = releaseCandidateArtifactIssues(reportName, report, options);
+    blockers.push(...artifactIntegrity.issues);
+
+    const reportBlockers = Array.isArray(report.blockers) ? report.blockers : [];
+    const reportWarnings = Array.isArray(report.warnings) ? report.warnings : [];
+    const reportApprovals = Array.isArray(report.approvals) ? report.approvals : [];
+    const normalizedWarnings = reportWarnings.map((warning, index) => {
+      const issueCode = warningIssueCode(warning, reportName, index);
+      return {
+        report: reportName,
+        issue_code: issueCode,
+        code: isObject(warning) ? warning.code || warning.issue_code || warning.issueCode || issueCode : issueCode,
+        message: isObject(warning) && warning.message ? warning.message : "release candidate gate warning",
+        approval_id: isObject(warning) ? warning.approval_id || warning.approvalId || warning.approval?.id || null : null,
+        approved: warningHasApproval(warning, reportApprovals, issueCode, now),
+      };
+    });
+
+    normalizedReports[reportName] = {
+      status: status || "malformed",
+      provenance: report.provenance,
+      blocker_count: reportBlockers.length,
+      warning_count: normalizedWarnings.length,
+      approval_count: reportApprovals.length,
+      artifact_integrity: artifactIntegrity.integrity,
+    };
+    warnings.push(...normalizedWarnings);
+    blockers.push(...validateApprovals(reportName, reportApprovals, now));
+
+    if (status === "block") {
+      blockers.push(issue(
+        "RC_GATE_REPORT_BLOCKED",
+        reportName,
+        "release candidate gate input report did not pass",
+        { report_status: report.status },
+      ));
+    }
+    blockers.push(...collectReportBlockerIssues(reportName, report));
+
+    if (reportName === "dogfoodMatrix") {
+      blockers.push(...dogfoodFailureIssues(report));
+    }
+  }
+
+  for (const warning of warnings) {
+    if (warning.approved !== true) {
+      blockers.push(issue(
+        "RC_GATE_WARNING_APPROVAL_REQUIRED",
+        warning.report,
+        "release candidate gates require every warning to be bound to a valid current approval",
+        { issue_code: warning.issue_code, mode },
+      ));
+    }
+  }
+
+  const status = blockers.length > 0 ? "block" : "pass";
+  const issueCodes = [...new Set(blockers.map((blocker) => blocker.code))];
+
+  return {
+    schema_version: RELEASE_CANDIDATE_GATE_SCHEMA_VERSION,
+    schema: "yolo.release.release_candidate_gate_result.v1",
+    mode,
+    status,
+    issue_codes: issueCodes,
+    blockers,
+    warnings: status === "pass" ? warnings : [],
+    reports: normalizedReports,
+    contract: {
+      required_reports: RELEASE_CANDIDATE_REQUIRED_REPORTS,
+      report_statuses: {
+        pass: [...RELEASE_CANDIDATE_PASS_STATUSES],
+        block: [...RELEASE_CANDIDATE_BLOCK_STATUSES],
+      },
+      approval_binding: "approval.id, approval.approved_by, approval.approved_at, approval.expires_at/valid_until, and approval.issue_codes are required",
+      warning_policy: "rc and publish modes require zero warnings or valid approvals bound to every warning issue code",
+    },
+    next_actions: status === "pass"
+      ? ["Release candidate gate passed for the requested mode."]
+      : ["Resolve release candidate gate blockers before promoting or publishing."],
+  };
+}
+
+export const evaluateReleaseCandidateGate = runReleaseCandidateGate;

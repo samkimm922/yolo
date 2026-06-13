@@ -14,12 +14,12 @@ function appendUniqueDefault(target, items = []) {
 
 function noop() {}
 
-export function estimateRunTimeoutMs({ taskCount = 0, sessionTimeoutHours = 4 } = {}) {
+export function estimateRunTimeoutMs({ taskCount = 0, sessionTimeoutHours = 4 } = Object()) {
   const estimatedMinutes = taskCount * 8 * 1.5;
   return Math.max(sessionTimeoutHours * 3600000, Math.round(estimatedMinutes * 60000));
 }
 
-export function appendBlockedTaskFailures({ taskResults, appendUnique = appendUniqueDefault } = {}) {
+export function appendBlockedTaskFailures({ taskResults, appendUnique = appendUniqueDefault } = Object()) {
   appendUnique(
     taskResults.failed,
     (taskResults.blocked || []).filter((id) => !(taskResults.contractReview || []).includes(id)),
@@ -66,7 +66,7 @@ export async function runTaskPipeline({
   retryPhase = runRetryPhase,
   reviewLoop = runReviewLoop,
   finalize = finalizeRun,
-} = {}) {
+} = Object()) {
   if (!progress) throw new Error("runTaskPipeline requires progress");
   if (typeof loadPRD !== "function") throw new Error("runTaskPipeline requires loadPRD");
   if (typeof mainLoop !== "function") throw new Error("runTaskPipeline requires mainLoop");

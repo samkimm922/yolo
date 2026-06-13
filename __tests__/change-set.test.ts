@@ -43,9 +43,9 @@ describe("execution change-set helpers", () => {
 
   test("filterCommittableFiles excludes runner docs and common binary artifacts", () => {
     assert.deepEqual(filterCommittableFiles([
-      "SESSION.md",
+      "docs/memory/SESSION.md",
       "src/a.ts",
-      "SNAPSHOT.md",
+      "docs/memory/SNAPSHOT.md",
       "assets/icon.png",
       "package.json",
     ]), [
@@ -93,7 +93,7 @@ describe("execution change-set helpers", () => {
     const calls = [];
     const execFileSync = (bin, args) => {
       calls.push([bin, ...args]);
-      if (args[0] === "diff") return "src/a.ts\nREADME.md\nSNAPSHOT.md\nassets/logo.png\n";
+      if (args[0] === "diff") return "src/a.ts\nREADME.md\ndocs/memory/SNAPSHOT.md\nassets/logo.png\n";
       if (args[0] === "ls-files") return "docs/spec.md\nsrc/out.ts\n";
       return "";
     };
@@ -118,7 +118,7 @@ describe("execution change-set helpers", () => {
     assert.deepEqual(context.allChanged, [
       "src/a.ts",
       "README.md",
-      "SNAPSHOT.md",
+      "docs/memory/SNAPSHOT.md",
       "assets/logo.png",
       "docs/spec.md",
       "src/out.ts",
@@ -134,6 +134,28 @@ describe("execution change-set helpers", () => {
     assert.equal(context.hasRealCode, true);
     assert.deepEqual(context.auditTargets, ["src/a.ts"]);
     assert.deepEqual(context.outOfScope, ["README.md", "docs/spec.md", "src/out.ts"]);
+  });
+
+  test("buildCommitChangeContext preserves out-of-scope files skipped during worktree cleanup", () => {
+    const worktreeFiles = ["src/a.ts"];
+    Object.defineProperty(worktreeFiles, "outOfScopeSkipped", {
+      value: ["src/out.ts"],
+      enumerable: false,
+    });
+
+    const context = buildCommitChangeContext({
+      rootDir: "/repo",
+      task: {
+        scope: {
+          targets: [{ file: "src/a.ts" }],
+        },
+      },
+      worktreeFiles,
+      isFileAllowedByScope: (file, scope) => scope.targets.some((target) => target.file === file),
+    });
+
+    assert.deepEqual(context.code, ["src/a.ts"]);
+    assert.deepEqual(context.outOfScope, ["src/out.ts"]);
   });
 
   test("buildCommitChangeContext treats metadata-only changes as no real code without zero-biz override", () => {

@@ -17,15 +17,15 @@ export function applyGateFailureLearningEffects({
   taskId,
   gateExitCode,
   failures = [],
-  gateFailure = {},
+  gateFailure = Object(),
   retryCountFile,
   projectRoot = "",
   stateRoot = "",
-  logAnalysis = () => {},
-  logFix = () => {},
+  logAnalysis = (..._args) => {},
+  logFix = (..._args) => {},
   execNode = () => null,
   incrementRetryCountFile = defaultIncrementRetryCountFile,
-} = {}) {
+} = Object()) {
   const failedSummary = gateFailure.failedSummary || "";
   logAnalysis("", "├─", `分析: ${failedSummary}`);
   for (const failure of failures) {

@@ -28,7 +28,7 @@ function formatResult(result) {
   return lines.join("\n");
 }
 
-export function runPrdMigrateGatesCli(argv = process.argv.slice(2), io = {}) {
+export function runPrdMigrateGatesCli(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const json = argv.includes("--json");
@@ -58,7 +58,7 @@ export function runPrdMigrateGatesCli(argv = process.argv.slice(2), io = {}) {
         }
         stdout.write(`${lines.join("\n")}\n`);
       }
-      return 0;
+      return summary.blocked_count > 0 ? 1 : 0;
     }
 
     if (!fileArg) {
@@ -69,7 +69,7 @@ export function runPrdMigrateGatesCli(argv = process.argv.slice(2), io = {}) {
     const result = migratePrdFile(fileArg, { apply });
     const payload = { status: result.blocked_count > 0 ? "blocked" : "success", ...publicResult(result) };
     stdout.write(json ? `${JSON.stringify(payload, null, 2)}\n` : `${formatResult(result)}\n`);
-    return result.blocked_count > 0 && apply ? 1 : 0;
+    return result.blocked_count > 0 ? 1 : 0;
   } catch (error) {
     const payload = { status: "error", error: error.message };
     stderr.write(json ? `${JSON.stringify(payload, null, 2)}\n` : `[prd-migrate-gates] ${error.message}\n`);

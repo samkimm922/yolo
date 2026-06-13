@@ -1,10 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import {
   listWorkflows,
   workflowToSkillDescriptor,
   WORKFLOW_SKILL_DESCRIPTOR_SCHEMA,
 } from "./registry.js";
+import { renderPMProtocolMarkdown } from "./pm-protocol.js";
 
 export const WORKFLOW_SKILL_INSTALL_SCHEMA_VERSION = "1.0";
 export const WORKFLOW_SKILL_INSTALL_PLAN_SCHEMA = "yolo.workflow.skill_install_plan.v1";
@@ -66,7 +68,7 @@ function projectPath(projectRoot, path) {
   return rel && !rel.startsWith("..") && !isAbsolute(rel) ? rel.replaceAll("\\", "/") : absolute;
 }
 
-function resolveTargetDir(projectRoot, options = {}) {
+function resolveTargetDir(projectRoot, options = Object()) {
   if (options.targetDir) {
     const absolute = isAbsolute(options.targetDir) ? options.targetDir : join(projectRoot, options.targetDir);
     return {
@@ -100,7 +102,15 @@ function skillFolderName(id) {
   return cleanString(id).toLowerCase().replace(/[^a-z0-9_.-]/g, "-");
 }
 
-function expectedSkillPaths(targetDir, descriptors) {
+function yamlString(value) {
+  return JSON.stringify(cleanString(value));
+}
+
+function skillMarkdownFilename(options = Object()) {
+  return cleanString(options.skillMarkdownFile || options.skill_markdown_file || "SKILL.md") || "SKILL.md";
+}
+
+function expectedSkillPaths(targetDir, descriptors, markdownFile = "SKILL.md") {
   const paths = [
     `${targetDir}/${WORKFLOW_SKILL_AGENT_RULES_FILE}`,
     `${targetDir}/${WORKFLOW_SKILL_TRIGGER_INDEX_FILE}`,
@@ -108,7 +118,7 @@ function expectedSkillPaths(targetDir, descriptors) {
   ];
   for (const descriptor of descriptors) {
     const skillDir = `${targetDir}/${skillFolderName(descriptor.id)}`;
-    paths.push(`${skillDir}/skill.json`, `${skillDir}/SKILL.md`);
+    paths.push(`${skillDir}/skill.json`, `${skillDir}/${markdownFile}`);
   }
   return paths;
 }
@@ -125,7 +135,7 @@ function requiredArray(errors, descriptor, field) {
   }
 }
 
-export function validateWorkflowSkillDescriptor(descriptor = {}) {
+export function validateWorkflowSkillDescriptor(descriptor = Object()) {
   const errors = [];
   const warnings = [];
 
@@ -184,12 +194,26 @@ export function validateWorkflowSkillDescriptor(descriptor = {}) {
 }
 
 function renderSkillMarkdown(descriptor) {
+  // Demand / interview workflows use the full PM protocol prompt
+  if (descriptor.workflow === "demand" || descriptor.workflow === "interview") {
+    return renderPMProtocolMarkdown(descriptor);
+  }
+
   const lines = [
+    "---",
+    `name: ${yamlString(descriptor.id)}`,
+    `description: ${yamlString(descriptor.purpose)}`,
+    "---",
+    "",
     `# ${descriptor.name}`,
     "",
     `Schema: ${descriptor.schema}`,
     `Workflow: ${descriptor.workflow}`,
     `Agent: ${descriptor.agent}`,
+    `Surface: ${descriptor.surface || "internal"}`,
+    `Stability: ${descriptor.stability || "internal"}`,
+    `Visibility: ${descriptor.visibility || "hidden"}`,
+    descriptor.alias_for ? `Alias for: ${descriptor.alias_for}` : null,
     "",
     "## Purpose",
     "",
@@ -224,14 +248,17 @@ function renderSkillMarkdown(descriptor) {
     "## Execution Contract",
     "",
     "- Keep requirements, design, tasks, and evidence traceable.",
+    "- This descriptor is not permission to advance to downstream workflows automatically.",
+    "- Complete only the listed workflow outputs and stop; a later workflow needs an explicit matching trigger or user-selected `/yolo-*` stage command.",
+    "- If this workflow lists `no_code_change`, do not compile executable PRD, run implementation, fix code, or edit source files from this workflow.",
     "- Fail closed when a required verification hook cannot run.",
     "- Do not assume one model; inspect provider capability before execution.",
     "",
-  ];
+  ].filter((line) => line !== null);
   return lines.join("\n");
 }
 
-function buildWorkflowSkillTriggerIndex(targetInfo, descriptors) {
+function buildWorkflowSkillTriggerIndex(targetInfo, descriptors, markdownFile = "SKILL.md") {
   const triggers = [];
   for (const descriptor of descriptors) {
     for (const trigger of descriptor.trigger || []) {
@@ -241,12 +268,16 @@ function buildWorkflowSkillTriggerIndex(targetInfo, descriptors) {
         workflow: descriptor.workflow,
         agent: descriptor.agent,
         descriptor_path: `${targetInfo.relative_dir}/${skillFolderName(descriptor.id)}/skill.json`,
-        markdown_path: `${targetInfo.relative_dir}/${skillFolderName(descriptor.id)}/SKILL.md`,
+        markdown_path: `${targetInfo.relative_dir}/${skillFolderName(descriptor.id)}/${markdownFile}`,
         entrypoints: {
           sdk: descriptor.entrypoints?.sdk || null,
           cli: descriptor.entrypoints?.cli || null,
           skill: descriptor.entrypoints?.skill || descriptor.id,
         },
+        surface: descriptor.surface || "internal",
+        stability: descriptor.stability || "internal",
+        visibility: descriptor.visibility || "hidden",
+        alias_for: descriptor.alias_for || null,
       });
     }
   }
@@ -260,12 +291,12 @@ function buildWorkflowSkillTriggerIndex(targetInfo, descriptors) {
     schema: WORKFLOW_SKILL_TRIGGER_INDEX_SCHEMA,
     target: targetInfo.target,
     target_dir: targetInfo.relative_dir,
-    convention: "route a matching trigger to the named skill descriptor; fail closed when required inputs, PRD/spec gates, or verification hooks are missing",
+    convention: "route a matching trigger to the named skill descriptor, complete only that workflow, then stop unless a later workflow is explicitly selected; fail closed when required inputs, PRD/spec gates, or verification hooks are missing",
     triggers,
   };
 }
 
-function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex) {
+function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex, markdownFile = "SKILL.md") {
   const triggerLines = triggerIndex.triggers.length > 0
     ? triggerIndex.triggers.map((item) =>
       `- ${item.trigger} -> ${item.skill_id} (${item.entrypoints.cli})`
@@ -282,7 +313,7 @@ function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex) {
     "## Source Of Truth",
     "",
     "- Treat `skill.json` as the machine-readable workflow contract.",
-    "- Treat `SKILL.md` as the human-readable workflow guide.",
+    `- Treat \`${markdownFile}\` as the human-readable workflow guide.`,
     "- Treat `triggers.json` as the trigger routing index for this target.",
     "- Keep runtime artifacts under the consumer project state root, not under the YOLO package root.",
     "",
@@ -290,10 +321,14 @@ function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex) {
     "",
     "- Start a workflow only when the current user intent, CLI event, or automation event matches a listed trigger.",
     "- Route the trigger to exactly one listed skill unless a caller explicitly selects multiple workflows.",
-    "- Re-read the selected `skill.json` before execution and use `SKILL.md` only for agent-readable guidance.",
+    "- Default user-facing commands are limited to: status, demand, spec, tasks, run, check, review, release.",
+    "- Hidden compatibility and internal workflow descriptors may exist, but they must keep alias_for, stability, and visibility metadata.",
+    `- Re-read the selected \`skill.json\` before execution and use \`${markdownFile}\` only for agent-readable guidance.`,
     "",
     "## Gate Policy",
     "",
+    "- A selected workflow is terminal for the current turn unless the caller explicitly selected a later workflow.",
+    "- Do not treat user approval of a no-code workflow as permission to implement code.",
     "- Fail closed when required PRD, spec, evidence, review, lint, test, or release gates cannot run.",
     "- Do not mark a workflow complete until every listed verification hook has either passed or produced a blocking finding.",
     "- Preserve traceability from requirement to task, implementation, review finding, fix, and final evidence.",
@@ -310,24 +345,25 @@ function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex) {
   return lines.join("\n");
 }
 
-function descriptorsForInstall(options = {}) {
+function descriptorsForInstall(options = Object()) {
   const workflowIds = asArray(options.workflow || options.workflows);
   const selectedIds = workflowIds.length > 0 ? workflowIds : listWorkflows().map((workflow) => workflow.id);
   const agent = defaultAgentForTarget(options.target, options.agent);
   return selectedIds.map((id) => workflowToSkillDescriptor(id, { agent }));
 }
 
-export function buildWorkflowSkillInstallPlan(options = {}) {
+export function buildWorkflowSkillInstallPlan(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.cwd || process.cwd());
   const targetInfo = resolveTargetDir(projectRoot, options);
   const descriptors = descriptorsForInstall({
     ...options,
     target: targetInfo.target,
   });
+  const markdownFile = skillMarkdownFilename(options);
 
   const directories = [targetInfo.relative_dir];
   const files = [];
-  const triggerIndex = buildWorkflowSkillTriggerIndex(targetInfo, descriptors);
+  const triggerIndex = buildWorkflowSkillTriggerIndex(targetInfo, descriptors, markdownFile);
 
   for (const descriptor of descriptors) {
     const skillDir = join(targetInfo.relative_dir, skillFolderName(descriptor.id));
@@ -339,7 +375,7 @@ export function buildWorkflowSkillInstallPlan(options = {}) {
       content: stableJson(descriptor),
     });
     files.push({
-      path: `${skillDir}/SKILL.md`,
+      path: `${skillDir}/${markdownFile}`,
       role: "skill_markdown",
       descriptor_id: descriptor.id,
       content: renderSkillMarkdown(descriptor),
@@ -350,7 +386,7 @@ export function buildWorkflowSkillInstallPlan(options = {}) {
     path: `${targetInfo.relative_dir}/${WORKFLOW_SKILL_AGENT_RULES_FILE}`,
     role: "agent_rules",
     descriptor_id: null,
-    content: renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex),
+    content: renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex, markdownFile),
   });
   files.push({
     path: `${targetInfo.relative_dir}/${WORKFLOW_SKILL_TRIGGER_INDEX_FILE}`,
@@ -370,6 +406,10 @@ export function buildWorkflowSkillInstallPlan(options = {}) {
         id: descriptor.id,
         workflow: descriptor.workflow,
         agent: descriptor.agent,
+        surface: descriptor.surface || "internal",
+        stability: descriptor.stability || "internal",
+        visibility: descriptor.visibility || "hidden",
+        alias_for: descriptor.alias_for || null,
         path: `${targetInfo.relative_dir}/${skillFolderName(descriptor.id)}/skill.json`,
       })),
     }),
@@ -381,6 +421,7 @@ export function buildWorkflowSkillInstallPlan(options = {}) {
     project_root: projectRoot,
     target: targetInfo.target,
     target_dir: targetInfo.relative_dir,
+    skill_markdown_file: markdownFile,
     directories: unique(directories),
     descriptors,
     files,
@@ -392,6 +433,7 @@ export function buildWorkflowSkillInstallPlan(options = {}) {
     project_root: projectRoot,
     target: targetInfo.target,
     target_dir: targetInfo.relative_dir,
+    skill_markdown_file: markdownFile,
     directories: unique(directories),
     descriptors,
     files,
@@ -400,7 +442,7 @@ export function buildWorkflowSkillInstallPlan(options = {}) {
   };
 }
 
-export function inspectWorkflowSkillInstallPlan(plan = {}) {
+export function inspectWorkflowSkillInstallPlan(plan = Object()) {
   const descriptorResults = (plan.descriptors || []).map(validateWorkflowSkillDescriptor);
   const errors = descriptorResults.flatMap((result) => result.errors.map((error) => ({
     descriptor_id: result.descriptor_id,
@@ -492,7 +534,7 @@ export function inspectWorkflowSkillInstallPlan(plan = {}) {
   };
 }
 
-export function installWorkflowSkills(options = {}) {
+export function installWorkflowSkills(options = Object()) {
   const plan = buildWorkflowSkillInstallPlan(options);
   if (!plan.validation.ready) {
     return {
@@ -517,7 +559,8 @@ export function installWorkflowSkills(options = {}) {
   const overwritten = [];
   const skipped = [];
 
-  for (const dir of plan.directories) {
+  for (const dirValue of plan.directories) {
+    const dir = String(dirValue);
     const absoluteDir = isAbsolute(dir) ? dir : join(plan.project_root, dir);
     if (!existsSync(absoluteDir)) {
       createdDirs.push(dir);
@@ -563,8 +606,13 @@ export function installWorkflowSkills(options = {}) {
   };
 }
 
-export function buildWorkflowSkillTargetSmokePlan(options = {}) {
-  const projectRoot = resolve(options.projectRoot || options.cwd || process.cwd());
+export function buildWorkflowSkillTargetSmokePlan(options = Object()) {
+  // 烟测默认写入一次性 tmpdir 沙盒，绝不落到真实 cwd/.agents——避免污染当前项目。
+  // 仅当显式传入 projectRoot/cwd 时才使用指定目录（测试用临时沙盒）。
+  const explicitRoot = options.projectRoot || options.cwd;
+  const projectRoot = explicitRoot
+    ? resolve(explicitRoot)
+    : mkdtempSync(join(tmpdir(), "yolo-workflow-smoke-"));
   const packageRoot = options.packageRoot || options.package_root
     ? resolve(options.packageRoot || options.package_root)
     : null;
@@ -574,7 +622,8 @@ export function buildWorkflowSkillTargetSmokePlan(options = {}) {
     : ["fix"];
   const agentByTarget = options.agentByTarget || options.agent_by_target || {};
 
-  const targetPlans = targets.map((target) => {
+  const targetPlans = targets.map((targetValue) => {
+    const target = String(targetValue);
     const agent = cleanString(agentByTarget[target] || options.agent);
     const installPlan = buildWorkflowSkillInstallPlan({
       projectRoot,
@@ -604,7 +653,7 @@ export function buildWorkflowSkillTargetSmokePlan(options = {}) {
   };
 }
 
-function check(passed, code, message, extra = {}) {
+function check(passed, code, message, extra = Object()) {
   return {
     code,
     passed: Boolean(passed),
@@ -613,7 +662,7 @@ function check(passed, code, message, extra = {}) {
   };
 }
 
-export function runWorkflowSkillTargetSmoke(options = {}) {
+export function runWorkflowSkillTargetSmoke(options = Object()) {
   const plan = buildWorkflowSkillTargetSmokePlan(options);
   const dryRun = options.dryRun === true || options.dry_run === true;
   if (dryRun) {

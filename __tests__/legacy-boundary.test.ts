@@ -23,7 +23,7 @@ function rel(file) {
 }
 
 function sourceFiles() {
-  const roots = ["src", "lib", "scripts"]
+  const roots = ["src", "scripts"]
     .map((dir) => resolve(YOLO_DIR, dir))
     .flatMap((dir) => listFiles(dir));
   const rootTs = readdirSync(YOLO_DIR)

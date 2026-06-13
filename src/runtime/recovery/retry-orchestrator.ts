@@ -37,7 +37,7 @@ export async function runRetryPhase({
   normalizeRepoPath = (value) => value,
   maxRetryRounds = 3,
   logProgress = noop,
-} = {}) {
+} = Object()) {
   if (!taskResults) throw new Error("runRetryPhase requires taskResults");
   if (!progress) throw new Error("runRetryPhase requires progress");
 

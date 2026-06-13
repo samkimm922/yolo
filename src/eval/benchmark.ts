@@ -228,11 +228,11 @@ function fixtureCounts(fixtures = DEFAULT_BENCHMARK_FIXTURES) {
   }, { vague_requirement: 0, ui_acceptance: 0, real_project_dogfood: 0, total: 0 });
 }
 
-function normalizeResults(results = {}) {
+function normalizeResults(results = Object()) {
   const raw = Array.isArray(results?.scenarios) ? results.scenarios : results;
   if (Array.isArray(raw)) return new Map(raw.map((item) => [item.fixture_id || item.id, item]));
   if (!raw || typeof raw !== "object") return new Map();
-  return new Map(Object.entries(raw).map(([id, value]) => [id, { fixture_id: id, ...value }]));
+  return new Map(Object.entries(raw).map(([id, value]) => [id, Object.assign(Object(), { fixture_id: id }, value)]));
 }
 
 function readJsonMaybe(filePath) {
@@ -242,19 +242,19 @@ function readJsonMaybe(filePath) {
   return JSON.parse(readFileSync(resolved, "utf8"));
 }
 
-function metricEvidence(evidence = {}, metricId) {
+function metricEvidence(evidence = Object(), metricId) {
   if (evidence.metrics && Object.hasOwn(evidence.metrics, metricId)) return evidence.metrics[metricId];
   if (Object.hasOwn(evidence, metricId)) return evidence[metricId];
   return null;
 }
 
-export function listBenchmarkFixtures(options = {}) {
+export function listBenchmarkFixtures(options = Object()) {
   const suite = clean(options.suite);
   const fixtures = DEFAULT_BENCHMARK_FIXTURES.map(clone);
   return suite ? fixtures.filter((fixture) => fixture.suite === suite) : fixtures;
 }
 
-export function buildYoloBenchmarkPlan(options = {}) {
+export function buildYoloBenchmarkPlan(options = Object()) {
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const stateRoot = resolve(options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
   const minScore = Number(options.minScore || options.min_score || 80);
@@ -286,7 +286,7 @@ export function buildYoloBenchmarkPlan(options = {}) {
   };
 }
 
-export function scoreBenchmarkScenario(scenario = {}, evidence = {}, options = {}) {
+export function scoreBenchmarkScenario(scenario = Object(), evidence = Object(), options = Object()) {
   const threshold = Number(options.minScore || options.min_score || scenario.min_score || 80);
   const rubric = rubricById();
   const requiredMetrics = asArray(scenario.required_metrics);
@@ -371,7 +371,7 @@ export function scoreBenchmarkScenario(scenario = {}, evidence = {}, options = {
 }
 
 function summarizeSuites(results = []) {
-  const suites = {};
+  const suites = Object();
   for (const result of results) {
     const suite = result.suite || "unknown";
     const current = suites[suite] || { count: 0, pass: 0, warning: 0, blocked: 0, average_score: 0 };
@@ -425,7 +425,7 @@ function inspectRegression({ currentScore, scenarioResults, baseline, maxRegress
   };
 }
 
-export function runYoloBenchmark(input = {}, options = {}) {
+export function runYoloBenchmark(input = Object(), options = Object()) {
   const plan = input.plan || buildYoloBenchmarkPlan({ ...options, ...input });
   const resultInput = input.results || input.result || readJsonMaybe(input.resultsPath || input.results_path || options.resultsPath || options.results_path);
   const baseline = input.baseline || readJsonMaybe(input.baselinePath || input.baseline_path || options.baselinePath || options.baseline_path);
@@ -510,7 +510,7 @@ export function runYoloBenchmark(input = {}, options = {}) {
 
 export const runBenchmark = runYoloBenchmark;
 
-export function formatYoloBenchmarkText(report = {}) {
+export function formatYoloBenchmarkText(report = Object()) {
   const lines = [`[yolo eval] ${report.status}: ${report.summary}`];
   lines.push(`score: ${report.overall_score}/100 threshold=${report.threshold}`);
   if (report.fixture_counts) {
@@ -531,7 +531,7 @@ export function formatYoloBenchmarkText(report = {}) {
 }
 
 export function parseYoloBenchmarkArgs(argv = []) {
-  const input = {};
+  const input = Object();
   const options = { json: false, help: false, writeEvidence: true };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -571,7 +571,7 @@ export function parseYoloBenchmarkArgs(argv = []) {
   return { input, options };
 }
 
-export async function runYoloBenchmarkCli(argv = [], io = {}) {
+export async function runYoloBenchmarkCli(argv = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const { input, options } = parseYoloBenchmarkArgs(argv);
   if (options.help) {
@@ -586,7 +586,7 @@ export async function runYoloBenchmarkCli(argv = [], io = {}) {
   });
   if (options.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else stdout.write(`${formatYoloBenchmarkText(report)}\n`);
-  return report.status === "blocked" ? 1 : 0;
+  return report.status === "pass" ? 0 : report.status === "warning" ? 2 : 1;
 }
 
 if (isMain) {

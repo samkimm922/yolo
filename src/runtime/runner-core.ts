@@ -1,15 +1,13 @@
 #!/usr/bin/env node
 // YOLO Runner — PRD Contract v2.0 契约引擎 + narrower 重试 + WARN→FAIL 升级
-// 仅支持 PRD Contract v2.0 格式（scope + pre_conditions + post_conditions）
-// legacy PRD 不再支持运行时转换，请先离线迁移到 schemas/prd-v2.schema.json
-// 用法: node runner.js [prd.json] [--mode=dev] [--reset]
-//       PRD 路径可选，不传则自动找 scripts/yolo/ 下最新的 PRD JSON
+// 仅支持 PRD Contract v2.0 (scope + pre_conditions + post_conditions); 用法: node runner.js [prd.json] [--mode=dev] [--reset]
+// PRD 路径可选，不传则自动找 scripts/yolo/ 下最新的 PRD JSON
 import { appendFileSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync, execSync, spawnSync } from "node:child_process";
-import { config } from "../../lib/config.js";
-import { ensureCanonicalDirs, yoloPath } from "../../lib/paths.js";
+import { config } from "../lib/config.js";
+import { ensureCanonicalDirs, yoloPath } from "../lib/paths.js";
 import { detectModelProvider as detectProvider } from "./adapters/provider-doctor.js";
 import { evaluatePostConditions, setContractRoot } from "../prd/contract.js";
 import { inspectPreExecutionGates } from "./gates/pre-execution-gates.js";
@@ -42,6 +40,7 @@ import {
   writeRunnerStateSnapshot,
 } from "./run-lifecycle/recovery-checkpoints.js";
 import { createRunnerTimeoutController } from "./run-lifecycle/shutdown.js";
+import { inspectLifecycleGuard } from "../lifecycle/guard.js";
 import {
   createRunnerWorktreeHandlers,
   detectRunnerModelProvider,
@@ -105,11 +104,10 @@ const MAX_REVIEW_ROUNDS = 5;
 const MAX_REVIEW_TASKS_PER_ROUND = config.runner.max_review_tasks_per_round ?? 5;
 const startTime = Date.now();
 const progress = { total: 0, done: 0, failed: 0 };
-let CURRENT_RUN_FILE = runnerContext.currentRunFile, EXPANDED_TASKS_FILE = runnerContext.expandedTasksFile;
-let OUTPUT_LOG = runnerContext.outputLog;
+let CURRENT_RUN_FILE = runnerContext.currentRunFile, EXPANDED_TASKS_FILE = runnerContext.expandedTasksFile, OUTPUT_LOG = runnerContext.outputLog, activeRunId = null;
 process.env.YOLO_LOOP = "1";
 
-function applyRunnerContext(options = {}) {
+function applyRunnerContext(options = Object()) {
   runnerContext = resolveRunnerContext(options, { packageRoot: PACKAGE_ROOT, config, yoloPath });
   ROOT = runnerContext.rootDir;
   STATE_ROOT = runnerContext.stateRoot;
@@ -129,6 +127,7 @@ function applyRunnerContext(options = {}) {
 
 const runnerLedgerWriters = createRunnerLedgerWriters({
   getStateDir: () => STATE_DIR,
+  getRunId: () => activeRunId,
   appendStateEvent,
   appendRunEvent,
 });
@@ -146,7 +145,7 @@ function writeStateSnapshot(reason, prdPath = null) {
   });
 }
 
-function writeRunnerRecoveryCheckpoint(reason, prdPath, taskId, update = {}) {
+function writeRunnerRecoveryCheckpoint(reason, prdPath, taskId, update = Object()) {
   writeRunnerRecoveryCheckpointImpl({
     reason,
     prdPath,
@@ -193,7 +192,7 @@ function applySplitSuggestionsToPrd(prdPath, parentTask, doctor) {
   });
 }
 
-function spawnProvider(prompt, timeout = runtimeConfig.ai.timeout_ms, { cwd: cwdPath } = {}) {
+function spawnProvider(prompt, timeout = runtimeConfig.ai.timeout_ms, { cwd: cwdPath } = Object()) {
   return spawnProviderPrompt(prompt, {
     timeout,
     cwd: cwdPath || ROOT,
@@ -291,7 +290,11 @@ function updatePrdTaskStatus(prdPath, taskId, update) {
 }
 
 function writeTaskResult(record) {
-  return appendTaskResult(RESULTS_FILE, record);
+  return appendTaskResult(RESULTS_FILE, record, {
+    runId: activeRunId,
+    workspaceRoot: ROOT,
+    allowInitialAttempt: true,
+  });
 }
 
 function recordTaskTransition(prdPath, transition) {
@@ -420,7 +423,7 @@ const globalTimeoutController = createRunnerTimeoutController({
   execSync,
 });
 
-function _setGlobalTimeout(ms, options = {}) {
+function _setGlobalTimeout(ms, options = Object()) {
   return globalTimeoutController.setGlobalTimeout(ms, options);
 }
 
@@ -459,18 +462,20 @@ function writeCurrentRun(runId, prdPath) {
 
 const runnerError = createRunnerError;
 
-function runPreExecutionGates(prdPath, options = {}) {
+function runPreExecutionGates(prdPath, options = Object()) {
   const exitOnFailure = options.exitOnFailure !== false;
   const prd = loadPRD(prdPath);
   const gate = inspectPreExecutionGates({
     prd,
     prdPath,
     stateDir: STATE_DIR,
-    projectRoot: ROOT,
+    projectRoot: ROOT, config: runtimeConfig,
   });
-  if (gate.status === "blocked") {
-    console.error(gate.messages.join("\n"));
-    if (exitOnFailure) process.exit(1);
+  if (gate.status !== "pass") {
+    const output = gate.messages.join("\n");
+    if (gate.status === "warning") console.warn(output);
+    else console.error(output);
+    if (exitOnFailure) process.exit(gate.exit_code || 1);
     const details = gate.stage === "contract"
       ? {
           code: gate.code,
@@ -484,84 +489,87 @@ function runPreExecutionGates(prdPath, options = {}) {
         };
     throw runnerError(gate.message, gate.exit_code, details);
   }
-  if (gate.status === "warning") {
-    console.warn(gate.messages.join("\n"));
-  }
 }
 
 function archiveCurrentRun(runId, results) {
   archiveCurrentRunFile({ currentRunFile: CURRENT_RUN_FILE, stateDir: STATE_DIR, runId, results });
 }
 
-export async function run(prdPath, options = {}) {
+export async function run(prdPath, options = Object()) {
   applyRunnerContext(options);
   runtimeConfig = withExecutionConfig(config, options);
   const exitOnComplete = options.exitOnComplete !== false;
   if (options.mode) globalMode = options.mode;
   // Generate run_id for this session
   const runId = options.runId || options.run_id || generateRunId();
+  activeRunId = runId;
+  try {
+    const lg = inspectLifecycleGuard({ command: "yolo-run", projectRoot: ROOT, stateRoot: STATE_ROOT, prdPath });
+    if (lg.status !== "pass") { console.error(lg.summary || "Lifecycle guard blocked"); throw runnerError(lg.summary || "Lifecycle guard blocked", 1, { lifecycle_guard: lg }); }
+    runPreExecutionGates(prdPath, { exitOnFailure: exitOnComplete });
 
-  runPreExecutionGates(prdPath, { exitOnFailure: exitOnComplete });
+    const resumeCompleted = prepareRunStartup({
+      runId,
+      prdPath,
+      paths: {
+        stateDir: STATE_DIR,
+        runtimeDir: RUNTIME_DIR,
+        expandedTasksFile: EXPANDED_TASKS_FILE,
+        resultsFile: RESULTS_FILE,
+      },
+      config,
+      rootDir: ROOT,
+      yoloRoot: STATE_ROOT,
+      exitOnComplete,
+      taskCountsAsCompleted,
+      initTaskLogs,
+      writeCurrentRun,
+      startProgressApiServer: options.startProgressServer === false ? () => {} : startEmbeddedProgressServer,
+      initializeBaselines: options.initializeBaselines !== false,
+      logProgress: logP,
+      runnerError,
+    });
 
-  const resumeCompleted = prepareRunStartup({
-    runId,
-    prdPath,
-    paths: {
+    return await runTaskPipeline({
+      runId,
+      prdPath,
+      resumeCompleted,
+      exitOnComplete,
+      sessionTimeoutHours: config.runner.session_timeout_h,
+      maxReviewRounds: MAX_REVIEW_ROUNDS,
+      maxReviewTasksPerRound: MAX_REVIEW_TASKS_PER_ROUND,
+      projectRoot: ROOT,
+      stateRoot: STATE_ROOT,
+      toolsRoot: PACKAGE_ROOT,
       stateDir: STATE_DIR,
       runtimeDir: RUNTIME_DIR,
       expandedTasksFile: EXPANDED_TASKS_FILE,
-      resultsFile: RESULTS_FILE,
-    },
-    config,
-    rootDir: ROOT,
-    yoloRoot: STATE_ROOT,
-    exitOnComplete,
-    taskCountsAsCompleted,
-    initTaskLogs,
-    writeCurrentRun,
-    startProgressApiServer: options.startProgressServer === false ? () => {} : startEmbeddedProgressServer,
-    initializeBaselines: options.initializeBaselines !== false,
-    logProgress: logP,
-    runnerError,
-  });
-
-  return runTaskPipeline({
-    runId,
-    prdPath,
-    resumeCompleted,
-    exitOnComplete,
-    sessionTimeoutHours: config.runner.session_timeout_h,
-    maxReviewRounds: MAX_REVIEW_ROUNDS,
-    maxReviewTasksPerRound: MAX_REVIEW_TASKS_PER_ROUND,
-    projectRoot: ROOT,
-    stateRoot: STATE_ROOT,
-    toolsRoot: PACKAGE_ROOT,
-    stateDir: STATE_DIR,
-    runtimeDir: RUNTIME_DIR,
-    expandedTasksFile: EXPANDED_TASKS_FILE,
-    progress,
-    startTimeMs: startTime,
-    progressServerProc,
-    loadPRD,
-    mainLoop,
-    taskPostconditionsPass,
-    updateTaskStatus: (id, update) => updatePrdTaskStatus(prdPath, id, update),
-    appendUnique,
-    normalizeRepoPath: (filePath) => normalizeRepoPathForRoot(filePath, { rootDir: ROOT }),
-    setGlobalTimeout: _setGlobalTimeout,
-    logRun,
-    logProgress: logP,
-    writeStateSnapshot,
-    writeRunReport,
-    archiveCurrentRun,
-    execFileSync,
-    processExecPath: process.execPath,
-    logReviewStart,
-    logReviewGate,
-    logReviewIssue,
-    logReviewDone,
-    logReviewError,
-  });
+      progress,
+      startTimeMs: startTime,
+      progressServerProc,
+      loadPRD,
+      mainLoop,
+      taskPostconditionsPass,
+      updateTaskStatus: (id, update) => updatePrdTaskStatus(prdPath, id, update),
+      appendUnique,
+      normalizeRepoPath: (filePath) => normalizeRepoPathForRoot(filePath, { rootDir: ROOT }),
+      setGlobalTimeout: _setGlobalTimeout,
+      logRun,
+      logProgress: logP,
+      writeStateSnapshot,
+      writeRunReport,
+      archiveCurrentRun,
+      execFileSync,
+      processExecPath: process.execPath,
+      logReviewStart,
+      logReviewGate,
+      logReviewIssue,
+      logReviewDone,
+      logReviewError,
+    });
+  } finally {
+    if (activeRunId === runId) activeRunId = null;
+  }
 }
 
 export async function runCli(argv = process.argv) {
@@ -589,8 +597,4 @@ export async function runCli(argv = process.argv) {
       execSync,
     });
   }
-}
-
-if (isMain) {
-  runCli();
 }

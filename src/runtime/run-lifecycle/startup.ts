@@ -12,15 +12,16 @@ import {
 import { execFileSync as defaultExecFileSync, execSync as defaultExecSync } from "node:child_process";
 import { basename, join, resolve } from "node:path";
 import {
+  BASELINE_TOOLS,
+  baselineFileName,
+  buildBaselineArtifact,
   parseEslintBaselineErrorKeys,
   parseTscBaselineKeys,
 } from "../execution/baselines.js";
 import { trimJsonlWithArchive } from "../memory/retention.js";
 
-export function createRunnerError(message, exitCode = 1, details = {}) {
-  const error = new Error(message);
-  error.exitCode = exitCode;
-  Object.assign(error, details);
+export function createRunnerError(message, exitCode = 1, details = Object()) {
+  const error = Object.assign(new Error(message), { exitCode }, details);
   return error;
 }
 
@@ -36,7 +37,7 @@ export function acquireRunnerPidLock({
   processExit = process.exit,
   makeError = createRunnerError,
   consoleError = (...args) => console.error(...args),
-} = {}) {
+} = Object()) {
   if (existsSync(pidFile)) {
     const oldPid = parseInt(readFileSync(pidFile, "utf8").trim(), 10);
     try {
@@ -67,7 +68,7 @@ export function rotateTaskResults({
   unlinkSync = defaultUnlinkSync,
   now = () => new Date(),
   consoleLog = (...args) => console.log(...args),
-} = {}) {
+} = Object()) {
   if (!existsSync(resultsFile)) return { rotated: false };
   const bakFile = `${resultsFile.replace(".jsonl", "")}.bak.${now().toISOString().replace(/[-:T]/g, "").slice(0, 15)}`;
   try { copyFileSync(resultsFile, bakFile); } catch (_) {}
@@ -86,7 +87,7 @@ export function initializeRuntimeState({
   unlinkSync = defaultUnlinkSync,
   consoleLog = (...args) => console.log(...args),
   consoleError = (...args) => console.error(...args),
-} = {}) {
+} = Object()) {
   try {
     if (!existsSync(runtimeDir)) mkdirSync(runtimeDir, { recursive: true });
     for (const file of readdirSync(runtimeDir)) {
@@ -114,8 +115,8 @@ export function truncateJsonlFile({
   readFileSync = defaultReadFileSync,
   writeFileSync = defaultWriteFileSync,
   mkdirSync = defaultMkdirSync,
-  log = () => {},
-} = {}) {
+  log = (..._args) => {},
+} = Object()) {
   const result = trimJsonlWithArchive({
     filePath,
     maxLines,
@@ -149,30 +150,72 @@ export function initializeMissingBaselines({
   existsSync = defaultExistsSync,
   writeFileSync = defaultWriteFileSync,
   execFileSync = defaultExecFileSync,
-  log = () => {},
+  log = (..._args) => {},
   nowIso = () => new Date().toISOString(),
-} = {}) {
+} = Object()) {
   const initialized = [];
-  for (const tool of ["tsc", "eslint"]) {
-    const baselinePath = join(runtimeDir, `${tool}-baseline.json`);
+  for (const tool of BASELINE_TOOLS) {
+    const baselinePath = join(runtimeDir, baselineFileName(tool));
     if (existsSync(baselinePath)) continue;
     log("BASELINE", "init", `初始化 ${tool} baseline...`);
     try {
-      const command = tool === "tsc"
-        ? `${config.build.type_check} 2>&1 || true`
-        : `${config.build.lint} 2>&1 || true`;
-      const output = execFileSync("sh", ["-c", command], { cwd: rootDir, encoding: "utf8", timeout: 120000 });
+      const rawCommand = tool === "tsc" ? config.build.type_check : config.build.lint;
+      const command = `${rawCommand} 2>&1`;
+      let output = "";
+      let stderr = "";
+      let exitCode = 0;
+      let status = "pass";
+      let reason = null;
+      try {
+        output = execFileSync("sh", ["-c", command], { cwd: rootDir, encoding: "utf8", timeout: 120000 });
+      } catch (error) {
+        output = `${error?.stdout || ""}${error?.stderr || ""}`;
+        stderr = String(error?.stderr || "");
+        exitCode = Number.isInteger(error?.status) ? error.status : 1;
+        const blocked = Boolean(error?.signal) ||
+          exitCode === 127 ||
+          /\bnot found\b|is not recognized|command not found/i.test(output) ||
+          !output.trim();
+        if (blocked) {
+          status = "blocked";
+          reason = error?.signal ? "baseline_command_timeout_or_signal" : "baseline_command_unavailable";
+        }
+      }
       const keys = tool === "tsc"
         ? parseTscBaselineKeys(output)
         : parseEslintBaselineErrorKeys(output, rootDir);
-      writeFileSync(baselinePath, JSON.stringify({
+      const createdAt = nowIso();
+      const baseline = buildBaselineArtifact({
+        tool,
         keys,
-        meta: { created_at: nowIso(), updated_at: nowIso(), tool },
-      }, null, 2), "utf8");
-      log("BASELINE", "init", `${tool} baseline: ${keys.length} 个条目`);
-      initialized.push({ tool, keys });
+        command: rawCommand,
+        exitCode,
+        stdout: output,
+        stderr,
+        status,
+        reason,
+        createdAt,
+        updatedAt: createdAt,
+      });
+      writeFileSync(baselinePath, JSON.stringify(baseline, null, 2), "utf8");
+      log("BASELINE", status === "blocked" ? "BLOCK" : "init", `${tool} baseline: ${keys.length} 个条目`);
+      initialized.push({ tool, keys, status, blocked: status === "blocked", baseline });
     } catch (error) {
-      log("BASELINE", "WARN", `${tool} baseline 初始化失败: ${error.message}，跳过`);
+      const createdAt = nowIso();
+      const baseline = buildBaselineArtifact({
+        tool,
+        keys: [],
+        command: tool === "tsc" ? config.build.type_check : config.build.lint,
+        exitCode: 1,
+        stderr: error?.message || String(error),
+        status: "blocked",
+        reason: "baseline_capture_exception",
+        createdAt,
+        updatedAt: createdAt,
+      });
+      try { writeFileSync(baselinePath, JSON.stringify(baseline, null, 2), "utf8"); } catch (_) {}
+      log("BASELINE", "BLOCK", `${tool} baseline 初始化失败: ${error.message}`);
+      initialized.push({ tool, keys: [], status: "blocked", blocked: true, error: error.message, baseline });
     }
   }
   return initialized;
@@ -182,7 +225,7 @@ export function cleanupStaleGitWorktreesAndBranches({
   rootDir,
   execSync = defaultExecSync,
   consoleLog = (...args) => console.log(...args),
-} = {}) {
+} = Object()) {
   const removed = { worktrees: [], branches: [] };
   try {
     const wtList = execSync("git worktree list --porcelain", {
@@ -234,7 +277,7 @@ export function cleanupRetryRoundFiles({
   readdirSync = defaultReaddirSync,
   unlinkSync = defaultUnlinkSync,
   consoleLog = (...args) => console.log(...args),
-} = {}) {
+} = Object()) {
   const removed = [];
   try {
     if (!existsSync(retryDir)) return removed;
@@ -259,7 +302,7 @@ export function loadResumeCompletedFromPrd({
   writeFileSync = defaultWriteFileSync,
   renameSync = defaultRenameSync,
   consoleLog = (...args) => console.log(...args),
-} = {}) {
+} = Object()) {
   try {
     const prd = JSON.parse(readFileSync(prdPath, "utf8"));
     const resumeCompleted = new Set((prd.tasks || []).filter(taskCountsAsCompleted).map((task) => task.id));
@@ -288,15 +331,15 @@ export function prepareRunStartup({
   exitOnComplete,
   pid = process.pid,
   taskCountsAsCompleted,
-  initTaskLogs = () => {},
-  writeCurrentRun = () => {},
-  startProgressApiServer = () => {},
+  initTaskLogs = (..._args) => {},
+  writeCurrentRun = (..._args) => {},
+  startProgressApiServer = (..._args) => {},
   initializeBaselines = true,
-  logProgress = () => {},
+  logProgress = (..._args) => {},
   runnerError = createRunnerError,
   processKill = process.kill,
   processExit = process.exit,
-} = {}) {
+} = Object()) {
   acquireRunnerPidLock({
     pidFile: join(paths.stateDir, "runner.pid"),
     pid,
@@ -307,7 +350,7 @@ export function prepareRunStartup({
   });
   rotateTaskResults({ resultsFile: paths.resultsFile });
   initializeRuntimeState({ runtimeDir: paths.runtimeDir, expandedTasksFile: paths.expandedTasksFile });
-  initTaskLogs();
+  initTaskLogs({ runId });
   const archiveDir = join(paths.stateDir, "archive", "jsonl", new Date().toISOString().slice(0, 7));
   truncateJsonlFile({ filePath: join(paths.stateDir, "events.jsonl"), maxLines: config.state.max_events, archiveDir, log: logProgress });
   truncateJsonlFile({ filePath: join(paths.stateDir, "changes.jsonl"), maxLines: config.state.max_changes, archiveDir, log: logProgress });
@@ -316,7 +359,14 @@ export function prepareRunStartup({
   truncateJsonlFile({ filePath: join(paths.stateDir, "session-memory.jsonl"), maxLines: config.state.max_session_memory || 200, archiveDir, log: logProgress });
   try { defaultWriteFileSync(join(paths.runtimeDir, "learn-stats.json"), "{}", "utf8"); } catch (_) {}
   if (initializeBaselines) {
-    initializeMissingBaselines({ runtimeDir: paths.runtimeDir, rootDir, config, log: logProgress });
+    const baselineResults = initializeMissingBaselines({ runtimeDir: paths.runtimeDir, rootDir, config, log: logProgress });
+    const blockedBaselines = baselineResults.filter((result) => result.blocked);
+    if (blockedBaselines.length > 0) {
+      throw runnerError("Required baseline initialization failed", 1, {
+        code: "BASELINE_INITIALIZATION_BLOCKED",
+        baselines: blockedBaselines.map(({ tool, status, error }) => ({ tool, status, error: error || null })),
+      });
+    }
   }
   const reviewLogPath = join(paths.stateDir, "review-log.jsonl");
   if (defaultExistsSync(reviewLogPath)) {

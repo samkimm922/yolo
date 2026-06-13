@@ -24,6 +24,7 @@ describe("package install smoke", () => {
     );
     assert.deepEqual(plan.bin_names, Object.keys(packageJson.bin).sort());
     assert.ok(plan.package_files.some((entry) => entry === "dist/" || entry.startsWith("dist/")));
+    assert.ok(plan.commands.some((command) => command.includes("npm pack") && command.includes("--ignore-scripts")));
   });
 
   test("packed package inspection blocks local state, tests, and legacy workspace data", () => {
@@ -53,6 +54,7 @@ describe("package install smoke", () => {
     assert.equal(result.exit_code, 0);
     assert.equal(result.pack.inspection.status, "pass");
     assert.equal(result.pack.inspection.forbidden_entries.length, 0);
+    assert.ok(result.pack.info.files.some((file) => file.path === "dist/hooks/pre-tool-block-yolo-write.js"), "tarball must ship dist/hooks/pre-tool-block-yolo-write.js");
     assert.equal(result.install.status, "pass");
     assert.equal(result.import_check.status, "pass");
     assert.equal(result.bin_checks[0].status, "pass");
@@ -62,6 +64,9 @@ describe("package install smoke", () => {
     const sdk = createYoloSdk();
 
     assert.equal(typeof sdk.release.buildPackageInstallSmokePlan, "function");
+    assert.equal(typeof sdk.release.buildReleaseCandidateChangeManifest, "function");
+    assert.equal(typeof sdk.release.buildCleanEnvironmentVerifyPlan, "function");
+    assert.equal(typeof sdk.release.buildDogfoodMatrixReport, "function");
     assert.equal(typeof sdk.release.buildControlledBetaReleaseDecisionPlan, "function");
     assert.equal(typeof sdk.release.buildOperatorReleaseRunbookPlan, "function");
     assert.equal(typeof sdk.release.buildOperatorReleaseStatePlan, "function");
@@ -75,8 +80,13 @@ describe("package install smoke", () => {
     assert.equal(typeof sdk.release.buildRuntimeBoundaryDecisionPlan, "function");
     assert.equal(typeof sdk.release.buildPublicBetaEvidencePlan, "function");
     assert.equal(typeof sdk.release.inspectPackedPackage, "function");
+    assert.equal(typeof sdk.release.classifyReleaseChangeDomain, "function");
+    assert.equal(typeof sdk.release.listDogfoodMatrixScenarios, "function");
     assert.equal(typeof sdk.release.runPackageInstallSmoke, "function");
     assert.equal(typeof sdk.release.runControlledBetaReleaseDecisionGate, "function");
+    assert.equal(typeof sdk.release.runReleaseCandidateGate, "function");
+    assert.equal(typeof sdk.release.readReleaseCandidateChangeManifest, "function");
+    assert.equal(typeof sdk.release.runCleanEnvironmentVerify, "function");
     assert.equal(typeof sdk.release.runOperatorReleaseRunbookGate, "function");
     assert.equal(typeof sdk.release.runOperatorReleaseStateMutation, "function");
     assert.equal(typeof sdk.release.runPostReleaseAuditGate, "function");

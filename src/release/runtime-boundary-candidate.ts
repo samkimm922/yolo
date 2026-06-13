@@ -11,7 +11,7 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = {}) {
+function check(code, passed, message, extra = Object()) {
   return { code, passed, message, ...extra };
 }
 
@@ -19,13 +19,13 @@ function boundaryEntry(apiBoundary, exportName) {
   return (apiBoundary.package_exports || []).find((entry) => entry.export === exportName) || null;
 }
 
-function implementationReady(runtimeApiFreeze = {}) {
+function implementationReady(runtimeApiFreeze = Object()) {
   if (runtimeApiFreeze.implementation_ready === true) return true;
   const blockers = runtimeApiFreeze.blockers || [];
   return blockers.length > 0 && blockers.every((blocker) => blocker.code === "RUNTIME_API_BOUNDARY_STABLE");
 }
 
-function implementationBlockerCodes(runtimeApiFreeze = {}) {
+function implementationBlockerCodes(runtimeApiFreeze = Object()) {
   if (Array.isArray(runtimeApiFreeze.implementation_blockers)) {
     return runtimeApiFreeze.implementation_blockers.map((blocker) => blocker.code);
   }
@@ -34,7 +34,7 @@ function implementationBlockerCodes(runtimeApiFreeze = {}) {
     .map((blocker) => blocker.code);
 }
 
-export function buildRuntimeBoundaryCandidatePlan(options = {}) {
+export function buildRuntimeBoundaryCandidatePlan(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const targetExport = options.targetExport || options.target_export || DEFAULT_RUNTIME_EXPORT;
   return {
@@ -69,7 +69,7 @@ export function buildRuntimeBoundaryCandidatePlan(options = {}) {
   };
 }
 
-export function inspectRuntimeBoundaryCandidate(options = {}) {
+export function inspectRuntimeBoundaryCandidate(options = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const apiBoundary = options.apiBoundary || options.api_boundary || readJson(join(yoloRoot, "docs/public-sdk-api-boundary.json"));

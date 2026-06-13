@@ -9,11 +9,12 @@ project:
   source_extensions:
     - ".ts"
     - ".tsx"
+    - ".js"
+    - ".jsx"
   framework: "generic"
   exclude:
     - "node_modules"
     - "dist"
-    - "build"
     - ".git"
 
 build:
@@ -24,9 +25,8 @@ build:
   build: "npm run build"
 
 ai:
-  executor: "auto"
-  provider: "auto"
-  model: "auto"
+  executor: "claude"
+  model: "claude-sonnet-4-6"
   timeout_ms: 480000
   settings: ""
 

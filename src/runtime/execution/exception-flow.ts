@@ -10,15 +10,15 @@ export async function handleRunTaskExceptionFlow({
   attempt = 0,
   history = [],
   maxAttempts = 3,
-  currentWorktree = {},
+  currentWorktree = Object(),
   cleanupWorktree,
   recordTaskTransition,
-  logProgress = () => {},
-  logTaskError = () => {},
-  logTaskDone = () => {},
+  logProgress = (..._args) => {},
+  logTaskError = (..._args) => {},
+  logTaskDone = (..._args) => {},
   sleep = sleepFor,
   consoleError = (...args) => console.error(...args),
-} = {}) {
+} = Object()) {
   consoleError(`[runTask] ${task.id} 重试 ${attempt} 异常:`, error?.message || error);
 
   try {

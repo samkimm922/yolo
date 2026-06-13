@@ -6,7 +6,7 @@ const AUTO_FIX_RECIPES = new Set([
   "raw-collection",
 ]);
 
-function scannerIds(task = {}) {
+function scannerIds(task = Object()) {
   return (task.source_findings || task.fix_findings || [])
     .map((finding) => finding.scanner_id || finding.rule_id)
     .filter(Boolean);
@@ -17,7 +17,7 @@ function hasOnlyScanner(task, scannerId) {
   return ids.length > 0 && ids.every((id) => id === scannerId);
 }
 
-export function isSplitOrStructuralRefactorTask(task = {}) {
+export function isSplitOrStructuralRefactorTask(task = Object()) {
   const text = `${task.title || ""}\n${task.description || ""}`.toLowerCase();
   const ids = scannerIds(task);
   return task.scope?.allow_new_files === true ||
@@ -25,12 +25,12 @@ export function isSplitOrStructuralRefactorTask(task = {}) {
     /拆分|split|提取|文件.*行|file-length|超过\s*\d+\s*行/.test(text);
 }
 
-export function hasAutoFixRecipe(task = {}) {
+export function hasAutoFixRecipe(task = Object()) {
   const rule = task.fix_rule || scannerIds(task)[0] || "";
   return AUTO_FIX_RECIPES.has(rule);
 }
 
-function sourceFindings(task = {}) {
+function sourceFindings(task = Object()) {
   return task.source_findings || task.fix_findings || [];
 }
 
@@ -38,7 +38,7 @@ function isTestFile(filePath = "") {
   return filePath.includes("/__tests__/") || /\.(test|spec)\.[tj]sx?$/.test(filePath);
 }
 
-export function hasSafeR6UnknownAsRecipe(task = {}) {
+export function hasSafeR6UnknownAsRecipe(task = Object()) {
   const targets = task.scope?.targets || [];
   if (!hasOnlyScanner(task, "R6-as-unknown-as") || targets.length !== 1) return false;
   const targetFile = targets[0]?.file || "";
@@ -54,7 +54,7 @@ export function hasSafeR6UnknownAsRecipe(task = {}) {
   });
 }
 
-export function classifyTaskExecution(task = {}) {
+export function classifyTaskExecution(task = Object()) {
   if (task.task_kind === "deterministic_check" || task.execution_mode === "deterministic_check") {
     return {
       route: "deterministic_check",

@@ -2,9 +2,9 @@ import { failTaskTransition } from "../task-state/transitions.js";
 
 export function buildPreMergePostconditionFailureOutcome({
   taskId,
-  postResult = {},
+  postResult = Object(),
   attempt = 0,
-} = {}) {
+} = Object()) {
   const reason = `post_conditions failed before merge: ${(postResult.failed || []).join("; ")}`;
   return {
     reason,
