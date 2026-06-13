@@ -225,17 +225,24 @@ describe("run lifecycle startup helpers", () => {
     assert.deepEqual(removed, ["/yolo/data/retry-round-a.json"]);
   });
 
-  test("cleanupStaleGitWorktreesAndBranches removes yolo worktrees and branches", () => {
+  test("cleanupStaleGitWorktreesAndBranches removes this run's yolo worktrees and their branches", () => {
     const commands = [];
     const result = cleanupStaleGitWorktreesAndBranches({
       rootDir: "/repo",
+      worktreeRoot: "/repo/../.yolo-worktrees",
       consoleLog: () => {},
       execSync: (command) => {
         commands.push(command);
         if (command === "git worktree list --porcelain") {
-          return "Worktree /repo\nWorktree /repo/../.yolo-worktrees/yolo-1\n";
+          return [
+            "Worktree /repo",
+            "HEAD abc",
+            "Worktree /repo/../.yolo-worktrees/yolo-1",
+            "HEAD def",
+            "branch refs/heads/yolo-a",
+            "",
+          ].join("\n");
         }
-        if (command === 'git branch --list "yolo-*"') return "yolo-a\n";
         return "";
       },
     });
@@ -245,6 +252,45 @@ describe("run lifecycle startup helpers", () => {
       branches: ["yolo-a"],
     });
     assert.ok(commands.includes('git branch -D "yolo-a" 2>/dev/null'));
+  });
+
+  test("cleanupStaleGitWorktreesAndBranches leaves another runner's worktree and branch alone", () => {
+    const removed = [];
+    const result = cleanupStaleGitWorktreesAndBranches({
+      rootDir: "/repo",
+      worktreeRoot: "/repo/../.yolo-worktrees",
+      consoleLog: () => {},
+      execSync: (command) => {
+        if (command === "git worktree list --porcelain") {
+          return [
+            "Worktree /repo",
+            "HEAD abc",
+            // owned by this run: under worktreeRoot
+            "Worktree /repo/../.yolo-worktrees/OWNED",
+            "HEAD def",
+            "branch refs/heads/yolo-owned-1",
+            // NOT owned: lives outside this run's worktreeRoot
+            "Worktree /elsewhere/.yolo-worktrees/ALIEN",
+            "HEAD ghi",
+            "branch refs/heads/yolo-alien-1",
+            "",
+          ].join("\n");
+        }
+        if (command.includes("git worktree remove") || command.includes("git branch -D")) {
+          removed.push(command);
+        }
+        return "";
+      },
+    });
+
+    assert.deepEqual(result, {
+      worktrees: ["/repo/../.yolo-worktrees/OWNED"],
+      branches: ["yolo-owned-1"],
+    });
+    assert.equal(removed.some((cmd) => cmd.includes("OWNED")), true, "owned worktree should be removed");
+    assert.equal(removed.some((cmd) => cmd.includes("yolo-owned-1")), true, "owned branch should be deleted");
+    assert.equal(removed.some((cmd) => cmd.includes("ALIEN")), false, "alien worktree must not be touched");
+    assert.equal(removed.some((cmd) => cmd.includes("yolo-alien-1")), false, "alien branch must not be deleted");
   });
 
   test("loadResumeCompletedFromPrd resets running tasks and returns completed ids", () => {

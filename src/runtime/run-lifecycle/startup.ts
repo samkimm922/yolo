@@ -10,7 +10,7 @@ import {
   writeFileSync as defaultWriteFileSync,
 } from "node:fs";
 import { execFileSync as defaultExecFileSync, execSync as defaultExecSync } from "node:child_process";
-import { basename, join, resolve } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 import {
   BASELINE_TOOLS,
   baselineFileName,
@@ -223,50 +223,75 @@ export function initializeMissingBaselines({
 
 export function cleanupStaleGitWorktreesAndBranches({
   rootDir,
+  worktreeRoot = null,
   execSync = defaultExecSync,
   consoleLog = (...args) => console.log(...args),
 } = Object()) {
   const removed = { worktrees: [], branches: [] };
+
+  // P9.M4: only touch worktrees (and the branches checked out in them) that live
+  // under THIS run's worktreeRoot. The previous blanket "yolo-*" sweep deleted
+  // another runner's active worktree/branch when two runners shared a repo.
+  // H1's PID lock prevents concurrent same-repo runners; this is the
+  // defense-in-depth that keeps cleanup out of unrelated yolo-* state.
+  const wtRootResolved = worktreeRoot ? resolve(worktreeRoot) : null;
+  const isYoloPath = (wtPath) => wtPath.includes(".yolo-worktrees") || wtPath.includes("yolo-");
+  const isUnderRoot = (wtPath) => {
+    if (!wtRootResolved) return true;
+    const resolved = resolve(wtPath);
+    return resolved === wtRootResolved || resolved.startsWith(`${wtRootResolved}${sep}`);
+  };
+
+  const ownedWorktrees = [];
+  const ownedBranches = [];
   try {
     const wtList = execSync("git worktree list --porcelain", {
       cwd: rootDir,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     });
-    const wtLines = wtList.split("\n").filter((line) => line.startsWith("Worktree "));
-    for (const line of wtLines) {
-      const wtPath = line.replace("Worktree ", "");
-      if (!wtPath.includes(".yolo-worktrees") && !wtPath.includes("yolo-")) continue;
-      try {
-        execSync(`git worktree remove --force "${wtPath}" 2>/dev/null`, {
-          cwd: rootDir,
-          stdio: ["ignore", "pipe", "ignore"],
-        });
-        removed.worktrees.push(wtPath);
-        consoleLog(`  清理残留 worktree: ${wtPath}`);
-      } catch (_) {}
-    }
-  } catch (_) {}
-
-  try {
-    const branches = execSync('git branch --list "yolo-*"', {
-      cwd: rootDir,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    if (branches) {
-      for (const branch of branches.split("\n").map((line) => line.trim()).filter(Boolean)) {
-        try {
-          execSync(`git branch -D "${branch}" 2>/dev/null`, {
-            cwd: rootDir,
-            stdio: ["ignore", "pipe", "ignore"],
-          });
-          removed.branches.push(branch);
-          consoleLog(`  清理残留分支: ${branch}`);
-        } catch (_) {}
+    let curPath = null;
+    let curBranch = null;
+    const flush = () => {
+      if (curPath && isYoloPath(curPath) && isUnderRoot(curPath)) {
+        ownedWorktrees.push(curPath);
+        if (curBranch) ownedBranches.push(curBranch);
+      }
+    };
+    for (const rawLine of wtList.split("\n")) {
+      const line = rawLine.trim();
+      if (line.startsWith("Worktree ")) {
+        flush();
+        curPath = line.slice("Worktree ".length).trim();
+        curBranch = null;
+      } else if (line.startsWith("branch ")) {
+        curBranch = line.slice("branch ".length).trim().replace(/^refs\/heads\//, "");
       }
     }
+    flush();
   } catch (_) {}
+
+  for (const wtPath of ownedWorktrees) {
+    try {
+      execSync(`git worktree remove --force "${wtPath}" 2>/dev/null`, {
+        cwd: rootDir,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      removed.worktrees.push(wtPath);
+      consoleLog(`  清理残留 worktree: ${wtPath}`);
+    } catch (_) {}
+  }
+
+  for (const branch of ownedBranches) {
+    try {
+      execSync(`git branch -D "${branch}" 2>/dev/null`, {
+        cwd: rootDir,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      removed.branches.push(branch);
+      consoleLog(`  清理残留分支: ${branch}`);
+    } catch (_) {}
+  }
   return removed;
 }
 
@@ -380,7 +405,9 @@ export function prepareRunStartup({
   writeCurrentRun(runId, prdPath);
   logProgress("RUN", runId, "started");
   startProgressApiServer(config.progress_server.port);
-  cleanupStaleGitWorktreesAndBranches({ rootDir });
+  // P9.M4: scope cleanup to this run's worktree root (same convention as
+  // resolveRunnerContext) so a shared repo's other yolo-* state is not swept.
+  cleanupStaleGitWorktreesAndBranches({ rootDir, worktreeRoot: join(rootDir, "..", ".yolo-worktrees") });
   cleanupRetryRoundFiles({ retryDir: join(yoloRoot, "data"), currentPrdPath: prdPath });
   return loadResumeCompletedFromPrd({ prdPath, taskCountsAsCompleted });
 }
