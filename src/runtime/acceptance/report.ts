@@ -234,13 +234,17 @@ function acceptanceCriteriaIssues(prd, issues) {
   }
 }
 
+function hasVerifyCommand(condition) {
+  return Boolean(clean(condition.verify_command) || clean(condition.params?.verify_command));
+}
+
 function collectManualCriteria(prd) {
   const manualCriteria = [];
   const tasks = asArray(prd?.tasks);
   for (const task of tasks) {
     const conditions = asArray(task.post_conditions);
     for (const condition of conditions) {
-      if (condition.type === "acceptance_criteria" && !condition.verify_command) {
+      if (condition.type === "acceptance_criteria" && !hasVerifyCommand(condition)) {
         manualCriteria.push({
           task_id: task.id || null,
           condition_id: condition.id || null,

@@ -1207,4 +1207,75 @@ describe("acceptance report", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("P8.H2: acceptance_criteria with params.verify_command is machine-verifiable, not manual", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      const prdWithMachineAcceptance = prd({
+        post_conditions: [
+          {
+            id: "POST-MACHINE-CMD",
+            type: "acceptance_criteria",
+            severity: "FAIL",
+            params: {
+              text: "Inventory service returns 200 from health endpoint.",
+              verify_command: "curl -sf http://localhost:3000/health",
+            },
+          },
+          {
+            id: "POST-MANUAL-ONLY",
+            type: "acceptance_criteria",
+            severity: "WARN",
+            params: { text: "Product owner signs off on UX." },
+          },
+        ],
+      });
+
+      const report = buildAcceptanceReport({
+        prd: prdWithMachineAcceptance,
+        runReport: runReport(),
+        reviewReport: { findings: [] },
+        projectRoot: root,
+        stateRoot,
+      });
+
+      // The machine-verifiable criterion must NOT be classified as manual.
+      assert.equal(
+        report.manual_criteria.some((c) => c.condition_id === "POST-MACHINE-CMD"),
+        false,
+        `expected POST-MACHINE-CMD to be machine-verifiable, got manual_criteria: ${JSON.stringify(report.manual_criteria)}`,
+      );
+      // The genuinely manual criterion stays manual.
+      assert.equal(report.manual_criteria.length, 1);
+      assert.equal(report.manual_criteria[0].condition_id, "POST-MANUAL-ONLY");
+
+      // Top-level verify_command (legacy shape) is also recognized as machine.
+      const legacyMachine = prd({
+        post_conditions: [
+          {
+            id: "POST-LEGACY-CMD",
+            type: "acceptance_criteria",
+            severity: "FAIL",
+            verify_command: "npm run healthcheck",
+            params: { text: "Healthcheck script exits 0." },
+          },
+        ],
+      });
+      const legacyReport = buildAcceptanceReport({
+        prd: legacyMachine,
+        runReport: runReport(),
+        reviewReport: { findings: [] },
+        projectRoot: root,
+        stateRoot,
+      });
+      assert.equal(
+        legacyReport.manual_criteria.some((c) => c.condition_id === "POST-LEGACY-CMD"),
+        false,
+        `expected POST-LEGACY-CMD (top-level verify_command) to be machine-verifiable`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
