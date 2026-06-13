@@ -599,8 +599,8 @@ export function buildRunFinalAnswer(report = Object(), options = Object()) {
     source: "run-report",
     run_id: report.run_id || null,
     status,
-    outcome: status === "success" && blockerLines.length === 0 ? "success" : "needs_attention",
-    headline: status === "success" && blockerLines.length === 0
+    outcome: blockerLines.length === 0 ? "success" : "needs_attention",
+    headline: blockerLines.length === 0
       ? `YOLO run ${report.run_id || "unknown"} completed`
       : `YOLO run ${report.run_id || "unknown"} completed with blockers`,
     summary: {

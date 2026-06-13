@@ -14,6 +14,7 @@ import { inspectDemandReadiness } from "../src/demand/gate.js";
 import { inspectStoryAtomicityFromDemand } from "../src/demand/story-atomicity.js";
 import { parseYoloArgs } from "../src/cli/yolo.js";
 import { buildInitToFirstPrdSmokePlan } from "../src/core/init-smoke.js";
+import { buildRunFinalAnswer } from "../src/runtime/evidence/report.js";
 import { buildYoloCommandRegistry, validateCommandLifecycleStageAlignment } from "../src/workflows/command-registry.js";
 import { createYoloSdk } from "../sdk.js";
 
@@ -617,5 +618,19 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     const matchers = (settings.hooks?.PreToolUse || []).map((entry) => entry.matcher);
     const bashRegistered = matchers.some((matcher) => typeof matcher === "string" && /\bBash\b/.test(matcher));
     assert.ok(bashRegistered, "settings-minimal.json PreToolUse matcher must include Bash");
+  });
+
+  test("P6.M1: final answer outcome derives from verifiable fields, not report.status", () => {
+    const finalAnswer = buildRunFinalAnswer({
+      run_id: "RUN-P6-M1",
+      status: "success",
+      summary: { planned: 1, completed: 1, failed: 0, skipped: 0, blocked: 0 },
+      tasks: { completed: ["FIX-1"], failed: [], skipped: [], blocked: [] },
+      gates: { failed_count: 1, failed_tasks: ["FIX-1"] },
+      review: { issue_count: 0, error_count: 0 },
+    });
+
+    assert.equal(finalAnswer.outcome, "needs_attention");
+    assert.ok(finalAnswer.blockers.some((blocker) => blocker.includes("failed gates: 1")));
   });
 });
