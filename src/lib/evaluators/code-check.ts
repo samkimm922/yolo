@@ -2,6 +2,7 @@
 
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
+import { isWithin } from "../security/path-guard.js";
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -9,7 +10,7 @@ function escapeRegExp(value) {
 
 function readExistingFile(ROOT, file) {
   const absPath = resolve(ROOT, file || "");
-  if (!file || !existsSync(absPath) || statSync(absPath).isDirectory()) return null;
+  if (!file || !isWithin(absPath, ROOT) || !existsSync(absPath) || statSync(absPath).isDirectory()) return null;
   return readFileSync(absPath, "utf8");
 }
 

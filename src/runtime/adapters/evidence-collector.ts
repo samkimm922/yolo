@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { resolveProjectContext } from "../../packs/resolver.js";
 import { asArray, selectedAcceptanceAdapter } from "../gates/readiness-policy.js";
+import { isWithin } from "../../lib/security/path-guard.js";
 
 export const ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION = "1.0";
 export const ADAPTER_EVIDENCE_COLLECTOR_SCHEMA = "yolo.adapter.evidence_collector.v1";
@@ -340,6 +341,27 @@ export function runAdapterEvidenceCollector(input = Object(), options = Object()
       env: { ...process.env },
     });
     const evidencePath = command.evidence_path ? resolve(plan.project_root, command.evidence_path) : "";
+    if (evidencePath && !isWithin(evidencePath, plan.project_root)) {
+      commandResults.push({
+        id: command.id,
+        command: command.command,
+        started_at: startedAt,
+        finished_at: nowIso(),
+        status: "failed",
+        exit_code: null,
+        signal: null,
+        error: `evidence_path escapes project root: ${command.evidence_path}`,
+        stdout: "",
+        stderr: "",
+        evidence_path: null,
+        evidence_file: null,
+        evidence_found: false,
+        adapter_applies_to: plan.adapter_applies_to || [],
+        required_platform: plan.required_platform || null,
+        required_platforms: plan.required_platforms || [],
+      });
+      continue;
+    }
     const evidence = readJsonEvidence(evidencePath);
     if (evidence) evidenceRecords.push(evidence);
     commandResults.push({
