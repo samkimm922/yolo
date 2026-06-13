@@ -8,7 +8,7 @@
 
 Local target:
 
-- Repo: `/Users/sippingroom/Developer/yolo`
+- Repo: `<your YOLO repo path>`
 - Branch/status at audit start: dirty worktree with many modified and untracked files.
 - Local non-dependency file count observed by orchestrator: 449.
 - Key local counts from release/docs subagent: `package.json` exports 53, bins 6, `src/**/*.ts` 177, `__tests__/*.test.ts` 138, `docs/**/*.md` 30.

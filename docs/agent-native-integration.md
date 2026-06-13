@@ -8,7 +8,7 @@
 
 ```text
 请把 YOLO 安装到当前项目和我的 Agent 工具里。我要在 Codex 里只看到 /yolo 统一入口，由它自动判断需求、PRD、检查和执行阶段；Claude Code 只生成 /yolo 加 /yolo-status、/yolo-demand、/yolo-spec、/yolo-tasks、/yolo-check、/yolo-run、/yolo-review、/yolo-release 这些稳定 slash commands。执行前先告诉我会写哪些文件。
-YOLO 路径是：/Users/sippingroom/Developer/SamKimTest/scripts/yolo
+YOLO 路径是：<你的 YOLO 安装目录>
 ```
 
 安装后，不确定该走哪一步时这样用：

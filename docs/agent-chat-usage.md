@@ -63,7 +63,7 @@
 
 ```text
 请把 YOLO 安装到当前项目和我的 Agent 工具里。我要在 Codex 里只看到 /yolo 统一入口，由它自动判断需求、PRD、检查和执行阶段；Claude Code 只生成 /yolo 加 /yolo-status、/yolo-demand、/yolo-spec、/yolo-tasks、/yolo-check、/yolo-run、/yolo-review、/yolo-release 这些稳定 slash commands。执行前先告诉我会写哪些文件。
-YOLO 路径是 /Users/sippingroom/Developer/SamKimTest/scripts/yolo。
+YOLO 路径是 <你的 YOLO 安装目录>。
 ```
 
 agent 会负责安装 `AGENTS.md`、`CLAUDE.md`、`.codex/skills/yolo`、`.claude/skills`、`.claude/commands`，以及 Codex 用户级 `~/.agents/skills/yolo`。Codex 菜单只暴露 `/yolo` 总入口和单个 `source-command-yolo` fallback；需求沟通、PRD、检查、执行等阶段由 `/yolo` 根据用户这句话路由。内部 workflow 只留在 YOLO 内部索引里。

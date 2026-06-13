@@ -17,7 +17,7 @@ docs/agent-native-integration.md
 
 ```text
 请把 YOLO 安装到当前项目和我的 Agent 工具里。我要在 Codex 里只看到 /yolo 统一入口，由它自动判断需求、PRD、检查和执行阶段；Claude Code 只生成 /yolo 加 /yolo-status、/yolo-demand、/yolo-spec、/yolo-tasks、/yolo-check、/yolo-run、/yolo-review、/yolo-release 这些稳定 slash commands。执行前先告诉我会写哪些文件。
-YOLO 路径是：/Users/sippingroom/Developer/SamKimTest/scripts/yolo
+YOLO 路径是：<你的 YOLO 安装目录>
 ```
 
 安装后，Claude Code 可以直接用 `/yolo`，也可以用 `/yolo-status`、`/yolo-demand`、`/yolo-spec`、`/yolo-tasks`、`/yolo-check`、`/yolo-run`、`/yolo-review`、`/yolo-release` 这 8 个稳定阶段命令。Codex 为了不让菜单出现一长串相似入口，只保留 `/yolo` 总入口；你把阶段写进同一句话里，比如 `/yolo 需求沟通：...`、`/yolo 生成 PRD/spec：...`、`/yolo 检查 PRD：...`。还是不触发时，说“使用 source-command-yolo”或“使用 yolo skill 执行 /yolo”。
@@ -27,7 +27,7 @@ YOLO 路径是：/Users/sippingroom/Developer/SamKimTest/scripts/yolo
 在 Finder 里打开 YOLO 文件夹：
 
 ```text
-/Users/sippingroom/Developer/SamKimTest/scripts/yolo
+<你的 YOLO 安装目录>
 ```
 
 双击：

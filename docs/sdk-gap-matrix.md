@@ -309,7 +309,7 @@ yolo/
 
 ### Phase 6: Cross-project fixtures
 
-目标：证明 YOLO 不只适合当前 SamKimTest。
+目标：证明 YOLO 不只适合某一种应用形态。
 
 至少建立这些 fixture：
 
