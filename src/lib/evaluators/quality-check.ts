@@ -135,6 +135,15 @@ export function evalNoNewTypeErrors(params = Object(), taskScope, ROOT, exec) {
     }
   }
 
+  if (!tsc.ok && currentKeys.size === 0) {
+    const code = tsc.exitCode != null ? `(code ${tsc.exitCode})` : "";
+    return {
+      passed: false,
+      detail: `typecheck 命令异常退出${code}，无法确认零错误`,
+      type: "no_new_type_errors",
+    };
+  }
+
   const baseSet = new Set(baselineKeys);
 
   const allNewIssues = [...currentKeys].filter((k) => !baseSet.has(k));
