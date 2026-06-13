@@ -45,7 +45,6 @@ const INVENTORY = [
   ["src/packs/resolver.ts", { WARN: 0, warning: 7, "best-effort": 0, skip: 0 }],
 
   ["src/prd/audit-to-prd.ts", { WARN: 1, warning: 0, "best-effort": 0, skip: 0 }],
-  ["src/prd/check.ts", { WARN: 3, warning: 0, "best-effort": 0, skip: 13 }],
   ["src/prd/contract.ts", { WARN: 2, warning: 5, "best-effort": 0, skip: 0 }],
   ["src/prd/preflight.ts", { WARN: 1, warning: 49, "best-effort": 0, skip: 2 }],
   ["src/prd/validate.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 3 }],
