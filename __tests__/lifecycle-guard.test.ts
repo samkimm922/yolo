@@ -76,7 +76,7 @@ describe("lifecycle guard", () => {
 
       assert.equal(result.status, "blocked");
       assert.equal(result.code, "LIFECYCLE_NOT_INITIALIZED");
-      assert.equal(result.recommended_command, "/yolo-init");
+      assert.equal(result.recommended_command, "yolo init");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -276,7 +276,7 @@ describe("lifecycle guard", () => {
   test("next action follows the first incomplete main stage", () => {
     const root = tempProject();
     try {
-      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-init");
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "yolo init");
       initLifecycleState({ projectRoot: root });
       assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-discover");
 

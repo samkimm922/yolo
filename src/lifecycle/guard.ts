@@ -249,12 +249,12 @@ function lifecycleMissingResult({ command, projectRoot, stateRoot, statusPath })
     blockers: [{
       code: "LIFECYCLE_NOT_INITIALIZED",
       stage: "setup",
-      message: "Run /yolo-init before guarded downstream stages.",
+      message: "Run `yolo init` before guarded downstream stages.",
     }],
     warnings: [],
-    allowed_commands: ["/yolo-init", "/yolo-doctor", "/yolo-brainstorm", "/yolo-interview", "/yolo-discover", "/yolo-discuss"],
-    recommended_command: "/yolo-init",
-    next_actions: ["Run /yolo-init for this target project, then use /yolo-next."],
+    allowed_commands: ["yolo init", "/yolo-doctor", "/yolo-brainstorm", "/yolo-interview", "/yolo-discover", "/yolo-discuss"],
+    recommended_command: "yolo init",
+    next_actions: ["Run `yolo init` for this target project, then use /yolo-next."],
   };
 }
 
@@ -435,7 +435,7 @@ export function nextLifecycleAction(options = Object()) {
   const statusPath = lifecycleStatusPath({ ...options, projectRoot, stateRoot });
   if (!existsSync(statusPath)) {
     return {
-      command: "/yolo-init",
+      command: "yolo init",
       stage: "setup",
       description: "initialize YOLO lifecycle state",
       reason: "lifecycle_not_initialized",
@@ -511,7 +511,7 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
       missing_required_stages: ["setup"],
       blockers: [makeBlocker("LIFECYCLE_STATUS_UNREADABLE", "setup", error.message)],
       warnings: [],
-      allowed_commands: ["/yolo-doctor", "/yolo-init"],
+      allowed_commands: ["/yolo-doctor", "yolo init"],
       next_actions: ["Run /yolo-doctor to inspect lifecycle status."],
     };
   }
