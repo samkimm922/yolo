@@ -181,7 +181,9 @@ describe("evidence ledger", () => {
   });
 
   test("P8.M4: JSON schema requires the same hash fields as the runtime validator", async () => {
-    const Ajv = (await import("ajv")).default;
+    let Ajv;
+    const ajvMod = await import("ajv");
+    Ajv = ajvMod.default;
     const ajv = new Ajv({ allErrors: true, strict: false, validateFormats: false });
     const schema = JSON.parse(readFileSync(resolve(import.meta.dirname, "../schemas/evidence-ledger-v1.schema.json"), "utf8"));
     const validate = ajv.compile(schema);
