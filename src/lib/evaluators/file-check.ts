@@ -3,12 +3,16 @@
 import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { isWithin } from "../security/path-guard.js";
 
 export function evalFileExists(params, _taskScope, ROOT) {
   const file = params.file || params.path;
   if (!file) return { passed: false, detail: "缺少 file/path 参数" };
 
   const absPath = resolve(ROOT, file);
+  if (!isWithin(absPath, ROOT)) {
+    return { passed: false, detail: `路径越界，拒绝访问: ${file}` };
+  }
   const exists = existsSync(absPath) && !statSync(absPath).isDirectory();
 
   return {
@@ -23,6 +27,9 @@ export function evalDirExists(params, _taskScope, ROOT) {
   if (!file) return { passed: false, detail: "缺少 file/path 参数" };
 
   const absPath = resolve(ROOT, file);
+  if (!isWithin(absPath, ROOT)) {
+    return { passed: false, detail: `路径越界，拒绝访问: ${file}` };
+  }
   const exists = existsSync(absPath) && statSync(absPath).isDirectory();
 
   return {
@@ -36,6 +43,10 @@ export function evalFileNotExists(params, taskScope, ROOT) {
   const file = params.file || params.path;
   if (!file) return { passed: false, status: "not_run", detail: "缺少 file/path 参数" };
 
+  const absPath = resolve(ROOT, file);
+  if (!isWithin(absPath, ROOT)) {
+    return { passed: false, status: "not_run", detail: `路径越界，拒绝访问: ${file}` };
+  }
   const result = evalFileExists(params, taskScope, ROOT);
   return {
     passed: !result.passed,

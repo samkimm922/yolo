@@ -9,6 +9,7 @@ import { inspectAtomicTask } from "../runtime/execution/atomic-task-doctor.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
 import { preflightPrdDocument } from "../prd/preflight.js";
 import { appendJsonlRecord } from "../runtime/evidence/ledger.js";
+import { parseCommandToArgv } from "../lib/security/command-guard.js";
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -728,15 +729,15 @@ function modifiedFileCondition(taskId, index, file) {
 function acceptanceCondition(taskId, index, scenario) {
   const params = Object.assign(Object(), { text: scenario.then || scenario.text || scenario });
   const verifyCommand = scenario.verify_command || scenario.verifyCommand;
-  // P0.4 compile-time validation: reject verify commands with pipe/redirect/semicolon
-  if (verifyCommand && /[;&|>]/.test(verifyCommand)) {
+  // P10.S1 compile-time validation: reject verify commands with unquoted shell metacharacters
+  if (verifyCommand && !parseCommandToArgv(verifyCommand).ok) {
     // Strip the unsafe command; acceptance stays WARN (manual)
     return {
       id: `POST-${taskId}-SCENARIO-${index + 1}`,
       type: "acceptance_criteria",
       severity: "WARN",
       params,
-      message: `${scenario.then || scenario.text || scenario} [verify_command rejected at compile time: pipe/redirect/semicolon forbidden]`,
+      message: `${scenario.then || scenario.text || scenario} [verify_command rejected at compile time: shell metacharacters forbidden]`,
     };
   }
   if (verifyCommand) params.verify_command = verifyCommand;
@@ -872,13 +873,13 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
       for (const [chunkIndex, files] of fileChunks.entries()) {
         const taskId = `DEMAND-${scenario.requirement_id || "REQ"}-${String(scenarioIndex + 1).padStart(3, "0")}${String(surfaceIndex + 1).padStart(2, "0")}${String(chunkIndex + 1).padStart(2, "0")}`;
         const verifyCommand = scenario.verify_command || scenario.verifyCommand;
-        if (verifyCommand && /[;&|>]/.test(verifyCommand)) {
-          const illegalChars = [...verifyCommand.match(/[;&|>]/g)].join(", ");
+        if (verifyCommand && !parseCommandToArgv(verifyCommand).ok) {
+          const parsed = parseCommandToArgv(verifyCommand);
           compileErrors.push({
             task_id: taskId,
             original_command: verifyCommand,
-            illegal_chars: illegalChars,
-            suggestion: `Replace "${verifyCommand}" with a single safe command without pipe, redirect, or semicolon.`,
+            illegal_chars: parsed.ok ? "" : (parsed.detail.match(/"(.+?)"/)?.[1] || "shell_metachar"),
+            suggestion: `Replace "${verifyCommand}" with a single safe command without shell metacharacters ($ ; & | > < \` ( ) { } etc.).`,
           });
         }
         const proof = clean(surface.proof || scenario.proof || requirement.text || scenario.desired_behavior);

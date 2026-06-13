@@ -1,18 +1,36 @@
 import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 
+/**
+ * Write `data` to `path` atomically (crash-safe).
+ *
+ * .bak semantics (intentional disaster-recovery design, NOT a bug):
+ *   Step 1 copies the current file to `<path>.bak` BEFORE writing. This
+ *   snapshot captures the last known-consistent state. If the main file
+ *   is later corrupted (partial write, disk error, kill -9 mid-rename),
+ *   `readStateWithFallback` recovers from .bak. The .bak is overwritten
+ *   on every successful write, so it always reflects the most recent
+ *   consistent predecessor state.
+ */
 export function writeStateAtomic(path: string, data: unknown): void {
-  // 1. backup current as .bak
+  // 1. backup current as .bak — last consistent predecessor state
   if (existsSync(path)) copyFileSync(path, `${path}.bak`);
-  // 2. write tmp + fsync
+  // 2. write tmp + fsync — ensure data hits disk before rename
   const tmp = `${path}.tmp`;
   writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
   const fd = openSync(tmp, "r");
   fsyncSync(fd);
   closeSync(fd);
-  // 3. atomic rename
+  // 3. atomic rename — visible state flips in one syscall
   renameSync(tmp, path);
 }
 
+/**
+ * Read state from `path`. If the main file is corrupt or missing,
+ * fall back to `<path>.bak` (the last consistent predecessor snapshot
+ * saved by writeStateAtomic). This is the intended disaster-recovery
+ * path — callers should treat a .bak read as a signal that the main
+ * file was interrupted mid-write.
+ */
 export function readStateWithFallback<T = unknown>(path: string): T {
   try {
     return JSON.parse(readFileSync(path, "utf8")) as T;

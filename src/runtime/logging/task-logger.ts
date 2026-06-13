@@ -6,6 +6,8 @@
 import { appendFileSync, mkdirSync, readdirSync, unlinkSync, existsSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isSafePathComponent } from "../../lib/security/path-guard.js";
+import { redact } from "../../lib/security/redact.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "../../..");
@@ -64,6 +66,10 @@ export function initTaskLogs(options = Object()) {
 // entry: { type, ... } — ts 字段自动添加
 export function writeTaskLog(taskId, entry) {
   try {
+    if (!isSafePathComponent(String(taskId))) {
+      console.error(`[task-logger] writeTaskLog rejected unsafe taskId: ${taskId}`);
+      return;
+    }
     const runContext = taskLogRunId ? { run_id: taskLogRunId } : {};
     const line = JSON.stringify({ ts: isoLocal(), ...entry, task_id: taskId, ...runContext }) + "\n";
     appendFileSync(join(taskLogsDir, `${taskId}.jsonl`), line, "utf8");
@@ -87,7 +93,7 @@ export function logTaskEdit(taskId, file, detail) {
 }
 
 export function logTaskBash(taskId, cmd, result, output) {
-  writeTaskLog(taskId, { type: "BASH", cmd, result, output: output?.slice(0, 500) });
+  writeTaskLog(taskId, { type: "BASH", cmd, result, output: redact(output?.slice(0, 500) || "") });
 }
 
 export function logTaskGate(taskId, check, result, errors) {

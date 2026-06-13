@@ -13,6 +13,7 @@ import {
 } from "../gates/readiness-policy.js";
 import { runAdapterEvidenceCollector } from "../adapters/evidence-collector.js";
 import { verifyArtifactIntegrity } from "../evidence/artifact-integrity.js";
+import { isWithin } from "../../lib/security/path-guard.js";
 
 export const ACCEPTANCE_REPORT_SCHEMA_VERSION = "1.0";
 export const ACCEPTANCE_REPORT_SCHEMA = "yolo.acceptance.report.v1";
@@ -58,11 +59,21 @@ function approvalArtifactPath({ input = Object(), options = Object(), stateRoot 
     join(stateRoot, "lifecycle", "acceptance-approval.json");
 }
 
-function readApprovalArtifact(path) {
+function readApprovalArtifact(path, boundaryRoot) {
   if (!path) {
     return { artifact_path: "", artifact: null, error: null };
   }
   const resolved = resolve(path);
+  if (boundaryRoot && !isWithin(resolved, boundaryRoot)) {
+    return {
+      artifact_path: "",
+      artifact: null,
+      error: {
+        code: "ACCEPTANCE_WARNING_APPROVAL_PATH_OUTSIDE_ROOT",
+        message: `Approval artifact path escapes project/state root: ${path}`,
+      },
+    };
+  }
   if (!existsSync(resolved)) {
     return { artifact_path: "", artifact: null, error: null };
   }
@@ -114,8 +125,8 @@ function approvalWarningsMatch(approval = Object(), expected = Object()) {
   return expectedCount === 0;
 }
 
-function approvalFromArtifact(path, expected = Object()) {
-  const read = readApprovalArtifact(path);
+function approvalFromArtifact(path, expected = Object(), boundaryRoot) {
+  const read = readApprovalArtifact(path, boundaryRoot);
   const artifact = read.artifact;
   const payload = artifact?.report || artifact;
   const approval = payload?.approval || payload?.acceptance_approval || payload;
@@ -574,7 +585,17 @@ export function buildAcceptanceReport(input = Object(), options = Object()) {
     mode,
     warning_count: releaseWarnings.length,
     warning_digest: warningApprovalDigest({ prdPath, mode, warnings: releaseWarnings }),
-  });
+  }, stateRoot);
+  // P10.S4: unconditionally flag path-escape attempts regardless of release mode
+  const pathEscapeError = (warningApproval.invalid_reasons || []).find(
+    (r) => r.code === "ACCEPTANCE_WARNING_APPROVAL_PATH_OUTSIDE_ROOT",
+  );
+  if (pathEscapeError) {
+    pushIssue(issues, "P1", "ACCEPTANCE_WARNING_APPROVAL_PATH_OUTSIDE_ROOT", pathEscapeError.message, {
+      approval_artifact: approvalPath,
+    });
+    summary = summarizeIssues(issues);
+  }
   if (releaseMode && summary.p1 === 0 && summary.p0 === 0 && releaseWarnings.length > 0 && !warningApproval.approved) {
     const invalidReasons = warningApproval.invalid_reasons || [];
     for (const reason of invalidReasons) {

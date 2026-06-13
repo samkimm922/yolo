@@ -5,10 +5,19 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { config } from "../config.js";
+import { parseCommandToArgv } from "../security/command-guard.js";
 
 function runCommand(command, ROOT, timeout) {
+  const parsed = parseCommandToArgv(command);
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      out: "",
+      message: `command rejected: ${parsed.detail}`,
+    };
+  }
   try {
-    const out = execFileSync("sh", ["-c", command], {
+    const out = execFileSync(parsed.argv[0], parsed.argv.slice(1), {
       cwd: ROOT,
       encoding: "utf8",
       timeout,

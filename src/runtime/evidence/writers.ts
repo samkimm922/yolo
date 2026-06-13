@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { inspectPrdContract } from "../gates/prd-contract-doctor.js";
 import { gateFailureFingerprint } from "../gates/failure-analysis.js";
 import { buildEvidenceArtifact, writeJsonArtifact } from "./ledger.js";
+import { isSafePathComponent } from "../../lib/security/path-guard.js";
 
 export { evidenceArtifactDigest } from "./ledger.js";
 
@@ -16,7 +17,11 @@ export function stripYoloPrefix(filePath) {
 }
 
 export function taskEvidenceDir(taskId, { yoloRoot }) {
-  const dir = join(yoloRoot, "state", "evidence", taskId);
+  const id = String(taskId || "");
+  if (!isSafePathComponent(id)) {
+    throw new Error(`taskEvidenceDir rejected unsafe taskId: ${taskId}`);
+  }
+  const dir = join(yoloRoot, "state", "evidence", id);
   mkdirSync(dir, { recursive: true });
   return dir;
 }
