@@ -16,12 +16,15 @@
 | `yolo/contract` | Contract condition evaluation. |
 | `yolo/scanner` | Deterministic review scanner. |
 | `yolo/validate-prd` | PRD schema validation. |
+| `yolo/config` | Config loading (short alias of `yolo/core/config`). |
+| `yolo/prd-preflight` | PRD readiness gate (short alias of `yolo/prd/preflight`). |
 
 ## Experimental Package Exports
 
 | Export | Purpose |
 |---|---|
 | `yolo/core/bootstrap` | Project bootstrap used by `yolo init`. |
+| `yolo/core/setup` | Project setup used by `yolo init` (bootstrap, agent bridge install, doctor). |
 | `yolo/core/init-smoke` | Init-to-first-PRD smoke for bootstrap, spec, preflight, and runner dry-run readiness. |
 | `yolo/runtime/adapters` | Agent adapter capability, budget, sandbox, and approval policy contract. |
 | `yolo/runtime/adapter-evidence` | Adapter evidence collector; dry-run by default, executes manifest commands only with explicit authorization. |

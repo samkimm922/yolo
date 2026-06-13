@@ -68,6 +68,7 @@ Experimental 表示当前可用，但 API shape、返回字段或执行语义仍
 | `yolo/runtime/adapter-evidence` | adapter evidence collector 可规划或在显式授权下执行 acceptance adapter manifest command；默认 dry-run，不自动执行外部工具。 |
 | `yolo/runtime/progress-ui-evidence` | progress dashboard UI/UX evidence harness 可生成本地 HTML snapshot、结构化 `ui_evidence` 和 adapter 可消费证据；当前 schema/browser execution 仍为 beta-only。 |
 | `yolo/core/bootstrap` | `yolo init` 的项目初始化 SDK；结构已可用，但 spec lifecycle 目录可能继续扩展。 |
+| `yolo/core/setup` | `yolo init` 的项目 setup SDK（bootstrap、agent bridge install、doctor）；结构已可用，但 setup shape 仍可能扩展。 |
 | `yolo/core/init-smoke` | init-to-first-PRD smoke 可证明 bootstrap、spec lifecycle、PRD preflight 和 runner dry-run readiness；smoke shape 仍可能扩展。 |
 | `yolo/prd/migration` | gate migration 可用，但自动修复策略会随 contract 严格度变化。 |
 | `yolo/prd-migrate-gates` | 兼容 alias；同上。 |
@@ -100,7 +101,6 @@ Experimental 表示当前可用，但 API shape、返回字段或执行语义仍
 | `yolo/release/experience-pack-audit` | experience pack effectiveness audit 会制造相关/无关学习记录并验证下一次 prompt 只注入相关 bounded experience；不阻塞 prompt，不执行 provider。 |
 | `yolo/release/nontechnical-ux-doctor` | non-technical UX doctor 会校验 README、agent docs、native skill、Claude/Codex command artifacts 都收束到一句话入口和 chat-first 规则；只读检查。 |
 | `yolo/eval/benchmark` | benchmark fixtures 和 rubric scoring 可评估 discovery、PRD、UI acceptance、agent command、evidence 与 dogfood 质量；缺结果、低分或回归超阈值会 fail-closed。 |
-| `yolo/pm` | requirement -> findings 仍是早期 PM 模块。 |
 | `yolo/audit-to-prd` | audit 输入格式还未冻结。 |
 | `sdk.prd.convertAuditToPrd` | 输入 contract 未完全公开。 |
 | `sdk.prd.generateFindingsFromRequirement` | PM findings schema 未完全冻结。 |
