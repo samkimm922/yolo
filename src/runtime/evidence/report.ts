@@ -297,6 +297,36 @@ function evidenceFailureCount({
     (ledgerIntegrity.error_count || 0);
 }
 
+// Read state/runtime/task-results.jsonl (if present) and bucket each record by
+// its terminal status. Mirrors the shape callers pass via the taskResults
+// argument so buildRunReport can fall back to disk when callers omit it.
+const TASK_RESULT_STATUS_BUCKETS = {
+  PASS: "completed",
+  COMPLETED: "completed",
+  SUCCEEDED: "completed",
+  FAIL: "failed",
+  FAILED: "failed",
+  ERROR: "failed",
+  SKIP: "skipped",
+  SKIPPED: "skipped",
+  BLOCKED: "blocked",
+};
+
+function readTaskResultsFromDisk(stateDir, runId = null) {
+  const filePath = join(stateDir, "runtime", "task-results.jsonl");
+  const records = readJsonl(filePath);
+  const scoped = runId ? records.filter((record) => !record.run_id || record.run_id === runId) : records;
+  const buckets = { completed: [], failed: [], skipped: [], blocked: [] };
+  for (const record of scoped) {
+    const raw = String(record.status || record.outcome || "").trim().toUpperCase();
+    const bucket = TASK_RESULT_STATUS_BUCKETS[raw];
+    if (!bucket) continue;
+    const taskId = record.task_id || record.taskId || record.id;
+    if (taskId) buckets[bucket].push(taskId);
+  }
+  return buckets;
+}
+
 function summarizeRemediation({ taskResults = Object(), stateEvents = [] } = Object()) {
   const fromTaskResults = (taskResults.remediation || []).map((entry) => ({
     source: "task-results",
@@ -362,10 +392,24 @@ export function buildRunReport({
   const runEnd = last(runEvents.filter((entry) => entry.event === "run_end"));
   const ledgerIntegrity = summarizeLedgerIntegrity({ runs, events, stateDir });
 
-  const completed = unique(taskResults.completed || []);
-  const failed = unique(taskResults.failed || []);
-  const skipped = unique(taskResults.skipped || []);
-  const blocked = unique(taskResults.blocked || []);
+  // Fall back to state/runtime/task-results.jsonl when callers do not pass an
+  // explicit taskResults aggregation. This keeps buildRunReport useful for
+  // CLI/SDK callers that resume from persisted state instead of in-memory data.
+  const hasExplicitBuckets = Boolean(
+    taskResults && (
+      Array.isArray(taskResults.completed) ||
+      Array.isArray(taskResults.failed) ||
+      Array.isArray(taskResults.skipped) ||
+      Array.isArray(taskResults.blocked)
+    ),
+  );
+  const buckets = hasExplicitBuckets
+    ? taskResults
+    : readTaskResultsFromDisk(stateDir, runId);
+  const completed = unique(buckets.completed || []);
+  const failed = unique(buckets.failed || []);
+  const skipped = unique(buckets.skipped || []);
+  const blocked = unique(buckets.blocked || []);
   const terminalCount = completed.length + failed.length + blocked.length;
   const plannedCount = progressTotal ?? runStart?.tasks ?? terminalCount + skipped.length;
   const duration = asNumber(durationSec ?? runEnd?.duration_sec);

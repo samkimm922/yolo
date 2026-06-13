@@ -2,7 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { appendRunEvent, appendStateEvent } from "../src/runtime/evidence/ledger.js";
 import {
   buildRunFinalAnswer,
@@ -689,6 +689,61 @@ describe("evidence run report", () => {
 
     assert.equal(finalAnswer.outcome, "needs_attention");
     assert.ok(finalAnswer.blockers.some((blocker) => blocker.includes("fixtures check is not_run")));
+  });
+
+  test("P8.M5: buildRunReport reads task-results.jsonl when taskResults is omitted", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", { run_id: "RUN-5", prd: "data/prd.json", tasks: 4 }, { now: "2026-05-24T10:00:00.000Z" });
+      appendRunEvent(stateDir, "run_end", { run_id: "RUN-5", duration_sec: "5" }, { now: "2026-05-24T10:01:00.000Z" });
+
+      const resultsFile = join(stateDir, "runtime", "task-results.jsonl");
+      mkdirSync(dirname(resultsFile), { recursive: true });
+      const records = [
+        { task_id: "T-A", run_id: "RUN-5", status: "PASS", attempt_id: "T-A-attempt-0", workspace_root: "/tmp", timestamp: "2026-05-24T10:00:30.000Z" },
+        { task_id: "T-B", run_id: "RUN-5", status: "FAIL", attempt_id: "T-B-attempt-0", workspace_root: "/tmp", timestamp: "2026-05-24T10:00:40.000Z" },
+        { task_id: "T-C", run_id: "RUN-5", status: "SKIP", attempt_id: "T-C-attempt-0", workspace_root: "/tmp", timestamp: "2026-05-24T10:00:50.000Z" },
+        { task_id: "T-D", run_id: "RUN-5", status: "BLOCKED", attempt_id: "T-D-attempt-0", workspace_root: "/tmp", timestamp: "2026-05-24T10:00:55.000Z" },
+      ];
+      writeFileSync(resultsFile, records.map((record) => JSON.stringify(record)).join("\n") + "\n", "utf8");
+
+      const report = buildRunReport({ stateDir, runId: "RUN-5" });
+
+      assert.deepEqual(report.tasks.completed, ["T-A"]);
+      assert.deepEqual(report.tasks.failed, ["T-B"]);
+      assert.deepEqual(report.tasks.skipped, ["T-C"]);
+      assert.deepEqual(report.tasks.blocked, ["T-D"]);
+      assert.equal(report.summary.completed, 1);
+      assert.equal(report.summary.failed, 1);
+      assert.equal(report.summary.skipped, 1);
+      assert.equal(report.summary.blocked, 1);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("P8.M5: explicit taskResults still wins over disk; missing file yields empty buckets", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", { run_id: "RUN-6", prd: "data/prd.json", tasks: 0 }, { now: "2026-05-24T11:00:00.000Z" });
+      appendRunEvent(stateDir, "run_end", { run_id: "RUN-6", duration_sec: "1" }, { now: "2026-05-24T11:00:01.000Z" });
+
+      // No task-results.jsonl on disk: buckets default to empty.
+      const empty = buildRunReport({ stateDir, runId: "RUN-6" });
+      assert.deepEqual(empty.tasks.completed, []);
+      assert.deepEqual(empty.tasks.failed, []);
+      assert.deepEqual(empty.tasks.blocked, []);
+
+      // Explicit taskResults overrides any disk read.
+      const explicit = buildRunReport({
+        stateDir,
+        runId: "RUN-6",
+        taskResults: { completed: ["EXPLICIT-1"], failed: [], skipped: [], blocked: [] },
+      });
+      assert.deepEqual(explicit.tasks.completed, ["EXPLICIT-1"]);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
   });
 
 });
