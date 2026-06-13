@@ -59,7 +59,7 @@ function isWriteLikeTool(toolName) {
 
 // Used for clean file paths from Write/Edit tools.
 function pathTouchesYoloState(filePath) {
-  const normalized = String(filePath || "").replace(/\\/g, '/');
+  const normalized = String(filePath || "").replace(/\\/g, '/').toLowerCase();
   return normalized.split('/').includes('.yolo');
 }
 
@@ -75,7 +75,7 @@ function block(code, message, file = null) {
 
 // ── Bash branch: deny-by-default per subcommand ──
 
-const YOLO_PATH_RE = /(?<![A-Za-z0-9_.])\.yolo(?=\/|$|['"\s);&|])/;
+const YOLO_PATH_RE = /(?<![A-Za-z0-9_.])\.yolo(?=\/|$|['"\s);&|])/i;
 
 function commandTouchesYoloState(command) {
   const subcommands = splitSubcommands(command);

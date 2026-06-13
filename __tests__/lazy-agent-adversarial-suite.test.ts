@@ -570,6 +570,47 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     }
   });
 
+  test("P6.H3: case-insensitive .yolo variants are blocked", () => {
+    const hookPath = join(PROJECT_ROOT, "hooks", "pre-tool-block-yolo-write.ts");
+    if (!existsSync(hookPath)) {
+      assert.ok(true, "hook not present — skip");
+      return;
+    }
+
+    const variants = [".YOLO", ".Yolo", ".yOlO"];
+    for (const variant of variants) {
+      for (const toolName of ["Write", "Edit", "Bash"]) {
+        const filePath = `/project/${variant}/lifecycle/status.json`;
+        const command = `echo '{}' > /project/${variant}/lifecycle/status.json`;
+        const payload = JSON.stringify({
+          tool_name: toolName,
+          tool_input: toolName === "Bash" ? { command } : { file_path: filePath },
+        });
+        const result = spawnSync("node", ["--import", "tsx", hookPath], {
+          input: payload,
+          encoding: "utf8",
+          cwd: PROJECT_ROOT,
+        });
+        assert.equal(result.status, 2, `${toolName} must block ${variant}`);
+      }
+    }
+  });
+
+  test("P6.H3: lowercase .yolo control group remains blocked", () => {
+    const hookPath = join(PROJECT_ROOT, "hooks", "pre-tool-block-yolo-write.ts");
+    if (!existsSync(hookPath)) {
+      assert.ok(true, "hook not present — skip");
+      return;
+    }
+    const payload = JSON.stringify({ tool_name: "Write", tool_input: { file_path: "/project/.yolo/lifecycle/status.json" } });
+    const result = spawnSync("node", ["--import", "tsx", hookPath], {
+      input: payload,
+      encoding: "utf8",
+      cwd: PROJECT_ROOT,
+    });
+    assert.equal(result.status, 2, "lowercase .yolo must still be blocked");
+  });
+
   test("P6.H1: settings-minimal.json matcher registers Bash hook", () => {
     const settingsPath = join(PROJECT_ROOT, "settings-minimal.json");
     const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
