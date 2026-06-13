@@ -298,27 +298,31 @@ export function cleanupRetryRoundFiles({
 export function loadResumeCompletedFromPrd({
   prdPath,
   taskCountsAsCompleted,
+  existsSync = defaultExistsSync,
   readFileSync = defaultReadFileSync,
   writeFileSync = defaultWriteFileSync,
   renameSync = defaultRenameSync,
   consoleLog = (...args) => console.log(...args),
 } = Object()) {
-  try {
-    const prd = JSON.parse(readFileSync(prdPath, "utf8"));
-    const resumeCompleted = new Set((prd.tasks || []).filter(taskCountsAsCompleted).map((task) => task.id));
-    const staleRunning = (prd.tasks || []).filter((task) => task.status === "running");
-    if (staleRunning.length > 0) {
-      for (const task of staleRunning) task.status = "pending";
-      const tmp = `${prdPath}.tmp`;
-      writeFileSync(tmp, JSON.stringify(prd, null, 2), "utf8");
-      renameSync(tmp, prdPath);
-      consoleLog(`[resume] 重置 ${staleRunning.length} 个中断任务: ${staleRunning.map((task) => task.id).join(", ")}`);
-    }
-    consoleLog(`[resume] PRD 中已完成: ${resumeCompleted.size} 个任务`);
-    return resumeCompleted;
-  } catch (_) {
+  // Fresh run: no PRD yet — there is nothing to resume from, an empty set is correct.
+  if (!existsSync(prdPath)) {
     return new Set();
   }
+  // PRD exists. A parse failure means the PRD is corrupt; fail closed (surface the
+  // error) instead of silently returning an empty set, which would mark every prior
+  // completion as undone and rerun the whole plan (A3 silent-failure family).
+  const prd = JSON.parse(readFileSync(prdPath, "utf8"));
+  const resumeCompleted = new Set((prd.tasks || []).filter(taskCountsAsCompleted).map((task) => task.id));
+  const staleRunning = (prd.tasks || []).filter((task) => task.status === "running");
+  if (staleRunning.length > 0) {
+    for (const task of staleRunning) task.status = "pending";
+    const tmp = `${prdPath}.tmp`;
+    writeFileSync(tmp, JSON.stringify(prd, null, 2), "utf8");
+    renameSync(tmp, prdPath);
+    consoleLog(`[resume] 重置 ${staleRunning.length} 个中断任务: ${staleRunning.map((task) => task.id).join(", ")}`);
+  }
+  consoleLog(`[resume] PRD 中已完成: ${resumeCompleted.size} 个任务`);
+  return resumeCompleted;
 }
 
 export function prepareRunStartup({

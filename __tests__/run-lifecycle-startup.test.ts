@@ -276,4 +276,41 @@ describe("run lifecycle startup helpers", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("loadResumeCompletedFromPrd returns an empty set when the PRD does not exist (fresh run)", () => {
+    const root = tempDir();
+    try {
+      const prdPath = join(root, "missing-prd.json");
+      const completed = loadResumeCompletedFromPrd({
+        prdPath,
+        taskCountsAsCompleted: () => true,
+        consoleLog: () => {},
+      });
+      assert.equal(completed.size, 0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("loadResumeCompletedFromPrd fails closed on a corrupt PRD instead of silently rerunning everything", () => {
+    const root = tempDir();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeFileSync(prdPath, "{ this is not valid json ,,}", "utf8");
+
+      assert.throws(
+        () => loadResumeCompletedFromPrd({
+          prdPath,
+          taskCountsAsCompleted: () => true,
+          consoleLog: () => {},
+        }),
+        (error) => {
+          assert.ok(error instanceof SyntaxError, "corrupt PRD should surface as a JSON parse error, not an empty set");
+          return true;
+        },
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
