@@ -55,7 +55,7 @@ const INVENTORY = [
   ["src/review/findings-to-tasks.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 3 }],
   ["src/review/fix-loop.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 2 }],
   ["src/review/scanner.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 2 }],
-  ["src/runtime/acceptance/report.ts", { WARN: 0, warning: 6, "best-effort": 0, skip: 0 }],
+  ["src/runtime/acceptance/report.ts", { WARN: 0, warning: 6, "best-effort": 0, skip: 1 }],
   ["src/runtime/adapters/agent-contract.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 1 }],
   ["src/runtime/adapters/provider-capability-bits.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 0 }],
   ["src/runtime/adapters/provider-runtime-matrix.ts", { WARN: 0, warning: 9, "best-effort": 0, skip: 0 }],

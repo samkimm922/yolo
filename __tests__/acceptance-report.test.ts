@@ -55,10 +55,12 @@ function prd(task = {}) {
   };
 }
 
-function runReport() {
+function runReport(prdPath = null) {
   return {
     status: "success",
-    summary: { failed: 0, blocked: 0 },
+    run_id: "run-test-001",
+    prd: prdPath || null,
+    summary: { planned: 1, completed: 1, failed: 0, blocked: 0, skipped: 0, evidence_failures: 0 },
   };
 }
 
@@ -253,7 +255,9 @@ describe("acceptance report", () => {
       });
       writeLifecycleStageReport("run", {
         status: "success",
-        summary: "run passed",
+        run_id: "run-test-001",
+        prd: prdPath,
+        summary: { planned: 1, completed: 1, failed: 0, blocked: 0, skipped: 0, evidence_failures: 0 },
         evidence: [{ path: "state/run/run-report.json" }],
       }, lifecycleOptions(root));
       writeLifecycleStageReport("review-fix", {
@@ -294,7 +298,7 @@ describe("acceptance report", () => {
       const report = buildAcceptanceReport({
         prdPath,
         prd: prd(),
-        runReport: runReport(),
+        runReport: runReport(prdPath),
         reviewReport: { findings: [] },
         uiEvidence: {
           page_reachable: true,
@@ -332,7 +336,7 @@ describe("acceptance report", () => {
       const report = buildAcceptanceReport({
         prdPath,
         prd: prd(),
-        runReport: runReport(),
+        runReport: runReport(prdPath),
         reviewReport: { findings: [] },
         uiEvidence: {
           page_reachable: true,
@@ -375,7 +379,7 @@ describe("acceptance report", () => {
       const report = buildAcceptanceReport({
         prdPath,
         prd: prd(),
-        runReport: runReport(),
+        runReport: runReport(prdPath),
         reviewReport: { findings: [] },
         uiEvidence: {
           page_reachable: true,
@@ -441,7 +445,9 @@ describe("acceptance report", () => {
       });
       writeLifecycleStageReport("run", {
         status: "success",
-        summary: "run passed",
+        run_id: "run-test-001",
+        prd: prdPath,
+        summary: { planned: 1, completed: 1, failed: 0, blocked: 0, skipped: 0, evidence_failures: 0 },
         evidence: [{ path: "state/run/run-report.json" }],
       }, lifecycleOptions(root));
       writeLifecycleStageReport("review-fix", {
@@ -506,7 +512,9 @@ describe("acceptance report", () => {
       });
       writeLifecycleStageReport("run", {
         status: "success",
-        summary: "run passed",
+        run_id: "run-test-001",
+        prd: prdPath,
+        summary: { planned: 1, completed: 1, failed: 0, blocked: 0, skipped: 0, evidence_failures: 0 },
         evidence: [{ path: "state/run/run-report.json" }],
       }, lifecycleOptions(root));
       writeLifecycleStageReport("review-fix", {
@@ -1122,6 +1130,78 @@ describe("acceptance report", () => {
       assert.ok(
         guard.blockers.some((blocker) => blocker.code === "ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED"),
         `expected ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED when only partially covered: ${JSON.stringify(guard.blockers)}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("P8.H1: a minimal lifecycle run-stage wrapper is rejected as run evidence", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      // GPT#1 reproduce: bare stage wrapper with no run_id and a string summary.
+      writeLifecycleStageReport("run", {
+        status: "success",
+        summary: "run passed",
+      }, lifecycleOptions(root));
+
+      const report = buildAcceptanceReport({
+        prd: prd(),
+        projectRoot: root,
+        stateRoot,
+      });
+
+      assert.notEqual(report.status, "pass");
+      assert.ok(
+        report.issues.some((issue) => issue.code === "RUN_REPORT_INSUFFICIENT"),
+        `expected RUN_REPORT_INSUFFICIENT for minimal wrapper: ${JSON.stringify(report.issues.map((issue) => issue.code))}`,
+      );
+      const insufficient = report.issues.find((issue) => issue.code === "RUN_REPORT_INSUFFICIENT");
+      assert.ok(insufficient.reasons.includes("missing run_id"));
+      assert.ok(insufficient.reasons.some((reason) => reason.startsWith("missing structured summary")));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("P8.H1: a real run report with run_id, structured summary and PRD lineage passes", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, prd());
+      writeJson(join(stateRoot, "lifecycle/run-report.json"), runReport(prdPath));
+      writeJson(join(stateRoot, "adapters/local-browser.manifest.json"), {
+        schema: "yolo.manifest.v1",
+        id: "local-browser",
+        kind: "acceptance_adapter",
+        description: "Local browser adapter",
+        inputs: ["url"],
+        outputs: ["report"],
+        commands: [{ command: "npm run accept" }],
+        evidence: ["screenshot"],
+        capabilities: ["page_reachable", "screenshot"],
+      });
+
+      const report = buildAcceptanceReport({
+        prdPath,
+        prd: prd(),
+        reviewReport: { findings: [] },
+        uiEvidence: {
+          page_reachable: true,
+          critical_path_passed: true,
+          required_state_present: true,
+          screenshots: ["state/evidence/ui.png"],
+        },
+        projectRoot: root,
+        stateRoot,
+      });
+
+      assert.equal(report.status, "pass");
+      assert.equal(
+        report.issues.some((issue) => issue.code === "RUN_REPORT_INSUFFICIENT"),
+        false,
       );
     } finally {
       rmSync(root, { recursive: true, force: true });

@@ -758,13 +758,18 @@ describe("yolo sdk", () => {
       }), "utf8");
       const runEvidencePath = join(root, "state/reports/pi-lifecycle/run-report.json");
       mkdirSync(dirname(runEvidencePath), { recursive: true });
-      writeFileSync(runEvidencePath, JSON.stringify({ status: "success" }), "utf8");
+      const runEvidence = {
+        run_id: "pi-lifecycle-run-001",
+        status: "success",
+        summary: { planned: 1, completed: 1, failed: 0, blocked: 0, skipped: 0 },
+        prd: prdPath,
+      };
+      writeFileSync(runEvidencePath, JSON.stringify(runEvidence), "utf8");
       const reviewEvidencePath = join(root, "state/review/pi-lifecycle/review-report.json");
       mkdirSync(dirname(reviewEvidencePath), { recursive: true });
       writeFileSync(reviewEvidencePath, JSON.stringify({ status: "success", findings: [] }), "utf8");
       writeLifecycleStageReport("run", {
-        status: "success",
-        summary: { failed: 0, blocked: 0 },
+        ...runEvidence,
         evidence: [{ path: "state/reports/pi-lifecycle/run-report.json" }],
       }, {
         projectRoot: root,
