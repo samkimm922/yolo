@@ -746,4 +746,42 @@ describe("evidence run report", () => {
     }
   });
 
+  test("P8.L8: merged_into tasks are bucketed, counted as terminal, and surfaced in the final answer", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", { run_id: "RUN-MERGE", prd: "data/prd.json", tasks: 3 }, { now: "2026-05-24T12:00:00.000Z" });
+      appendRunEvent(stateDir, "run_end", { run_id: "RUN-MERGE", duration_sec: "2" }, { now: "2026-05-24T12:00:02.000Z" });
+
+      const resultsFile = join(stateDir, "runtime", "task-results.jsonl");
+      mkdirSync(dirname(resultsFile), { recursive: true });
+      const records = [
+        { task_id: "PARENT-1", run_id: "RUN-MERGE", status: "PASS", attempt_id: "P-0", workspace_root: "/tmp", timestamp: "2026-05-24T12:00:30.000Z" },
+        { task_id: "CHILD-1A", run_id: "RUN-MERGE", status: "MERGED_INTO", attempt_id: "C-0", workspace_root: "/tmp", timestamp: "2026-05-24T12:00:40.000Z" },
+        { task_id: "CHILD-1B", run_id: "RUN-MERGE", status: "MERGED_INTO", attempt_id: "C-1", workspace_root: "/tmp", timestamp: "2026-05-24T12:00:50.000Z" },
+      ];
+      writeFileSync(resultsFile, records.map((record) => JSON.stringify(record)).join("\n") + "\n", "utf8");
+
+      const report = buildRunReport({ stateDir, runId: "RUN-MERGE" });
+
+      // Bucketed separately and surfaced.
+      assert.deepEqual(report.tasks.completed, ["PARENT-1"]);
+      assert.deepEqual(report.tasks.merged_into, ["CHILD-1A", "CHILD-1B"]);
+      assert.equal(report.summary.completed, 1);
+      assert.equal(report.summary.merged_into, 2);
+      assert.equal(report.summary.failed, 0);
+      assert.equal(report.summary.blocked, 0);
+
+      // merged_into counts toward terminal completion so the run is not falsely "not_run".
+      assert.notEqual(report.status, "not_run");
+      assert.ok(report.summary.task_success_rate > 0);
+
+      // Final answer surfaces merged_into so a human can tell which children folded in.
+      const finalAnswer = buildRunFinalAnswer(report);
+      assert.deepEqual(finalAnswer.tasks.merged_into, ["CHILD-1A", "CHILD-1B"]);
+      assert.equal(finalAnswer.summary.merged_into, 2);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
 });
