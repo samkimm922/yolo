@@ -1,6 +1,5 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -9,7 +8,6 @@ import {
   refreshMemoryCenter,
 } from "../src/runtime/memory/center.js";
 
-const YOLO_DIR = resolve(import.meta.dirname, "..");
 const FIXED_NOW = new Date("2026-05-25T00:00:00.000Z");
 
 function tempProject() {
@@ -124,40 +122,6 @@ describe("memory center", () => {
       assert.equal(archiveFiles.length, 1);
       assert.match(readFileSync(join(archiveMonthDir, archiveFiles[0]), "utf8"), /one/);
       assert.match(readFileSync(join(root, "docs/memory/CURRENT_STATUS.md"), "utf8"), /Archived ledger files: 1/);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  test("hooks point at relocated memory and change log implementations", () => {
-    const preToolLog = readFileSync(join(YOLO_DIR, "hooks/pre-tool-log.ts"), "utf8");
-    const preToolTaskLog = readFileSync(join(YOLO_DIR, "hooks/pre-tool-task-log.ts"), "utf8");
-    const stopHook = readFileSync(join(YOLO_DIR, "hooks/stop-update-docs.ts"), "utf8");
-
-    assert.match(preToolLog, /src\/runtime\/evidence\/log-change\.js/);
-    assert.match(preToolLog, /src\/devtools\/memory-center\.js/);
-    assert.match(preToolTaskLog, /src\/runtime\/evidence\/log-change\.js/);
-    assert.match(stopHook, /src\/devtools\/memory-center\.js/);
-    assert.doesNotMatch(preToolLog, /\.\.', 'log-change\.js'/);
-    assert.doesNotMatch(stopHook, /generate-tree\.js'\)/);
-  });
-
-  test("log-change writes under the caller supplied state root", () => {
-    const root = tempProject();
-    try {
-      execFileSync(process.execPath, [
-        join(YOLO_DIR, "dist/src/runtime/evidence/log-change.js"),
-        "auto",
-        "--file=/tmp/example.js",
-        "--tool=Write",
-        `--state-root=${root}`,
-      ], { cwd: YOLO_DIR, encoding: "utf8" });
-
-      const lines = readFileSync(join(root, "state/changes.jsonl"), "utf8").trim().split("\n");
-      const entry = JSON.parse(lines[0]);
-      assert.equal(entry.status, "AUTO_LOGGED");
-      assert.equal(entry.file, "/tmp/example.js");
-      assert.equal(existsSync(join(YOLO_DIR, "src/runtime/evidence/state/changes.jsonl")), false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

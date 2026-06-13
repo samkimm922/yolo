@@ -2,17 +2,12 @@
 // 输入: review-scanner.js 的输出 findings 数组
 // 输出: { autoFixTasks, claudeFixTasks, infoCount }
 
-// ── Severity → Priority 映射 ─────────────────────────────────
+import { severityToPriority } from "./severity-priority.js";
 
-function severityToPriority(severity) {
-  switch (severity) {
-    case 'CRITICAL': return 'P1';
-    case 'HIGH':     return 'P2';
-    case 'MEDIUM':   return 'P3';
-    case 'LOW':      return 'P4';
-    default:         return 'P4';
-  }
-}
+// ── Severity → Priority 映射 ─────────────────────────────────
+// See lib/severity-priority.ts for the canonical mapping shared with
+// review/findings-to-tasks.ts. CRITICAL is P0 so scanner-driven fixes
+// cannot quietly outrank findings-driven fixes (or vice versa).
 
 // ── ID 序列生成器 ────────────────────────────────────────────
 

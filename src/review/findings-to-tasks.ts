@@ -2,17 +2,9 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { normalizeReviewFinding } from "./findings.js";
+import { severityToPriority } from "../lib/severity-priority.js";
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
-
-function severityToPriority(severity) {
-  switch (String(severity || "").toUpperCase()) {
-    case "CRITICAL": return "P0";
-    case "HIGH": return "P1";
-    case "MEDIUM": return "P2";
-    default: return "P3";
-  }
-}
 
 function normalizePath(value) {
   return String(value || "")

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { detectProjectState } from "./project-state-detector.js";
+import { DEMAND_SESSION_SCHEMA, DEMAND_SESSION_SCHEMA_VERSION } from "./artifacts.js";
 
 export interface DemandTriageResult {
   schema_version: string;
@@ -373,10 +374,30 @@ function readDemandSessionFile(pathOrDir) {
     return { ok: false, path: sessionPath, error: `Demand session not found: ${sessionPath}` };
   }
   try {
-    return { ok: true, path: sessionPath, dir: dirname(sessionPath), session: JSON.parse(readFileSync(sessionPath, "utf8")) };
+    const session = JSON.parse(readFileSync(sessionPath, "utf8"));
+    const schemaError = demandSessionSchemaError(session, sessionPath);
+    if (schemaError) return { ok: false, path: sessionPath, error: schemaError };
+    return { ok: true, path: sessionPath, dir: dirname(sessionPath), session };
   } catch (error) {
     return { ok: false, path: sessionPath, error: `Demand session JSON parse failed: ${error.message}` };
   }
+}
+
+// Demand sessions are forward-only evidence: a stale, future, or malformed
+// schema_version can silently change downstream behavior. Reject anything that
+// is not the canonical yolo.demand.session.v1 / 1.0 shape so callers fail
+// closed at the read boundary instead of drifting further down the pipeline.
+export function demandSessionSchemaError(session, sessionPath = "") {
+  if (!session || typeof session !== "object" || Array.isArray(session)) {
+    return `Demand session ${sessionPath} must be a JSON object`;
+  }
+  if (session.schema_version !== DEMAND_SESSION_SCHEMA_VERSION) {
+    return `Demand session ${sessionPath} has unsupported schema_version "${session.schema_version}"; expected "${DEMAND_SESSION_SCHEMA_VERSION}"`;
+  }
+  if (session.schema !== DEMAND_SESSION_SCHEMA) {
+    return `Demand session ${sessionPath} has unsupported schema "${session.schema}"; expected "${DEMAND_SESSION_SCHEMA}"`;
+  }
+  return null;
 }
 
 function loadSession(input = Object(), options = Object()) {

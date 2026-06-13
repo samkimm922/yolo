@@ -297,6 +297,37 @@ function evidenceFailureCount({
     (ledgerIntegrity.error_count || 0);
 }
 
+// Read state/runtime/task-results.jsonl (if present) and bucket each record by
+// its terminal status. Mirrors the shape callers pass via the taskResults
+// argument so buildRunReport can fall back to disk when callers omit it.
+const TASK_RESULT_STATUS_BUCKETS = {
+  PASS: "completed",
+  COMPLETED: "completed",
+  SUCCEEDED: "completed",
+  MERGED_INTO: "merged_into",
+  FAIL: "failed",
+  FAILED: "failed",
+  ERROR: "failed",
+  SKIP: "skipped",
+  SKIPPED: "skipped",
+  BLOCKED: "blocked",
+};
+
+function readTaskResultsFromDisk(stateDir, runId = null) {
+  const filePath = join(stateDir, "runtime", "task-results.jsonl");
+  const records = readJsonl(filePath);
+  const scoped = runId ? records.filter((record) => !record.run_id || record.run_id === runId) : records;
+  const buckets = { completed: [], failed: [], skipped: [], blocked: [], merged_into: [] };
+  for (const record of scoped) {
+    const raw = String(record.status || record.outcome || "").trim().toUpperCase();
+    const bucket = TASK_RESULT_STATUS_BUCKETS[raw];
+    if (!bucket) continue;
+    const taskId = record.task_id || record.taskId || record.id;
+    if (taskId) buckets[bucket].push(taskId);
+  }
+  return buckets;
+}
+
 function summarizeRemediation({ taskResults = Object(), stateEvents = [] } = Object()) {
   const fromTaskResults = (taskResults.remediation || []).map((entry) => ({
     source: "task-results",
@@ -362,11 +393,30 @@ export function buildRunReport({
   const runEnd = last(runEvents.filter((entry) => entry.event === "run_end"));
   const ledgerIntegrity = summarizeLedgerIntegrity({ runs, events, stateDir });
 
-  const completed = unique(taskResults.completed || []);
-  const failed = unique(taskResults.failed || []);
-  const skipped = unique(taskResults.skipped || []);
-  const blocked = unique(taskResults.blocked || []);
-  const terminalCount = completed.length + failed.length + blocked.length;
+  // Fall back to state/runtime/task-results.jsonl when callers do not pass an
+  // explicit taskResults aggregation. This keeps buildRunReport useful for
+  // CLI/SDK callers that resume from persisted state instead of in-memory data.
+  const hasExplicitBuckets = Boolean(
+    taskResults && (
+      Array.isArray(taskResults.completed) ||
+      Array.isArray(taskResults.failed) ||
+      Array.isArray(taskResults.skipped) ||
+      Array.isArray(taskResults.blocked)
+    ),
+  );
+  const buckets = hasExplicitBuckets
+    ? taskResults
+    : readTaskResultsFromDisk(stateDir, runId);
+  const completed = unique(buckets.completed || []);
+  const failed = unique(buckets.failed || []);
+  const skipped = unique(buckets.skipped || []);
+  const blocked = unique(buckets.blocked || []);
+  const mergedInto = unique(buckets.merged_into || []);
+  // merged_into tasks are terminal-but-satisfied (they were folded into a parent
+  // task and count as completed for dependency purposes). Treat them as
+  // completed for run-rate accounting but surface them separately so the final
+  // answer can distinguish "actually executed" from "folded into another task".
+  const terminalCount = completed.length + failed.length + blocked.length + mergedInto.length;
   const plannedCount = progressTotal ?? runStart?.tasks ?? terminalCount + skipped.length;
   const duration = asNumber(durationSec ?? runEnd?.duration_sec);
   const gates = summarizeGateEvidence({ stateEvents, taskLogEntries });
@@ -399,15 +449,17 @@ export function buildRunReport({
       failed: failed.length,
       skipped: skipped.length,
       blocked: blocked.length,
+      merged_into: mergedInto.length,
       evidence_failures: evidenceFailures,
-      task_success_rate: rate(completed.length, terminalCount),
-      run_success_rate: rate(completed.length, runRateDenominator),
+      task_success_rate: rate(completed.length + mergedInto.length, terminalCount),
+      run_success_rate: rate(completed.length + mergedInto.length, runRateDenominator),
     },
     tasks: {
       completed,
       failed,
       skipped,
       blocked,
+      merged_into: mergedInto,
     },
     ledger: {
       run_events: runEvents.length,
@@ -502,6 +554,8 @@ export function buildRunFinalAnswer(report = Object(), options = Object()) {
   const blocked = unique(tasks.blocked || []);
   const completed = unique(tasks.completed || []);
   const skipped = unique(tasks.skipped || []);
+  const mergedInto = unique(tasks.merged_into || []);
+  const completedOrMerged = unique([...completed, ...mergedInto]);
   const gateFailures = report.gates?.failed_count || 0;
   const reviewIssues = report.review?.issue_count || 0;
   const reviewErrors = report.review?.error_count || 0;
@@ -512,7 +566,7 @@ export function buildRunFinalAnswer(report = Object(), options = Object()) {
   const remediationUnsafe = report.remediation?.unsafe_stop_count || 0;
   const ledgerIntegrityErrors = report.ledger?.integrity?.error_count || 0;
   const planned = summary.planned == null ? null : Number(summary.planned);
-  const terminalCount = completed.length + failed.length + blocked.length;
+  const terminalCount = completed.length + failed.length + blocked.length + mergedInto.length;
   const status = report.status || (failed.length || blocked.length ? "error" : "success");
   const fixtureRunCount = Number(report.fixtures?.run_count || 0);
   const fixtureStatus = cleanStatus(report.fixtures?.status);
@@ -609,6 +663,7 @@ export function buildRunFinalAnswer(report = Object(), options = Object()) {
       failed: failed.length,
       skipped: skipped.length,
       blocked: blocked.length,
+      merged_into: mergedInto.length,
       evidence_failures: summary.evidence_failures ?? null,
       task_success_rate: summary.task_success_rate ?? null,
       run_success_rate: summary.run_success_rate ?? null,
@@ -620,6 +675,7 @@ export function buildRunFinalAnswer(report = Object(), options = Object()) {
       failed: itemList(failed),
       skipped: itemList(skipped),
       blocked: itemList(blocked),
+      merged_into: itemList(mergedInto),
     },
     evidence: {
       report_json: options.reportJsonPath || options.report_json || null,

@@ -110,8 +110,9 @@ function progressUiPrd() {
 
 function runReport() {
   return {
+    run_id: "run-progress-ui-001",
     status: "success",
-    summary: { failed: 0, blocked: 0 },
+    summary: { planned: 1, completed: 1, failed: 0, blocked: 0, skipped: 0 },
   };
 }
 

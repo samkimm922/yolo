@@ -7,7 +7,7 @@
       "dir": "closed-loop",
       "archive_dir": "__tests__/fixtures/legacy-cleanup-20260526221343/closed-loop",
       "status": "archived_readonly",
-      "file_count": 45,
+      "file_count": 25,
       "policy": "Do not restore package exports, SDK namespaces, runner imports, or public workflows that execute closed-loop modules. Archive content is evidence only unless an operator explicitly restores it for migration."
     }
   ],

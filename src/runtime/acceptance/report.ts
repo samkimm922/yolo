@@ -234,13 +234,17 @@ function acceptanceCriteriaIssues(prd, issues) {
   }
 }
 
+function hasVerifyCommand(condition) {
+  return Boolean(clean(condition.verify_command) || clean(condition.params?.verify_command));
+}
+
 function collectManualCriteria(prd) {
   const manualCriteria = [];
   const tasks = asArray(prd?.tasks);
   for (const task of tasks) {
     const conditions = asArray(task.post_conditions);
     for (const condition of conditions) {
-      if (condition.type === "acceptance_criteria" && !condition.verify_command) {
+      if (condition.type === "acceptance_criteria" && !hasVerifyCommand(condition)) {
         manualCriteria.push({
           task_id: task.id || null,
           condition_id: condition.id || null,
@@ -252,11 +256,68 @@ function collectManualCriteria(prd) {
   return manualCriteria;
 }
 
-function runtimeEvidenceIssues(runReport, issues, { releaseMode = false } = Object()) {
+// Extract verifiable run evidence from a real run report or from the inner
+// `report` payload of a lifecycle stage wrapper. A stage wrapper that wraps a
+// real run report is valid evidence; a minimal wrapper with no run_id/summary
+// is not.
+const RUN_SUMMARY_FIELDS = ["planned", "completed", "failed", "blocked", "skipped"];
+
+function isStructuredSummary(summary) {
+  return Boolean(summary) && typeof summary === "object" && !Array.isArray(summary)
+    && RUN_SUMMARY_FIELDS.some((field) => Number.isFinite(Number(summary[field])));
+}
+
+function runEvidencePayload(runReport) {
+  const empty = { run_id: "", summary: null, prd: "" };
+  if (!runReport || typeof runReport !== "object") return empty;
+  const nested = runReport.report && typeof runReport.report === "object" ? runReport.report : null;
+  const topLevelSummary = (runReport.summary && typeof runReport.summary === "object" && !Array.isArray(runReport.summary))
+    ? runReport.summary
+    : null;
+  const nestedSummary = (nested && nested.summary && typeof nested.summary === "object" && !Array.isArray(nested.summary))
+    ? nested.summary
+    : null;
+  // A stage wrapper may carry a stage-level summary ({failed, blocked}) at the top
+  // level; the verifiable structured run summary lives inside the nested .report.
+  // Prefer the summary that actually carries structured run-report fields.
+  const summarySource = (topLevelSummary && isStructuredSummary(topLevelSummary))
+    ? topLevelSummary
+    : (nestedSummary && isStructuredSummary(nestedSummary)
+      ? nestedSummary
+      : (topLevelSummary || nestedSummary));
+  return {
+    run_id: clean(runReport.run_id || runReport.runId || (nested && (nested.run_id || nested.runId)) || ""),
+    summary: summarySource,
+    prd: clean(runReport.prd || runReport.prd_path || (nested && (nested.prd || nested.prd_path)) || ""),
+  };
+}
+
+function runReportSufficiencyIssues(runReport, issues, { prdPath = "" } = Object()) {
+  if (!runReport) return;
+  const payload = runEvidencePayload(runReport);
+  const reasons = [];
+  if (!payload.run_id) reasons.push("missing run_id");
+  const hasStructuredSummary = isStructuredSummary(payload.summary);
+  if (!hasStructuredSummary) reasons.push("missing structured summary (planned/completed/failed/blocked)");
+  if (prdPath && !payload.prd) reasons.push("missing PRD lineage binding");
+  if (reasons.length > 0) {
+    pushIssue(issues, "P1", "RUN_REPORT_INSUFFICIENT",
+      "Run report must carry a verifiable run_id, a structured task summary, and PRD lineage — a minimal lifecycle stage wrapper is not valid run evidence.",
+      {
+        run_id: payload.run_id || null,
+        reasons,
+        schema: clean(runReport.schema) || null,
+        stage: clean(runReport.stage) || null,
+      });
+  }
+}
+
+function runtimeEvidenceIssues(runReport, issues, { releaseMode = false, prdPath = "" } = Object()) {
   if (!runReport) {
     pushIssue(issues, "P1", "RUN_REPORT_MISSING", "Acceptance requires run evidence or an explicit degraded/manual record.");
     return;
   }
+  runReportSufficiencyIssues(runReport, issues, { prdPath });
   const status = clean(runReport.status).toLowerCase();
   const statusEntries = collectReportStatuses(runReport);
   const nonPassStatuses = statusEntries.filter((entry) => !RUN_REPORT_PASS_STATUSES.has(entry.status));
@@ -496,7 +557,7 @@ export function buildAcceptanceReport(input = Object(), options = Object()) {
   } else {
     acceptanceCriteriaIssues(prd, issues);
   }
-  runtimeEvidenceIssues(runReport, issues, { releaseMode });
+  runtimeEvidenceIssues(runReport, issues, { releaseMode, prdPath });
   adapterEvidenceIssues(adapterEvidence, issues);
   evidenceLineageIssues({ prdPath, runReport, reviewReport }, issues);
   reviewIssues(reviewReport, runReport, issues);

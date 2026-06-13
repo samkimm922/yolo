@@ -55,10 +55,6 @@ export const TARGET_COVERAGE_CONDITION_TYPES = [
   "target_file_modified",
 ];
 
-export function conditionTypeSet(types = CONDITION_TYPES) {
-  return new Set(types);
-}
-
 export function supportedConditionTypes() {
   return [...CONDITION_TYPES].sort();
 }
