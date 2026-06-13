@@ -43,4 +43,20 @@ describe("review CLI exit code propagation", () => {
     assert.equal(result.status, 0);
     assert.equal(result.stdout.trim(), "[]");
   });
+
+  test("exits non-zero when inner claude returns non-JSON garbage (P7.H5)", () => {
+    const fake = `#!/usr/bin/env node\nprocess.stdout.write("not json");\nprocess.exit(0);\n`;
+    const result = runReviewWithFakeClaude(fake, ["--round=1"]);
+    assert.notEqual(result.status, 0, `expected non-zero exit, got ${result.status}`);
+    assert.notEqual(result.stdout.trim(), "[]", "must not emit [] on unparseable output");
+  });
+
+  test("exits zero when inner claude returns valid findings array (P7.H5 happy)", () => {
+    const fake = `#!/usr/bin/env node\nprocess.stdout.write('[{"id":"BUG-1","severity":"HIGH","file":"src/a.ts","line":1,"category":"runtime","description":"x","suggestion":"y"}]');\nprocess.exit(0);\n`;
+    const result = runReviewWithFakeClaude(fake, ["--round=1"]);
+    assert.equal(result.status, 0);
+    const parsed = JSON.parse(result.stdout.trim());
+    assert.equal(Array.isArray(parsed), true);
+    assert.equal(parsed.length, 1);
+  });
 });
