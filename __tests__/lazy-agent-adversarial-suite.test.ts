@@ -134,7 +134,7 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     }
     const payload = JSON.stringify({
       tool_name: "Write",
-      tool_input: { file_path: "/project/.yolo/lifecycle/status.json", content: "{}" },
+      tool_input: { file_path: ".yolo/lifecycle/status.json", content: "{}" },
     });
     let exited = 0;
     let threw = false;
@@ -312,7 +312,7 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     }
     const payload = JSON.stringify({
       tool_name: "Bash",
-      tool_input: { command: "echo '{}' > /project/.yolo/lifecycle/status.json" },
+      tool_input: { command: "echo '{}' > .yolo/lifecycle/status.json" },
     });
     const blocked = spawnSync("node", ["--import", "tsx", hookPath], { input: payload, encoding: "utf8", cwd: PROJECT_ROOT });
     assert.equal(blocked.status, 2, "Bash redirect to .yolo must be blocked");
@@ -496,7 +496,7 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     const blocked = [
       // 1-2: node inline eval, relative + absolute
       "node -e \"require('fs').writeFileSync('.yolo/lifecycle/status.json', '{}')\"",
-      "node --eval \"require('fs').writeFileSync('/project/.yolo/lifecycle/status.json', '{}')\"",
+      "node --eval \"require('fs').writeFileSync('.yolo/lifecycle/status.json', '{}')\"",
       // 3: python inline eval
       "python3 -c \"open('.yolo/state.json', 'w').write('{}')\"",
       // 4-6: common write utilities (no special detector needed)
@@ -505,7 +505,7 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
       "touch .yolo/lifecycle/status.json",
       // 7-8: shell redirects, relative + absolute
       "echo '{}' > .yolo/lifecycle/status.json",
-      "echo '{}' >> /project/.yolo/lifecycle/status.json",
+      "echo '{}' >> .yolo/lifecycle/status.json",
       // 9-10: tee / sed
       "tee .yolo/lifecycle/status.json < /tmp/seed",
       "sed -i 's/a/b/' .yolo/lifecycle/status.json",
@@ -581,8 +581,8 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     const variants = [".YOLO", ".Yolo", ".yOlO"];
     for (const variant of variants) {
       for (const toolName of ["Write", "Edit", "Bash"]) {
-        const filePath = `/project/${variant}/lifecycle/status.json`;
-        const command = `echo '{}' > /project/${variant}/lifecycle/status.json`;
+        const filePath = `${variant}/lifecycle/status.json`;
+        const command = `echo '{}' > ${variant}/lifecycle/status.json`;
         const payload = JSON.stringify({
           tool_name: toolName,
           tool_input: toolName === "Bash" ? { command } : { file_path: filePath },
@@ -603,7 +603,7 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
       assert.ok(true, "hook not present — skip");
       return;
     }
-    const payload = JSON.stringify({ tool_name: "Write", tool_input: { file_path: "/project/.yolo/lifecycle/status.json" } });
+    const payload = JSON.stringify({ tool_name: "Write", tool_input: { file_path: ".yolo/lifecycle/status.json" } });
     const result = spawnSync("node", ["--import", "tsx", hookPath], {
       input: payload,
       encoding: "utf8",
@@ -632,5 +632,30 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
 
     assert.equal(finalAnswer.outcome, "needs_attention");
     assert.ok(finalAnswer.blockers.some((blocker) => blocker.includes("failed gates: 1")));
+  });
+
+  test("P6.M2: external .yolo paths such as /tmp/.yolo are not blocked", () => {
+    const hookPath = join(PROJECT_ROOT, "hooks", "pre-tool-block-yolo-write.ts");
+    if (!existsSync(hookPath)) {
+      assert.ok(true, "hook not present — skip");
+      return;
+    }
+
+    const allowed = [
+      { tool_name: "Write", tool_input: { file_path: "/tmp/.yolo/scratch.json" } },
+      { tool_name: "Edit", tool_input: { file_path: "/var/tmp/.yolo/state.json" } },
+      { tool_name: "Bash", tool_input: { command: "cat /tmp/.yolo/scratch.json" } },
+      { tool_name: "Bash", tool_input: { command: "echo '{}' > /tmp/.yolo/scratch.json" } },
+      { tool_name: "Bash", tool_input: { command: "ls /tmp/.yolo" } },
+    ];
+
+    for (const payload of allowed) {
+      const result = spawnSync("node", ["--import", "tsx", hookPath], {
+        input: JSON.stringify(payload),
+        encoding: "utf8",
+        cwd: PROJECT_ROOT,
+      });
+      assert.equal(result.status, 0, `external .yolo path must not be blocked: ${JSON.stringify(payload)}`);
+    }
   });
 });

@@ -2,8 +2,14 @@
 // pre-tool-block-yolo-write.ts — PreToolUse hook: block LLM Write/Edit of .yolo state
 // States must be written through yolo CLI, not directly by LLM agents.
 // Exit 2 = block (Claude Code will not execute the tool).
+//
+// Scope: only the .yolo directory under the current project root (process.cwd()).
+// External .yolo paths such as /tmp/.yolo are not project state and are allowed.
 
-let input = '';
+import { resolve } from "node:path";
+import { realpathSync } from "node:fs";
+
+let input = "";
 process.stdin.on('data', (chunk) => { input += chunk; });
 process.stdin.on('end', () => {
   let data;
@@ -57,10 +63,46 @@ function isWriteLikeTool(toolName) {
   return ["write", "edit", "multiedit", "notebookedit"].includes(toolName);
 }
 
+function canonicalizePath(filePath) {
+  const normalized = String(filePath || "").replace(/\\/g, "/");
+  if (!normalized) return "";
+  if (!normalized.startsWith("/")) {
+    return resolve(normalized).replace(/\\/g, "/").toLowerCase();
+  }
+  let prefix = normalized;
+  const remaining = [];
+  while (prefix) {
+    try {
+      const realPrefix = realpathSync(prefix).replace(/\\/g, "/");
+      const suffix = remaining.length > 0 ? remaining.reverse().join("/") : "";
+      return suffix ? `${realPrefix}/${suffix}`.toLowerCase() : realPrefix.toLowerCase();
+    } catch {
+      const parts = prefix.split("/").filter(Boolean);
+      if (parts.length === 0) break;
+      remaining.push(parts.pop());
+      prefix = parts.length === 0 ? "/" : `/${parts.join("/")}`;
+    }
+  }
+  return normalized.toLowerCase();
+}
+
+function projectStateRoot() {
+  return `${canonicalizePath(process.cwd())}/.yolo`;
+}
+
+function isUnderProjectStateRoot(filePath) {
+  const normalized = String(filePath || "").replace(/\\/g, "/");
+  if (!normalized) return false;
+  if (!/(?:^|\/)\.yolo(?:\/|$)/i.test(normalized)) return false;
+  const resolved = canonicalizePath(normalized);
+  if (!resolved) return false;
+  const stateRoot = projectStateRoot();
+  return resolved === stateRoot || resolved.startsWith(`${stateRoot}/`);
+}
+
 // Used for clean file paths from Write/Edit tools.
 function pathTouchesYoloState(filePath) {
-  const normalized = String(filePath || "").replace(/\\/g, '/').toLowerCase();
-  return normalized.split('/').includes('.yolo');
+  return isUnderProjectStateRoot(filePath);
 }
 
 function block(code, message, file = null) {
@@ -75,7 +117,7 @@ function block(code, message, file = null) {
 
 // ── Bash branch: deny-by-default per subcommand ──
 
-const YOLO_PATH_RE = /(?<![A-Za-z0-9_.])\.yolo(?=\/|$|['"\s);&|])/i;
+const YOLO_SEGMENT_RE = /(?<![A-Za-z0-9_.])\.yolo(?=\/|$|['"\s);&|])/gi;
 
 function commandTouchesYoloState(command) {
   const subcommands = splitSubcommands(command);
@@ -83,9 +125,33 @@ function commandTouchesYoloState(command) {
     const trimmed = sub.trim();
     if (!trimmed) continue;
     if (isYoloCliInvocation(trimmed)) continue;
-    if (YOLO_PATH_RE.test(trimmed)) return true;
+    if (subcommandTouchesProjectYolo(trimmed)) return true;
   }
   return false;
+}
+
+function subcommandTouchesProjectYolo(command) {
+  for (const token of splitShellTokens(command)) {
+    const stripped = token.replace(/^['"]+|['"]+$/g, "");
+    if (!stripped) continue;
+    for (const candidate of extractYoloPaths(stripped)) {
+      if (isUnderProjectStateRoot(candidate)) return true;
+    }
+  }
+  return false;
+}
+
+function extractYoloPaths(str) {
+  const paths = [];
+  let match;
+  while ((match = YOLO_SEGMENT_RE.exec(str)) !== null) {
+    let start = match.index;
+    while (start > 0 && /[A-Za-z0-9._\-/~]/.test(str[start - 1])) start -= 1;
+    let end = match.index + match[0].length;
+    while (end < str.length && /[A-Za-z0-9._\-/]/.test(str[end])) end += 1;
+    paths.push(str.slice(start, end));
+  }
+  return paths;
 }
 
 function splitSubcommands(command) {
