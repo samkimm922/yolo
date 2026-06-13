@@ -21,8 +21,8 @@
 
 | 指标 | 当前值 | 目标 | 状态 |
 |---|---:|---:|---|
-| `runner.ts` 行数 | 13 | <300 | 达标 |
-| `src/runtime/runner-core.ts` 行数 | 601 | <=601 internal core | 达标，继续按需拆分 |
+| `runner.ts` 行数 | 12 | <300 | 达标 |
+| `src/runtime/runner-core.ts` 行数 | 600 | <=600 internal core | 达标，继续按需拆分 |
 | 根目录 `.ts` 文件 | 7 | 7 public/compat entry | 达标 |
 | `src/**/*.ts` 文件 | 196 | 按 core/prd/spec/runtime/agents/review/evidence/workflows/memory/lifecycle/discovery/eval/parallel/demand/security 分层 | 进行中 |
 | 测试文件 | 174 | 持续增加真实项目 fixture/e2e | 进行中 |
