@@ -47,7 +47,7 @@ function reportBlockers(report = Object()) {
   const raw = [
     ...(Array.isArray(report.blockers) ? report.blockers : []),
     ...(Array.isArray(report.blocked_reasons) ? report.blocked_reasons : []),
-    ...(Array.isArray(report.issues) ? report.issues.filter((issue) => issue.status === "blocked") : []),
+    ...(Array.isArray(report.issues) ? report.issues.filter((issue) => isBlockingIssue(issue)) : []),
     ...(Array.isArray(report.checks) ? report.checks.filter((check) => check.status === "blocked") : []),
   ];
   return raw.map((item) => {
@@ -59,6 +59,16 @@ function reportBlockers(report = Object()) {
       task_id: item.task_id || item.taskId || null,
     };
   });
+}
+
+// Acceptance reports classify issues by priority level rather than status.
+// P0 (hard failures) and P1 (release-blocking gaps) must surface as stage
+// blockers; P2/human_review stay as advisory issues and do not block the stage.
+function isBlockingIssue(issue) {
+  if (!issue || typeof issue !== "object") return false;
+  if (issue.status === "blocked") return true;
+  const level = clean(issue.level).toUpperCase();
+  return level === "P0" || level === "P1";
 }
 
 function reportEvidence(report = Object()) {

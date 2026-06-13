@@ -94,4 +94,77 @@ describe("lifecycle progress", () => {
       }
     }
   });
+
+  test("P8.M3: acceptance P0/P1 issues are promoted to stage blockers; P2 stays advisory", () => {
+    for (const testCase of [
+      { level: "P0", code: "UI_CRITICAL_PATH_FAILED", shouldBlock: true },
+      { level: "P1", code: "RUN_REPORT_NOT_CLEAN", shouldBlock: true },
+      { level: "P2", code: "ADVISORY_HINT", shouldBlock: false },
+      { level: "human_review", code: "NEEDS_HUMAN_REVIEW", shouldBlock: false },
+    ]) {
+      const root = tempProject();
+      const stateRoot = join(root, ".yolo");
+      try {
+        const result = writeLifecycleStageReport("acceptance", {
+          status: "blocked",
+          summary: `acceptance has a ${testCase.level} issue`,
+          issues: [{
+            level: testCase.level,
+            code: testCase.code,
+            message: `${testCase.level} issue surfaced by acceptance`,
+          }],
+        }, {
+          projectRoot: root,
+          stateRoot,
+          source: "unit",
+          writeSessionMemory: false,
+          skipSequenceCheck: true,
+        });
+
+        // Read the stage report back to verify blockers field.
+        const stageReport = JSON.parse(readFileSync(join(stateRoot, "lifecycle/acceptance-report.json"), "utf8"));
+        const blockingCodes = stageReport.blockers.map((blocker) => blocker.code);
+
+        if (testCase.shouldBlock) {
+          assert.ok(
+            blockingCodes.includes(testCase.code),
+            `${testCase.level} issue ${testCase.code} should be a stage blocker, got: ${JSON.stringify(blockingCodes)}`,
+          );
+        } else {
+          assert.ok(
+            !blockingCodes.includes(testCase.code),
+            `${testCase.level} issue ${testCase.code} should NOT be a stage blocker, got: ${JSON.stringify(blockingCodes)}`,
+          );
+        }
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("P8.M3: legacy issues with explicit status='blocked' still become stage blockers", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      writeLifecycleStageReport("acceptance", {
+        status: "blocked",
+        summary: "blocked via legacy status field",
+        issues: [{ status: "blocked", code: "LEGACY_BLOCKER", message: "legacy status-shape blocker" }],
+      }, {
+        projectRoot: root,
+        stateRoot,
+        source: "unit",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+
+      const stageReport = JSON.parse(readFileSync(join(stateRoot, "lifecycle/acceptance-report.json"), "utf8"));
+      assert.ok(
+        stageReport.blockers.some((blocker) => blocker.code === "LEGACY_BLOCKER"),
+        `legacy status='blocked' issues must remain stage blockers: ${JSON.stringify(stageReport.blockers)}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
