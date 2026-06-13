@@ -242,4 +242,97 @@ describe("execution baseline helpers", () => {
     assert.equal(refreshedEslint.meta.command, "eslint");
     assert.equal(refreshedEslint.meta.artifact_hash, baselineArtifactHash(refreshedEslint));
   });
+
+  test("refreshBaselineAfterCommit keeps old baseline when tool is missing (P7.H4)", () => {
+    const files = new Map([
+      ["/repo/state/runtime/tsc-baseline.json", JSON.stringify({
+        keys: ["src/a.ts:1:TS1000", "src/fixed.ts:2:TS2000"],
+        meta: { created_at: "2026-01-01T00:00:00.000Z", command: "tsc", exit_code: 0 },
+      })],
+      ["/repo/state/runtime/eslint-baseline.json", JSON.stringify({
+        keys: ["src/a.ts:2:semi"],
+        meta: { command: "eslint", exit_code: 0 },
+      })],
+    ]);
+    const writes = new Map();
+    const execFileSync = (_bin, args) => {
+      if (args[1] && args[1].startsWith("definitely-missing-cmd")) {
+        const error = new Error("definitely-missing-cmd: command not found") as Error & { status: number; stderr: string };
+        error.status = 127;
+        error.stderr = "definitely-missing-cmd: command not found\n";
+        throw error;
+      }
+      if (args[1] && args[1].startsWith("eslint")) {
+        return JSON.stringify([{ filePath: "/repo/src/a.ts", messages: [{ line: 2, ruleId: "semi", severity: 2 }] }]);
+      }
+      return "";
+    };
+    const existsSync = (file) => files.has(file);
+    const readFileSync = (file) => files.get(file);
+    const writeFileSync = (file, content) => writes.set(file, content);
+
+    const results = refreshBaselineAfterCommit({
+      rootDir: "/repo",
+      runtimeDir: "/repo/state/runtime",
+      config: { build: { type_check: "definitely-missing-cmd", lint: "eslint" } },
+      execFileSync,
+      existsSync,
+      readFileSync,
+      writeFileSync,
+      nowIso: () => "2026-05-24T00:00:00.000Z",
+    });
+
+    const tscResult = results.find((r) => r.tool === "tsc");
+    assert.equal(tscResult.skipped, true);
+    assert.equal(tscResult.reason, "refresh_failed");
+    assert.equal(tscResult.exit_code, 127);
+    // baseline keys NOT cleared
+    assert.ok(!writes.has("/repo/state/runtime/tsc-baseline.json"),
+      "tsc baseline must not be rewritten when tool is missing");
+    // eslint still refreshed normally
+    const eslintResult = results.find((r) => r.tool === "eslint");
+    assert.equal(eslintResult.skipped, false);
+  });
+
+  test("refreshBaselineAfterCommit prunes normally when tsc exits non-zero with real errors (P7.H4 happy)", () => {
+    const files = new Map([
+      ["/repo/state/runtime/tsc-baseline.json", JSON.stringify({
+        keys: ["src/a.ts:1:TS1000", "src/fixed.ts:2:TS2000"],
+        meta: { created_at: "2026-01-01T00:00:00.000Z", command: "tsc", exit_code: 1 },
+      })],
+    ]);
+    const writes = new Map();
+    const execFileSync = (_bin, args) => {
+      if (args[1] && args[1].startsWith("tsc")) {
+        const error = new Error("tsc failed") as Error & { status: number; stdout: string };
+        error.status = 1;
+        error.stdout = "src/a.ts(1,1): error TS1000: bad\n";
+        throw error;
+      }
+      return "";
+    };
+    const existsSync = (file) => files.has(file);
+    const readFileSync = (file) => files.get(file);
+    const writeFileSync = (file, content) => writes.set(file, content);
+
+    const results = refreshBaselineAfterCommit({
+      rootDir: "/repo",
+      runtimeDir: "/repo/state/runtime",
+      config: { build: { type_check: "tsc", lint: "eslint" } },
+      execFileSync,
+      existsSync,
+      readFileSync,
+      writeFileSync,
+      nowIso: () => "2026-05-24T00:00:00.000Z",
+    });
+
+    const tscResult = results.find((r) => r.tool === "tsc");
+    assert.equal(tscResult.skipped, false);
+    assert.equal(tscResult.before, 2);
+    assert.equal(tscResult.after, 1);
+    assert.equal(tscResult.removed, 1);
+    const refreshed = JSON.parse(writes.get("/repo/state/runtime/tsc-baseline.json"));
+    assert.deepEqual(refreshed.keys, ["src/a.ts:1:TS1000"]);
+    assert.equal(refreshed.meta.exit_code, 1);
+  });
 });

@@ -382,13 +382,33 @@ export function refreshBaselineAfterCommit({
     }
     try {
       const command = tool === "tsc"
-        ? `${config.build.type_check} 2>&1 || true`
-        : `${config.build.lint} 2>&1 || true`;
-      const output = execFileSync("sh", ["-c", command], {
-        cwd: rootDir,
-        encoding: "utf8",
-        timeout: 120000,
-      });
+        ? config.build.type_check
+        : config.build.lint;
+      let output = "";
+      let exitCode = 0;
+      try {
+        output = execFileSync("sh", ["-c", `${command} 2>&1`], {
+          cwd: rootDir,
+          encoding: "utf8",
+          timeout: 120000,
+        });
+      } catch (runError) {
+        output = (runError?.stdout || "") + (runError?.stderr || "");
+        exitCode = Number.isInteger(runError?.status) ? runError.status : 1;
+      }
+      const blocked = exitCode === 127 ||
+        /\bnot found\b|is not recognized|command not found/i.test(output) ||
+        (exitCode !== 0 && !output.trim());
+      if (blocked) {
+        results.push({
+          tool,
+          skipped: true,
+          reason: "refresh_failed",
+          exit_code: exitCode,
+          error: `baseline refresh 工具失败 (exit ${exitCode})，保留旧 baseline 不清零`,
+        });
+        continue;
+      }
       const currentKeys = tool === "tsc"
         ? parseTscBaselineKeys(output)
         : parseEslintBaselineErrorKeys(output, rootDir);
@@ -396,8 +416,8 @@ export function refreshBaselineAfterCommit({
       const oldKeys = baseline.keys || [];
       baseline.keys = pruneResolvedBaselineKeys(oldKeys, currentKeys, rootDir);
       baseline.meta = baseline.meta || {};
-      baseline.meta.command = command.replace(/\s+2>&1\s+\|\|\s+true$/, "");
-      baseline.meta.exit_code = 0;
+      baseline.meta.command = command;
+      baseline.meta.exit_code = exitCode;
       baseline.meta.commit = currentCommit(rootDir);
       baseline.meta.updated_at = nowIso();
       baseline.meta.artifact_hash = baselineArtifactHash(baseline);
