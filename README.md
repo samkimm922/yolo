@@ -63,7 +63,7 @@ scripts/yolo/
 - 克隆本仓库后在项目根目录运行：
 
 ```bash
-npm install
+pnpm install
 ```
 
 ## 快速开始
