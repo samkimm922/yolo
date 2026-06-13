@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { buildDemandSession, demandMarkdownArtifacts } from "./artifacts.js";
 import { inspectDemandQuality, inspectDemandReadiness } from "./gate.js";
-import { buildDemandSessionState, type DemandSessionStateResult, type DemandTriageResult, type DemandPrdReadinessResult, type DemandBlocker } from "./router.js";
+import { buildDemandSessionState, demandSessionSchemaError, type DemandSessionStateResult, type DemandTriageResult, type DemandPrdReadinessResult, type DemandBlocker } from "./router.js";
 import { inspectAtomicTask } from "../runtime/execution/atomic-task-doctor.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
 import { preflightPrdDocument } from "../prd/preflight.js";
@@ -114,7 +114,10 @@ export function readDemandSession(pathOrDir) {
     return { ok: false, path: sessionPath, error: `Demand session not found: ${sessionPath}` };
   }
   try {
-    return { ok: true, path: sessionPath, dir: dirname(sessionPath), session: readJson(sessionPath) };
+    const session = readJson(sessionPath);
+    const schemaError = demandSessionSchemaError(session, sessionPath);
+    if (schemaError) return { ok: false, path: sessionPath, error: schemaError };
+    return { ok: true, path: sessionPath, dir: dirname(sessionPath), session };
   } catch (error) {
     return { ok: false, path: sessionPath, error: `Demand session JSON parse failed: ${error.message}` };
   }

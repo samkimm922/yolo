@@ -12,6 +12,7 @@ import {
 import { inspectDemandQuality, inspectDemandReadiness } from "../src/demand/gate.js";
 import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
+import { demandSessionSchemaError } from "../src/demand/router.js";
 
 interface PrdResult {
   [key: string]: unknown;
@@ -1021,6 +1022,52 @@ describe("demand runtime", () => {
       assert.match(prd.prd.id, /^[A-Z]+-[0-9]+-[A-Z0-9-]+$/);
       assert.equal(prd.prd.tasks[0].handoff.session.state_path, ".yolo/demand/DEMAND-20260529-库存预警/tasks/DEMAND-REQ-001-0010101/session.json");
       assert.ok(prd.prd.execution_readiness.session_handoff.state_paths[0].includes("库存预警"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("P8.L7: readDemandSession rejects sessions with wrong/missing schema_version", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-schema-"));
+    try {
+      const validSession = {
+        schema_version: "1.0",
+        schema: "yolo.demand.session.v1",
+        id: "DEMAND-VALID-001",
+        objective: "valid session",
+      };
+      const validPath = join(root, "valid", "session.json");
+      mkdirSync(dirname(validPath), { recursive: true });
+      writeFileSync(validPath, JSON.stringify(validSession), "utf8");
+      assert.equal(readDemandSession(join(root, "valid")).ok, true);
+
+      const futureVersion = { ...validSession, schema_version: "2.0" };
+      const futurePath = join(root, "future", "session.json");
+      mkdirSync(dirname(futurePath), { recursive: true });
+      writeFileSync(futurePath, JSON.stringify(futureVersion), "utf8");
+      const futureRead = readDemandSession(join(root, "future"));
+      assert.equal(futureRead.ok, false);
+      assert.match(futureRead.error, /unsupported schema_version "2\.0"/);
+
+      const wrongSchema = { ...validSession, schema: "yolo.demand.session.v2" };
+      const wrongPath = join(root, "wrong-schema", "session.json");
+      mkdirSync(dirname(wrongPath), { recursive: true });
+      writeFileSync(wrongPath, JSON.stringify(wrongSchema), "utf8");
+      const wrongRead = readDemandSession(join(root, "wrong-schema"));
+      assert.equal(wrongRead.ok, false);
+      assert.match(wrongRead.error, /unsupported schema "yolo\.demand\.session\.v2"/);
+
+      const missingFields = { id: "no-schema-fields" };
+      const missingPath = join(root, "missing", "session.json");
+      mkdirSync(dirname(missingPath), { recursive: true });
+      writeFileSync(missingPath, JSON.stringify(missingFields), "utf8");
+      const missingRead = readDemandSession(join(root, "missing"));
+      assert.equal(missingRead.ok, false);
+      assert.match(missingRead.error, /unsupported schema_version "undefined"/);
+
+      // Helper returns null for the valid shape and a string otherwise.
+      assert.equal(demandSessionSchemaError(validSession), null);
+      assert.ok(typeof demandSessionSchemaError(futureVersion) === "string");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

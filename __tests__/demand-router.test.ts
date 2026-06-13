@@ -798,6 +798,7 @@ describe("demand router", () => {
     try {
       const sessionPath = join(root, ".yolo", "demand", "DEMAND-1", "session.json");
       writeJson(sessionPath, {
+        schema_version: "1.0",
         schema: "yolo.demand.session.v1",
         id: "DEMAND-1",
         idea: "Existing billing API needs an invoiceStatus schema field.",
