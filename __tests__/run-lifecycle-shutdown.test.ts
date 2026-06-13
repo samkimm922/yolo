@@ -99,6 +99,7 @@ describe("run lifecycle shutdown helpers", () => {
       logRun: (event, data) => calls.push(["logRun", event, data]),
       writeProgressSnapshot: (data) => calls.push(["snapshot", data]),
       cleanupRuntimeStateFiles: (data) => calls.push(["cleanup", data]),
+      execSync: (cmd, opts) => calls.push(["exec", cmd, opts.cwd]),
       error: (_message, value) => calls.push(["error", value.message]),
       exit: (code) => calls.push(["exit", code]),
     });
@@ -106,6 +107,34 @@ describe("run lifecycle shutdown helpers", () => {
     assert.deepEqual(calls[0], ["error", "boom"]);
     assert.equal(calls.some((call) => call[0] === "logRun" && call[2].exit_reason === "uncaughtException"), true);
     assert.deepEqual(calls.at(-1), ["exit", 1]);
+  });
+
+  test("fatal error handler cleans up the active worktree and branch like graceful shutdown", () => {
+    const calls = [];
+    handleRunnerFatalError({
+      reason: new Error("boom"),
+      exitReason: "uncaughtException",
+      runResultsTracker: { completed: new Set(), failed: [] },
+      state: makeState(),
+      startTimeMs: 0,
+      logRun: () => {},
+      writeProgressSnapshot: () => {},
+      cleanupRuntimeStateFiles: () => {},
+      execSync: (cmd, opts) => calls.push([cmd, opts.cwd]),
+      error: () => {},
+      exit: () => {},
+    });
+
+    assert.equal(
+      calls.some(([cmd, cwd]) => cmd.includes("git worktree remove --force") && cmd.includes("/tmp/wt") && cwd === "/repo"),
+      true,
+      "fatal error should remove the active worktree",
+    );
+    assert.equal(
+      calls.some(([cmd, cwd]) => cmd.includes("git branch -D") && cmd.includes("yolo/FIX") && cwd === "/repo"),
+      true,
+      "fatal error should delete the active branch",
+    );
   });
 
   test("standalone cleanup and snapshot helpers are injectable", () => {

@@ -160,6 +160,7 @@ export function handleRunnerFatalError({
   logRun,
   writeProgressSnapshot,
   cleanupRuntimeStateFiles,
+  execSync,
   error = console.error,
   exit = process.exit,
 } = Object()) {
@@ -171,6 +172,11 @@ export function handleRunnerFatalError({
       completedIds: runResultsTracker?.completed || [],
       failedIds: runResultsTracker?.failed || [],
       writeProgressSnapshot,
+    });
+    cleanupActiveGitSession({
+      ...state.activeGitSession(),
+      rootDir: state.rootDir(),
+      execSync,
     });
     cleanupRuntimeStateFiles({ stateDir: state.stateDir() });
   } catch (_) {}

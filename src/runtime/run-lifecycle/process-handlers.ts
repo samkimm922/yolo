@@ -42,6 +42,7 @@ export function registerRunnerProcessHandlers({
       logRun,
       writeProgressSnapshot,
       cleanupRuntimeStateFiles,
+      execSync,
       error: (_message, value) => console.error("[yolo-runner] 未捕获的 Promise rejection:", value),
     });
   });
@@ -55,6 +56,7 @@ export function registerRunnerProcessHandlers({
       logRun,
       writeProgressSnapshot,
       cleanupRuntimeStateFiles,
+      execSync,
       error: (_message, value) => console.error("[yolo-runner] 未捕获的异常:", value),
     });
   });
