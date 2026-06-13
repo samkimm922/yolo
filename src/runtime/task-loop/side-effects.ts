@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
+import { writeStateAtomic } from "../persist/atomic-state.js";
 
 function result(error, fallback) {
   if (!error) return fallback;
@@ -24,7 +25,7 @@ export function writeExpandedTasksSnapshot({ filePath, source, tasks = [], compl
   try {
     const payload = buildExpandedTasksSnapshot({ source, tasks, completedIds, now });
     mkdirSync(dirname(filePath), { recursive: true });
-    writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
+    writeStateAtomic(filePath, payload);
     return { wrote: true, payload };
   } catch (error) {
     return result(error, { wrote: false, reason: "write_failed" });
@@ -43,7 +44,7 @@ export function updateExpandedTaskSnapshot({ filePath, taskId, outcome, now = ne
     if (outcome.counts_as_completed != null) payload.tasks[idx].counts_as_completed = outcome.counts_as_completed;
     if (outcome.reason) payload.tasks[idx].failReason = outcome.reason;
     payload.tasks[idx].updatedAt = now;
-    writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
+    writeStateAtomic(filePath, payload);
     return { wrote: true, payload, task: payload.tasks[idx] };
   } catch (error) {
     return result(error, { wrote: false, reason: "update_failed" });
@@ -63,7 +64,7 @@ export function writeProgressSnapshot({ stateDir, completedIds, failedIds, now =
       total: completed.length + failed.length,
     };
     const filePath = join(snapshotDir, "progress-snapshot.json");
-    writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
+    writeStateAtomic(filePath, payload);
     return { wrote: true, filePath, payload };
   } catch (error) {
     return result(error, { wrote: false, reason: "write_failed" });

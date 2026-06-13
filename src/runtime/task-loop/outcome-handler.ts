@@ -204,6 +204,17 @@ export function handleTaskOutcome({
   }
 
   const failKey = `${r.status}:${(r.reason || "").slice(0, 60)}`;
+  // P9.M2: persist the terminal failure to the PRD so task.status agrees with the run report.
+  // "failed" is not stale-reset on resume (only "running" is), leaving retry/circuit-breaker intact.
+  recordTaskTransition(failTaskTransition({
+    taskId: task.id,
+    reason: r.reason || r.status,
+    prdUpdate: {
+      phase: "failed",
+      counts_as_completed: false,
+    },
+    now,
+  }));
   if (lastFailKey && failKey === lastFailKey) {
     log("!!", "全局熔断", `连续 2 个 task 同因失败: ${failKey} — 疑似引擎 bug，全部停机`);
     results.failed.push(task.id);

@@ -1,16 +1,19 @@
 import {
+  closeSync as defaultCloseSync,
   copyFileSync as defaultCopyFileSync,
   existsSync as defaultExistsSync,
   mkdirSync as defaultMkdirSync,
+  openSync as defaultOpenSync,
   readFileSync as defaultReadFileSync,
   readdirSync as defaultReaddirSync,
   renameSync as defaultRenameSync,
   rmSync as defaultRmSync,
   unlinkSync as defaultUnlinkSync,
   writeFileSync as defaultWriteFileSync,
+  writeSync as defaultWriteSync,
 } from "node:fs";
 import { execFileSync as defaultExecFileSync, execSync as defaultExecSync } from "node:child_process";
-import { basename, join, resolve } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 import {
   BASELINE_TOOLS,
   baselineFileName,
@@ -29,36 +32,71 @@ export function acquireRunnerPidLock({
   pidFile,
   pid,
   exitOnComplete = true,
-  existsSync = defaultExistsSync,
   readFileSync = defaultReadFileSync,
-  writeFileSync = defaultWriteFileSync,
+  openSync = defaultOpenSync,
+  writeSync = defaultWriteSync,
+  closeSync = defaultCloseSync,
   unlinkSync = defaultUnlinkSync,
   processKill = process.kill,
   processExit = process.exit,
   makeError = createRunnerError,
   consoleError = (...args) => console.error(...args),
 } = Object()) {
-  if (existsSync(pidFile)) {
-    const oldPid = parseInt(readFileSync(pidFile, "utf8").trim(), 10);
-    try {
-      processKill(oldPid, 0);
-    } catch {
-      try { unlinkSync(pidFile); } catch (_) {}
+  // P9.H1: claim the pid file atomically with O_EXCL (openSync "wx") so two
+  // runners cannot both pass an existsSync check and then race on the write —
+  // the TOCTOU that let two runners both "acquire" the lock (verified: two
+  // acquires both returned acquired:true and wrote [111,222]). openSync("wx")
+  // either creates the file exclusively or throws EEXIST.
+  const tryCreate = () => {
+    const fd = openSync(pidFile, "wx");
+    writeSync(fd, String(pid));
+    closeSync(fd);
+  };
+
+  const rejectActive = (oldPid) => {
+    consoleError(`[yolo-runner] 另一个 runner 实例正在运行 (PID ${oldPid})。如确认已停止，删除 ${pidFile}`);
+    if (exitOnComplete) {
+      processExit(1);
+      return { acquired: false, pid: oldPid, exited: true };
     }
-    if (existsSync(pidFile)) {
-      consoleError(`[yolo-runner] 另一个 runner 实例正在运行 (PID ${oldPid})。如确认已停止，删除 ${pidFile}`);
-      if (exitOnComplete) {
-        processExit(1);
-        return { acquired: false, pid: oldPid, exited: true };
-      }
-      throw makeError(`Another runner instance is active (PID ${oldPid})`, 1, {
-        code: "RUNNER_ALREADY_ACTIVE",
-        pid: oldPid,
-      });
-    }
+    throw makeError(`Another runner instance is active (PID ${oldPid})`, 1, {
+      code: "RUNNER_ALREADY_ACTIVE",
+      pid: oldPid,
+    });
+  };
+
+  // Fast path: exclusive create succeeds when no pid file exists yet.
+  try {
+    tryCreate();
+    return { acquired: true, pid };
+  } catch (error) {
+    if (!error || error.code !== "EEXIST") throw error;
   }
-  writeFileSync(pidFile, String(pid), "utf8");
-  return { acquired: true, pid };
+
+  // pid file exists — read the owner and check whether it is alive.
+  let oldPid = NaN;
+  try {
+    oldPid = parseInt(readFileSync(pidFile, "utf8").trim(), 10);
+  } catch (_) {
+    return rejectActive(oldPid);
+  }
+  try {
+    processKill(oldPid, 0);
+    return rejectActive(oldPid);
+  } catch (_) {
+    // owner is dead — fall through to takeover
+  }
+
+  // Stale lock from a dead process: remove it and retry the exclusive create
+  // once. If another runner grabbed it in the gap, fail as already-active.
+  try { unlinkSync(pidFile); } catch (_) {}
+  try {
+    tryCreate();
+    return { acquired: true, pid };
+  } catch (error) {
+    if (!error || error.code !== "EEXIST") throw error;
+    return rejectActive(oldPid);
+  }
 }
 
 export function rotateTaskResults({
@@ -223,50 +261,75 @@ export function initializeMissingBaselines({
 
 export function cleanupStaleGitWorktreesAndBranches({
   rootDir,
+  worktreeRoot = null,
   execSync = defaultExecSync,
   consoleLog = (...args) => console.log(...args),
 } = Object()) {
   const removed = { worktrees: [], branches: [] };
+
+  // P9.M4: only touch worktrees (and the branches checked out in them) that live
+  // under THIS run's worktreeRoot. The previous blanket "yolo-*" sweep deleted
+  // another runner's active worktree/branch when two runners shared a repo.
+  // H1's PID lock prevents concurrent same-repo runners; this is the
+  // defense-in-depth that keeps cleanup out of unrelated yolo-* state.
+  const wtRootResolved = worktreeRoot ? resolve(worktreeRoot) : null;
+  const isYoloPath = (wtPath) => wtPath.includes(".yolo-worktrees") || wtPath.includes("yolo-");
+  const isUnderRoot = (wtPath) => {
+    if (!wtRootResolved) return true;
+    const resolved = resolve(wtPath);
+    return resolved === wtRootResolved || resolved.startsWith(`${wtRootResolved}${sep}`);
+  };
+
+  const ownedWorktrees = [];
+  const ownedBranches = [];
   try {
     const wtList = execSync("git worktree list --porcelain", {
       cwd: rootDir,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     });
-    const wtLines = wtList.split("\n").filter((line) => line.startsWith("Worktree "));
-    for (const line of wtLines) {
-      const wtPath = line.replace("Worktree ", "");
-      if (!wtPath.includes(".yolo-worktrees") && !wtPath.includes("yolo-")) continue;
-      try {
-        execSync(`git worktree remove --force "${wtPath}" 2>/dev/null`, {
-          cwd: rootDir,
-          stdio: ["ignore", "pipe", "ignore"],
-        });
-        removed.worktrees.push(wtPath);
-        consoleLog(`  清理残留 worktree: ${wtPath}`);
-      } catch (_) {}
-    }
-  } catch (_) {}
-
-  try {
-    const branches = execSync('git branch --list "yolo-*"', {
-      cwd: rootDir,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    if (branches) {
-      for (const branch of branches.split("\n").map((line) => line.trim()).filter(Boolean)) {
-        try {
-          execSync(`git branch -D "${branch}" 2>/dev/null`, {
-            cwd: rootDir,
-            stdio: ["ignore", "pipe", "ignore"],
-          });
-          removed.branches.push(branch);
-          consoleLog(`  清理残留分支: ${branch}`);
-        } catch (_) {}
+    let curPath = null;
+    let curBranch = null;
+    const flush = () => {
+      if (curPath && isYoloPath(curPath) && isUnderRoot(curPath)) {
+        ownedWorktrees.push(curPath);
+        if (curBranch) ownedBranches.push(curBranch);
+      }
+    };
+    for (const rawLine of wtList.split("\n")) {
+      const line = rawLine.trim();
+      if (line.startsWith("Worktree ")) {
+        flush();
+        curPath = line.slice("Worktree ".length).trim();
+        curBranch = null;
+      } else if (line.startsWith("branch ")) {
+        curBranch = line.slice("branch ".length).trim().replace(/^refs\/heads\//, "");
       }
     }
+    flush();
   } catch (_) {}
+
+  for (const wtPath of ownedWorktrees) {
+    try {
+      execSync(`git worktree remove --force "${wtPath}" 2>/dev/null`, {
+        cwd: rootDir,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      removed.worktrees.push(wtPath);
+      consoleLog(`  清理残留 worktree: ${wtPath}`);
+    } catch (_) {}
+  }
+
+  for (const branch of ownedBranches) {
+    try {
+      execSync(`git branch -D "${branch}" 2>/dev/null`, {
+        cwd: rootDir,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      removed.branches.push(branch);
+      consoleLog(`  清理残留分支: ${branch}`);
+    } catch (_) {}
+  }
   return removed;
 }
 
@@ -298,27 +361,31 @@ export function cleanupRetryRoundFiles({
 export function loadResumeCompletedFromPrd({
   prdPath,
   taskCountsAsCompleted,
+  existsSync = defaultExistsSync,
   readFileSync = defaultReadFileSync,
   writeFileSync = defaultWriteFileSync,
   renameSync = defaultRenameSync,
   consoleLog = (...args) => console.log(...args),
 } = Object()) {
-  try {
-    const prd = JSON.parse(readFileSync(prdPath, "utf8"));
-    const resumeCompleted = new Set((prd.tasks || []).filter(taskCountsAsCompleted).map((task) => task.id));
-    const staleRunning = (prd.tasks || []).filter((task) => task.status === "running");
-    if (staleRunning.length > 0) {
-      for (const task of staleRunning) task.status = "pending";
-      const tmp = `${prdPath}.tmp`;
-      writeFileSync(tmp, JSON.stringify(prd, null, 2), "utf8");
-      renameSync(tmp, prdPath);
-      consoleLog(`[resume] 重置 ${staleRunning.length} 个中断任务: ${staleRunning.map((task) => task.id).join(", ")}`);
-    }
-    consoleLog(`[resume] PRD 中已完成: ${resumeCompleted.size} 个任务`);
-    return resumeCompleted;
-  } catch (_) {
+  // Fresh run: no PRD yet — there is nothing to resume from, an empty set is correct.
+  if (!existsSync(prdPath)) {
     return new Set();
   }
+  // PRD exists. A parse failure means the PRD is corrupt; fail closed (surface the
+  // error) instead of silently returning an empty set, which would mark every prior
+  // completion as undone and rerun the whole plan (A3 silent-failure family).
+  const prd = JSON.parse(readFileSync(prdPath, "utf8"));
+  const resumeCompleted = new Set((prd.tasks || []).filter(taskCountsAsCompleted).map((task) => task.id));
+  const staleRunning = (prd.tasks || []).filter((task) => task.status === "running");
+  if (staleRunning.length > 0) {
+    for (const task of staleRunning) task.status = "pending";
+    const tmp = `${prdPath}.tmp`;
+    writeFileSync(tmp, JSON.stringify(prd, null, 2), "utf8");
+    renameSync(tmp, prdPath);
+    consoleLog(`[resume] 重置 ${staleRunning.length} 个中断任务: ${staleRunning.map((task) => task.id).join(", ")}`);
+  }
+  consoleLog(`[resume] PRD 中已完成: ${resumeCompleted.size} 个任务`);
+  return resumeCompleted;
 }
 
 export function prepareRunStartup({
@@ -376,7 +443,9 @@ export function prepareRunStartup({
   writeCurrentRun(runId, prdPath);
   logProgress("RUN", runId, "started");
   startProgressApiServer(config.progress_server.port);
-  cleanupStaleGitWorktreesAndBranches({ rootDir });
+  // P9.M4: scope cleanup to this run's worktree root (same convention as
+  // resolveRunnerContext) so a shared repo's other yolo-* state is not swept.
+  cleanupStaleGitWorktreesAndBranches({ rootDir, worktreeRoot: join(rootDir, "..", ".yolo-worktrees") });
   cleanupRetryRoundFiles({ retryDir: join(yoloRoot, "data"), currentPrdPath: prdPath });
   return loadResumeCompletedFromPrd({ prdPath, taskCountsAsCompleted });
 }

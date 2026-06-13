@@ -20,15 +20,25 @@ function tempDir() {
 }
 
 describe("run lifecycle startup helpers", () => {
-  test("acquireRunnerPidLock removes stale pid files and writes the current pid", () => {
+  test("acquireRunnerPidLock takes over a stale pid file (dead owner) via exclusive create", () => {
     const files = new Map([["/state/runner.pid", "123"]]);
     const unlinked = [];
+    let fdCounter = 100;
     const result = acquireRunnerPidLock({
       pidFile: "/state/runner.pid",
       pid: 456,
-      existsSync: (file) => files.has(file),
+      openSync: (file, flags) => {
+        if (flags === "wx" && files.has(file)) {
+          const err = new Error("EEXIST");
+          (err as Error & { code: string }).code = "EEXIST";
+          throw err;
+        }
+        files.set(file, "456");
+        return ++fdCounter;
+      },
       readFileSync: (file) => files.get(file),
-      writeFileSync: (file, value) => files.set(file, value),
+      writeSync: () => {},
+      closeSync: () => {},
       unlinkSync: (file) => {
         unlinked.push(file);
         files.delete(file);
@@ -49,9 +59,15 @@ describe("run lifecycle startup helpers", () => {
       pidFile: "/state/runner.pid",
       pid: 456,
       exitOnComplete: false,
-      existsSync: () => true,
+      openSync: () => {
+        const err = new Error("EEXIST");
+        (err as Error & { code: string }).code = "EEXIST";
+        throw err;
+      },
       readFileSync: () => "123",
-      writeFileSync: () => {},
+      writeSync: () => {},
+      closeSync: () => {},
+      unlinkSync: () => {},
       processKill: () => {},
       consoleError: (message) => errors.push(message),
     }), (error) => {
@@ -60,6 +76,83 @@ describe("run lifecycle startup helpers", () => {
       return true;
     });
     assert.match(errors[0], /另一个 runner 实例正在运行/);
+  });
+
+  test("acquireRunnerPidLock is race-free: only the first contender acquires when both face an existing file (TOCTOU fix)", () => {
+    const files = new Map();
+    let fdCounter = 200;
+    function acquireAs(runnerPid) {
+      return acquireRunnerPidLock({
+        pidFile: "/state/runner.pid",
+        pid: runnerPid,
+        exitOnComplete: false,
+        openSync: (file, flags) => {
+          if (flags === "wx" && files.has(file)) {
+            const err = new Error("EEXIST");
+            (err as Error & { code: string }).code = "EEXIST";
+            throw err;
+          }
+          files.set(file, String(runnerPid));
+          return ++fdCounter;
+        },
+        readFileSync: (file) => files.get(file),
+        writeSync: () => {},
+        closeSync: () => {},
+        unlinkSync: () => {},
+        processKill: () => {}, // first owner always reports alive
+      });
+    }
+
+    const first = acquireAs(111);
+    assert.deepEqual(first, { acquired: true, pid: 111 });
+
+    let second = null;
+    let thrown = null;
+    try {
+      second = acquireAs(222);
+    } catch (error) {
+      thrown = error;
+    }
+
+    assert.equal(second, null, "the second contender must not acquire the lock");
+    assert.ok(thrown, "the second contender must throw");
+    assert.equal((thrown as Error & { code: string }).code, "RUNNER_ALREADY_ACTIVE");
+    assert.equal((thrown as Error & { pid: number }).pid, 111);
+    // the pid file must keep the first owner — it must never flip to 222
+    assert.equal(files.get("/state/runner.pid"), "111");
+  });
+
+  test("acquireRunnerPidLock reclaims the lock after a dead owner when no other runner contends", () => {
+    const files = new Map([["/state/runner.pid", "999"]]);
+    const unlinked = [];
+    let fdCounter = 300;
+    const result = acquireRunnerPidLock({
+      pidFile: "/state/runner.pid",
+      pid: 321,
+      openSync: (file, flags) => {
+        if (flags === "wx" && files.has(file)) {
+          const err = new Error("EEXIST");
+          (err as Error & { code: string }).code = "EEXIST";
+          throw err;
+        }
+        files.set(file, "321");
+        return ++fdCounter;
+      },
+      readFileSync: (file) => files.get(file),
+      writeSync: () => {},
+      closeSync: () => {},
+      unlinkSync: (file) => {
+        unlinked.push(file);
+        files.delete(file);
+      },
+      processKill: () => {
+        throw new Error("no such process");
+      },
+    });
+
+    assert.deepEqual(result, { acquired: true, pid: 321 });
+    assert.deepEqual(unlinked, ["/state/runner.pid"]);
+    assert.equal(files.get("/state/runner.pid"), "321");
   });
 
   test("rotateTaskResults backs up and deletes stale result files", () => {
@@ -225,17 +318,24 @@ describe("run lifecycle startup helpers", () => {
     assert.deepEqual(removed, ["/yolo/data/retry-round-a.json"]);
   });
 
-  test("cleanupStaleGitWorktreesAndBranches removes yolo worktrees and branches", () => {
+  test("cleanupStaleGitWorktreesAndBranches removes this run's yolo worktrees and their branches", () => {
     const commands = [];
     const result = cleanupStaleGitWorktreesAndBranches({
       rootDir: "/repo",
+      worktreeRoot: "/repo/../.yolo-worktrees",
       consoleLog: () => {},
       execSync: (command) => {
         commands.push(command);
         if (command === "git worktree list --porcelain") {
-          return "Worktree /repo\nWorktree /repo/../.yolo-worktrees/yolo-1\n";
+          return [
+            "Worktree /repo",
+            "HEAD abc",
+            "Worktree /repo/../.yolo-worktrees/yolo-1",
+            "HEAD def",
+            "branch refs/heads/yolo-a",
+            "",
+          ].join("\n");
         }
-        if (command === 'git branch --list "yolo-*"') return "yolo-a\n";
         return "";
       },
     });
@@ -245,6 +345,45 @@ describe("run lifecycle startup helpers", () => {
       branches: ["yolo-a"],
     });
     assert.ok(commands.includes('git branch -D "yolo-a" 2>/dev/null'));
+  });
+
+  test("cleanupStaleGitWorktreesAndBranches leaves another runner's worktree and branch alone", () => {
+    const removed = [];
+    const result = cleanupStaleGitWorktreesAndBranches({
+      rootDir: "/repo",
+      worktreeRoot: "/repo/../.yolo-worktrees",
+      consoleLog: () => {},
+      execSync: (command) => {
+        if (command === "git worktree list --porcelain") {
+          return [
+            "Worktree /repo",
+            "HEAD abc",
+            // owned by this run: under worktreeRoot
+            "Worktree /repo/../.yolo-worktrees/OWNED",
+            "HEAD def",
+            "branch refs/heads/yolo-owned-1",
+            // NOT owned: lives outside this run's worktreeRoot
+            "Worktree /elsewhere/.yolo-worktrees/ALIEN",
+            "HEAD ghi",
+            "branch refs/heads/yolo-alien-1",
+            "",
+          ].join("\n");
+        }
+        if (command.includes("git worktree remove") || command.includes("git branch -D")) {
+          removed.push(command);
+        }
+        return "";
+      },
+    });
+
+    assert.deepEqual(result, {
+      worktrees: ["/repo/../.yolo-worktrees/OWNED"],
+      branches: ["yolo-owned-1"],
+    });
+    assert.equal(removed.some((cmd) => cmd.includes("OWNED")), true, "owned worktree should be removed");
+    assert.equal(removed.some((cmd) => cmd.includes("yolo-owned-1")), true, "owned branch should be deleted");
+    assert.equal(removed.some((cmd) => cmd.includes("ALIEN")), false, "alien worktree must not be touched");
+    assert.equal(removed.some((cmd) => cmd.includes("yolo-alien-1")), false, "alien branch must not be deleted");
   });
 
   test("loadResumeCompletedFromPrd resets running tasks and returns completed ids", () => {
@@ -272,6 +411,43 @@ describe("run lifecycle startup helpers", () => {
         "pending",
       ]);
       assert.equal(existsSync(`${prdPath}.tmp`), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("loadResumeCompletedFromPrd returns an empty set when the PRD does not exist (fresh run)", () => {
+    const root = tempDir();
+    try {
+      const prdPath = join(root, "missing-prd.json");
+      const completed = loadResumeCompletedFromPrd({
+        prdPath,
+        taskCountsAsCompleted: () => true,
+        consoleLog: () => {},
+      });
+      assert.equal(completed.size, 0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("loadResumeCompletedFromPrd fails closed on a corrupt PRD instead of silently rerunning everything", () => {
+    const root = tempDir();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeFileSync(prdPath, "{ this is not valid json ,,}", "utf8");
+
+      assert.throws(
+        () => loadResumeCompletedFromPrd({
+          prdPath,
+          taskCountsAsCompleted: () => true,
+          consoleLog: () => {},
+        }),
+        (error) => {
+          assert.ok(error instanceof SyntaxError, "corrupt PRD should surface as a JSON parse error, not an empty set");
+          return true;
+        },
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -139,6 +139,65 @@ describe("task-loop side effects", () => {
       assert.deepEqual(calls[0][1], [join(root, "lessons-analyzer.js")]);
       assert.equal(calls[0][2].cwd, root);
       assert.equal(calls[0][2].timeout, 1234);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("updateExpandedTaskSnapshot writes atomically (tmp+rename), leaving a .bak of the prior snapshot", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "expanded-tasks.json");
+      const original = {
+        source: "data/prd.json",
+        tasks: [{ id: "FIX-P36-001", status: "pending" }],
+      };
+      writeFileSync(filePath, JSON.stringify(original, null, 2), "utf8");
+
+      updateExpandedTaskSnapshot({
+        filePath,
+        taskId: "FIX-P36-001",
+        outcome: { status: "failed", reason: "gate broke" },
+        now: "2026-06-13T00:00:00.000Z",
+      });
+
+      // atomic write backs up the prior file before rename
+      assert.equal(existsSync(`${filePath}.bak`), true, "atomic write should leave a .bak backup");
+      assert.equal(existsSync(`${filePath}.tmp`), false, "tmp file should be renamed away");
+      const updated = JSON.parse(readFileSync(filePath, "utf8"));
+      assert.equal(updated.tasks[0].status, "failed");
+      assert.deepEqual(JSON.parse(readFileSync(`${filePath}.bak`, "utf8")), original);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("writeProgressSnapshot writes atomically (tmp+rename), leaving a .bak on overwrite", () => {
+    const root = tempDir();
+    try {
+      const first = writeProgressSnapshot({
+        stateDir: root,
+        completedIds: new Set(["A"]),
+        failedIds: [],
+        now: "2026-06-13T00:00:00.000Z",
+      });
+      const snapshotPath = join(root, "runtime", "progress-snapshot.json");
+      assert.equal(existsSync(`${snapshotPath}.bak`), false, "first write has nothing to back up");
+
+      writeProgressSnapshot({
+        stateDir: root,
+        completedIds: new Set(["A", "B"]),
+        failedIds: ["C"],
+        now: "2026-06-13T00:00:01.000Z",
+      });
+
+      assert.equal(existsSync(`${snapshotPath}.bak`), true, "overwrite should back up the prior snapshot");
+      assert.equal(existsSync(`${snapshotPath}.tmp`), false, "tmp file should be renamed away");
+      const prev = JSON.parse(readFileSync(`${snapshotPath}.bak`, "utf8"));
+      assert.deepEqual(prev, first.payload);
+      const next = JSON.parse(readFileSync(snapshotPath, "utf8"));
+      assert.deepEqual(next.completed, ["A", "B"]);
+      assert.deepEqual(next.failed, ["C"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
