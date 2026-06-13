@@ -256,6 +256,15 @@ export function evalNoNewLintErrors(params = Object(), _taskScope, ROOT, exec) {
     }
   }
 
+  if (!eslint.ok && currentKeys.size === 0) {
+    const code = eslint.exitCode != null ? `(code ${eslint.exitCode})` : "";
+    return {
+      passed: false,
+      detail: `eslint 命令异常退出${code}，无法确认零错误`,
+      type: "no_new_lint_errors",
+    };
+  }
+
   const baseSet = new Set(baselineKeys);
   const newIssues = [...currentKeys].filter((k) => !baseSet.has(k));
 

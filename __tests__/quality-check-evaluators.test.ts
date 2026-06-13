@@ -1,9 +1,9 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { evalNoNewTypeErrors } from "../src/lib/evaluators/quality-check.js";
+import { evalNoNewTypeErrors, evalNoNewLintErrors } from "../src/lib/evaluators/quality-check.js";
 
 function emptyRoot() {
   return mkdtempSync(join(tmpdir(), "yolo-qc-"));
@@ -53,6 +53,50 @@ describe("evalNoNewTypeErrors fail-closed on tool failure (P7.H1)", () => {
       const result = evalNoNewTypeErrors({ command: "tsc --noEmit" }, Object(), root, exec);
       assert.equal(result.passed, false);
       assert.match(result.detail, /新增/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("evalNoNewLintErrors fail-closed on tool failure (P7.H2)", () => {
+  test("non-zero exit with empty [] output → FAIL, not pass", () => {
+    const root = emptyRoot();
+    try {
+      const exec = () => ({
+        ok: false,
+        out: "[]",
+        err: "",
+        commandNotFound: false,
+        exitCode: 2,
+      });
+      const result = evalNoNewLintErrors({ command: "node -e 'process.stdout.write(\"[]\");process.exit(2)'" }, Object(), root, exec);
+      assert.equal(result.passed, false);
+      assert.match(result.detail, /异常退出/);
+      assert.match(result.detail, /code 2/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("exit 0 with clean [] output → pass", () => {
+    const root = emptyRoot();
+    try {
+      const exec = () => ({ ok: true, out: "[]", commandNotFound: false, exitCode: 0 });
+      const result = evalNoNewLintErrors({ command: "eslint --format json ." }, Object(), root, exec);
+      assert.equal(result.passed, true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("eslint output not parseable as JSON → FAIL", () => {
+    const root = emptyRoot();
+    try {
+      assert.ok(!existsSync(join(root, "scripts", "yolo", "state", "runtime", "eslint-baseline.json")));
+      const exec = () => ({ ok: true, out: "not json garbage", commandNotFound: false, exitCode: 0 });
+      const result = evalNoNewLintErrors({ command: "eslint --format json ." }, Object(), root, exec);
+      assert.equal(result.passed, false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
