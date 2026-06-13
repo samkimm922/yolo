@@ -40,6 +40,7 @@ import {
   writeRunnerStateSnapshot,
 } from "./run-lifecycle/recovery-checkpoints.js";
 import { createRunnerTimeoutController } from "./run-lifecycle/shutdown.js";
+import { decidePreExecutionOutcome } from "./run-lifecycle/pre-execution-outcome.js";
 import { inspectLifecycleGuard } from "../lifecycle/guard.js";
 import {
   createRunnerWorktreeHandlers,
@@ -462,32 +463,25 @@ function writeCurrentRun(runId, prdPath) {
 
 const runnerError = createRunnerError;
 
-function runPreExecutionGates(prdPath, options = Object()) {
+export function runPreExecutionGates(prdPath, options = Object()) {
   const exitOnFailure = options.exitOnFailure !== false;
-  const prd = loadPRD(prdPath);
-  const gate = inspectPreExecutionGates({
+  const deps = options.deps || Object();
+  const loadFn = deps.loadPRD || loadPRD;
+  const inspectFn = deps.inspectGates || inspectPreExecutionGates;
+  const prd = loadFn(prdPath);
+  const gate = inspectFn({
     prd,
     prdPath,
     stateDir: STATE_DIR,
     projectRoot: ROOT, config: runtimeConfig,
   });
-  if (gate.status !== "pass") {
-    const output = gate.messages.join("\n");
-    if (gate.status === "warning") console.warn(output);
-    else console.error(output);
-    if (exitOnFailure) process.exit(gate.exit_code || 1);
-    const details = gate.stage === "contract"
-      ? {
-          code: gate.code,
-          doctor: gate.contract.doctor,
-          migration: gate.contract.migration,
-          evidence_file: gate.contract.evidence_path,
-        }
-      : {
-          code: gate.code,
-          spec_governance: gate.spec.result,
-        };
-    throw runnerError(gate.message, gate.exit_code, details);
+  const decision = decidePreExecutionOutcome(gate, { exitOnFailure });
+  if (decision.halt) {
+    if (typeof deps.onHalt === "function") deps.onHalt(decision, gate);
+    if (decision.logLevel === "warn") console.warn(decision.output);
+    else console.error(decision.output);
+    if (decision.shouldExit) process.exit(decision.exitCode);
+    throw runnerError(decision.errorMessage, decision.throwExitCode, decision.details);
   }
 }
 
@@ -506,7 +500,7 @@ export async function run(prdPath, options = Object()) {
   try {
     const lg = inspectLifecycleGuard({ command: "yolo-run", projectRoot: ROOT, stateRoot: STATE_ROOT, prdPath });
     if (lg.status !== "pass") { console.error(lg.summary || "Lifecycle guard blocked"); throw runnerError(lg.summary || "Lifecycle guard blocked", 1, { lifecycle_guard: lg }); }
-    runPreExecutionGates(prdPath, { exitOnFailure: exitOnComplete });
+    runPreExecutionGates(prdPath, { exitOnFailure: exitOnComplete, deps: options.deps });
 
     const resumeCompleted = prepareRunStartup({
       runId,

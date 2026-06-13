@@ -2,6 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { decidePreExecutionOutcome } from "../src/runtime/run-lifecycle/pre-execution-outcome.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 const runnerEntrySource = readFileSync(resolve(YOLO_DIR, "src/cli/yolo.ts"), "utf8");
@@ -57,15 +58,23 @@ const prdSchema = JSON.parse(readFileSync(resolve(YOLO_DIR, "schemas/prd-v2.sche
 
 describe("runner review fix execution flow", () => {
   test("runner has a fail-closed spec governance gate before execution", () => {
+    // Behavior (B1): a blocked pre-execution gate halts via the pure decision seam — fail-closed.
+    const blocked = decidePreExecutionOutcome(
+      { status: "blocked", stage: "spec", code: "PRD_SPEC_GOVERNANCE_BLOCKED", exit_code: 1, message: "blocked", spec: { result: {} }, messages: ["[spec-governance] blocked"] },
+      { exitOnFailure: false },
+    );
+    assert.equal(blocked.halt, true);
+    assert.equal(blocked.outcome, "blocked");
+    assert.equal(blocked.shouldThrow, true);
+    assert.equal(blocked.shouldExit, false);
+    // Architecture contracts for the spec governance gate (kept; B2 revisits remaining static asserts).
     assert.match(runnerSource, /function\s+runPreExecutionGates/);
-    assert.match(runnerSource, /inspectPreExecutionGates\(\{/);
     assert.match(preExecutionGatesSource, /inspectPrdContractDoctorGate\(\{/);
     assert.match(preExecutionGatesSource, /inspectSpecGovernanceGate\(\{\s*prd\s*\}\)/);
     assert.match(specGovernanceGateSource, /requireRequirements:\s*options\.requireRequirements\s*!==\s*false/);
     assert.match(specGovernanceGateSource, /requireDesign:\s*options\.requireDesign\s*!==\s*false/);
     assert.match(specGovernanceGateSource, /requireEvidenceForTerminal:\s*options\.requireEvidenceForTerminal\s*!==\s*false/);
     assert.match(specGovernanceGateSource, /PRD_SPEC_GOVERNANCE_BLOCKED/);
-    assert.match(runnerSource, /runPreExecutionGates\(prdPath,\s*\{\s*exitOnFailure:\s*exitOnComplete\s*\}\)/);
   });
 
   test("context pack failures use a structured outcome helper", () => {

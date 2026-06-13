@@ -22,10 +22,10 @@
 | 指标 | 当前值 | 目标 | 状态 |
 |---|---:|---:|---|
 | `runner.ts` 行数 | 12 | <300 | 达标 |
-| `src/runtime/runner-core.ts` 行数 | 600 | <=600 internal core | 达标，继续按需拆分 |
+| `src/runtime/runner-core.ts` 行数 | 594 | <=600 internal core | 达标，继续按需拆分 |
 | 根目录 `.ts` 文件 | 7 | 7 public/compat entry | 达标 |
-| `src/**/*.ts` 文件 | 196 | 按 core/prd/spec/runtime/agents/review/evidence/workflows/memory/lifecycle/discovery/eval/parallel/demand/security 分层 | 进行中 |
-| 测试文件 | 174 | 持续增加真实项目 fixture/e2e | 进行中 |
+| `src/**/*.ts` 文件 | 197 | 按 core/prd/spec/runtime/agents/review/evidence/workflows/memory/lifecycle/discovery/eval/parallel/demand/security 分层 | 进行中 |
+| 测试文件 | 175 | 持续增加真实项目 fixture/e2e | 进行中 |
 | package exports | 52 | stable/experimental/internal 分层明确 | 已建 manifest，root migration debt 清零，继续冻结 experimental API |
 | package bins | 6 | CLI public surface 明确 | 已登记 |
 | `docs/**/*.md` 文件 | 21 | 公开 docs / memory mirrors 与当前结构同步 | 进行中 |
