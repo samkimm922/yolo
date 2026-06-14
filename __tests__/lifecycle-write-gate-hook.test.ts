@@ -5,7 +5,10 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync 
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const HOOK = join(process.cwd(), "hooks/pre-tool-lifecycle-gate.ts");
+// Spawn the BUILT hook (.js via node) instead of `npx tsx <.ts>`: npx + tsx
+// cold-start ran 8–28s per case, near the timeout and flaky under load.
+// `npm test` builds dist first; mirrors provider-adapter.test.ts R4 hook test.
+const HOOK = join(process.cwd(), "dist", "hooks", "pre-tool-lifecycle-gate.js");
 
 function writeStatus(root, stages) {
   const dir = join(root, ".yolo/lifecycle");
@@ -20,11 +23,11 @@ function writeStatus(root, stages) {
 }
 
 function runHook(root, payload) {
-  const result = spawnSync("npx", ["tsx", HOOK], {
+  const result = spawnSync("node", [HOOK], {
     cwd: root,
     encoding: "utf8",
     input: JSON.stringify(payload),
-    timeout: 30000,
+    timeout: 15000,
   });
   return { exitCode: result.status, stderr: result.stderr || "", stdout: result.stdout || "" };
 }
