@@ -2285,6 +2285,25 @@ export async function runYoloDemandCli(argv = [], io = Object()) {
     return runYoloDemandStageCli(stage, input, options, io);
   }
 
+  // Non-technical onboarding: a bare `yolo demand "<idea>"` (no --stage, no
+  // status/dispatch subcommand, no existing session) used to dump a blocked
+  // DEMAND_NOT_PRD_READY snapshot and a free-text question with no runnable
+  // next step. Route it into the interview stage so the user gets a session
+  // path and a copy-pasteable `yolo interview answer ...` next action.
+  const bareIdeaText = cleanCliText(input.objective || input.idea || input.text || input.requirement);
+  const hasExplicitSession = Boolean(
+    input.demandPath || input.demand_path || input.sessionPath || input.session_path,
+  );
+  if (
+    command === "status"
+    && !commandNames.has(first)
+    && !stageNames.has(first)
+    && bareIdeaText
+    && !hasExplicitSession
+  ) {
+    return runYoloDemandStageCli("interview", input, options, io);
+  }
+
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
   if (command === "dispatch" || command === "evidence") {
     const result = await runDemandEvidenceDispatchRuntime({

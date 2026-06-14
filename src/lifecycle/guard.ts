@@ -14,16 +14,19 @@ const WARNING_READY_STAGES: ReadonlySet<string> = Object.freeze(new Set<string>(
 const BLOCKING_REPORT_STATUSES = new Set(["blocked", "error", "failed", "fail", "warning", "draft", "not_run", "indeterminate"]);
 const PENDING_REPORT_STATUSES = new Set(["pending", "active", "running", "in_progress", "todo", "open"]);
 
+// recommended_command must be a runnable `yolo <subcommand>` — non-technical users
+// paste it directly into a terminal. Slash forms (/yolo-*) only resolve inside a
+// Claude/Codex chat, so they must never appear as the recommended_command value.
 const MAIN_NEXT_STAGES = [
-  { stage: "discovery", command: "/yolo-discover", description: "clarify the idea before planning" },
-  { stage: "roadmap", command: "/yolo-plan", description: "create the execution plan" },
-  { stage: "prd", command: "/yolo-prd", description: "compile the executable PRD" },
-  { stage: "check", command: "/yolo-check", description: "validate the PRD before edits" },
-  { stage: "run", command: "/yolo-run", description: "execute only after check passes and the user approves execution" },
-  { stage: "review-fix", command: "/yolo-review", description: "review the implementation and resolve findings" },
-  { stage: "acceptance", command: "/yolo-accept", description: "collect acceptance evidence" },
-  { stage: "delivery", command: "/yolo-ship", description: "produce delivery readiness" },
-  { stage: "learn", command: "/yolo-learn", description: "record bounded lessons" },
+  { stage: "discovery", command: "yolo demand --stage interview", description: "clarify the idea before planning" },
+  { stage: "roadmap", command: "yolo tasks", description: "create the execution plan" },
+  { stage: "prd", command: "yolo spec", description: "compile the executable PRD" },
+  { stage: "check", command: "yolo check", description: "validate the PRD before edits" },
+  { stage: "run", command: "yolo run", description: "execute only after check passes and the user approves execution" },
+  { stage: "review-fix", command: "yolo review", description: "review the implementation and resolve findings" },
+  { stage: "acceptance", command: "yolo release accept", description: "collect acceptance evidence" },
+  { stage: "delivery", command: "yolo ship", description: "produce delivery readiness" },
+  { stage: "learn", command: "yolo learn", description: "record bounded lessons" },
 ];
 
 function clean(value) {
@@ -252,9 +255,9 @@ function lifecycleMissingResult({ command, projectRoot, stateRoot, statusPath })
       message: "Run `yolo init` before guarded downstream stages.",
     }],
     warnings: [],
-    allowed_commands: ["yolo init", "/yolo-doctor", "/yolo-brainstorm", "/yolo-interview", "/yolo-discover", "/yolo-discuss"],
+    allowed_commands: ["yolo init", "yolo doctor", "yolo demand --stage brainstorm", "yolo demand --stage interview", "yolo demand --stage discover", "yolo demand --stage discuss"],
     recommended_command: "yolo init",
-    next_actions: ["Run `yolo init` for this target project, then use /yolo-next."],
+    next_actions: ["Run `yolo init` for this target project, then use `yolo status`."],
   };
 }
 
@@ -384,7 +387,7 @@ function requiredStagesFor(command, input = Object()) {
       {
         stage: "check",
         code: "CHECK_REQUIRED",
-        message: "A passing /yolo-check stage for this PRD is required before YOLO can edit code.",
+        message: "A passing `yolo check` stage for this PRD is required before YOLO can edit code.",
         mustBeCompleted: true,
         requireLifecycleArtifact: true,
         requireCurrentPrdCheck: true,
@@ -446,7 +449,7 @@ export function nextLifecycleAction(options = Object()) {
     state = readJsonFile(statusPath);
   } catch {
     return {
-      command: "/yolo-doctor",
+      command: "yolo doctor",
       stage: "check",
       description: "repair unreadable lifecycle status",
       reason: "lifecycle_status_unreadable",
@@ -456,7 +459,7 @@ export function nextLifecycleAction(options = Object()) {
     if (!stageReady(state, item.stage)) return { ...item, reason: `${item.stage}_not_completed` };
   }
   return {
-    command: "/yolo-learn",
+    command: "yolo learn",
     stage: "learn",
     description: "record lessons or start a new YOLO request",
     reason: "main_lifecycle_complete",
@@ -491,7 +494,7 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
       missing_required_stages: [],
       blockers: [],
       warnings: [],
-      allowed_commands: [recommended.command, "/yolo-next", "/yolo-doctor"],
+      allowed_commands: [recommended.command, "yolo status", "yolo doctor"],
       next_actions: [`Run ${recommended.command} when this stage is complete.`],
     };
   }
@@ -511,8 +514,8 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
       missing_required_stages: ["setup"],
       blockers: [makeBlocker("LIFECYCLE_STATUS_UNREADABLE", "setup", error.message)],
       warnings: [],
-      allowed_commands: ["/yolo-doctor", "yolo init"],
-      next_actions: ["Run /yolo-doctor to inspect lifecycle status."],
+      allowed_commands: ["yolo doctor", "yolo init"],
+      next_actions: ["Run `yolo doctor` to inspect lifecycle status."],
     };
   }
 
@@ -561,10 +564,10 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
       missing_required_stages: missing,
       blockers,
       warnings: [...validation.warnings, ...writeWarning],
-      allowed_commands: [recommended.command, "/yolo-next", "/yolo-doctor"],
+      allowed_commands: [recommended.command, "yolo status", "yolo doctor"],
       next_actions: [
         `Run ${recommended.command} first.`,
-        "Use /yolo-next when you are unsure which YOLO stage is currently allowed.",
+        "Use `yolo status` when you are unsure which YOLO stage is currently allowed.",
       ],
     };
   }
@@ -579,7 +582,7 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
     missing_required_stages: [],
     blockers: [],
     warnings: validation.warnings,
-    allowed_commands: [command.startsWith("yolo-") ? `/${command}` : command, recommended.command, "/yolo-next"],
+    allowed_commands: [command.startsWith("yolo-") ? command.replace(/^yolo-/, "yolo ") : command, recommended.command, "yolo status"],
     next_actions: WRITE_COMMANDS.has(command)
       ? ["Confirm execution is current and specific before starting write-capable work."]
       : [`Complete this stage, then run ${recommended.command}.`],
