@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
+import { isWithin } from "../security/path-guard.js";
 import { config } from "../config.js";
 import { execCommand } from "../security/safe-exec.js";
 
@@ -104,7 +105,7 @@ function changedFilesFromFilesystemBaseline(ROOT, taskScope = Object()) {
   const changed = [];
   for (const file of candidates) {
     const absolute = resolve(ROOT, file);
-    if (!existsSync(absolute)) continue;
+    if (!isWithin(absolute, ROOT) || !existsSync(absolute)) continue;
     try {
       if (statSync(absolute).isDirectory()) continue;
       const currentHash = hashFile(absolute);

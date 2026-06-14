@@ -190,6 +190,20 @@ const SHELL_INJECTION_ALLOWLIST: Record<string, string> = {
 
 const SHELL_GUARD_ROOTS = ["src", "lib", "bin", "tools", "hooks"];
 
+// ── P12.I2 path-guard: ban unguarded resolve(<root>, <var>) reads in path-sensitive dirs ──
+// Externally-influenced paths must go through resolveWithinRoot (the chokepoint) or be
+// guarded by an adjacent isWithin(...) check. A raw resolve(<root>, <var>) that feeds an
+// fs read without a nearby guard is a path-traversal surface.
+const PATH_GUARD_ROOTS = ["src/lib/evaluators", "src/runtime/adapters", "src/runtime/logging", "src/runtime/evidence"];
+const RAW_ROOT_RESOLVE_RE = /(?:^|[^A-Za-z.])resolve\(\s*(?:ROOT|projectRoot|root|stateRoot|rootDir|projectDir)\s*,\s*[A-Za-z_$]/;
+const PATH_GUARD_NEARBY_RE = /isWithin\(|resolveWithinRoot\(/;
+const PATH_GUARD_WINDOW = 3;
+// `relative/path` or `relative/path:line` -> audit reason. Add ONLY with a written audit
+// explaining why the path cannot reach untrusted content or stays within root.
+const PATH_GUARD_ALLOWLIST: Record<string, string> = {
+  "src/runtime/adapters/evidence-collector.ts:180": "resolve(projectRoot, stateRoot, 'state/evidence/adapters', fileName) — internal output path under stateRoot from fixed segments; not an external-content read.",
+};
+
 export function inspectShellInjectionGuard() {
   const findings: ShellFinding[] = [];
   const files = SHELL_GUARD_ROOTS.flatMap((root) => walk(root)).filter((f) => /\.tsx?$/.test(f));
@@ -226,12 +240,40 @@ export function inspectShellInjectionGuard() {
   };
 }
 
+export function inspectPathGuard() {
+  const findings: ShellFinding[] = [];
+  const files = PATH_GUARD_ROOTS.flatMap((root) => walk(root)).filter((f) => /\.tsx?$/.test(f));
+  for (const file of files) {
+    if (PATH_GUARD_ALLOWLIST[file]) continue;
+    const text = readFileSync(resolve(ROOT, file), "utf8");
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNumber = i + 1;
+      if (PATH_GUARD_ALLOWLIST[`${file}:${lineNumber}`]) continue;
+      if (isCommentLine(line)) continue;
+      if (!RAW_ROOT_RESOLVE_RE.test(line)) continue;
+      const start = Math.max(0, i - PATH_GUARD_WINDOW);
+      const end = Math.min(lines.length, i + PATH_GUARD_WINDOW + 1);
+      if (PATH_GUARD_NEARBY_RE.test(lines.slice(start, end).join("\n"))) continue;
+      findings.push({
+        file,
+        line: lineNumber,
+        code: "UNGUARDED_PATH_RESOLVE",
+        message: `Unguarded resolve(<root>, <var>) path surface. Route externally-influenced paths through resolveWithinRoot (src/lib/security/path-guard.ts) or guard with an adjacent isWithin(...). If legitimate, add an audit entry to PATH_GUARD_ALLOWLIST in scripts/ci-guard.ts.`,
+      });
+    }
+  }
+  return { status: findings.length === 0 ? "pass" : "fail", findings };
+}
+
 export function runCiGuard(mode = "all") {
   const checks = [];
   if (mode === "all" || mode === "actionlint" || mode === "workflow") checks.push({ name: "workflow", ...inspectWorkflowGuards() });
   if (mode === "all" || mode === "security" || mode === "secrets") checks.push({ name: "security", ...inspectSecretGuards() });
   if (mode === "all" || mode === "assertions" || mode === "source-assertions") checks.push({ name: "source-assertions", ...inspectSourceAssertionGuard() });
   if (mode === "all" || mode === "shell-injection" || mode === "shell") checks.push({ name: "shell-injection", ...inspectShellInjectionGuard() });
+  if (mode === "all" || mode === "path-guard" || mode === "path") checks.push({ name: "path-guard", ...inspectPathGuard() });
   return {
     status: checks.every((check) => check.status === "pass") ? "pass" : "fail",
     checks,

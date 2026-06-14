@@ -2,6 +2,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
+import { isWithin } from "../security/path-guard.js";
 import { execCommand } from "../security/safe-exec.js";
 import { config } from "../config.js";
 
@@ -49,7 +50,8 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
 
   const violations = [];
   for (const file of targets) {
-    if (!existsSync(resolve(ROOT, file))) continue;
+    const abs = resolve(ROOT, file);
+    if (!isWithin(abs, ROOT) || !existsSync(abs)) continue;
     const unstagedDiff = exec(`git diff -- "${file}"`);
     const stagedDiff = exec(`git diff --cached -- "${file}"`);
     if (!unstagedDiff.ok && !stagedDiff.ok) {
