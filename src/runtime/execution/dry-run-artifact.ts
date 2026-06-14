@@ -1,4 +1,3 @@
-import { execFileSync as defaultExecFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -10,6 +9,7 @@ import {
   failTaskTransition,
   passTaskTransition,
 } from "../task-state/transitions.js";
+import { safeExecFileSync } from "../../lib/security/safe-exec.js";
 
 export function dryRunArtifactTarget(task = Object()) {
   return task.scope?.targets?.[0]?.file || "";
@@ -18,14 +18,15 @@ export function dryRunArtifactTarget(task = Object()) {
 export function runDryRunCommand(command, {
   cwd,
   timeout = 120000,
-  execFileSync = defaultExecFileSync,
+  execFileSync = safeExecFileSync,
 } = Object()) {
+  // P12.I1: default executor is safeExecFileSync (routes through execArgv, no shell).
+  // Tests may inject a mock execFileSync for unit control.
   try {
-    const stdout = execFileSync("sh", ["-c", command], {
+    const stdout = execFileSync(command, [], {
       cwd,
       encoding: "utf8",
       timeout,
-      stdio: ["pipe", "pipe", "pipe"],
     });
     return { command, exit_code: 0, stdout: stdout.trim().slice(0, 4000), stderr: "" };
   } catch (error) {

@@ -97,8 +97,9 @@ describe("provider runtime matrix", () => {
     assert.equal(codex.invocation.output_file, join(stateRoot, "state", "runtime", "codex-output-123-8.txt"));
 
     const custom = matrix.providers.find((entry) => entry.provider === "custom");
-    assert.equal(custom.invocation.command, "sh");
-    assert.deepEqual(custom.invocation.args, ["-c", "node ./agent.js"]);
+    // P12.I1: clean custom command parsed to argv (no shell:true).
+    assert.equal(custom.invocation.command, "node");
+    assert.deepEqual(custom.invocation.args, ["./agent.js"]);
   });
 
   test("inspectProviderRuntimeMatrix fails closed on unavailable providers and unsafe paths", () => {
@@ -174,8 +175,9 @@ describe("provider runtime matrix", () => {
     assert.equal(codex.output_capture.output_file, join(stateRoot, "state", "runtime", "codex-output-123-8.txt"));
 
     const custom = matrix.providers.find((entry) => entry.provider === "custom");
-    assert.equal(custom.command, "sh");
-    assert.deepEqual(custom.args, ["-c", "node ./agent.js"]);
+    // P12.I1: clean custom command parsed to argv (no shell:true).
+    assert.equal(custom.command, "node");
+    assert.deepEqual(custom.args, ["./agent.js"]);
   });
 
   test("inspectProviderCliDryRunMatrix fails closed before unsafe or executable provider calls", () => {

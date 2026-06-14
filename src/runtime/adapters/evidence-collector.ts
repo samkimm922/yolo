@@ -1,10 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { resolveProjectContext } from "../../packs/resolver.js";
 import { asArray, selectedAcceptanceAdapter } from "../gates/readiness-policy.js";
 import { isWithin } from "../../lib/security/path-guard.js";
 import { redact } from "../../lib/security/redact.js";
+import { execCommand } from "../../lib/security/safe-exec.js";
 
 export const ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION = "1.0";
 export const ADAPTER_EVIDENCE_COLLECTOR_SCHEMA = "yolo.adapter.evidence_collector.v1";
@@ -334,10 +334,10 @@ export function runAdapterEvidenceCollector(input = Object(), options = Object()
   const evidenceRecords = [];
   for (const command of plan.commands) {
     const startedAt = nowIso();
-    const executed = spawnSync(command.command, {
+    // P12.I1: route adapter command through safe-exec — argv parsing rejects
+    // shell metacharacters, never invokes sh -c. shell:true is banned by ci-guard.
+    const executed = execCommand(command.command, {
       cwd: plan.project_root,
-      shell: true,
-      encoding: "utf8",
       timeout: command.timeout_ms,
       env: { ...process.env },
     });
@@ -370,10 +370,12 @@ export function runAdapterEvidenceCollector(input = Object(), options = Object()
       command: command.command,
       started_at: startedAt,
       finished_at: nowIso(),
-      status: executed.status === 0 && !executed.error ? "pass" : "failed",
-      exit_code: executed.status,
+      status: executed.ok && !executed.rejected ? "pass" : "failed",
+      exit_code: executed.exit_code,
       signal: executed.signal || null,
-      error: executed.error?.message || null,
+      error: executed.rejected
+        ? `command rejected: ${executed.reject_detail}`
+        : (executed.error || null),
       stdout: redact(truncate(executed.stdout)),
       stderr: redact(truncate(executed.stderr)),
       evidence_path: evidencePath || null,

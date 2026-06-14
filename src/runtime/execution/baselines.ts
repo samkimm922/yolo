@@ -1,14 +1,12 @@
 import {
-  execFileSync as defaultExecFileSync,
-  execSync as defaultExecSync,
-} from "node:child_process";
-import { createHash } from "node:crypto";
-import {
   existsSync as defaultExistsSync,
   readFileSync as defaultReadFileSync,
   writeFileSync as defaultWriteFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
+import { safeExecSync as defaultExecSync, safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
+import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 
 export const BASELINE_TOOLS = ["tsc", "eslint"];
 export const BASELINE_FILE_NAMES = {
@@ -186,12 +184,13 @@ export function runBaselineCommand({
   execSync = defaultExecSync,
   timeout = 60000,
 } = Object()) {
+  // P12.I1: default executor is safeExecSync (argv parse, reject shell metacharacters,
+  // no shell). Tests may inject a mock execSync for unit control.
   try {
-    const stdout = execSync(`${command} 2>&1`, {
+    const stdout = execSync(command, {
       cwd: rootDir,
       encoding: "utf8",
       timeout,
-      stdio: ["pipe", "pipe", "pipe"],
     });
     return {
       command,
@@ -247,6 +246,8 @@ export function createDirtyWorktreeSnapshot({ rootDir, execSync = defaultExecSyn
 
 export function restoreDirtyWorktreeSnapshot(stashRef, { rootDir, execSync = defaultExecSync } = Object()) {
   if (!stashRef) return false;
+  // P12.I1: default executor is safeExecSync — parses "git stash apply <sha>" to argv,
+  // rejects metacharacters, no shell. stashRef is a git-generated SHA (alphanumeric).
   try {
     execSync(`git stash apply ${stashRef}`, {
       cwd: rootDir,
@@ -384,21 +385,34 @@ export function refreshBaselineAfterCommit({
       const command = tool === "tsc"
         ? config.build.type_check
         : config.build.lint;
+      // P12.I1: parse config command to argv, route through execFileSync DI
+      // (default = safeExecFileSync, no shell). Rejects metacharacters at parse.
+      const parsed = parseCommandToArgv(command);
       let output = "";
       let exitCode = 0;
-      try {
-        output = execFileSync("sh", ["-c", `${command} 2>&1`], {
-          cwd: rootDir,
-          encoding: "utf8",
-          timeout: 120000,
-        });
-      } catch (runError) {
-        output = (runError?.stdout || "") + (runError?.stderr || "");
-        exitCode = Number.isInteger(runError?.status) ? runError.status : 1;
+      let blocked = false;
+      if (!parsed.ok) {
+        output = `command rejected: ${parsed.detail}`;
+        exitCode = 127;
+        blocked = true;
+      } else {
+        const argv = parsed.argv ?? [];
+        try {
+          const stdout = execFileSync(argv[0], argv.slice(1), {
+            cwd: rootDir,
+            encoding: "utf8",
+            timeout: 120000,
+          });
+          output = String(stdout || "");
+        } catch (error) {
+          output = `${String(error?.stdout || "")}${String(error?.stderr || "")}`;
+          exitCode = Number.isInteger(error?.status) ? error.status : (Number.isInteger(error?.code) ? error.code : 1);
+          blocked = Boolean(error?.signal) ||
+            exitCode === 127 ||
+            /\bnot found\b|is not recognized|command not found/i.test(output) ||
+            (exitCode !== 0 && !output.trim());
+        }
       }
-      const blocked = exitCode === 127 ||
-        /\bnot found\b|is not recognized|command not found/i.test(output) ||
-        (exitCode !== 0 && !output.trim());
       if (blocked) {
         results.push({
           tool,

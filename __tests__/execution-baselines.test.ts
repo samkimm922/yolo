@@ -186,10 +186,10 @@ describe("execution baseline helpers", () => {
     const commands = [];
     const execFileSync = (bin, args) => {
       commands.push([bin, ...args].join(" "));
-      if (args[1].startsWith("tsc")) {
+      if (bin === "tsc") {
         return "src/a.ts(1,1): error TS1000: bad\n";
       }
-      if (args[1].startsWith("eslint")) {
+      if (bin === "eslint") {
         return JSON.stringify([
           {
             filePath: "/repo/src/a.ts",
@@ -255,14 +255,14 @@ describe("execution baseline helpers", () => {
       })],
     ]);
     const writes = new Map();
-    const execFileSync = (_bin, args) => {
-      if (args[1] && args[1].startsWith("definitely-missing-cmd")) {
+    const execFileSync = (bin, _args) => {
+      if (bin === "definitely-missing-cmd") {
         const error = new Error("definitely-missing-cmd: command not found") as Error & { status: number; stderr: string };
         error.status = 127;
         error.stderr = "definitely-missing-cmd: command not found\n";
         throw error;
       }
-      if (args[1] && args[1].startsWith("eslint")) {
+      if (bin === "eslint") {
         return JSON.stringify([{ filePath: "/repo/src/a.ts", messages: [{ line: 2, ruleId: "semi", severity: 2 }] }]);
       }
       return "";
@@ -302,8 +302,8 @@ describe("execution baseline helpers", () => {
       })],
     ]);
     const writes = new Map();
-    const execFileSync = (_bin, args) => {
-      if (args[1] && args[1].startsWith("tsc")) {
+    const execFileSync = (bin, _args) => {
+      if (bin === "tsc") {
         const error = new Error("tsc failed") as Error & { status: number; stdout: string };
         error.status = 1;
         error.stdout = "src/a.ts(1,1): error TS1000: bad\n";

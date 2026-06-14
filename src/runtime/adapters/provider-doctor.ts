@@ -1,14 +1,11 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { commandExistsSync } from "../../lib/security/safe-exec.js";
 
 function defaultCommandExists(command) {
-  const result = spawnSync("sh", ["-c", "command -v \"$1\"", "sh", command], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
-  return result.status === 0;
+  // P12.I1: PATH walk via fs.accessSync — no sh -c, no injection surface.
+  return commandExistsSync(String(command ?? "").trim());
 }
 
 function cleanString(value) {

@@ -1,9 +1,10 @@
 import { existsSync as defaultExistsSync, readFileSync as defaultReadFileSync } from "node:fs";
-import { spawn as defaultSpawn, spawnSync } from "node:child_process";
+import { spawn as defaultSpawn } from "node:child_process";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectAgentAdapterContract, normalizeAgentProvider } from "../adapters/agent-contract.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
+import { commandExistsSync } from "../../lib/security/safe-exec.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -61,11 +62,8 @@ function providerRunReason(status, verification = null) {
 function defaultCommandExists(command) {
   const executable = cleanString(command);
   if (!executable) return false;
-  const result = spawnSync("sh", ["-c", "command -v \"$1\"", "sh", executable], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
-  return result.status === 0;
+  // P12.I1: PATH walk via fs.accessSync — no sh -c, no injection surface.
+  return commandExistsSync(executable);
 }
 
 function preflightReason(blockers = []) {
@@ -346,6 +344,20 @@ export function buildProviderInvocation({
     const customCommand = renderCustomCommand(ai.custom_command || ai.command, ai);
     if (!customCommand) {
       throw new Error("buildProviderInvocation custom provider requires config.ai.custom_command");
+    }
+    // P12.I1: prefer argv form when customCommand parses cleanly (no shell
+    // metacharacters) so spawnSync runs without shell:true. If the operator's
+    // config uses shell features (pipes, redirects, env vars), keep the
+    // explicit sh -c opt-in — the operator has chosen shell semantics.
+    const parsedCustom = parseCommandToArgv(customCommand);
+    if (parsedCustom.ok && parsedCustom.argv && parsedCustom.argv.length > 0) {
+      return {
+        provider: "custom",
+        command: parsedCustom.argv[0],
+        args: parsedCustom.argv.slice(1),
+        customCommand,
+        outputFile: null,
+      };
     }
     return {
       provider: "custom",

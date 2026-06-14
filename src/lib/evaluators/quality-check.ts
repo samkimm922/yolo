@@ -2,7 +2,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execCommand } from "../security/safe-exec.js";
 import { config } from "../config.js";
 
 function configuredCommand(params = Object(), key) {
@@ -296,9 +296,16 @@ export function evalNoNewDeadCode(params = Object(), _taskScope, ROOT) {
     if (!command) {
       return { passed: false, detail: "未配置 dead_code 命令，无法验证 no_new_dead_code", type: "no_new_dead_code" };
     }
-    const knipOut = execFileSync("sh", ["-c", command], {
-      cwd: ROOT, encoding: "utf8", timeout: params.timeout_ms || config.gate?.timeout?.dead_code || 30000, stdio: ["pipe", "pipe", "pipe"],
+    const knipResult = execCommand(command, {
+      cwd: ROOT, timeout: params.timeout_ms || config.gate?.timeout?.dead_code || 30000,
     });
+    if (knipResult.rejected) {
+      return { passed: false, detail: `dead_code 命令被拒绝: ${knipResult.reject_detail}`, type: "no_new_dead_code" };
+    }
+    if (!knipResult.ok) {
+      throw new Error(knipResult.stderr || knipResult.error || `dead_code command exited ${knipResult.exit_code}`);
+    }
+    const knipOut = knipResult.stdout;
     const knipData = JSON.parse(knipOut.trim());
     const currentKeys = [];
     const excludeDirs = ["node_modules", "dist", "__tests__"];

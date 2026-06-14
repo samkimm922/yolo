@@ -352,9 +352,10 @@ describe("provider execution adapter", () => {
       runtimeDir: "/repo/state/runtime",
     });
 
+    // P12.I1: clean custom command parsed to argv (no shell:true, no sh -c).
     assert.equal(invocation.provider, "custom");
-    assert.equal(invocation.command, "sh");
-    assert.deepEqual(invocation.args, ["-c", "node ./agent.js --mode yolo"]);
+    assert.equal(invocation.command, "node");
+    assert.deepEqual(invocation.args, ["./agent.js", "--mode", "yolo"]);
     assert.equal(invocation.customCommand, "node ./agent.js --mode yolo");
     assert.equal(invocation.outputFile, null);
   });

@@ -121,11 +121,117 @@ export function inspectSourceAssertionGuard() {
   };
 }
 
+// ── Shell-injection guard (P12.I1) ─────────────────────────────
+// Bans new shell-injection surface: `shell: true`, `"sh", ["-c", ...]`,
+// `execSync(...)` with template/var command, except where explicitly
+// allowlisted with an audit reason. The咽喉 is src/lib/security/safe-exec.ts;
+// all untrusted command execution must route through it.
+//
+// What this gate does NOT flag (safe by construction):
+//   - execFileSync/spawnSync with an argv array (e.g. execFileSync("git", [...]))
+//     even if an argv element uses ${} — the result is a single arg, no shell.
+//   - execSync("literal command") with no ${} interpolation.
+//
+// What this gate DOES flag:
+//   - shell: true
+//   - "sh"/'sh' followed by ["-c"/,'-c',  (explicit shell opt-in)
+//   - execSync(`template literal ${var}`)  — shell form with substitution
+//   - execSync("literal ${var}")           — double-quoted with interpolation
+type ShellFinding = { file: string; line: number; code: string; message: string };
+
+const SHELL_SH_C_RE = /["']sh["']\s*,\s*\[\s*["']-c["']/;
+const SHELL_TRUE_RE = /shell\s*:\s*true\b/;
+// execSync(`...`) with template literal — only execSync (which takes a string command),
+// not execFileSync/spawnSync (which take argv arrays and are safe even with ${}).
+const EXEC_SYNC_TEMPLATE_RE = /\bexecSync\s*\(\s*`/;
+// execSync("...") with ${} interpolation in the double-quoted string.
+const EXEC_SYNC_INTERP_RE = /\bexecSync\s*\(\s*"[^"]*\$\{/;
+
+function isCommentLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return true;
+  return trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*") || trimmed.startsWith("#");
+}
+
+// Each entry: `relative/path` -> audit reason (file-level) OR `relative/path:line` (line-level).
+// Add ONLY with a written audit explaining why argv form is impossible AND
+// why the call cannot reach untrusted input.
+const SHELL_INJECTION_ALLOWLIST: Record<string, string> = {
+  // src/lib/security/safe-exec.ts itself uses spawnSync (the咽喉). argv-only
+  // (shell:false) — no untrusted string reaches a shell. Self-scan would
+  // false-positive on its own detection regex too.
+  "src/lib/security/safe-exec.ts": "咽喉: spawnSync(argv, { shell: false }). argv-only executor.",
+  // Worktree git ops use shellQuote'd args on project-controlled paths.
+  // No untrusted input — paths/branches generated internally from taskId/sessionId.
+  "src/runtime/execution/worktree-session.ts": "git/ln/cp/rm ops with shellQuote'd args on project-controlled paths (wtPath/wtBranch/rootNodeModules). Args quoted; no untrusted command surface. macOS git worktree needs shell for `2>/dev/null` fallback suppression — audited P12.I1.",
+  // shutdown/startup git worktree cleanup with quoted paths from session state.
+  "src/runtime/run-lifecycle/shutdown.ts": "git worktree/branch cleanup with double-quoted paths from session state (activeWorktree/activeBranch). No untrusted input.",
+  "src/runtime/run-lifecycle/startup.ts": "git worktree/branch cleanup with double-quoted paths from session state (wtPath/branch). No untrusted input.",
+  // progress/server pgrep literal.
+  "src/runtime/progress/server.ts": "literal pgrep -f 'runner.js' (no var substitution).",
+  // finalize/recovery-checkpoints spawnSync node with argv array.
+  "src/runtime/run-lifecycle/finalize.ts": "spawnSync('node', argv) — no shell, literal node invocations.",
+  "src/runtime/run-lifecycle/recovery-checkpoints.ts": "spawnSync(processExecPath, argv) — no shell, internal process exec.",
+  // runner-core-helpers spawnSync('node', ...) and pgrep with numeric pid.
+  "src/runtime/runner-core-helpers.ts": "execFileSync('node', argv) and pgrep -P with numeric pid (Number-cast). No untrusted string.",
+  // artifacts git rev-parse HEAD literal.
+  "src/discovery/artifacts.ts": "literal 'git rev-parse HEAD' (no var substitution).",
+  // baselines execSync DI defaults to safeExecSync (P12.I1). Template literal
+  // `git stash apply ${stashRef}` is parsed to argv by safeExecSync internally;
+  // stashRef is a git-generated SHA (alphanumeric only).
+  "src/runtime/execution/baselines.ts": "execSync DI defaults to safeExecSync (P12.I1 咽喉). `git stash apply ${stashRef}` parsed to argv internally; stashRef is git-generated SHA (alphanumeric).",
+  // review-loop orchestrator execFileSync with explicit argv — injected by caller.
+  "src/runtime/review-loop/orchestrator.ts": "execFileSync(argv) — injected by caller, no shell:true.",
+  // auto-fix uses execFileSync with argv arrays.
+  "src/lib/auto-fix.ts": "execFileSync(argv) — injected by callers with argv arrays; no shell.",
+  // test harness — fixture-only.
+  "src/fixtures/harness.ts": "test harness: spawnSync('sh', ['-c', ...]) for fixture command-existence/script checks. Fixture-only; never runs in production runtime.",
+};
+
+const SHELL_GUARD_ROOTS = ["src", "lib", "bin", "tools", "hooks"];
+
+export function inspectShellInjectionGuard() {
+  const findings: ShellFinding[] = [];
+  const files = SHELL_GUARD_ROOTS.flatMap((root) => walk(root)).filter((f) => /\.tsx?$/.test(f));
+  for (const file of files) {
+    // File-level allowlist.
+    if (SHELL_INJECTION_ALLOWLIST[file]) continue;
+    const text = readFileSync(resolve(ROOT, file), "utf8");
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNumber = i + 1;
+      const lineKey = `${file}:${lineNumber}`;
+      if (SHELL_INJECTION_ALLOWLIST[lineKey]) continue;
+      // Skip comments — detection patterns mentioned in comments would false-positive.
+      if (isCommentLine(line)) continue;
+      let code: string | null = null;
+      if (SHELL_TRUE_RE.test(line)) code = "SHELL_TRUE_BANNED";
+      else if (SHELL_SH_C_RE.test(line)) code = "SH_C_TEMPLATE_BANNED";
+      else if (EXEC_SYNC_TEMPLATE_RE.test(line)) code = "EXEC_SYNC_TEMPLATE_BANNED";
+      else if (EXEC_SYNC_INTERP_RE.test(line)) code = "EXEC_SYNC_INTERP_BANNED";
+      if (code) {
+        findings.push({
+          file,
+          line: lineNumber,
+          code,
+          message: `Shell-injection surface (${code}). Route untrusted commands through src/lib/security/safe-exec.ts (execCommand/execArgv). If legitimate, add an audit entry to SHELL_INJECTION_ALLOWLIST in scripts/ci-guard.ts.`,
+        });
+      }
+    }
+  }
+  return {
+    status: findings.length === 0 ? "pass" : "fail",
+    findings,
+  };
+}
+
 export function runCiGuard(mode = "all") {
   const checks = [];
   if (mode === "all" || mode === "actionlint" || mode === "workflow") checks.push({ name: "workflow", ...inspectWorkflowGuards() });
   if (mode === "all" || mode === "security" || mode === "secrets") checks.push({ name: "security", ...inspectSecretGuards() });
   if (mode === "all" || mode === "assertions" || mode === "source-assertions") checks.push({ name: "source-assertions", ...inspectSourceAssertionGuard() });
+  if (mode === "all" || mode === "shell-injection" || mode === "shell") checks.push({ name: "shell-injection", ...inspectShellInjectionGuard() });
   return {
     status: checks.every((check) => check.status === "pass") ? "pass" : "fail",
     checks,

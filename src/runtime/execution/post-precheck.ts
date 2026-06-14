@@ -3,7 +3,7 @@ import {
   readFileSync as defaultReadFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
-import { execSync as defaultExecSync } from "node:child_process";
+import { safeExecSync as defaultExecSync } from "../../lib/security/safe-exec.js";
 import { skipTaskTransition } from "../task-state/transitions.js";
 
 export function taskForValidSkipPostconditions(task = Object()) {
@@ -76,9 +76,9 @@ export function inspectPostPrecheckSkip({
   task = Object(),
   rootDir,
   typeCheckCommand,
-  execSync = defaultExecSync,
   existsSync = defaultExistsSync,
   readFileSync = defaultReadFileSync,
+  execSync = defaultExecSync,
 } = Object()) {
   const explicit = explicitCodePostconditionsPass({
     task,
@@ -92,15 +92,12 @@ export function inspectPostPrecheckSkip({
 
   const targetFiles = (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
   if (targetFiles.length > 0 && typeCheckCommand) {
+    // P12.I1: default executor is safeExecSync (argv parse, reject shell metacharacters,
+    // no shell). Tests may inject a mock execSync for unit control.
     try {
-      execSync(`${typeCheckCommand} 2>&1`, {
-        encoding: "utf8",
-        cwd: rootDir,
-        timeout: 120000,
-        stdio: ["pipe", "pipe", "pipe"],
-      });
+      execSync(typeCheckCommand, { cwd: rootDir, encoding: "utf8", timeout: 120000 });
     } catch (error) {
-      const tscOutput = `${error.stdout || ""}${error.stderr || ""}`;
+      const tscOutput = `${String(error?.stdout || "")}${String(error?.stderr || "")}`;
       const { errorLines, files } = parseTscErrorFiles(tscOutput);
       if (errorLines.length > 0 && targetFilesHaveTscErrors(targetFiles, files)) {
         return {
