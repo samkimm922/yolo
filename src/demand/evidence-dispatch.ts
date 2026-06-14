@@ -11,6 +11,7 @@ import {
   inspectDemandPrdReadiness,
 } from "./router.js";
 import { redact } from "../lib/security/redact.js";
+import { detectExternalResearchSignal } from "../lib/research-signal.js";
 
 export const DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION = "1.0";
 export const DEMAND_EVIDENCE_DISPATCH_SCHEMA = "yolo.demand.evidence_dispatch.v1";
@@ -170,10 +171,11 @@ function demandRequestsExternalResearch(input = Object(), plan = Object()) {
     input.risks,
     plan.demand_status?.state?.slot_values?.problem,
     plan.demand_status?.state?.slot_values?.desired_outcome,
-  ].flatMap(asArray).map(clean).join("\n").toLowerCase();
-  return /https?:\/\//.test(text)
-    || /\b(use|run|perform|execute|do|fetch|search|browse|inspect|read|look up|lookup)\b.{0,80}\b(external research|web|fetch|search|browser|url)\b/.test(text)
-    || /\b(external research|web|fetch|search|browser|url)\b.{0,80}\b(required|must|explicitly requested|as external evidence)\b/.test(text);
+  ].flatMap(asArray).map(clean).join("\n");
+  // Shared single-source detection (src/lib/research-signal.ts). Same URL +
+  // explicit-request patterns as before, plus external-reference intent, so
+  // discovery and demand agree on what "requires external evidence" means.
+  return detectExternalResearchSignal(text).requires_external;
 }
 
 function externalEvidencePresent(agentResults = []) {

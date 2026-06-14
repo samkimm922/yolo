@@ -67,3 +67,60 @@ describe("discovery readiness gate", () => {
     assert.ok(result.warnings.some((warning) => warning.code === "DISCOVERY_CONSTRAINTS_RECORDED"));
   });
 });
+
+describe("discovery external evidence fail-closed", () => {
+  const localIdea = "For store managers, add an inventory alerts API in src/inventory/alerts.js so an alert appears when stock is below threshold.";
+  const urlIdea = "For store managers, add an inventory alerts API modeled on https://example.com/alerts-guide so an alert appears when stock is below threshold.";
+
+  const baseInput = {
+    idea: urlIdea,
+    problem: "stockouts are found too late",
+    success_criteria: ["alert appears below threshold"],
+    target_files: ["src/inventory/alerts.js"],
+    constraints: ["keep imports unchanged"],
+  };
+
+  test("idea with URL but no external evidence blocks PRD readiness", () => {
+    const result = inspectDiscoveryReadiness(baseInput);
+    assert.equal(result.ready_for_prd, false);
+    assert.equal(result.status, "blocked");
+    assert.ok(result.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"));
+  });
+
+  test("idea with URL and matching scope=external evidence passes", () => {
+    const result = inspectDiscoveryReadiness({
+      ...baseInput,
+      evidence: [{
+        scope: "external",
+        url: "https://example.com/alerts-guide",
+        source: "external_web",
+        summary: "Reference alert schema.",
+      }],
+    });
+    assert.equal(result.ready_for_prd, true);
+    assert.equal(result.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"), false);
+  });
+
+  test("pure local idea is not blocked by the external evidence gate", () => {
+    const result = inspectDiscoveryReadiness({ ...baseInput, idea: localIdea });
+    assert.equal(
+      result.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"),
+      false,
+      "local idea must not trigger the external-evidence gate",
+    );
+  });
+
+  test("attempted-but-missing external research reports tool-unavailable reason", () => {
+    const result = inspectDiscoveryReadiness({ ...baseInput, external_research_attempted: true });
+    const blocker = result.blockers.find((item) => item.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED");
+    assert.ok(blocker);
+    assert.match(blocker.message, /unavailable/);
+  });
+
+  test("not-attempted missing external research reports not-triggered reason", () => {
+    const result = inspectDiscoveryReadiness(baseInput);
+    const blocker = result.blockers.find((item) => item.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED");
+    assert.ok(blocker);
+    assert.match(blocker.message, /not triggered/);
+  });
+});

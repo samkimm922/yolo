@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import { inspectDiscoveryReadiness } from "./gate.js";
+import { detectExternalResearchSignal } from "../lib/research-signal.js";
 
 export const DISCOVERY_ARTIFACT_SCHEMA = "yolo.discovery.artifact.v1";
 export const DISCOVERY_PROJECT_SCHEMA = "yolo.discovery.project.v1";
@@ -123,8 +124,28 @@ function normalizeResearchDecision(input = Object(), readiness = Object()) {
   if (raw === true) return "research";
   const value = clean(raw).toLowerCase();
   if (["research", "run", "yes", "true", "needed"].includes(value)) return "research";
-  if (readiness.status === "blocked") return "skip";
-  return "skip";
+  // Derive from content: URLs or external-reference intent in the demand/brief
+  // text mean external research is required. Shares one signal definition with
+  // demand evidence dispatch (src/lib/research-signal.ts).
+  //
+  // NOTE: we do NOT short-circuit on readiness.status === "blocked". The
+  // research decision answers "does this brief need external research?" — a
+  // question about content, not about whether the PRD gate is currently
+  // passable. BUG-B blocks the PRD gate when external evidence is missing,
+  // and that block is exactly when the research decision must read "research"
+  // so the user knows what to do next. Empty/short content already produces
+  // no signal and falls through to "skip" naturally.
+  const brief = readiness.brief || {};
+  const signal = detectExternalResearchSignal(
+    input.idea || brief.idea,
+    input.problem || brief.problem,
+    input.objective,
+    arrayOfStrings(brief.success_criteria).join(" "),
+    arrayOfStrings(brief.constraints).join(" "),
+    arrayOfStrings(input.success_criteria).join(" "),
+    arrayOfStrings(input.constraints).join(" "),
+  );
+  return signal.requires_external ? "research" : "skip";
 }
 
 function readBaseCommit(options = Object()) {

@@ -2,6 +2,8 @@ export const DISCOVERY_GATE_SCHEMA_VERSION = "1.0";
 export const DISCOVERY_BRIEF_SCHEMA = "yolo.discovery.brief.v1";
 export const DISCOVERY_READINESS_SCHEMA = "yolo.discovery.readiness.v1";
 
+import { detectExternalResearchSignal } from "../lib/research-signal.js";
+
 function asArray(value) {
   if (value == null) return [];
   return Array.isArray(value) ? value : [value];
@@ -88,6 +90,42 @@ export function buildDiscoveryBrief(input = Object(), options = Object()) {
   };
 }
 
+// Fail-closed: when the demand/brief content signals external research is
+// required (URL or external-reference intent), discovery must not declare
+// ready_for_prd unless external-scoped evidence is present. Prevents the
+// discovery→PRD path from silently passing when a web tool was unavailable
+// or external research was never triggered.
+function externalEvidenceChecks(input = Object(), brief = Object()) {
+  const signal = detectExternalResearchSignal(
+    brief.idea,
+    brief.problem,
+    brief.success_criteria.join(" "),
+    brief.constraints.join(" "),
+  );
+  if (!signal.requires_external) return [];
+
+  const evidence = [...asArray(input.evidence), ...asArray(input.research_results)];
+  const hasExternal = evidence.some((record) => {
+    if (!record || typeof record !== "object") return false;
+    return clean(record.scope || record.evidence_scope || record.source_scope).toLowerCase() === "external";
+  });
+  if (hasExternal) return [];
+
+  const attempted = input.external_research_attempted === true
+    || input.externalResearchAttempted === true;
+  const message = attempted
+    ? "External research was required and attempted, but no scope=external evidence was produced (web tool unavailable or produced nothing)."
+    : "External research is required by the content but no scope=external evidence is present (research was not triggered).";
+
+  return [check(
+    "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED",
+    false,
+    "error",
+    message,
+    { reason: signal.reason, matches: signal.matches },
+  )];
+}
+
 export function inspectDiscoveryReadiness(input = Object(), options = Object()) {
   const brief = buildDiscoveryBrief(input, options);
   const text = [
@@ -141,6 +179,7 @@ export function inspectDiscoveryReadiness(input = Object(), options = Object()) 
       "error",
       "discovery must produce at least one active requirement before planning",
     ),
+    ...externalEvidenceChecks(input, brief),
   ];
 
   const blockers = checks.filter((item) => item.severity === "error" && item.passed !== true);

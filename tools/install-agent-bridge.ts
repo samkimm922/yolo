@@ -583,7 +583,21 @@ export function buildAgentBridgeInstallPlan(options = Object()) {
       })
     : [];
 
-  const allFiles = [...files, ...native_skill_files, ...claude_slash_commands];
+  // BUG-C1: emit a project-scoped .claude/settings.json wiring the
+  // PreToolUse lifecycle-gate hook so `yolo check` blocked MACHINE-BLOCKS
+  // source writes, not just reports. Claude-target only, project scope only.
+  const claude_project_hooks = targets.includes("claude") && wantsProject
+    ? [{
+        target: "claude",
+        scope: "project",
+        path: join(projectRoot, ".claude/settings.json"),
+        relative_path: ".claude/settings.json",
+        role: "claude_project_settings",
+        content: buildClaudeProjectSettings({ yoloRoot }),
+      }]
+    : [];
+
+  const allFiles = [...files, ...native_skill_files, ...claude_slash_commands, ...claude_project_hooks];
 
   return {
     schema: "yolo.agent_bridge_install_plan.v1",
@@ -596,6 +610,7 @@ export function buildAgentBridgeInstallPlan(options = Object()) {
     files,
     native_skill_files,
     claude_slash_commands,
+    claude_project_hooks,
     total_file_count: allFiles.length,
     within_budget: allFiles.length <= MAX_INSTALL_FILE_COUNT,
     writes_workspace: wantsProject,
@@ -604,6 +619,22 @@ export function buildAgentBridgeInstallPlan(options = Object()) {
     reads_credentials: false,
     executes_provider: false,
   };
+}
+
+function buildClaudeProjectSettings({ yoloRoot }) {
+  const hookJs = join(resolve(yoloRoot), "dist", "hooks", "pre-tool-lifecycle-gate.js");
+  const settings = {
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: "Write|Edit|MultiEdit|Bash",
+          command: `node "${hookJs}"`,
+          description: "YOLO lifecycle gate (BUG-C): block source writes unless yolo check stage is completed/warning. Fail-closed.",
+        },
+      ],
+    },
+  };
+  return `${JSON.stringify(settings, null, 2)}\n`;
 }
 
 export function installAgentBridge(options = Object()) {
@@ -628,7 +659,7 @@ export function installAgentBridge(options = Object()) {
     }
   }
 
-  for (const file of [...plan.native_skill_files, ...plan.claude_slash_commands]) {
+  for (const file of [...plan.native_skill_files, ...plan.claude_slash_commands, ...plan.claude_project_hooks]) {
     writePlainArtifact({ file, dryRun, force, written, planned, overwritten, skipped });
   }
 

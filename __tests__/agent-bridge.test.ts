@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -354,5 +354,39 @@ describe("agent bridge installer", () => {
 
     // No legacy artifacts
     assert.match(readFileSync(join(homeDir, ".claude/commands/yolo-demand.md"), "utf8"), /one-question mode/);
+  });
+
+  test("project-scope install emits .claude/settings.json with lifecycle-gate PreToolUse hook", () => {
+    const projectRoot = tempProject();
+    try {
+      const plan = buildAgentBridgeInstallPlan({ projectRoot, yoloRoot: "/tmp/yolo", targets: "claude" });
+      assert.ok(plan.claude_project_hooks.length > 0, "project hooks must be planned for claude target");
+      const hook = plan.claude_project_hooks[0];
+      assert.equal(hook.role, "claude_project_settings");
+      assert.equal(hook.relative_path, ".claude/settings.json");
+      assert.match(hook.content, /PreToolUse/);
+      assert.match(hook.content, /pre-tool-lifecycle-gate/);
+      assert.match(hook.content, /Write\|Edit\|MultiEdit\|Bash/);
+
+      const result = installAgentBridge({ projectRoot, yoloRoot: "/tmp/yolo", targets: "claude" });
+      assert.equal(existsSync(join(projectRoot, ".claude/settings.json")), true);
+      const settings = JSON.parse(readFileSync(join(projectRoot, ".claude/settings.json"), "utf8"));
+      assert.ok(settings.hooks?.PreToolUse?.some((entry) => entry.command?.includes("pre-tool-lifecycle-gate")));
+      assert.ok(result.written.includes(".claude/settings.json"));
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("user-scope install does not emit project settings.json hook", () => {
+    const projectRoot = tempProject();
+    const homeDir = mkdtempSync(join(tmpdir(), "yolo-agent-bridge-home-"));
+    try {
+      const plan = buildAgentBridgeInstallPlan({ projectRoot, homeDir, yoloRoot: "/tmp/yolo", targets: "claude", scopes: ["user"] });
+      assert.equal(plan.claude_project_hooks.length, 0, "user scope must not emit project settings.json");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(homeDir, { recursive: true, force: true });
+    }
   });
 });

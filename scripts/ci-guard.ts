@@ -267,6 +267,47 @@ export function inspectPathGuard() {
   return { status: findings.length === 0 ? "pass" : "fail", findings };
 }
 
+// ── BUG-C4: lifecycle-hook install guard ───────────────────────
+// Asserts tools/install-agent-bridge.ts still emits the project-scoped
+// .claude/settings.json wiring the PreToolUse lifecycle-gate hook.
+// The hook is the machine-enforcement layer for BUG-C (yolo check blocked
+// must MACHINE-BLOCK source writes). Removing the emit silently breaks the
+// enforcement boundary; this guard fail-closes the regression at CI time.
+const LIFECYCLE_HOOK_INSTALL_FILE = "tools/install-agent-bridge.ts";
+const LIFECYCLE_HOOK_REQUIRED_TOKENS = [
+  { token: "pre-tool-lifecycle-gate", why: "must reference the PreToolUse hook script" },
+  { token: "PreToolUse", why: "must register under the PreToolUse hook type" },
+  { token: "Write|Edit|MultiEdit|Bash", why: "matcher must cover Write/Edit/MultiEdit/Bash source-write surface" },
+  { token: ".claude/settings.json", why: "must emit project-scoped .claude/settings.json" },
+];
+
+export function inspectLifecycleHookInstallGuard(options: { text?: string } = {}) {
+  const findings: { file: string; code: string; message: string }[] = [];
+  let text = options.text;
+  if (text === undefined) {
+    const path = resolve(ROOT, LIFECYCLE_HOOK_INSTALL_FILE);
+    if (!existsSync(path)) {
+      findings.push({
+        file: LIFECYCLE_HOOK_INSTALL_FILE,
+        code: "LIFECYCLE_HOOK_INSTALL_FILE_MISSING",
+        message: `${LIFECYCLE_HOOK_INSTALL_FILE} not found; lifecycle-gate hook emit guard cannot run.`,
+      });
+      return { status: "fail", findings };
+    }
+    text = readFileSync(path, "utf8");
+  }
+  for (const requirement of LIFECYCLE_HOOK_REQUIRED_TOKENS) {
+    if (!text.includes(requirement.token)) {
+      findings.push({
+        file: LIFECYCLE_HOOK_INSTALL_FILE,
+        code: "LIFECYCLE_HOOK_INSTALL_TOKEN_MISSING",
+        message: `Missing required token "${requirement.token}" (${requirement.why}). BUG-C enforcement depends on install emitting this; do not remove without replacing the enforcement layer.`,
+      });
+    }
+  }
+  return { status: findings.length === 0 ? "pass" : "fail", findings };
+}
+
 export function runCiGuard(mode = "all") {
   const checks = [];
   if (mode === "all" || mode === "actionlint" || mode === "workflow") checks.push({ name: "workflow", ...inspectWorkflowGuards() });
@@ -274,6 +315,7 @@ export function runCiGuard(mode = "all") {
   if (mode === "all" || mode === "assertions" || mode === "source-assertions") checks.push({ name: "source-assertions", ...inspectSourceAssertionGuard() });
   if (mode === "all" || mode === "shell-injection" || mode === "shell") checks.push({ name: "shell-injection", ...inspectShellInjectionGuard() });
   if (mode === "all" || mode === "path-guard" || mode === "path") checks.push({ name: "path-guard", ...inspectPathGuard() });
+  if (mode === "all" || mode === "lifecycle-hook" || mode === "lifecycle") checks.push({ name: "lifecycle-hook", ...inspectLifecycleHookInstallGuard() });
   return {
     status: checks.every((check) => check.status === "pass") ? "pass" : "fail",
     checks,

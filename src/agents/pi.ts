@@ -468,7 +468,11 @@ export async function runPiAgent(input = Object(), options = Object()) {
   writeState("running", "PI execution started.");
 
   for (const action of plan.actions) {
-    if (action.id === "pi.execute.runner") {
+    // BUG-C3: lifecycle gate must fire for EVERY runtime execute action
+    // (pi.execute.*), not just pi.execute.runner. Otherwise a blocked check
+    // still permits other write-capable execute actions (installer, etc.)
+    // to run. Observe actions are read-only and bypass the gate.
+    if (action.kind === "runtime" && action.id?.startsWith("pi.execute.")) {
       const guard = inspectLifecycleGuard({
         command: "yolo-run",
         projectRoot: plan.artifacts.projectRoot,
@@ -489,14 +493,14 @@ export async function runPiAgent(input = Object(), options = Object()) {
         writeState("error", observation.summary);
         return {
           status: "error",
-          summary: "PI stopped before implementation because lifecycle prerequisites failed.",
+          summary: `PI stopped before ${action.id} because lifecycle prerequisites failed.`,
           code: observation.code,
           next_actions: observation.next_actions,
           artifacts: plan.artifacts,
           plan,
           observations,
           lifecycle_guard: guard,
-          stop_condition: "lifecycle_guard",
+          stop_condition: "lifecycle_guard_blocked",
         };
       }
     }

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { LIFECYCLE_STAGES, getLifecycleStage, lifecycleStageForCommand, validateLifecycleState } from "./schema.js";
 import { lifecycleArtifactPath, lifecycleStatusPath, resolveLifecycleStateRoot } from "./state.js";
+import { inspectWorktreeDrift } from "./source-snapshot.js";
 
 export const LIFECYCLE_GUARD_SCHEMA_VERSION = "1.0";
 export const LIFECYCLE_GUARD_SCHEMA = "yolo.lifecycle.guard.v1";
@@ -686,6 +687,20 @@ export function inspectLifecycleDrift(projectRoot: string): LifecycleDriftResult
     }
     previousStage = stage;
     if (ts != null) previousTimestamp = ts;
+  }
+
+  // BUG-C2: worktree drift — detect out-of-band source edits since the last
+  // check snapshot. If the working tree signature changed, the lifecycle state
+  // can no longer be trusted as authoritative.
+  const worktreeDrift = inspectWorktreeDrift({ projectRoot });
+  if (worktreeDrift.has_drift) {
+    drift_records.push({
+      stage: "check",
+      code: "WORKTREE_DIVERGED",
+      declared: "clean",
+      actual: "diverged",
+      message: worktreeDrift.reason || "Working tree changed since the last check snapshot.",
+    });
   }
 
   return { has_drift: drift_records.length > 0, drift_records };
