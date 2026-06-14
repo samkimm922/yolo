@@ -129,6 +129,31 @@ describe("demand runtime", () => {
     }
   });
 
+  test("brainstorm persists content-derived evidence requirements in session state", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-evidence-requirements-"));
+    try {
+      const result = runDemandBrainstormRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        idea: "Create onboarding checklist copy modeled on https://example.com/checklist-guide.",
+        target_users: ["freelance designer"],
+        status_quo: ["Designers copy checklist items from old notes."],
+        success_criteria: ["Designer sees checklist copy aligned to the external guide."],
+        non_goals: ["No calendar sync."],
+        writeArtifacts: true,
+      });
+
+      const read = readDemandSession(join(result.demand_dir, "session.json"));
+      assert.equal(read.ok, true);
+      assert.equal(read.session.evidence_requirements.length > 0, true);
+      assert.equal(read.session.evidence_requirements[0].kind, "external");
+      assert.equal(read.session.evidence_requirements[0].status, "pending");
+      assert.equal(read.session.evidence_requirement_summary.pending > 0, true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("discuss requires approval and compiles approved demand to L3 PRD", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-discuss-"));
     try {

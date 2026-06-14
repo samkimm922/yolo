@@ -101,6 +101,21 @@ describe("discovery external evidence fail-closed", () => {
     assert.equal(result.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"), false);
   });
 
+  test("unrelated external evidence does not satisfy the URL requirement", () => {
+    const result = inspectDiscoveryReadiness({
+      ...baseInput,
+      evidence: [{
+        scope: "external",
+        url: "https://example.com/unrelated",
+        source: "external_web",
+        summary: "Fetched a different page.",
+      }],
+    });
+
+    assert.equal(result.ready_for_prd, false);
+    assert.ok(result.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"));
+  });
+
   test("pure local idea is not blocked by the external evidence gate", () => {
     const result = inspectDiscoveryReadiness({ ...baseInput, idea: localIdea });
     assert.equal(

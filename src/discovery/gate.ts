@@ -2,7 +2,10 @@ export const DISCOVERY_GATE_SCHEMA_VERSION = "1.0";
 export const DISCOVERY_BRIEF_SCHEMA = "yolo.discovery.brief.v1";
 export const DISCOVERY_READINESS_SCHEMA = "yolo.discovery.readiness.v1";
 
-import { detectExternalResearchSignal } from "../lib/research-signal.js";
+import {
+  buildEvidenceRequirements,
+  evidenceRequirementBlockers,
+} from "../demand/evidence-requirements.js";
 
 function asArray(value) {
   if (value == null) return [];
@@ -96,34 +99,40 @@ export function buildDiscoveryBrief(input = Object(), options = Object()) {
 // discovery→PRD path from silently passing when a web tool was unavailable
 // or external research was never triggered.
 function externalEvidenceChecks(input = Object(), brief = Object()) {
-  const signal = detectExternalResearchSignal(
+  const texts = [
     brief.idea,
     brief.problem,
     brief.success_criteria.join(" "),
     brief.constraints.join(" "),
-  );
-  if (!signal.requires_external) return [];
-
-  const evidence = [...asArray(input.evidence), ...asArray(input.research_results)];
-  const hasExternal = evidence.some((record) => {
-    if (!record || typeof record !== "object") return false;
-    return clean(record.scope || record.evidence_scope || record.source_scope).toLowerCase() === "external";
-  });
-  if (hasExternal) return [];
-
+  ];
   const attempted = input.external_research_attempted === true
     || input.externalResearchAttempted === true;
+  const requirements = buildEvidenceRequirements(input, {}, {
+    kinds: ["external"],
+    texts,
+    evidence_records: [...asArray(input.evidence), ...asArray(input.research_results)],
+    external_research_attempted: attempted,
+  });
+  const blockers = evidenceRequirementBlockers(requirements);
+  if (blockers.length === 0) return [];
+
   const message = attempted
     ? "External research was required and attempted, but no scope=external evidence was produced (web tool unavailable or produced nothing)."
     : "External research is required by the content but no scope=external evidence is present (research was not triggered).";
 
-  return [check(
-    "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED",
+  return blockers.map((blocker) => check(
+    blocker.code,
     false,
     "error",
     message,
-    { reason: signal.reason, matches: signal.matches },
-  )];
+    {
+      evidence_requirement_id: blocker.evidence_requirement_id,
+      topic: blocker.topic,
+      kind: blocker.kind,
+      reason: blocker.reason,
+      matches: blocker.matches,
+    },
+  ));
 }
 
 export function inspectDiscoveryReadiness(input = Object(), options = Object()) {

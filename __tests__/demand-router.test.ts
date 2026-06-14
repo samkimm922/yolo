@@ -24,9 +24,12 @@ interface RoutedState {
   reason_codes: string[];
   missing_slots: string[];
   needed_evidence_agents: string[];
+  evidence_requirements?: { id: string; topic: string; kind: string; reason: string; status: string }[];
+  evidence_requirement_summary?: { total: number; pending: number; satisfied: number; pending_items: unknown[]; satisfied_items: unknown[] };
   next_question: { slot: string; text: string } | null;
   question_queue: { slot: string }[];
   next_action: string;
+  next_actions?: string[];
   prd_ready: boolean;
   submode: string;
 }
@@ -45,6 +48,22 @@ function projectEvidence(summary: string, why: string, overrides: Record<string,
     source: "project_code",
     summary,
     why,
+    ...overrides,
+  };
+}
+
+function completeLocalDemand(overrides: Record<string, unknown> = {}) {
+  return {
+    objective: "Create a guided onboarding checklist for freelance designers.",
+    target_users: ["Freelance designers who onboard new clients weekly."],
+    status_quo: ["They copy tasks from old notes and often miss a step."],
+    desired_outcome: ["Designers can see the next onboarding step for each client."],
+    scope_in: ["Checklist creation and step completion for one client workspace."],
+    scope_out: ["No calendar sync or template marketplace."],
+    constraints: ["Keep the first version to a manual checklist."],
+    acceptance_criteria: ["A designer can add a client and mark onboarding steps complete."],
+    risks: ["Missing checklist steps can delay client onboarding."],
+    approve: true,
     ...overrides,
   };
 }
@@ -550,6 +569,126 @@ describe("demand router", () => {
     });
 
     assert.equal(complete.prd_ready, true, JSON.stringify(complete.blockers, null, 2));
+  });
+
+  test("external-reference demand records pending evidence requirement and blocks readiness", () => {
+    const readiness = inspectDemandPrdReadiness(completeLocalDemand({
+      objective: "Create onboarding checklist copy modeled on https://example.com/checklist-guide.",
+    }));
+
+    assert.equal(readiness.prd_ready, false);
+    assert.equal(readiness.evidence_requirements.length > 0, true);
+    assert.equal(readiness.evidence_requirements[0].kind, "external");
+    assert.equal(readiness.evidence_requirements[0].status, "pending");
+    assert.ok(readiness.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"));
+  });
+
+  test("external evidence with covers satisfies the matching requirement", () => {
+    const base = completeLocalDemand({
+      objective: "Create onboarding checklist copy modeled on https://example.com/checklist-guide.",
+    });
+    const pending = inspectDemandPrdReadiness(base);
+    const requirement = pending.evidence_requirements[0];
+
+    const readiness = inspectDemandPrdReadiness({
+      ...base,
+      evidence_results: [{
+        role: "researcher",
+        status: "completed",
+        claim: "The referenced checklist guide was fetched.",
+        evidence: [{
+          scope: "external",
+          url: "https://example.com/checklist-guide",
+          source: "external_web",
+          summary: "Fetched checklist guide as external reference.",
+          why: "This covers the referenced external guide.",
+          covers: [requirement.id],
+        }],
+        recommendation: "proceed",
+        result: { verdict: "pass" },
+      }],
+    });
+
+    assert.equal(readiness.evidence_requirements[0].status, "satisfied");
+    assert.equal(readiness.prd_ready, true, JSON.stringify(readiness.blockers, null, 2));
+  });
+
+  test("multiple external requirements stay blocked when only one is covered", () => {
+    const base = completeLocalDemand({
+      objective: "Use external research from https://example.com/checklist-guide and replicate the external onboarding checklist pattern.",
+    });
+    const pending = inspectDemandPrdReadiness(base);
+    assert.equal(pending.evidence_requirements.length >= 2, true, JSON.stringify(pending.evidence_requirements));
+    const covered = pending.evidence_requirements[0];
+
+    const readiness = inspectDemandPrdReadiness({
+      ...base,
+      evidence_results: [{
+        role: "researcher",
+        status: "completed",
+        claim: "One external reference was fetched.",
+        evidence: [{
+          scope: "external",
+          url: "https://example.com/checklist-guide",
+          source: "external_web",
+          summary: "Fetched the checklist guide.",
+          why: "This covers only one requirement.",
+          covers: [covered.id],
+        }],
+        recommendation: "proceed",
+        result: { verdict: "pass" },
+      }],
+    });
+
+    assert.equal(readiness.prd_ready, false);
+    assert.equal(readiness.evidence_requirements.filter((item) => item.status === "satisfied").length, 1);
+    assert.equal(readiness.evidence_requirements.some((item) => item.status === "pending"), true);
+    assert.ok(readiness.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"));
+  });
+
+  test("attempted external research with no valid covered record remains pending with tool-unavailable reason", () => {
+    const readiness = inspectDemandPrdReadiness({
+      ...completeLocalDemand({
+        objective: "Create onboarding checklist copy modeled on https://example.com/checklist-guide.",
+      }),
+      evidence_results: [{
+        role: "researcher",
+        status: "completed",
+        external_research_attempted: true,
+        claim: "External tool was attempted but did not return usable covered evidence.",
+        evidence: [{
+          scope: "external",
+          url: "https://unrelated.example.com",
+        }],
+        recommendation: "proceed",
+        result: { verdict: "pass" },
+      }],
+    });
+
+    const requirement = readiness.evidence_requirements[0];
+    assert.equal(requirement.status, "pending");
+    assert.match(requirement.reason, /Tool unavailable/);
+    assert.equal(readiness.prd_ready, false);
+    assert.ok(readiness.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"));
+  });
+
+  test("pure local demand has no evidence requirements and is not blocked by research gate", () => {
+    const readiness = inspectDemandPrdReadiness(completeLocalDemand());
+
+    assert.deepEqual(readiness.evidence_requirements, []);
+    assert.equal(readiness.prd_ready, true, JSON.stringify(readiness.blockers, null, 2));
+    assert.equal(readiness.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"), false);
+  });
+
+  test("pending evidence requirements drive demand status next actions", () => {
+    const result = runDemandStatusRuntime(completeLocalDemand({
+      objective: "Create onboarding checklist copy modeled on https://example.com/checklist-guide.",
+    }));
+
+    assertRoutedState(result);
+    assert.equal(result.state.evidence_requirement_summary?.pending, 1);
+    assert.ok(result.state.next_actions?.some((action) => /收集 .*证据/.test(action)));
+    assert.match(result.state.next_action, /证据需求/);
   });
 
   test("external-only evidence cannot satisfy existing project facts", () => {

@@ -3,6 +3,10 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { buildDemandArtifactGraph } from "./graph.js";
 import { inspectDemandReadiness } from "./gate.js";
 import { buildUnderstandingPlayback } from "./understanding-playback.js";
+import {
+  buildEvidenceRequirements,
+  evidenceRequirementSummary,
+} from "./evidence-requirements.js";
 
 export const DEMAND_SESSION_SCHEMA_VERSION = "1.0";
 export const DEMAND_SESSION_SCHEMA = "yolo.demand.session.v1";
@@ -1095,6 +1099,8 @@ export function buildDemandSession(input = Object(), options = Object()) {
     },
     playback: input.playback || null,
   });
+  session.evidence_requirements = buildEvidenceRequirements(input, session);
+  session.evidence_requirement_summary = evidenceRequirementSummary(session.evidence_requirements);
   session.readiness = inspectDemandReadiness(session, {
     phase: session.phase,
     projectRoot,
@@ -1171,6 +1177,9 @@ export function demandMarkdownArtifacts(session = Object()) {
       "",
       "## Codebase Scouts",
       linesList(asArray(session.investigation?.codebase_scouts).map((item) => `${item.file} [${item.status || "unknown"}] ${item.reason || ""}`)),
+      "",
+      "## Evidence Requirements",
+      linesList(asArray(session.evidence_requirements).map((item) => `${item.id} [${item.status}] ${item.kind}: ${item.topic} - ${item.reason}`)),
       "",
       "## Risks",
       linesList(session.investigation?.risks),
