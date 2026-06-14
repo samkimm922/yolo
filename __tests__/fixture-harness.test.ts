@@ -124,10 +124,10 @@ describe("fixture execution harness", () => {
       run: {
         mode: "dry-run",
         supports_dry_run: true,
-        commands: ["node -e \"setTimeout(() => {}, 1000)\""],
+        commands: ["node -e \"setTimeout(() => {}, 5000)\""],
       },
     };
-    const result = runFixtureHarness(fixture, { keepWorkspace: true, timeout_ms: 20 });
+    const result = runFixtureHarness(fixture, { keepWorkspace: true, timeout_ms: 100 });
     try {
       assert.equal(result.status, "blocked");
       assert.equal(result.commands[0].failure.failure_type, "timeout");

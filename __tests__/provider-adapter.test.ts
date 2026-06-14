@@ -231,7 +231,7 @@ describe("provider execution adapter", () => {
     let child;
     let killedPid = null;
     const run = await spawnProviderPrompt("prompt", spawnOptions({
-      timeout: 1,
+      timeout: 50,
       spawnImpl: () => {
         child = fakeProviderSpawn({ close: false })();
         return child;
