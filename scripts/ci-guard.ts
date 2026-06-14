@@ -84,10 +84,48 @@ export function inspectSecretGuards() {
   };
 }
 
+// ── Source-string assertion guard ──────────────────────────────
+// Bans new assert.match(*Source, ...) patterns in test files.
+// These assert against source-code text read from files, which is
+// brittle (any refactor breaks the test). Existing occurrences are
+// allowlisted via baseline counts; the guard fails if counts grow.
+const SOURCE_ASSERTION_BASELINE: Record<string, number> = {
+  "__tests__/runner-review-flow.test.ts": 138,
+  "__tests__/prompt-r9-contract.test.ts": 10,
+  // This test intentionally embeds the pattern in a string literal to verify the guard catches it.
+  "__tests__/ci-guard-source-assertions.test.ts": 1,
+};
+
+const SOURCE_ASSERTION_PATTERN = /assert\.match\(\s*\w*Source[\s,]/g;
+
+export function inspectSourceAssertionGuard() {
+  const findings = [];
+  const testFiles = walk("__tests__").filter((f) => /\.test\.ts$/.test(f));
+  for (const file of testFiles) {
+    const text = readFileSync(resolve(ROOT, file), "utf8");
+    SOURCE_ASSERTION_PATTERN.lastIndex = 0;
+    const matches = text.match(SOURCE_ASSERTION_PATTERN) || [];
+    const count = matches.length;
+    const baseline = SOURCE_ASSERTION_BASELINE[file] ?? 0;
+    if (count > baseline) {
+      findings.push({
+        file,
+        code: "NEW_SOURCE_STRING_ASSERTION",
+        message: `Found ${count} assert.match(*Source, ...) assertions (baseline: ${baseline}). New source-code string assertions are banned — convert to behavioral tests that drive real exported functions.`,
+      });
+    }
+  }
+  return {
+    status: findings.length === 0 ? "pass" : "fail",
+    findings,
+  };
+}
+
 export function runCiGuard(mode = "all") {
   const checks = [];
   if (mode === "all" || mode === "actionlint" || mode === "workflow") checks.push({ name: "workflow", ...inspectWorkflowGuards() });
   if (mode === "all" || mode === "security" || mode === "secrets") checks.push({ name: "security", ...inspectSecretGuards() });
+  if (mode === "all" || mode === "assertions" || mode === "source-assertions") checks.push({ name: "source-assertions", ...inspectSourceAssertionGuard() });
   return {
     status: checks.every((check) => check.status === "pass") ? "pass" : "fail",
     checks,
