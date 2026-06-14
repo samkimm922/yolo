@@ -448,7 +448,7 @@ describe("lifecycle guard", () => {
       });
 
       assert.equal(pi.status, "error");
-      assert.equal(pi.stop_condition, "lifecycle_guard");
+      assert.equal(pi.stop_condition, "lifecycle_guard_blocked");
       assert.deepEqual((pi as { lifecycle_guard: { missing_required_stages: string[] } }).lifecycle_guard.missing_required_stages, ["discovery", "roadmap", "check"]);
       assert.deepEqual(seen, ["pi.prd.preflight"]);
     } finally {
