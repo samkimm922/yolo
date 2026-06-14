@@ -2,6 +2,11 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { handleGateFailureFlow } from "../src/runtime/execution/gate-failure-flow.js";
 
+// B3: drives the REAL buildGateFailureRetryDecision (no stub) by controlling
+// history / attempt / maxRetryForGate / failures. The summarizeFailures and
+// applyLearningEffects stubs only fix the historyEntry fingerprint fed into
+// nextHistory, so we can deterministically trigger each decision branch.
+
 const task = { id: "FIX-FAIL", scope: { targets: [{ file: "src/a.ts" }] } };
 const wt = { path: "/tmp/wt", branch: "yolo/FIX-FAIL" };
 const gate = { exitCode: 1, stdout: "eslint failed in src/a.ts" };
@@ -49,11 +54,6 @@ function baseOptions(record, overrides = {}) {
         historyEntry: gateFailure.historyEntry,
       };
     },
-    buildRetryDecision: () => ({
-      action: "retry",
-      retryMessage: "exit=1, 重试 2/3",
-      cleanupMessage: "worktree: 已丢弃失败改动，从干净基线重试",
-    }),
     cleanupWorktree: (...args) => record.cleanup.push(args),
     recordTaskTransition: (transition) => record.transitions.push(transition),
     execNode: (...args) => {
@@ -71,9 +71,10 @@ function baseOptions(record, overrides = {}) {
   };
 }
 
-describe("gate failure flow", () => {
-  test("retry decisions preserve updated history and discard worktree", () => {
+describe("gate failure flow (real buildGateFailureRetryDecision)", () => {
+  test("non-repeated history within retry budget retries and discards worktree", () => {
     const record = logs();
+    // attempt=2 <= maxRetryForGate=3, history fingerprint differs from new entry → retry
     const result = handleGateFailureFlow(baseOptions(record));
 
     assert.equal(result.action, "retry");
@@ -81,6 +82,11 @@ describe("gate failure flow", () => {
     assert.equal(result.remediation.action, "RETRY_WITH_CONTEXT");
     assert.equal(result.remediation.automation_can_continue, true);
     assert.deepEqual(result.history.at(-1), historyEntry);
+    // Real retry message is built from attempt/maxRetry, not faked:
+    assert.ok(
+      record.progress.some((entry) => entry[0] === task.id && entry[2] === "exit=1, 重试 2/3"),
+      "retry message must reflect real attempt/maxRetry",
+    );
     assert.deepEqual(record.cleanup, [["/tmp/wt", "yolo/FIX-FAIL", false]]);
     assert.deepEqual(record.progress.at(-1), ["", "├─", "worktree: 已丢弃失败改动，从干净基线重试"]);
     assert.deepEqual(record.fixes[0], ["FIX-FAIL", "eslint", "unused"]);
@@ -94,51 +100,39 @@ describe("gate failure flow", () => {
     }]);
   });
 
-  test("max retry decisions record failure and return terminal result", () => {
+  test("non-repeated history over retry budget returns terminal max_retry result", () => {
     const record = logs();
-    const result = handleGateFailureFlow(baseOptions(record, {
-      buildRetryDecision: () => ({
-        action: "max_retry",
-        errorTitle: "闸门 exit 1, 重试 2 次仍失败",
-        errorDetail: "eslint failed",
-        transition: { task_id: "FIX-FAIL", result: { status: "FAIL" }, prd_update: { status: "failed" } },
-        doneStatus: "failed",
-        doneReason: "闸门 exit 1, 重试 2 次仍失败",
-        result: { status: "failed", reason: "闸门 exit 1, 重试 2 次仍失败" },
-      }),
-    }));
+    // attempt=2 > maxRetryForGate=1, history still non-repeated → max_retry
+    const result = handleGateFailureFlow(baseOptions(record, { maxRetryForGate: 1 }));
+    const reason = "闸门 exit 1, 重试 2 次仍失败";
 
     assert.equal(result.action, "return");
     assert.equal(result.result.status, "failed");
-    assert.equal(result.result.reason, "闸门 exit 1, 重试 2 次仍失败");
+    assert.equal(result.result.reason, reason);
     assert.equal(result.result.remediation.action, "REROUTE_REVIEW_FIX");
-    assert.deepEqual(record.errors[0], ["FIX-FAIL", "闸门 exit 1, 重试 2 次仍失败", "eslint failed"]);
+    assert.deepEqual(record.errors[0], ["FIX-FAIL", reason, "eslint failed"]);
     assert.equal(record.transitions[0].task_id, "FIX-FAIL");
     assert.equal(record.transitions[0].result.remediation.action, "REROUTE_REVIEW_FIX");
-    assert.deepEqual(record.done[0], ["FIX-FAIL", "failed", 75, "闸门 exit 1, 重试 2 次仍失败"]);
+    assert.deepEqual(record.done[0], ["FIX-FAIL", "failed", 75, reason]);
+    assert.deepEqual(record.cleanup, [["/tmp/wt", "yolo/FIX-FAIL", false]]);
   });
 
-  test("stuck decisions learn, cleanup, transition, and return stuck result", () => {
+  test("repeated non-contract failures return stuck result and record learning", () => {
     const record = logs();
+    // history tail matches new entry fingerprint → hasRepeatedGateFailure=true,
+    // eslint failure is not a contract condition → stuck
     const result = handleGateFailureFlow(baseOptions(record, {
-      buildRetryDecision: () => ({
-        action: "stuck",
-        stopLog: { id: "FIX-FAIL", marker: "!! 停机", message: "连续 2 次同 gate code 失败" },
-        errorTitle: "连续同因停机",
-        errorDetail: "gate exit 1: eslint: unused",
-        learnMessage: "连续同因停机: eslint: unused",
-        transition: { task_id: "FIX-FAIL", result: { status: "FAIL", reason: "连续同因" } },
-        doneStatus: "failed",
-        doneReason: "连续同因停机",
-        result: { status: "stuck", reason: "连续同因" },
-      }),
+      history: [{ gate: 1, fingerprint: "eslint:unused", message: "previous" }],
     }));
 
     assert.equal(result.action, "return");
     assert.equal(result.result.status, "stuck");
     assert.equal(result.result.reason, "连续同因");
     assert.equal(result.result.remediation.action, "REROUTE_REVIEW_FIX");
-    assert.deepEqual(record.progress.find((entry) => entry[1] === "!! 停机"), ["FIX-FAIL", "!! 停机", "连续 2 次同 gate code 失败"]);
+    assert.deepEqual(
+      record.progress.find((entry) => entry[1] === "!! 停机"),
+      ["FIX-FAIL", "!! 停机", "连续 2 次同 gate code 失败"],
+    );
     assert.deepEqual(record.execs.at(-1), ["learn.js", [
       "--record",
       "--task=FIX-FAIL",
@@ -152,16 +146,12 @@ describe("gate failure flow", () => {
     assert.equal(record.transitions[0].result.remediation.action, "REROUTE_REVIEW_FIX");
   });
 
-  test("contract suspect decisions write evidence and block the task", () => {
+  test("repeated contract-condition failures block the task as contract_suspect", () => {
     const record = logs();
+    // repeated history + a contract-condition failure (code_contains) → contract_suspect
     const result = handleGateFailureFlow(baseOptions(record, {
-      buildRetryDecision: () => ({
-        action: "contract_suspect",
-        stopLog: { id: "FIX-FAIL", marker: "!! 停机", message: "连续 2 次同 gate code 失败" },
-        errorTitle: "连续同因停机",
-        errorDetail: "gate exit 1: code_contains missing",
-        learnMessage: "连续同因停机: code_contains missing",
-      }),
+      history: [{ gate: 1, fingerprint: "eslint:unused", message: "previous" }],
+      analyzeOutput: () => [{ type: "code_contains", detail: "missing", code: "code_contains" }],
       writeSuspectEvidence: (payload, options) => {
         assert.equal(payload.history.at(-1), historyEntry);
         assert.deepEqual(options, { yoloRoot: "/tmp/yolo", projectRoot: "/repo" });

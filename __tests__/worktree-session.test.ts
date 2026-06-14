@@ -80,10 +80,9 @@ describe("worktree execution session helpers", () => {
       if (command === "git rev-parse HEAD") return "abc123\n";
       return "";
     };
-    const execFileSync = (_command, args) => {
-      const shell = args.at(-1);
-      if (shell.includes("tsc")) return "src/a.ts(1,1): error TS1000: bad\n";
-      if (shell.includes("eslint")) {
+    const execFileSync = (bin, _args) => {
+      if (bin === "tsc") return "src/a.ts(1,1): error TS1000: bad\n";
+      if (bin === "eslint") {
         return JSON.stringify([{ filePath: "/repo/.yolo-worktrees/FIX-1/src/a.ts", messages: [{ line: 2, ruleId: "semi" }] }]);
       }
       return "";

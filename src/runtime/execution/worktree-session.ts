@@ -10,12 +10,13 @@ import {
   writeFileSync as defaultWriteFileSync,
 } from "node:fs";
 import {
-  execFileSync as defaultExecFileSync,
   execSync as defaultExecSync,
 } from "node:child_process";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 
+import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
+import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 import {
   buildBaselineArtifact,
   parseEslintBaselineKeys,
@@ -235,30 +236,52 @@ function collectAllowedFilesystemPaths({
 function writeWorktreeBaselines({
   wtPath,
   config,
-  execFileSync,
+  execFileSync = defaultExecFileSync,
   existsSync,
   mkdirSync,
   writeFileSync,
 }) {
   const wtBaselineDir = join(wtPath, "scripts", "yolo", "state", "runtime");
   if (!existsSync(wtBaselineDir)) mkdirSync(wtBaselineDir, { recursive: true });
+  // P12.I1: route config-supplied command through safe-exec with cwd=wtPath.
+  // argv parse rejects metacharacters; execFileSync DI defaults to safeExecFileSync.
   const run = (command, timeout) => {
+    const parsed = parseCommandToArgv(command);
+    if (!parsed.ok) {
+      return {
+        output: `command rejected: ${parsed.detail}`,
+        stderr: `command rejected: ${parsed.detail}`,
+        exitCode: 127,
+        status: "blocked",
+        reason: "baseline_command_rejected",
+      };
+    }
+    const argv = parsed.argv ?? [];
     try {
-      const output = execFileSync("sh", ["-c", `cd ${shellQuote(wtPath)} && ${command} 2>&1`], {
+      const stdout = execFileSync(argv[0], argv.slice(1), {
+        cwd: wtPath,
         encoding: "utf8",
         timeout,
       });
-      return { output, stderr: "", exitCode: 0, status: "pass", reason: null };
+      return {
+        output: String(stdout || ""),
+        stderr: "",
+        exitCode: 0,
+        status: "pass",
+        reason: null,
+      };
     } catch (error) {
-      const output = `${error?.stdout || ""}${error?.stderr || ""}`;
-      const exitCode = Number.isInteger(error?.status) ? error.status : 1;
+      const stdout = String(error?.stdout || "");
+      const stderr = String(error?.stderr || error?.message || "");
+      const output = `${stdout}${stderr}`;
+      const exitCode = Number.isInteger(error?.status) ? error.status : (Number.isInteger(error?.code) ? error.code : 1);
       const blocked = Boolean(error?.signal) ||
         exitCode === 127 ||
         /\bnot found\b|is not recognized|command not found/i.test(output) ||
         !output.trim();
       return {
         output,
-        stderr: String(error?.stderr || ""),
+        stderr,
         exitCode,
         status: blocked ? "blocked" : "pass",
         reason: blocked ? (error?.signal ? "baseline_command_timeout_or_signal" : "baseline_command_unavailable") : null,

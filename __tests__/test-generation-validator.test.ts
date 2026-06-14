@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseStatusLine, validateTestGeneration } from "../src/runtime/gates/test-generation-validator.js";
@@ -119,5 +119,38 @@ describe("test generation validator", () => {
     });
     assert.equal(result.blocks_execution, true);
     assert.equal(result.failures[0].code, "TEST_FAILURE_LOOP_BLOCKED");
+  });
+
+  test("add_minimal blocks new test files outside allowed_test_files", () => {
+    const result = validateTestGeneration({
+      test_generation: {
+        mode: "add_minimal",
+        reason: "scoped allowlist",
+        allowed_test_files: ["__tests__/allowed.test.js"],
+        max_new_test_files: 1,
+      },
+    }, { changedFiles: changed("__tests__/not-on-allowlist.test.js") });
+    assert.equal(result.status, "fail");
+    assert.equal(result.blocks_execution, true);
+    assert.equal(result.failures[0].code, "TEST_FILE_OUT_OF_ALLOWLIST");
+  });
+
+  test("add_minimal blocks test files exceeding max_test_lines_changed", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-test-gen-lines-"));
+    try {
+      mkdirSync(join(root, "__tests__"), { recursive: true });
+      writeFileSync(join(root, "__tests__", "big.test.js"), `${Array(10).fill("const x = 1;").join("\n")}\n`);
+      const result = validateTestGeneration({
+        scope: { allow_new_files: true, targets: [{ file: "__tests__/big.test.js" }] },
+        test_generation: { mode: "add_minimal", reason: "line budget", max_test_lines_changed: 3 },
+      }, {
+        cwd: root,
+        changedFiles: [{ file: "__tests__/big.test.js", status: "A", isNew: true }],
+      });
+      assert.equal(result.status, "fail");
+      assert.ok(result.failures.some((failure) => failure.code === "TEST_LINES_CHANGED_LIMIT"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

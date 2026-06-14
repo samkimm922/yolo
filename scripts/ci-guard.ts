@@ -84,10 +84,196 @@ export function inspectSecretGuards() {
   };
 }
 
+// ── Source-string assertion guard ──────────────────────────────
+// Bans new assert.match(*Source, ...) patterns in test files.
+// These assert against source-code text read from files, which is
+// brittle (any refactor breaks the test). Existing occurrences are
+// allowlisted via baseline counts; the guard fails if counts grow.
+const SOURCE_ASSERTION_BASELINE: Record<string, number> = {
+  "__tests__/runner-review-flow.test.ts": 138,
+  "__tests__/prompt-r9-contract.test.ts": 10,
+  // This test intentionally embeds the pattern in a string literal to verify the guard catches it.
+  "__tests__/ci-guard-source-assertions.test.ts": 1,
+};
+
+const SOURCE_ASSERTION_PATTERN = /assert\.match\(\s*\w*Source[\s,]/g;
+
+export function inspectSourceAssertionGuard() {
+  const findings = [];
+  const testFiles = walk("__tests__").filter((f) => /\.test\.ts$/.test(f));
+  for (const file of testFiles) {
+    const text = readFileSync(resolve(ROOT, file), "utf8");
+    SOURCE_ASSERTION_PATTERN.lastIndex = 0;
+    const matches = text.match(SOURCE_ASSERTION_PATTERN) || [];
+    const count = matches.length;
+    const baseline = SOURCE_ASSERTION_BASELINE[file] ?? 0;
+    if (count > baseline) {
+      findings.push({
+        file,
+        code: "NEW_SOURCE_STRING_ASSERTION",
+        message: `Found ${count} assert.match(*Source, ...) assertions (baseline: ${baseline}). New source-code string assertions are banned — convert to behavioral tests that drive real exported functions.`,
+      });
+    }
+  }
+  return {
+    status: findings.length === 0 ? "pass" : "fail",
+    findings,
+  };
+}
+
+// ── Shell-injection guard (P12.I1) ─────────────────────────────
+// Bans new shell-injection surface: `shell: true`, `"sh", ["-c", ...]`,
+// `execSync(...)` with template/var command, except where explicitly
+// allowlisted with an audit reason. The咽喉 is src/lib/security/safe-exec.ts;
+// all untrusted command execution must route through it.
+//
+// What this gate does NOT flag (safe by construction):
+//   - execFileSync/spawnSync with an argv array (e.g. execFileSync("git", [...]))
+//     even if an argv element uses ${} — the result is a single arg, no shell.
+//   - execSync("literal command") with no ${} interpolation.
+//
+// What this gate DOES flag:
+//   - shell: true
+//   - "sh"/'sh' followed by ["-c"/,'-c',  (explicit shell opt-in)
+//   - execSync(`template literal ${var}`)  — shell form with substitution
+//   - execSync("literal ${var}")           — double-quoted with interpolation
+type ShellFinding = { file: string; line: number; code: string; message: string };
+
+const SHELL_SH_C_RE = /["']sh["']\s*,\s*\[\s*["']-c["']/;
+const SHELL_TRUE_RE = /shell\s*:\s*true\b/;
+// execSync(`...`) with template literal — only execSync (which takes a string command),
+// not execFileSync/spawnSync (which take argv arrays and are safe even with ${}).
+const EXEC_SYNC_TEMPLATE_RE = /\bexecSync\s*\(\s*`/;
+// execSync("...") with ${} interpolation in the double-quoted string.
+const EXEC_SYNC_INTERP_RE = /\bexecSync\s*\(\s*"[^"]*\$\{/;
+
+function isCommentLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return true;
+  return trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*") || trimmed.startsWith("#");
+}
+
+// Each entry: `relative/path` -> audit reason (file-level) OR `relative/path:line` (line-level).
+// Add ONLY with a written audit explaining why argv form is impossible AND
+// why the call cannot reach untrusted input.
+const SHELL_INJECTION_ALLOWLIST: Record<string, string> = {
+  // src/lib/security/safe-exec.ts itself uses spawnSync (the咽喉). argv-only
+  // (shell:false) — no untrusted string reaches a shell. Self-scan would
+  // false-positive on its own detection regex too.
+  "src/lib/security/safe-exec.ts": "咽喉: spawnSync(argv, { shell: false }). argv-only executor.",
+  // Worktree git ops use shellQuote'd args on project-controlled paths.
+  // No untrusted input — paths/branches generated internally from taskId/sessionId.
+  "src/runtime/execution/worktree-session.ts": "git/ln/cp/rm ops with shellQuote'd args on project-controlled paths (wtPath/wtBranch/rootNodeModules). Args quoted; no untrusted command surface. macOS git worktree needs shell for `2>/dev/null` fallback suppression — audited P12.I1.",
+  // shutdown/startup git worktree cleanup with quoted paths from session state.
+  "src/runtime/run-lifecycle/shutdown.ts": "git worktree/branch cleanup with double-quoted paths from session state (activeWorktree/activeBranch). No untrusted input.",
+  "src/runtime/run-lifecycle/startup.ts": "git worktree/branch cleanup with double-quoted paths from session state (wtPath/branch). No untrusted input.",
+  // progress/server pgrep literal.
+  "src/runtime/progress/server.ts": "literal pgrep -f 'runner.js' (no var substitution).",
+  // finalize/recovery-checkpoints spawnSync node with argv array.
+  "src/runtime/run-lifecycle/finalize.ts": "spawnSync('node', argv) — no shell, literal node invocations.",
+  "src/runtime/run-lifecycle/recovery-checkpoints.ts": "spawnSync(processExecPath, argv) — no shell, internal process exec.",
+  // runner-core-helpers spawnSync('node', ...) and pgrep with numeric pid.
+  "src/runtime/runner-core-helpers.ts": "execFileSync('node', argv) and pgrep -P with numeric pid (Number-cast). No untrusted string.",
+  // artifacts git rev-parse HEAD literal.
+  "src/discovery/artifacts.ts": "literal 'git rev-parse HEAD' (no var substitution).",
+  // baselines execSync DI defaults to safeExecSync (P12.I1). Template literal
+  // `git stash apply ${stashRef}` is parsed to argv by safeExecSync internally;
+  // stashRef is a git-generated SHA (alphanumeric only).
+  "src/runtime/execution/baselines.ts": "execSync DI defaults to safeExecSync (P12.I1 咽喉). `git stash apply ${stashRef}` parsed to argv internally; stashRef is git-generated SHA (alphanumeric).",
+  // review-loop orchestrator execFileSync with explicit argv — injected by caller.
+  "src/runtime/review-loop/orchestrator.ts": "execFileSync(argv) — injected by caller, no shell:true.",
+  // auto-fix uses execFileSync with argv arrays.
+  "src/lib/auto-fix.ts": "execFileSync(argv) — injected by callers with argv arrays; no shell.",
+  // test harness — fixture-only.
+  "src/fixtures/harness.ts": "test harness: spawnSync('sh', ['-c', ...]) for fixture command-existence/script checks. Fixture-only; never runs in production runtime.",
+};
+
+const SHELL_GUARD_ROOTS = ["src", "lib", "bin", "tools", "hooks"];
+
+// ── P12.I2 path-guard: ban unguarded resolve(<root>, <var>) reads in path-sensitive dirs ──
+// Externally-influenced paths must go through resolveWithinRoot (the chokepoint) or be
+// guarded by an adjacent isWithin(...) check. A raw resolve(<root>, <var>) that feeds an
+// fs read without a nearby guard is a path-traversal surface.
+const PATH_GUARD_ROOTS = ["src/lib/evaluators", "src/runtime/adapters", "src/runtime/logging", "src/runtime/evidence"];
+const RAW_ROOT_RESOLVE_RE = /(?:^|[^A-Za-z.])resolve\(\s*(?:ROOT|projectRoot|root|stateRoot|rootDir|projectDir)\s*,\s*[A-Za-z_$]/;
+const PATH_GUARD_NEARBY_RE = /isWithin\(|resolveWithinRoot\(/;
+const PATH_GUARD_WINDOW = 3;
+// `relative/path` or `relative/path:line` -> audit reason. Add ONLY with a written audit
+// explaining why the path cannot reach untrusted content or stays within root.
+const PATH_GUARD_ALLOWLIST: Record<string, string> = {
+  "src/runtime/adapters/evidence-collector.ts:180": "resolve(projectRoot, stateRoot, 'state/evidence/adapters', fileName) — internal output path under stateRoot from fixed segments; not an external-content read.",
+};
+
+export function inspectShellInjectionGuard() {
+  const findings: ShellFinding[] = [];
+  const files = SHELL_GUARD_ROOTS.flatMap((root) => walk(root)).filter((f) => /\.tsx?$/.test(f));
+  for (const file of files) {
+    // File-level allowlist.
+    if (SHELL_INJECTION_ALLOWLIST[file]) continue;
+    const text = readFileSync(resolve(ROOT, file), "utf8");
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNumber = i + 1;
+      const lineKey = `${file}:${lineNumber}`;
+      if (SHELL_INJECTION_ALLOWLIST[lineKey]) continue;
+      // Skip comments — detection patterns mentioned in comments would false-positive.
+      if (isCommentLine(line)) continue;
+      let code: string | null = null;
+      if (SHELL_TRUE_RE.test(line)) code = "SHELL_TRUE_BANNED";
+      else if (SHELL_SH_C_RE.test(line)) code = "SH_C_TEMPLATE_BANNED";
+      else if (EXEC_SYNC_TEMPLATE_RE.test(line)) code = "EXEC_SYNC_TEMPLATE_BANNED";
+      else if (EXEC_SYNC_INTERP_RE.test(line)) code = "EXEC_SYNC_INTERP_BANNED";
+      if (code) {
+        findings.push({
+          file,
+          line: lineNumber,
+          code,
+          message: `Shell-injection surface (${code}). Route untrusted commands through src/lib/security/safe-exec.ts (execCommand/execArgv). If legitimate, add an audit entry to SHELL_INJECTION_ALLOWLIST in scripts/ci-guard.ts.`,
+        });
+      }
+    }
+  }
+  return {
+    status: findings.length === 0 ? "pass" : "fail",
+    findings,
+  };
+}
+
+export function inspectPathGuard() {
+  const findings: ShellFinding[] = [];
+  const files = PATH_GUARD_ROOTS.flatMap((root) => walk(root)).filter((f) => /\.tsx?$/.test(f));
+  for (const file of files) {
+    if (PATH_GUARD_ALLOWLIST[file]) continue;
+    const text = readFileSync(resolve(ROOT, file), "utf8");
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNumber = i + 1;
+      if (PATH_GUARD_ALLOWLIST[`${file}:${lineNumber}`]) continue;
+      if (isCommentLine(line)) continue;
+      if (!RAW_ROOT_RESOLVE_RE.test(line)) continue;
+      const start = Math.max(0, i - PATH_GUARD_WINDOW);
+      const end = Math.min(lines.length, i + PATH_GUARD_WINDOW + 1);
+      if (PATH_GUARD_NEARBY_RE.test(lines.slice(start, end).join("\n"))) continue;
+      findings.push({
+        file,
+        line: lineNumber,
+        code: "UNGUARDED_PATH_RESOLVE",
+        message: `Unguarded resolve(<root>, <var>) path surface. Route externally-influenced paths through resolveWithinRoot (src/lib/security/path-guard.ts) or guard with an adjacent isWithin(...). If legitimate, add an audit entry to PATH_GUARD_ALLOWLIST in scripts/ci-guard.ts.`,
+      });
+    }
+  }
+  return { status: findings.length === 0 ? "pass" : "fail", findings };
+}
+
 export function runCiGuard(mode = "all") {
   const checks = [];
   if (mode === "all" || mode === "actionlint" || mode === "workflow") checks.push({ name: "workflow", ...inspectWorkflowGuards() });
   if (mode === "all" || mode === "security" || mode === "secrets") checks.push({ name: "security", ...inspectSecretGuards() });
+  if (mode === "all" || mode === "assertions" || mode === "source-assertions") checks.push({ name: "source-assertions", ...inspectSourceAssertionGuard() });
+  if (mode === "all" || mode === "shell-injection" || mode === "shell") checks.push({ name: "shell-injection", ...inspectShellInjectionGuard() });
+  if (mode === "all" || mode === "path-guard" || mode === "path") checks.push({ name: "path-guard", ...inspectPathGuard() });
   return {
     status: checks.every((check) => check.status === "pass") ? "pass" : "fail",
     checks,

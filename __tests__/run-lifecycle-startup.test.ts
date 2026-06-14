@@ -250,8 +250,8 @@ describe("run lifecycle startup helpers", () => {
       config: { build: { type_check: "tsc --noEmit", lint: "eslint ." } },
       existsSync: () => false,
       writeFileSync: (file, content) => writes.set(file, content),
-      execFileSync: (_bin, args) => {
-        if (args[1].startsWith("tsc")) return "src/a.ts(1,1): error TS1000: bad\n";
+      execFileSync: (bin, _args) => {
+        if (bin === "tsc") return "src/a.ts(1,1): error TS1000: bad\n";
         return JSON.stringify([{ filePath: "/repo/src/a.ts", messages: [
           { line: 2, ruleId: "semi", severity: 2 },
           { line: 3, ruleId: "no-alert", severity: 1 },
@@ -281,8 +281,8 @@ describe("run lifecycle startup helpers", () => {
       config: { build: { type_check: "missing-tsc", lint: "eslint ." } },
       existsSync: () => false,
       writeFileSync: (file, content) => writes.set(file, content),
-      execFileSync: (_bin, args) => {
-        if (args[1].startsWith("missing-tsc")) {
+      execFileSync: (bin, _args) => {
+        if (bin === "missing-tsc") {
           const error = new Error("missing-tsc: command not found") as Error & { status: number; stderr: string };
           error.status = 127;
           error.stderr = "missing-tsc: command not found\n";

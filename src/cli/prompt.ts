@@ -6,6 +6,13 @@
  * - 纯 v2 scope / pre_conditions / post_conditions
  * - 移除所有 v1 constraints 回退
  * - 重试时解析 gate JSON 日志，只注入失败条件（narrower）
+ *
+ * P12.I3: untrusted task content is wrapped in <untrusted-user-data> tags.
+ * This reduces prompt-injection surface by clearly separating operator-authored
+ * instructions (outside the tags) from PRD/task content (inside the tags).
+ * The real defense is output-side: scope gate + PreToolUse hook block writes
+ * outside declared targets regardless of what the model outputs. The tags are
+ * defense-in-depth — they help the model distinguish instruction from data.
  */
 
 import { readFileSync, existsSync, statSync, readdirSync } from "fs";
@@ -589,7 +596,9 @@ parts.push(
   "---",
   "",
   "## 🎯 问题描述",
+  "<untrusted-user-data>",
   task.description || task.title,
+  "</untrusted-user-data>",
   "",
 );
 
@@ -597,7 +606,7 @@ parts.push(
 parts.push(
   "## ✅ 验收标准",
   (task.acceptance_criteria || []).length > 0
-    ? task.acceptance_criteria.map((a) => typeof a === "string" ? `- ${a}` : `- ${a.description || a.message || ""}`).join("\n")
+    ? [`<untrusted-user-data>`, task.acceptance_criteria.map((a) => typeof a === "string" ? `- ${a}` : `- ${a.description || a.message || ""}`).join("\n"), `</untrusted-user-data>`].join("\n")
     : "按描述执行，通过 tsc + eslint + vitest",
   "",
 );

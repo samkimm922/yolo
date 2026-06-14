@@ -7,7 +7,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
 import { supportedConditionTypes as catalogSupportedConditionTypes } from "./condition-catalog.js";
 import {
   evalAstCallbackUsesParam,
@@ -21,6 +20,7 @@ import { evalFileExists, evalFileNotExists, evalDirExists, evalFilesModifiedMax,
 import { evalNoForbiddenPatterns, evalNoNewTypeErrors, evalTypeErrorsContain, evalNoNewLintErrors, evalNoNewDeadCode } from "../lib/evaluators/quality-check.js";
 import { evalTestsPass, evalBuildPass, evalBusinessCodeMin } from "../lib/evaluators/runtime-check.js";
 import { parseCommandToArgv } from "../lib/security/command-guard.js";
+import { execArgv, execCommand } from "../lib/security/safe-exec.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -43,27 +43,28 @@ function scopedRoot(options = Object()) {
 function createExec(root) {
   return function exec(cmd, opts = Object()) {
     const timeout = opts.timeout || 60000;
-    try {
-      const out = execFileSync("sh", ["-c", cmd], {
-        cwd: root,
-        timeout,
-        encoding: "utf8",
-        stdio: ["pipe", "pipe", "pipe"],
-      }).trim();
-      return { ok: true, out };
-    } catch (e) {
-      const errMsg = ((e.stderr || "") + (e.message || "")).toLowerCase();
-      const commandNotFound = errMsg.includes("command not found") ||
-                              errMsg.includes("enoent") ||
-                              e.code === "ENOENT";
+    // P12.I1: route through safe-exec — untrusted command strings are parsed
+    // to argv and rejected if they contain unquoted shell metacharacters.
+    // `2>&1` redirections in the cmd are handled by capturing both streams.
+    const stripped = String(cmd ?? "").replace(/\s*2>&1\s*$/, "");
+    const result = execCommand(stripped, { cwd: root, timeout });
+    const trimmedOut = result.stdout.trim();
+    if (result.rejected) {
       return {
         ok: false,
-        out: (e.stdout || "").trim(),
-        err: (e.stderr || "").trim(),
-        commandNotFound,
-        exitCode: Number.isInteger(e.status) ? e.status : null,
+        out: "",
+        err: result.stderr,
+        commandNotFound: false,
+        exitCode: null,
       };
     }
+    return {
+      ok: result.ok,
+      out: trimmedOut,
+      err: result.stderr.trim(),
+      commandNotFound: result.command_not_found,
+      exitCode: result.exit_code,
+    };
   };
 }
 
@@ -104,30 +105,20 @@ function createEvaluators(root) {
             detail: `验收标准 verify_command 被拒绝: ${parsed.detail}`,
           };
         }
-        try {
-          const out = execFileSync(parsed.argv[0], parsed.argv.slice(1), {
-            cwd: root,
-            timeout: 60000,
-            encoding: "utf8",
-            stdio: ["pipe", "pipe", "pipe"],
-          }).trim();
+        const ran = execArgv(parsed.argv, { cwd: root, timeout: 60000 });
+        if (ran.ok) {
           return {
             passed: true,
             status: "pass",
             detail: `验收命令通过: ${verifyCommand}`,
           };
-        } catch (e) {
-          const errMsg = ((e.stderr || "") + (e.message || "")).toLowerCase();
-          const commandNotFound = errMsg.includes("command not found") ||
-                                  errMsg.includes("enoent") ||
-                                  e.code === "ENOENT";
-          return {
-            passed: false,
-            status: "fail",
-            detail: `验收命令失败: ${verifyCommand}${e.stderr ? " — " + String(e.stderr).trim() : ""}`,
-            commandNotFound,
-          };
         }
+        return {
+          passed: false,
+          status: "fail",
+          detail: `验收命令失败: ${verifyCommand}${ran.stderr ? " — " + String(ran.stderr).trim() : ""}`,
+          commandNotFound: ran.command_not_found,
+        };
       }
       // No executable verify command — mark as manual (blocked at delivery gate)
       return {

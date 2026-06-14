@@ -1,12 +1,12 @@
 # YOLO Release Candidate Gate
 
-`yolo release-candidate` is the operator-facing entrypoint for release-candidate readiness. The next step for a release candidate is the generic RC gate, not Trello replay.
+`yolo release candidate` is the operator-facing entrypoint for release-candidate readiness. The next step for a release candidate is the generic RC gate, not Trello replay.
 
 ## Commands
 
 ```bash
-yolo release-candidate --mode rc --json
-yolo release-gate --mode publish --dry-run --json
+yolo release candidate --mode rc --json
+yolo release gate --mode publish --dry-run --json
 ```
 
 Supported options:

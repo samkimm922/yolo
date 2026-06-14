@@ -46,6 +46,7 @@ describe("YOLO release-candidate CLI", () => {
       ]);
       assert.ok(payload.issue_codes.includes("RC_GATE_REPORT_BLOCKED"));
       assert.ok(payload.blockers.some((blocker) => blocker.issue_code === "RELEASE_CLEAN_ENVIRONMENT_NOT_EXECUTED"));
+      assert.ok(!payload.blockers.some((blocker) => blocker.issue_code === "RELEASE_CANDIDATE_RESULT_INCONSISTENT"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -135,6 +136,7 @@ describe("YOLO release-candidate CLI", () => {
       assert.ok(payload.blockers.some((blocker) => blocker.code === "INNER_BLOCKED"));
       assert.ok(payload.blockers.some((blocker) => blocker.code === "RELEASE_CANDIDATE_GATE_RESULT_MISSING"));
       assert.ok(payload.blockers.some((blocker) => blocker.code === "RELEASE_CANDIDATE_GATE_NOT_PASSING"));
+      assert.ok(!payload.blockers.some((blocker) => blocker.code === "RELEASE_CANDIDATE_GATE_ERROR"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -157,6 +159,7 @@ describe("YOLO release-candidate CLI", () => {
       assert.equal(payload.code, "RELEASE_CANDIDATE_GATE_ERROR");
       assert.match(payload.error, /boom from rc runner/);
       assert.ok(payload.blockers.some((blocker) => blocker.code === "RELEASE_CANDIDATE_GATE_ERROR"));
+      assert.ok(!payload.blockers.some((blocker) => blocker.code === "RELEASE_CANDIDATE_GATE_NOT_PASSING"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

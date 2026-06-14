@@ -2,7 +2,7 @@
 
 日期：2026-05-27
 
-Fixture registry and harness prove YOLO is not tied to one SamKimTest application shape. Every fixture has a requirement, spec trace, PRD task, smoke command, and evidence contract.
+Fixture registry and harness prove YOLO is not tied to one application shape. Every fixture has a requirement, spec trace, PRD task, smoke command, and evidence contract.
 
 | Fixture | Project Signal | Smoke Command | Coverage Purpose |
 |---|---|---|---|

@@ -12,7 +12,7 @@ import {
   writeFileSync as defaultWriteFileSync,
   writeSync as defaultWriteSync,
 } from "node:fs";
-import { execFileSync as defaultExecFileSync, execSync as defaultExecSync } from "node:child_process";
+import { execSync as defaultExecSync } from "node:child_process";
 import { basename, join, resolve, sep } from "node:path";
 import {
   BASELINE_TOOLS,
@@ -22,6 +22,8 @@ import {
   parseTscBaselineKeys,
 } from "../execution/baselines.js";
 import { trimJsonlWithArchive } from "../memory/retention.js";
+import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
+import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 
 export function createRunnerError(message, exitCode = 1, details = Object()) {
   const error = Object.assign(new Error(message), { exitCode }, details);
@@ -198,25 +200,41 @@ export function initializeMissingBaselines({
     log("BASELINE", "init", `初始化 ${tool} baseline...`);
     try {
       const rawCommand = tool === "tsc" ? config.build.type_check : config.build.lint;
-      const command = `${rawCommand} 2>&1`;
+      // P12.I1: parse config command to argv, route through execFileSync DI
+      // (default = safeExecFileSync, no shell). Rejects metacharacters at parse.
+      const parsed = parseCommandToArgv(rawCommand);
       let output = "";
       let stderr = "";
       let exitCode = 0;
       let status = "pass";
       let reason = null;
-      try {
-        output = execFileSync("sh", ["-c", command], { cwd: rootDir, encoding: "utf8", timeout: 120000 });
-      } catch (error) {
-        output = `${error?.stdout || ""}${error?.stderr || ""}`;
-        stderr = String(error?.stderr || "");
-        exitCode = Number.isInteger(error?.status) ? error.status : 1;
-        const blocked = Boolean(error?.signal) ||
-          exitCode === 127 ||
-          /\bnot found\b|is not recognized|command not found/i.test(output) ||
-          !output.trim();
-        if (blocked) {
-          status = "blocked";
-          reason = error?.signal ? "baseline_command_timeout_or_signal" : "baseline_command_unavailable";
+      if (!parsed.ok) {
+        output = `command rejected: ${parsed.detail}`;
+        stderr = output;
+        exitCode = 127;
+        status = "blocked";
+        reason = "baseline_command_rejected";
+      } else {
+        const argv = parsed.argv ?? [];
+        try {
+          const stdout = execFileSync(argv[0], argv.slice(1), {
+            cwd: rootDir,
+            encoding: "utf8",
+            timeout: 120000,
+          });
+          output = String(stdout || "");
+        } catch (error) {
+          output = `${String(error?.stdout || "")}${String(error?.stderr || "")}`;
+          stderr = String(error?.stderr || error?.message || "");
+          exitCode = Number.isInteger(error?.status) ? error.status : (Number.isInteger(error?.code) ? error.code : 1);
+          const blocked = Boolean(error?.signal) ||
+            exitCode === 127 ||
+            /\bnot found\b|is not recognized|command not found/i.test(output) ||
+            !output.trim();
+          if (blocked) {
+            status = "blocked";
+            reason = error?.signal ? "baseline_command_timeout_or_signal" : "baseline_command_unavailable";
+          }
         }
       }
       const keys = tool === "tsc"

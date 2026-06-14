@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { commandExistsSync } from "../../lib/security/safe-exec.js";
 
 function runtimeScript(packageRoot, relativePath) {
   const direct = join(packageRoot, relativePath);
@@ -7,11 +8,12 @@ function runtimeScript(packageRoot, relativePath) {
   return join(packageRoot, "dist", relativePath);
 }
 
-export function detectRunnerModelProvider({ config, execSync, detectProvider }) {
+export function detectRunnerModelProvider({ config, execSync: _execSync, detectProvider }) {
+  // P12.I1: PATH walk via fs.accessSync — no sh -c, no shell:true.
   return detectProvider({
     config,
     commandExists(command) {
-      return execSync(`command -v ${command} >/dev/null 2>&1; echo $?`, { shell: true, encoding: "utf8" }).trim() === "0";
+      return commandExistsSync(String(command ?? "").trim());
     },
   }).selected;
 }

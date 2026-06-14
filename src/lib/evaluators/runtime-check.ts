@@ -4,33 +4,26 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
+import { isWithin } from "../security/path-guard.js";
 import { config } from "../config.js";
-import { parseCommandToArgv } from "../security/command-guard.js";
+import { execCommand } from "../security/safe-exec.js";
 
 function runCommand(command, ROOT, timeout) {
-  const parsed = parseCommandToArgv(command);
-  if (!parsed.ok) {
+  // P12.I1: route through safe-exec — untrusted command strings parsed to argv
+  // and rejected if they contain shell metacharacters; spawn without shell.
+  const result = execCommand(command, { cwd: ROOT, timeout });
+  if (result.rejected) {
     return {
       ok: false,
       out: "",
-      message: `command rejected: ${parsed.detail}`,
+      message: `command rejected: ${result.reject_detail}`,
     };
   }
-  try {
-    const out = execFileSync(parsed.argv[0], parsed.argv.slice(1), {
-      cwd: ROOT,
-      encoding: "utf8",
-      timeout,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    return { ok: true, out };
-  } catch (error) {
-    return {
-      ok: false,
-      out: (error.stdout || "") + (error.stderr || ""),
-      message: error.message || "",
-    };
-  }
+  return {
+    ok: result.ok,
+    out: result.stdout,
+    message: result.ok ? "" : (result.stderr || result.error || ""),
+  };
 }
 
 export function evalTestsPass(params = Object(), _taskScope, ROOT) {
@@ -112,7 +105,7 @@ function changedFilesFromFilesystemBaseline(ROOT, taskScope = Object()) {
   const changed = [];
   for (const file of candidates) {
     const absolute = resolve(ROOT, file);
-    if (!existsSync(absolute)) continue;
+    if (!isWithin(absolute, ROOT) || !existsSync(absolute)) continue;
     try {
       if (statSync(absolute).isDirectory()) continue;
       const currentHash = hashFile(absolute);

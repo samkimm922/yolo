@@ -7,8 +7,8 @@
 让 Codex 或 Claude Code 先替你安装 YOLO 集成：
 
 ```text
-请把 YOLO 安装到当前项目和我的 Agent 工具里。我要在 Codex 里只看到 /yolo 统一入口，由它自动判断需求、PRD、检查和执行阶段；Claude Code 只生成 /yolo 加 /yolo-status、/yolo-demand、/yolo-spec、/yolo-tasks、/yolo-check、/yolo-run、/yolo-review、/yolo-release 这些稳定 slash commands。执行前先告诉我会写哪些文件。
-YOLO 路径是：/Users/sippingroom/Developer/SamKimTest/scripts/yolo
+请把 YOLO 安装到当前项目和我的 Agent 工具里。我要使用 4 个公开动词：/yolo-demand、/yolo-auto、/yolo-ship、/yolo-status。Codex 可以保留 /yolo 作为统一 fallback，但不要生成 /yolo-spec、/yolo-tasks、/yolo-run、/yolo-check、/yolo-review、/yolo-release 这些默认菜单。执行前先告诉我会写哪些文件。
+YOLO 路径是：<你的 YOLO 安装目录>
 ```
 
 安装后，不确定该走哪一步时这样用：
@@ -59,25 +59,26 @@ YOLO 路径是：/Users/sippingroom/Developer/SamKimTest/scripts/yolo
 
 YOLO 会根据这句话自己判断下一步，不要求用户在 brainstorm、discover、plan、prd、check、run、review、accept 之间手动选命令。
 
-Claude Code 可以直接选稳定阶段入口。Codex 为了避免菜单噪音，只从 `/yolo` 总入口进入；如果你已经知道阶段，把阶段写进同一句话里，例如 `/yolo 需求沟通：...`、`/yolo 生成 PRD：...`、`/yolo 检查 PRD：...`、`/yolo 执行已检查 PRD：...`。默认安装面只展示 `/yolo` 加 8 个稳定入口：
+Claude Code 可以直接用 4 个动词 slash。Codex 为了避免菜单噪音，只从 `/yolo` 总入口进入；如果你已经知道阶段，把阶段写进同一句话里，例如 `/yolo 需求沟通：...`、`/yolo 生成 PRD：...`、`/yolo 检查 PRD：...`、`/yolo 执行已检查 PRD：...`。安装 agent bridge 后，Claude Code 只得到面向非技术用户的 4 个动词 slash commands：
 
-| 命令 | 用途 | 是否改代码 |
+| Slash | 用途 | 是否改代码 |
 |---|---|---|
-| `/yolo` | 读状态并选择唯一安全下一步 | 默认不改 |
 | `/yolo-status` | 只读查看 lifecycle、阻塞项、下一步 | 不改 |
-| `/yolo-demand` | 统一需求沟通入口，内部衔接 brainstorm / interview / discover / discuss / office-hours / evidence dispatch / PRD readiness | 不改 |
-| `/yolo-spec` | 把已批准需求编译成 PRD/spec | 不改业务代码 |
-| `/yolo-tasks` | 拆成原子任务、验收标准和执行顺序 | 不改业务代码 |
-| `/yolo-check` | 检查 PRD / preflight / gate 是否能执行 | 不改 |
-| `/yolo-run` | 执行已经检查通过的 PRD | 会改，必须确认 |
-| `/yolo-review` | 审查实现质量并产出 fix 任务 | 默认不改 |
-| `/yolo-release` | acceptance / ship / release-candidate / dogfood / package gate | 不发布 |
+| `/yolo-demand` | 把需求聊清楚，缺信息时只问一个 next_question | 不改 |
+| `/yolo-auto` | 在用户明确批准后，从需求/PRD 走 spec、check、实现、review、fix 和证据 | 会改，必须确认 |
+| `/yolo-ship` | 用 gate 和证据做 fail-closed 交付判断 | 不发布 |
 
-旧 host 可能仍识别 `/yolo-brainstorm`、`/yolo-interview`、`/yolo-discover`、`/yolo-discuss`、`/office-hours`、`/yolo-plan`、`/yolo-prd`、`/yolo-accept`、`/yolo-ship` 等兼容入口；这些不是默认菜单项，也不作为默认 slash command 文件安装。它们只应被路由到对应稳定入口，并执行相同硬门。
+`/yolo-spec`、`/yolo-tasks`、`/yolo-run`、`/yolo-check`、`/yolo-review`、`/yolo-release` 不是默认安装的 slash commands；它们是终端 CLI 子命令（见下文），Codex/Claude 可以在聊天里通过 `/yolo` fallback 路由到对应阶段。
+
+### 终端 CLI 子命令（不需要 agent bridge）
+
+在终端里直接用 `yolo` CLI，有 8 个稳定子命令：`status | demand | spec | tasks | run | check | review | release`。其中 `run` 写代码，其余默认不改业务代码。`START_HERE.command` 双击后跑的就是 `yolo status`。
+
+旧 host 可能仍识别 `/yolo-brainstorm`、`/yolo-interview`、`/yolo-discover`、`/yolo-discuss`、`/office-hours`、`/yolo-plan`、`/yolo-prd`、`/yolo-accept` 等兼容入口；这些不是默认菜单项，也不作为默认 slash command 文件安装。它们只应被路由到对应动词，并执行相同硬门。
 
 ## Codex 和 Claude Code 的差异
 
-Claude Code 本地已有明确的 `.claude/commands/*.md` 约定，所以 YOLO 会生成真实的 `/yolo`、`/yolo-status`、`/yolo-demand`、`/yolo-spec`、`/yolo-tasks`、`/yolo-check`、`/yolo-run`、`/yolo-review`、`/yolo-release` slash command 文件。旧别名不再默认生成命令文件；如果某个 host 已经暴露旧别名，只能作为兼容 shim 路由到稳定入口。
+Claude Code 本地已有明确的 `.claude/commands/*.md` 约定，所以 YOLO 安装器只生成 4 个动词 slash command 文件：`/yolo-demand`、`/yolo-auto`、`/yolo-ship`、`/yolo-status`。旧别名不再默认生成命令文件；如果某个 host 已经暴露旧别名，只能作为兼容 shim 路由到对应动词。
 
 Codex 的入口和 GSD/GStack 一样走 skill discovery：安装器会生成 `~/.agents/skills/yolo/SKILL.md` 这个总入口和单个 `~/.agents/skills/source-command-yolo/SKILL.md` fallback，不再生成顶层 `yolo-*` 阶段 skill。需求沟通、PRD、检查、执行等阶段由 `/yolo` 内部路由。内部 workflow 只写 `skill.json` 和 `WORKFLOW.md`，不再写会被 Codex 当成顶层 slash 技能的 `SKILL.md`，所以菜单里不会混入 `yolo.pi`、`yolo.prd` 这种内部名。安装后需要新开 Codex 会话或重启 Codex，让它重新发现 skills。
 

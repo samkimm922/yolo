@@ -34,7 +34,7 @@ Codex 可以继续用 `/yolo 你的需求...` 作为统一 fallback，由 agent 
 ## 目录结构
 
 ```
-scripts/yolo/
+yolo/                      # 仓库根（不是 scripts/yolo/ 子目录）
   bin/                # 公开 CLI 入口（薄封装，调用 src/cli/*）
   src/                # SDK / runtime / agents / lifecycle / workflows / gates / evidence
   runner.ts           # 兼容运行入口，构建后输出 dist/runner.js
@@ -42,28 +42,28 @@ scripts/yolo/
   gate.ts             # 兼容闸门入口，公开 bin 使用 dist/bin/yolo-gate.js
   prompt.ts           # 兼容提示词入口，公开 bin 使用 dist/bin/yolo-prompt.js
   learn.ts            # 兼容学习入口，转发到 src/runtime/learning
-  task-logger.ts      # 兼容日志模块，转发到 src/runtime/logging
   state-snapshot.ts   # 兼容状态快照，转发到 src/runtime/evidence
   session-memory.ts   # 兼容 session 记忆，转发到 src/runtime/evidence
   config.yaml         # 配置文件
   config.example.yaml # 通用配置模板
-  state/              # 运行时状态（events / runs / changes）
   docs/memory/        # 记忆中心（状态、交接、结构树、审计）
   data/               # 静态数据
   schemas/            # JSON Schema 定义
-  skills/             # 技能模板
-  workflows/          # 工作流定义
+  fixtures/           # 跨项目 fixture 矩阵
+  tools/              # 安装/集成工具（agent bridge 等）
+  state/              # 运行时状态（events / runs / changes）
   __tests__/          # 测试文件
+  scripts/yolo/closed-loop/  # v1 legacy（archived readonly，见 docs/legacy-boundary.json）
 ```
 
 ## 前提条件
 
-- **Node.js ≥ 18**（`node -v` 确认）
+- **Node.js ≥ 22**（`node -v` 确认；对齐 `engines >=22.0.0` 与 `.nvmrc`）
 - **Claude Code**（推荐）或 Codex 作为 AI 执行环境
 - 克隆本仓库后在项目根目录运行：
 
 ```bash
-npm install
+pnpm install
 ```
 
 ## 快速开始
@@ -73,7 +73,7 @@ npm install
 ```text
 /yolo-demand 我想把库存预警需求聊清楚，先不要生成 PRD。
 /yolo-auto 我确认执行已检查通过的库存预警 PRD。
-/yolo-ship specs/prd-low-stock-alert.json
+/yolo-ship <你的 PRD 路径>
 /yolo-status
 ```
 

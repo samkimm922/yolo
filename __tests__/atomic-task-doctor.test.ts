@@ -27,19 +27,28 @@ describe("atomic task doctor", () => {
   });
 
   test("allows simple single-file direct patch", () => {
-    const result = inspectAtomicTask({
-      id: "FIX-SIMPLE-001",
-      title: "修单文件文案",
-      type: "bugfix",
-      status: "pending",
-      scope: { targets: [{ file: "src/services/card.service.ts" }], max_files: 1 },
-      pre_conditions: [{ id: "PRE-TEXT", type: "code_contains", severity: "FAIL", params: { file: "src/services/card.service.ts", text: "old" } }],
-      post_conditions: [{ id: "POST-TEXT", type: "code_not_contains", severity: "FAIL", params: { file: "src/services/card.service.ts", text: "old" } }],
-    }, { root: YOLO_DIR, writeEvidence: false });
+    const root = mkdtempSync(join(tmpdir(), "yolo-atomic-simple-"));
+    try {
+      mkdirSync(join(root, "src", "services"), { recursive: true });
+      writeFileSync(join(root, "src", "services", "card.service.ts"), "export const old = 1;\n");
 
-    assert.equal(result.status, "pass");
-    assert.notEqual(result.mode, "must_split");
-    assert.ok(result.score <= 5);
+      const result = inspectAtomicTask({
+        id: "FIX-SIMPLE-001",
+        title: "修单文件文案",
+        type: "bugfix",
+        status: "pending",
+        scope: { targets: [{ file: "src/services/card.service.ts" }], max_files: 1 },
+        pre_conditions: [{ id: "PRE-TEXT", type: "code_contains", severity: "FAIL", params: { file: "src/services/card.service.ts", text: "old" } }],
+        post_conditions: [{ id: "POST-TEXT", type: "code_not_contains", severity: "FAIL", params: { file: "src/services/card.service.ts", text: "old" } }],
+      }, { root, projectRoot: root, writeEvidence: false });
+
+      assert.equal(result.status, "pass");
+      assert.notEqual(result.mode, "must_split");
+      assert.ok(result.score <= 5);
+      assert.ok(!result.reasons.some((r) => r.id === "CREATES_NEW_FILE"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("feature crossing page and service is blocked before implementation", () => {

@@ -6,10 +6,10 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { extname, resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
 import { config } from "../lib/config.js";
 import { buildReviewOutput, normalizeReviewFindings } from "./findings.js";
 import { redact } from "../lib/security/redact.js";
+import { execCommand } from "../lib/security/safe-exec.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -468,13 +468,12 @@ export function scanProject(options = Object()) {
 
   // ── TSC 编译错误扫描 ──
   if (settings.includeExternalChecks && settings.config.build.type_check) {
-    try {
-      execSync(`${settings.config.build.type_check} 2>&1`, {
-        cwd: settings.root, encoding: 'utf8', timeout: settings.config.gate.timeout.type_check || 120000, stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      // type checker 退出 0 = 无错误
-    } catch (e) {
-      const tscOutput = (e.stdout || '') + (e.stderr || '');
+    // P12.I1: route config-supplied type_check through safe-exec.
+    const tscResult = execCommand(settings.config.build.type_check, {
+      cwd: settings.root, timeout: settings.config.gate?.timeout?.type_check || 120000,
+    });
+    if (!tscResult.ok) {
+      const tscOutput = `${tscResult.stdout || ""}${tscResult.stderr || ""}`;
       const tscLines = tscOutput.split('\n').filter(l => /error TS\d+:/.test(l));
       const seenFiles = new Set();
       for (const line of tscLines) {
@@ -504,9 +503,16 @@ export function scanProject(options = Object()) {
   // ── ESLint 错误扫描（仅 error 级别，不报 warning）──
   if (settings.includeExternalChecks) try {
     const lintCommand = settings.config.build.lint || "";
-    const eslintOut = lintCommand ? execSync(`${lintCommand} --quiet 2>&1`, {
-      cwd: settings.root, encoding: 'utf8', timeout: settings.config.gate.timeout.lint || 90000, stdio: ['pipe', 'pipe', 'pipe'],
-    }) : "";
+    // P12.I1: route config-supplied lint through safe-exec with --quiet appended.
+    // parseCommandToArgv handles the appended flag; shell metacharacters rejected.
+    const eslintOut = lintCommand
+      ? (() => {
+          const r = execCommand(`${lintCommand} --quiet`, {
+            cwd: settings.root, timeout: settings.config.gate?.timeout?.lint || 90000,
+          });
+          return r.rejected ? "" : `${r.stdout || ""}${r.stderr || ""}`;
+        })()
+      : "";
     const jsonStart = eslintOut.indexOf('[');
     if (jsonStart >= 0) {
       const results = JSON.parse(eslintOut.slice(jsonStart));

@@ -139,7 +139,7 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     let exited = 0;
     let threw = false;
     try {
-      execFileSync("node", ["--import", "tsx", hookPath], { input: payload, encoding: "utf8", cwd: PROJECT_ROOT });
+      execFileSync("node", ["--import", "tsx", hookPath], { input: payload, encoding: "utf8", timeout: 30000, cwd: PROJECT_ROOT });
     } catch (error) {
       threw = true;
       exited = error.status || 0;
@@ -147,14 +147,14 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     assert.ok(threw, "hook must throw when blocking .yolo write");
     assert.equal(exited, 2, "hook must exit 2 when LLM tries to write .yolo state directly");
 
-    const invalidJson = spawnSync("node", ["--import", "tsx", hookPath], { input: "{not-json", encoding: "utf8", cwd: PROJECT_ROOT });
+    const invalidJson = spawnSync("node", ["--import", "tsx", hookPath], { input: "{not-json", encoding: "utf8", timeout: 30000, cwd: PROJECT_ROOT });
     assert.equal(invalidJson.status, 2, "invalid JSON must fail closed with exit 2");
 
     const normalPayload = JSON.stringify({
       tool_name: "Write",
       tool_input: { file_path: "/project/src/app.ts", content: "" },
     });
-    const normalWrite = spawnSync("node", ["--import", "tsx", hookPath], { input: normalPayload, encoding: "utf8", cwd: PROJECT_ROOT });
+    const normalWrite = spawnSync("node", ["--import", "tsx", hookPath], { input: normalPayload, encoding: "utf8", timeout: 30000, cwd: PROJECT_ROOT });
     assert.equal(normalWrite.status, 0, "normal non-.yolo write must exit 0");
   });
 
@@ -314,14 +314,14 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
       tool_name: "Bash",
       tool_input: { command: "echo '{}' > .yolo/lifecycle/status.json" },
     });
-    const blocked = spawnSync("node", ["--import", "tsx", hookPath], { input: payload, encoding: "utf8", cwd: PROJECT_ROOT });
+    const blocked = spawnSync("node", ["--import", "tsx", hookPath], { input: payload, encoding: "utf8", timeout: 30000, cwd: PROJECT_ROOT });
     assert.equal(blocked.status, 2, "Bash redirect to .yolo must be blocked");
 
     const cliPayload = JSON.stringify({
       tool_name: "Bash",
       tool_input: { command: "node ./dist/bin/yolo.js status --state-root /project/.yolo" },
     });
-    const allowed = spawnSync("node", ["--import", "tsx", hookPath], { input: cliPayload, encoding: "utf8", cwd: PROJECT_ROOT });
+    const allowed = spawnSync("node", ["--import", "tsx", hookPath], { input: cliPayload, encoding: "utf8", timeout: 30000, cwd: PROJECT_ROOT });
     assert.equal(allowed.status, 0, "yolo CLI state access must be allowed");
   });
 
@@ -482,6 +482,7 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     return spawnSync("node", ["--import", "tsx", hookPath], {
       input: payload,
       encoding: "utf8",
+      timeout: 30000,
       cwd: PROJECT_ROOT,
     });
   }
@@ -590,6 +591,7 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
         const result = spawnSync("node", ["--import", "tsx", hookPath], {
           input: payload,
           encoding: "utf8",
+          timeout: 30000,
           cwd: PROJECT_ROOT,
         });
         assert.equal(result.status, 2, `${toolName} must block ${variant}`);
@@ -607,6 +609,7 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     const result = spawnSync("node", ["--import", "tsx", hookPath], {
       input: payload,
       encoding: "utf8",
+      timeout: 30000,
       cwd: PROJECT_ROOT,
     });
     assert.equal(result.status, 2, "lowercase .yolo must still be blocked");
@@ -653,6 +656,7 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
       const result = spawnSync("node", ["--import", "tsx", hookPath], {
         input: JSON.stringify(payload),
         encoding: "utf8",
+        timeout: 30000,
         cwd: PROJECT_ROOT,
       });
       assert.equal(result.status, 0, `external .yolo path must not be blocked: ${JSON.stringify(payload)}`);

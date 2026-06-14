@@ -16,18 +16,18 @@ docs/agent-native-integration.md
 最像 GSD / Superpowers 的方式，是先让 agent 帮你安装 YOLO skill/command：
 
 ```text
-请把 YOLO 安装到当前项目和我的 Agent 工具里。我要在 Codex 里只看到 /yolo 统一入口，由它自动判断需求、PRD、检查和执行阶段；Claude Code 只生成 /yolo 加 /yolo-status、/yolo-demand、/yolo-spec、/yolo-tasks、/yolo-check、/yolo-run、/yolo-review、/yolo-release 这些稳定 slash commands。执行前先告诉我会写哪些文件。
-YOLO 路径是：/Users/sippingroom/Developer/SamKimTest/scripts/yolo
+请把 YOLO 安装到当前项目和我的 Agent 工具里。我要使用 4 个公开动词：/yolo-demand、/yolo-auto、/yolo-ship、/yolo-status。Codex 可以保留 /yolo 作为统一 fallback，但不要生成 /yolo-spec、/yolo-tasks、/yolo-run、/yolo-check、/yolo-review、/yolo-release 这些默认菜单。执行前先告诉我会写哪些文件。
+YOLO 路径是：<你的 YOLO 安装目录>
 ```
 
-安装后，Claude Code 可以直接用 `/yolo`，也可以用 `/yolo-status`、`/yolo-demand`、`/yolo-spec`、`/yolo-tasks`、`/yolo-check`、`/yolo-run`、`/yolo-review`、`/yolo-release` 这 8 个稳定阶段命令。Codex 为了不让菜单出现一长串相似入口，只保留 `/yolo` 总入口；你把阶段写进同一句话里，比如 `/yolo 需求沟通：...`、`/yolo 生成 PRD/spec：...`、`/yolo 检查 PRD：...`。还是不触发时，说“使用 source-command-yolo”或“使用 yolo skill 执行 /yolo”。
+安装后，Claude Code 可以直接用这 4 个动词 slash：`/yolo-status`、`/yolo-demand`、`/yolo-auto`、`/yolo-ship`。`spec`、`tasks`、`check`、`run`、`review`、`release` 是终端 CLI 子命令，不是默认安装的 slash。Codex 为了不让菜单出现一长串相似入口，只保留 `/yolo` 总入口；你把阶段写进同一句话里，比如 `/yolo 需求沟通：...`、`/yolo 生成 PRD/spec：...`、`/yolo 检查 PRD：...`。还是不触发时，说“使用 source-command-yolo”或“使用 yolo skill 执行 /yolo”。
 
 如果你是在 Finder 里用，再双击下面这个入口。
 
 在 Finder 里打开 YOLO 文件夹：
 
 ```text
-/Users/sippingroom/Developer/SamKimTest/scripts/yolo
+<你的 YOLO 安装目录>
 ```
 
 双击：
@@ -36,17 +36,11 @@ YOLO 路径是：/Users/sippingroom/Developer/SamKimTest/scripts/yolo
 START_HERE.command
 ```
 
-它会打开一个菜单。你只需要输入数字。
+它不会打开菜单，也不会要你输入数字。它只做一件事：运行 `yolo status`，把当前项目的生命周期状态、阻塞项和唯一安全的下一步打印出来，然后等回车关闭。它只读状态，不改代码。
 
-## 菜单怎么选
+## 双击后你会看到什么
 
-| 你现在想做什么 | 选哪个 |
-|---|---|
-| 第一次让某个项目接入 YOLO | 1 |
-| 你只有一个想法，想先看看 YOLO 会怎么做 | 2 |
-| 你已经有 PRD 文件，想先检查能不能执行 | 3 |
-| PRD 已经检查通过，想让 YOLO 开始改项目 | 4 |
-| 不想做了 | 5 |
+`yolo status` 的输出会告诉你现在该走哪一步。如果你已经在 Codex / Claude Code 里，把这步的提示直接发给 agent，让它接着做。
 
 ## 最安全的第一次用法
 
@@ -54,20 +48,19 @@ START_HERE.command
 
 推荐顺序：
 
-1. 选 `1` 初始化项目。
-2. 选 `2` 写一句大白话需求，让 YOLO 只生成计划。
-3. 看生成的 `plan.md`。
-4. 有 PRD 后选 `3` 检查。
-5. 检查通过后，再选 `4` 执行。
+1. 双击 `START_HERE.command` 看 `yolo status`，确认项目能不能用 YOLO。
+2. 在 Codex / Claude Code 里用 `/yolo-demand` 把需求聊清楚，先不要生成 PRD。
+3. 需求和范围都确认后，再用 `/yolo-auto` 推进。
+4. 交付前用 `/yolo-ship` 做 fail-closed 判断。
 
-## 每一步会不会改代码
+## 每个动词会不会改代码
 
-| 菜单 | 会不会改代码 |
+| 动词 | 会不会改代码 |
 |---|---|
-| 1 初始化 | 只会创建 `.yolo/` 和 `specs/` 基础文件 |
-| 2 生成计划 | 不改代码 |
-| 3 检查 PRD | 不改代码 |
-| 4 开始执行 | 会改代码，所以会要求你输入“我确认” |
+| `/yolo-status` | 只读，不改 |
+| `/yolo-demand` | 只聊需求，不改 |
+| `/yolo-ship` | 只做交付判断，不发布 |
+| `/yolo-auto` | 会改代码，所以必须你明确批准才执行 |
 
 ## YOLO 卡住是什么意思
 
@@ -94,13 +87,14 @@ YOLO 如果停下来，通常不是坏了，而是 gate 在保护项目。
 
 ## 一句话版本
 
-不懂代码的人只做这件事：
+不懂代码的人只做这两件事：
 
 ```text
-双击 START_HERE.command，然后按菜单选 1、2、3、4。
+双击 START_HERE.command 看 yolo status。
+然后在 Codex / Claude Code 里说：/yolo 你的需求，先读状态并选择安全阶段，不要改代码。
 ```
 
-默认先选 `2`，因为它只生成计划，不改代码。
+默认先用 `/yolo-demand`，因为它只聊需求，不改代码。
 
 如果是在 Codex / Claude Code 里，只说这句话：
 

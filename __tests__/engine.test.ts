@@ -6,8 +6,10 @@
 
 import { describe, test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { resolve, join } from "node:path";
+import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
 import { CONDITION_TYPES, inspectConditionCatalogSync } from "../src/prd/condition-catalog.js";
 
 // ── expect shim (compatible with vitest expect API) ──────────────
@@ -264,15 +266,42 @@ describe("no_forbidden_patterns", () => {
     unlinkSync(clean);
   });
 
-  test("pattern found in git diff → FAIL (integration check)", () => {
-    // no_forbidden_patterns checks git diff added lines, not file contents
-    // Without uncommitted changes, violations are empty → PASS
+  test("no uncommitted git diff → PASS (no violations to report)", () => {
+    // no_forbidden_patterns checks git diff added lines, not file contents.
+    // fileA is in .tmp-test (untracked) so git diff returns nothing → PASS.
     const r = pre([{
       id: "c1", type: "no_forbidden_patterns", severity: "FAIL",
       params: { patterns: [{ pattern: "as any" }], targets: [fileA] }, message: "",
     }]);
-    // No git diff for this file → no violations → PASS
     expect(r.results[0].passed).toBe(true);
+  });
+
+  test("pattern found in git diff added lines → FAIL", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-engine-forbidden-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: root });
+      execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: root });
+      execFileSync("git", ["config", "user.name", "Test"], { cwd: root });
+      const file = join(root, "a.ts");
+      writeFileSync(file, "export const PI = 3.14;\n", "utf8");
+      execFileSync("git", ["add", "a.ts"], { cwd: root });
+      execFileSync("git", ["commit", "-q", "-m", "init"], { cwd: root });
+      // Add violating pattern in uncommitted change
+      writeFileSync(file, "export const PI = 3.14;\nconst x = 1 as any;\n", "utf8");
+
+      const r = engine.evaluatePreConditions({
+        id: "T",
+        pre_conditions: [{
+          id: "c1", type: "no_forbidden_patterns", severity: "FAIL",
+          params: { patterns: [{ pattern: "as any" }], targets: ["a.ts"] }, message: "",
+        }],
+      }, {}, { root });
+
+      assert.equal(r.results[0].passed, false);
+      assert.match(r.results[0].detail, /as any/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

@@ -54,7 +54,7 @@ Claude Code 会得到 4 个真实 slash commands。Codex 会得到 `yolo` native
 交付前做 fail-closed 判断：
 
 ```text
-/yolo-ship specs/prd-low-stock-alert.json
+/yolo-ship <你的 PRD 路径>
 ```
 
 不知道当前项目装没装好、该走哪一步时：
@@ -63,21 +63,15 @@ Claude Code 会得到 4 个真实 slash commands。Codex 会得到 `yolo` native
 /yolo-status
 ```
 
-## 不懂命令行的本地菜单
+## 不懂命令行的本地入口
 
-如果只想用本地菜单，可以双击：
+如果只想看当前项目状态，可以双击：
 
 ```text
 START_HERE.command
 ```
 
-它会打开一个菜单：
-
-- `1` 初始化项目
-- `2` 只生成计划，不改代码
-- `3` 检查 PRD
-- `4` 执行 PRD，会要求二次确认
-- `5` 退出
+它会运行 `yolo status`，打印当前项目的生命周期状态、阻塞项和唯一安全的下一步，再列出一组终端稳定入口（`yolo status | demand | spec | tasks | run | check | review | release`），按回车关闭窗口。它只读状态，不会改代码，也没有数字菜单。
 
 大白话说明见 [docs/non-technical-user-guide.md](non-technical-user-guide.md)。
 
@@ -96,11 +90,11 @@ node dist/bin/yolo.js install /path/to/project --dry-run --json
 # demand：需求状态、office-hours 或证据调度
 node dist/bin/yolo.js demand status "我想增加库存预警" --json
 
-# auto：完整 YOLO 主线，先 dry-run
+# auto：完整 YOLO 主线，先 dry-run（exit 2 = AUTO_PLAN_READY，计划就绪待批准，不是错误；dry-run 从需求文本生成计划，无需 prdPath）
 node dist/bin/yolo.js auto "Add low-stock alerts to inventory dashboard" --dry-run --json
 
-# ship：交付前判断，不发布
-node dist/bin/yolo.js ship specs/prd-low-stock-alert.json --json
+# ship：交付前判断，不发布（把 <你的 PRD 路径> 换成 yolo spec 生成的真实 PRD）
+node dist/bin/yolo.js ship <你的 PRD 路径> --json
 
 # status：只读状态和下一步
 node dist/bin/yolo.js status --cwd /path/to/project --json

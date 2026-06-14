@@ -7,7 +7,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execArgv } from "../../lib/security/safe-exec.js";
 import { resolve } from "node:path";
 import { evaluatePreConditions, setContractRoot } from "../../prd/contract.js";
 import { getArg } from "../../lib/cli-utils.js";
@@ -70,21 +70,17 @@ if (!result.allPass) {
   const targets = (task.scope?.targets || []).map(t => t.file).filter(Boolean);
   if (targets.length > 0) {
     const TSC_TIMEOUT = 30000;
-    try {
-      const tscOut = execFileSync("sh", ["-c", "pnpm exec tsc --noEmit 2>&1"], {
-        cwd: ROOT,
-        timeout: TSC_TIMEOUT,
-        encoding: "utf8",
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-      const hasTargetErrors = targets.some(t => tscOut.includes(t));
+    // P12.I1: literal pnpm+tsc argv via safe-exec (no shell, no injection surface).
+    const ran = execArgv(["pnpm", "exec", "tsc", "--noEmit"], { cwd: ROOT, timeout: TSC_TIMEOUT });
+    if (ran.ok) {
+      const hasTargetErrors = targets.some(t => ran.stdout.includes(t));
       if (!hasTargetErrors) {
         console.log(`PRE-CHECK SKIP: ${taskId} — tsc 无目标文件错误（可能已被前置任务修复），跳过修复`);
         process.exit(0);
       }
-    } catch (e) {
+    } else {
       // tsc 非零退出 → 存在类型错误。检查错误是否涉及目标文件。
-      const tscOut = (e.stdout || "").trim();
+      const tscOut = `${ran.stdout || ""}${ran.stderr || ""}`.trim();
       if (tscOut) {
         const hasTargetErrors = targets.some(t => tscOut.includes(t));
         if (!hasTargetErrors) {

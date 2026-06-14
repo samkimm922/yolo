@@ -95,7 +95,7 @@ describe("public package entrypoints", () => {
       const payload = JSON.parse(result.stdout);
       assert.equal(payload.status, "blocked");
       assert.equal(payload.code, "LIFECYCLE_NOT_INITIALIZED");
-      assert.equal(payload.recommended_command, "/yolo-init");
+      assert.equal(payload.recommended_command, "yolo init");
 
       const pi = spawnSync(process.execPath, [
         resolve(YOLO_DIR, packageJson.bin["yolo-pi"]),

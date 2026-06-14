@@ -62,8 +62,8 @@
 让当前 agent 帮你装。你在 Codex 或 Claude Code 里说：
 
 ```text
-请把 YOLO 安装到当前项目和我的 Agent 工具里。我要在 Codex 里只看到 /yolo 统一入口，由它自动判断需求、PRD、检查和执行阶段；Claude Code 只生成 /yolo 加 /yolo-status、/yolo-demand、/yolo-spec、/yolo-tasks、/yolo-check、/yolo-run、/yolo-review、/yolo-release 这些稳定 slash commands。执行前先告诉我会写哪些文件。
-YOLO 路径是 /Users/sippingroom/Developer/SamKimTest/scripts/yolo。
+请把 YOLO 安装到当前项目和我的 Agent 工具里。我要使用 4 个公开动词：/yolo-demand、/yolo-auto、/yolo-ship、/yolo-status。Codex 可以保留 /yolo 作为统一 fallback，但不要生成 /yolo-spec、/yolo-tasks、/yolo-run、/yolo-check、/yolo-review、/yolo-release 这些默认菜单。执行前先告诉我会写哪些文件。
+YOLO 路径是 <你的 YOLO 安装目录>。
 ```
 
 agent 会负责安装 `AGENTS.md`、`CLAUDE.md`、`.codex/skills/yolo`、`.claude/skills`、`.claude/commands`，以及 Codex 用户级 `~/.agents/skills/yolo`。Codex 菜单只暴露 `/yolo` 总入口和单个 `source-command-yolo` fallback；需求沟通、PRD、检查、执行等阶段由 `/yolo` 根据用户这句话路由。内部 workflow 只留在 YOLO 内部索引里。
@@ -126,7 +126,7 @@ YOLO 会根据这句话自己判断是要继续需求挖掘、生成计划、编
 /yolo 我确认执行 /path/to/prd.json。
 ```
 
-Claude Code 可以直接用这些稳定阶段入口：`/yolo-status`、`/yolo-demand`、`/yolo-spec`、`/yolo-tasks`、`/yolo-check`、`/yolo-run`、`/yolo-review`、`/yolo-release`。Codex 为了避免菜单噪音，统一从 `/yolo` 进入，例如 `/yolo 需求沟通：...`、`/yolo 生成 PRD/spec：...`、`/yolo 检查 PRD：...`。旧的 brainstorm/interview/discover/discuss/plan/prd/accept/ship 等入口仍保留兼容路由，但只能路由到对应稳定入口并执行同一硬门。
+Claude Code 可以直接用这 4 个动词 slash：`/yolo-status`、`/yolo-demand`、`/yolo-auto`、`/yolo-ship`。`spec`、`tasks`、`check`、`run`、`review`、`release` 是终端 CLI 子命令（`yolo spec` 等），不是默认安装的 slash；Codex/Claude 在聊天里通过 `/yolo` fallback 路由到对应阶段，例如 `/yolo 需求沟通：...`、`/yolo 生成 PRD/spec：...`、`/yolo 检查 PRD：...`。旧的 brainstorm/interview/discover/discuss/plan/prd/accept 等入口仍保留兼容路由，但只能路由到对应动词并执行同一硬门。
 
 阶段入口必须停在本阶段：`/yolo-demand` 只做需求沟通、证据调度和 PRD 就绪判断，不能顺手生成可执行 PRD 或实现；`/yolo-spec` 只生成/检查 PRD/spec；`/yolo-tasks` 只拆任务；`/yolo-check` 只做检查，不能因为用户说“可以”就开始实现。真正写代码只能在 `/yolo-run`，并且必须有检查通过的 PRD 和批准的执行 scope。
 

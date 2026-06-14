@@ -14,6 +14,7 @@ import {
 import { runAdapterEvidenceCollector } from "../adapters/evidence-collector.js";
 import { verifyArtifactIntegrity } from "../evidence/artifact-integrity.js";
 import { isWithin } from "../../lib/security/path-guard.js";
+import { verifyApprovalSignature, approvalSignablePayload } from "../../lib/security/approval-signing.js";
 
 export const ACCEPTANCE_REPORT_SCHEMA_VERSION = "1.0";
 export const ACCEPTANCE_REPORT_SCHEMA = "yolo.acceptance.report.v1";
@@ -148,6 +149,28 @@ function approvalFromArtifact(path, expected = Object(), boundaryRoot) {
     }
     if (!approvalWarningsMatch(approval, expected)) {
       reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_WARNING_MISMATCH", message: "Approval artifact does not match the current warning set." });
+    }
+    // P12.I4: ed25519 signature verification for release approvals.
+    // Enforcement model: fail-closed ONLY when YOLO_APPROVAL_PUBLIC_KEY is configured
+    // (i.e., the CI/release pipeline has committed to signed approvals). Without the
+    // env var, signature verification is advisory — existing dev/test flows that don't
+    // sign are not blocked. When a signature IS present, it must always verify.
+    const publicKey = clean(process.env.YOLO_APPROVAL_PUBLIC_KEY);
+    const signature = clean(approval?.signature);
+    if (signature) {
+      if (!publicKey) {
+        // Signature present but no public key configured — advisory, don't block.
+      } else {
+        const signablePayload = approvalSignablePayload(approval);
+        const sigResult = verifyApprovalSignature(signablePayload, signature, publicKey);
+        if (!sigResult.verified) {
+          reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_SIGNATURE_INVALID", message: `Approval signature verification failed: ${sigResult.detail}` });
+        }
+      }
+    } else if (publicKey) {
+      // Public key configured but no signature on the approval — fail-closed.
+      // The pipeline has committed to signed approvals; unsigned is rejected.
+      reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_SIGNATURE_MISSING", message: "YOLO_APPROVAL_PUBLIC_KEY is set but approval artifact has no signature. Sign the approval with the CI private key." });
     }
   }
   return {

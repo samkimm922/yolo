@@ -1,4 +1,3 @@
-import { execFileSync as defaultExecFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -6,10 +5,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { resolveWithinRoot } from "../../lib/security/path-guard.js";
 import {
   failTaskTransition,
   passTaskTransition,
 } from "../task-state/transitions.js";
+import { safeExecFileSync } from "../../lib/security/safe-exec.js";
 
 export function dryRunArtifactTarget(task = Object()) {
   return task.scope?.targets?.[0]?.file || "";
@@ -18,14 +19,15 @@ export function dryRunArtifactTarget(task = Object()) {
 export function runDryRunCommand(command, {
   cwd,
   timeout = 120000,
-  execFileSync = defaultExecFileSync,
+  execFileSync = safeExecFileSync,
 } = Object()) {
+  // P12.I1: default executor is safeExecFileSync (routes through execArgv, no shell).
+  // Tests may inject a mock execFileSync for unit control.
   try {
-    const stdout = execFileSync("sh", ["-c", command], {
+    const stdout = execFileSync(command, [], {
       cwd,
       encoding: "utf8",
       timeout,
-      stdio: ["pipe", "pipe", "pipe"],
     });
     return { command, exit_code: 0, stdout: stdout.trim().slice(0, 4000), stderr: "" };
   } catch (error) {
@@ -122,7 +124,19 @@ export function completeDryRunArtifactTask({
   const target = dryRunArtifactTarget(task);
   if (!target) return { status: "failed", reason: "dry_run_artifact missing scope target" };
 
-  const artifactPath = resolve(projectRoot, target);
+  // P12.I2: route untrusted target through resolveWithinRoot咽喉.
+  const guardResult = resolveWithinRoot(projectRoot, target);
+  if (!guardResult.ok) {
+    const reason = `scope target escapes project root: ${guardResult.detail}`;
+    recordTaskTransition(prdPath, failTaskTransition({
+      taskId: task.id,
+      reason,
+      result: { escape: true, detail: guardResult.detail },
+    }));
+    logTaskDone(task.id, "failed", Date.now() - startedAtMs, reason);
+    return { status: "failed", reason };
+  }
+  const artifactPath = guardResult.path;
   mkdirSync(dirname(artifactPath), { recursive: true });
   writeFileSync(artifactPath, renderDryRunArtifact(task, prdPath, { yoloRoot, projectRoot }), "utf8");
 
