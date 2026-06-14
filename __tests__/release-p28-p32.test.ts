@@ -166,6 +166,7 @@ describe("P28-P32 release evidence gates", () => {
 
     assert.equal(result.status, "blocked");
     assert.ok(result.blockers.some((blocker) => blocker.code === "AGENT_INTEGRATION_DOCTOR_ARTIFACTS_PRESENT"));
+    assert.ok(!result.blockers.some((blocker) => blocker.code === "AGENT_INTEGRATION_DOCTOR_ROOTS_EXIST"));
     assert.equal(result.guarantees.published, false);
     assert.equal(result.guarantees.provider_execution, false);
   });
@@ -226,7 +227,9 @@ describe("P28-P32 release evidence gates", () => {
 
     assert.equal(result.status, "blocked");
     assert.ok(result.blockers.some((blocker) => blocker.code === "AGENT_INTEGRATION_DOCTOR_HOST_DISCOVERY_FRESH"));
+    assert.ok(!result.blockers.some((blocker) => blocker.code === "AGENT_INTEGRATION_DOCTOR_ARTIFACTS_PRESENT"));
     assert.ok(result.host_discovery.blockers.some((blocker) => blocker.code === "AGENT_INTEGRATION_DOCTOR_HOST_DISCOVERY_STALE"));
+    assert.ok(!result.host_discovery.blockers.some((blocker) => blocker.code === "AGENT_INTEGRATION_DOCTOR_HOST_DISCOVERY_MISSING"));
   });
 
   test("real-project dogfood requires plan/check/review evidence from an external project", () => {
@@ -243,6 +246,7 @@ describe("P28-P32 release evidence gates", () => {
     });
     assert.equal(blocked.status, "blocked");
     assert.ok(blocked.blockers.some((blocker) => blocker.code === "REAL_PROJECT_DOGFOOD_EXTERNAL_PROJECT"));
+    assert.ok(!blocked.blockers.some((blocker) => blocker.code === "REAL_PROJECT_DOGFOOD_AGENT_INTEGRATION_PASS"));
 
     const passed = runRealProjectDogfoodGate({
       yoloRoot,
@@ -270,6 +274,7 @@ describe("P28-P32 release evidence gates", () => {
 
     assert.equal(blocked.status, "blocked");
     assert.ok(blocked.blockers.some((blocker) => blocker.code === "PI_EXECUTION_DRILL_BILLABLE_AUTHORIZATION"));
+    assert.ok(!blocked.blockers.some((blocker) => blocker.code === "PI_EXECUTION_DRILL_BILLABLE_COST_ACKNOWLEDGED"));
     assert.equal(blocked.guarantees.billable_provider_execution, false);
   });
 
@@ -310,6 +315,7 @@ describe("P28-P32 release evidence gates", () => {
     });
     assert.equal(blocked.status, "blocked");
     assert.ok(blocked.blockers.some((blocker) => blocker.code === "RUNTIME_BOUNDARY_DECISION_RECORD_PRESENT"));
+    assert.ok(!blocked.blockers.some((blocker) => blocker.code === "RUNTIME_BOUNDARY_DECISION_CANDIDATE_READY"));
 
     const ready = runRuntimeBoundaryDecisionGate({
       yoloRoot: "/tmp/yolo",
