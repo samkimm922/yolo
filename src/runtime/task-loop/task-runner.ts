@@ -7,6 +7,7 @@ import { handleRunTaskExceptionFlow } from "../execution/exception-flow.js";
 import { prepareProviderSession } from "../execution/session-attempt.js";
 import { inspectSessionPreGateChecks } from "../execution/session-pre-gates.js";
 import { handlePreSessionFlow } from "../execution/pre-session-flow.js";
+import { decideGateOutcome } from "./gate-outcome-decision.js";
 
 function noop() {}
 
@@ -171,7 +172,8 @@ export async function runTaskWithRuntime({
       logProgress("", "├─", `gate ${exitCode === 0 ? "PASS" : "FAIL(" + exitCode + ")"}`);
       logTaskGate(task.id, "gate", exitCode === 0 ? "pass" : "fail", exitCode !== 0 ? (gate.stdout || "").slice(0, 500).split("\n").slice(0, 10) : []);
 
-      if (exitCode === 0) {
+      const gateDecision = decideGateOutcome(exitCode, { maxRetry });
+      if (gateDecision.branch === "pass") {
         const gatePass = await handleGatePassFlow({
           task,
           prdPath,
@@ -200,7 +202,7 @@ export async function runTaskWithRuntime({
         wt,
         gate,
         attempt,
-        maxRetryForGate: maxRetry[exitCode] ?? 0,
+        maxRetryForGate: gateDecision.maxRetryForGate,
         history,
         runtimeDir,
         yoloRoot: stateRoot,
