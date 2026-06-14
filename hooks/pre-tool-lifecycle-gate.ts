@@ -143,7 +143,17 @@ function isProjectSourceFile(filePath) {
 }
 
 function statusJsonPath() {
-  return `${projectRootCanonical()}/.yolo/lifecycle/status.json`;
+  // Read from the real, CASE-PRESERVING cwd. canonicalizePath lowercases paths
+  // for case-insensitive *comparison* (isProjectSourceFile), but a lowercased
+  // path breaks file I/O on case-sensitive filesystems (Linux CI), where the
+  // status.json read would miss and fail-closed even on a passing check.
+  let root;
+  try {
+    root = realpathSync(process.cwd()).replace(/\\/g, "/");
+  } catch {
+    root = String(process.cwd()).replace(/\\/g, "/");
+  }
+  return `${root}/.yolo/lifecycle/status.json`;
 }
 
 // Authorization = check stage completed or warning. Fail-closed on missing,
