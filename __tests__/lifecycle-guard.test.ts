@@ -278,7 +278,7 @@ describe("lifecycle guard", () => {
     try {
       assert.equal(nextLifecycleAction({ projectRoot: root }).command, "yolo init");
       initLifecycleState({ projectRoot: root });
-      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-discover");
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "yolo demand --stage interview");
 
       writeLifecycleStageReport("discovery", { status: "success" }, {
         projectRoot: root,
@@ -286,7 +286,7 @@ describe("lifecycle guard", () => {
         writeSessionMemory: false,
         skipSequenceCheck: true,
       });
-      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-plan");
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "yolo tasks");
 
       writeLifecycleStageReport("roadmap", { status: "warning", summary: "plan has warnings" }, {
         projectRoot: root,
@@ -294,7 +294,7 @@ describe("lifecycle guard", () => {
         writeSessionMemory: false,
         skipSequenceCheck: true,
       });
-      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-plan");
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "yolo tasks");
 
       writeLifecycleStageReport("roadmap", { status: "success", summary: "plan passed" }, {
         projectRoot: root,
@@ -302,7 +302,7 @@ describe("lifecycle guard", () => {
         writeSessionMemory: false,
         skipSequenceCheck: true,
       });
-      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-prd");
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "yolo spec");
 
       writeLifecycleStageReport("prd", { status: "success", summary: "prd compiled" }, {
         projectRoot: root,
@@ -310,7 +310,7 @@ describe("lifecycle guard", () => {
         writeSessionMemory: false,
         skipSequenceCheck: true,
       });
-      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-check");
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "yolo check");
 
       for (const stage of ["prd", "check", "run", "review-fix"]) {
         writeLifecycleStageReport(stage, { status: "success" }, {
@@ -326,7 +326,7 @@ describe("lifecycle guard", () => {
         writeSessionMemory: false,
         skipSequenceCheck: true,
       });
-      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "/yolo-accept");
+      assert.equal(nextLifecycleAction({ projectRoot: root }).command, "yolo release accept");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -346,7 +346,7 @@ describe("lifecycle guard", () => {
       const result = out.json();
 
       assert.equal(exitCode, 0);
-      assert.equal(result.recommended_command, "/yolo-doctor");
+      assert.equal(result.recommended_command, "yolo doctor");
       const guard = result.guard;
       assert.equal(
         typeof guard === "object" && guard !== null && "current_stage" in guard
@@ -386,7 +386,7 @@ describe("lifecycle guard", () => {
       const next = nextOut.json();
 
       assert.equal(nextExit, 0);
-      assert.equal(next.recommended_command, "/yolo-discover");
+      assert.equal(next.recommended_command, "yolo demand --stage interview");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -710,6 +710,109 @@ describe("lifecycle guard", () => {
           `yolo ${name} must produce an error message on stderr`,
         );
       }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // Regression: non-technical users paste recommended_command / next_actions straight
+  // into a terminal. Slash forms (/yolo-*) are unknown-shell commands there. Every
+  // recommended_command across every lifecycle state must be a runnable `yolo ...`.
+  test("recommended_command is always a runnable yolo subcommand, never a slash form", async () => {
+    const root = tempProject();
+    try {
+      const runnableSubcommands = new Set([
+        "yolo init", "yolo doctor", "yolo status",
+        "yolo demand --stage interview", "yolo demand --stage brainstorm",
+        "yolo demand --stage discover", "yolo demand --stage discuss",
+        "yolo tasks", "yolo spec", "yolo check", "yolo run",
+        "yolo review", "yolo release accept", "yolo ship", "yolo learn",
+      ]);
+
+      const checkCommand = (cmd: string, where: string) => {
+        assert.ok(
+          typeof cmd === "string" && cmd.length > 0,
+          `${where} must set a non-empty command string`,
+        );
+        assert.ok(
+          !cmd.startsWith("/"),
+          `${where}="${cmd}" must not be a slash form — terminal users cannot run it`,
+        );
+        assert.ok(
+          cmd.startsWith("yolo "),
+          `${where}="${cmd}" must start with "yolo " so it runs in a plain shell`,
+        );
+        assert.ok(
+          runnableSubcommands.has(cmd),
+          `${where}="${cmd}" is not a recognized runnable yolo subcommand`,
+        );
+      };
+
+      // 1. No status file at all → setup gate.
+      checkCommand(
+        nextLifecycleAction({ projectRoot: root }).command,
+        "nextLifecycleAction (uninitialized)",
+      );
+
+      // 2. Walk every lifecycle stage boundary; each recommended_command must be runnable.
+      initLifecycleState({ projectRoot: root });
+      const stageSequence: Array<{ stage: string; expectCmd: string }> = [
+        { stage: "discovery", expectCmd: "yolo demand --stage interview" },
+        { stage: "roadmap", expectCmd: "yolo tasks" },
+        { stage: "prd", expectCmd: "yolo spec" },
+        { stage: "check", expectCmd: "yolo check" },
+        { stage: "run", expectCmd: "yolo run" },
+        { stage: "review-fix", expectCmd: "yolo review" },
+        { stage: "acceptance", expectCmd: "yolo release accept" },
+        { stage: "delivery", expectCmd: "yolo ship" },
+      ];
+      const completed: string[] = [];
+      for (const { stage, expectCmd } of stageSequence) {
+        const before = nextLifecycleAction({ projectRoot: root }).command;
+        checkCommand(before, `nextLifecycleAction before ${stage}`);
+        assert.equal(before, expectCmd, `stage boundary before ${stage}`);
+        // Also exercise the guard's recommended_command path for an arbitrary downstream command.
+        const guard = inspectLifecycleGuard(
+          { command: "yolo-run", projectRoot: root },
+          {},
+        );
+        checkCommand(guard.recommended_command, `inspectLifecycleGuard.recommended_command at ${stage} boundary`);
+        for (const action of guard.next_actions || []) {
+          assert.ok(
+            !action.includes("/yolo-"),
+            `next_actions at ${stage} must not reference slash commands: ${action}`,
+          );
+        }
+        writeLifecycleStageReport(stage, { status: "success" }, {
+          projectRoot: root,
+          stateRoot: join(root, ".yolo"),
+          writeSessionMemory: false,
+          skipSequenceCheck: true,
+        });
+        completed.push(stage);
+      }
+
+      // 3. Unreadable status → doctor recommendation.
+      writeFileSync(join(root, ".yolo", "lifecycle", "status.json"), "{", "utf8");
+      checkCommand(
+        nextLifecycleAction({ projectRoot: root }).command,
+        "nextLifecycleAction (unreadable status)",
+      );
+
+      // 4. End-to-end via the CLI surface non-technical users actually run.
+      rmSync(join(root, ".yolo"), { recursive: true, force: true });
+      initLifecycleState({ projectRoot: root });
+      const out = capture();
+      const exit = await runYoloCli(["status", `--cwd=${root}`, "--json"], {
+        cwd: root,
+        stdout: out.stream,
+      });
+      assert.equal(exit, 0);
+      const status = out.json() as { recommended_command?: unknown };
+      checkCommand(
+        String(status.recommended_command ?? ""),
+        "yolo status CLI recommended_command",
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
