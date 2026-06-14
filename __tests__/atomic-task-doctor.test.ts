@@ -228,3 +228,107 @@ describe("atomic task doctor", () => {
     }
   });
 });
+
+// BUG-1: atomic_bundle — declarative narrow gate for cohesive multi-file tasks
+describe("atomic_bundle exemption", () => {
+  const fiveServiceFiles = [
+    "src/services/migration/schema.sql",
+    "src/services/migration/rls.sql",
+    "src/services/migration/triggers.sql",
+    "src/services/migration/indexes.sql",
+    "src/services/migration/types.ts",
+  ];
+
+  const baseScope = {
+    targets: fiveServiceFiles.map((file) => ({ file })),
+  };
+
+  const basePostConditions = [
+    { id: "POST-FILES", type: "files_modified_max", severity: "FAIL", params: { max: 5 } },
+    { id: "POST-TYPEERR", type: "no_new_type_errors", severity: "FAIL", params: {} },
+  ];
+
+  function bundleTask(overrides = Object()) {
+    return {
+      id: "FIX-BUNDLE-001",
+      title: "数据库 schema 迁移:新增 inventory_transactions 表",
+      type: "feature",
+      status: "pending",
+      description: "新增库存事务表 schema、RLS 策略、触发器、索引和类型定义。",
+      ...overrides,
+      scope: { ...baseScope, ...overrides.scope },
+      post_conditions: overrides.post_conditions || basePostConditions,
+    };
+  }
+
+  test("valid atomic_bundle with 5 cohesive files is NOT must_split", () => {
+    const result = inspectAtomicTask(bundleTask({
+      scope: {
+        ...baseScope,
+        atomic_bundle: {
+          reason: "schema + RLS + triggers + indexes + types 构成不可分割的数据库迁移交付单元",
+          files: fiveServiceFiles,
+        },
+      },
+    }), { root: YOLO_DIR, writeEvidence: false });
+
+    assert.notEqual(result.mode, "must_split");
+    assert.ok(result.reasons.some((r) => r.id === "ATOMIC_BUNDLE_EXEMPT"));
+  });
+
+  test("5 files without atomic_bundle is still must_split", () => {
+    const result = inspectAtomicTask(bundleTask(), { root: YOLO_DIR, writeEvidence: false });
+
+    assert.equal(result.mode, "must_split");
+    assert.equal(result.reasons.some((r) => r.id === "ATOMIC_BUNDLE_EXEMPT"), false);
+  });
+
+  test("atomic_bundle with multiple behavior domains is still must_split", () => {
+    // Uses data_consistency + compile domains (not ui_state+data_consistency)
+    // to independently test the behaviorDomains<=1 exemption condition,
+    // since trigger B only fires for ui_state+data_consistency dual domain.
+    const result = inspectAtomicTask(bundleTask({
+      title: "service 层数据库 schema 迁移 + 编译配置修改",
+      description: "在同一层修改数据库 schema 和编译配置，涉及库存事务和 tsc 编译选项。",
+      scope: {
+        ...baseScope,
+        atomic_bundle: {
+          reason: "双域修改是一个整体交付",
+          files: fiveServiceFiles,
+        },
+      },
+    }), { root: YOLO_DIR, writeEvidence: false });
+
+    assert.equal(result.mode, "must_split");
+  });
+
+  test("atomic_bundle with empty reason is still must_split", () => {
+    const result = inspectAtomicTask(bundleTask({
+      scope: {
+        ...baseScope,
+        atomic_bundle: {
+          reason: "",
+          files: fiveServiceFiles,
+        },
+      },
+    }), { root: YOLO_DIR, writeEvidence: false });
+
+    assert.equal(result.mode, "must_split");
+    assert.equal(result.reasons.some((r) => r.id === "ATOMIC_BUNDLE_EXEMPT"), false);
+  });
+
+  test("atomic_bundle not covering all target files is still must_split", () => {
+    const result = inspectAtomicTask(bundleTask({
+      scope: {
+        ...baseScope,
+        atomic_bundle: {
+          reason: "只声明了 3 个文件，但任务有 5 个 target",
+          files: fiveServiceFiles.slice(0, 3),
+        },
+      },
+    }), { root: YOLO_DIR, writeEvidence: false });
+
+    assert.equal(result.mode, "must_split");
+    assert.equal(result.reasons.some((r) => r.id === "ATOMIC_BUNDLE_EXEMPT"), false);
+  });
+});
