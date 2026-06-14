@@ -3,7 +3,7 @@
 import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { isWithin } from "../security/path-guard.js";
+import { isWithin, resolveWithinRoot } from "../security/path-guard.js";
 
 export function evalFileExists(params, _taskScope, ROOT) {
   const file = params.file || params.path;
@@ -177,7 +177,13 @@ export function evalFileLinesMax(params, taskScope, ROOT) {
   const violations = [];
   const legacyAllowed = [];
   for (const file of targets) {
-    const absPath = resolve(ROOT, file);
+    // P12.I2: route untrusted file through resolveWithinRoot咽喉.
+    const guardResult = resolveWithinRoot(ROOT, file);
+    if (!guardResult.ok) {
+      violations.push({ file, escape: true, detail: guardResult.detail });
+      continue;
+    }
+    const absPath = guardResult.path;
     if (!existsSync(absPath)) {
       violations.push({ file, missing: true });
       continue;

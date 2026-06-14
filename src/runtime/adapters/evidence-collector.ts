@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { resolveProjectContext } from "../../packs/resolver.js";
 import { asArray, selectedAcceptanceAdapter } from "../gates/readiness-policy.js";
-import { isWithin } from "../../lib/security/path-guard.js";
+import { isWithin, resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { redact } from "../../lib/security/redact.js";
 import { execCommand } from "../../lib/security/safe-exec.js";
 
@@ -341,8 +341,11 @@ export function runAdapterEvidenceCollector(input = Object(), options = Object()
       timeout: command.timeout_ms,
       env: { ...process.env },
     });
-    const evidencePath = command.evidence_path ? resolve(plan.project_root, command.evidence_path) : "";
-    if (evidencePath && !isWithin(evidencePath, plan.project_root)) {
+    // P12.I2: route untrusted evidence_path through resolveWithinRoot咽喉.
+    const evidenceGuard = command.evidence_path
+      ? resolveWithinRoot(plan.project_root, command.evidence_path)
+      : { ok: false, reason: "none" as const };
+    if (command.evidence_path && !evidenceGuard.ok) {
       commandResults.push({
         id: command.id,
         command: command.command,
@@ -363,6 +366,7 @@ export function runAdapterEvidenceCollector(input = Object(), options = Object()
       });
       continue;
     }
+    const evidencePath = evidenceGuard.ok ? (evidenceGuard.path || "") : "";
     const evidence = readJsonEvidence(evidencePath);
     if (evidence) evidenceRecords.push(evidence);
     commandResults.push({

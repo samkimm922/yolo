@@ -5,6 +5,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { resolveWithinRoot } from "../../lib/security/path-guard.js";
 import {
   failTaskTransition,
   passTaskTransition,
@@ -123,7 +124,19 @@ export function completeDryRunArtifactTask({
   const target = dryRunArtifactTarget(task);
   if (!target) return { status: "failed", reason: "dry_run_artifact missing scope target" };
 
-  const artifactPath = resolve(projectRoot, target);
+  // P12.I2: route untrusted target through resolveWithinRoot咽喉.
+  const guardResult = resolveWithinRoot(projectRoot, target);
+  if (!guardResult.ok) {
+    const reason = `scope target escapes project root: ${guardResult.detail}`;
+    recordTaskTransition(prdPath, failTaskTransition({
+      taskId: task.id,
+      reason,
+      result: { escape: true, detail: guardResult.detail },
+    }));
+    logTaskDone(task.id, "failed", Date.now() - startedAtMs, reason);
+    return { status: "failed", reason };
+  }
+  const artifactPath = guardResult.path;
   mkdirSync(dirname(artifactPath), { recursive: true });
   writeFileSync(artifactPath, renderDryRunArtifact(task, prdPath, { yoloRoot, projectRoot }), "utf8");
 
