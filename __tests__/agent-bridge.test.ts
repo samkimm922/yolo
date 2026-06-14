@@ -244,13 +244,14 @@ describe("agent bridge installer", () => {
       ".claude/skills/yolo/SKILL.md",
     ]);
 
-    // Claude slash commands: 4 stable verbs
+    // Claude slash commands: bare /yolo router + 4 stable verbs
     const claudeCommands = plan.claude_slash_commands.map((file) => file.relative_path);
+    assert.equal(claudeCommands.includes(".claude/commands/yolo.md"), true);
     assert.equal(claudeCommands.includes(".claude/commands/yolo-demand.md"), true);
     assert.equal(claudeCommands.includes(".claude/commands/yolo-auto.md"), true);
     assert.equal(claudeCommands.includes(".claude/commands/yolo-ship.md"), true);
     assert.equal(claudeCommands.includes(".claude/commands/yolo-status.md"), true);
-    assert.equal(claudeCommands.length, 4);
+    assert.equal(claudeCommands.length, 5);
 
     // No per-command Codex docs, no source commands, no legacy cleanup, no workflow skills
     assert.equal(plan.hasOwnProperty("command_files"), false);
@@ -279,7 +280,8 @@ describe("agent bridge installer", () => {
     assert.equal(result.written.includes(".codex/skills/yolo/SKILL.md"), true);
     assert.equal(result.written.includes(".claude/skills/yolo/SKILL.md"), true);
 
-    // Claude slash commands: only 4 stable verbs
+    // Claude slash commands: bare /yolo router + 4 stable verbs
+    assert.equal(result.written.includes(".claude/commands/yolo.md"), true);
     assert.equal(result.written.includes(".claude/commands/yolo-demand.md"), true);
     assert.equal(result.written.includes(".claude/commands/yolo-auto.md"), true);
     assert.equal(result.written.includes(".claude/commands/yolo-ship.md"), true);
@@ -345,7 +347,8 @@ describe("agent bridge installer", () => {
     assert.equal(existsSync(join(homeDir, ".agents/skills/yolo/SKILL.md")), true);
     assert.equal(existsSync(join(homeDir, ".claude/skills/yolo/SKILL.md")), true);
 
-    // Claude slash commands: 4 stable verbs
+    // Claude slash commands: bare /yolo router + 4 stable verbs
+    assert.equal(existsSync(join(homeDir, ".claude/commands/yolo.md")), true);
     assert.equal(existsSync(join(homeDir, ".claude/commands/yolo-demand.md")), true);
     assert.equal(existsSync(join(homeDir, ".claude/commands/yolo-auto.md")), true);
     assert.equal(existsSync(join(homeDir, ".claude/commands/yolo-ship.md")), true);
@@ -387,6 +390,121 @@ describe("agent bridge installer", () => {
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
       rmSync(homeDir, { recursive: true, force: true });
+    }
+  });
+
+  // BUG-3: manifest-based reconcile — clean up orphaned yolo entries on upgrade
+  test("reconcile deletes orphaned yolo commands from previous manifest on upgrade", () => {
+    const projectRoot = tempProject();
+    try {
+      // Simulate old install: write legacy yolo commands + manifest
+      mkdirSync(join(projectRoot, ".claude/commands"), { recursive: true });
+      mkdirSync(join(projectRoot, ".claude/skills/yolo"), { recursive: true });
+      mkdirSync(join(projectRoot, ".codex/skills/yolo"), { recursive: true });
+
+      // Old files that the new slim plan does NOT include
+      writeFileSync(join(projectRoot, ".claude/commands/yolo-plan.md"), "# old plan\n", "utf8");
+      writeFileSync(join(projectRoot, ".claude/commands/yolo-prd.md"), "# old prd\n", "utf8");
+      writeFileSync(join(projectRoot, ".claude/commands/yolo-check.md"), "# old check\n", "utf8");
+
+      // A non-yolo user file that must NEVER be deleted
+      writeFileSync(join(projectRoot, ".claude/commands/my-custom.md"), "# my custom\n", "utf8");
+
+      // Old manifest tracking these files
+      const oldManifest = {
+        schema: "yolo.bridge_manifest.v1",
+        generated_at: "2025-01-01T00:00:00.000Z",
+        entries: [
+          ".claude/commands/yolo-plan.md",
+          ".claude/commands/yolo-prd.md",
+          ".claude/commands/yolo-check.md",
+          ".claude/skills/yolo/SKILL.md",
+        ],
+      };
+      writeFileSync(join(projectRoot, ".yolo-bridge-manifest.json"), JSON.stringify(oldManifest, null, 2), "utf8");
+
+      // Run new slim install
+      const result = installAgentBridge({ projectRoot, yoloRoot: "/tmp/yolo", targets: "claude", force: true });
+
+      // Orphaned yolo commands deleted
+      assert.equal(existsSync(join(projectRoot, ".claude/commands/yolo-plan.md")), false, "orphan yolo-plan.md must be deleted");
+      assert.equal(existsSync(join(projectRoot, ".claude/commands/yolo-prd.md")), false, "orphan yolo-prd.md must be deleted");
+      assert.equal(existsSync(join(projectRoot, ".claude/commands/yolo-check.md")), false, "orphan yolo-check.md must be deleted");
+
+      // New slim commands present
+      assert.equal(existsSync(join(projectRoot, ".claude/commands/yolo.md")), true);
+      assert.equal(existsSync(join(projectRoot, ".claude/commands/yolo-demand.md")), true);
+      assert.equal(existsSync(join(projectRoot, ".claude/commands/yolo-status.md")), true);
+
+      // Non-yolo file untouched
+      assert.equal(existsSync(join(projectRoot, ".claude/commands/my-custom.md")), true, "non-yolo file must not be deleted");
+
+      // Reconciled list reports deleted entries
+      assert.ok(result.reconciled.includes(".claude/commands/yolo-plan.md"));
+      assert.ok(result.reconciled.includes(".claude/commands/yolo-prd.md"));
+      assert.ok(result.reconciled.includes(".claude/commands/yolo-check.md"));
+
+      // New manifest written with current entries
+      const newManifest = JSON.parse(readFileSync(join(projectRoot, ".yolo-bridge-manifest.json"), "utf8"));
+      assert.equal(newManifest.schema, "yolo.bridge_manifest.v1");
+      assert.ok(newManifest.entries.includes(".claude/commands/yolo.md"));
+      assert.ok(newManifest.entries.includes(".claude/commands/yolo-demand.md"));
+      assert.ok(newManifest.entries.includes(".claude/skills/yolo/SKILL.md"));
+      assert.equal(newManifest.entries.includes(".claude/commands/yolo-plan.md"), false, "old orphan must not be in new manifest");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("reconcile does NOT delete anything when no previous manifest exists", () => {
+    const projectRoot = tempProject();
+    try {
+      // Write some yolo-looking files WITHOUT a manifest (e.g., manual setup)
+      mkdirSync(join(projectRoot, ".claude/commands"), { recursive: true });
+      writeFileSync(join(projectRoot, ".claude/commands/yolo-plan.md"), "# manual\n", "utf8");
+      writeFileSync(join(projectRoot, ".claude/commands/my-custom.md"), "# my custom\n", "utf8");
+
+      // No manifest file → must not delete anything
+      assert.equal(existsSync(join(projectRoot, ".yolo-bridge-manifest.json")), false);
+
+      const result = installAgentBridge({ projectRoot, yoloRoot: "/tmp/yolo", targets: "claude", force: true });
+
+      // Nothing reconciled
+      assert.deepEqual(result.reconciled, []);
+
+      // Manual files untouched
+      assert.equal(existsSync(join(projectRoot, ".claude/commands/yolo-plan.md")), true, "manual yolo file without manifest must not be deleted");
+      assert.equal(existsSync(join(projectRoot, ".claude/commands/my-custom.md")), true);
+
+      // Manifest is written after install
+      assert.equal(existsSync(join(projectRoot, ".yolo-bridge-manifest.json")), true);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("dry-run reports orphaned entries without deleting", () => {
+    const projectRoot = tempProject();
+    try {
+      mkdirSync(join(projectRoot, ".claude/commands"), { recursive: true });
+      writeFileSync(join(projectRoot, ".claude/commands/yolo-plan.md"), "# old\n", "utf8");
+
+      const oldManifest = {
+        schema: "yolo.bridge_manifest.v1",
+        generated_at: "2025-01-01T00:00:00.000Z",
+        entries: [".claude/commands/yolo-plan.md", ".claude/skills/yolo/SKILL.md"],
+      };
+      writeFileSync(join(projectRoot, ".yolo-bridge-manifest.json"), JSON.stringify(oldManifest, null, 2), "utf8");
+
+      const result = installAgentBridge({ projectRoot, yoloRoot: "/tmp/yolo", targets: "claude", dryRun: true });
+
+      // Dry-run: nothing actually deleted
+      assert.equal(existsSync(join(projectRoot, ".claude/commands/yolo-plan.md")), true, "dry-run must not delete files");
+      assert.deepEqual(result.reconciled, []);
+      // Dry-run reports planned reconcile in planned array
+      assert.ok(result.planned.some((p) => p.includes("yolo-plan.md")), "dry-run must report orphan in planned");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
     }
   });
 });

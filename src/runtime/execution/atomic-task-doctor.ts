@@ -272,6 +272,23 @@ export function inspectAtomicTask(task, options = Object()) {
     text.includes("tsc") || text.includes("compile") || text.includes("编译") ? "compile" : null,
   ]);
 
+  // BUG-1: atomic_bundle — declarative narrow gate for cohesive/indivisible multi-file tasks.
+  // Exempts ONLY file-count triggers (MULTI_FILE, TARGET_FILES_GT_3, AT_SCOPE_FILE_LIMIT,
+  // files.length>3 hardSplit). All behavioral triggers remain enforced.
+  const atomicBundle = task.scope?.atomic_bundle;
+  const bundleFiles = unique((atomicBundle?.files || []).map((f) => normalizeFile(f))).map(String);
+  const allFilesCovered = files.length > 0 && files.every((f) => bundleFiles.includes(f));
+  const hasValidAtomicBundle = Boolean(
+    atomicBundle
+    && typeof atomicBundle.reason === "string"
+    && atomicBundle.reason.trim().length > 0
+    && Array.isArray(atomicBundle.files)
+    && allFilesCovered
+    && behaviorDomains.length <= 1
+    && !crossesPagesServices
+    && failPostconditions <= 7,
+  );
+
   let score = 0;
   const reasons = [];
   const add = (points, id, detail, evidence = Object()) => {
@@ -279,8 +296,8 @@ export function inspectAtomicTask(task, options = Object()) {
     reasons.push({ id, points, detail, evidence });
   };
 
-  if (files.length > 1) add((files.length - 1) * 2, "MULTI_FILE", `目标文件 ${files.length} 个`, { files });
-  if (files.length > 3) add(2, "TARGET_FILES_GT_3", "目标文件超过 3 个，模型上下文和改动范围容易漂移", { files });
+  if (files.length > 1 && !hasValidAtomicBundle) add((files.length - 1) * 2, "MULTI_FILE", `目标文件 ${files.length} 个`, { files });
+  if (files.length > 3 && !hasValidAtomicBundle) add(2, "TARGET_FILES_GT_3", "目标文件超过 3 个，模型上下文和改动范围容易漂移", { files });
   if (crossesPagesServices) add(3, "CROSSES_PAGES_SERVICES", "任务同时跨页面层和 service 层", { layers, files });
   if (dataTerms.length) add(3, "DATA_CONSISTENCY_TERMS", "任务涉及库存/数量/事务/数据库等数据一致性词", { terms: dataTerms });
   if (hookTerms.length) add(2, "HOOK_OR_API_TERMS", "任务涉及 hook/API 调用契约", { terms: hookTerms });
@@ -292,14 +309,23 @@ export function inspectAtomicTask(task, options = Object()) {
     });
   }
   if (behaviorDomains.length > 1) add(2, "MULTIPLE_BEHAVIOR_DOMAINS", "任务包含多个独立行为域", { behaviorDomains });
-  if (task.scope?.max_files && files.length >= task.scope.max_files && files.length > 1) {
+  if (task.scope?.max_files && files.length >= task.scope.max_files && files.length > 1 && !hasValidAtomicBundle) {
     add(1, "AT_SCOPE_FILE_LIMIT", "目标文件数已经贴近/达到 scope.max_files，没有缓冲空间", { max_files: task.scope.max_files, files: files.length });
+  }
+
+  if (hasValidAtomicBundle) {
+    reasons.push({
+      id: "ATOMIC_BUNDLE_EXEMPT",
+      points: 0,
+      detail: `atomic_bundle 豁免文件数触发: ${atomicBundle.reason}`,
+      evidence: { reason: atomicBundle.reason, bundle_files: bundleFiles, target_files: files },
+    });
   }
 
   const hardSplit =
     crossesPagesServices ||
     (!structuralSingleFileTask && behaviorDomains.includes("ui_state") && behaviorDomains.includes("data_consistency")) ||
-    files.length > 3 ||
+    (files.length > 3 && !hasValidAtomicBundle) ||
     failPostconditions > 7 ||
     (hasNewFile && files.length > 1 && behaviorDomains.length > 1);
 
@@ -339,6 +365,7 @@ export function inspectAtomicTask(task, options = Object()) {
     structural_single_file_task: structuralSingleFileTask,
     fail_postconditions: failPostconditions,
     behavioral_fail_postconditions: behavioralFailPostconditions,
+    atomic_bundle: hasValidAtomicBundle ? { reason: atomicBundle.reason, files: bundleFiles } : null,
     reasons,
     split_suggestions: mode === "must_split" ? buildSplitSuggestions(task, files, layers, text, classify) : [],
     next_action: mode === "must_split"

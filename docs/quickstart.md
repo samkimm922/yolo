@@ -29,13 +29,14 @@ AGENTS.md
 CLAUDE.md
 .codex/skills/yolo/SKILL.md
 .claude/skills/yolo/SKILL.md
+.claude/commands/yolo.md
 .claude/commands/yolo-demand.md
 .claude/commands/yolo-auto.md
 .claude/commands/yolo-ship.md
 .claude/commands/yolo-status.md
 ```
 
-Claude Code 会得到 4 个真实 slash commands。Codex 会得到 `yolo` native skill，并可用 `/yolo 你的需求...` 作为 fallback；内部 workflow 名称如 `yolo.pi`、`yolo.prd` 不作为用户菜单暴露。详细说明见 [docs/agent-chat-usage.md](agent-chat-usage.md) 和 [docs/agent-native-integration.md](agent-native-integration.md)。
+Claude Code 会得到 5 个 slash commands（1 个 `/yolo` 路由入口 + 4 个稳定动词）。Codex 会得到 `yolo` native skill，并可用 `/yolo 你的需求...` 作为 fallback；内部 workflow 名称如 `yolo.pi`、`yolo.prd` 不作为用户菜单暴露。详细说明见 [docs/agent-chat-usage.md](agent-chat-usage.md) 和 [docs/agent-native-integration.md](agent-native-integration.md)。
 
 ## 日常用法
 

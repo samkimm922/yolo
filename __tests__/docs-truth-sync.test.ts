@@ -165,9 +165,10 @@ describe("docs truth sync", () => {
       .filter(Boolean);
 
     assert.deepEqual(documentedManifest, installerManifest);
+    // BUG-2: bare /yolo router is prepended to the 4 stable slash commands
     assert.deepEqual(
       plan.claude_slash_commands.map((file) => `/${file.command}`),
-      slashCommands,
+      ["/yolo", ...slashCommands],
     );
   });
 

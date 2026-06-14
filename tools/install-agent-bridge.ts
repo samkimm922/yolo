@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -271,6 +271,51 @@ function executionApprovalRule(command = Object()) {
     return "- Execution approval must be current and specific to this run/fix scope.";
   }
   return "- User confirmation that this stage output looks good is not execution approval. It only authorizes the next no-code stage unless the user later invokes `/yolo-run` or `/yolo-fix` after checks pass.";
+}
+
+// BUG-2: bare /yolo router — status-first entry point.
+// No args → run yolo-status, follow guard recommendation.
+// Freeform args → dispatch by intent to demand/auto/ship/status.
+export function buildBareYoloSlashCommand({ yoloRoot = DEFAULT_YOLO_ROOT } = Object()) {
+  const statusCommand = getYoloCommand("status");
+  return [
+    "---",
+    `name: yolo`,
+    `description: ${statusCommand.description} With freeform args, dispatch by intent to the safe next stage.`,
+    `argument-hint: "[<your requirement or intent>]"`,
+    "allowed-tools:",
+    "  - Read",
+    "  - Bash",
+    "  - Glob",
+    "  - Grep",
+    "---",
+    "",
+    "# /yolo",
+    "",
+    "**Input**: $ARGUMENTS",
+    "",
+    `YOLO root: ${resolve(yoloRoot)}`,
+    "",
+    "## Objective",
+    "",
+    "Status-first router. When invoked without arguments, run `/yolo-status` first to read lifecycle state and follow the guard's recommended next step. When invoked with freeform arguments, dispatch by intent to the matching stage command.",
+    "",
+    "## Routing Rules",
+    "",
+    "- No arguments: run `yolo status` and follow the lifecycle guard recommendation.",
+    "- Freeform requirement text: dispatch to `/yolo-demand` (demand interview), `/yolo-auto` (full pipeline), `/yolo-ship` (delivery verdict), or `/yolo-status` (read state) by intent.",
+    "- If the user's intent is ambiguous, default to `/yolo-status` first.",
+    "- This command is a router, not a terminal stage. After routing, enforce the target stage's safety rules and stop points.",
+    "- Treat Claude Code chat as the user interface; do not ask the user to memorize terminal commands.",
+    "- Fail closed on missing PRD, unclear scope, dirty risky workspace, broken tests, provider failure, or gate failure.",
+    "",
+    "## Example",
+    "",
+    "```text",
+    "yolo",
+    "```",
+    "",
+  ].join("\n");
 }
 
 export function buildClaudeSlashCommand(commandName, { yoloRoot = DEFAULT_YOLO_ROOT } = Object()) {
@@ -567,7 +612,7 @@ export function buildAgentBridgeInstallPlan(options = Object()) {
   const claude_slash_commands = targets.includes("claude")
     ? scopes.flatMap((scope) => {
         const baseDir = scope === "user" ? homeDir : projectRoot;
-        return listYoloCommands({ recommended: true }).map((command) => {
+        const stableCommands = listYoloCommands({ recommended: true }).map((command) => {
           const commandName = primarySlashNameForCommand(command);
           const path = join(baseDir, ".claude/commands", `${commandName}.md`);
           return {
@@ -580,6 +625,18 @@ export function buildAgentBridgeInstallPlan(options = Object()) {
             content: buildClaudeSlashCommand(commandName, { yoloRoot }),
           };
         });
+        // BUG-2: bare /yolo router — status-first, dispatches by intent
+        const bareYoloPath = join(baseDir, ".claude/commands", "yolo.md");
+        const bareYolo = {
+          target: "claude",
+          scope,
+          path: bareYoloPath,
+          relative_path: displayRelativePath(baseDir, bareYoloPath, scope),
+          role: "claude_slash_command",
+          command: "yolo",
+          content: buildBareYoloSlashCommand({ yoloRoot }),
+        };
+        return [bareYolo, ...stableCommands];
       })
     : [];
 
@@ -637,6 +694,32 @@ function buildClaudeProjectSettings({ yoloRoot }) {
   return `${JSON.stringify(settings, null, 2)}\n`;
 }
 
+// BUG-3: manifest-based reconcile — track yolo-owned files and clean up orphans on upgrade.
+const MANIFEST_FILENAME = ".yolo-bridge-manifest.json";
+
+function manifestPathForBaseDir(baseDir) {
+  return join(baseDir, MANIFEST_FILENAME);
+}
+
+function readYoloBridgeManifest(baseDir) {
+  const path = manifestPathForBaseDir(baseDir);
+  if (!existsSync(path)) return null;
+  try {
+    const data = JSON.parse(readFileSync(path, "utf8"));
+    if (data && Array.isArray(data.entries)) return data;
+  } catch { /* corrupt manifest → treat as no manifest */ }
+  return null;
+}
+
+function buildManifestEntriesForScope(plan, scope, baseDir) {
+  const entries = [];
+  for (const file of [...plan.native_skill_files, ...plan.claude_slash_commands]) {
+    if (file.scope !== scope) continue;
+    entries.push(relativeToBase(baseDir, file.path));
+  }
+  return entries;
+}
+
 export function installAgentBridge(options = Object()) {
   const plan = buildAgentBridgeInstallPlan(options);
   const dryRun = options.dryRun === true || options.dry_run === true;
@@ -645,6 +728,26 @@ export function installAgentBridge(options = Object()) {
   const planned = [];
   const skipped = [];
   const overwritten = [];
+  const reconciled = [];
+
+  // BUG-3: reconcile — delete orphaned yolo entries from previous manifest before writing new files.
+  for (const scope of plan.scopes) {
+    const baseDir = scope === "user" ? plan.home_dir : plan.project_root;
+    const newEntries = buildManifestEntriesForScope(plan, scope, baseDir);
+    const oldManifest = readYoloBridgeManifest(baseDir);
+    if (!oldManifest) continue; // no previous manifest → do not delete anything
+    const orphanEntries = oldManifest.entries.filter((entry) => !newEntries.includes(entry));
+    for (const entry of orphanEntries) {
+      const orphanPath = join(baseDir, entry);
+      if (!existsSync(orphanPath)) continue;
+      if (dryRun) {
+        planned.push(`[reconcile] ${entry}`);
+      } else {
+        unlinkSync(orphanPath);
+        reconciled.push(entry);
+      }
+    }
+  }
 
   for (const file of plan.files) {
     const existing = existsSync(file.path) ? readFileSync(file.path, "utf8") : "";
@@ -663,6 +766,20 @@ export function installAgentBridge(options = Object()) {
     writePlainArtifact({ file, dryRun, force, written, planned, overwritten, skipped });
   }
 
+  // BUG-3: write manifest after files are written (non-dry-run only).
+  if (!dryRun) {
+    for (const scope of plan.scopes) {
+      const baseDir = scope === "user" ? plan.home_dir : plan.project_root;
+      const entries = buildManifestEntriesForScope(plan, scope, baseDir);
+      const manifest = {
+        schema: "yolo.bridge_manifest.v1",
+        generated_at: new Date().toISOString(),
+        entries,
+      };
+      writeFileSync(manifestPathForBaseDir(baseDir), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    }
+  }
+
   return {
     schema: "yolo.agent_bridge_install_result.v1",
     status: "success",
@@ -678,6 +795,7 @@ export function installAgentBridge(options = Object()) {
     written,
     overwritten,
     skipped,
+    reconciled,
     total_file_count: plan.total_file_count,
     within_budget: plan.within_budget,
     guarantees: {
