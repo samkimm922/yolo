@@ -149,7 +149,7 @@ describe("release readiness", () => {
   });
 
   test("release docs keep manual external, billable, public dogfood, and private blockers explicit", () => {
-    refreshMemoryCenter({ projectRoot: YOLO_DIR, stateRoot: YOLO_DIR });
+    refreshMemoryCenter({ projectRoot: YOLO_DIR, stateRoot: YOLO_DIR, dryRun: true });
     const docs = [
       "docs/api-reference.md",
       "docs/public-sdk-contract.md",
