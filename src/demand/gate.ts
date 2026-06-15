@@ -2,6 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { inspectStoryAtomicityFromDemand } from "./story-atomicity.js";
 import { validateLedgerChain, readLedgerJsonl } from "../runtime/evidence/ledger.js";
+import {
+  buildEvidenceRequirements,
+  detectProjectFactAssumptionSignal,
+  evidenceRequirementBlockers,
+  evidenceRequirementNextActions,
+  evidenceRequirementSummary,
+} from "./evidence-requirements.js";
 
 export const DEMAND_READINESS_SCHEMA_VERSION = "1.0";
 export const DEMAND_READINESS_SCHEMA = "yolo.demand.readiness.v1";
@@ -265,8 +272,7 @@ function projectFactGrounding(session = Object(), options = Object()) {
   const concreteRule = /(<=|>=|<|>|less than|greater than|below|above|equal|equals|at or below|at or above|per sku|configurable)/i.test(text);
   const concreteField = /\b([a-z]+[A-Za-z0-9]*_(?:threshold|floor|quantity|qty|units|available|stock)[A-Za-z0-9_]*|[a-z]+(?:Threshold|Quantity|Qty|Units|Available|Stock)[A-Za-z0-9]*)\b/.test(text);
   const fieldPassthrough = /\b(expose|return|include|map|copy|pass(?:ed)? through|preserve|透传|返回|包含|保留)\b/i.test(text);
-  const genericFieldAssumption = /(already|existing|receives?|contains?|present|available)[^\n.]{0,80}\b(field|payload|row|request|data|threshold|quantity|qty)\b/i.test(text)
-    || /\b(field|payload|row|request|data|threshold|quantity|qty)\b[^\n.]{0,80}(already|existing|receives?|contains?|present|available)/i.test(text);
+  const genericFieldAssumption = detectProjectFactAssumptionSignal(text).requires_project;
   const projectMentionsCriticalField = /\b(threshold|replenishment|floor|lowstock|low_stock|quantity|qty_available|qty)\b/i.test(projectText);
   const executionTargets = new Set(targetFiles(session));
   const targetFacts = targetFileFactRecords(session);
@@ -678,6 +684,8 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
   const prdMode = ["prd", "executable_prd"].includes(phase);
   const factGroundingRequired = prdMode || (deepMode && approval.approved === true && (hasExecutionScope || hasDeclaredTargetFacts));
   const factGroundingIssues = factGroundingRequired ? projectFactGrounding(session, options) : [];
+  const evidenceRequirements = buildEvidenceRequirements({}, session, options);
+  const requirementBlockers = evidenceRequirementBlockers(evidenceRequirements);
 
   const checks = [
     check(
@@ -822,10 +830,19 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
     ),
   ];
 
-  const blockers = checks.filter((item) => item.severity === "error" && !item.passed);
+  const blockers = [
+    ...checks.filter((item) => item.severity === "error" && !item.passed),
+    ...requirementBlockers,
+  ];
   const warnings = checks.filter((item) => item.severity === "warning" && !item.passed);
   const level = readinessLevel(checks, session);
-  const status = statusFromChecks(checks);
+  const status = requirementBlockers.length > 0 ? "blocked" : statusFromChecks(checks);
+  const requirementActions = evidenceRequirementNextActions(evidenceRequirements);
+  const defaultNextActions = blockers.length > 0
+    ? blockers.map((item) => item.message)
+    : warnings.length > 0
+      ? warnings.map((item) => item.message)
+      : ["Demand artifacts are ready for executable PRD compilation."];
   return {
     schema_version: DEMAND_READINESS_SCHEMA_VERSION,
     schema: DEMAND_READINESS_SCHEMA,
@@ -839,11 +856,11 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
     checks,
     blockers,
     warnings,
-    next_actions: blockers.length > 0
-      ? blockers.map((item) => item.message)
-      : warnings.length > 0
-        ? warnings.map((item) => item.message)
-        : ["Demand artifacts are ready for executable PRD compilation."],
+    evidence_requirements: evidenceRequirements,
+    evidence_requirement_summary: evidenceRequirementSummary(evidenceRequirements),
+    next_actions: requirementActions.length > 0
+      ? [...requirementActions, ...defaultNextActions.filter((item) => !requirementActions.includes(item))]
+      : defaultNextActions,
   };
 }
 

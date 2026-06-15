@@ -800,6 +800,16 @@ export function formatDemandStatusText(result = Object()) {
   if (!printedQuestion && Array.isArray(state.needed_evidence_agents) && state.needed_evidence_agents.length) {
     lines.push(`needed_evidence_agents: ${state.needed_evidence_agents.join(", ")}`);
   }
+  if (state.evidence_requirement_summary?.total > 0) {
+    lines.push(`evidence_requirements: pending=${state.evidence_requirement_summary.pending || 0} satisfied=${state.evidence_requirement_summary.satisfied || 0}`);
+    for (const item of state.evidence_requirement_summary.pending_items || []) {
+      lines.push(`  - ${item.id} ${item.kind}: ${item.topic}`);
+    }
+  }
+  if (Array.isArray(state.next_actions) && state.next_actions.length > 0) {
+    lines.push("next_actions:");
+    for (const action of state.next_actions) lines.push(`  - ${action}`);
+  }
   if (state.next_action) lines.push(`next_action: ${state.next_action}`);
   return lines.join("\n");
 }

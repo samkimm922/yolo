@@ -20,7 +20,7 @@ const EXTERNAL_INTENT_RE = new RegExp(
   "\\b(?:"
   + [
     "replicate", "clone", "match", "align(?:\\s+with)?", "port(?:\\s+from)?",
-    "mirror", "reproduce", "copy(?:\\s+from)?",
+    "mirror", "reproduce", "copy\\s+from\\s+(?:external|outside|third[_ -]?party|upstream)",
     "reference(?:\\s+(?:an?|the)\\s+(?:external|outside|third[_ -]?party)\\s+(?:source|site|api|library|service|product|implementation))?",
     "follow(?:\\s+the)?\\s+(?:external|outside|upstream)\\s+(?:source|spec|api|contract)",
   ].join("|")

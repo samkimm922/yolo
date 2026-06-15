@@ -2,6 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { detectProjectState } from "./project-state-detector.js";
 import { DEMAND_SESSION_SCHEMA, DEMAND_SESSION_SCHEMA_VERSION } from "./artifacts.js";
+import {
+  buildEvidenceRequirements,
+  evidenceRequirementBlockers,
+  evidenceRequirementNextActions,
+  evidenceRequirementSummary,
+  type EvidenceRequirement,
+} from "./evidence-requirements.js";
 
 export interface DemandTriageResult {
   schema_version: string;
@@ -38,6 +45,8 @@ export interface DemandPrdReadinessResult {
   assumptions: string[];
   required_evidence_agents: string[];
   evidence_agreement: { status: string; conflicts: DemandBlocker[] };
+  evidence_requirements: EvidenceRequirement[];
+  evidence_requirement_summary: unknown;
   prd_ready: boolean;
 }
 
@@ -63,11 +72,15 @@ export interface DemandSessionStateResult {
     question_queue: DemandQuestion[];
     evidence_tasks: { role: string; protocol: unknown; reason: string }[];
     needed_evidence_agents: string[];
+    evidence_requirements: EvidenceRequirement[];
+    evidence_requirement_summary: unknown;
     prd_ready: boolean;
     next_action: string;
+    next_actions: string[];
   };
   next_question: DemandQuestion | null;
   question_queue: DemandQuestion[];
+  next_actions: string[];
 }
 
 export const DEMAND_ROUTER_SCHEMA_VERSION = "1.0";
@@ -907,6 +920,8 @@ export function inspectDemandPrdReadiness(input = Object(), options = Object()):
   for (const conflict of agreement.conflicts) {
     blockerList.push(conflict);
   }
+  const evidenceRequirements = buildEvidenceRequirements(input, session);
+  blockerList.push(...evidenceRequirementBlockers(evidenceRequirements));
   if (triage.evidence_policy !== "none" && evidenceItems(session, input).length === 0 && requiredRoles.length === 0) {
     blockerList.push({
       code: "EVIDENCE_REQUIRED",
@@ -929,6 +944,8 @@ export function inspectDemandPrdReadiness(input = Object(), options = Object()):
     assumptions: pendingAssumptions,
     required_evidence_agents: requiredRoles,
     evidence_agreement: agreement,
+    evidence_requirements: evidenceRequirements,
+    evidence_requirement_summary: evidenceRequirementSummary(evidenceRequirements),
     prd_ready: blockers.length === 0,
   };
 }
@@ -984,6 +1001,7 @@ export function inspectEvidenceAgreement(results = []) {
 
 function stageFrom(readiness = Object(), triage = Object()) {
   if (readiness.prd_ready) return "prd_ready";
+  if (asArray(readiness.evidence_requirements).some((item) => item?.status === "pending")) return "evidence";
   const missingSlots = asArray(readiness.missing_slots).map(clean).filter(Boolean);
   const nonApprovalMissing = missingSlots.filter((slot) => slot !== "approval");
   const firstMissing = DEMAND_REQUIRED_PRD_SLOTS.find((slot) => nonApprovalMissing.includes(slot));
@@ -993,7 +1011,23 @@ function stageFrom(readiness = Object(), triage = Object()) {
   return "discuss";
 }
 
+function nextActionsFor(stage, triage = Object(), readiness = Object(), evidenceTasks = [], nextQuestion = null) {
+  const requirementActions = evidenceRequirementNextActions(readiness.evidence_requirements);
+  const actions = [];
+  actions.push(...requirementActions);
+  if (readiness.prd_ready) actions.push("Proceed to yolo prd after user confirms this demand state.");
+  else if (nextQuestion?.text) actions.push(`请回答：${nextQuestion.text}`);
+  else if (stage === "evidence") actions.push(`Run ${evidenceTasks.map((task) => task.role).join(" + ")} before treating project claims as facts.`);
+  else if (stage === "approval") actions.push("Ask for explicit approval after missing slots and assumptions are resolved.");
+  else if (stage === "requirements") actions.push("Fill missing PRD contract slots, especially acceptance criteria and scope boundaries.");
+  else if (stage === "clarify") actions.push("Ask focused clarification questions for the missing slots.");
+  else actions.push(triage.route === "careful" ? "Discuss risks and evidence blockers before PRD." : "Continue fast demand clarification.");
+  return [...new Set(actions.filter(Boolean))];
+}
+
 function nextActionFor(stage, triage = Object(), readiness = Object(), evidenceTasks = [], nextQuestion = null) {
+  const actions = nextActionsFor(stage, triage, readiness, evidenceTasks, nextQuestion);
+  if (actions.length > 0) return actions[0];
   if (readiness.prd_ready) return "Proceed to yolo prd after user confirms this demand state.";
   if (nextQuestion?.text) return `请回答：${nextQuestion.text}`;
   if (stage === "evidence") return `Run ${evidenceTasks.map((task) => task.role).join(" + ")} before treating project claims as facts.`;
@@ -1011,6 +1045,7 @@ export function buildDemandSessionState(input = Object(), options = Object()): D
   const stage = stageFrom(readiness, triage);
   const questionQueue = asArray(readiness.question_queue);
   const nextQuestion = readiness.next_question || questionQueue[0] || null;
+  const nextActions = nextActionsFor(stage, triage, readiness, evidenceTasks, nextQuestion);
   const state = {
     schema_version: DEMAND_SESSION_STATE_SCHEMA_VERSION,
     schema: DEMAND_SESSION_STATE_SCHEMA,
@@ -1027,8 +1062,11 @@ export function buildDemandSessionState(input = Object(), options = Object()): D
     question_queue: questionQueue,
     evidence_tasks: evidenceTasks,
     needed_evidence_agents: evidenceTasks.map((task) => task.role),
+    evidence_requirements: readiness.evidence_requirements,
+    evidence_requirement_summary: readiness.evidence_requirement_summary,
     prd_ready: readiness.prd_ready,
-    next_action: nextActionFor(stage, triage, readiness, evidenceTasks, nextQuestion),
+    next_action: nextActions[0] || nextActionFor(stage, triage, readiness, evidenceTasks, nextQuestion),
+    next_actions: nextActions,
   };
   return {
     status: readiness.prd_ready ? "success" : "blocked",
@@ -1041,5 +1079,6 @@ export function buildDemandSessionState(input = Object(), options = Object()): D
     state,
     next_question: nextQuestion,
     question_queue: questionQueue,
+    next_actions: nextActions,
   };
 }

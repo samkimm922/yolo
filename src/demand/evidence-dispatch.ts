@@ -11,7 +11,10 @@ import {
   inspectDemandPrdReadiness,
 } from "./router.js";
 import { redact } from "../lib/security/redact.js";
-import { detectExternalResearchSignal } from "../lib/research-signal.js";
+import {
+  evidenceRequirementBlockers,
+  evidenceRequirementSummary,
+} from "./evidence-requirements.js";
 
 export const DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION = "1.0";
 export const DEMAND_EVIDENCE_DISPATCH_SCHEMA = "yolo.demand.evidence_dispatch.v1";
@@ -158,33 +161,6 @@ function evidenceScopeErrors(value) {
     if (VALID_EVIDENCE_SCOPES.has(scope)) return [];
     return [`evidence[${index}] must declare scope as project, external, user, or unknown.`];
   });
-}
-
-function demandRequestsExternalResearch(input = Object(), plan = Object()) {
-  const text = [
-    input.objective,
-    input.problem,
-    input.research,
-    input.external_research,
-    input.success_criteria,
-    input.constraints,
-    input.risks,
-    plan.demand_status?.state?.slot_values?.problem,
-    plan.demand_status?.state?.slot_values?.desired_outcome,
-  ].flatMap(asArray).map(clean).join("\n");
-  // Shared single-source detection (src/lib/research-signal.ts). Same URL +
-  // explicit-request patterns as before, plus external-reference intent, so
-  // discovery and demand agree on what "requires external evidence" means.
-  return detectExternalResearchSignal(text).requires_external;
-}
-
-function externalEvidencePresent(agentResults = []) {
-  return asArray(agentResults).some((result) => asArray(result?.evidence).some((record) => {
-    if (!record || typeof record !== "object") return false;
-    const scope = clean(record.scope || record.evidence_scope || record.source_scope).toLowerCase();
-    const source = clean(record.source || record.kind || record.type).toLowerCase();
-    return scope === "external" || !!record.url || source.startsWith("external_");
-  }));
 }
 
 function readDemandSession(input = Object(), projectRoot) {
@@ -349,6 +325,7 @@ export function buildDemandEvidenceAgentPrompt({ action = Object(), plan = Objec
     "- Do not treat assumptions as facts.",
     "- missing must be [] when nothing is missing; never put status notes such as 'no missing data identified' into missing.",
     "- Every evidence record must include scope: project, external, user, or unknown.",
+    "- If Current demand status includes evidence_requirements, any evidence record that satisfies one must set covers to the matching requirement id.",
     "- Project facts require project-scoped evidence from code, tests, docs, config, logs, or artifacts, with a repo-relative path or file locator.",
     "- If a project fact cannot be verified from files/docs/tests/logs/artifacts, put it in missing or assumptions.",
     "- If the demand explicitly asks for external research/fetch/search, actually use an available web/fetch/search-capable tool such as WebFetch, WebSearch, an MCP web reader, browser fetch, or equivalent. Record those records as scope=external; if no such tool is available, put that in missing.",
@@ -394,6 +371,7 @@ export function buildDemandEvidenceAgentPrompt({ action = Object(), plan = Objec
           source: "project_code | project_test | project_docs | project_config | project_log | project_artifact | external_web | external_docs | user | unknown",
           summary: "short evidence summary",
           why: "why this evidence matters",
+          covers: ["EVREQ-... requirement ids satisfied by this record"],
         },
       ],
       assumptions: ["unverified assumptions, if any"],
@@ -674,13 +652,12 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
     path: change.path,
     change: change.change,
   }));
-  const externalResearchBlockers = demandRequestsExternalResearch(input, plan) && !externalEvidencePresent(result.agent_results)
-    ? [{
-      code: "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED",
-      message: "Demand explicitly requested external web/fetch/search evidence, but no agent result included scope=external evidence with a URL or external source.",
-    }]
-    : [];
-  const runtimeBlockers = [...boundaryBlockers, ...externalResearchBlockers];
+  const requirementBlockers = evidenceRequirementBlockers(readiness.evidence_requirements);
+  const readinessBlockerKeys = new Set(asArray(readiness.blockers).map((blocker) => `${blocker.code}\u0000${blocker.evidence_requirement_id || blocker.id || ""}\u0000${blocker.topic || ""}`));
+  const dispatchRequirementBlockers = requirementBlockers.filter((blocker) =>
+    !readinessBlockerKeys.has(`${blocker.code}\u0000${blocker.evidence_requirement_id || blocker.id || ""}\u0000${blocker.topic || ""}`)
+  );
+  const runtimeBlockers = [...boundaryBlockers, ...dispatchRequirementBlockers];
   const finalReadiness = runtimeBlockers.length > 0
     ? {
       ...readiness,
@@ -702,6 +679,8 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
       blockers: finalReadiness.blockers,
       assumptions: finalReadiness.assumptions,
       missing_slots: finalReadiness.missing_slots,
+      evidence_requirements: finalReadiness.evidence_requirements || [],
+      evidence_requirement_summary: evidenceRequirementSummary(finalReadiness.evidence_requirements || []),
       prd_ready: finalReadiness.prd_ready,
     },
   };
