@@ -507,4 +507,41 @@ describe("agent bridge installer", () => {
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
+
+  // Regression: the PreToolUse hook command must resolve to the REAL built hook
+  // whether yoloRoot is the package root (source) or the dist dir (built CLI).
+  // The original code blindly joined yoloRoot + "dist/hooks", producing
+  // dist/dist/hooks when run from the built CLI — a path that does not exist,
+  // so Claude Code silently skipped the gate (no enforcement). The earlier test
+  // only checked the filename substring, not that the path resolves.
+  test("project settings hook path resolves to an existing file (no dist/dist doubling)", () => {
+    const base = mkdtempSync(join(tmpdir(), "yolo-hookpath-"));
+    try {
+      mkdirSync(join(base, "dist", "hooks"), { recursive: true });
+      writeFileSync(join(base, "dist", "hooks", "pre-tool-lifecycle-gate.js"), "// built hook\n", "utf8");
+
+      const projectRoot = mkdtempSync(join(tmpdir(), "yolo-proj-"));
+      try {
+        const hookPathFor = (yoloRoot) => {
+          const plan = buildAgentBridgeInstallPlan({ projectRoot, yoloRoot, targets: "claude" });
+          const settingsFile = plan.claude_project_hooks.find((f) => f.relative_path === ".claude/settings.json");
+          assert.ok(settingsFile, "claude project settings.json must be planned");
+          const command = JSON.parse(settingsFile.content).hooks.PreToolUse[0].command;
+          return command.match(/node "([^"]+)"/)[1];
+        };
+
+        const fromRoot = hookPathFor(base);
+        assert.ok(!fromRoot.includes("dist/dist"), `must not double dist: ${fromRoot}`);
+        assert.equal(existsSync(fromRoot), true, `hook must exist: ${fromRoot}`);
+
+        const fromDist = hookPathFor(join(base, "dist"));
+        assert.ok(!fromDist.includes("dist/dist"), `must not double dist when yoloRoot is dist: ${fromDist}`);
+        assert.equal(existsSync(fromDist), true, `hook must exist when yoloRoot is dist: ${fromDist}`);
+      } finally {
+        rmSync(projectRoot, { recursive: true, force: true });
+      }
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
 });

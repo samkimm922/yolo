@@ -679,7 +679,16 @@ export function buildAgentBridgeInstallPlan(options = Object()) {
 }
 
 function buildClaudeProjectSettings({ yoloRoot }) {
-  const hookJs = join(resolve(yoloRoot), "dist", "hooks", "pre-tool-lifecycle-gate.js");
+  // yoloRoot is the package root when run from source (repo/) but the dist dir
+  // when run from the built CLI (repo/dist/), because DEFAULT_YOLO_ROOT =
+  // resolve(__dirname, "..") differs between source and build. Resolve to the
+  // hook that actually exists so the path never doubles to `dist/dist/hooks`.
+  const root = resolve(yoloRoot);
+  const hookCandidates = [
+    join(root, "dist", "hooks", "pre-tool-lifecycle-gate.js"),
+    join(root, "hooks", "pre-tool-lifecycle-gate.js"),
+  ];
+  const hookJs = hookCandidates.find((candidate) => existsSync(candidate)) || hookCandidates[0];
   const settings = {
     hooks: {
       PreToolUse: [
