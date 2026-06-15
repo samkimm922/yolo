@@ -124,7 +124,7 @@ describe("post commit outcome helpers", () => {
     assert.equal(outcome.reason, "0 业务代码");
     assert.equal(outcome.doneReason, "0 业务代码");
     assert.equal(outcome.transition.result.status, "FAILED_NO_CODE");
-    assert.equal(outcome.transition.result.reason, "仅元数据改动,无 src/cloudfunctions 业务代码");
+    assert.equal(outcome.transition.result.reason, "仅元数据改动,无真实业务代码");
     assert.deepEqual(outcome.transition.prd_update, {
       status: "failed_no_code",
       failReason: "0 业务代码改动",

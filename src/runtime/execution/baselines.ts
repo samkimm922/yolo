@@ -4,7 +4,7 @@ import {
   writeFileSync as defaultWriteFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { safeExecSync as defaultExecSync, safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 
@@ -134,6 +134,14 @@ function currentCommit(rootDir, execSync = defaultExecSync) {
   }
 }
 
+function baselineCommandEnv(rootDir) {
+  const localBin = join(rootDir, "node_modules", ".bin");
+  return {
+    ...process.env,
+    PATH: [localBin, process.env.PATH || ""].filter(Boolean).join(delimiter),
+  };
+}
+
 export function baselineArtifactHash(baseline = Object()) {
   const meta = { ...(baseline.meta || {}) };
   delete meta.artifact_hash;
@@ -186,14 +194,29 @@ export function runBaselineCommand({
 } = Object()) {
   // P12.I1: default executor is safeExecSync (argv parse, reject shell metacharacters,
   // no shell). Tests may inject a mock execSync for unit control.
+  const rawCommand = String(command || "").trim();
+  if (!rawCommand) {
+    return {
+      command: rawCommand,
+      exit_code: 0,
+      stdout: "",
+      stderr: "",
+      output: "",
+      signal: null,
+      error: null,
+      status: "skipped",
+      reason: "baseline_command_not_configured",
+    };
+  }
   try {
-    const stdout = execSync(command, {
+    const stdout = execSync(rawCommand, {
       cwd: rootDir,
       encoding: "utf8",
       timeout,
+      env: baselineCommandEnv(rootDir),
     });
     return {
-      command,
+      command: rawCommand,
       exit_code: 0,
       stdout,
       stderr: "",
@@ -212,7 +235,7 @@ export function runBaselineCommand({
       /\bnot found\b|is not recognized|command not found/i.test(output) ||
       (!output.trim() && exitCode !== 0);
     return {
-      command,
+      command: rawCommand,
       exit_code: exitCode,
       stdout,
       stderr,
@@ -324,7 +347,7 @@ export function captureExecutionBaselines({
   const stashRef = createDirtyWorktreeSnapshot({ rootDir, execSync });
   const tscBaseline = captureTscBaseline({
     rootDir,
-    command: config.build.type_check,
+    command: config.build?.type_check || "",
     baselinePath: tscBaselinePath,
     execSync,
     writeFileSync,
@@ -332,7 +355,7 @@ export function captureExecutionBaselines({
   });
   const eslintBaseline = captureEslintBaseline({
     rootDir,
-    command: config.build.lint,
+    command: config.build?.lint || "",
     baselinePath: eslintBaselinePath,
     execSync,
     writeFileSync,
@@ -383,8 +406,12 @@ export function refreshBaselineAfterCommit({
     }
     try {
       const command = tool === "tsc"
-        ? config.build.type_check
-        : config.build.lint;
+        ? config.build?.type_check || ""
+        : config.build?.lint || "";
+      if (!String(command).trim()) {
+        results.push({ tool, skipped: true, reason: "baseline_command_not_configured" });
+        continue;
+      }
       // P12.I1: parse config command to argv, route through execFileSync DI
       // (default = safeExecFileSync, no shell). Rejects metacharacters at parse.
       const parsed = parseCommandToArgv(command);
@@ -402,6 +429,7 @@ export function refreshBaselineAfterCommit({
             cwd: rootDir,
             encoding: "utf8",
             timeout: 120000,
+            env: baselineCommandEnv(rootDir),
           });
           output = String(stdout || "");
         } catch (error) {

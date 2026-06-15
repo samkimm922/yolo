@@ -13,7 +13,7 @@ import {
   writeSync as defaultWriteSync,
 } from "node:fs";
 import { execSync as defaultExecSync } from "node:child_process";
-import { basename, join, resolve, sep } from "node:path";
+import { basename, delimiter, join, resolve, sep } from "node:path";
 import {
   BASELINE_TOOLS,
   baselineFileName,
@@ -28,6 +28,14 @@ import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 export function createRunnerError(message, exitCode = 1, details = Object()) {
   const error = Object.assign(new Error(message), { exitCode }, details);
   return error;
+}
+
+function baselineCommandEnv(rootDir) {
+  const localBin = join(rootDir, "node_modules", ".bin");
+  return {
+    ...process.env,
+    PATH: [localBin, process.env.PATH || ""].filter(Boolean).join(delimiter),
+  };
 }
 
 export function acquireRunnerPidLock({
@@ -199,7 +207,26 @@ export function initializeMissingBaselines({
     if (existsSync(baselinePath)) continue;
     log("BASELINE", "init", `初始化 ${tool} baseline...`);
     try {
-      const rawCommand = tool === "tsc" ? config.build.type_check : config.build.lint;
+      const rawCommand = String(tool === "tsc" ? config.build?.type_check || "" : config.build?.lint || "").trim();
+      if (!rawCommand) {
+        const createdAt = nowIso();
+        const baseline = buildBaselineArtifact({
+          tool,
+          keys: [],
+          command: rawCommand,
+          exitCode: 0,
+          stdout: "",
+          stderr: "",
+          status: "skipped",
+          reason: "baseline_command_not_configured",
+          createdAt,
+          updatedAt: createdAt,
+        });
+        writeFileSync(baselinePath, JSON.stringify(baseline, null, 2), "utf8");
+        log("BASELINE", "skip", `${tool} baseline: 未配置命令，跳过`);
+        initialized.push({ tool, keys: [], status: "skipped", skipped: true, blocked: false, baseline });
+        continue;
+      }
       // P12.I1: parse config command to argv, route through execFileSync DI
       // (default = safeExecFileSync, no shell). Rejects metacharacters at parse.
       const parsed = parseCommandToArgv(rawCommand);
@@ -221,6 +248,7 @@ export function initializeMissingBaselines({
             cwd: rootDir,
             encoding: "utf8",
             timeout: 120000,
+            env: baselineCommandEnv(rootDir),
           });
           output = String(stdout || "");
         } catch (error) {
@@ -261,7 +289,7 @@ export function initializeMissingBaselines({
       const baseline = buildBaselineArtifact({
         tool,
         keys: [],
-        command: tool === "tsc" ? config.build.type_check : config.build.lint,
+        command: tool === "tsc" ? config.build?.type_check || "" : config.build?.lint || "",
         exitCode: 1,
         stderr: error?.message || String(error),
         status: "blocked",

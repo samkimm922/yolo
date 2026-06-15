@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluatePostConditions, toGateFormat } from "../prd/contract.js";
+import { loadConfig } from "../lib/config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const yoloRoot = resolve(__dirname, "../..");
@@ -29,6 +30,21 @@ function loadTask(prdPath, taskId) {
   const prd = JSON.parse(readFileSync(prdPath, "utf-8"));
   const task = (prd.tasks || []).find((item) => item.id === taskId) || null;
   return { prd, task };
+}
+
+function resolveGateConfig({ argv, contractRoot, stateRoot } = Object()) {
+  const explicitConfigPath = argValue(argv, "--config") || argValue(argv, "--config-path");
+  if (explicitConfigPath) {
+    return loadConfig({ path: explicitConfigPath, forceReload: true });
+  }
+
+  const candidates = [
+    stateRoot ? join(resolve(stateRoot), "config.json") : null,
+    contractRoot ? join(resolve(contractRoot), ".yolo", "config.json") : null,
+  ].filter(Boolean);
+  const configPath = candidates.find((path) => existsSync(path));
+  if (configPath) return loadConfig({ path: configPath, forceReload: true });
+  return loadConfig(true);
 }
 
 function applyWarnEscalation(task, { stateRoot } = Object()) {
@@ -89,6 +105,7 @@ export function runGateCli(argv = process.argv.slice(2), io = Object()) {
   const contractRoot = argValue(argv, "--cwd") || defaultProjectRoot;
   const stateRoot = argValue(argv, "--state-root");
   const logDir = io.logDir || argValue(argv, "--log-dir") || (stateRoot ? join(resolve(stateRoot), "state/runtime") : defaultLogDir);
+  const gateConfig = resolveGateConfig({ argv, contractRoot, stateRoot });
   const startTime = Date.now();
 
   stdout.write(`\n${C}${B}═══ YOLO Gate (Contract) ═══${X}  Task: ${taskId}  Mode: ${mode}\n\n`);
@@ -111,7 +128,7 @@ export function runGateCli(argv = process.argv.slice(2), io = Object()) {
     stdout.write(`${Y}  WARN→FAIL 升级: ${conditionId}（已出现 ≥5 次）${X}\n`);
   }
 
-  const contractResult = evaluatePostConditions(task, prd, { root: contractRoot });
+  const contractResult = evaluatePostConditions(task, prd, { root: contractRoot, config: gateConfig });
   const gateFormat = toGateFormat(contractResult);
 
   for (const gate of gateFormat.gates) {

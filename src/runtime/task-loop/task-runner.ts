@@ -90,7 +90,7 @@ export async function runTaskWithRuntime({
     writeTaskResult,
     updatePrdTaskStatus,
     applySplitSuggestionsToPrd,
-    isBusinessFile,
+    isBusinessFile: (file) => isBusinessFile(file, { config }),
     logProgress,
     logTaskBash,
     logTaskDone,

@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+import { DEFAULT_CONFIG_PATH, loadConfig } from "../src/lib/config.js";
 import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 import { runRunnerRuntime } from "../src/runtime/runner-runtime.js";
 
@@ -115,6 +116,65 @@ function writeRunnablePrd(prdPath) {
 }
 
 describe("runner runtime final verdict", () => {
+  test("loads target project .yolo/config.json before invoking runner-core", async () => {
+    const projectRoot = tempProject();
+    const stateRoot = join(projectRoot, ".yolo");
+    const prdPath = join(stateRoot, "data/prd/current/runtime.json");
+    let seenOptions = null;
+    try {
+      writeFileSync(join(projectRoot, "README.md"), "# runner runtime\n", "utf8");
+      writeJson(join(stateRoot, "config.json"), {
+        version: "2.0",
+        project: { name: "TargetProject", root: "." },
+        build: {
+          type_check: "echo target-typecheck",
+          lint: "echo target-lint",
+        },
+      });
+      writeRunnablePrd(prdPath);
+      const check = prepareLifecycle(projectRoot, stateRoot, prdPath);
+      assert.notEqual(check.status, "blocked", JSON.stringify(check.blockers, null, 2));
+
+      await runRunnerRuntime({
+        prdPath,
+        projectRoot,
+        stateRoot,
+        startProgressServer: false,
+        initializeBaselines: false,
+        writeLifecycle: false,
+      }, {
+        runner: {
+          run: async (_prd, options) => {
+            seenOptions = options;
+            return {
+              status: "success",
+              summary: "runner completed",
+              exit_code: 0,
+              run_id: "run-mock",
+              prd: prdPath,
+              completed: ["FIX-RUNTIME-001"],
+              failed: [],
+              skipped: [],
+              blocked: [],
+              contractReview: [],
+              report: {
+                status: "success",
+                summary: { failed: 0, blocked: 0, evidence_failures: 0 },
+              },
+            };
+          },
+        },
+      });
+
+      assert.equal(seenOptions.config.project.name, "TargetProject");
+      assert.equal(seenOptions.config.build.type_check, "echo target-typecheck");
+      assert.equal(seenOptions.config.build.lint, "echo target-lint");
+    } finally {
+      loadConfig({ path: DEFAULT_CONFIG_PATH, forceReload: true });
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("returns error when mocked runner exits 0 with blocked tasks", async () => {
     const projectRoot = tempProject();
     const stateRoot = join(projectRoot, ".yolo");

@@ -18,6 +18,9 @@ project:
     - ".git"
 
 build:
+  # Optional inclusion globs for business code classification.
+  # Empty/default uses source file extensions plus metadata directory excludes.
+  business_globs: []
   type_check: "npm run typecheck"
   lint: "npm run lint"
   dead_code: ""

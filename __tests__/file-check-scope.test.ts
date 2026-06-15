@@ -229,6 +229,36 @@ describe("business_code_min scope classification", () => {
     assert.equal(result.found, 1);
   });
 
+  test("counts component layout source files as business code", () => {
+    const result = evalBusinessCodeMin(
+      { min: 1 },
+      {},
+      "/repo",
+      fakeExec({
+        "git diff --name-only HEAD": "components/board/top-bar.tsx\n",
+        "git ls-files --others --exclude-standard": "",
+      }),
+    );
+    assert.equal(result.passed, true);
+    assert.equal(result.found, 1);
+  });
+
+  test("honors configured business_globs for business_code_min", () => {
+    const result = evalBusinessCodeMin(
+      { min: 1 },
+      {},
+      "/repo",
+      fakeExec({
+        "git diff --name-only HEAD": "components/x.tsx\n",
+        "git ls-files --others --exclude-standard": "",
+      }),
+      { config: { build: { business_globs: ["app/**", "lib/**"] } } },
+    );
+    assert.equal(result.passed, false);
+    assert.equal(result.found, 0);
+    assert.match(result.detail, /business_globs: app\/\*\*, lib\/\*\*/);
+  });
+
   test("uses filesystem worktree baseline hashes when git diff is unavailable", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-business-code-"));
     try {

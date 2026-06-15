@@ -303,6 +303,46 @@ describe("run lifecycle startup helpers", () => {
     assert.equal(baseline.meta.artifact_hash, baselineArtifactHash(baseline));
   });
 
+  test("initializeMissingBaselines uses npx-form typecheck and skips unconfigured lint", () => {
+    const writes = new Map();
+    const calls = [];
+    const result = initializeMissingBaselines({
+      runtimeDir: "/repo/state/runtime",
+      rootDir: "/repo",
+      config: { build: { type_check: "npx tsc --noEmit", lint: "" } },
+      existsSync: () => false,
+      writeFileSync: (file, content) => writes.set(file, content),
+      execFileSync: (bin, args, options) => {
+        calls.push({ bin, args, options });
+        if (bin === "tsc") {
+          const error = new Error("tsc: command not found") as Error & { status: number; stderr: string };
+          error.status = 127;
+          error.stderr = "tsc: command not found\n";
+          throw error;
+        }
+        assert.equal(bin, "npx");
+        assert.deepEqual(args, ["tsc", "--noEmit"]);
+        assert.match(options.env.PATH, /^\/repo\/node_modules\/\.bin/);
+        return "";
+      },
+      log: () => {},
+      nowIso: () => "2026-05-24T00:00:00.000Z",
+    });
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(result.map((item) => [item.tool, item.status, item.blocked, item.skipped || false]), [
+      ["tsc", "pass", false, false],
+      ["eslint", "skipped", false, true],
+    ]);
+    const tscBaseline = JSON.parse(writes.get("/repo/state/runtime/tsc-baseline.json"));
+    const eslintBaseline = JSON.parse(writes.get("/repo/state/runtime/eslint-baseline.json"));
+    assert.equal(tscBaseline.meta.command, "npx tsc --noEmit");
+    assert.equal(tscBaseline.meta.status, "pass");
+    assert.equal(eslintBaseline.meta.command, "");
+    assert.equal(eslintBaseline.meta.status, "skipped");
+    assert.equal(eslintBaseline.meta.reason, "baseline_command_not_configured");
+  });
+
   test("cleanupRetryRoundFiles deletes stale retry PRDs but keeps the current PRD", () => {
     const removed = [];
     const result = cleanupRetryRoundFiles({

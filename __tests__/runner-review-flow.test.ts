@@ -541,7 +541,7 @@ describe("runner review fix execution flow", () => {
     assert.match(executionCommitFlowSource, /buildOutOfScopeBlock\(\{/);
     assert.match(executionCommitFlowSource, /buildCommitSkipDecision\(\{/);
     assert.match(executionCommitFlowSource, /task\.task_kind !== "dry_run_artifact" \|\| outOfScope\.length === 0/);
-    assert.match(runnerSource, /buildCommitChangeContext\(\{\s*rootDir:\s*ROOT,\s*task,\s*worktreeFiles,\s*isFileAllowedByScope,\s*\}\)/);
+    assert.match(runnerSource, /buildCommitChangeContext\(\{\s*rootDir:\s*ROOT,\s*task,\s*worktreeFiles,\s*isFileAllowedByScope,\s*config:\s*runtimeConfig,\s*\}\)/);
     assert.match(executionChangeSetSource, /scopedOutOfScopeFiles\(code,\s*task,\s*\{\s*isFileAllowedByScope,\s*\}\)/);
     assert.match(executionChangeSetSource, /!isFileAllowedByScope\(file,\s*scope\)/);
     assert.match(gatePassFlowSource, /buildPostCommitOutcome\(\{/);

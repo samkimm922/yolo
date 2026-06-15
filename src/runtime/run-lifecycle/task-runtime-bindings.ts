@@ -8,6 +8,10 @@ function runtimeScript(packageRoot, relativePath) {
   return join(packageRoot, "dist", relativePath);
 }
 
+function resolveConfig(config) {
+  return typeof config === "function" ? config() : config;
+}
+
 export function detectRunnerModelProvider({ config, execSync: _execSync, detectProvider }) {
   // P12.I1: PATH walk via fs.accessSync — no sh -c, no shell:true.
   return detectProvider({
@@ -34,7 +38,7 @@ export function createRunnerWorktreeHandlers({
         taskId,
         rootDir: getRootDir(),
         worktreeRoot: getWorktreeRoot(),
-        config,
+        config: resolveConfig(config),
       });
       setActiveGitSession({ activeWorktree: wt.path, activeBranch: wt.branch });
       return wt;

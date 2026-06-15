@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import { isWithin } from "../security/path-guard.js";
 import { config } from "../config.js";
 import { execCommand } from "../security/safe-exec.js";
+import { businessFilePolicyDescription, isBusinessFile } from "../../runtime/execution/change-set.js";
 
 function runCommand(command, ROOT, timeout) {
   // P12.I1: route through safe-exec — untrusted command strings parsed to argv
@@ -115,11 +116,12 @@ function changedFilesFromFilesystemBaseline(ROOT, taskScope = Object()) {
   return changed;
 }
 
-export function evalBusinessCodeMin(params, taskScope, ROOT, exec) {
+export function evalBusinessCodeMin(params, taskScope, ROOT, exec, options = Object()) {
   if (taskScope?.expected_zero_business_code === true) {
     return { passed: true, detail: "task 声明 expected_zero_business_code,跳过" };
   }
   const minFiles = params.min ?? 1;
+  const businessConfig = options.config || config;
 
   const diffOut = exec("git diff --name-only HEAD");
   const untrackedOut = exec("git ls-files --others --exclude-standard");
@@ -130,29 +132,12 @@ export function evalBusinessCodeMin(params, taskScope, ROOT, exec) {
     for (const file of changedFilesFromFilesystemBaseline(ROOT, taskScope)) all.add(file);
   }
 
-  const isBusiness = (f) => {
-    if (!f) return false;
-    if (f.startsWith(".yolo/")) return false;
-    if (f.startsWith(".yolo-backup/")) return false;
-    if (f.startsWith(".claude/")) return false;
-    if (f.startsWith("scripts/")) return false;
-    if (f.startsWith("docs/")) return false;
-    if (/\.md$/i.test(f)) return false;
-    if (f.includes("/state/")) return false;
-    if (f.startsWith("src/")) return true;
-    if (f.startsWith("cloudfunctions/")) return true;
-    if (f.startsWith("tests/")) return true;
-    if (f.startsWith("__tests__/")) return true;
-    if (f.includes("/__tests__/")) return true;
-    return false;
-  };
-
-  const businessFiles = [...all].filter(isBusiness);
-  const whitelistDesc = "src/**, cloudfunctions/**, __tests__/**, tests/**";
+  const businessFiles = [...all].filter((file) => isBusinessFile(file, { config: businessConfig }));
+  const policyDesc = businessFilePolicyDescription({ config: businessConfig });
   if (businessFiles.length < minFiles) {
     return {
       passed: false,
-      detail: `未检测到真业务代码改动 (白名单: ${whitelistDesc}; 检测到 ${businessFiles.length} < ${minFiles})`,
+      detail: `未检测到真业务代码改动 (${policyDesc}; 检测到 ${businessFiles.length} < ${minFiles})`,
       found: businessFiles.length,
     };
   }
