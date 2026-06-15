@@ -552,4 +552,34 @@ describe("agent bridge installer", () => {
       rmSync(base, { recursive: true, force: true });
     }
   });
+
+  // Schema-drift guard: EVERY generated PreToolUse/PostToolUse entry must match the
+  // Claude Code hook schema { matcher, hooks: [{ type, command }] }. A malformed entry
+  // makes Claude Code reject the whole settings.json and silently skip all hooks — the
+  // exact bug that left the BUG-C1 lifecycle gate unloaded despite green hook-script tests.
+  test("generated .claude/settings.json conforms to the Claude Code hook schema", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "yolo-hookschema-"));
+    try {
+      const plan = buildAgentBridgeInstallPlan({ projectRoot, yoloRoot: "/tmp/yolo", targets: "claude" });
+      const settingsFile = plan.claude_project_hooks.find((f) => f.relative_path === ".claude/settings.json");
+      assert.ok(settingsFile, "claude project settings.json must be planned");
+      const hooks = JSON.parse(settingsFile.content).hooks || {};
+      const groups = Object.values(hooks).filter(Array.isArray);
+      assert.ok(groups.length > 0, "settings.json must declare at least one hook group");
+      for (const entries of groups) {
+        for (const entry of entries) {
+          assert.equal(typeof entry.matcher, "string", "each hook entry needs a string matcher");
+          assert.ok(Array.isArray(entry.hooks), "each hook entry needs a nested hooks array");
+          assert.ok(entry.hooks.length > 0, "nested hooks array must be non-empty");
+          assert.equal(entry.command, undefined, "command must not sit on the entry itself");
+          for (const h of entry.hooks) {
+            assert.equal(h.type, "command", "nested hook type must be 'command'");
+            assert.equal(typeof h.command, "string", "nested hook needs a string command");
+          }
+        }
+      }
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
 });
