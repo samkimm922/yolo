@@ -333,6 +333,7 @@ export async function runRunnerRuntime(input = Object(), options = Object()) {
       agentCommand: input.agentCommand || input.agent_command || input.customCommand || input.custom_command || options.agentCommand || options.agent_command || options.customCommand || options.custom_command,
       config: runConfig,
       startProgressServer: input.startProgressServer ?? input.start_progress_server ?? options.startProgressServer ?? options.start_progress_server,
+      runReviewLoop: input.runReviewLoop ?? input.run_review_loop ?? options.runReviewLoop ?? options.run_review_loop,
       initializeBaselines: input.initializeBaselines ?? input.initialize_baselines ?? options.initializeBaselines ?? options.initialize_baselines,
       exitOnComplete: false,
     });

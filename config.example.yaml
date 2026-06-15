@@ -32,6 +32,7 @@ ai:
   model: "claude-sonnet-4-6"
   timeout_ms: 480000
   settings: ""
+  claude_permission_mode: "acceptEdits"
 
 gate:
   timeout:

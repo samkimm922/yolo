@@ -99,6 +99,8 @@ export function parseYoloArgs(argv = process.argv.slice(2)) {
     collectEvidence: false,
     executeAdapter: false,
     allowAdapterCommands: false,
+    startProgressServer: undefined,
+    runReviewLoop: undefined,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -119,6 +121,10 @@ export function parseYoloArgs(argv = process.argv.slice(2)) {
       options.executeAdapter = true;
     } else if (arg === "--allow-adapter-commands") {
       options.allowAdapterCommands = true;
+    } else if (arg === "--no-progress-server") {
+      options.startProgressServer = false;
+    } else if (arg === "--no-review-loop") {
+      options.runReviewLoop = false;
     } else if (arg === "--prd" || arg.startsWith("--prd=")) {
       const read = readArgValue(argv, i, "--prd");
       input.prdPath = read.value;
@@ -392,6 +398,14 @@ export function parseYoloCheckArgs(argv = []) {
     } else if (arg === "--approval-artifact" || arg.startsWith("--approval-artifact=") || arg === "--approval" || arg.startsWith("--approval=")) {
       const read = readArgValue(argv, i, arg.startsWith("--approval=") ? "--approval" : "--approval-artifact");
       input.approvalArtifact = read.value;
+      i += read.consumed;
+    } else if (arg === "--run-report" || arg.startsWith("--run-report=") || arg === "--run-report-path" || arg.startsWith("--run-report-path=")) {
+      const read = readArgValue(argv, i, arg.startsWith("--run-report-path") ? "--run-report-path" : "--run-report");
+      input.runReportPath = read.value;
+      i += read.consumed;
+    } else if (arg === "--review-report" || arg.startsWith("--review-report=") || arg === "--review-report-path" || arg.startsWith("--review-report-path=")) {
+      const read = readArgValue(argv, i, arg.startsWith("--review-report-path") ? "--review-report-path" : "--review-report");
+      input.reviewReportPath = read.value;
       i += read.consumed;
     } else if (arg === "--prd" || arg.startsWith("--prd=")) {
       const read = readArgValue(argv, i, "--prd");
@@ -2392,6 +2406,8 @@ export async function runYoloAcceptCli(argv = [], io = Object()) {
     projectRoot,
     mode: input.mode,
     approvalArtifact: input.approvalArtifact,
+    runReportPath: input.runReportPath,
+    reviewReportPath: input.reviewReportPath,
     writeLifecycle: options.writeLifecycle,
     collectEvidence: options.collectEvidence,
     executeAdapter: options.executeAdapter,
@@ -2934,6 +2950,8 @@ export async function runYoloCli(argv = process.argv.slice(2), io = Object()) {
       collectEvidence: options.collectEvidence,
       executeAdapter: options.executeAdapter,
       allowAdapterCommands: options.allowAdapterCommands,
+      startProgressServer: options.startProgressServer,
+      runReviewLoop: options.runReviewLoop,
     }, {
       yoloRoot,
       projectRoot: cliProjectRoot,
@@ -2957,6 +2975,8 @@ export async function runYoloCli(argv = process.argv.slice(2), io = Object()) {
     collectEvidence: options.collectEvidence,
     executeAdapter: options.executeAdapter,
     allowAdapterCommands: options.allowAdapterCommands,
+    startProgressServer: options.startProgressServer,
+    runReviewLoop: options.runReviewLoop,
     executor,
     provider,
     model: input.model,

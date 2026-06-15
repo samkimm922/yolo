@@ -51,6 +51,13 @@ describe("CONFIG_PATH resolution", () => {
     }
   });
 
+  test("loadConfig default claude permission mode allows autonomous edits", () => {
+    const cfg = loadConfig({ path: DEFAULT_CONFIG_PATH, forceReload: true });
+
+    assert.equal(cfg.ai.claude_permission_mode, "acceptEdits");
+    assert.notEqual(cfg.ai.claude_permission_mode, "default");
+  });
+
   test("loadConfig keeps YAML config parsing behavior", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-config-yaml-"));
     const configPath = join(root, "config.yaml");

@@ -280,7 +280,7 @@ async function commitTask(task, prdPath, worktreeFiles = null) {
     emitEvent: logEvent,
     refreshBaselines: refreshBaselinesAfterCommit,
   });
-  return commitFlow.result;
+  return { ...commitFlow.result, code };
 }
 
 // ── PRD 任务状态更新（单源真相：PRD 文件本身）────────────────────
@@ -306,12 +306,13 @@ function recordTaskTransition(prdPath, transition) {
   });
 }
 
-function taskPostconditionsPass(task, prd, contractRoot = ROOT) {
+function taskPostconditionsPass(task, prd, contractRoot = ROOT, options = Object()) {
   try {
     setContractRoot(contractRoot);
     const result = evaluatePostConditions(task, prd, {
       root: contractRoot,
       config: runtimeConfig,
+      changedFiles: options.changedFiles || options.changed_files,
     });
     const blocking = (result.results || []).filter((item) => item.severity === "FAIL" && item.passed === false);
     return {
@@ -534,6 +535,7 @@ export async function run(prdPath, options = Object()) {
       resumeCompleted,
       exitOnComplete,
       sessionTimeoutHours: runtimeConfig.runner.session_timeout_h,
+      runReviewLoop: options.runReviewLoop !== false,
       maxReviewRounds: MAX_REVIEW_ROUNDS,
       maxReviewTasksPerRound: runtimeConfig.runner.max_review_tasks_per_round ?? MAX_REVIEW_TASKS_PER_ROUND,
       projectRoot: ROOT,

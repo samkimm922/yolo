@@ -265,7 +265,7 @@ describe("demand evidence dispatch", () => {
           assert.equal(runOptions.config.ai.claude_disallowed_tools, "Write,Edit,Bash");
           assert.equal(runOptions.config.ai.claude_disable_slash_commands, false);
           assert.equal(runOptions.config.ai.claude_no_session_persistence, true);
-          assert.equal(runOptions.config.ai.claude_permission_mode, "default");
+          assert.equal(runOptions.config.ai.claude_permission_mode, "acceptEdits");
           assert.equal(runOptions.config.ai.max_budget_usd, "0.25");
           return {
             success: true,
@@ -304,7 +304,7 @@ describe("demand evidence dispatch", () => {
           assert.equal(runOptions.config.ai.claude_tools, "default");
           assert.equal(runOptions.config.ai.claude_allowed_tools, "Read,Glob,Grep,WebFetch,WebSearch");
           assert.equal(runOptions.config.ai.claude_disallowed_tools, "Write,Edit,Bash");
-          assert.equal(runOptions.config.ai.claude_permission_mode, "default");
+          assert.equal(runOptions.config.ai.claude_permission_mode, "acceptEdits");
           return {
             success: true,
             provider: "claude",
@@ -337,7 +337,7 @@ describe("demand evidence dispatch", () => {
           assert.equal(runOptions.config.ai.claude_allowed_tools, "Read,Glob,Grep,WebFetch,WebSearch");
           assert.equal(runOptions.config.ai.claude_disallowed_tools, "Write,Edit,Bash");
           assert.equal(runOptions.config.ai.claude_disable_slash_commands, false);
-          assert.equal(runOptions.config.ai.claude_permission_mode, "default");
+          assert.equal(runOptions.config.ai.claude_permission_mode, "acceptEdits");
           return {
             success: true,
             provider: "claude",
@@ -376,7 +376,7 @@ describe("demand evidence dispatch", () => {
           assert.equal(runOptions.config.ai.claude_tools, "default");
           assert.equal(runOptions.config.ai.claude_allowed_tools, "Read,Glob,Grep,WebFetch,WebSearch");
           assert.equal(runOptions.config.ai.claude_disallowed_tools, "Write,Edit,Bash");
-          assert.equal(runOptions.config.ai.claude_permission_mode, "default");
+          assert.equal(runOptions.config.ai.claude_permission_mode, "acceptEdits");
           return {
             success: true,
             provider: "claude",
@@ -564,7 +564,7 @@ describe("demand evidence dispatch", () => {
           assert.match(prompt, /usual non-editing evidence protocol is suspended/);
           assert.match(prompt, /src\/boundary-probe\.txt/);
           assert.equal(runOptions.config.ai.agent_tool_profile, "boundary_probe");
-          assert.equal(runOptions.config.ai.claude_permission_mode, "default");
+          assert.equal(runOptions.config.ai.claude_permission_mode, "acceptEdits");
           assert.equal(runOptions.config.ai.claude_allowed_tools, "Read,Glob,Grep,Write,Edit,Bash");
           assert.equal(runOptions.config.ai.claude_disallowed_tools, "");
           writeFileSync(join(root, "src", "boundary-probe.txt"), "probe-write\n", "utf8");

@@ -402,10 +402,13 @@ export function runCiGuard(mode = "all") {
   };
 }
 
-const mode = process.argv[2] || "all";
-const result = runCiGuard(mode);
-if (result.status !== "pass") {
-  process.stderr.write(`${JSON.stringify(result, null, 2)}\n`);
-  process.exit(1);
+const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+if (isMain) {
+  const mode = process.argv[2] || "all";
+  const result = runCiGuard(mode);
+  if (result.status !== "pass") {
+    process.stderr.write(`${JSON.stringify(result, null, 2)}\n`);
+    process.exit(1);
+  }
+  process.stdout.write(`ci guard ${mode}: pass\n`);
 }
-process.stdout.write(`ci guard ${mode}: pass\n`);

@@ -10,6 +10,7 @@ import { PassThrough } from "node:stream";
 import {
   buildProviderInvocation,
   classifyProviderFailure,
+  DEFAULT_CLAUDE_PERMISSION_MODE,
   DEFAULT_CLAUDE_SETTINGS_PATH,
   spawnProviderPrompt,
   YOLO_PACKAGE_ROOT,
@@ -19,7 +20,7 @@ const baseConfig = {
   ai: {
     model: "claude-sonnet-4",
     settings: ".claude/settings.json",
-    claude_permission_mode: "default",
+    claude_permission_mode: "acceptEdits",
     max_budget_usd: 3,
     codex_model: "gpt-5-codex",
     codex_sandbox: "workspace-write",
@@ -74,7 +75,7 @@ describe("provider execution adapter", () => {
     assert.deepEqual(invocation.args, [
       "-p",
       "--model", "claude-sonnet-4",
-      "--permission-mode", "default",
+      "--permission-mode", "acceptEdits",
       "--settings", "/repo/.claude/settings.json",
       "--max-budget-usd", "3",
     ]);
@@ -88,7 +89,6 @@ describe("provider execution adapter", () => {
         ai: {
           executor: "claude",
           model: "openrouter/deepseek-chat",
-          claude_permission_mode: "default",
         },
       },
       workDir: "/repo",
@@ -101,8 +101,26 @@ describe("provider execution adapter", () => {
     assert.deepEqual(invocation.args, [
       "-p",
       "--model", "openrouter/deepseek-chat",
-      "--permission-mode", "default",
+      "--permission-mode", DEFAULT_CLAUDE_PERMISSION_MODE,
     ]);
+  });
+
+  test("spawnProviderPrompt defaults claude print mode to an editable permission mode", async () => {
+    let capturedArgs = [];
+    const run = await spawnProviderPrompt("prompt", spawnOptions({
+      config: { ai: { model: "claude-sonnet-4", settings: "" } },
+      spawnImpl: (command, args) => {
+        capturedArgs = args;
+        assert.equal(command, "claude");
+        return fakeProviderSpawn({ stdout: "done\n", code: 0 })();
+      },
+    }));
+
+    const modeIndex = capturedArgs.indexOf("--permission-mode");
+    assert.notEqual(modeIndex, -1);
+    assert.equal(capturedArgs[modeIndex + 1], DEFAULT_CLAUDE_PERMISSION_MODE);
+    assert.notEqual(capturedArgs[modeIndex + 1], "default");
+    assert.equal(run.success, true);
   });
 
   test("default claude settings resolve to the YOLO package root instead of the target project", () => {
@@ -305,7 +323,7 @@ describe("provider execution adapter", () => {
     assert.deepEqual(invocation.args, [
       "-p",
       "--model", "claude-sonnet-4-6",
-      "--permission-mode", "default",
+      "--permission-mode", DEFAULT_CLAUDE_PERMISSION_MODE,
       "--settings", settings,
       "--tools", "Read,Glob,Grep",
       "--allowedTools", "Read,Glob,Grep",

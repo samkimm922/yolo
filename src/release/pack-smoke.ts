@@ -374,6 +374,7 @@ assert.equal(piPlan.artifacts.outputDir.startsWith(join(projectRoot, ".yolo")), 
 	  runId: "run-pack-state-root",
 	  mode: "dev",
 	  startProgressServer: false,
+	  runReviewLoop: false,
 	  initializeBaselines: false
 	});
 	assert.equal(runner.status, "success");

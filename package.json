@@ -108,6 +108,7 @@
     "memory:refresh": "npm run build --silent && node ./dist/src/devtools/memory-center.js --legacy-pointers",
     "test": "npm run build --silent && node --import tsx --test __tests__/*.test.ts",
     "soak": "node --import tsx scripts/soak/run.ts",
+    "smoke:packed-external": "node --import tsx scripts/e2e-smoke/packed-external.ts",
     "verify": "npm run typecheck --silent && npm run test --silent && node --import tsx scripts/source-grep-meta.ts && node --import tsx scripts/ci-guard.ts && npm run preflight --silent && node -e \"import {config} from'./dist/src/lib/config.js';process.exit(config.version==='2.0'?0:1)\"",
     "prepack": "npm run build --silent",
     "lint": "node --import tsx scripts/source-grep-meta.ts",

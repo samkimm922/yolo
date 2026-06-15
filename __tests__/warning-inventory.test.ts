@@ -18,7 +18,7 @@ const ROOT_ENTRYPOINTS = ["runner.ts", "gate.ts", "prompt.ts", "learn.ts", "sdk.
 const INVENTORY = [
   ["src/cli/gate.ts", { WARN: 4, warning: 0, "best-effort": 0, skip: 0 }],
   ["src/cli/prd-preflight.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 0 }],
-  ["src/cli/prompt.ts", { WARN: 2, warning: 2, "best-effort": 0, skip: 0 }],
+  ["src/cli/prompt.ts", { WARN: 1, warning: 2, "best-effort": 0, skip: 0 }],
   ["src/cli/review.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/cli/yolo.ts", { WARN: 0, warning: 17, "best-effort": 0, skip: 5 }],
   ["src/core/bootstrap.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 4 }],

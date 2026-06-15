@@ -20,10 +20,12 @@ import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 import { buildExperiencePackText } from "../runtime/learning/center.js";
+import { loadConfig } from "../lib/config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "..", "..");
 const DEFAULT_ROOT = resolve(YOLO_ROOT, "..", "..");
+const DEFAULT_PROMPT_MAX_LINES_PER_FILE = 150;
 let ROOT = DEFAULT_ROOT;
 
 // --- CLI 参数解析 ---
@@ -45,9 +47,39 @@ export function parsePromptArgs(argv = process.argv.slice(2), env = process.env)
     gate: getArg(argv, "--gate="),
     cwd: getArg(argv, "--cwd="),
     stateRoot: getArg(argv, "--state-root="),
+    configPath: getArg(argv, "--config="),
     noExperiencePack: argv.includes("--no-experience-pack"),
     experienceLimit: getArg(argv, "--experience-limit="),
   };
+}
+
+function positiveInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function loadPromptConfig(input = Object(), stateRoot = null) {
+  if (input.config) return input.config;
+  const explicitPath = input.configPath || input.config_path;
+  const candidates = [
+    explicitPath ? resolve(explicitPath) : null,
+    stateRoot ? join(resolve(stateRoot), "config.json") : null,
+    ROOT ? join(ROOT, ".yolo", "config.json") : null,
+  ].filter(Boolean);
+  const configPath = candidates.find((path) => existsSync(path));
+  try {
+    return configPath
+      ? loadConfig({ path: configPath, forceReload: true })
+      : loadConfig({ forceReload: true });
+  } catch {
+    return { gate: { max_lines_per_file: DEFAULT_PROMPT_MAX_LINES_PER_FILE } };
+  }
+}
+
+function resolveMaxLinesPerFile(scope = Object(), config = Object()) {
+  return positiveInteger(scope.max_lines_per_file)
+    || positiveInteger(config.gate?.max_lines_per_file)
+    || DEFAULT_PROMPT_MAX_LINES_PER_FILE;
 }
 
 function normalizeCondition(c) {
@@ -96,17 +128,17 @@ function loadWorkflow(type) {
 }
 
 // ── 项目规则 ──────────────────────────────────────────────────────
-const PROJECT_RULES = [
-  "R1: 只修改 PRD scope 允许的目标文件，除非 scope.allow_new_files 明确允许新增 sibling 文件",
-  "R2: 保持最小 diff，不顺手重构、不改无关行为、不扩大任务范围",
-  "R3: 禁止用 as any 或 as unknown as 掩盖类型问题；优先收窄类型、补完整数据结构或调整调用点",
-  "R4: 禁止硬编码密钥、token、密码、私有路径或环境专属值",
-  "R5: 禁止留下 console/debug 日志，除非目标项目已有明确 logger 约定并且本任务要求",
-  "R6: 不绕过测试、lint、typecheck、gate 或 PRD post_conditions",
-  "R7: 单文件行数必须满足 scope.max_lines_per_file；超过上限先拆分再修复",
-  "R8: 不修改测试断言来掩盖业务 bug，除非 PRD 明确要求更新测试契约",
-  "R9: 新增 public API、配置、权限、数据库或部署变更时必须有 PRD 证据支持",
-  "R10: 修改后自查 import、类型签名、错误处理、边界条件和目标文件行数",
+const PROJECT_CONSTRAINTS = [
+  "只修改 PRD scope 允许的目标文件；新增文件必须由 scope.allow_new_files 允许",
+  "保持最小 diff，不改无关行为，不顺手重构",
+  "不用 as any / as unknown as 掩盖类型问题",
+  "不写密钥、token、密码、私有路径或环境专属值",
+  "不留下 console/debug 日志，除非任务或项目 logger 约定要求",
+  "不绕过测试、lint、typecheck、gate 或 PRD post_conditions",
+  "单文件行数遵守本 task 上限；超限先拆分再修复",
+  "不改测试断言掩盖业务 bug，除非 PRD 明确要求",
+  "新增 public API、配置、权限、数据库或部署变更必须有 PRD 证据",
+  "结束前自查 import、类型签名、错误处理、边界条件和行数",
 ];
 
 // ── 文件上下文收集（同 v4，保持不变）─────────────────────────────
@@ -155,8 +187,9 @@ function readFileSafe(filePath, maxLines = 300) {
   }
 }
 
-function gatherContext(targetFile) {
+function gatherContext(targetFile, maxLinesPerFile = DEFAULT_PROMPT_MAX_LINES_PER_FILE) {
   const sections = [];
+  const maxLines = positiveInteger(maxLinesPerFile) || DEFAULT_PROMPT_MAX_LINES_PER_FILE;
   if (!targetFile || !existsSync(resolve(ROOT, targetFile))) {
     if (targetFile) {
       sections.push(`## 📁 目标文件（需新建）\n\n文件 \`${targetFile}\` 当前不存在，需要创建。`);
@@ -170,14 +203,14 @@ function gatherContext(targetFile) {
   const fileData = readFileSafe(absPath);
   if (!fileData) return "";
 
-  const remaining = 150 - fileData.lines;
+  const remaining = maxLines - fileData.lines;
   const warning = remaining < 10
     ? `\n⚠️ 警告：只剩 ${remaining} 行空间！如果要加超过 ${remaining} 行代码，必须先拆分文件。`
     : remaining < 30
       ? `\n⚡ 注意：仅剩 ${remaining} 行空间，紧凑修改。`
       : "";
 
-  sections.push(`## 📁 目标文件: ${targetFile}\n\n当前 ${fileData.lines} 行 | 上限 150 行 | 剩余 ${remaining} 行${warning}\n\n\`\`\`typescript\n${fileData.content}\n\`\`\``);
+  sections.push(`## 📁 目标文件: ${targetFile}\n\n当前 ${fileData.lines} 行 | 上限 ${maxLines} 行 | 剩余 ${remaining} 行${warning}\n\n\`\`\`typescript\n${fileData.content}\n\`\`\``);
 
   // 收集类型文件和服务文件
   const imports = parseImports(absPath);
@@ -189,7 +222,7 @@ function gatherContext(targetFile) {
     if (!resolved) continue;
     const relPath = resolved.replace(ROOT + "/", "");
     if (resolved.includes("/types/") || resolved.endsWith(".d.ts")) {
-      const d = readFileSafe(resolved, 150);
+      const d = readFileSafe(resolved, Math.max(maxLines, 80));
       if (d) typeFiles.push({ path: relPath, ...d });
     } else if (resolved.includes("/services/") || resolved.includes("/hooks/")) {
       const d = readFileSafe(resolved, 80);
@@ -238,12 +271,13 @@ function isR9TestSplitTask(task, targets) {
 function renderR9TestSplitContract(task, targets, scope) {
   const target = targets[0]?.file || "目标测试文件";
   const maxFiles = scope.max_files || 5;
+  const maxLines = positiveInteger(scope.max_lines_per_file) || DEFAULT_PROMPT_MAX_LINES_PER_FILE;
   const maxNewFiles = Math.max(0, maxFiles - 1);
   const splitPlan = renderR9StaticSplitPlan(target, scope);
   return [
     "## R9 测试文件拆分快路径",
     "",
-    `目标: 把 \`${target}\` 拆到 ≤ ${scope.max_lines_per_file || 150} 行，最多新增 ${maxNewFiles} 个 sibling 测试文件。`,
+    `目标: 把 \`${target}\` 拆到 ≤ ${maxLines} 行，最多新增 ${maxNewFiles} 个 sibling 测试文件。`,
     "",
     splitPlan,
     "",
@@ -256,7 +290,7 @@ function renderR9TestSplitContract(task, targets, scope) {
     "6. 禁止改业务实现文件，禁止为了过 gate 改测试断言。",
     "",
     "停止条件:",
-    `- \`${target}\` ≤ ${scope.max_lines_per_file || 150} 行。`,
+    `- \`${target}\` ≤ ${maxLines} 行。`,
     `- 总修改代码文件数 ≤ ${maxFiles}。`,
     "- 不新增 TSC 错误。",
     "- 如果拆分无法在这些限制内完成，停止并说明需要进一步拆 task，不要扩大范围。",
@@ -308,7 +342,7 @@ function renderR9StaticSplitPlan(target, scope) {
   const absPath = resolve(ROOT, target);
   if (!existsSync(absPath)) return "静态拆分计划: 目标文件不存在，跳过。";
   const lines = readFileSync(absPath, "utf8").split("\n");
-  const maxLines = scope.max_lines_per_file || 150;
+  const maxLines = positiveInteger(scope.max_lines_per_file) || DEFAULT_PROMPT_MAX_LINES_PER_FILE;
   const maxFiles = scope.max_files || 5;
   const baseName = target.replace(/\.test\.[tj]sx?$/, "");
   const ext = target.endsWith(".tsx") ? "tsx" : "ts";
@@ -365,6 +399,7 @@ export function generatePrompt(input = Object()) {
   const gateFilter = input.gate || null;
   const stateRoot = input.stateRoot || input.state_root || null;
   ROOT = resolve(input.cwd || input.projectRoot || DEFAULT_ROOT);
+  const promptConfig = loadPromptConfig(input, stateRoot);
 
   if (!taskId || !prdPath) {
     throw new Error("用法: prompt.js --task=<id> --prd=<path> [--fix] [--learnings=<text>] [--attempt=N]");
@@ -383,48 +418,33 @@ export function generatePrompt(input = Object()) {
   }
 
   const scope = task.scope || {};
+  const maxLinesPerFile = resolveMaxLinesPerFile(scope, promptConfig);
+  const effectiveScope = { ...scope, max_lines_per_file: maxLinesPerFile };
   const TARGET_FILE = scope.targets?.[0]?.file || "";
   const targets = scope.targets || (TARGET_FILE ? [{ file: TARGET_FILE }] : []);
   const readonlyFiles = scope.readonly_files || [];
   const preConditions = (task.pre_conditions || []).map(normalizeCondition);
   const postConditions = (task.post_conditions || []).map(normalizeCondition);
-  const contextSections = targets.map((target) => gatherContext(target.file)).filter(Boolean).join("\n\n");
+  const contextSections = targets.map((target) => gatherContext(target.file, maxLinesPerFile)).filter(Boolean).join("\n\n");
   const readonlyContextSections = gatherReadonlyContext(readonlyFiles);
 
 // 重试模式: 从 gate JSON 日志提取失败条件
 const gateResult = isFix ? loadFailedConditions(taskId) : null;
 
-// 指令块
-const analysisBlock = isFix
+// 指令块：行动优先，避免 provider 停在计划/摘要。
+const actionBlock = isFix
   ? [
-      "## 🔄 第 " + attempt + " 次重试",
-      "",
-      "上一次修改没有通过 gate 检查。下面是**失败的条件**和当前代码。",
-      "",
-      "### 这次务必做到：",
-      "1. **先看上面的完整代码**，找到根因位置",
-      "2. 对照下面「失败条件」逐条分析：我的上次修改改了什么 → 为什么导致这个失败",
-      "3. 用 Edit 工具精确修改，不改其他文件",
-      "4. 改完后再检查：类型对不对、import 有没有多余、行数有没有超标",
-      "5. 一个 task 只做一个文件操作",
+      "## 立即执行",
+      `- 第 ${attempt} 次执行：直接用 Edit/Write 修改 scope 目标文件，不要输出计划，不要等待批准。`,
+      "- 只修上次失败条件；已通过条件不要动。",
+      `- 改完自查类型、import、边界和行数；目标文件 ≤ ${maxLinesPerFile} 行。`,
       "",
     ]
   : [
-      "## 🔧 修复指令",
-      "",
-      "### 步骤",
-      "1. **先读上面「目标文件完整代码」**，理解当前代码结构",
-      "2. 对照「问题描述」定位根因",
-      "3. 用 Edit 工具做最小修改",
-      "4. 改完后检查：文件行数 ≤ 150、类型匹配、import 无多余",
-      "",
-      "### 禁止",
-      "- 禁止不读代码直接改",
-      "- 禁止输出分析文本而不实际改代码",
-      "- 禁止修改不相关的文件",
-      "- 禁止顺手优化、重构、加注释",
-      "- 禁止改动后文件超过 150 行",
-      "- 禁止一个任务同时创建新文件又修改已有文件",
+      "## 立即执行",
+      "- 直接用 Edit/Write 修改 scope 目标文件，不要输出计划，不要等待批准。",
+      "- 根据当前代码、问题描述和验收条件做最小可验证改动。",
+      `- 改完自查类型、import、边界和行数；目标文件 ≤ ${maxLinesPerFile} 行。`,
       "",
     ];
 
@@ -446,18 +466,14 @@ if (workflowContent) {
 parts.push(
   `# ${task.id} — ${task.title}`,
   "",
-  "## Fresh Session Contract",
-  "",
+  ...actionBlock,
+  "## Session",
   `- session_id: \`${sessionId || `${task.id}-attempt-${attempt}`}\``,
   `- task_id: \`${task.id}\``,
   `- attempt: \`${attempt}\``,
-  "- 每个 task / retry 必须是新的 provider session，禁止复用上一 task 的聊天上下文。",
-  "- 允许上下文：本 PRD task slice、scope targets、readonly files、post_conditions、bounded learning、上次 gate failure 摘要。",
-  "- 禁止上下文：上一 task 的完整 transcript、provider stdout、无界历史记忆、无关项目历史。",
+  "- fresh: 只使用本 task slice、scope、readonly、post_conditions、bounded learning 和上次 gate 摘要。",
+  "- forbidden: 上一 task transcript/provider stdout、无界历史、无关项目历史。",
   "",
-  "---",
-  "",
-  ...analysisBlock,
   "---",
   "",
   contextSections,
@@ -486,9 +502,8 @@ try {
 
 // ── v2 契约：pre_conditions / post_conditions ────────────────────
 if (preConditions.length > 0) {
-  parts.push("## 📋 修前条件（pre_conditions）");
+  parts.push("## 修前条件");
   parts.push("");
-  parts.push("> 修前验证：确认 bug 模式仍然存在。以下条件全部 PASS → 执行修复。");
   for (const c of preConditions) {
     parts.push(formatCondition(c));
   }
@@ -501,7 +516,7 @@ if (postConditions.length > 0) {
 
   // 重试模式: 只展示失败的条件
   if (gateResult && gateResult.failed.length > 0) {
-    parts.push("## ❌ 上次失败的条件（必须修复）");
+    parts.push("## 上次失败条件");
     parts.push("");
       for (const g of gateResult.failed) {
         parts.push(`- **${g.name}** [${g.severity}]: ${g.detail?.slice(0, 150) || g.name}`);
@@ -509,7 +524,7 @@ if (postConditions.length > 0) {
     parts.push("");
 
     if (gateResult.passed.length > 0) {
-      parts.push("## ✅ 已通过的条件（不要动）");
+      parts.push("## 已通过条件");
       parts.push("");
       for (const g of gateResult.passed) {
         parts.push(`- ${g.name} ✓`);
@@ -519,7 +534,7 @@ if (postConditions.length > 0) {
   } else {
     // 非重试: 展示所有条件
     if (failConditions.length > 0) {
-      parts.push("## 📋 修后条件 — 必须通过（post_conditions FAIL）");
+      parts.push("## 必须通过");
       parts.push("");
       for (const c of failConditions) {
         parts.push(formatCondition(c));
@@ -527,7 +542,7 @@ if (postConditions.length > 0) {
       parts.push("");
     }
     if (warnConditions.length > 0) {
-      parts.push("## 📋 修后条件 — 最好做到（post_conditions WARN）");
+      parts.push("## 尽量满足");
       parts.push("");
       for (const c of warnConditions) {
         parts.push(formatCondition(c));
@@ -538,13 +553,13 @@ if (postConditions.length > 0) {
 }
 
 // ── 修改范围约束 ──────────────────────────────────────────────────
-parts.push("## 📐 修改范围约束");
+parts.push("## 约束");
 parts.push("");
 if (targets.length > 0) {
   parts.push(`- 目标文件: ${targets.map((t) => t.file).join(", ")}`);
 }
 parts.push(`- 最多修改 ${scope.max_files || 5} 个代码文件`);
-parts.push(`- 单文件不超过 ${scope.max_lines_per_file || 150} 行`);
+parts.push(`- 单文件不超过 ${maxLinesPerFile} 行`);
 if (scope.allow_new_files) {
   parts.push("- 允许创建新文件");
   // 检测是否为文件拆分任务
@@ -555,7 +570,7 @@ if (scope.allow_new_files) {
   if (isSplit) {
     if (isR9TestSplitTask(task, targets)) {
       parts.push("");
-      parts.push(renderR9TestSplitContract(task, targets, scope));
+      parts.push(renderR9TestSplitContract(task, targets, effectiveScope));
     }
     parts.push("");
     parts.push("## 文件拆分操作（必须严格按顺序执行）");
@@ -625,22 +640,22 @@ const FRONTEND_RULES = taskId.startsWith("FE-") ? [
 
 // 项目规则
 parts.push(
-  "## 📏 项目代码规则（违反会被 gate 拦截）",
-  PROJECT_RULES.map((r) => `- ${r}`).join("\n"),
+  "## 代码约束",
+  PROJECT_CONSTRAINTS.map((r) => `- ${r}`).join("\n"),
   ...FRONTEND_RULES,
 );
 
-// ── 底线 ──────────────────────────────────────────────────────────
+// ── 完成条件 ──────────────────────────────────────────────────────
 const scopedTargetFiles = targets.map(t => t.file).filter(Boolean);
 
 parts.push(
-  "## ⚠️ 底线",
-  "1. **必须实际产出目标代码 diff**：worktree 中 `git status` 必须显示 PRD scope 目标文件改动；仅改 docs/SESSION/SNAPSHOT/DELIVERY_LOG 视为失败",
+  "## 完成条件",
+  "1. **必须实际产出目标代码 diff**：`git status` 必须显示 PRD scope 目标文件改动；仅改 docs/SESSION/SNAPSHOT/DELIVERY_LOG 视为失败",
   scopedTargetFiles.length > 0
     ? `2. **必须创建/修改这些目标文件**：${scopedTargetFiles.join(', ')}（如不存在则用 Write 创建）`
     : "2. 必须实际修改代码文件（无修改 = 失败）",
-  "3. 改动文件数 ≤ 5",
-  `4. 改动后目标文件 ≤ ${scope.max_lines_per_file || 150} 行`,
+  `3. 改动文件数 ≤ ${scope.max_files || 5}`,
+  `4. 改动后目标文件 ≤ ${maxLinesPerFile} 行`,
   "5. 不改不相关的文件",
   "6. 文档同步（SESSION/SNAPSHOT/DELIVERY_LOG）由 runner 自动处理，**不要手动改这三个文档**",
 );

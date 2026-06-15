@@ -708,12 +708,16 @@ export function runYoloAcceptCli(argv = process.argv.slice(2), io = Object()) {
   const mode = argv.includes("--ship") ? "ship" : argv.includes("--release") ? "release" : "accept";
   const approvalIndex = argv.findIndex((arg) => arg === "--approval-artifact" || arg === "--approval" || arg.startsWith("--approval-artifact=") || arg.startsWith("--approval="));
   const approvalArg = approvalIndex >= 0 ? readArgValue(argv, approvalIndex).value : undefined;
+  const runReportIndex = argv.findIndex((arg) => arg === "--run-report" || arg === "--run-report-path" || arg.startsWith("--run-report=") || arg.startsWith("--run-report-path="));
+  const runReportArg = runReportIndex >= 0 ? readArgValue(argv, runReportIndex).value : undefined;
+  const reviewReportIndex = argv.findIndex((arg) => arg === "--review-report" || arg === "--review-report-path" || arg.startsWith("--review-report=") || arg.startsWith("--review-report-path="));
+  const reviewReportArg = reviewReportIndex >= 0 ? readArgValue(argv, reviewReportIndex).value : undefined;
   const cwdArg = argv.find((arg) => arg.startsWith("--cwd="));
   const cwdIndex = argv.indexOf("--cwd");
   const projectRoot = resolve(
     cwdArg ? cwdArg.split("=").slice(1).join("=") : cwdIndex >= 0 && argv[cwdIndex + 1] ? argv[cwdIndex + 1] : io.cwd || process.cwd(),
   );
-  const valueFlags = new Set(["--cwd", "--approval", "--approval-artifact"]);
+  const valueFlags = new Set(["--cwd", "--approval", "--approval-artifact", "--run-report", "--run-report-path", "--review-report", "--review-report-path"]);
   const prdPath = argv.find((arg, index) => !arg.startsWith("--") && !valueFlags.has(argv[index - 1]));
   const resolvedPrdPath = prdPath ? resolve(projectRoot, prdPath) : prdPath;
   const guard = inspectLifecycleGuard({
@@ -732,6 +736,8 @@ export function runYoloAcceptCli(argv = process.argv.slice(2), io = Object()) {
     projectRoot,
     mode,
     approvalArtifact: approvalArg,
+    runReportPath: runReportArg,
+    reviewReportPath: reviewReportArg,
     writeLifecycle: !noWrite,
   }, { learnFailures: true });
   if (json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);

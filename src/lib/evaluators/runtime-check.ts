@@ -116,19 +116,35 @@ function changedFilesFromFilesystemBaseline(ROOT, taskScope = Object()) {
   return changed;
 }
 
+function changedFilesFromOptions(options = Object(), taskScope = Object()) {
+  const candidates = [
+    options.changedFiles,
+    options.changed_files,
+    taskScope.changedFiles,
+    taskScope.changed_files,
+  ];
+  const files = candidates.find((value) => Array.isArray(value));
+  return Array.isArray(files) ? [...new Set(files.map(String).map((file) => file.trim()).filter(Boolean))] : null;
+}
+
 export function evalBusinessCodeMin(params, taskScope, ROOT, exec, options = Object()) {
   if (taskScope?.expected_zero_business_code === true) {
     return { passed: true, detail: "task 声明 expected_zero_business_code,跳过" };
   }
   const minFiles = params.min ?? 1;
   const businessConfig = options.config || config;
+  const providedChangedFiles = changedFilesFromOptions(options, taskScope);
 
-  const diffOut = exec("git diff --name-only HEAD");
-  const untrackedOut = exec("git ls-files --others --exclude-standard");
   const all = new Set();
-  if (diffOut.ok) diffOut.out.split("\n").filter(Boolean).forEach((f) => all.add(f));
-  if (untrackedOut.ok) untrackedOut.out.split("\n").filter(Boolean).forEach((f) => all.add(f));
-  if (all.size === 0) {
+  if (providedChangedFiles) {
+    providedChangedFiles.forEach((file) => all.add(file));
+  } else {
+    const diffOut = exec("git diff --name-only HEAD");
+    const untrackedOut = exec("git ls-files --others --exclude-standard");
+    if (diffOut.ok) diffOut.out.split("\n").filter(Boolean).forEach((f) => all.add(f));
+    if (untrackedOut.ok) untrackedOut.out.split("\n").filter(Boolean).forEach((f) => all.add(f));
+  }
+  if (!providedChangedFiles && all.size === 0) {
     for (const file of changedFilesFromFilesystemBaseline(ROOT, taskScope)) all.add(file);
   }
 

@@ -586,7 +586,7 @@ describe("runner review fix execution flow", () => {
     assert.match(gatePassFlowSource, /shouldRunPostCommitPostconditions\(commitResult\)/);
     assert.match(gatePassFlowSource, /buildPostCommitOutcome\(\{/);
     assert.match(runnerSource, /setContractRoot\(ROOT\)/);
-    assert.match(runnerSource, /function\s+taskPostconditionsPass\(task,\s*prd,\s*contractRoot = ROOT\)/);
+    assert.match(runnerSource, /function\s+taskPostconditionsPass\(task,\s*prd,\s*contractRoot = ROOT,\s*options = Object\(\)\)/);
     assert.doesNotMatch(runnerSource, /if \(task\.task_kind === "dry_run_artifact"\) \{\s*const prdForCheck = loadPRD\(prdPath\)/);
   });
 

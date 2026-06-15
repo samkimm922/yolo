@@ -18,6 +18,7 @@ const PROVIDER_COMMANDS = {
 
 export const AGENT_ADAPTER_CONTRACT_SCHEMA_VERSION = "1.1";
 export const AGENT_ADAPTER_CONTRACT_SCHEMA = "yolo.runtime.agent_adapter_contract.v1";
+export const DEFAULT_CLAUDE_PERMISSION_MODE = "acceptEdits";
 
 function cleanString(value) {
   return String(value ?? "").trim();
@@ -128,7 +129,7 @@ export function buildAgentAdapterCapabilities(provider, config = Object()) {
   const normalized = normalizeAgentProvider(provider) || "claude";
   const ai = config.ai || {};
   const codexSandbox = cleanString(ai.codex_sandbox || "workspace-write");
-  const claudePermissionMode = cleanString(ai.claude_permission_mode || "default");
+  const claudePermissionMode = cleanString(ai.claude_permission_mode || DEFAULT_CLAUDE_PERMISSION_MODE);
   const customMode = cleanString(ai.custom_sandbox || "external");
 
   if (normalized === "codex") {
