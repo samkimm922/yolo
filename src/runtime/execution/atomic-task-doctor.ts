@@ -4,6 +4,7 @@ import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getArg, hasFlag } from "../../lib/cli-utils.js";
 import { buildEvidenceArtifact, writeJsonArtifact } from "../evidence/ledger.js";
+import { isBusinessFile } from "./change-set.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "../../..");
@@ -74,13 +75,14 @@ function taskText(task) {
 
 function fileLayer(file) {
   const f = normalizeFile(file);
-  if (f.startsWith("src/pages/")) return "pages";
-  if (f.startsWith("src/services/")) return "services";
-  if (f.startsWith("src/components/")) return "components";
-  if (f.startsWith("src/hooks/") || f.includes("/hooks/")) return "hooks";
-  if (f.startsWith("src/types/") || f.endsWith(".d.ts")) return "types";
-  if (f.startsWith("cloudfunctions/")) return "cloudfunctions";
-  if (f.startsWith("scripts/yolo/")) return "yolo_engine";
+  const parts = f.split("/").filter(Boolean).map((part) => part.toLowerCase());
+  if (parts.includes("pages") || parts.includes("views") || parts.includes("screens") || parts.includes("routes") || parts.includes("features")) return "pages";
+  if (parts.includes("services") || parts.includes("api") || parts.includes("controllers") || parts.includes("server") || parts.includes("domain")) return "services";
+  if (parts.includes("components") || parts.includes("ui") || parts.includes("widgets")) return "components";
+  if (parts.includes("hooks") || parts.includes("composables") || parts.includes("middleware")) return "hooks";
+  if (parts.includes("types") || parts.includes("interfaces") || f.endsWith(".d.ts")) return "types";
+  if (parts.includes("cloudfunctions")) return "cloudfunctions";
+  if (parts[0] === "scripts" && parts[1] === "yolo") return "yolo_engine";
   return f.split("/")[0] || "unknown";
 }
 
@@ -89,6 +91,7 @@ function buildLayerMap(projectRoot) {
   const layers = new Map(); // path → category
   const srcDir = resolve(root, "src");
   const baseDir = existsSync(srcDir) ? srcDir : root;
+  const sourceRootPrefix = baseDir === srcDir ? `${relative(root, srcDir).replace(/\\/g, "/")}/` : "";
 
   function probe(dir, depth = 0) {
     if (depth > 2) return;
@@ -131,18 +134,15 @@ function buildLayerMap(projectRoot) {
     layers,
     resolve(file) {
       const f = normalizeFile(file);
-      for (const [prefix, category] of layers) {
-        if (f.startsWith(prefix)) return category;
+      const candidates = sourceRootPrefix && f.startsWith(sourceRootPrefix)
+        ? [f.slice(sourceRootPrefix.length), f]
+        : [f];
+      for (const candidate of candidates) {
+        for (const [prefix, category] of layers) {
+          if (candidate.startsWith(prefix)) return category;
+        }
       }
-      // Fallback to hardcoded rules for well-known patterns
-      if (f.startsWith("src/pages/")) return "pages";
-      if (f.startsWith("src/services/")) return "services";
-      if (f.startsWith("src/components/")) return "components";
-      if (f.startsWith("src/hooks/") || f.includes("/hooks/")) return "hooks";
-      if (f.startsWith("src/types/") || f.endsWith(".d.ts")) return "types";
-      if (f.startsWith("cloudfunctions/")) return "cloudfunctions";
-      if (f.startsWith("scripts/yolo/")) return "yolo_engine";
-      return f.split("/")[0] || "unknown";
+      return fileLayer(f);
     },
   };
 }
@@ -261,7 +261,10 @@ export function inspectAtomicTask(task, options = Object()) {
   const uiTerms = UI_TERMS.filter((term) => text.includes(term));
   const hookTerms = HOOK_TERMS.filter((term) => text.includes(term));
   const crossesPagesServices = layers.includes("pages") && layers.includes("services");
-  const missingSourceTargets = files.filter((file) => file.startsWith("src/") && !existingTargets([file], targetRoots).includes(file));
+  const businessFileOptions = options.businessFileOptions || options;
+  const missingSourceTargets = files.filter((file) =>
+    isBusinessFile(file, businessFileOptions) && !existingTargets([file], targetRoots).includes(file)
+  );
   const hasNewFile = missingSourceTargets.length > 0 && task.scope?.allow_new_files !== false;
   const isSplitChild = Boolean(task.parent_task_id || task.split_from);
   const isSingleFileSplitChild = isSplitChild && files.length === 1 && task.scope?.max_files === 1;

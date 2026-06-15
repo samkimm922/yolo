@@ -55,6 +55,41 @@ describe("files_modified_max scope filtering", () => {
     assert.deepEqual(result.out_of_scope_files, ["src/b.ts"]);
   });
 
+  test("counts layout-independent source files as business diffs", () => {
+    const result = evalFilesModifiedMax(
+      { max: 2 },
+      { targets: [{ file: "app/page.tsx" }] },
+      "/repo",
+      fakeExec({
+        "git diff --name-only": "app/page.tsx\nlib/db.ts\ncomponents/nav.tsx\ndocs/notes.md\n",
+        "git ls-files --others --exclude-standard": "",
+      }),
+    );
+
+    assert.equal(result.passed, false);
+    assert.equal(result.found, 3);
+    assert.deepEqual(result.files, ["app/page.tsx", "lib/db.ts", "components/nav.tsx"]);
+    assert.deepEqual(result.out_of_scope_files, ["lib/db.ts", "components/nav.tsx"]);
+  });
+
+  test("honors configured business_globs for files_modified_max", () => {
+    const result = evalFilesModifiedMax(
+      { max: 1 },
+      { targets: [{ file: "app/page.tsx" }] },
+      "/repo",
+      fakeExec({
+        "git diff --name-only": "app/page.tsx\nlib/db.ts\ncomponents/nav.tsx\n",
+        "git ls-files --others --exclude-standard": "",
+      }),
+      { config: { build: { business_globs: ["app/**", "lib/**"] } } },
+    );
+
+    assert.equal(result.passed, false);
+    assert.equal(result.found, 2);
+    assert.deepEqual(result.files, ["app/page.tsx", "lib/db.ts"]);
+    assert.deepEqual(result.out_of_scope_files, ["lib/db.ts"]);
+  });
+
   test("fails closed when git diff is unavailable", () => {
     const result = evalFilesModifiedMax(
       { max: 2 },

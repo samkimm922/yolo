@@ -22,6 +22,7 @@ import {
   parseEslintBaselineKeys,
   parseTscBaselineKeys,
 } from "./baselines.js";
+import { isBusinessFile } from "./change-set.js";
 
 export function isFileInScopeTargets(filePath, targets = []) {
   return (targets || []).some((target) => {
@@ -44,18 +45,8 @@ export function isFileAllowedByScope(filePath, scopeOrTargets = []) {
   return targetDirs.some((dir) => filePath.startsWith(dir));
 }
 
-export function isBusinessLikeFile(filePath) {
-  return [
-    "src/",
-    "cloudfunctions/",
-    "config/",
-    "packages/",
-    "app/",
-    "lib/",
-    "prisma/",
-    "migrations/",
-    "public/",
-  ].some((prefix) => filePath.startsWith(prefix));
+export function isBusinessLikeFile(filePath, options = Object()) {
+  return isBusinessFile(filePath, options);
 }
 
 export function parseGitStatusEntries(output = "") {
@@ -454,6 +445,7 @@ export function cleanupTaskWorktree({
   mergeToMain = false,
   allowedScope = [],
   baseRef = null,
+  config,
   execSync = defaultExecSync,
   execFileSync = defaultExecFileSync,
   existsSync = defaultExistsSync,
@@ -521,7 +513,7 @@ export function cleanupTaskWorktree({
           filteredCount++;
           continue;
         }
-        if (isBusinessLikeFile(filePath) && !isFileAllowedByScope(filePath, allowedScope)) {
+        if (isBusinessLikeFile(filePath, { config }) && !isFileAllowedByScope(filePath, allowedScope)) {
           outOfScopeSkippedCount++;
           outOfScopeSkipped.push(filePath);
           log("BLOCK", `跳过越界文件: ${filePath}`);

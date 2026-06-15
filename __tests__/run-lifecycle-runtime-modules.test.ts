@@ -138,18 +138,23 @@ describe("runner lifecycle runtime modules", () => {
     }), "codex");
 
     const active = [];
+    let cleanupArgs = null;
     const handlers = createRunnerWorktreeHandlers({
       getRootDir: () => "/repo",
       getWorktreeRoot: () => "/repo/.worktrees",
-      config: {},
+      config: { build: { business_globs: ["app/**"] } },
       createTaskWorktree: () => ({ path: "/wt", branch: "yolo/FIX", base: "HEAD" }),
-      cleanupTaskWorktree: () => ["src/app.js"],
+      cleanupTaskWorktree: (args) => {
+        cleanupArgs = args;
+        return ["src/app.js"];
+      },
       setActiveGitSession: (session) => active.push(["set", session]),
       clearActiveGitSession: (session) => active.push(["clear", session]),
       log: () => {},
     });
     assert.equal(handlers.createWorktree("A").path, "/wt");
     assert.deepEqual(handlers.cleanupWorktree("/wt", "yolo/FIX", true), ["src/app.js"]);
+    assert.deepEqual(cleanupArgs.config, { build: { business_globs: ["app/**"] } });
     assert.equal(active.length, 2);
 
     const gate = runRunnerGateInWorktree({

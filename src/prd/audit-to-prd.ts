@@ -9,6 +9,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
+import { isBusinessFile } from "../runtime/execution/change-set.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -27,18 +28,8 @@ function makeTaskId(prefix, index) {
   return `${prefix}-AUTO-${String(index).padStart(3, "0")}`;
 }
 
-function isBusinessCode(file) {
-  if (!file) return false;
-  if (file.startsWith(".yolo/")) return false;
-  if (file.startsWith("scripts/yolo/")) return false;
-  if (file.startsWith("docs/")) return false;
-  if (!file.includes("/") && /\.md$/i.test(file)) return false;
-  if (file.startsWith("src/")) return true;
-  if (file.startsWith("cloudfunctions/")) return true;
-  if (file.startsWith("tests/")) return true;
-  if (file.startsWith("__tests__/")) return true;
-  if (file.includes("/__tests__/")) return true;
-  return false;
+function isBusinessCode(file, options = Object()) {
+  return isBusinessFile(file, options);
 }
 
 function normalizeTargetPath(value) {
@@ -285,7 +276,7 @@ function groupFindings(findings) {
   return groups;
 }
 
-function buildTask(kind, findingsList, index) {
+function buildTask(kind, findingsList, index, options = Object()) {
   const id = makeTaskId(kind === "mechanical" ? "MECH" : kind === "atomic_fix" ? "FIX" : "FEAT", index);
   const allFiles = [...new Set(findingsList.flatMap((finding) => finding.files || []))];
   const highestSev = findingsList.reduce((worst, finding) => {
@@ -299,7 +290,7 @@ function buildTask(kind, findingsList, index) {
     .join("\n");
 
   const targetFiles = allFiles.map(normalizeTargetPath);
-  const allNonBusiness = targetFiles.length > 0 && targetFiles.every((file) => !isBusinessCode(file));
+  const allNonBusiness = targetFiles.length > 0 && targetFiles.every((file) => !isBusinessCode(file, options));
   const existingScope = findingsList.find((finding) => finding.scope && finding.scope.targets)?.scope;
   const scope = existingScope
     ? { ...existingScope }
@@ -348,9 +339,9 @@ export function buildPrdFromFindings(findings, options = Object()) {
   const tasks = [];
   let taskIndex = 0;
 
-  for (const [, group] of groups.mechanical) tasks.push(buildTask("mechanical", group, ++taskIndex));
-  for (const [, group] of groups.atomic_fix) tasks.push(buildTask("atomic_fix", group, ++taskIndex));
-  for (const finding of groups.atomic_feature) tasks.push(buildTask("atomic_feature", [finding], ++taskIndex));
+  for (const [, group] of groups.mechanical) tasks.push(buildTask("mechanical", group, ++taskIndex, options));
+  for (const [, group] of groups.atomic_fix) tasks.push(buildTask("atomic_fix", group, ++taskIndex, options));
+  for (const finding of groups.atomic_feature) tasks.push(buildTask("atomic_feature", [finding], ++taskIndex, options));
   const explicitDemandContract = requireApprovedDemandContract(explicitDemandContractOption(options), tasks);
   for (const task of tasks) task.status = explicitDemandContract ? "pending" : "needs_contract_review";
   const requirements = tasks.map((task) => ({

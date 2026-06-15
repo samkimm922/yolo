@@ -79,12 +79,12 @@ export async function prepareProviderSession({
   }
 
   const promptResult = execNode("prompt.js", promptSession.args);
-  logTaskBash(task.id, "node prompt.js", promptResult.ok ? "pass" : "fail", promptResult.stdout?.slice(0, 200));
+  logTaskBash(task.id, "node prompt.js", promptResult.ok ? "pass" : "fail", (promptResult.stdout || promptResult.stderr)?.slice(0, 200));
   if (!promptResult.ok) {
     return {
       action: "return",
       reason: "prompt_failed",
-      result: { status: "failed", reason: "prompt 生成失败" },
+      result: { status: "failed", reason: promptResult.helperMissing ? promptResult.stderr : "prompt 生成失败" },
     };
   }
 
