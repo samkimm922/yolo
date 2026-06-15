@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 
@@ -50,10 +50,23 @@ export function computeTaskTimeout(targets, { rootDir }) {
 }
 
 export function execNodeScript(script, args = [], { toolsRoot, cwd, timeout = 120000 } = Object()) {
+  const scriptPath = resolve(toolsRoot, script);
+  if (!existsSync(scriptPath)) {
+    const message = `helper 脚本 ${script} 在 toolsRoot=${toolsRoot} 不存在 (helper script not found; 可能 dist 未构建)`;
+    return {
+      ok: false,
+      stdout: "",
+      stderr: message,
+      code: "HELPER_SCRIPT_NOT_FOUND",
+      helperMissing: true,
+      script,
+      scriptPath,
+    };
+  }
   try {
     return {
       ok: true,
-      stdout: execFileSync("node", [resolve(toolsRoot, script), ...args], {
+      stdout: execFileSync("node", [scriptPath, ...args], {
         cwd,
         encoding: "utf8",
         timeout: timeout || 120000,

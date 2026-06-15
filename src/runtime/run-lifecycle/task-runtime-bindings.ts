@@ -51,6 +51,7 @@ export function createRunnerWorktreeHandlers({
         mergeToMain,
         allowedScope,
         baseRef,
+        config: resolveConfig(config),
         log: (phase, detail) => log("", phase, detail),
       });
       clearActiveGitSession({ activeWorktree: wtPath, activeBranch: wtBranch });

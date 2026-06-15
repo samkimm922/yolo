@@ -4,6 +4,7 @@ import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { isWithin, resolveWithinRoot } from "../security/path-guard.js";
+import { isBusinessFile } from "../../runtime/execution/change-set.js";
 
 export function evalFileExists(params, _taskScope, ROOT) {
   const file = params.file || params.path;
@@ -59,18 +60,8 @@ function splitGitFileList(output = "") {
   return String(output || "").split("\n").map((file) => file.trim()).filter(Boolean);
 }
 
-function isBusinessDiffFile(file) {
-  if (!file || file.includes("node_modules") || file.startsWith("dist")) return false;
-  if (file.startsWith(".yolo/")) return false;
-  if (file.startsWith("scripts/yolo/")) return false;
-  if (file.startsWith("docs/")) return false;
-  if (!file.includes("/") && /\.md$/i.test(file)) return false;
-  if (file.startsWith("src/")) return true;
-  if (file.startsWith("cloudfunctions/")) return true;
-  if (file.startsWith("tests/")) return true;
-  if (file.startsWith("__tests__/")) return true;
-  if (file.includes("/__tests__/")) return true;
-  return false;
+function isBusinessDiffFile(file, options = Object()) {
+  return isBusinessFile(file, options);
 }
 
 function isInTargetScope(file, targetFiles = []) {
@@ -78,7 +69,7 @@ function isInTargetScope(file, targetFiles = []) {
   return targetFiles.some((target) => file === target || file.startsWith(target.endsWith("/") ? target : `${target}/`));
 }
 
-export function evalFilesModifiedMax(params, taskScope, ROOT, exec) {
+export function evalFilesModifiedMax(params, taskScope, ROOT, exec, options = Object()) {
   const maxFiles = params.max ?? 5;
   const targetFiles = (taskScope?.targets || []).map((t) => t.file).filter(Boolean);
 
@@ -110,7 +101,8 @@ export function evalFilesModifiedMax(params, taskScope, ROOT, exec) {
   }
   const untrackedFiles = splitGitFileList(untracked.out);
 
-  const modifiedFiles = [...new Set([...stagedFiles, ...unstagedFiles, ...untrackedFiles])].filter(isBusinessDiffFile);
+  const modifiedFiles = [...new Set([...stagedFiles, ...unstagedFiles, ...untrackedFiles])]
+    .filter((file) => isBusinessDiffFile(file, options));
   const outOfScopeFiles = targetFiles.length > 0
     ? modifiedFiles.filter((file) => !isInTargetScope(file, targetFiles))
     : [];

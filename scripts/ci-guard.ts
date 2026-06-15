@@ -32,10 +32,20 @@ function workflowFiles() {
     .map((file) => join(".github/workflows", file));
 }
 
+function readRepoTextIfPresent(file: string): string | null {
+  try {
+    return readFileSync(resolve(ROOT, file), "utf8");
+  } catch (error: any) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 export function inspectWorkflowGuards() {
   const findings = [];
   for (const file of workflowFiles()) {
-    const text = readFileSync(resolve(ROOT, file), "utf8");
+    const text = readRepoTextIfPresent(file);
+    if (text === null) continue;
     if (/\tpull_request|\tpush|\t-\s+run:/.test(text)) {
       findings.push({ file, code: "WORKFLOW_TAB_INDENT", message: "Workflow YAML should not use tab indentation." });
     }
@@ -63,7 +73,8 @@ export function inspectSecretGuards() {
   const findings = [];
   for (const file of SOURCE_ROOTS.flatMap((root) => walk(root))) {
     if (/\.(png|jpe?g|gif|webp|ico|tgz|zip|lock)$/.test(file)) continue;
-    const text = readFileSync(resolve(ROOT, file), "utf8");
+    const text = readRepoTextIfPresent(file);
+    if (text === null) continue;
     for (const [code, pattern] of SECRET_PATTERNS) {
       pattern.lastIndex = 0;
       if (pattern.test(text)) {
@@ -102,7 +113,8 @@ export function inspectSourceAssertionGuard() {
   const findings = [];
   const testFiles = walk("__tests__").filter((f) => /\.test\.ts$/.test(f));
   for (const file of testFiles) {
-    const text = readFileSync(resolve(ROOT, file), "utf8");
+    const text = readRepoTextIfPresent(file);
+    if (text === null) continue;
     SOURCE_ASSERTION_PATTERN.lastIndex = 0;
     const matches = text.match(SOURCE_ASSERTION_PATTERN) || [];
     const count = matches.length;
@@ -210,7 +222,8 @@ export function inspectShellInjectionGuard() {
   for (const file of files) {
     // File-level allowlist.
     if (SHELL_INJECTION_ALLOWLIST[file]) continue;
-    const text = readFileSync(resolve(ROOT, file), "utf8");
+    const text = readRepoTextIfPresent(file);
+    if (text === null) continue;
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -245,7 +258,8 @@ export function inspectPathGuard() {
   const files = PATH_GUARD_ROOTS.flatMap((root) => walk(root)).filter((f) => /\.tsx?$/.test(f));
   for (const file of files) {
     if (PATH_GUARD_ALLOWLIST[file]) continue;
-    const text = readFileSync(resolve(ROOT, file), "utf8");
+    const text = readRepoTextIfPresent(file);
+    if (text === null) continue;
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -262,6 +276,71 @@ export function inspectPathGuard() {
         code: "UNGUARDED_PATH_RESOLVE",
         message: `Unguarded resolve(<root>, <var>) path surface. Route externally-influenced paths through resolveWithinRoot (src/lib/security/path-guard.ts) or guard with an adjacent isWithin(...). If legitimate, add an audit entry to PATH_GUARD_ALLOWLIST in scripts/ci-guard.ts.`,
       });
+    }
+  }
+  return { status: findings.length === 0 ? "pass" : "fail", findings };
+}
+
+// ── Business-file hardcoding guard ─────────────────────────────
+// Business-file classification must route through
+// src/runtime/execution/change-set.ts:isBusinessFile so project layout can be
+// configured with build.business_globs. New local prefix allowlists silently
+// undercount/overcount non-src layouts.
+const BUSINESS_FILE_HARDCODING_ROOTS = ["src/runtime", "src/lib/evaluators"];
+const BUSINESS_FUNCTION_START_RE = /(?:export\s+)?function\s+([A-Za-z_$][\w$]*Business[\w$]*)\b|(?:const|let|var)\s+([A-Za-z_$][\w$]*Business[\w$]*)\s*=/;
+const BUSINESS_HARDCODED_PREFIX_RE = /(?:\.startsWith\(\s*["'](?:src|cloudfunctions)\/["']\s*\)|["'](?:src|cloudfunctions)\/["']\s*,?)/;
+const BUSINESS_HARDCODING_ALLOWLIST: Record<string, string> = {
+  "src/runtime/execution/change-set.ts:isBusinessFileLegacyDirectoryOnly": "legacy isolated helper kept for compatibility; runtime business gates use isBusinessFile.",
+};
+
+function braceDelta(line: string): number {
+  return (line.match(/{/g) || []).length - (line.match(/}/g) || []).length;
+}
+
+function businessFunctionRanges(text: string) {
+  const ranges: { name: string; start: number; end: number }[] = [];
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(BUSINESS_FUNCTION_START_RE);
+    if (!match) continue;
+    const name = match[1] || match[2];
+    let depth = braceDelta(lines[i]);
+    let end = i;
+    if (depth <= 0 && !lines[i].includes("{")) {
+      ranges.push({ name, start: i, end: i });
+      continue;
+    }
+    for (let j = i + 1; j < lines.length; j++) {
+      end = j;
+      depth += braceDelta(lines[j]);
+      if (depth <= 0) break;
+    }
+    ranges.push({ name, start: i, end });
+    i = end;
+  }
+  return ranges;
+}
+
+export function inspectBusinessFileHardcodingGuard() {
+  const findings: ShellFinding[] = [];
+  const files = BUSINESS_FILE_HARDCODING_ROOTS.flatMap((root) => walk(root)).filter((f) => /\.tsx?$/.test(f));
+  for (const file of files) {
+    const text = readRepoTextIfPresent(file);
+    if (text === null) continue;
+    const lines = text.split("\n");
+    for (const range of businessFunctionRanges(text)) {
+      if (BUSINESS_HARDCODING_ALLOWLIST[`${file}:${range.name}`]) continue;
+      for (let i = range.start; i <= range.end; i++) {
+        const line = lines[i];
+        if (isCommentLine(line)) continue;
+        if (!BUSINESS_HARDCODED_PREFIX_RE.test(line)) continue;
+        findings.push({
+          file,
+          line: i + 1,
+          code: "BUSINESS_FILE_HARDCODED_PREFIX",
+          message: `Business-file classification must use src/runtime/execution/change-set.ts:isBusinessFile with config-driven build.business_globs instead of a hardcoded src/cloudfunctions prefix allowlist.`,
+        });
+      }
     }
   }
   return { status: findings.length === 0 ? "pass" : "fail", findings };
@@ -315,6 +394,7 @@ export function runCiGuard(mode = "all") {
   if (mode === "all" || mode === "assertions" || mode === "source-assertions") checks.push({ name: "source-assertions", ...inspectSourceAssertionGuard() });
   if (mode === "all" || mode === "shell-injection" || mode === "shell") checks.push({ name: "shell-injection", ...inspectShellInjectionGuard() });
   if (mode === "all" || mode === "path-guard" || mode === "path") checks.push({ name: "path-guard", ...inspectPathGuard() });
+  if (mode === "all" || mode === "business-file-hardcoding" || mode === "business-files") checks.push({ name: "business-file-hardcoding", ...inspectBusinessFileHardcodingGuard() });
   if (mode === "all" || mode === "lifecycle-hook" || mode === "lifecycle") checks.push({ name: "lifecycle-hook", ...inspectLifecycleHookInstallGuard() });
   return {
     status: checks.every((check) => check.status === "pass") ? "pass" : "fail",

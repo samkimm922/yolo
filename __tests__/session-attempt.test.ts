@@ -79,6 +79,41 @@ describe("session attempt helpers", () => {
     assert.ok(commands[1][1].includes("--cwd=/repo"));
   });
 
+  test("surfaces missing prompt helper failures from execNode", async () => {
+    const result = await prepareProviderSession({
+      task: task(),
+      prdPath: "prd.json",
+      attempt: 1,
+      rootDir: "/repo",
+      runtimeDir: "/repo/state/runtime",
+      validateContextPack: async () => ({
+        ok: true,
+        result: { status: "pass", blocks_execution: false, failures: [] },
+      }),
+      execNode: (script) => {
+        if (script === "learn.js") return { ok: true, stdout: "" };
+        return {
+          ok: false,
+          stdout: "",
+          stderr: "helper 脚本 prompt.js 在 toolsRoot=/tmp/yolo 不存在 (helper script not found; 可能 dist 未构建)",
+          helperMissing: true,
+        };
+      },
+      captureBaselines: () => {
+        throw new Error("captureBaselines should not be called");
+      },
+      createWorktree: () => {
+        throw new Error("createWorktree should not be called");
+      },
+      logTaskBash: () => {},
+    });
+
+    assert.equal(result.action, "return");
+    assert.equal(result.reason, "prompt_failed");
+    assert.match(result.result.reason, /helper script not found/);
+    assert.match(result.result.reason, /toolsRoot=\/tmp\/yolo/);
+  });
+
   test("prepares prompt, baselines, worktree, and provider session", async () => {
     const bashLogs = [];
     const progressLogs = [];

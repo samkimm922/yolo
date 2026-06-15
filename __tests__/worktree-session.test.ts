@@ -56,18 +56,19 @@ describe("worktree execution session helpers", () => {
     assert.deepEqual(gitLines("/repo", ["status", "--porcelain"], { execFileSync, strict: false }), []);
   });
 
-  test("business-like scope includes app package and public project paths", () => {
+  test("business-like scope uses the shared source-file policy", () => {
     for (const filePath of [
       "packages/app/lib/page.ts",
       "app/page.tsx",
+      "components/nav.tsx",
       "lib/db.ts",
-      "prisma/schema.prisma",
       "migrations/001.sql",
-      "public/robots.txt",
     ]) {
       assert.equal(isBusinessLikeFile(filePath), true);
     }
     assert.equal(isBusinessLikeFile("docs/notes.md"), false);
+    assert.equal(isBusinessLikeFile("public/robots.txt"), false);
+    assert.equal(isBusinessLikeFile("public/robots.txt", { config: { build: { business_globs: ["public/**"] } } }), true);
   });
 
   test("createTaskWorktree creates a deterministic worktree and writes gate baselines", () => {
@@ -234,7 +235,7 @@ describe("worktree execution session helpers", () => {
     );
   });
 
-  test("cleanupTaskWorktree skips package app lib out-of-scope files for commit blocking", () => {
+  test("cleanupTaskWorktree skips layout-independent business source files for commit blocking", () => {
     const copied = [];
     const logs = [];
     const execFileSync = (_command, args) => {
@@ -243,10 +244,9 @@ describe("worktree execution session helpers", () => {
           " M src/a.ts",
           " M packages/app/lib/page.ts",
           " M app/page.tsx",
+          " M components/nav.tsx",
           " M lib/db.ts",
-          " M prisma/schema.prisma",
           " M migrations/001.sql",
-          " M public/robots.txt",
         ].join("\n");
       }
       if (args[0] === "-C" && args[2] === "ls-files") return "";
@@ -275,13 +275,55 @@ describe("worktree execution session helpers", () => {
     assert.deepEqual(pkgResult.outOfScopeSkipped, [
       "packages/app/lib/page.ts",
       "app/page.tsx",
+      "components/nav.tsx",
       "lib/db.ts",
-      "prisma/schema.prisma",
       "migrations/001.sql",
-      "public/robots.txt",
     ]);
     assert.deepEqual(copied, [{ src: "/wt/FIX-PKG/src/a.ts", dst: "/repo/src/a.ts" }]);
     assert.ok(logs.some((entry) => entry.phase === "BLOCK" && entry.detail.includes("packages/app/lib/page.ts")));
+  });
+
+  test("cleanupTaskWorktree honors configured business_globs when blocking out-of-scope files", () => {
+    const copied = [];
+    const logs = [];
+    const execFileSync = (_command, args) => {
+      if (args[0] === "-C" && args[2] === "status") {
+        return [
+          " M src/a.ts",
+          " M public/robots.txt",
+          " M components/nav.tsx",
+        ].join("\n");
+      }
+      if (args[0] === "-C" && args[2] === "ls-files") return "";
+      if (args[0] === "diff") return "src/a.ts\n";
+      if (args[0] === "ls-files") return "";
+      return "";
+    };
+
+    const result = cleanupTaskWorktree({
+      wtPath: "/wt/FIX-GLOBS",
+      wtBranch: "yolo-FIX-GLOBS",
+      rootDir: "/repo",
+      mergeToMain: true,
+      allowedScope: { targets: [{ file: "src/a.ts" }] },
+      config: { build: { business_globs: ["src/**", "public/**"] } },
+      execFileSync,
+      execSync: () => "true\n",
+      existsSync: (path) => path === "/wt/FIX-GLOBS/src/a.ts" || path === "/wt/FIX-GLOBS/components/nav.tsx",
+      statSync: () => ({ isDirectory: () => false }),
+      mkdirSync: () => {},
+      copyFileSync: (src, dst) => copied.push({ src, dst }),
+      log: (phase, detail) => logs.push({ phase, detail }),
+    });
+
+    const globResult = result as string[] & { outOfScopeSkipped: string[] };
+    assert.deepEqual(result, ["src/a.ts", "components/nav.tsx"]);
+    assert.deepEqual(globResult.outOfScopeSkipped, ["public/robots.txt"]);
+    assert.deepEqual(copied, [
+      { src: "/wt/FIX-GLOBS/src/a.ts", dst: "/repo/src/a.ts" },
+      { src: "/wt/FIX-GLOBS/components/nav.tsx", dst: "/repo/components/nav.tsx" },
+    ]);
+    assert.ok(logs.some((entry) => entry.phase === "BLOCK" && entry.detail.includes("public/robots.txt")));
   });
 
   test("cleanupTaskWorktree merges scoped files from filesystem worktrees", () => {

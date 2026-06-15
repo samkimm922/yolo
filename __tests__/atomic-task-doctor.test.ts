@@ -227,6 +227,29 @@ describe("atomic task doctor", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("detects new business files outside src with the shared business-file policy", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-atomic-new-app-"));
+    try {
+      const result = inspectAtomicTask({
+        id: "FIX-APP-NEW-001",
+        title: "新增 app router helper",
+        type: "feature",
+        status: "pending",
+        scope: {
+          targets: [{ file: "app/features/cart/new-helper.ts" }],
+          allow_new_files: true,
+        },
+        post_conditions: [
+          { id: "POST-TSC", type: "no_new_type_errors", severity: "FAIL", params: {} },
+        ],
+      }, { root, projectRoot: root, writeEvidence: false });
+
+      assert.ok(result.reasons.some((reason) => reason.id === "CREATES_NEW_FILE"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 // BUG-1: atomic_bundle — declarative narrow gate for cohesive multi-file tasks
