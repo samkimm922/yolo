@@ -689,13 +689,21 @@ function buildClaudeProjectSettings({ yoloRoot }) {
     join(root, "hooks", "pre-tool-lifecycle-gate.js"),
   ];
   const hookJs = hookCandidates.find((candidate) => existsSync(candidate)) || hookCandidates[0];
+  // Claude Code hook schema: PreToolUse entries are { matcher, hooks: [{ type, command }] }.
+  // The command must live inside the nested hooks array — putting it directly on the
+  // matcher object makes Claude Code reject the whole settings.json (and silently skip
+  // every hook in it), so the lifecycle gate never loads.
   const settings = {
     hooks: {
       PreToolUse: [
         {
           matcher: "Write|Edit|MultiEdit|Bash",
-          command: `node "${hookJs}"`,
-          description: "YOLO lifecycle gate (BUG-C): block source writes unless yolo check stage is completed/warning. Fail-closed.",
+          hooks: [
+            {
+              type: "command",
+              command: `node "${hookJs}"`,
+            },
+          ],
         },
       ],
     },
