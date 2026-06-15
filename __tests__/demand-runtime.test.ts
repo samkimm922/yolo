@@ -233,6 +233,64 @@ describe("demand runtime", () => {
     }
   });
 
+  test("PRD compilation stamps approval effective_for_prd from verified readiness", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-prd-effective-"));
+    try {
+      seedDemandTargetFiles(root, ["src/services/label-summary.ts"]);
+      const discuss = runDemandDiscussRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        idea: "Build a label summary helper for support operators.",
+        target_users: ["support operator"],
+        status_quo: ["Operators manually trim and normalize labels before writing summaries."],
+        evidence: ["Support notes show repeated label cleanup before handoff.", "The existing helper file is src/services/label-summary.ts."],
+        assumptions: ["Labels arrive as short plain strings from the support form."],
+        success_criteria: ["Operators get a trimmed label summary from one helper call."],
+        constraints: ["Do not change ticket routing behavior."],
+        non_goals: ["Do not build a label editor."],
+        target_files: ["src/services/label-summary.ts"],
+        decisions: ["Start with trimming whitespace and returning the normalized label text."],
+        roadmap: ["MVP label summary helper."],
+        exceptions: ["What if the inventory system is down?"],
+        approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
+        writeArtifacts: true,
+      });
+      assert.equal(discuss.status, "success");
+      assert.equal(discuss.readiness.executable_prd_ready, true);
+
+      const read = readDemandSession(join(discuss.demand_dir, "session.json"));
+      assert.equal(read.ok, true);
+      delete read.session.approval.effective_for_prd;
+      writeJson(join(discuss.demand_dir, "session.json"), read.session);
+
+      const prd = runDemandPrdRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demandPath: discuss.demand_dir,
+        base_commit: "abcdef0",
+        writeArtifacts: true,
+      });
+
+      assert.equal(prd.status, "success", JSON.stringify(prd.blockers, null, 2));
+      requirePrd(prd);
+      assert.equal(prd.prd.demand.approval.approved, true);
+      assert.equal(prd.prd.demand.approval.effective_for_prd, true);
+
+      const check = inspectYoloCheck({
+        prdPath: prd.artifacts[0],
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        writeLifecycle: false,
+      });
+
+      assert.equal(check.blockers.some((blocker) => blocker.code === "DEMAND_APPROVAL_NOT_EFFECTIVE_FOR_PRD"), false);
+      assert.notEqual(check.checks.find((item) => item.name === "demand_contract").status, "blocked");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("approved-demand PRD quality gate blocks vague proof despite readiness passing", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-quality-proof-"));
     try {

@@ -13,7 +13,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -55,8 +55,9 @@ const DEFAULTS = {
   },
 
   build: {
-    type_check: 'tsc --noEmit',
-    lint: 'node --import tsx scripts/source-grep-meta.ts',
+    business_globs: [],
+    type_check: 'npx tsc --noEmit',
+    lint: '',
     test: 'node --import tsx --test __tests__/*.test.ts',
     build: 'npm run build --silent',
   },
@@ -331,6 +332,55 @@ function deepMerge(base, override) {
   return override;
 }
 
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseConfigContent(content, path) {
+  const ext = extname(path).toLowerCase();
+  if (ext === '.json') return JSON.parse(content);
+  if (ext === '.yaml' || ext === '.yml') return parseYAML(content);
+
+  try {
+    return JSON.parse(content);
+  } catch (_) {
+    return parseYAML(content);
+  }
+}
+
+const RECOGNIZED_CONFIG_KEYS = new Set([
+  'version',
+  'schema_version',
+  'project',
+  'paths',
+  'policy',
+  'build',
+  'ai',
+  'gate',
+  'runner',
+  'state',
+  'docs',
+  'learn',
+  'progress_server',
+]);
+
+function parsedConfigWarnings(parsed) {
+  if (!isPlainObject(parsed)) return ['配置不是对象'];
+
+  const keys = Object.keys(parsed);
+  if (keys.length === 0) return ['配置为空'];
+
+  const hasRecognizedKey = keys.some((key) => RECOGNIZED_CONFIG_KEYS.has(key));
+  const warnings = [];
+  if (!hasRecognizedKey) warnings.push('缺少可识别的顶层配置字段');
+  if (Object.prototype.hasOwnProperty.call(parsed, 'build')) {
+    if (!isPlainObject(parsed.build) || Object.keys(parsed.build).length === 0) {
+      warnings.push('build 段为空');
+    }
+  }
+  return warnings;
+}
+
 // ============================================================
 // 公共 API
 // ============================================================
@@ -374,15 +424,24 @@ export function loadConfig(options = undefined) {
   }
 
   let parsed = Object();
+  let parsedFromFile = false;
 
   try {
-    const yamlContent = readFileSync(path, 'utf-8');
-    parsed = parseYAML(yamlContent);
+    const content = readFileSync(path, 'utf-8');
+    parsed = parseConfigContent(content, path);
+    parsedFromFile = true;
   } catch (err) {
     if (err.code === 'ENOENT') {
       console.warn(`[config] ${path} 不存在，使用默认配置`);
     } else {
-      console.warn(`[config] 读取/解析配置失败: ${err.message}，使用默认配置`);
+      console.warn(`[config] ${path} 配置解析失败/为空: ${err.message}；回退默认，可能导致命令不可用`);
+    }
+  }
+
+  if (parsedFromFile) {
+    const warnings = parsedConfigWarnings(parsed);
+    if (warnings.length > 0) {
+      console.warn(`[config] ${path} 配置解析失败/为空: ${warnings.join('；')}；回退默认，可能导致命令不可用`);
     }
   }
 

@@ -108,8 +108,8 @@ const progress = { total: 0, done: 0, failed: 0 };
 let CURRENT_RUN_FILE = runnerContext.currentRunFile, EXPANDED_TASKS_FILE = runnerContext.expandedTasksFile, OUTPUT_LOG = runnerContext.outputLog, activeRunId = null;
 process.env.YOLO_LOOP = "1";
 
-function applyRunnerContext(options = Object()) {
-  runnerContext = resolveRunnerContext(options, { packageRoot: PACKAGE_ROOT, config, yoloPath });
+function applyRunnerContext(options = Object(), cfg = runtimeConfig) {
+  runnerContext = resolveRunnerContext(options, { packageRoot: PACKAGE_ROOT, config: cfg, yoloPath });
   ROOT = runnerContext.rootDir;
   STATE_ROOT = runnerContext.stateRoot;
   STATE_DIR = runnerContext.stateDir;
@@ -215,7 +215,7 @@ function cleanupWorktree(wtPath, wtBranch, mergeToMain = false, allowedScope = [
   return runnerWorktreeHandlers.cleanupWorktree(wtPath, wtBranch, mergeToMain, allowedScope, baseRef);
 }
 
-function spawnClaudeInWorktree(prompt, wtPath, timeout = config.ai.timeout_ms) {
+function spawnClaudeInWorktree(prompt, wtPath, timeout = runtimeConfig.ai.timeout_ms) {
   return spawnProvider(prompt, timeout, { cwd: wtPath });
 }
 
@@ -238,7 +238,7 @@ function refreshBaselinesAfterCommit() {
   return refreshRunnerBaselinesAfterCommit({
     rootDir: ROOT,
     runtimeDir: RUNTIME_DIR,
-    config,
+    config: runtimeConfig,
     refreshBaselineAfterCommit,
     log: logP,
   });
@@ -257,6 +257,7 @@ async function commitTask(task, prdPath, worktreeFiles = null) {
     task,
     worktreeFiles,
     isFileAllowedByScope,
+    config: runtimeConfig,
   });
   applyScopeAudit({
     auditPath: join(RUNTIME_DIR, "task-audit.jsonl"),
@@ -308,7 +309,10 @@ function recordTaskTransition(prdPath, transition) {
 function taskPostconditionsPass(task, prd, contractRoot = ROOT) {
   try {
     setContractRoot(contractRoot);
-    const result = evaluatePostConditions(task, prd);
+    const result = evaluatePostConditions(task, prd, {
+      root: contractRoot,
+      config: runtimeConfig,
+    });
     const blocking = (result.results || []).filter((item) => item.severity === "FAIL" && item.passed === false);
     return {
       passed: blocking.length === 0,
@@ -398,7 +402,7 @@ const runnerLifecycleState = createRunnerLifecycleState({
 const runnerWorktreeHandlers = createRunnerWorktreeHandlers({
   getRootDir: () => ROOT,
   getWorktreeRoot: () => WORKTREE_ROOT,
-  config,
+  config: () => runtimeConfig,
   createTaskWorktree,
   cleanupTaskWorktree,
   setActiveGitSession({ activeWorktree: nextWorktree, activeBranch: nextBranch }) {
@@ -490,8 +494,8 @@ function archiveCurrentRun(runId, results) {
 }
 
 export async function run(prdPath, options = Object()) {
-  applyRunnerContext(options);
-  runtimeConfig = withExecutionConfig(config, options);
+  runtimeConfig = withExecutionConfig(options.config || config, options);
+  applyRunnerContext(options, runtimeConfig);
   const exitOnComplete = options.exitOnComplete !== false;
   if (options.mode) globalMode = options.mode;
   // Generate run_id for this session
@@ -511,7 +515,7 @@ export async function run(prdPath, options = Object()) {
         expandedTasksFile: EXPANDED_TASKS_FILE,
         resultsFile: RESULTS_FILE,
       },
-      config,
+      config: runtimeConfig,
       rootDir: ROOT,
       yoloRoot: STATE_ROOT,
       exitOnComplete,
@@ -529,9 +533,9 @@ export async function run(prdPath, options = Object()) {
       prdPath,
       resumeCompleted,
       exitOnComplete,
-      sessionTimeoutHours: config.runner.session_timeout_h,
+      sessionTimeoutHours: runtimeConfig.runner.session_timeout_h,
       maxReviewRounds: MAX_REVIEW_ROUNDS,
-      maxReviewTasksPerRound: MAX_REVIEW_TASKS_PER_ROUND,
+      maxReviewTasksPerRound: runtimeConfig.runner.max_review_tasks_per_round ?? MAX_REVIEW_TASKS_PER_ROUND,
       projectRoot: ROOT,
       stateRoot: STATE_ROOT,
       toolsRoot: PACKAGE_ROOT,

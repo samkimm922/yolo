@@ -84,7 +84,7 @@ export function buildPostCommitOutcome({
         result: {
           ...baseRecord,
           status: "FAILED_NO_CODE",
-          reason: "仅元数据改动,无 src/cloudfunctions 业务代码",
+          reason: "仅元数据改动,无真实业务代码",
         },
         prdUpdate: {
           status: "failed_no_code",

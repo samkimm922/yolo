@@ -1250,7 +1250,10 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
     demand: {
       id: session.id,
       source: session.source || "yolo-demand",
-      approval: session.approval,
+      approval: {
+        ...session.approval,
+        effective_for_prd: session.approval?.approved === true && readiness.executable_prd_ready === true,
+      },
       approval_reason: session.approval_reason || session.approval?.reason || session.approval?.note || "",
       deferred_scope: asArray(session.discussion?.deferred),
       deferred_scope_confirmation: deferredScopeConfirmation(session),

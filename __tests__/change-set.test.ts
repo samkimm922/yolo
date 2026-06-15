@@ -54,21 +54,51 @@ describe("execution change-set helpers", () => {
     ]);
   });
 
-  test("isBusinessFile and classifyChangedFiles preserve runner business file policy", () => {
+  test("isBusinessFile default policy detects source files across layouts", () => {
+    assert.equal(isBusinessFile("components/board/top-bar.tsx"), true);
+    assert.equal(isBusinessFile("app/page.tsx"), true);
+    assert.equal(isBusinessFile("lib/store.ts"), true);
     assert.equal(isBusinessFile("src/a.ts"), true);
     assert.equal(isBusinessFile("cloudfunctions/f/index.js"), true);
+    assert.equal(isBusinessFile("__tests__/a.test.js"), true);
+    assert.equal(isBusinessFile(".yolo/state/x.json"), false);
     assert.equal(isBusinessFile("docs/spec.md"), false);
+    assert.equal(isBusinessFile("node_modules/pkg/index.js"), false);
+    assert.equal(isBusinessFile("dist/server.js"), false);
     assert.equal(isBusinessFile("scripts/yolo/runner.js"), false);
     assert.equal(isBusinessFile("README.md"), false);
+    assert.equal(isBusinessFile("package-lock.json"), false);
+  });
 
+  test("isBusinessFile honors configured business_globs as an inclusion policy", () => {
+    const config = { build: { business_globs: ["app/**", "lib/**"] } };
+    assert.equal(isBusinessFile("app/x.ts", { config }), true);
+    assert.equal(isBusinessFile("lib/store.ts", { config }), true);
+    assert.equal(isBusinessFile("components/x.tsx", { config }), false);
+    assert.equal(isBusinessFile(".yolo/state/x.ts", { config }), false);
+  });
+
+  test("classifyChangedFiles keeps layout-neutral business files in the business list", () => {
     assert.deepEqual(classifyChangedFiles([
-      "src/a.ts",
-      "__tests__/a.test.js",
+      "components/board/top-bar.tsx",
+      "app/page.tsx",
       "docs/spec.md",
       "package.json",
     ]), {
-      business: ["src/a.ts", "__tests__/a.test.js"],
+      business: ["components/board/top-bar.tsx", "app/page.tsx"],
       metadata: ["docs/spec.md", "package.json"],
+    });
+  });
+
+  test("classifyChangedFiles uses configured business_globs to narrow business files", () => {
+    const config = { build: { business_globs: ["app/**", "lib/**"] } };
+    assert.deepEqual(classifyChangedFiles([
+      "app/x.ts",
+      "components/x.tsx",
+      "lib/store.ts",
+    ], { config }), {
+      business: ["app/x.ts", "lib/store.ts"],
+      metadata: ["components/x.tsx"],
     });
   });
 
@@ -134,6 +164,21 @@ describe("execution change-set helpers", () => {
     assert.equal(context.hasRealCode, true);
     assert.deepEqual(context.auditTargets, ["src/a.ts"]);
     assert.deepEqual(context.outOfScope, ["README.md", "docs/spec.md", "src/out.ts"]);
+  });
+
+  test("buildCommitChangeContext classifies component layout targets as business code", () => {
+    const context = buildCommitChangeContext({
+      rootDir: "/repo",
+      task: { scope: { targets: [{ file: "components/board/top-bar.tsx" }] } },
+      worktreeFiles: ["components/board/top-bar.tsx", "README.md"],
+      isFileAllowedByScope: (file, scope) => scope.targets.some((target) => target.file === file),
+    });
+
+    assert.deepEqual(context.businessFiles, ["components/board/top-bar.tsx"]);
+    assert.deepEqual(context.metadataFiles, ["README.md"]);
+    assert.equal(context.hasRealCode, true);
+    assert.deepEqual(context.auditTargets, ["components/board/top-bar.tsx"]);
+    assert.deepEqual(context.outOfScope, ["README.md"]);
   });
 
   test("buildCommitChangeContext preserves out-of-scope files skipped during worktree cleanup", () => {

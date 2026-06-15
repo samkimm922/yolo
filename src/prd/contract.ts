@@ -70,8 +70,9 @@ function createExec(root) {
 
 // ── 条件类型调度表 ──────────────────────────────────────────────
 
-function createEvaluators(root) {
+function createEvaluators(root, options = Object()) {
   const exec = createExec(root);
+  const evaluatorConfig = options.config;
   return {
     code_contains: (params, ts) => evalCodeContains(params, ts, root),
     code_not_contains: (params, ts) => evalCodeNotContains(params, ts, root),
@@ -93,7 +94,7 @@ function createEvaluators(root) {
     tests_pass: (params, ts) => evalTestsPass(params, ts, root),
     test_file_passes: (params, ts) => evalTestsPass(params, ts, root),
     build_pass: (params, ts) => evalBuildPass(params, ts, root),
-    business_code_min: (params, ts) => evalBusinessCodeMin(params, ts, root, exec),
+    business_code_min: (params, ts) => evalBusinessCodeMin(params, ts, root, exec, { config: evaluatorConfig }),
     acceptance_criteria: (params, _taskScope) => {
       const verifyCommand = (params && params.verify_command) || null;
       if (verifyCommand && typeof verifyCommand === "string") {
@@ -220,7 +221,7 @@ function evaluateCondition(condition, taskScope, options = Object()) {
   const { id, type, params = Object(), severity = "FAIL", invert = false } =
     condition;
 
-  const fn = createEvaluators(scopedRoot(options))[condition.type];
+  const fn = createEvaluators(scopedRoot(options), options)[condition.type];
   if (!fn) {
     return {
       id: condition.id || "UNKNOWN",
@@ -370,7 +371,7 @@ export function evaluatePostConditions(task, prd, options = Object()) {
       id: "AUTO-business_code_min",
       type: "business_code_min",
       params: { min: 1 },
-      message: "至少 1 个真实代码/测试文件改动 (src/**, cloudfunctions/**, __tests__/**, tests/**)",
+      message: "至少 1 个真实业务源码/测试文件改动",
       severity: "FAIL",
     });
   }

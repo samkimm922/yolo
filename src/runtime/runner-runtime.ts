@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
+import { loadConfig } from "../core/config.js";
 import { preflightPrd } from "../prd/preflight.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
 import { inspectLifecycleGuard } from "../lifecycle/guard.js";
@@ -207,6 +208,21 @@ function inferProjectRootFromPrdPath(prdPath) {
   return dirname(prdPath);
 }
 
+function resolveRunnerRuntimeConfig({ projectRoot, input = Object(), options = Object() } = Object()) {
+  const providedConfig = input.config || options.config;
+  if (providedConfig) return providedConfig;
+
+  const explicitPath = input.configPath || input.config_path || options.configPath || options.config_path;
+  if (explicitPath) return loadConfig({ path: explicitPath, forceReload: true });
+
+  const projectConfigPath = join(projectRoot, ".yolo", "config.json");
+  if (existsSync(projectConfigPath)) {
+    return loadConfig({ path: projectConfigPath, forceReload: true });
+  }
+
+  return loadConfig({ forceReload: true });
+}
+
 export async function runRunnerRuntime(input = Object(), options = Object()) {
   const prdPath = input.prdPath || input.prd_path;
   const dryRun = input.dryRun === true || input.dry_run === true || options.dryRun === true || options.dry_run === true;
@@ -225,6 +241,7 @@ export async function runRunnerRuntime(input = Object(), options = Object()) {
     const resolvedPrdPath = resolve(prdPath);
     const projectRoot = resolve(input.projectRoot || input.project_root || options.projectRoot || options.project_root || inferProjectRootFromPrdPath(resolvedPrdPath));
     const stateRoot = resolve(input.stateRoot || input.state_root || options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
+    const runConfig = resolveRunnerRuntimeConfig({ projectRoot, input, options });
     const writeLifecycle = input.writeLifecycle ?? input.write_lifecycle ?? options.writeLifecycle ?? options.write_lifecycle ?? true;
     const guard = inspectLifecycleGuard({
       ...input,
@@ -314,6 +331,7 @@ export async function runRunnerRuntime(input = Object(), options = Object()) {
       provider: input.provider || options.provider,
       model: input.model || options.model,
       agentCommand: input.agentCommand || input.agent_command || input.customCommand || input.custom_command || options.agentCommand || options.agent_command || options.customCommand || options.custom_command,
+      config: runConfig,
       startProgressServer: input.startProgressServer ?? input.start_progress_server ?? options.startProgressServer ?? options.start_progress_server,
       initializeBaselines: input.initializeBaselines ?? input.initialize_baselines ?? options.initializeBaselines ?? options.initialize_baselines,
       exitOnComplete: false,

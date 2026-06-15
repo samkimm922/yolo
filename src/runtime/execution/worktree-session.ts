@@ -13,7 +13,7 @@ import {
   execSync as defaultExecSync,
 } from "node:child_process";
 import { createHash } from "node:crypto";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 
 import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
@@ -243,10 +243,24 @@ function writeWorktreeBaselines({
 }) {
   const wtBaselineDir = join(wtPath, "scripts", "yolo", "state", "runtime");
   if (!existsSync(wtBaselineDir)) mkdirSync(wtBaselineDir, { recursive: true });
+  const baselineEnv = {
+    ...process.env,
+    PATH: [join(wtPath, "node_modules", ".bin"), process.env.PATH || ""].filter(Boolean).join(delimiter),
+  };
   // P12.I1: route config-supplied command through safe-exec with cwd=wtPath.
   // argv parse rejects metacharacters; execFileSync DI defaults to safeExecFileSync.
   const run = (command, timeout) => {
-    const parsed = parseCommandToArgv(command);
+    const rawCommand = String(command || "").trim();
+    if (!rawCommand) {
+      return {
+        output: "",
+        stderr: "",
+        exitCode: 0,
+        status: "skipped",
+        reason: "baseline_command_not_configured",
+      };
+    }
+    const parsed = parseCommandToArgv(rawCommand);
     if (!parsed.ok) {
       return {
         output: `command rejected: ${parsed.detail}`,
@@ -262,6 +276,7 @@ function writeWorktreeBaselines({
         cwd: wtPath,
         encoding: "utf8",
         timeout,
+        env: baselineEnv,
       });
       return {
         output: String(stdout || ""),
@@ -289,12 +304,12 @@ function writeWorktreeBaselines({
     }
   };
   try {
-    const result = run(config.build.type_check, 120000);
+    const result = run(config.build?.type_check || "", 120000);
     const keys = parseTscBaselineKeys(result.output);
     writeFileSync(join(wtBaselineDir, "tsc-baseline.json"), JSON.stringify(buildBaselineArtifact({
       tool: "tsc",
       keys,
-      command: config.build.type_check,
+      command: config.build?.type_check || "",
       exitCode: result.exitCode,
       stdout: result.output,
       stderr: result.stderr,
@@ -304,12 +319,12 @@ function writeWorktreeBaselines({
     }), null, 2), "utf8");
   } catch {}
   try {
-    const result = run(config.build.lint, 90000);
+    const result = run(config.build?.lint || "", 90000);
     writeFileSync(join(wtBaselineDir, "eslint-baseline.json"), JSON.stringify({
       ...buildBaselineArtifact({
         tool: "eslint",
         keys: parseEslintBaselineKeys(result.output, wtPath),
-        command: config.build.lint,
+        command: config.build?.lint || "",
         exitCode: result.exitCode,
         stdout: result.output,
         stderr: result.stderr,
