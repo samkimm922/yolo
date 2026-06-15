@@ -67,6 +67,7 @@ const DEFAULTS = {
     model: 'claude-sonnet-4-6',
     timeout_ms: 480000,
     settings: 'settings-minimal.json',
+    claude_permission_mode: 'acceptEdits',
   },
 
   gate: {

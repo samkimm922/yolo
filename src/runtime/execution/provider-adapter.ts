@@ -28,6 +28,7 @@ function findPackageRoot(startDir) {
 export const YOLO_PACKAGE_ROOT = findPackageRoot(MODULE_DIR);
 export const DEFAULT_CLAUDE_SETTINGS_FILE = "settings-minimal.json";
 export const DEFAULT_CLAUDE_SETTINGS_PATH = resolve(YOLO_PACKAGE_ROOT, DEFAULT_CLAUDE_SETTINGS_FILE);
+export const DEFAULT_CLAUDE_PERMISSION_MODE = "acceptEdits";
 
 function selectedProvider(value) {
   const provider = typeof value === "string" ? value : value?.selected;
@@ -307,6 +308,95 @@ export function inspectProviderInvocationPreflight(invocation = Object(), {
   };
 }
 
+function resolveProviderStubPath(value, { rootDir } = Object()) {
+  const stub = cleanString(value);
+  if (!stub) return "";
+  return isAbsolute(stub) ? resolve(stub) : resolve(rootDir || process.cwd(), stub);
+}
+
+function buildProviderStubInvocation(stubPath) {
+  return {
+    provider: "stub",
+    command: process.execPath,
+    args: [stubPath],
+    outputFile: null,
+    stubPath,
+  };
+}
+
+function inspectProviderStubPreflight(invocation = Object(), {
+  existsSync = defaultExistsSync,
+  commandExists = null,
+} = Object()) {
+  const blockers = [];
+  if (!existsSync(invocation.stubPath)) {
+    blockers.push({
+      code: "PROVIDER_STUB_MISSING",
+      provider: "stub",
+      path: invocation.stubPath,
+      message: `Provider stub file not found: ${invocation.stubPath}`,
+    });
+  }
+  if (typeof commandExists === "function" && commandExists(invocation.command) === false) {
+    blockers.push({
+      code: "PROVIDER_STUB_NODE_UNAVAILABLE",
+      provider: "stub",
+      command: invocation.command,
+      message: "provider stub node executable is not available",
+    });
+  }
+  return {
+    status: blockers.length > 0 ? "blocked" : "pass",
+    blocks_execution: blockers.length > 0,
+    blockers,
+    warnings: [],
+  };
+}
+
+function providerStubInspection(invocation = Object(), { rootDir, workDir, runtimeDir, timeout } = Object()) {
+  return {
+    status: "pass",
+    blocks_execution: false,
+    selected_provider: "stub",
+    requested_provider: "stub",
+    available: { stub: true },
+    contract: {
+      provider: "stub",
+      command: invocation.command,
+      capabilities: {
+        provider: "stub",
+        command: invocation.command,
+        stdin_prompt: true,
+        output_capture: true,
+        output_capture_mode: "stdout",
+        model_selection: false,
+        budget_limit: false,
+        sandbox: false,
+        sandbox_mode: "test_stub",
+        approval_policy: "test_stub",
+        file_write: true,
+        shell_exec: false,
+      },
+      timeout: {
+        required: true,
+        max_ms: timeout,
+        enforceable: true,
+        failure_code: "AGENT_TIMEOUT",
+      },
+      root_policy: {
+        root_dir: rootDir,
+        work_dir: workDir,
+        runtime_dir: runtimeDir,
+        allowed_roots: [rootDir, workDir, runtimeDir].filter(Boolean).map((path) => resolve(path)),
+        require_allowed_root: true,
+        fail_closed: true,
+      },
+    },
+    blockers: [],
+    warnings: [],
+  };
+}
+
 export function buildProviderInvocation({
   provider,
   config,
@@ -371,7 +461,7 @@ export function buildProviderInvocation({
   const args = ["-p"];
   const claudeModel = modelValue(ai);
   if (claudeModel) args.push("--model", claudeModel);
-  args.push("--permission-mode", ai.claude_permission_mode || "default");
+  args.push("--permission-mode", cleanString(ai.claude_permission_mode) || DEFAULT_CLAUDE_PERMISSION_MODE);
   const claudeSettings = resolveClaudeSettings(rootDir, ai.settings, { packageRoot });
   if (cleanString(ai.settings)) {
     args.push("--settings", settingsValue(rootDir, ai.settings, { packageRoot }));
@@ -423,34 +513,27 @@ export function spawnProviderPrompt(prompt, {
   if (!rootDir) throw new Error("spawnProviderPrompt requires rootDir");
   if (!runtimeDir) throw new Error("spawnProviderPrompt requires runtimeDir");
   const workDir = cwd || rootDir;
-  const providerDetection = detectModelProvider ? detectModelProvider() : null;
-  const provider = selectedProvider(providerDetection || config.ai?.executor || config.ai?.provider || "claude");
-  const inspection = inspectAgentAdapterContract({
-    config,
-    provider,
-    providerDetection: providerDetection && typeof providerDetection === "object" ? providerDetection : undefined,
-    commandExists,
-    rootDir,
-    workDir,
-    runtimeDir,
-    timeoutMs: timeout,
-  });
+  const stubPath = resolveProviderStubPath(process.env.YOLO_PROVIDER_STUB, { rootDir });
+  const stubEnabled = Boolean(stubPath);
+  const providerDetection = stubEnabled ? null : (detectModelProvider ? detectModelProvider() : null);
+  const provider = stubEnabled ? "stub" : selectedProvider(providerDetection || config.ai?.executor || config.ai?.provider || "claude");
   let invocation;
   try {
-    invocation = buildProviderInvocation({ provider, config, workDir, rootDir, runtimeDir, packageRoot });
+    invocation = stubEnabled
+      ? buildProviderStubInvocation(stubPath)
+      : buildProviderInvocation({ provider, config, workDir, rootDir, runtimeDir, packageRoot });
   } catch (error) {
     return Promise.resolve(blockedProviderRun({
       provider,
-      command: inspection.contract?.command || null,
+      command: null,
       blockers: [
-        ...(inspection.blockers || []),
         {
           code: "PROVIDER_INVOCATION_BUILD_FAILED",
           provider,
           message: error?.message || String(error),
         },
       ],
-      inspection,
+      inspection: null,
       preflight: {
         status: "blocked",
         blocks_execution: true,
@@ -463,7 +546,21 @@ export function spawnProviderPrompt(prompt, {
       },
     }));
   }
-  const preflight = inspectProviderInvocationPreflight(invocation, { existsSync, commandExists });
+  const inspection = stubEnabled
+    ? providerStubInspection(invocation, { rootDir, workDir, runtimeDir, timeout })
+    : inspectAgentAdapterContract({
+        config,
+        provider,
+        providerDetection: providerDetection && typeof providerDetection === "object" ? providerDetection : undefined,
+        commandExists,
+        rootDir,
+        workDir,
+        runtimeDir,
+        timeoutMs: timeout,
+      });
+  const preflight = stubEnabled
+    ? inspectProviderStubPreflight(invocation, { existsSync, commandExists })
+    : inspectProviderInvocationPreflight(invocation, { existsSync, commandExists });
   const blockers = [
     ...(inspection.blockers || []),
     ...(preflight.blockers || []),

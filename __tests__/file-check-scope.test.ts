@@ -90,6 +90,23 @@ describe("files_modified_max scope filtering", () => {
     assert.deepEqual(result.out_of_scope_files, ["lib/db.ts"]);
   });
 
+  test("uses runner-provided changed files after task commit", () => {
+    const result = evalFilesModifiedMax(
+      { max: 1 },
+      { targets: [{ file: "components/ExternalSmokeBadge.tsx" }] },
+      "/repo",
+      fakeFailExec(),
+      {
+        changedFiles: ["components/ExternalSmokeBadge.tsx"],
+        config: { build: { business_globs: ["components/**/*.tsx"] } },
+      },
+    );
+
+    assert.equal(result.passed, true);
+    assert.equal(result.found, 1);
+    assert.deepEqual(result.files, ["components/ExternalSmokeBadge.tsx"]);
+  });
+
   test("fails closed when git diff is unavailable", () => {
     const result = evalFilesModifiedMax(
       { max: 2 },
@@ -292,6 +309,22 @@ describe("business_code_min scope classification", () => {
     assert.equal(result.passed, false);
     assert.equal(result.found, 0);
     assert.match(result.detail, /business_globs: app\/\*\*, lib\/\*\*/);
+  });
+
+  test("uses runner-provided changed files after task commit", () => {
+    const result = evalBusinessCodeMin(
+      { min: 1 },
+      {},
+      "/repo",
+      fakeFailExec(),
+      {
+        changedFiles: ["components/ExternalSmokeBadge.tsx"],
+        config: { build: { business_globs: ["components/**/*.tsx"] } },
+      },
+    );
+
+    assert.equal(result.passed, true);
+    assert.equal(result.found, 1);
   });
 
   test("uses filesystem worktree baseline hashes when git diff is unavailable", () => {

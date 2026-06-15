@@ -135,6 +135,7 @@ describe("runner state root", () => {
         mode: "dev",
         runId,
         startProgressServer: false,
+        runReviewLoop: false,
         initializeBaselines: false,
       });
 

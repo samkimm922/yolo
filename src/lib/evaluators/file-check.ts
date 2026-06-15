@@ -60,6 +60,17 @@ function splitGitFileList(output = "") {
   return String(output || "").split("\n").map((file) => file.trim()).filter(Boolean);
 }
 
+function changedFilesFromOptions(options = Object(), taskScope = Object()) {
+  const candidates = [
+    options.changedFiles,
+    options.changed_files,
+    taskScope.changedFiles,
+    taskScope.changed_files,
+  ];
+  const files = candidates.find((value) => Array.isArray(value));
+  return Array.isArray(files) ? [...new Set(files.map(String).map((file) => file.trim()).filter(Boolean))] : null;
+}
+
 function isBusinessDiffFile(file, options = Object()) {
   return isBusinessFile(file, options);
 }
@@ -72,37 +83,41 @@ function isInTargetScope(file, targetFiles = []) {
 export function evalFilesModifiedMax(params, taskScope, ROOT, exec, options = Object()) {
   const maxFiles = params.max ?? 5;
   const targetFiles = (taskScope?.targets || []).map((t) => t.file).filter(Boolean);
+  const providedChangedFiles = changedFilesFromOptions(options, taskScope);
 
-  const unstagedDiff = exec("git diff --name-only");
-  const stagedDiff = exec("git diff --cached --name-only");
-  if (!unstagedDiff.ok && !stagedDiff.ok) {
-    return {
-      passed: false,
-      status: "indeterminate",
-      detail: `无法获取 diff，无法验证修改文件数（限制 ${maxFiles}）`,
-      target_files: targetFiles,
-      out_of_scope_files: [],
-    };
+  let changedFiles = providedChangedFiles;
+  if (!changedFiles) {
+    const unstagedDiff = exec("git diff --name-only");
+    const stagedDiff = exec("git diff --cached --name-only");
+    if (!unstagedDiff.ok && !stagedDiff.ok) {
+      return {
+        passed: false,
+        status: "indeterminate",
+        detail: `无法获取 diff，无法验证修改文件数（限制 ${maxFiles}）`,
+        target_files: targetFiles,
+        out_of_scope_files: [],
+      };
+    }
+
+    const unstagedFiles = splitGitFileList(unstagedDiff.out);
+    const stagedFiles = splitGitFileList(stagedDiff.out);
+
+    const untracked = exec("git ls-files --others --exclude-standard");
+    if (!untracked.ok) {
+      return {
+        passed: false,
+        status: "indeterminate",
+        detail: `无法获取未跟踪文件列表，无法验证修改文件数（限制 ${maxFiles}）`,
+        files: [...new Set([...stagedFiles, ...unstagedFiles])],
+        target_files: targetFiles,
+        out_of_scope_files: [],
+      };
+    }
+    const untrackedFiles = splitGitFileList(untracked.out);
+    changedFiles = [...new Set([...stagedFiles, ...unstagedFiles, ...untrackedFiles])];
   }
 
-  const unstagedFiles = splitGitFileList(unstagedDiff.out);
-  const stagedFiles = splitGitFileList(stagedDiff.out);
-
-  const untracked = exec("git ls-files --others --exclude-standard");
-  if (!untracked.ok) {
-    return {
-      passed: false,
-      status: "indeterminate",
-      detail: `无法获取未跟踪文件列表，无法验证修改文件数（限制 ${maxFiles}）`,
-      files: [...new Set([...stagedFiles, ...unstagedFiles])],
-      target_files: targetFiles,
-      out_of_scope_files: [],
-    };
-  }
-  const untrackedFiles = splitGitFileList(untracked.out);
-
-  const modifiedFiles = [...new Set([...stagedFiles, ...unstagedFiles, ...untrackedFiles])]
-    .filter((file) => isBusinessDiffFile(file, options));
+  const modifiedFiles = changedFiles.filter((file) => isBusinessDiffFile(file, options));
   const outOfScopeFiles = targetFiles.length > 0
     ? modifiedFiles.filter((file) => !isInTargetScope(file, targetFiles))
     : [];

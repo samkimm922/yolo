@@ -4,8 +4,136 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
+import { generatePrompt } from "../src/cli/prompt.js";
 
 describe("prompt contract", () => {
+  test("uses scope max_lines_per_file in prompt budget text", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-prompt-scope-lines-"));
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src/index.ts"), "export const value = 1;\n", "utf8");
+
+    const prdPath = join(root, "prd.json");
+    writeFileSync(prdPath, JSON.stringify({
+      version: "2.0",
+      tasks: [{
+        id: "FIX-LINES-SCOPE",
+        title: "Fix scoped line budget",
+        type: "bugfix",
+        status: "pending",
+        description: "Change value",
+        scope: {
+          targets: [{ file: "src/index.ts" }],
+          max_files: 1,
+          max_lines_per_file: 250,
+        },
+        post_conditions: [{
+          id: "POST-CONTAINS",
+          type: "code_contains",
+          severity: "FAIL",
+          params: { file: "src/index.ts", text: "value = 2" },
+        }],
+      }],
+    }), "utf8");
+
+    const output = generatePrompt({
+      taskId: "FIX-LINES-SCOPE",
+      prdPath,
+      cwd: root,
+      noExperiencePack: true,
+      config: { gate: { max_lines_per_file: 120 } },
+    });
+
+    assert.match(output, /上限 250 行/);
+    assert.match(output, /单文件不超过 250 行/);
+    assert.match(output, /改动后目标文件 ≤ 250 行/);
+    assert.doesNotMatch(output, /上限 150 行/);
+    assert.doesNotMatch(output, /单文件不超过 150 行/);
+    assert.doesNotMatch(output, /改动后目标文件 ≤ 150 行/);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("falls back to config gate max_lines_per_file when scope omits it", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-prompt-config-lines-"));
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src/index.ts"), "export const value = 1;\n", "utf8");
+
+    const prdPath = join(root, "prd.json");
+    writeFileSync(prdPath, JSON.stringify({
+      version: "2.0",
+      tasks: [{
+        id: "FIX-LINES-CONFIG",
+        title: "Fix config line budget",
+        type: "bugfix",
+        status: "pending",
+        description: "Change value",
+        scope: {
+          targets: [{ file: "src/index.ts" }],
+          max_files: 1,
+        },
+        post_conditions: [{
+          id: "POST-CONTAINS",
+          type: "code_contains",
+          severity: "FAIL",
+          params: { file: "src/index.ts", text: "value = 2" },
+        }],
+      }],
+    }), "utf8");
+
+    const output = generatePrompt({
+      taskId: "FIX-LINES-CONFIG",
+      prdPath,
+      cwd: root,
+      noExperiencePack: true,
+      config: { gate: { max_lines_per_file: 220 } },
+    });
+
+    assert.match(output, /上限 220 行/);
+    assert.match(output, /单文件不超过 220 行/);
+    assert.match(output, /改动后目标文件 ≤ 220 行/);
+    assert.doesNotMatch(output, /上限 150 行/);
+    assert.doesNotMatch(output, /单文件不超过 150 行/);
+    assert.doesNotMatch(output, /改动后目标文件 ≤ 150 行/);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("puts immediate edit instruction before session metadata", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-prompt-action-first-"));
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src/index.ts"), "export const value = 1;\n", "utf8");
+
+    const prdPath = join(root, "prd.json");
+    writeFileSync(prdPath, JSON.stringify({
+      version: "2.0",
+      tasks: [{
+        id: "FIX-ACTION-FIRST",
+        title: "Fix action first",
+        type: "bugfix",
+        status: "pending",
+        description: "Change value",
+        scope: {
+          targets: [{ file: "src/index.ts" }],
+          max_files: 1,
+          max_lines_per_file: 90,
+        },
+      }],
+    }), "utf8");
+
+    const output = generatePrompt({
+      taskId: "FIX-ACTION-FIRST",
+      prdPath,
+      cwd: root,
+      noExperiencePack: true,
+      config: { gate: { max_lines_per_file: 120 } },
+    });
+
+    assert.match(output, /## 立即执行\n- 直接用 Edit\/Write 修改 scope 目标文件/);
+    assert.ok(output.indexOf("## 立即执行") < output.indexOf("## Session"));
+    assert.doesNotMatch(output, /Fresh Session Contract/);
+    assert.doesNotMatch(output, /### 步骤/);
+    assert.doesNotMatch(output, /R1:/);
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("includes machine-verifiable condition params and readonly context", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-prompt-contract-"));
     mkdirSync(join(root, "src/services"), { recursive: true });

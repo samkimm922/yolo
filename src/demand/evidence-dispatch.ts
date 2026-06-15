@@ -197,8 +197,8 @@ function agentToolProfile(input = Object(), options = Object()) {
 }
 
 function safeClaudePermissionMode(value) {
-  const mode = clean(value || "default");
-  return ["bypasspermissions", "dangerously-skip-permissions"].includes(mode.toLowerCase()) ? "default" : mode;
+  const mode = clean(value || "acceptEdits");
+  return ["bypasspermissions", "dangerously-skip-permissions"].includes(mode.toLowerCase()) ? "acceptEdits" : mode;
 }
 
 function safeRepoRelativePath(value) {

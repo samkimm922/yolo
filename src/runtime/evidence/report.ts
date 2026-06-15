@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import {
+  appendJsonlRecord,
   appendStateEvent,
   buildEvidenceArtifact,
   validateLedgerChain,
@@ -758,6 +759,20 @@ export function writeRunReport(options = Object()) {
     report_markdown: relative(resolve(options.stateDir), paths.markdown_path),
     final_answer_json: relative(resolve(options.stateDir), paths.final_answer_json_path),
     final_answer_markdown: relative(resolve(options.stateDir), paths.final_answer_markdown_path),
+    artifact_integrity: artifactIntegrity,
+  }, { source: "run-report" });
+
+  appendJsonlRecord(join(options.stateDir, "artifacts.jsonl"), {
+    event: "artifact.write",
+    ledger: "artifact",
+    run_id: report.run_id,
+    artifact_type: "run_report_bundle",
+    artifacts: [
+      { type: "run_report_json", path: relative(resolve(options.stateDir), paths.json_path) },
+      { type: "run_report_markdown", path: relative(resolve(options.stateDir), paths.markdown_path) },
+      { type: "final_answer_json", path: relative(resolve(options.stateDir), paths.final_answer_json_path) },
+      { type: "final_answer_markdown", path: relative(resolve(options.stateDir), paths.final_answer_markdown_path) },
+    ],
     artifact_integrity: artifactIntegrity,
   }, { source: "run-report" });
 

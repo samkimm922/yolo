@@ -84,7 +84,7 @@ function createEvaluators(root, options = Object()) {
     function_contains_call: (params, ts) => evalFunctionContainsCall(params, ts, root),
     function_contains_text: (params, ts) => evalFunctionContainsText(params, ts, root),
     no_forbidden_patterns: (params, ts) => evalNoForbiddenPatterns(params, ts, root, exec),
-    files_modified_max: (params, ts) => evalFilesModifiedMax(params, ts, root, exec, { config: evaluatorConfig }),
+    files_modified_max: (params, ts) => evalFilesModifiedMax(params, ts, root, exec, { config: evaluatorConfig, changedFiles: options.changedFiles || options.changed_files }),
     file_lines_max: (params, ts) => evalFileLinesMax(params, ts, root),
     no_new_type_errors: (params, ts) => evalNoNewTypeErrors(params, ts, root, exec),
     type_errors_contain: (params, ts) => evalTypeErrorsContain(params, ts, root, exec),
@@ -94,7 +94,7 @@ function createEvaluators(root, options = Object()) {
     tests_pass: (params, ts) => evalTestsPass(params, ts, root),
     test_file_passes: (params, ts) => evalTestsPass(params, ts, root),
     build_pass: (params, ts) => evalBuildPass(params, ts, root),
-    business_code_min: (params, ts) => evalBusinessCodeMin(params, ts, root, exec, { config: evaluatorConfig }),
+    business_code_min: (params, ts) => evalBusinessCodeMin(params, ts, root, exec, { config: evaluatorConfig, changedFiles: options.changedFiles || options.changed_files }),
     acceptance_criteria: (params, _taskScope) => {
       const verifyCommand = (params && params.verify_command) || null;
       if (verifyCommand && typeof verifyCommand === "string") {

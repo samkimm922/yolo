@@ -12,7 +12,7 @@ const baseConfig = {
   ai: {
     provider: "claude",
     model: "claude-sonnet-4-6",
-    claude_permission_mode: "default",
+    claude_permission_mode: "acceptEdits",
     max_budget_usd: 3,
     codex_model: "gpt-5-codex",
     codex_sandbox: "workspace-write",
@@ -41,7 +41,7 @@ describe("agent adapter contract", () => {
     assert.equal(contract.command, "claude");
     assert.equal(contract.budget.enforceable, true);
     assert.equal(contract.budget.max_usd, 3);
-    assert.equal(contract.sandbox.approval_policy, "default");
+    assert.equal(contract.sandbox.approval_policy, "acceptEdits");
     assert.equal(contract.capabilities.stdin_prompt, true);
     assert.equal(contract.capabilities.output_capture_mode, "stdout");
     assert.equal(contract.timeout.required, true);

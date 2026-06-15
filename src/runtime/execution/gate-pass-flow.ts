@@ -73,7 +73,11 @@ export async function handleGatePassFlow({
   let postResult = null;
   if (shouldRunPostCommitPostconditions(commitResult)) {
     const prdForCheck = loadPRD(prdPath);
-    postResult = taskPostconditionsPass(task, prdForCheck);
+    const changedFiles = commitResult.code || [
+      ...(commitResult.businessFiles || []),
+      ...(commitResult.metadataFiles || []),
+    ];
+    postResult = taskPostconditionsPass(task, prdForCheck, undefined, { changedFiles });
   }
 
   const postCommitOutcome = buildPostCommitOutcome({
