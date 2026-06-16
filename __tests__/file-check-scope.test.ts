@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { evalFileLinesMax, evalFilesModifiedMax } from "../src/lib/evaluators/file-check.js";
 import { evalCodeContains } from "../src/lib/evaluators/code-check.js";
 import { evalNoNewDeadCode } from "../src/lib/evaluators/quality-check.js";
-import { evaluatePreConditions } from "../src/prd/contract.js";
+import { evaluatePreConditions, evaluatePostConditions } from "../src/prd/contract.js";
 import { evalBusinessCodeMin } from "../src/lib/evaluators/runtime-check.js";
 
 function fakeExec(outputs) {
@@ -263,6 +264,105 @@ describe("evaluator cannot-verify states", () => {
     assert.equal(result.allPass, false);
     assert.equal(result.warnConditions.length, 1);
     assert.equal(result.results[0].status, "not_run");
+  });
+});
+
+describe("target_file_modified changed file source", () => {
+  const calendarTarget = "components/board/views/calendar-view.tsx";
+
+  function evaluateTargetFileModified({
+    target = calendarTarget,
+    changedFiles,
+    changed_files,
+    root = "/repo",
+  } = Object()) {
+    const options = {
+      root,
+      ...(changedFiles !== undefined ? { changedFiles } : Object()),
+      ...(changed_files !== undefined ? { changed_files } : Object()),
+    };
+    return evaluatePostConditions({
+      id: "T",
+      scope: {
+        expected_zero_business_code: true,
+        targets: [{ file: target }],
+      },
+      post_conditions: [{
+        id: "POST-TARGET",
+        type: "target_file_modified",
+        severity: "FAIL",
+        params: { file: target },
+      }],
+    }, {}, options);
+  }
+
+  function targetResult(result) {
+    return result.results.find((item) => item.id === "POST-TARGET");
+  }
+
+  test("uses runner-provided changedFiles after task commit", () => {
+    const result = evaluateTargetFileModified({
+      changedFiles: [calendarTarget],
+    });
+
+    assert.equal(result.allPass, true);
+    assert.equal(targetResult(result).passed, true);
+    assert.equal(targetResult(result).found, 1);
+  });
+
+  test("uses runner-provided changed_files alias after task commit", () => {
+    const result = evaluateTargetFileModified({
+      changed_files: [calendarTarget],
+    });
+
+    assert.equal(result.allPass, true);
+    assert.equal(targetResult(result).passed, true);
+    assert.equal(targetResult(result).found, 1);
+  });
+
+  test("fails when runner-provided changedFiles does not include the target", () => {
+    const result = evaluateTargetFileModified({
+      changedFiles: ["components/board/views/list-view.tsx"],
+    });
+
+    assert.equal(result.allPass, false);
+    assert.equal(targetResult(result).passed, false);
+    assert.equal(targetResult(result).found, 0);
+    assert.match(targetResult(result).detail, /未在修改列表中/);
+  });
+
+  test("falls back to git diff when changedFiles is not provided", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-target-file-git-"));
+    try {
+      mkdirSync(join(root, "components/board/views"), { recursive: true });
+      writeFileSync(join(root, calendarTarget), "export const initial = true;\n", "utf8");
+      execFileSync("git", ["init", "--quiet"], { cwd: root });
+      execFileSync("git", ["add", calendarTarget], { cwd: root });
+      execFileSync("git", [
+        "-c", "user.name=YOLO Test",
+        "-c", "user.email=yolo@example.invalid",
+        "commit", "--quiet", "-m", "init",
+      ], { cwd: root });
+      writeFileSync(join(root, calendarTarget), "export const changed = true;\n", "utf8");
+
+      const result = evaluateTargetFileModified({ root });
+
+      assert.equal(result.allPass, true);
+      assert.equal(targetResult(result).passed, true);
+      assert.equal(targetResult(result).found, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("normalizes leading dot path differences before matching changedFiles", () => {
+    const result = evaluateTargetFileModified({
+      target: `./${calendarTarget}`,
+      changedFiles: [calendarTarget],
+    });
+
+    assert.equal(result.allPass, true);
+    assert.equal(targetResult(result).passed, true);
   });
 });
 
