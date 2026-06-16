@@ -506,7 +506,6 @@ export async function run(prdPath, options = Object()) {
     const lg = inspectLifecycleGuard({ command: "yolo-run", projectRoot: ROOT, stateRoot: STATE_ROOT, prdPath });
     if (lg.status !== "pass") { console.error(lg.summary || "Lifecycle guard blocked"); throw runnerError(lg.summary || "Lifecycle guard blocked", 1, { lifecycle_guard: lg }); }
     runPreExecutionGates(prdPath, { exitOnFailure: exitOnComplete, deps: options.deps });
-
     const resumeCompleted = prepareRunStartup({
       runId,
       prdPath,
@@ -523,7 +522,8 @@ export async function run(prdPath, options = Object()) {
       taskCountsAsCompleted,
       initTaskLogs,
       writeCurrentRun,
-      startProgressApiServer: options.startProgressServer === false ? () => {} : startEmbeddedProgressServer,
+      startProgressApiServer: options.startProgressServer === false ? () => null : startEmbeddedProgressServer,
+      setProgressServerProc: (proc) => { progressServerProc = proc; },
       initializeBaselines: options.initializeBaselines !== false,
       logProgress: logP,
       runnerError,

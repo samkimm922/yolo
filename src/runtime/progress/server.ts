@@ -341,13 +341,25 @@ function readLifecycleProgressData() {
 }
 
 // ── SSE 连接管理 ──────────────────────────────────────────────────
-const sseClients = new Set();
+const sseClients = new Set<any>();
 let taskLogsWatcher = null;
 let currentRunWatcher = null;
 let reviewLogWatcher = null;
-
+let fileWatchersStarted = false;
+let selfWatcher = null;
 let selfRestartDebounceTimer = null;
 const SELF_FILE_PATH = fileURLToPath(import.meta.url);
+const watchedFiles = new Set<string>();
+
+function watchFileTracked(filePath, options, listener) {
+  watchFile(filePath, options, listener);
+  watchedFiles.add(filePath);
+}
+
+function unwatchFileTracked(filePath) {
+  try { unwatchFile(filePath); } catch {}
+  watchedFiles.delete(filePath);
+}
 
 /** 向所有 SSE 客户端广播事件 */
 function sseBroadcast(event, data) {
@@ -436,6 +448,8 @@ function handleSSEConnection(req, res) {
 
 /** 启动文件监听器 */
 function startFileWatchers() {
+  if (fileWatchersStarted) return;
+  fileWatchersStarted = true;
   // 监听 task-logs 目录变化
   try {
     if (existsSync(TASK_LOGS_DIR)) {
@@ -462,7 +476,7 @@ function startFileWatchers() {
 
   // 监听 current-run.json 变化（用 watchFile 做轮询式监听，更可靠）
   if (existsSync(CURRENT_RUN_FILE)) {
-    watchFile(CURRENT_RUN_FILE, { interval: 1000 }, () => {
+    watchFileTracked(CURRENT_RUN_FILE, { interval: 1000 }, () => {
       const run = readCurrentRun();
       sseBroadcast("run-status", { currentRun: run });
     });
@@ -471,7 +485,7 @@ function startFileWatchers() {
 
   // 监听 review-log.jsonl 变化
   if (existsSync(REVIEW_LOG_FILE)) {
-    watchFile(REVIEW_LOG_FILE, { interval: 1000 }, () => {
+    watchFileTracked(REVIEW_LOG_FILE, { interval: 1000 }, () => {
       const review = readReviewLog();
       sseBroadcast("review-status", { review });
     });
@@ -481,7 +495,7 @@ function startFileWatchers() {
   // 监听 expanded-tasks.json 变化 → 推送全量进度更新（runner 写入此文件）
   const etFile = join(YOLO_ROOT, "state", "expanded-tasks.json");
   if (existsSync(etFile)) {
-    watchFile(etFile, { interval: 2000 }, (curr, prev) => {
+    watchFileTracked(etFile, { interval: 2000 }, (curr, prev) => {
       if (curr.mtimeMs !== prev.mtimeMs) {
         const progressData = getProgressData();
         const stats = readStats();
@@ -509,10 +523,10 @@ function startFileWatchers() {
     // 如果 PRD 路径发生变化（新 run），切换监听目标
     const currentPrd = resolvePrdPath();
     if (currentPrd !== lastWatchedPrd) {
-      try { unwatchFile(lastWatchedPrd); } catch {}
+      if (lastWatchedPrd) unwatchFileTracked(lastWatchedPrd);
       lastWatchedPrd = currentPrd;
       if (lastWatchedPrd) {
-        watchFile(lastWatchedPrd, { interval: 2000 }, onPrdChange);
+        watchFileTracked(lastWatchedPrd, { interval: 2000 }, onPrdChange);
       }
     }
     const progressData = getProgressData();
@@ -533,14 +547,14 @@ function startFileWatchers() {
     });
   };
   if (lastWatchedPrd) {
-    watchFile(lastWatchedPrd, { interval: 2000 }, onPrdChange);
+    watchFileTracked(lastWatchedPrd, { interval: 2000 }, onPrdChange);
   }
 }
 
 /** 启动自身文件监听（用于开发时自动重启） */
 function startSelfWatcher() {
   try {
-    watch(SELF_FILE_PATH, (eventType, filename) => {
+    selfWatcher = watch(SELF_FILE_PATH, (eventType, filename) => {
       clearTimeout(selfRestartDebounceTimer);
       selfRestartDebounceTimer = setTimeout(() => {
         process.stderr.write('[self-restart] 检测到文件变化，正在重启...\n');
@@ -549,6 +563,33 @@ function startSelfWatcher() {
     });
   } catch (e) {
     console.warn('[self-restart] 无法启动自身文件监听:', e.message);
+  }
+}
+
+function closeProgressServerResources() {
+  if (taskLogsWatcher) {
+    try { taskLogsWatcher.close(); } catch {}
+    taskLogsWatcher = null;
+  }
+  for (const filePath of [...watchedFiles]) {
+    unwatchFileTracked(filePath);
+  }
+  currentRunWatcher = null;
+  reviewLogWatcher = null;
+  fileWatchersStarted = false;
+  if (selfRestartDebounceTimer) {
+    clearTimeout(selfRestartDebounceTimer);
+    selfRestartDebounceTimer = null;
+  }
+  if (selfWatcher) {
+    try { selfWatcher.close(); } catch {}
+    selfWatcher = null;
+  }
+  for (const client of [...sseClients]) {
+    try { clearInterval(client._heartbeat); } catch {}
+    try { client.res.end(); } catch {}
+    try { client.taskLogPositions?.clear?.(); } catch {}
+    sseClients.delete(client);
   }
 }
 
@@ -1603,7 +1644,7 @@ const server = http.createServer((req, res) => {
 });
 
 // 导出供 runner 内嵌使用
-export { server, getProgressData, readStats, readLifecycleProgressData, startFileWatchers, HTML, CSS };
+export { server, getProgressData, readStats, readLifecycleProgressData, startFileWatchers, closeProgressServerResources, HTML, CSS };
 
 // 只在直接运行时启动（被 import 时不启动）
 const __main = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));

@@ -9,6 +9,7 @@ import {
 import { spawnSync as defaultSpawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { BASELINE_RUNTIME_FILES } from "../execution/baselines.js";
+import { cleanupProgressServer } from "./shutdown.js";
 
 const PERSIST_RUNTIME_FILES = new Set([
   "learn-stats.json",
@@ -493,7 +494,7 @@ export function printRunReportSummary({
   }
 }
 
-export function finalizeRun({
+export async function finalizeRun({
   runId,
   prdPath,
   taskResults,
@@ -549,9 +550,7 @@ export function finalizeRun({
   writeStateSnapshot("run_end", prdPath);
   archiveCurrentRun(runId, taskResults);
   logProgress("RUN", runId, "archived");
-  if (progressServerProc?.pid) {
-    try { processKill(progressServerProc.pid, "SIGTERM"); } catch (_) {}
-  }
+  await cleanupProgressServer(progressServerProc, { processKill });
   const result = buildRunReturnResult({ runId, prdPath, taskResults, runReportResult, normalizeRepoPath });
   cleanupRunArtifacts({
     yoloRoot,

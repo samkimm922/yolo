@@ -2,6 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   cleanupActiveGitSession,
+  cleanupProgressServer,
   createGracefulShutdownHandler,
   createRunnerTimeoutController,
   handleRunnerFatalError,
@@ -40,7 +41,7 @@ describe("run lifecycle shutdown helpers", () => {
   });
 
   test("timeout controller snapshots progress, archives current run, cleans runtime, and exits", () => {
-    const calls = [];
+    const calls: any[] = [];
     const controller = createRunnerTimeoutController({
       initialTimeoutMs: 7200000,
       startTimeMs: 1000,
@@ -66,7 +67,7 @@ describe("run lifecycle shutdown helpers", () => {
   });
 
   test("graceful shutdown handler records progress and exits nonzero on signals", async () => {
-    const calls = [];
+    const calls: any[] = [];
     const shutdown = createGracefulShutdownHandler({
       progress: { done: 3, failed: 0 },
       runResultsTracker: { completed: new Set(["A"]), failed: [] },
@@ -155,5 +156,27 @@ describe("run lifecycle shutdown helpers", () => {
       writeProgressSnapshot: (payload) => snapshots.push(payload),
     });
     assert.deepEqual(snapshots[0].failedIds, ["B"]);
+  });
+
+  test("progress server cleanup closes embedded handles before falling back to process kill", async () => {
+    const calls: any[] = [];
+    const killCalls: any[] = [];
+    await cleanupProgressServer({
+      pid: 123,
+      close: async () => calls.push("close"),
+      kill: () => calls.push("kill"),
+    }, {
+      processKill: () => calls.push("processKill"),
+    });
+
+    assert.deepEqual(calls, ["close"]);
+
+    await cleanupProgressServer({ pid: 456 }, {
+      processKill: (pid, signal) => {
+        killCalls.push(["processKill", pid, signal]);
+        return true;
+      },
+    });
+    assert.deepEqual(killCalls[0], ["processKill", 456, "SIGTERM"]);
   });
 });

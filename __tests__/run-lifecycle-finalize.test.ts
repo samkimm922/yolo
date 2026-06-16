@@ -1,5 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +19,88 @@ function tempDir() {
 
 function touch(filePath, content = "") {
   writeFileSync(filePath, content, "utf8");
+}
+
+function runNodeScript(source: string, timeoutMs = 5000): Promise<{
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+}> {
+  return new Promise((resolveResult) => {
+    const child = spawn(process.execPath, [
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "--eval",
+      source,
+    ], {
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      resolveResult({ code: null, signal: "SIGKILL", stdout, stderr, timedOut: true });
+    }, timeoutMs);
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("exit", (code, signal) => {
+      clearTimeout(timeout);
+      resolveResult({ code, signal, stdout, stderr, timedOut: false });
+    });
+  });
+}
+
+function finalizeScript({ exitOnComplete, startEmbeddedServer = false, keepAlive = false }: {
+  exitOnComplete: boolean;
+  startEmbeddedServer?: boolean;
+  keepAlive?: boolean;
+}) {
+  return `
+    import { mkdtempSync, mkdirSync } from "node:fs";
+    import { tmpdir } from "node:os";
+    import { join } from "node:path";
+    import { finalizeRun } from "./src/runtime/run-lifecycle/finalize.js";
+    import { startEmbeddedProgressServer } from "./src/runtime/progress/embedded-server.js";
+
+    const root = mkdtempSync(join(tmpdir(), "yolo-runner-exit-"));
+    const stateDir = join(root, "state");
+    const runtimeDir = join(stateDir, "runtime");
+    mkdirSync(runtimeDir, { recursive: true });
+    ${keepAlive ? "setInterval(() => {}, 1000);" : ""}
+    const progressServerProc = ${startEmbeddedServer ? "startEmbeddedProgressServer(0, { log: () => {}, error: (message) => process.stderr.write(String(message) + '\\n') })" : "null"};
+    await finalizeRun({
+      runId: "run-exit",
+      prdPath: join(root, "data", "prd.json"),
+      taskResults: { completed: ["A"], failed: [], skipped: [], blocked: [], contractReview: [] },
+      progressTotal: 1,
+      startTimeMs: Date.now(),
+      projectRoot: root,
+      stateDir,
+      runtimeDir,
+      yoloRoot: root,
+      exitOnComplete: ${exitOnComplete ? "true" : "false"},
+      progressServerProc,
+      writeRunReport: () => ({
+        json_path: join(stateDir, "report.json"),
+        markdown_path: join(stateDir, "report.md"),
+        final_answer_json_path: join(stateDir, "final-answer.json"),
+        final_answer_markdown_path: join(stateDir, "final-answer.md"),
+        report: { status: "success", summary: { task_success_rate: 100, run_success_rate: 100 } },
+        final_answer: { status: "success", outcome: "success", checks: [], blockers: [] },
+      }),
+      logRun: () => {},
+      logProgress: () => {},
+      writeStateSnapshot: () => {},
+      archiveCurrentRun: () => {},
+      normalizeRepoPath: (value) => value,
+      spawnSync: () => ({ status: 0, stdout: "", stderr: "" }),
+      consoleLog: () => {},
+    });
+  `;
 }
 
 describe("run lifecycle finalization helpers", () => {
@@ -397,7 +480,7 @@ describe("run lifecycle finalization helpers", () => {
     ]);
   });
 
-  test("finalizeRun writes report, archives current run, kills progress server, and returns result", () => {
+  test("finalizeRun writes report, archives current run, kills progress server, and returns result", async () => {
     const root = tempDir();
     try {
       const stateDir = join(root, "state");
@@ -405,7 +488,7 @@ describe("run lifecycle finalization helpers", () => {
       mkdirSync(runtimeDir, { recursive: true });
       touch(join(stateDir, "current-run.json"), JSON.stringify({ run_id: "run-1", started_at: "start" }));
       const calls = { logRun: [], snapshots: [], archives: [], killed: [] };
-      const result = finalizeRun({
+      const result = await finalizeRun({
         runId: "run-1",
         prdPath: join(root, "data", "prd.json"),
         taskResults: { completed: ["A"], failed: [], skipped: [], blocked: [] },
@@ -444,5 +527,66 @@ describe("run lifecycle finalization helpers", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("finalizeRun prefers closing an embedded progress server handle before returning", async () => {
+    const root = tempDir();
+    try {
+      const stateDir = join(root, "state");
+      const runtimeDir = join(stateDir, "runtime");
+      mkdirSync(runtimeDir, { recursive: true });
+      const calls = [];
+      const result = await finalizeRun({
+        runId: "run-close",
+        prdPath: join(root, "data", "prd.json"),
+        taskResults: { completed: ["A"], failed: [], skipped: [], blocked: [] },
+        progressTotal: 1,
+        startTimeMs: Date.now(),
+        stateDir,
+        runtimeDir,
+        yoloRoot: root,
+        exitOnComplete: false,
+        writeRunReport: () => ({
+          json_path: join(stateDir, "report.json"),
+          markdown_path: join(stateDir, "report.md"),
+          final_answer_json_path: join(stateDir, "final-answer.json"),
+          final_answer_markdown_path: join(stateDir, "final-answer.md"),
+          report: { status: "success", summary: { task_success_rate: 100, run_success_rate: 100 } },
+          final_answer: { status: "success", outcome: "success", checks: [], blockers: [] },
+        }),
+        logRun: () => {},
+        logProgress: () => {},
+        writeStateSnapshot: () => {},
+        archiveCurrentRun: () => {},
+        normalizeRepoPath: (value) => value.replace(`${root}/`, ""),
+        progressServerProc: {
+          close: async () => calls.push("close"),
+          kill: () => calls.push("kill"),
+          pid: 123,
+        },
+        processKill: () => calls.push("processKill"),
+        spawnSync: () => ({ status: 0, stdout: "", stderr: "" }),
+        consoleLog: () => {},
+      });
+
+      assert.equal(result.exit_code, 0);
+      assert.deepEqual(calls, ["close"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("exitOnComplete=true exits 0 within the timeout even with a live event-loop handle", async () => {
+    const result = await runNodeScript(finalizeScript({ exitOnComplete: true, keepAlive: true }));
+
+    assert.equal(result.timedOut, false, result.stderr || result.stdout);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
+  });
+
+  test("exitOnComplete=false does not call process.exit, but closes the embedded progress server so the child drains", async () => {
+    const result = await runNodeScript(finalizeScript({ exitOnComplete: false, startEmbeddedServer: true }));
+
+    assert.equal(result.timedOut, false, result.stderr || result.stdout);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
   });
 });

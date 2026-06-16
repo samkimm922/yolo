@@ -84,6 +84,7 @@ test("runTaskPipeline wires main, retry, review, and finalize phases in order", 
     ["main", "/repo/.yolo/data/prd.json", true],
     ["retry", ["BLOCKED-TASK"]],
     ["review", ["BLOCKED-TASK"]],
+    ["timeout", 0, { exitOnTimeout: false }],
     ["finalize", 2, ["BLOCKED-TASK"]],
   ]);
 });

@@ -10,6 +10,7 @@ import {
   initializeRuntimeState,
   initializeMissingBaselines,
   loadResumeCompletedFromPrd,
+  prepareRunStartup,
   rotateTaskResults,
   truncateJsonlFile,
 } from "../src/runtime/run-lifecycle/startup.js";
@@ -194,6 +195,47 @@ describe("run lifecycle startup helpers", () => {
       assert.equal(existsSync(join(taskLogDir, "old.jsonl")), false);
       assert.equal(existsSync(join(runtimeDir, "codex-output-old.txt")), false);
       assert.equal(existsSync(expandedTasksFile), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("prepareRunStartup exposes the embedded progress server handle for lifecycle cleanup", () => {
+    const root = tempDir();
+    try {
+      const stateDir = join(root, ".yolo", "state");
+      const runtimeDir = join(stateDir, "runtime");
+      const expandedTasksFile = join(stateDir, "expanded-tasks.json");
+      const resultsFile = join(runtimeDir, "task-results.jsonl");
+      const prdPath = join(root, ".yolo", "data", "prd.json");
+      mkdirSync(join(root, ".yolo", "data"), { recursive: true });
+      mkdirSync(runtimeDir, { recursive: true });
+      writeFileSync(prdPath, JSON.stringify({ tasks: [{ id: "A", status: "done" }] }), "utf8");
+      const handle = { close: async () => {} };
+      let captured = null;
+
+      const resumeCompleted = prepareRunStartup({
+        runId: "run-startup",
+        prdPath,
+        paths: { stateDir, runtimeDir, expandedTasksFile, resultsFile },
+        config: {
+          progress_server: { port: 0 },
+          state: { max_events: 100, max_changes: 100, max_runs: 100, max_learning: 100, max_session_memory: 100 },
+        },
+        rootDir: root,
+        yoloRoot: join(root, ".yolo"),
+        exitOnComplete: false,
+        taskCountsAsCompleted: (task) => task.status === "done",
+        initTaskLogs: () => {},
+        writeCurrentRun: () => {},
+        startProgressApiServer: () => handle,
+        setProgressServerProc: (proc) => { captured = proc; },
+        initializeBaselines: false,
+        logProgress: () => {},
+      });
+
+      assert.equal(captured, handle);
+      assert.deepEqual([...resumeCompleted], ["A"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
