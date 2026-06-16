@@ -132,7 +132,8 @@ export async function runTaskPipeline({
     });
   }
 
-  return finalize({
+  setGlobalTimeout(0, { exitOnTimeout: false });
+  return await finalize({
     runId,
     prdPath,
     taskResults,

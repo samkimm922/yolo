@@ -35,9 +35,20 @@ export function cleanupActiveGitSession({
   }
 }
 
-export function cleanupProgressServer(progressServerProc) {
-  if (progressServerProc?.pid) {
-    try { process.kill(progressServerProc.pid, "SIGTERM"); } catch {}
+export async function cleanupProgressServer(progressServerProc, { processKill = process.kill } = Object()) {
+  if (!progressServerProc) return;
+  if (typeof progressServerProc.close === "function") {
+    try {
+      await progressServerProc.close();
+      return;
+    } catch (_) {}
+  }
+  if (typeof progressServerProc.kill === "function") {
+    try { progressServerProc.kill("SIGTERM"); } catch {}
+    return;
+  }
+  if (progressServerProc.pid) {
+    try { processKill(progressServerProc.pid, "SIGTERM"); } catch {}
   }
 }
 
@@ -82,6 +93,7 @@ export function createRunnerTimeoutController({
       });
       archiveCurrentRunFile({ currentRunFile: state.currentRunFile(), stateDir: state.stateDir(), interrupted: true });
       cleanupRuntimeStateFiles({ stateDir: state.stateDir() });
+      void cleanupProgressServer(state.progressServerProc());
     } catch (_) {}
     exit(2);
   }
@@ -145,7 +157,7 @@ export function createGracefulShutdownHandler({
       log,
     });
     cleanupRuntimeStateFiles({ stateDir: state.stateDir() });
-    cleanupProgressServer(state.progressServerProc());
+    await cleanupProgressServer(state.progressServerProc());
     log("✅ 清理完成，已记录中断并以失败状态退出");
     exit(130);
   };
@@ -179,6 +191,7 @@ export function handleRunnerFatalError({
       execSync,
     });
     cleanupRuntimeStateFiles({ stateDir: state.stateDir() });
+    void cleanupProgressServer(state.progressServerProc());
   } catch (_) {}
   exit(1);
 }

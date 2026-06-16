@@ -1,5 +1,6 @@
 import {
   cleanupActiveGitSession,
+  cleanupProgressServer,
   createGracefulShutdownHandler,
   handleRunnerFatalError,
   saveRunnerProgressSnapshot,
@@ -97,6 +98,7 @@ export function handleRunCliFailure({
     });
     archiveCurrentRunFile({ currentRunFile: state.currentRunFile(), stateDir: state.stateDir(), interrupted: true });
     cleanupRuntimeStateFiles({ stateDir: state.stateDir() });
+    void cleanupProgressServer(state.progressServerProc?.());
   } catch (_) {}
   exit(1);
 }

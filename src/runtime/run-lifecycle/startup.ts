@@ -447,6 +447,7 @@ export function prepareRunStartup({
   initTaskLogs = (..._args) => {},
   writeCurrentRun = (..._args) => {},
   startProgressApiServer = (..._args) => {},
+  setProgressServerProc = (..._args) => {},
   initializeBaselines = true,
   logProgress = (..._args) => {},
   runnerError = createRunnerError,
@@ -488,7 +489,8 @@ export function prepareRunStartup({
   }
   writeCurrentRun(runId, prdPath);
   logProgress("RUN", runId, "started");
-  startProgressApiServer(config.progress_server.port);
+  const progressServerProc = startProgressApiServer(config.progress_server.port) || null;
+  setProgressServerProc(progressServerProc);
   // P9.M4: scope cleanup to this run's worktree root (same convention as
   // resolveRunnerContext) so a shared repo's other yolo-* state is not swept.
   cleanupStaleGitWorktreesAndBranches({ rootDir, worktreeRoot: join(rootDir, "..", ".yolo-worktrees") });
