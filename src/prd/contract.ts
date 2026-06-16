@@ -5,7 +5,7 @@
 //   评估 post_conditions: node contract.js --task=<id> --prd=<path> --phase=post [--baseline-dir=<dir>]
 
 import { readFileSync, existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, isAbsolute, relative, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { supportedConditionTypes as catalogSupportedConditionTypes } from "./condition-catalog.js";
 import {
@@ -66,6 +66,30 @@ function createExec(root) {
       exitCode: result.exit_code,
     };
   };
+}
+
+function normalizeRepoFilePath(file, root = ROOT) {
+  const raw = typeof file === "string" ? file : file?.file || file?.path || "";
+  let normalized = String(raw ?? "").trim().replace(/\\/g, "/");
+  if (!normalized) return "";
+  if (isAbsolute(normalized)) {
+    const relativePath = relative(root, normalized).replace(/\\/g, "/");
+    if (relativePath && relativePath !== "." && !relativePath.startsWith("../") && relativePath !== "..") {
+      normalized = relativePath;
+    }
+  }
+  normalized = normalize(normalized).replace(/\\/g, "/").replace(/^\.\/+/, "");
+  return normalized === "." ? "" : normalized;
+}
+
+function changedFilesFromOptions(options = Object(), root = ROOT) {
+  const candidates = [
+    options.changedFiles,
+    options.changed_files,
+  ];
+  const files = candidates.find((value) => Array.isArray(value));
+  if (!Array.isArray(files)) return null;
+  return [...new Set(files.map((file) => normalizeRepoFilePath(file, root)).filter(Boolean))];
 }
 
 // ── 条件类型调度表 ──────────────────────────────────────────────
@@ -132,7 +156,7 @@ function createEvaluators(root, options = Object()) {
     },
     code_matches: (params, ts) => evalCodeContains({ ...params, is_regex: true }, ts, root),
     target_file_modified: (params, ts) => {
-      const targetFile = params.file || ts?.targets?.[0]?.file;
+      const targetFile = normalizeRepoFilePath(params.file || ts?.targets?.[0]?.file, root);
       if (!targetFile) {
         return {
           passed: false,
@@ -140,15 +164,18 @@ function createEvaluators(root, options = Object()) {
           detail: "无目标文件指定，无法验证目标文件是否修改",
         };
       }
-      const r = exec("git diff --name-only HEAD", { timeout: 10000 });
-      if (!r.ok) {
-        return {
-          passed: false,
-          status: "indeterminate",
-          detail: "无法获取 git diff，无法验证目标文件是否修改",
-        };
+      let modified = changedFilesFromOptions(options, root);
+      if (!modified) {
+        const r = exec("git diff --name-only HEAD", { timeout: 10000 });
+        if (!r.ok) {
+          return {
+            passed: false,
+            status: "indeterminate",
+            detail: "无法获取 git diff，无法验证目标文件是否修改",
+          };
+        }
+        modified = r.out.split("\n").map((file) => normalizeRepoFilePath(file, root)).filter(Boolean);
       }
-      const modified = r.out.split("\n").filter(Boolean);
       const found = modified.some((f) => f === targetFile || f.endsWith(targetFile));
       return { passed: found, detail: found ? `目标文件 ${targetFile} 已修改` : `目标文件 ${targetFile} 未在修改列表中`, found: found ? 1 : 0 };
     },
