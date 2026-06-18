@@ -117,6 +117,76 @@ function removePath(path, { existsSync, rmSync, execSync } = Object()) {
   }
 }
 
+const NODE_MODULES_EXEC_MAX_BUFFER = 1024 * 1024;
+const NODE_MODULES_CLONE_TIMEOUT_MS = 15000;
+const NODE_MODULES_COPY_TIMEOUT_MS = 120000;
+const NODE_MODULES_LINK_TIMEOUT_MS = 5000;
+const NODE_MODULES_CLEANUP_TIMEOUT_MS = 30000;
+
+function execNodeModulesCommand(execSync, command, timeout) {
+  execSync(command, {
+    encoding: "utf8",
+    stdio: ["pipe", "pipe", "pipe"],
+    timeout,
+    maxBuffer: NODE_MODULES_EXEC_MAX_BUFFER,
+  });
+}
+
+function removePartialWorktreeNodeModules(wtNodeModules, {
+  existsSync,
+  rmSync = defaultRmSync,
+  execSync,
+} = Object()) {
+  if (!existsSync(wtNodeModules)) return;
+  try {
+    rmSync(wtNodeModules, { recursive: true, force: true });
+  } catch {
+    execNodeModulesCommand(
+      execSync,
+      `rm -rf ${shellQuote(wtNodeModules)}`,
+      NODE_MODULES_CLEANUP_TIMEOUT_MS,
+    );
+  }
+}
+
+export function provisionWorktreeNodeModules({
+  wtPath,
+  rootDir,
+  execSync = defaultExecSync,
+  existsSync = defaultExistsSync,
+  rmSync = defaultRmSync,
+  platform = process.platform,
+} = Object()) {
+  const wtNodeModules = join(wtPath, "node_modules");
+  const rootNodeModules = join(rootDir, "node_modules");
+  if (existsSync(wtNodeModules) || !existsSync(rootNodeModules)) return false;
+
+  const cloneCommand = platform === "darwin"
+    ? `cp -cR ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`
+    : `cp --reflink=auto -r ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`;
+  const attempts = [
+    { command: cloneCommand, timeout: NODE_MODULES_CLONE_TIMEOUT_MS },
+    {
+      command: `cp -r ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`,
+      timeout: NODE_MODULES_COPY_TIMEOUT_MS,
+    },
+    {
+      command: `ln -s ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`,
+      timeout: NODE_MODULES_LINK_TIMEOUT_MS,
+    },
+  ];
+  for (const [index, attempt] of attempts.entries()) {
+    try {
+      execNodeModulesCommand(execSync, attempt.command, attempt.timeout);
+      return true;
+    } catch (error) {
+      removePartialWorktreeNodeModules(wtNodeModules, { existsSync, rmSync, execSync });
+      if (index === attempts.length - 1) throw error;
+    }
+  }
+  return false;
+}
+
 function shouldCopyProjectEntry(src) {
   const name = src.split("/").pop();
   if ([".git", "node_modules", ".yolo-worktrees", ".yolo-backup"].includes(name)) return false;
@@ -412,19 +482,7 @@ export function createTaskWorktree({
     throw new Error(`createWorktree: git checkout -b failed: ${error.message}`);
   }
 
-  const wtNodeModules = join(wtPath, "node_modules");
-  const rootNodeModules = join(rootDir, "node_modules");
-  if (!existsSync(wtNodeModules) && existsSync(rootNodeModules)) {
-    try {
-      execSync(`ln -s ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`, {
-        encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
-      });
-    } catch {
-      execSync(`cp -r ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`, {
-        encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
-      });
-    }
-  }
+  provisionWorktreeNodeModules({ wtPath, rootDir, execSync, existsSync });
 
   writeWorktreeBaselines({
     wtPath,

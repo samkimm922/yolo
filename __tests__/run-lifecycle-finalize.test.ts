@@ -21,7 +21,7 @@ function touch(filePath, content = "") {
   writeFileSync(filePath, content, "utf8");
 }
 
-function runNodeScript(source: string, timeoutMs = 5000): Promise<{
+function runNodeScript(source: string, timeoutMs = 10000): Promise<{
   code: number | null;
   signal: NodeJS.Signals | null;
   stdout: string;
