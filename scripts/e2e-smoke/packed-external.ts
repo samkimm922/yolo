@@ -518,6 +518,7 @@ function runYoloJson(projectRoot: string, label: string, args: string[], expecte
     env: {
       YOLO_PROVIDER_STUB: STUB_PATH,
       YOLO_PROVIDER_STUB_TARGET: TARGET_FILE,
+      ...(label === "yolo run" ? { YOLO_DEBUG_WORKTREE_NODE_MODULES: "1" } : {}),
     },
   });
   const json = parseJsonOutput(result.stdout);

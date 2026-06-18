@@ -2,9 +2,11 @@ import {
   cpSync as defaultCpSync,
   copyFileSync as defaultCopyFileSync,
   existsSync as defaultExistsSync,
+  lstatSync as defaultLstatSync,
   mkdirSync as defaultMkdirSync,
   readFileSync as defaultReadFileSync,
   readdirSync as defaultReaddirSync,
+  realpathSync as defaultRealpathSync,
   rmSync as defaultRmSync,
   statSync as defaultStatSync,
   writeFileSync as defaultWriteFileSync,
@@ -13,7 +15,7 @@ import {
   execSync as defaultExecSync,
 } from "node:child_process";
 import { createHash } from "node:crypto";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join, relative } from "node:path";
 
 import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
@@ -147,6 +149,48 @@ function removePartialWorktreeNodeModules(wtNodeModules, {
       NODE_MODULES_CLEANUP_TIMEOUT_MS,
     );
   }
+}
+
+function shouldLogNodeModulesDiagnostics() {
+  return process.env.YOLO_DEBUG_WORKTREE_NODE_MODULES === "1";
+}
+
+function describeWorktreeNodeModules(wtPath, {
+  existsSync = defaultExistsSync,
+  lstatSync = defaultLstatSync,
+  realpathSync = defaultRealpathSync,
+} = Object()) {
+  const wtNodeModules = join(wtPath, "node_modules");
+  const diagnostic = {
+    worktree: wtPath,
+    node_modules: wtNodeModules,
+    exists: existsSync(wtNodeModules),
+    is_directory: false,
+    is_symlink: false,
+    realpath: null,
+    inside_worktree: false,
+    has_bin_yolo: existsSync(join(wtNodeModules, ".bin", "yolo")),
+    has_package_yolo: existsSync(join(wtNodeModules, "yolo")),
+    error: null,
+  };
+  try {
+    const stat = lstatSync(wtNodeModules);
+    diagnostic.is_directory = stat.isDirectory();
+    diagnostic.is_symlink = stat.isSymbolicLink();
+  } catch (error) {
+    diagnostic.error = error?.message || String(error);
+    return diagnostic;
+  }
+  try {
+    const wtReal = realpathSync(wtPath);
+    const nmReal = realpathSync(wtNodeModules);
+    const rel = relative(wtReal, nmReal);
+    diagnostic.realpath = nmReal;
+    diagnostic.inside_worktree = Boolean(rel && !rel.startsWith("..") && !isAbsolute(rel));
+  } catch (error) {
+    diagnostic.error = error?.message || String(error);
+  }
+  return diagnostic;
 }
 
 export function provisionWorktreeNodeModules({
@@ -628,6 +672,13 @@ export function cleanupTaskWorktree({
   }
 
   if (insideGitWorkTree) {
+    if (shouldLogNodeModulesDiagnostics()) {
+      log("!!", `worktree node_modules diagnostic: ${JSON.stringify(describeWorktreeNodeModules(wtPath, {
+        existsSync,
+        lstatSync: defaultLstatSync,
+        realpathSync: defaultRealpathSync,
+      }))}`);
+    }
     try {
       execSync(`git worktree remove ${shellQuote(wtPath)} --force`, {
         cwd: rootDir, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
