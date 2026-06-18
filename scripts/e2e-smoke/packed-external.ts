@@ -363,6 +363,18 @@ function writeExternalConfig(projectRoot: string, options: { mutateBusinessSrcOn
     },
     progress_server: { port: 0 },
   });
+  writeJson(join(projectRoot, ".yolo", "adapters", "local-browser.manifest.json"), {
+    schema: "yolo.manifest.v1",
+    id: "packed-local-browser",
+    kind: "acceptance_adapter",
+    description: "Packed smoke local browser acceptance adapter",
+    inputs: ["url", "prd"],
+    outputs: ["acceptance_report"],
+    commands: [{ command: "npm run build" }],
+    evidence: ["runtime_log"],
+    capabilities: ["page_reachable", "screenshot", "runtime_errors"],
+    applies_to: ["ui", "browser"],
+  });
   assertCondition(existsSync(join(projectRoot, ".yolo", "config.json")), "external .yolo/config.json exists");
   assertCondition(readJson(join(projectRoot, ".yolo", "config.json")).build.type_check === "npx tsc --noEmit", "external config uses JSON type_check=npx tsc --noEmit");
 }
@@ -431,6 +443,7 @@ function buildApprovedPrd(projectRoot: string, baseCommit: string) {
       task_kind: "code_change",
       ui: false,
       interface: false,
+      surface: TARGET_FILE,
       priority: "P3",
       status: "pending",
       requirement_ids: ["REQ-PACKED-EXTERNAL-1"],
@@ -446,6 +459,9 @@ function buildApprovedPrd(projectRoot: string, baseCommit: string) {
         { id: "POST-MARKER", type: "code_contains", severity: "FAIL", params: { files: [TARGET_FILE], text: TARGET_MARKER } },
         { id: "POST-TYPECHECK", type: "no_new_type_errors", severity: "FAIL", params: { command: "npx tsc --noEmit" } },
         { id: "POST-BUILD", type: "build_pass", severity: "FAIL", params: { command: "npm run build", timeout_ms: 120000 } },
+      ],
+      state_matrix: [
+        { state: "rendered", surface: TARGET_FILE, expected: "External smoke marker component can render." },
       ],
       evidence_plan: [
         { type: "run_report", required: true },
@@ -595,6 +611,25 @@ function assertAcceptanceUsedRunReport(acceptance: any, runReportPath: string) {
   assertCondition(found, "acceptance artifact_integrity used the runner's real run-report path");
 }
 
+function seedAdapterEvidence(projectRoot: string) {
+  const screenshot = join(projectRoot, ".yolo", "state", "evidence", "adapters", "packed-local-browser", "external-smoke.txt");
+  writeText(screenshot, "packed external UI evidence placeholder\n");
+  const evidencePath = join(projectRoot, ".yolo", "state", "evidence", "adapters", "packed-local-browser-latest.json");
+  writeJson(evidencePath, {
+    status: "pass",
+    artifact_path: evidencePath,
+    adapter: { id: "packed-local-browser" },
+    ui_evidence: {
+      page_reachable: true,
+      critical_path_passed: true,
+      required_state_present: true,
+      runtime_errors: [],
+      screenshots: [".yolo/state/evidence/adapters/packed-local-browser/external-smoke.txt"],
+    },
+  });
+  assertCondition(existsSync(evidencePath), "packed smoke adapter evidence exists");
+}
+
 function assertDeliveryComplete(projectRoot: string, ship: any) {
   assertCondition(ship.status === "success", "delivery command returned success");
   assertCondition(ship.ship?.status === "success", "delivery ship gate status is success");
@@ -672,6 +707,7 @@ async function runSmoke(argv = process.argv.slice(2)) {
 
     const review = runYoloJson(projectRoot, "yolo review", ["review", TARGET_FILE, "--cwd", projectRoot, "--json"]);
     assertCondition(review.status === "success", "review completed for changed source file");
+    seedAdapterEvidence(projectRoot);
 
     const acceptance = runYoloJson(projectRoot, "yolo release accept", [
       "release",

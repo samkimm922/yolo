@@ -581,6 +581,66 @@ describe("yolo check report", () => {
     }
   });
 
+  test("treats ui false tasks with TSX surfaces as UI and requires an adapter", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({
+        ui: false,
+        surface: "src/pages/inventory.tsx",
+        title: "Build inventory page",
+        type: "feature",
+        scope: { targets: [{ file: "src/pages/inventory.tsx" }] },
+        state_matrix: [{ state: "loaded" }],
+        evidence_plan: [{ type: "screenshot" }],
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "src/pages/inventory.tsx" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+      const adapter = report.checks.find((check) => check.name === "adapter_readiness");
+
+      assert.equal(report.status, "blocked");
+      assert.equal(report.task_surface_summary.ui_task_count, 1);
+      assert.equal(adapter.status, "blocked");
+      assert.ok(report.blockers.some((blocker) => blocker.code === "ADAPTER_UI_ACCEPTANCE_MISSING"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps ui false backend tasks non-UI without hard UI signals", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({
+        ui: false,
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+      const adapter = report.checks.find((check) => check.name === "adapter_readiness");
+
+      assert.equal(report.status, "pass");
+      assert.equal(report.task_surface_summary.ui_task_count, 0);
+      assert.equal(adapter.status, "pass");
+      assert.equal(adapter.ui_task_count, 0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("blocks PRD slices that mix independent user stories", () => {
     const root = tempProject();
     try {
