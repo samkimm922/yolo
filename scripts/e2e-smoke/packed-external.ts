@@ -136,9 +136,15 @@ function runChecked(label: string, command: string, args: string[], {
   const exitCode = result.status ?? (result.signal ? 1 : 1);
   log(`[cmd] ${label} exit=${exitCode}`);
   if (!expected.includes(exitCode)) {
+    const diagnosticLines = `${result.stdout || ""}\n${result.stderr || ""}`
+      .split("\n")
+      .filter((line) => /worktree node_modules diagnostic|worktree:|provider|gate|POST-|node_modules realpath/i.test(line))
+      .slice(-80)
+      .join("\n");
     throw new Error([
       `${label} failed with exit ${exitCode}; expected ${expected.join(",")}`,
       `command: ${command} ${args.join(" ")}`,
+      diagnosticLines ? `diagnostics:\n${diagnosticLines}` : "",
       result.stdout ? `stdout:\n${result.stdout.slice(-8000)}` : "",
       result.stderr ? `stderr:\n${result.stderr.slice(-8000)}` : "",
       result.error ? `error: ${result.error.message}` : "",
@@ -197,6 +203,7 @@ function scaffoldProject(projectRoot: string, tgzPath: string) {
     type: "module",
     scripts: {
       typecheck: "npx tsc --noEmit",
+      build: "node scripts/assert-worktree-node-modules.mjs",
     },
     dependencies: {
       yolo: pathToFileURL(tgzPath).href,
@@ -248,10 +255,30 @@ function scaffoldProject(projectRoot: string, tgzPath: string) {
     "}",
     "",
   ].join("\n"));
+  writeText(join(projectRoot, "scripts", "assert-worktree-node-modules.mjs"), [
+    "import { lstatSync, realpathSync } from 'node:fs';",
+    "import { isAbsolute, join, relative } from 'node:path';",
+    "",
+    "const root = process.cwd();",
+    "const nodeModules = join(root, 'node_modules');",
+    "const stat = lstatSync(nodeModules);",
+    "if (!stat.isDirectory() || stat.isSymbolicLink()) {",
+    "  throw new Error('node_modules must be a real directory inside the worktree');",
+    "}",
+    "const rootReal = realpathSync(root);",
+    "const real = realpathSync(nodeModules);",
+    "const rel = relative(rootReal, real);",
+    "if (!rel || rel.startsWith('..') || isAbsolute(rel)) {",
+    "  throw new Error(`node_modules points outside the worktree: ${real}`);",
+    "}",
+    "console.log(`[packed-external] node_modules realpath=${real}`);",
+    "",
+  ].join("\n"));
   assertCondition(!existsSync(join(projectRoot, "src")), "fixture has no src/ directory");
   assertCondition(existsSync(join(projectRoot, "app", "page.tsx")), "fixture app/ source exists");
   assertCondition(existsSync(join(projectRoot, "components", "ExistingCard.tsx")), "fixture components/ source exists");
   assertCondition(existsSync(join(projectRoot, "lib", "format.ts")), "fixture lib/ source exists");
+  assertCondition(existsSync(join(projectRoot, "scripts", "assert-worktree-node-modules.mjs")), "fixture worktree node_modules build assertion exists");
 }
 
 function installedYoloBin(projectRoot: string) {
@@ -267,6 +294,8 @@ function assertInstalledPackage(projectRoot: string) {
     join(packageRoot, "dist", "prompt.js"),
     join(packageRoot, "dist", "learn.js"),
     join(packageRoot, "dist", "src", "runtime", "execution", "provider-adapter.js"),
+    join(projectRoot, "node_modules", ".bin", "tsc"),
+    join(projectRoot, "node_modules", "typescript", "package.json"),
   ];
   for (const file of required) {
     assertCondition(existsSync(file), `installed package asset exists: ${relative(projectRoot, file)}`);
@@ -304,7 +333,7 @@ function writeExternalConfig(projectRoot: string, options: { mutateBusinessSrcOn
       type_check: "npx tsc --noEmit",
       lint: "",
       test: "",
-      build: "",
+      build: "npm run build",
     },
     ai: {
       executor: "claude",
@@ -416,10 +445,12 @@ function buildApprovedPrd(projectRoot: string, baseCommit: string) {
         { id: "POST-FILE", type: "file_exists", severity: "FAIL", params: { file: TARGET_FILE } },
         { id: "POST-MARKER", type: "code_contains", severity: "FAIL", params: { files: [TARGET_FILE], text: TARGET_MARKER } },
         { id: "POST-TYPECHECK", type: "no_new_type_errors", severity: "FAIL", params: { command: "npx tsc --noEmit" } },
+        { id: "POST-BUILD", type: "build_pass", severity: "FAIL", params: { command: "npm run build", timeout_ms: 120000 } },
       ],
       evidence_plan: [
         { type: "run_report", required: true },
         { type: "typecheck", command: "npx tsc --noEmit", required: true },
+        { type: "build", command: "npm run build", required: true },
         { type: "acceptance_report", required: true },
       ],
       trace: {
@@ -495,6 +526,7 @@ function runYoloJson(projectRoot: string, label: string, args: string[], expecte
     env: {
       YOLO_PROVIDER_STUB: STUB_PATH,
       YOLO_PROVIDER_STUB_TARGET: TARGET_FILE,
+      ...(label === "yolo run" ? { YOLO_DEBUG_WORKTREE_NODE_MODULES: "1" } : {}),
     },
   });
   const json = parseJsonOutput(result.stdout);
@@ -525,6 +557,35 @@ function findTscBaseline(projectRoot: string) {
     if (existsSync(candidate)) return candidate;
   }
   return null;
+}
+
+function findGateArtifact(projectRoot: string, taskId: string) {
+  const filePrefix = `gate-${taskId}-`;
+  const runtimeRoots = [join(projectRoot, ".yolo", "state", "runtime")];
+  const archiveRoot = join(projectRoot, ".yolo", "state", "archive", "raw-runtime");
+  if (existsSync(archiveRoot)) {
+    for (const name of readdirSync(archiveRoot).sort().reverse()) {
+      runtimeRoots.push(join(archiveRoot, name, "runtime"));
+    }
+  }
+  for (const runtimeRoot of runtimeRoots) {
+    if (!existsSync(runtimeRoot)) continue;
+    const candidate = readdirSync(runtimeRoot)
+      .filter((name) => name.startsWith(filePrefix) && name.endsWith(".json"))
+      .sort()
+      .reverse()[0];
+    if (candidate) return join(runtimeRoot, candidate);
+  }
+  return null;
+}
+
+function assertWorktreeNodeModulesBuildGate(projectRoot: string) {
+  const gatePath = findGateArtifact(projectRoot, "TASK-PACKED-EXTERNAL-1");
+  assertCondition(gatePath && existsSync(gatePath), "gate artifact exists for packed external task");
+  const gate = readJson(gatePath);
+  const buildGate = (gate.gates || []).find((entry) => entry.name === "POST-BUILD");
+  assertCondition(buildGate?.status === "pass", "POST-BUILD gate passed in the real worktree");
+  assertCondition(String(buildGate.detail || "").includes("npm run build"), "POST-BUILD gate ran npm run build");
 }
 
 function assertAcceptanceUsedRunReport(acceptance: any, runReportPath: string) {
@@ -558,7 +619,7 @@ async function runSmoke(argv = process.argv.slice(2)) {
     scaffoldProject(projectRoot, tgzPath);
 
     stage("install", "npm install tarball dependency");
-    runChecked("npm install", "npm", ["install", "--no-audit", "--no-fund"], {
+    runChecked("npm install", "npm", ["install", "--include=dev", "--no-audit", "--no-fund"], {
       cwd: projectRoot,
       timeout: 180000,
     });
@@ -607,6 +668,7 @@ async function runSmoke(argv = process.argv.slice(2)) {
     const baselinePath = findTscBaseline(projectRoot);
     assertCondition(baselinePath && existsSync(baselinePath), "tsc baseline exists after runner startup/finalize archive");
     assertCondition(readJson(baselinePath).meta?.status === "pass", "tsc baseline status is pass, not silent ENOENT");
+    assertWorktreeNodeModulesBuildGate(projectRoot);
 
     const review = runYoloJson(projectRoot, "yolo review", ["review", TARGET_FILE, "--cwd", projectRoot, "--json"]);
     assertCondition(review.status === "success", "review completed for changed source file");

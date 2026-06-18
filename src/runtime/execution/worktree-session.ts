@@ -2,18 +2,21 @@ import {
   cpSync as defaultCpSync,
   copyFileSync as defaultCopyFileSync,
   existsSync as defaultExistsSync,
+  lstatSync as defaultLstatSync,
   mkdirSync as defaultMkdirSync,
   readFileSync as defaultReadFileSync,
   readdirSync as defaultReaddirSync,
+  realpathSync as defaultRealpathSync,
   rmSync as defaultRmSync,
   statSync as defaultStatSync,
+  unlinkSync as defaultUnlinkSync,
   writeFileSync as defaultWriteFileSync,
 } from "node:fs";
 import {
   execSync as defaultExecSync,
 } from "node:child_process";
 import { createHash } from "node:crypto";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join, relative } from "node:path";
 
 import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
@@ -115,6 +118,254 @@ function removePath(path, { existsSync, rmSync, execSync } = Object()) {
   } catch {
     execSync(`rm -rf ${shellQuote(path)}`, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
   }
+}
+
+const NODE_MODULES_EXEC_MAX_BUFFER = 1024 * 1024;
+const NODE_MODULES_PROVISION_TIMEOUT_MS = 300000;
+const NODE_MODULES_CLEANUP_TIMEOUT_MS = 30000;
+
+function execNodeModulesCommand(execSync, command, timeout) {
+  execSync(command, {
+    encoding: "utf8",
+    stdio: ["pipe", "pipe", "pipe"],
+    timeout,
+    maxBuffer: NODE_MODULES_EXEC_MAX_BUFFER,
+  });
+}
+
+function removePartialWorktreeNodeModules(wtNodeModules, {
+  existsSync,
+  rmSync = defaultRmSync,
+  execSync,
+} = Object()) {
+  if (!existsSync(wtNodeModules)) return;
+  try {
+    rmSync(wtNodeModules, { recursive: true, force: true });
+  } catch {
+    execNodeModulesCommand(
+      execSync,
+      `rm -rf ${shellQuote(wtNodeModules)}`,
+      NODE_MODULES_CLEANUP_TIMEOUT_MS,
+    );
+  }
+}
+
+function shouldLogNodeModulesDiagnostics() {
+  return process.env.YOLO_DEBUG_WORKTREE_NODE_MODULES === "1";
+}
+
+function describeWorktreeNodeModules(wtPath, {
+  existsSync = defaultExistsSync,
+  lstatSync = defaultLstatSync,
+  realpathSync = defaultRealpathSync,
+} = Object()) {
+  const wtNodeModules = join(wtPath, "node_modules");
+  const diagnostic = {
+    worktree: wtPath,
+    node_modules: wtNodeModules,
+    exists: existsSync(wtNodeModules),
+    is_directory: false,
+    is_symlink: false,
+    realpath: null,
+    inside_worktree: false,
+    has_bin_yolo: existsSync(join(wtNodeModules, ".bin", "yolo")),
+    has_bin_tsc: existsSync(join(wtNodeModules, ".bin", "tsc")),
+    has_package_yolo: existsSync(join(wtNodeModules, "yolo")),
+    has_package_typescript: existsSync(join(wtNodeModules, "typescript")),
+    error: null,
+  };
+  try {
+    const stat = lstatSync(wtNodeModules);
+    diagnostic.is_directory = stat.isDirectory();
+    diagnostic.is_symlink = stat.isSymbolicLink();
+  } catch (error) {
+    diagnostic.error = error?.message || String(error);
+    return diagnostic;
+  }
+  try {
+    const wtReal = realpathSync(wtPath);
+    const nmReal = realpathSync(wtNodeModules);
+    const rel = relative(wtReal, nmReal);
+    diagnostic.realpath = nmReal;
+    diagnostic.inside_worktree = Boolean(rel && !rel.startsWith("..") && !isAbsolute(rel));
+  } catch (error) {
+    diagnostic.error = error?.message || String(error);
+  }
+  return diagnostic;
+}
+
+function validateWorktreeNodeModules(wtPath, {
+  existsSync = defaultExistsSync,
+  lstatSync = defaultLstatSync,
+  realpathSync = defaultRealpathSync,
+} = Object()) {
+  const diagnostic = describeWorktreeNodeModules(wtPath, { existsSync, lstatSync, realpathSync });
+  if (!diagnostic.exists) {
+    return { ok: false, reason: "missing", diagnostic };
+  }
+  if (!diagnostic.is_directory || diagnostic.is_symlink) {
+    return { ok: false, reason: "not_real_directory", diagnostic };
+  }
+  if (!diagnostic.inside_worktree) {
+    return { ok: false, reason: "outside_worktree", diagnostic };
+  }
+  return { ok: true, reason: null, diagnostic };
+}
+
+function isRealPathInside(parentReal, childReal) {
+  const rel = relative(parentReal, childReal);
+  return rel === "" || Boolean(rel && !rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function collectPackageSymlinkEntries(rootNodeModules, {
+  readdirSync = defaultReaddirSync,
+  lstatSync = defaultLstatSync,
+} = Object()) {
+  const entries = [];
+  let rootEntries = [];
+  try {
+    rootEntries = readdirSync(rootNodeModules, { withFileTypes: true });
+  } catch {
+    return entries;
+  }
+  const maybeAdd = (relativePath) => {
+    const path = join(rootNodeModules, relativePath);
+    try {
+      if (lstatSync(path).isSymbolicLink()) entries.push({ relativePath, path });
+    } catch {}
+  };
+  for (const entry of rootEntries) {
+    if (entry.name === ".bin" || entry.name.startsWith(".")) continue;
+    if (entry.name.startsWith("@") && entry.isDirectory()) {
+      let scopedEntries = [];
+      try {
+        scopedEntries = readdirSync(join(rootNodeModules, entry.name), { withFileTypes: true });
+      } catch {}
+      for (const scopedEntry of scopedEntries) {
+        maybeAdd(join(entry.name, scopedEntry.name));
+      }
+      continue;
+    }
+    maybeAdd(entry.name);
+  }
+  return entries;
+}
+
+function copyNodeModulesEntry(execSync, source, destination) {
+  const cloneCommand = `cp -a --reflink=auto ${shellQuote(source)} ${shellQuote(destination)}`;
+  const copyCommand = `cp -a ${shellQuote(source)} ${shellQuote(destination)}`;
+  try {
+    execNodeModulesCommand(execSync, cloneCommand, NODE_MODULES_PROVISION_TIMEOUT_MS);
+  } catch {
+    execNodeModulesCommand(execSync, copyCommand, NODE_MODULES_PROVISION_TIMEOUT_MS);
+  }
+}
+
+function removeCopiedNodeModulesEntry(path, {
+  lstatSync = defaultLstatSync,
+  rmSync = defaultRmSync,
+  unlinkSync = defaultUnlinkSync,
+} = Object()) {
+  let stat;
+  try {
+    stat = lstatSync(path);
+  } catch {
+    return;
+  }
+  if (stat.isDirectory() && !stat.isSymbolicLink()) {
+    rmSync(path, { recursive: true, force: true });
+    return;
+  }
+  unlinkSync(path);
+}
+
+function materializeExternalPackageSymlinks({
+  rootNodeModules,
+  wtNodeModules,
+  execSync = defaultExecSync,
+  readdirSync = defaultReaddirSync,
+  lstatSync = defaultLstatSync,
+  realpathSync = defaultRealpathSync,
+  mkdirSync = defaultMkdirSync,
+  rmSync = defaultRmSync,
+} = Object()) {
+  let rootNodeModulesReal;
+  try {
+    rootNodeModulesReal = realpathSync(rootNodeModules);
+  } catch {
+    return;
+  }
+  const symlinks = collectPackageSymlinkEntries(rootNodeModules, { readdirSync, lstatSync });
+  for (const entry of symlinks) {
+    let targetReal;
+    try {
+      targetReal = realpathSync(entry.path);
+    } catch {
+      continue;
+    }
+    if (isRealPathInside(rootNodeModulesReal, targetReal)) continue;
+    const destination = join(wtNodeModules, entry.relativePath);
+    try {
+      mkdirSync(dirname(destination), { recursive: true });
+      removeCopiedNodeModulesEntry(destination, { lstatSync, rmSync });
+      copyNodeModulesEntry(execSync, targetReal, destination);
+    } catch (error) {
+      removeCopiedNodeModulesEntry(destination, { lstatSync, rmSync });
+      throw error;
+    }
+  }
+}
+
+export function provisionWorktreeNodeModules({
+  wtPath,
+  rootDir,
+  execSync = defaultExecSync,
+  existsSync = defaultExistsSync,
+  lstatSync = defaultLstatSync,
+  realpathSync = defaultRealpathSync,
+  readdirSync = defaultReaddirSync,
+  mkdirSync = defaultMkdirSync,
+  rmSync = defaultRmSync,
+  platform = process.platform,
+} = Object()) {
+  const wtNodeModules = join(wtPath, "node_modules");
+  const rootNodeModules = join(rootDir, "node_modules");
+  if (existsSync(wtNodeModules) || !existsSync(rootNodeModules)) return false;
+
+  const cloneCommand = platform === "darwin"
+    ? `cp -cR ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`
+    : `cp -a --reflink=auto ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`;
+  const copyCommand = platform === "darwin"
+    ? `cp -pR ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`
+    : `cp -a ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`;
+  const attempts = [
+    { command: cloneCommand, timeout: NODE_MODULES_PROVISION_TIMEOUT_MS },
+    { command: copyCommand, timeout: NODE_MODULES_PROVISION_TIMEOUT_MS },
+  ];
+  for (const [index, attempt] of attempts.entries()) {
+    try {
+      execNodeModulesCommand(execSync, attempt.command, attempt.timeout);
+      materializeExternalPackageSymlinks({
+        rootNodeModules,
+        wtNodeModules,
+        execSync,
+        readdirSync,
+        lstatSync,
+        realpathSync,
+        mkdirSync,
+        rmSync,
+      });
+      const validation = validateWorktreeNodeModules(wtPath, { existsSync, lstatSync, realpathSync });
+      if (!validation.ok) {
+        throw new Error(`node_modules provisioning produced unusable worktree dependency tree: ${validation.reason} ${JSON.stringify(validation.diagnostic)}`);
+      }
+      return true;
+    } catch (error) {
+      removePartialWorktreeNodeModules(wtNodeModules, { existsSync, rmSync, execSync });
+      if (index === attempts.length - 1) throw error;
+    }
+  }
+  return false;
 }
 
 function shouldCopyProjectEntry(src) {
@@ -412,19 +663,7 @@ export function createTaskWorktree({
     throw new Error(`createWorktree: git checkout -b failed: ${error.message}`);
   }
 
-  const wtNodeModules = join(wtPath, "node_modules");
-  const rootNodeModules = join(rootDir, "node_modules");
-  if (!existsSync(wtNodeModules) && existsSync(rootNodeModules)) {
-    try {
-      execSync(`ln -s ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`, {
-        encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
-      });
-    } catch {
-      execSync(`cp -r ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`, {
-        encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
-      });
-    }
-  }
+  provisionWorktreeNodeModules({ wtPath, rootDir, execSync, existsSync });
 
   writeWorktreeBaselines({
     wtPath,
@@ -570,6 +809,13 @@ export function cleanupTaskWorktree({
   }
 
   if (insideGitWorkTree) {
+    if (shouldLogNodeModulesDiagnostics()) {
+      log("!!", `worktree node_modules diagnostic: ${JSON.stringify(describeWorktreeNodeModules(wtPath, {
+        existsSync,
+        lstatSync: defaultLstatSync,
+        realpathSync: defaultRealpathSync,
+      }))}`);
+    }
     try {
       execSync(`git worktree remove ${shellQuote(wtPath)} --force`, {
         cwd: rootDir, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],

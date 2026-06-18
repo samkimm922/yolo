@@ -1,5 +1,8 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, relative } from "node:path";
 import {
   cleanupTaskWorktree,
   createTaskWorktree,
@@ -8,8 +11,16 @@ import {
   isFileAllowedByScope,
   parseGitNameStatusEntries,
   parseGitStatusEntries,
+  provisionWorktreeNodeModules,
 } from "../src/runtime/execution/worktree-session.js";
 import { baselineArtifactHash } from "../src/runtime/execution/baselines.js";
+
+function assertNodeModulesExecOptions(options, timeout) {
+  assert.equal(options.encoding, "utf8");
+  assert.deepEqual(options.stdio, ["pipe", "pipe", "pipe"]);
+  assert.equal(options.timeout, timeout);
+  assert.equal(options.maxBuffer, 1024 * 1024);
+}
 
 describe("worktree execution session helpers", () => {
   test("scope helpers allow explicit targets and sibling new files only when requested", () => {
@@ -54,6 +65,217 @@ describe("worktree execution session helpers", () => {
       /git status --porcelain failed: fatal: not a git repository/,
     );
     assert.deepEqual(gitLines("/repo", ["status", "--porcelain"], { execFileSync, strict: false }), []);
+  });
+
+  test("provisionWorktreeNodeModules uses platform clone commands first", () => {
+    const darwinCalls = [];
+    const linuxCalls = [];
+    let darwinCopied = false;
+    let linuxCopied = false;
+    const fakeLstat = () => ({ isDirectory: () => true, isSymbolicLink: () => false });
+    const fakeRealpath = (path) => path;
+
+    assert.equal(provisionWorktreeNodeModules({
+      wtPath: "/repo/.yolo-worktrees/FIX-1",
+      rootDir: "/repo",
+      platform: "darwin",
+      existsSync: (path) => path === "/repo/node_modules" || (darwinCopied && path === "/repo/.yolo-worktrees/FIX-1/node_modules"),
+      lstatSync: fakeLstat,
+      realpathSync: fakeRealpath,
+      execSync: (command, options) => {
+        darwinCalls.push({ command, options });
+        darwinCopied = true;
+      },
+    }), true);
+    assert.deepEqual(darwinCalls.map((call) => call.command), ['cp -cR "/repo/node_modules" "/repo/.yolo-worktrees/FIX-1/node_modules"']);
+    assertNodeModulesExecOptions(darwinCalls[0].options, 300000);
+
+    assert.equal(provisionWorktreeNodeModules({
+      wtPath: "/repo/.yolo-worktrees/FIX-2",
+      rootDir: "/repo",
+      platform: "linux",
+      existsSync: (path) => path === "/repo/node_modules" || (linuxCopied && path === "/repo/.yolo-worktrees/FIX-2/node_modules"),
+      lstatSync: fakeLstat,
+      realpathSync: fakeRealpath,
+      execSync: (command, options) => {
+        linuxCalls.push({ command, options });
+        linuxCopied = true;
+      },
+    }), true);
+    assert.deepEqual(linuxCalls.map((call) => call.command), ['cp -a --reflink=auto "/repo/node_modules" "/repo/.yolo-worktrees/FIX-2/node_modules"']);
+    assertNodeModulesExecOptions(linuxCalls[0].options, 300000);
+  });
+
+  test("provisionWorktreeNodeModules falls back from clone to ordinary copy", () => {
+    const calls = [];
+    let copied = false;
+    assert.equal(provisionWorktreeNodeModules({
+      wtPath: "/repo/.yolo-worktrees/FIX-CP",
+      rootDir: "/repo",
+      platform: "darwin",
+      existsSync: (path) => path === "/repo/node_modules" || (copied && path === "/repo/.yolo-worktrees/FIX-CP/node_modules"),
+      lstatSync: () => ({ isDirectory: () => true, isSymbolicLink: () => false }),
+      realpathSync: (path) => path,
+      execSync: (command, options) => {
+        calls.push({ command, options });
+        if (command.startsWith("cp -cR ")) throw new Error("clone unsupported");
+        copied = true;
+        return "";
+      },
+    }), true);
+
+    assert.deepEqual(calls.map((call) => call.command), [
+      'cp -cR "/repo/node_modules" "/repo/.yolo-worktrees/FIX-CP/node_modules"',
+      'cp -pR "/repo/node_modules" "/repo/.yolo-worktrees/FIX-CP/node_modules"',
+    ]);
+    assertNodeModulesExecOptions(calls[0].options, 300000);
+    assertNodeModulesExecOptions(calls[1].options, 300000);
+  });
+
+  test("provisionWorktreeNodeModules fails closed instead of linking node_modules outside the worktree", () => {
+    const calls = [];
+    assert.throws(
+      () => provisionWorktreeNodeModules({
+        wtPath: "/repo/.yolo-worktrees/FIX-LINK",
+        rootDir: "/repo",
+        platform: "linux",
+        existsSync: (path) => path === "/repo/node_modules",
+        execSync: (command, options) => {
+          calls.push({ command, options });
+          throw new Error("copy failed");
+        },
+      }),
+      /copy failed/,
+    );
+
+    assert.deepEqual(calls.map((call) => call.command), [
+      'cp -a --reflink=auto "/repo/node_modules" "/repo/.yolo-worktrees/FIX-LINK/node_modules"',
+      'cp -a "/repo/node_modules" "/repo/.yolo-worktrees/FIX-LINK/node_modules"',
+    ]);
+    assertNodeModulesExecOptions(calls[0].options, 300000);
+    assertNodeModulesExecOptions(calls[1].options, 300000);
+  });
+
+  test("provisionWorktreeNodeModules removes timed-out copy partials before failing closed", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-node-modules-timeout-"));
+    const rootDir = join(root, "project");
+    const wtPath = join(root, ".yolo-worktrees", "FIX-TIMEOUT");
+    const wtNodeModules = join(wtPath, "node_modules");
+    try {
+      mkdirSync(join(rootDir, "node_modules", "pkg"), { recursive: true });
+      mkdirSync(wtPath, { recursive: true });
+      writeFileSync(join(rootDir, "node_modules", "pkg", "index.js"), "module.exports = 1;\n", "utf8");
+
+      const calls = [];
+      const execSync = (command, options) => {
+        calls.push({ command, options });
+        if (command.startsWith("cp -a --reflink=auto ")) throw new Error("clone unsupported");
+        if (command.startsWith("cp -a ")) {
+          mkdirSync(wtNodeModules, { recursive: true });
+          writeFileSync(join(wtNodeModules, "partial.txt"), "partial\n", "utf8");
+          throw Object.assign(new Error("copy timed out"), { code: "ETIMEDOUT" });
+        }
+        throw new Error(`unexpected command: ${command}`);
+      };
+
+      assert.throws(
+        () => provisionWorktreeNodeModules({
+          wtPath,
+          rootDir,
+          platform: "linux",
+          execSync,
+        }),
+        /copy timed out/,
+      );
+
+      assert.deepEqual(calls.map((call) => call.command), [
+        `cp -a --reflink=auto "${join(rootDir, "node_modules")}" "${wtNodeModules}"`,
+        `cp -a "${join(rootDir, "node_modules")}" "${wtNodeModules}"`,
+      ]);
+      assertNodeModulesExecOptions(calls[0].options, 300000);
+      assertNodeModulesExecOptions(calls[1].options, 300000);
+      assert.equal(existsSync(wtNodeModules), false);
+      assert.equal(existsSync(join(wtNodeModules, "partial.txt")), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("provisionWorktreeNodeModules creates an in-worktree real directory", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-node-modules-"));
+    const rootDir = join(root, "project");
+    const wtPath = join(root, ".yolo-worktrees", "FIX-REAL");
+    try {
+      mkdirSync(join(rootDir, "node_modules", "pkg"), { recursive: true });
+      mkdirSync(wtPath, { recursive: true });
+      writeFileSync(join(rootDir, "node_modules", "pkg", "index.js"), "module.exports = 1;\n", "utf8");
+
+      assert.equal(provisionWorktreeNodeModules({ wtPath, rootDir }), true);
+
+      const wtNodeModules = join(wtPath, "node_modules");
+      const stat = lstatSync(wtNodeModules);
+      const real = realpathSync(wtNodeModules);
+      const rel = relative(realpathSync(wtPath), real);
+      assert.equal(stat.isDirectory(), true);
+      assert.equal(stat.isSymbolicLink(), false);
+      assert.equal(Boolean(rel && !rel.startsWith("..") && !isAbsolute(rel)), true);
+      assert.equal(existsSync(join(wtNodeModules, "pkg", "index.js")), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("provisionWorktreeNodeModules preserves package bin symlinks", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-node-modules-symlink-"));
+    const rootDir = join(root, "project");
+    const wtPath = join(root, ".yolo-worktrees", "FIX-SYMLINKS");
+    try {
+      mkdirSync(join(rootDir, "node_modules", "pkg", "bin"), { recursive: true });
+      mkdirSync(join(rootDir, "node_modules", ".bin"), { recursive: true });
+      mkdirSync(wtPath, { recursive: true });
+      writeFileSync(join(rootDir, "node_modules", "pkg", "bin", "cli.js"), "console.log('ok');\n", "utf8");
+      symlinkSync("../pkg/bin/cli.js", join(rootDir, "node_modules", ".bin", "pkg-cli"));
+
+      assert.equal(provisionWorktreeNodeModules({ wtPath, rootDir, platform: "linux" }), true);
+
+      const wtBin = join(wtPath, "node_modules", ".bin", "pkg-cli");
+      assert.equal(lstatSync(wtBin).isSymbolicLink(), true);
+      assert.equal(readlinkSync(wtBin), "../pkg/bin/cli.js");
+      assert.equal(existsSync(join(wtPath, "node_modules", "pkg", "bin", "cli.js")), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("provisionWorktreeNodeModules materializes package symlinks that point outside node_modules", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-node-modules-file-dep-"));
+    const rootDir = join(root, "project");
+    const wtPath = join(root, ".yolo-worktrees", "FIX-FILE-DEP");
+    const rootNodeModules = join(rootDir, "node_modules");
+    const storePackage = join(root, "store", "typescript");
+    try {
+      mkdirSync(join(storePackage, "bin"), { recursive: true });
+      mkdirSync(join(rootNodeModules, ".bin"), { recursive: true });
+      mkdirSync(wtPath, { recursive: true });
+      writeFileSync(join(storePackage, "package.json"), "{\"name\":\"typescript\"}\n", "utf8");
+      writeFileSync(join(storePackage, "bin", "tsc"), "#!/usr/bin/env node\n", "utf8");
+      symlinkSync(relative(rootNodeModules, storePackage), join(rootNodeModules, "typescript"));
+      symlinkSync("../typescript/bin/tsc", join(rootNodeModules, ".bin", "tsc"));
+      assert.equal(existsSync(join(rootNodeModules, ".bin", "tsc")), true);
+
+      assert.equal(provisionWorktreeNodeModules({ wtPath, rootDir, platform: "linux" }), true);
+
+      const wtPackage = join(wtPath, "node_modules", "typescript");
+      const wtBin = join(wtPath, "node_modules", ".bin", "tsc");
+      assert.equal(lstatSync(wtPackage).isDirectory(), true);
+      assert.equal(lstatSync(wtPackage).isSymbolicLink(), false);
+      assert.equal(lstatSync(wtBin).isSymbolicLink(), true);
+      assert.equal(readlinkSync(wtBin), "../typescript/bin/tsc");
+      assert.equal(existsSync(join(wtPackage, "package.json")), true);
+      assert.equal(existsSync(wtBin), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("business-like scope uses the shared source-file policy", () => {
