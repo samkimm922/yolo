@@ -247,6 +247,37 @@ describe("worktree execution session helpers", () => {
     }
   });
 
+  test("provisionWorktreeNodeModules materializes package symlinks that point outside node_modules", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-node-modules-file-dep-"));
+    const rootDir = join(root, "project");
+    const wtPath = join(root, ".yolo-worktrees", "FIX-FILE-DEP");
+    const rootNodeModules = join(rootDir, "node_modules");
+    const storePackage = join(root, "store", "typescript");
+    try {
+      mkdirSync(join(storePackage, "bin"), { recursive: true });
+      mkdirSync(join(rootNodeModules, ".bin"), { recursive: true });
+      mkdirSync(wtPath, { recursive: true });
+      writeFileSync(join(storePackage, "package.json"), "{\"name\":\"typescript\"}\n", "utf8");
+      writeFileSync(join(storePackage, "bin", "tsc"), "#!/usr/bin/env node\n", "utf8");
+      symlinkSync(relative(rootNodeModules, storePackage), join(rootNodeModules, "typescript"));
+      symlinkSync("../typescript/bin/tsc", join(rootNodeModules, ".bin", "tsc"));
+      assert.equal(existsSync(join(rootNodeModules, ".bin", "tsc")), true);
+
+      assert.equal(provisionWorktreeNodeModules({ wtPath, rootDir, platform: "linux" }), true);
+
+      const wtPackage = join(wtPath, "node_modules", "typescript");
+      const wtBin = join(wtPath, "node_modules", ".bin", "tsc");
+      assert.equal(lstatSync(wtPackage).isDirectory(), true);
+      assert.equal(lstatSync(wtPackage).isSymbolicLink(), false);
+      assert.equal(lstatSync(wtBin).isSymbolicLink(), true);
+      assert.equal(readlinkSync(wtBin), "../typescript/bin/tsc");
+      assert.equal(existsSync(join(wtPackage, "package.json")), true);
+      assert.equal(existsSync(wtBin), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("business-like scope uses the shared source-file policy", () => {
     for (const filePath of [
       "packages/app/lib/page.ts",
