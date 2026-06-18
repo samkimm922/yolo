@@ -294,6 +294,8 @@ function assertInstalledPackage(projectRoot: string) {
     join(packageRoot, "dist", "prompt.js"),
     join(packageRoot, "dist", "learn.js"),
     join(packageRoot, "dist", "src", "runtime", "execution", "provider-adapter.js"),
+    join(projectRoot, "node_modules", ".bin", "tsc"),
+    join(projectRoot, "node_modules", "typescript", "package.json"),
   ];
   for (const file of required) {
     assertCondition(existsSync(file), `installed package asset exists: ${relative(projectRoot, file)}`);
@@ -617,7 +619,7 @@ async function runSmoke(argv = process.argv.slice(2)) {
     scaffoldProject(projectRoot, tgzPath);
 
     stage("install", "npm install tarball dependency");
-    runChecked("npm install", "npm", ["install", "--no-audit", "--no-fund"], {
+    runChecked("npm install", "npm", ["install", "--include=dev", "--no-audit", "--no-fund"], {
       cwd: projectRoot,
       timeout: 180000,
     });
