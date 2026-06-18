@@ -641,6 +641,48 @@ describe("yolo check report", () => {
     }
   });
 
+  test("uses task handoff state matrix and evidence plan for UI readiness", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(join(stateRoot, "adapters/local-browser.manifest.json"), acceptanceAdapter());
+      writeJson(prdPath, strictPrd({
+        title: "Build inventory page",
+        type: "feature",
+        scope: { targets: [{ file: "src/pages/inventory.tsx" }] },
+        handoff: {
+          state_matrix: [{ state: "loaded" }],
+          evidence_plan: [{ type: "screenshot" }],
+        },
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "src/pages/inventory.tsx" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, stateRoot, mode: "runner" });
+      const uiReadiness = report.checks.find((check) => check.name === "ui_readiness");
+
+      assert.equal(report.status, "pass");
+      assert.equal(uiReadiness.status, "pass");
+      assert.equal(report.blockers.some((blocker) => blocker.code === "UI_STATE_MATRIX_MISSING"), false);
+      assert.equal(report.blockers.some((blocker) => blocker.code === "UI_EVIDENCE_PLAN_MISSING"), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("blocks PRD slices that mix independent user stories", () => {
     const root = tempProject();
     try {

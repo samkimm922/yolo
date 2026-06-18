@@ -91,12 +91,12 @@ export function uiSurface(task = Object()) {
 }
 
 export function hasStateMatrix(task = Object(), prd = Object(), manifest = Object()) {
-  return Boolean(task.state_matrix || task.ui?.state_matrix || prd.state_matrix || prd.ui_state_matrix || manifest.state_matrix || manifest.ui_state_matrix);
+  return Boolean(task.state_matrix || task.handoff?.state_matrix || task.ui?.state_matrix || prd.state_matrix || prd.ui_state_matrix || manifest.state_matrix || manifest.ui_state_matrix);
 }
 
 export function hasEvidencePlan(task = Object(), prd = Object(), manifest = Object()) {
   const evidenceTypes = new Set(["screenshot_exists", "playwright_check", "visual_regression", "ui_state_assertion", "runtime_log_absent"]);
-  return Boolean(task.evidence_plan || task.ui_evidence_plan || task.ui?.evidence_plan || prd.evidence_plan || manifest.evidence_plan)
+  return Boolean(task.evidence_plan || task.ui_evidence_plan || task.handoff?.evidence_plan || task.ui?.evidence_plan || prd.evidence_plan || manifest.evidence_plan)
     || asArray(task.post_conditions).some((condition) => evidenceTypes.has(condition.type));
 }
 
