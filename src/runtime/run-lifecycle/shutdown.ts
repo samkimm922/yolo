@@ -1,3 +1,5 @@
+const GIT_CLEANUP_EXEC_OPTIONS = { timeout: 15000, maxBuffer: 1024 * 1024 };
+
 export function writeRunEndOnCrashEvent(result = Object(), { logRun, startTimeMs, nowMs = Date.now } = Object()) {
   try {
     logRun("run_end", {
@@ -24,13 +26,13 @@ export function cleanupActiveGitSession({
   if (activeWorktree) {
     try {
       log(`  清理 worktree: ${activeWorktree}`);
-      execSync(`git worktree remove --force "${activeWorktree}" 2>/dev/null`, { cwd: rootDir });
+      execSync(`git worktree remove --force "${activeWorktree}" 2>/dev/null`, { cwd: rootDir, ...GIT_CLEANUP_EXEC_OPTIONS });
     } catch {}
   }
   if (activeBranch) {
     try {
       log(`  清理分支: ${activeBranch}`);
-      execSync(`git branch -D "${activeBranch}" 2>/dev/null`, { cwd: rootDir });
+      execSync(`git branch -D "${activeBranch}" 2>/dev/null`, { cwd: rootDir, ...GIT_CLEANUP_EXEC_OPTIONS });
     } catch {}
   }
 }

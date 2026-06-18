@@ -158,6 +158,30 @@ describe("run lifecycle shutdown helpers", () => {
     assert.deepEqual(snapshots[0].failedIds, ["B"]);
   });
 
+  test("git session cleanup uses bounded exec options and swallows timeouts", () => {
+    const execs = [];
+    assert.doesNotThrow(() => {
+      cleanupActiveGitSession({
+        activeWorktree: "/tmp/wt",
+        activeBranch: "yolo/FIX",
+        rootDir: "/repo",
+        execSync: (cmd, opts) => {
+          execs.push([cmd, opts]);
+          const error: NodeJS.ErrnoException = new Error("git cleanup timed out");
+          error.code = "ETIMEDOUT";
+          throw error;
+        },
+      });
+    });
+
+    assert.equal(execs.length, 2);
+    for (const [, opts] of execs) {
+      assert.equal(opts.cwd, "/repo");
+      assert.equal(opts.timeout, 15000);
+      assert.equal(opts.maxBuffer, 1024 * 1024);
+    }
+  });
+
   test("progress server cleanup closes embedded handles before falling back to process kill", async () => {
     const calls: any[] = [];
     const killCalls: any[] = [];
