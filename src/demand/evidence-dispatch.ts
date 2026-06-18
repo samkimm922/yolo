@@ -8,6 +8,7 @@ import {
   buildDemandSessionState,
   DEMAND_EVIDENCE_RESULT_SCHEMA,
   DEMAND_EVIDENCE_RESULT_SCHEMA_VERSION,
+  demandSessionSchemaError,
   inspectDemandPrdReadiness,
 } from "./router.js";
 import { redact } from "../lib/security/redact.js";
@@ -163,9 +164,53 @@ function evidenceScopeErrors(value) {
   });
 }
 
+function explicitDemandSessionPath(input = Object()) {
+  return clean(input.demandPath || input.demand_path || input.sessionPath || input.session_path);
+}
+
+function readExplicitDemandSession(input = Object(), projectRoot) {
+  const path = explicitDemandSessionPath(input);
+  if (!path) return { explicit: false, ok: true, session: null };
+  const demandPath = resolvePath(projectRoot, path);
+  const sessionPath = existsSync(demandPath) && !demandPath.endsWith(".json") ? join(demandPath, "session.json") : demandPath;
+  if (!existsSync(sessionPath)) {
+    return {
+      explicit: true,
+      ok: false,
+      code: "DEMAND_SESSION_NOT_FOUND",
+      path: sessionPath,
+      message: `Demand session not found: ${sessionPath}`,
+    };
+  }
+  try {
+    const session = JSON.parse(readFileSync(sessionPath, "utf8"));
+    const schemaError = demandSessionSchemaError(session, sessionPath);
+    if (schemaError) {
+      return {
+        explicit: true,
+        ok: false,
+        code: "DEMAND_SESSION_SCHEMA_INVALID",
+        path: sessionPath,
+        message: schemaError,
+      };
+    }
+    return { explicit: true, ok: true, path: sessionPath, session };
+  } catch (error) {
+    return {
+      explicit: true,
+      ok: false,
+      code: "DEMAND_SESSION_JSON_INVALID",
+      path: sessionPath,
+      message: `Demand session JSON parse failed: ${error.message}`,
+    };
+  }
+}
+
 function readDemandSession(input = Object(), projectRoot) {
   if (input.session && typeof input.session === "object") return input.session;
-  const path = clean(input.demandPath || input.demand_path || input.sessionPath || input.session_path || input.demand);
+  const explicit = readExplicitDemandSession(input, projectRoot);
+  if (explicit.explicit) return explicit.ok ? explicit.session : null;
+  const path = clean(input.demand);
   if (!path) return null;
   const demandPath = resolvePath(projectRoot, path);
   const sessionPath = existsSync(demandPath) && !demandPath.endsWith(".json") ? join(demandPath, "session.json") : demandPath;
@@ -175,6 +220,40 @@ function readDemandSession(input = Object(), projectRoot) {
   } catch {
     return null;
   }
+}
+
+function invalidDemandSessionDispatchResult(read, input = Object(), options = Object(), projectRoot, stateRoot, execute) {
+  return {
+    schema_version: DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION,
+    schema: DEMAND_EVIDENCE_DISPATCH_SCHEMA,
+    status: "blocked",
+    code: "DEMAND_SESSION_INVALID",
+    summary: read.message || "Explicit demand session source is invalid.",
+    generated_at: nowIso(),
+    project_root: projectRoot,
+    state_root: stateRoot,
+    output_dir: null,
+    output_file: null,
+    mode: execute ? "execute" : "dry_run",
+    execution_policy: {
+      default_mode: "fail_closed",
+      execute_requires: ["valid demand session"],
+      writes_business_code: false,
+      agent_instruction: "blocked_invalid_demand_session",
+      agent_tool_profile: agentToolProfile(input, options),
+    },
+    demand_status: null,
+    actions: [],
+    blockers: [{
+      code: read.code || "DEMAND_SESSION_INVALID",
+      message: read.message || "Explicit demand session source is invalid.",
+      path: read.path || null,
+      human_needed: true,
+    }],
+    agent_results: [],
+    provider_runs: [],
+    artifacts: [],
+  };
 }
 
 function dispatchIdFor(input = Object(), status = Object()) {
@@ -535,7 +614,8 @@ function executionConfig(input = Object(), options = Object()) {
 }
 
 export async function runDemandEvidenceDispatchRuntime(input = Object(), options = Object()) {
-  const plan = buildDemandEvidenceDispatchPlan(input, options);
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd);
+  const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const execute = input.executeAgents === true
     || input.execute_agents === true
     || input.execute === true
@@ -550,6 +630,16 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
     && input.write_artifact !== false
     && options.writeArtifact !== false
     && options.write_artifact !== false;
+  const demandSessionRead = readExplicitDemandSession(input, projectRoot);
+  if (demandSessionRead.explicit && !demandSessionRead.ok) {
+    return invalidDemandSessionDispatchResult(demandSessionRead, input, options, projectRoot, stateRoot, execute);
+  }
+
+  const plan = buildDemandEvidenceDispatchPlan(input, {
+    ...options,
+    projectRoot,
+    stateRoot,
+  });
 
   const result = Object.assign(Object(), {
     ...plan,

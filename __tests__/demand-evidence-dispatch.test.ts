@@ -2,7 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   buildDemandEvidenceAgentPrompt,
@@ -21,6 +21,13 @@ const completeRiskyDemand = {
   constraints: ["Keep existing clients compatible."],
   risks: ["Wrong thresholds can trigger bad stock decisions."],
   approve: true,
+};
+
+const completeRiskyDemandSession = {
+  schema_version: "1.0",
+  schema: "yolo.demand.session.v1",
+  ...completeRiskyDemand,
+  approval: { approved: true },
 };
 
 interface EvidenceRecord {
@@ -64,6 +71,11 @@ function roleFromPrompt(prompt) {
   if (prompt.includes("evidence cross-checker agent")) return "cross-checker";
   if (prompt.includes("evidence verifier agent")) return "verifier";
   return "unknown";
+}
+
+function writeJson(file, value) {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
 async function runCliJson(argv, cwd) {
@@ -121,6 +133,63 @@ describe("demand evidence dispatch", () => {
     assert.equal(result.status, "dry_run");
     assert.equal(result.mode, "dry_run");
     assert.equal(calls, 0);
+  });
+
+  test("explicit invalid demand session sources fail closed", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-invalid-session-"));
+    try {
+      const badJsonPath = join(root, "bad-session.json");
+      const badSchemaPath = join(root, "bad-schema.json");
+      writeFileSync(badJsonPath, "{not-json", "utf8");
+      writeJson(badSchemaPath, { schema_version: "1.0", schema: "wrong.schema" });
+
+      for (const [demandPath, code] of [
+        ["missing-session.json", "DEMAND_SESSION_NOT_FOUND"],
+        [badJsonPath, "DEMAND_SESSION_JSON_INVALID"],
+        [badSchemaPath, "DEMAND_SESSION_SCHEMA_INVALID"],
+      ]) {
+        const result = await runDemandEvidenceDispatchRuntime({
+          demandPath,
+        }, {
+          projectRoot: root,
+          stateRoot: join(root, ".yolo"),
+          spawnProviderPrompt: async () => {
+            throw new Error("should not plan or spawn for invalid explicit demand session");
+          },
+        });
+
+        assert.equal(result.status, "blocked");
+        assert.equal(result.code, "DEMAND_SESSION_INVALID");
+        assert.deepEqual(result.actions, []);
+        assert.ok(result.blockers.some((blocker) => blocker.code === code));
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("explicit valid demand session still produces a normal dry-run plan", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-valid-session-"));
+    try {
+      const sessionPath = join(root, ".yolo/demand/session.json");
+      writeJson(sessionPath, completeRiskyDemandSession);
+
+      const result = await runDemandEvidenceDispatchRuntime({
+        demandPath: sessionPath,
+      }, {
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        spawnProviderPrompt: async () => {
+          throw new Error("dry-run should not spawn provider agents");
+        },
+      });
+
+      assert.equal(result.status, "dry_run");
+      assert.equal(result.code, "DEMAND_EVIDENCE_DISPATCH_DRY_RUN");
+      assert.equal(result.actions.length > 0, true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("execute mode requires explicit agent dispatch authorization", async () => {
