@@ -28,6 +28,7 @@ import {
 } from "../discovery/runtime.js";
 import {
   runDemandBrainstormRuntime,
+  runDemandApprovedRuntime,
   runDemandDiscussRuntime,
   runDemandOfficeHoursRuntime,
   runDemandTaskRuntime,
@@ -60,7 +61,7 @@ export function usage() {
     "用法:",
     "  yolo status [--cwd <dir>] [--json]",
     "  yolo demand [status|dispatch] [idea|--demand <session.json|dir>] [--mode office-hours] [--json]",
-    "  yolo demand --stage brainstorm|interview|discover|discuss|prd <idea-or-session> [--json]",
+    "  yolo demand --stage brainstorm|interview|discover|discuss <idea-or-session> [--json]",
     "  yolo spec [--discovery <discovery.json>|--demand <session.json|dir>] [--output <prd.json>] [--json]",
     "  yolo tasks [--discovery <discovery.json>] [--json]",
     "  yolo check <prd.json> [--json] [--no-write] [--strict|--release]",
@@ -69,7 +70,7 @@ export function usage() {
     "  yolo release [candidate|accept|ship] [--mode rc|publish] [--dry-run] [--json]",
     "",
     "`yolo status` 会读取 .yolo/lifecycle/status.json，告诉 agent 当前唯一安全的下一步。",
-    "`yolo demand` 是需求阶段只读/访谈入口，会输出 context_type、route、evidence_policy、missing_slots、blockers、assumptions、needed_evidence_agents、prd_ready 和 next_action。",
+    "`yolo demand` 是需求阶段只读/访谈入口，会输出 context_type、route、evidence_policy、missing_slots、blockers、assumptions、needed_evidence_agents、prd_intake_ready、executable_prd_ready 和 next_action。",
     "`yolo demand dispatch` 会把 evidence agent 协议接到实际 agent provider；默认 dry-run，只有同时传 --execute-agents 和 --allow-agent-dispatch 才执行。",
     "`yolo demand --mode office-hours` 是精简 office-hours profile；`yolo office-hours` 仅保留为隐藏兼容 shim。",
     "`yolo spec` 会生成 PRD/spec 产物；只写 spec JSON，不改业务代码。",
@@ -788,7 +789,8 @@ export function formatDemandStatusText(result = Object()) {
   lines.push(`route: ${state.route || result.triage?.route || "fast"}`);
   lines.push(`evidence_policy: ${state.evidence_policy || result.triage?.evidence_policy || "none"}`);
   lines.push(`reason_codes: ${(state.reason_codes || result.triage?.reason_codes || []).join(", ") || "none"}`);
-  lines.push(`prd_ready: ${state.prd_ready === true}`);
+  lines.push(`prd_intake_ready: ${state.prd_intake_ready === true}`);
+  lines.push(`executable_prd_ready: ${state.executable_prd_ready === true}`);
   let printedQuestion = false;
   if (nextQuestion) {
     const label = nextQuestion.slot || nextQuestion.id || nextQuestion.question_id || "next";
@@ -840,7 +842,8 @@ export function formatDemandDispatchText(result = Object()) {
     }
   }
   if (result.readiness) {
-    lines.push(`prd_ready: ${result.readiness.prd_ready === true}`);
+    lines.push(`prd_intake_ready: ${result.readiness.prd_intake_ready === true}`);
+    lines.push(`executable_prd_ready: ${result.readiness.executable_prd_ready === true}`);
     if (Array.isArray(result.readiness.blockers) && result.readiness.blockers.length) {
       lines.push("blockers:");
       for (const blocker of result.readiness.blockers) {
@@ -1057,14 +1060,7 @@ function interviewNextActions(state = Object(), extra = Object()) {
   }
   if (!extra.demand_dir) actions.push(`Create demand artifacts: yolo interview to-demand --session ${path}`);
   if (extra.demand_dir) {
-    const hasRoadmap = Array.isArray(state.roadmap)
-      ? state.roadmap.length > 0
-      : ((state.roadmap?.mvp?.length > 0) || (state.roadmap?.phases?.length > 0));
-    if (hasRoadmap) {
-      actions.push(`Continue to PRD when ready: yolo prd --demand ${extra.demand_dir}`);
-    } else {
-      actions.push(`Roadmap not yet created. Generate roadmap: yolo tasks --demand ${extra.demand_dir}`);
-    }
+    actions.push(`yolo spec --demand ${extra.demand_path || extra.demand_dir}`);
   }
   for (const action of extra.runtime_next_actions || []) {
     if (actions.length >= 3) break;
@@ -1088,9 +1084,12 @@ function interviewResult(command, state = Object(), extra = Object()) {
     artifacts: extra.artifacts || [],
     outputs: extra.outputs || [],
     demand_dir: extra.demand_dir,
+    demand_path: extra.demand_path,
     demand_result: extra.demand_result,
   });
   result.next_actions = extra.next_actions || interviewNextActions(decorated, extra);
+  result.next_action = extra.next_action || result.next_actions?.[0] || null;
+  if (extra.blockers) result.blockers = extra.blockers;
   return result;
 }
 
@@ -1098,6 +1097,7 @@ function formatInterviewText(label, result = Object()) {
   const lines = [`[yolo interview ${label}] ${result.status}: ${result.summary}`];
   if (result.session_path) lines.push(`session: ${result.session_path}`);
   if (result.demand_dir) lines.push(`demand_dir: ${result.demand_dir}`);
+  if (result.demand_path) lines.push(`demand_path: ${result.demand_path}`);
   if (result.next_question) lines.push(`next_question: ${result.next_question.id} ${result.next_question.text}`);
   else lines.push("next_question: none");
   if (result.coverage) {
@@ -1117,6 +1117,10 @@ function formatInterviewText(label, result = Object()) {
     for (const followUp of followUps.slice(0, 3)) {
       lines.push(`  - ${followUp.slot || followUp.question_id}: ${followUp.plain_language_prompt || followUp.text || followUp.message}`);
     }
+  }
+  if (Array.isArray(result.blockers) && result.blockers.length) {
+    lines.push("blockers:");
+    for (const blocker of result.blockers) lines.push(`  - ${blocker.code || "BLOCKER"} ${blocker.message || blocker.slot || ""}`.trimEnd());
   }
   if (result.artifacts?.length) lines.push(`artifacts: ${result.artifacts.join(", ")}`);
   if (result.next_actions?.length) {
@@ -1910,6 +1914,7 @@ export async function runYoloNextCli(argv = [], io = Object()) {
     target_stage: next.stage,
     reason: next.reason,
     description: next.description,
+    allowed_commands: guard.allowed_commands || [],
     guard,
     next_actions: [`Run ${next.command}: ${next.description}.`],
   };
@@ -2060,12 +2065,29 @@ export async function runYoloInterviewCli(argv = [], io = Object()) {
       if (!input.sessionPath) return error("to-demand", "MISSING_INTERVIEW_SESSION", "Missing --session <path|dir>.");
       const read = readInterviewState(input.sessionPath, projectRoot);
       if (!read.ok) return error("to-demand", "INTERVIEW_SESSION_MISSING", read.error, 1);
-      const stateForDemand = cloneJson(read.state);
+      const stateForDemand = decorateInterviewState(cloneJson(read.state));
       if (stateForDemand.playback?.confirmed !== true) {
         return error("to-demand", "PLAYBACK_UNCONFIRMED", "Understanding playback has not been confirmed by the user. Run playback confirmation before to-demand.", 2);
       }
+      if (stateForDemand.coverage?.ready_for_prd_intake !== true) {
+        const blockers = stateForDemand.coverage?.readiness?.blockers || [];
+        const nextSlot = stateForDemand.next_question?.id || blockers[0]?.slot || "target_users";
+        const nextActions = [
+          `Missing demand fields/approvals: ${blockers.map((blocker) => blocker.slot || blocker.code).filter(Boolean).join(", ") || nextSlot}.`,
+          `yolo interview answer --session ${stateForDemand.interview_path} --question ${nextSlot} --answer "<answer>"`,
+        ];
+        const result = interviewResult("to-demand", stateForDemand, {
+          status: "blocked",
+          code: "INTERVIEW_PRD_INTAKE_BLOCKED",
+          summary: "Interview is not ready to create approved demand artifacts.",
+          blockers,
+          next_actions: nextActions,
+          next_action: nextActions[0],
+        });
+        return emit("to-demand", result, workflowExitCode(result));
+      }
       const demandInput = demandInterviewToDemandInput(stateForDemand);
-      const demandResult = runDemandDiscussRuntime({
+      const demandResult = runDemandApprovedRuntime({
         ...demandInput,
         projectRoot: stateForDemand.projectRoot || stateForDemand.project_root || projectRoot,
         stateRoot: stateForDemand.stateRoot || stateForDemand.state_root || stateRoot,
@@ -2079,7 +2101,7 @@ export async function runYoloInterviewCli(argv = [], io = Object()) {
         demand: {
           demand_id: demandResult.demand_id,
           demand_dir: demandResult.demand_dir,
-          demand_path: demandResult.artifacts?.find((path) => path.endsWith("session.json")) || null,
+          demand_path: demandResult.demand_path || demandResult.artifacts?.find((path) => path.endsWith("session.json")) || null,
           status: demandResult.status,
           readiness: demandResult.readiness,
           artifacts: demandResult.artifacts || [],
@@ -2093,14 +2115,6 @@ export async function runYoloInterviewCli(argv = [], io = Object()) {
         ...(demandResult.artifacts || []),
       ].filter(Boolean);
       const blocked = isBlockingWorkflowStatus(demandResult.status);
-      if (!blocked && writeArtifacts) {
-        writeLifecycleStageReport("discovery", {
-          status: "success",
-          summary: "Demand artifacts generated from interview satisfy discovery.",
-          demand_id: demandResult.demand_id,
-          demand_dir: demandResult.demand_dir,
-        }, { projectRoot, stateRoot, source: "to-demand", writeSessionMemory: false, skipSequenceCheck: true });
-      }
       const status = demandResult.status === "warning" ? "warning" : blocked ? "blocked" : "success";
       const code = demandResult.status === "warning"
         ? "INTERVIEW_DEMAND_WARNING"
@@ -2111,12 +2125,16 @@ export async function runYoloInterviewCli(argv = [], io = Object()) {
         status,
         code,
         summary: blocked
-          ? "Demand artifacts generated from interview are not PRD-ready."
-          : writeArtifacts ? "Demand artifacts generated from interview." : "Demand artifact preview generated from interview.",
+          ? "Approved demand handoff is blocked by missing interview fields or approval."
+          : writeArtifacts ? "Approved demand artifacts generated from interview." : "Approved demand artifact preview generated from interview.",
         artifacts,
         outputs: demandResult.outputs || [],
         demand_dir: demandResult.demand_dir,
+        demand_path: demandResult.demand_path,
         demand_result: demandResult,
+        blockers: demandResult.blockers || [],
+        next_action: demandResult.next_action,
+        next_actions: demandResult.next_actions || [],
         runtime_next_actions: demandResult.next_actions || [],
       });
       return emit("to-demand", result, workflowExitCode(result));
@@ -2252,29 +2270,21 @@ async function runYoloDemandStageCli(stage, input = Object(), options = Object()
   }
 
   if (stageLabel === "prd") {
-    const guarded = guardBlocked("yolo-prd", input, options, projectRoot, { stdout, stderr });
-    if (guarded !== 0) return guarded;
-    let result = input.demandPath
-      ? runDemandPrdRuntime({
-        ...input,
-        projectRoot,
-        stateRoot,
-        writeArtifacts: options.writeLifecycle,
-      })
-      : runDiscoveryPrdRuntime({
-        ...input,
-        projectRoot,
-        stateRoot,
-        objective: input.objective,
-        writeArtifacts: options.writeLifecycle,
-        writeLifecycle: options.writeLifecycle,
-        source: "yolo-demand:prd",
-      });
+    const demandRef = input.demandPath || input.demand_path || "<session.json|dir>";
+    const result = {
+      status: "blocked",
+      code: "DEMAND_STAGE_PRD_DEPRECATED",
+      summary: "Demand stage stops at approved demand artifacts; executable PRD generation belongs to yolo spec.",
+      blockers: [{
+        code: "USE_SPEC_FOR_EXECUTABLE_PRD",
+        message: "Do not generate executable prd.json from yolo demand.",
+      }],
+      artifacts: [],
+      next_action: `yolo spec --demand ${demandRef}`,
+      next_actions: [`yolo spec --demand ${demandRef}`],
+    };
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    else {
-      const text = input.demandPath ? formatDemandRuntimeText("prd", result) : formatDiscoveryRuntimeText("prd", result);
-      stdout.write(`${text}\n`);
-    }
+    else stdout.write(`${formatDemandRuntimeText("prd", result)}\n`);
     return workflowExitCode(result);
   }
 
@@ -2321,7 +2331,7 @@ export async function runYoloDemandCli(argv = [], io = Object()) {
 
   // Non-technical onboarding: a bare `yolo demand "<idea>"` (no --stage, no
   // status/dispatch subcommand, no existing session) used to dump a blocked
-  // DEMAND_NOT_PRD_READY snapshot and a free-text question with no runnable
+  // demand-intake-blocked snapshot and a free-text question with no runnable
   // next step. Route it into the interview stage so the user gets a session
   // path and a copy-pasteable `yolo interview answer ...` next action.
   const bareIdeaText = cleanCliText(input.objective || input.idea || input.text || input.requirement);

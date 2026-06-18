@@ -262,14 +262,24 @@ describe("yolo interview CLI", () => {
       ], { cwd: root, stdout: out.stream });
 
       const result = out.json();
-      assert.equal(exitCode, 1);
-      assert.equal(result.status, "blocked");
-      assert.equal(result.code, "INTERVIEW_DEMAND_BLOCKED");
+      assert.equal(exitCode, 0);
+      assert.equal(result.status, "success");
+      assert.equal(result.code, "INTERVIEW_DEMAND_CREATED");
       assert.equal(result.demand_result.demand_id, "DEMAND-STOCK-ALERTS");
       assert.equal(existsSync(join(result.demand_dir, "session.json")), true);
-      assert.equal(result.demand_result.status, "blocked");
+      assert.equal(result.demand_result.status, "success");
       assert.equal(result.demand_result.session.approval.approved, true);
+      assert.equal(result.demand_result.guarantees.produces_executable_prd, false);
       assert.equal(result.coverage.ready_for_prd_intake, true);
+      assert.equal(result.next_action, `yolo spec --demand ${result.demand_path}`);
+      assert.deepEqual(result.next_actions, [result.next_action]);
+
+      const statusOut = capture();
+      const statusExit = await runYoloCli(["status", "--cwd", root, "--json"], { cwd: root, stdout: statusOut.stream });
+      const status = statusOut.json();
+      assert.equal(statusExit, 0);
+      assert.equal(status.recommended_command, result.next_action);
+      assert.ok(status.allowed_commands.includes(result.next_action));
 
       const saved = JSON.parse(readFileSync(started.session_path, "utf8"));
       assert.equal(saved.demand.demand_id, "DEMAND-STOCK-ALERTS");
@@ -281,7 +291,7 @@ describe("yolo interview CLI", () => {
     }
   });
 
-  test("to-demand exits 2 when approved interview has no execution scope", async () => {
+  test("to-demand still creates approved demand when executable scope is not ready yet", async () => {
     const root = tempProject();
     try {
       const started = await startInterview(root, "private-notes");
@@ -315,11 +325,13 @@ describe("yolo interview CLI", () => {
       ], { cwd: root, stdout: out.stream });
 
       const result = out.json();
-      assert.equal(exitCode, 2);
-      assert.equal(result.status, "warning");
-      assert.equal(result.code, "INTERVIEW_DEMAND_WARNING");
-      assert.equal(result.demand_result.status, "warning");
+      assert.equal(exitCode, 0);
+      assert.equal(result.status, "success");
+      assert.equal(result.code, "INTERVIEW_DEMAND_CREATED");
+      assert.equal(result.demand_result.status, "success");
       assert.ok(result.demand_result.warnings.some((warning) => warning.code === "EXECUTION_SCOPE_PRESENT"));
+      assert.equal(result.demand_result.readiness.executable_prd_ready, false);
+      assert.equal(result.next_action, `yolo spec --demand ${result.demand_path}`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -361,6 +373,9 @@ describe("yolo interview CLI", () => {
       const result = out.json();
       assert.equal(exitCode, 1);
       assert.equal(result.status, "blocked");
+      assert.ok(result.blockers.some((blocker) => blocker.slot === "target_users"));
+      assert.match(result.next_actions.join("\n"), /Missing demand fields\/approvals:/);
+      assert.match(result.next_actions.join("\n"), /yolo interview answer/);
       assert.equal(result.coverage.ready_for_prd_intake, false);
       assert.equal(result.coverage_detail.readiness.status, "needs_follow_up");
       assert.equal(result.next_question.id, "target_users");

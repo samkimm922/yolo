@@ -229,6 +229,112 @@ export function runDemandDiscussRuntime(input = Object(), options = Object()) {
   return result;
 }
 
+export function approvedDemandSpecCommand(demandPath: string) {
+  return `yolo spec --demand ${demandPath}`;
+}
+
+export function runDemandApprovedRuntime(input = Object(), options = Object()) {
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
+  const stateRoot = stateRootFor({ ...input, projectRoot }, options);
+  const stateDir = join(stateRoot, "state");
+  const session = buildDemandSession({ ...input, projectRoot, stateRoot, phase: "prd_intake", source: "yolo-approved-demand" }, {
+    ...options,
+    phase: "prd_intake",
+    source: "yolo-approved-demand",
+  });
+  const outputDir = outputDirFor(session, { ...input, projectRoot, stateRoot }, options);
+  const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
+  if (shouldWrite) {
+    try {
+      appendJsonlRecord(join(stateDir, "evidence", "ledger.jsonl"), {
+        event: "demand.approved",
+        project_root: projectRoot,
+        state_root: stateRoot,
+        demand_id: session.id,
+        demand_dir: outputDir,
+        phase: "prd_intake",
+        ledger: "state",
+      });
+    } catch (_) {
+      // Ledger write is nonblocking; spec will report any missing evidence explicitly.
+    }
+  }
+  session.readiness = inspectDemandReadiness(session, { phase: session.phase, stateDir });
+  if (session.approval) {
+    session.approval.effective_for_prd = session.approval.approved === true && session.readiness.executable_prd_ready === true;
+    session.approval.blocked_by = session.approval.approved === true && !session.approval.effective_for_prd
+      ? asArray(session.readiness.blockers).map((blocker) => ({ code: blocker.code, message: blocker.message }))
+      : [];
+  }
+  const handoffBlockers = [];
+  if (session.approval?.approved !== true) {
+    handoffBlockers.push({
+      code: "APPROVAL_REQUIRED",
+      slot: "execution_approval",
+      message: "Approved demand handoff requires explicit interview approval.",
+    });
+  }
+  const coverage = input.interview?.coverage || {};
+  if (coverage.ready_for_prd_intake === false) {
+    for (const slot of asArray(coverage.missing_slots)) {
+      handoffBlockers.push({
+        code: `MISSING_${String(slot).toUpperCase()}`,
+        slot,
+        message: `Interview slot ${slot} must be answered before approved demand handoff.`,
+      });
+    }
+    for (const followUp of asArray(coverage.follow_up_questions)) {
+      handoffBlockers.push({
+        code: followUp.code || `FOLLOW_UP_${String(followUp.slot || "INTERVIEW").toUpperCase()}`,
+        slot: followUp.slot,
+        message: followUp.plain_language_prompt || followUp.text || followUp.message || "Resolve interview follow-up before approved demand handoff.",
+      });
+    }
+  }
+  const artifacts = shouldWrite ? writeDemandArtifacts(session, outputDir) : [];
+  const demandPath = artifacts.find((path) => path.endsWith("session.json")) || join(outputDir, "session.json");
+  const nextAction = approvedDemandSpecCommand(demandPath);
+  const blocked = handoffBlockers.length > 0;
+  const result = {
+    status: blocked ? "blocked" : "success",
+    code: blocked ? "DEMAND_APPROVED_HANDOFF_BLOCKED" : "DEMAND_APPROVED_HANDOFF_READY",
+    summary: blocked
+      ? "Approved demand handoff is blocked by missing interview approval or slots."
+      : "Approved demand artifacts created; hand off to spec for executable PRD generation.",
+    demand_id: session.id,
+    demand_dir: outputDir,
+    demand_path: demandPath,
+    session,
+    readiness: session.readiness,
+    graph: session.graph,
+    blockers: handoffBlockers,
+    warnings: session.readiness?.warnings || [],
+    artifacts,
+    outputs: artifacts.map((path) => ({ path, type: path.endsWith(".json") ? "demand_json" : "demand_markdown" })),
+    next_action: blocked
+      ? "yolo interview status --session <interview.json|dir>"
+      : nextAction,
+    next_actions: blocked
+      ? [
+          `Missing demand fields/approvals: ${handoffBlockers.map((blocker) => blocker.slot || blocker.code).filter(Boolean).join(", ")}.`,
+          "Next: yolo interview status --session <interview.json|dir>",
+        ]
+      : [nextAction],
+    guarantees: {
+      writes_business_code: false,
+      prd_execution: false,
+      provider_execution: false,
+      produces_executable_prd: false,
+      source: options.source || session.source,
+    },
+  };
+  if (!blocked && shouldWrite && shouldWriteLifecycle(input, options)) {
+    attachLifecycle(result, "discovery", { projectRoot, stateRoot }, "yolo-approved-demand");
+    attachLifecycle(result, "roadmap", { projectRoot, stateRoot }, "yolo-approved-demand");
+  }
+  return result;
+}
+
 export type DemandStatusRuntimeResult = DemandSessionStateResult & {
   guarantees: {
     writes_business_code: boolean;
@@ -265,6 +371,8 @@ export function runDemandStatusRuntime(input = Object(), options = Object()): De
         evidence_agreement: { status: "blocked", conflicts: [] },
         evidence_requirements: [],
         evidence_requirement_summary: { total: 0, pending: 0, satisfied: 0, pending_items: [], satisfied_items: [] },
+        prd_intake_ready: false,
+        executable_prd_ready: false,
         prd_ready: false,
       };
       return {
@@ -291,7 +399,8 @@ export function runDemandStatusRuntime(input = Object(), options = Object()): De
           needed_evidence_agents: [],
           evidence_requirements: [],
           evidence_requirement_summary: { total: 0, pending: 0, satisfied: 0, pending_items: [], satisfied_items: [] },
-          prd_ready: false,
+          prd_intake_ready: false,
+          executable_prd_ready: false,
           next_action: "Run yolo brainstorm/discuss first, or pass --demand <session.json|dir>.",
           next_actions: ["Run yolo brainstorm/discuss first, or pass --demand <session.json|dir>."],
         },
@@ -1513,7 +1622,7 @@ export function runDemandTaskRuntime(input = Object(), options = Object()) {
     artifacts,
     outputs: artifacts.map((path) => ({ path, type: "demand_task_plan" })),
     next_actions: plan.status === "success"
-      ? ["Use yolo prd --demand <session.json|dir> to compile the executable PRD."]
+      ? ["Use yolo spec --demand <session.json|dir> to compile the executable PRD."]
       : blockers.map((blocker) => blocker.message).filter(Boolean),
   };
   if (shouldWrite && plan.status === "success" && shouldWriteLifecycle(input, options)) {

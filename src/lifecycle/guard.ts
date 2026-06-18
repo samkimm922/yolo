@@ -130,6 +130,35 @@ function readLifecycleReport(stateRoot, stageId) {
   }
 }
 
+function demandPathFromStageReport(report = Object()) {
+  const candidates = [
+    report.report?.demand_path,
+    report.report?.demandPath,
+    report.report?.demand?.demand_path,
+    report.report?.demand?.demandPath,
+    report.report?.demand_dir,
+    report.report?.demandDir,
+    report.demand_path,
+    report.demandPath,
+    report.demand_dir,
+    report.demandDir,
+    ...(Array.isArray(report.report?.outputs) ? report.report.outputs : [])
+      .filter((output) => output?.type === "demand_json" && clean(output.path).endsWith("session.json"))
+      .map((output) => output.path),
+  ];
+  return candidates.map(clean).find(Boolean) || "";
+}
+
+function demandPathForSpec(stateRoot) {
+  for (const stage of ["roadmap", "discovery"]) {
+    const read = readLifecycleReport(stateRoot, stage);
+    if (!read.report) continue;
+    const demandPath = demandPathFromStageReport(read.report);
+    if (demandPath) return demandPath;
+  }
+  return "";
+}
+
 function truthyFlag(value) {
   return value === true || normalizeReportStatus(value) === "true";
 }
@@ -457,7 +486,19 @@ export function nextLifecycleAction(options = Object()) {
     };
   }
   for (const item of MAIN_NEXT_STAGES) {
-    if (!stageReady(state, item.stage)) return { ...item, reason: `${item.stage}_not_completed` };
+    if (!stageReady(state, item.stage)) {
+      if (item.stage === "prd") {
+        const demandPath = demandPathForSpec(stateRoot);
+        if (demandPath) {
+          return {
+            ...item,
+            command: `yolo spec --demand ${demandPath}`,
+            reason: `${item.stage}_not_completed`,
+          };
+        }
+      }
+      return { ...item, reason: `${item.stage}_not_completed` };
+    }
   }
   return {
     command: "yolo learn",

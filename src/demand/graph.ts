@@ -56,12 +56,6 @@ export const DEMAND_ARTIFACTS = [
     description: "Explicit human approval for PRD compilation and execution readiness.",
     requires: ["requirements_confirmation", "context", "roadmap"],
   },
-  {
-    id: "executable_prd",
-    generates: "prd.json",
-    description: "Executable PRD compiled from approved demand artifacts.",
-    requires: ["approval"],
-  },
 ];
 
 function artifactMap(artifacts = DEMAND_ARTIFACTS) {
