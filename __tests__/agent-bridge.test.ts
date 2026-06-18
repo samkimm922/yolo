@@ -464,6 +464,39 @@ describe("agent bridge installer", () => {
     }
   });
 
+  test("reconcile skips unsafe manifest entries and still deletes managed command orphans", () => {
+    const sandbox = mkdtempSync(join(tmpdir(), "yolo-agent-bridge-sec1-"));
+    const projectRoot = join(sandbox, "project");
+    const victimPath = join(sandbox, "victim.txt");
+    try {
+      mkdirSync(join(projectRoot, ".claude/commands"), { recursive: true });
+      writeFileSync(victimPath, "do not delete\n", "utf8");
+      writeFileSync(join(projectRoot, "notes.txt"), "user file\n", "utf8");
+      writeFileSync(join(projectRoot, ".claude/commands/xxx.md"), "# old command\n", "utf8");
+      writeFileSync(join(projectRoot, ".yolo-bridge-manifest.json"), JSON.stringify({
+        schema: "yolo.bridge_manifest.v1",
+        generated_at: "2025-01-01T00:00:00.000Z",
+        entries: [
+          "../victim.txt",
+          "notes.txt",
+          ".claude/commands/xxx.md",
+        ],
+      }, null, 2), "utf8");
+
+      const result = installAgentBridge({ projectRoot, yoloRoot: "/tmp/yolo", targets: "claude", force: true });
+
+      assert.equal(existsSync(victimPath), true, "manifest traversal must not delete outside baseDir");
+      assert.equal(readFileSync(victimPath, "utf8"), "do not delete\n");
+      assert.equal(existsSync(join(projectRoot, "notes.txt")), true, "unmanaged manifest entries must not be deleted");
+      assert.equal(existsSync(join(projectRoot, ".claude/commands/xxx.md")), false, "managed command orphan must still be deleted");
+      assert.ok(result.reconciled.includes(".claude/commands/xxx.md"));
+      assert.ok(result.skipped.some((entry) => entry.includes("../victim.txt") && entry.includes("parent_traversal")));
+      assert.ok(result.skipped.some((entry) => entry.includes("notes.txt") && entry.includes("unmanaged_entry")));
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
   test("reconcile does NOT delete anything when no previous manifest exists", () => {
     const projectRoot = tempProject();
     try {

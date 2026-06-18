@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveWithinRoot } from "../src/lib/security/path-guard.js";
 import {
   getYoloCommand,
   listYoloCommands,
@@ -737,6 +738,27 @@ function buildManifestEntriesForScope(plan, scope, baseDir) {
   return entries;
 }
 
+function isYoloManagedManifestEntry(entry) {
+  return (entry.startsWith(".claude/commands/") && entry.endsWith(".md"))
+    || entry.startsWith(".claude/skills/yolo/")
+    || entry.startsWith(".codex/skills/yolo/")
+    || entry.startsWith(".agents/skills/yolo/");
+}
+
+function resolveManifestEntryForDeletion(baseDir, entry) {
+  const value = typeof entry === "string" ? entry : "";
+  if (!value) return { ok: false, reason: "invalid_entry" };
+  if (value.includes("\0")) return { ok: false, reason: "null_byte" };
+  if (isAbsolute(value)) return { ok: false, reason: "absolute_path" };
+  if (value.includes("..")) return { ok: false, reason: "parent_traversal" };
+  if (value.includes("\\")) return { ok: false, reason: "path_separator" };
+  if (!isYoloManagedManifestEntry(value)) return { ok: false, reason: "unmanaged_entry" };
+
+  const resolved = resolveWithinRoot(baseDir, value);
+  if (!resolved.ok || !resolved.path) return { ok: false, reason: resolved.reason || "path_escape" };
+  return { ok: true, path: resolved.path };
+}
+
 export function installAgentBridge(options = Object()) {
   const plan = buildAgentBridgeInstallPlan(options);
   const dryRun = options.dryRun === true || options.dry_run === true;
@@ -755,7 +777,12 @@ export function installAgentBridge(options = Object()) {
     if (!oldManifest) continue; // no previous manifest → do not delete anything
     const orphanEntries = oldManifest.entries.filter((entry) => !newEntries.includes(entry));
     for (const entry of orphanEntries) {
-      const orphanPath = join(baseDir, entry);
+      const resolved = resolveManifestEntryForDeletion(baseDir, entry);
+      if (!resolved.ok) {
+        skipped.push(`[reconcile] ${String(entry)} (${resolved.reason})`);
+        continue;
+      }
+      const orphanPath = resolved.path;
       if (!existsSync(orphanPath)) continue;
       if (dryRun) {
         planned.push(`[reconcile] ${entry}`);
