@@ -336,6 +336,50 @@ describe("prd contract doctor gate", () => {
     }
   });
 
+  test("blocks pending tasks with targets outside the project root", () => {
+    const paths = makePaths();
+    try {
+      const result = inspectPrdContractDoctorGate({
+        prd: {
+          version: "2.0",
+          id: "PRD-TASK-TARGET-OUTSIDE-ROOT",
+          ...strictDemandFields(),
+          tasks: [{
+            id: "FIX-GATE-OUTSIDE-ROOT",
+            title: "Escaped target task",
+            priority: "P1",
+            type: "bugfix",
+            status: "pending",
+            requirement_ids: ["REQ-GATE-1"],
+            scope: { targets: [{ file: "../outside.ts" }] },
+            post_conditions: [
+              {
+                id: "POST-TARGET",
+                type: "target_file_modified",
+                severity: "FAIL",
+                params: { file: "../outside.ts" },
+              },
+              {
+                id: "POST-TYPECHECK",
+                type: "no_new_type_errors",
+                severity: "FAIL",
+                params: { command: "npm run typecheck" },
+              },
+            ],
+          }],
+        },
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+      });
+
+      assert.equal(result.status, "blocked");
+      assert.ok(result.doctor.failures.some((finding) => finding.code === "TASK_TARGET_OUTSIDE_ROOT" && finding.path === "../outside.ts"));
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("passes strict PRDs and still records doctor evidence", () => {
     const paths = makePaths();
     try {

@@ -484,6 +484,72 @@ describe("yolo check report", () => {
     }
   });
 
+  test("blocks task targets and post condition file params outside the project root", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({
+        scope: { targets: [{ file: "../outside.ts" }] },
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "../outside.ts" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+      const pmReadiness = report.checks.find((check) => check.name === "pm_readiness");
+
+      assert.equal(report.status, "blocked");
+      assert.equal(pmReadiness.status, "blocked");
+      assert.ok(report.blockers.some((blocker) => blocker.code === "TASK_TARGET_OUTSIDE_ROOT" && blocker.gate === "pm_readiness"));
+      assert.ok(report.blockers.some((blocker) => blocker.code === "TASK_TARGET_OUTSIDE_ROOT" && blocker.gate === "prd_preflight"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("allows task targets resolved inside the project root", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      const insideTarget = join(root, "src/a.js");
+      writeJson(prdPath, strictPrd({
+        scope: { targets: [{ file: insideTarget }] },
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: insideTarget },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+
+      assert.equal(report.status, "pass");
+      assert.equal(report.blockers.some((blocker) => blocker.code === "TASK_TARGET_OUTSIDE_ROOT"), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("blocks UI tasks without state matrix and evidence plan", () => {
     const root = tempProject();
     try {
@@ -510,6 +576,108 @@ describe("yolo check report", () => {
       assert.equal(report.remediation_plan.gate_strength, "strict");
       assert.equal(report.remediation_plan.blocks_ship, true);
       assert.equal(report.remediation_plan.action, "ASK_HUMAN");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("treats ui false tasks with TSX surfaces as UI and requires an adapter", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({
+        ui: false,
+        surface: "src/pages/inventory.tsx",
+        title: "Build inventory page",
+        type: "feature",
+        scope: { targets: [{ file: "src/pages/inventory.tsx" }] },
+        state_matrix: [{ state: "loaded" }],
+        evidence_plan: [{ type: "screenshot" }],
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "src/pages/inventory.tsx" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+      const adapter = report.checks.find((check) => check.name === "adapter_readiness");
+
+      assert.equal(report.status, "blocked");
+      assert.equal(report.task_surface_summary.ui_task_count, 1);
+      assert.equal(adapter.status, "blocked");
+      assert.ok(report.blockers.some((blocker) => blocker.code === "ADAPTER_UI_ACCEPTANCE_MISSING"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps ui false backend tasks non-UI without hard UI signals", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({
+        ui: false,
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+      const adapter = report.checks.find((check) => check.name === "adapter_readiness");
+
+      assert.equal(report.status, "pass");
+      assert.equal(report.task_surface_summary.ui_task_count, 0);
+      assert.equal(adapter.status, "pass");
+      assert.equal(adapter.ui_task_count, 0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("uses task handoff state matrix and evidence plan for UI readiness", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(join(stateRoot, "adapters/local-browser.manifest.json"), acceptanceAdapter());
+      writeJson(prdPath, strictPrd({
+        title: "Build inventory page",
+        type: "feature",
+        scope: { targets: [{ file: "src/pages/inventory.tsx" }] },
+        handoff: {
+          state_matrix: [{ state: "loaded" }],
+          evidence_plan: [{ type: "screenshot" }],
+        },
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "src/pages/inventory.tsx" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, stateRoot, mode: "runner" });
+      const uiReadiness = report.checks.find((check) => check.name === "ui_readiness");
+
+      assert.equal(report.status, "pass");
+      assert.equal(uiReadiness.status, "pass");
+      assert.equal(report.blockers.some((blocker) => blocker.code === "UI_STATE_MATRIX_MISSING"), false);
+      assert.equal(report.blockers.some((blocker) => blocker.code === "UI_EVIDENCE_PLAN_MISSING"), false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -32,6 +32,15 @@ export function taskText(task = Object()) {
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
+function fileLooksUi(file) {
+  return /\.(tsx|jsx|vue|svelte)$/.test(file) || /(^|\/)(pages|components|screens)\//.test(file);
+}
+
+function hasHardUiSignal(task = Object()) {
+  if (task.surface || task.ui_surface || task.ui?.surface) return true;
+  return taskFiles(task).some(fileLooksUi);
+}
+
 function manifestSignals(manifest = Object()) {
   return new Set([
     ...asArray(manifest.applies_to),
@@ -46,8 +55,10 @@ function resolverAcceptanceAdapter(resolver = Object()) {
 }
 
 export function isUiTask(task = Object(), context = Object()) {
+  const files = taskFiles(task);
+  if (hasHardUiSignal(task)) return true;
   if (task.ui === false || task.interface === false) return false;
-  if (task.ui === true || task.interface === "ui" || task.surface || task.ui_surface || task.ui?.surface) return true;
+  if (task.ui === true || task.interface === "ui") return true;
 
   const adapterSignals = manifestSignals(context.acceptanceManifest || resolverAcceptanceAdapter(context.resolver) || {});
   if (adapterSignals.has("ui") || adapterSignals.has("frontend") || adapterSignals.has("browser") || adapterSignals.has("screenshot")) {
@@ -55,9 +66,8 @@ export function isUiTask(task = Object(), context = Object()) {
     if (/\b(page|screen|component|visual|browser|frontend|ui)\b/.test(text) || /页面|组件|界面|前端/.test(text)) return true;
   }
 
-  const files = taskFiles(task);
   const text = taskText(task);
-  return files.some((file) => /\.(tsx|jsx|vue|svelte)$/.test(file) || file.includes("/pages/") || file.includes("/components/") || file.includes("/screens/"))
+  return files.some(fileLooksUi)
     || /\b(ui|page|screen|component|visual|browser|frontend)\b/.test(text)
     || /页面|组件|界面|前端/.test(text);
 }
@@ -81,12 +91,12 @@ export function uiSurface(task = Object()) {
 }
 
 export function hasStateMatrix(task = Object(), prd = Object(), manifest = Object()) {
-  return Boolean(task.state_matrix || task.ui?.state_matrix || prd.state_matrix || prd.ui_state_matrix || manifest.state_matrix || manifest.ui_state_matrix);
+  return Boolean(task.state_matrix || task.handoff?.state_matrix || task.ui?.state_matrix || prd.state_matrix || prd.ui_state_matrix || manifest.state_matrix || manifest.ui_state_matrix);
 }
 
 export function hasEvidencePlan(task = Object(), prd = Object(), manifest = Object()) {
   const evidenceTypes = new Set(["screenshot_exists", "playwright_check", "visual_regression", "ui_state_assertion", "runtime_log_absent"]);
-  return Boolean(task.evidence_plan || task.ui_evidence_plan || task.ui?.evidence_plan || prd.evidence_plan || manifest.evidence_plan)
+  return Boolean(task.evidence_plan || task.ui_evidence_plan || task.handoff?.evidence_plan || task.ui?.evidence_plan || prd.evidence_plan || manifest.evidence_plan)
     || asArray(task.post_conditions).some((condition) => evidenceTypes.has(condition.type));
 }
 
