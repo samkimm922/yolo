@@ -136,9 +136,15 @@ function runChecked(label: string, command: string, args: string[], {
   const exitCode = result.status ?? (result.signal ? 1 : 1);
   log(`[cmd] ${label} exit=${exitCode}`);
   if (!expected.includes(exitCode)) {
+    const diagnosticLines = `${result.stdout || ""}\n${result.stderr || ""}`
+      .split("\n")
+      .filter((line) => /worktree node_modules diagnostic|worktree:|provider|gate|POST-|node_modules realpath/i.test(line))
+      .slice(-80)
+      .join("\n");
     throw new Error([
       `${label} failed with exit ${exitCode}; expected ${expected.join(",")}`,
       `command: ${command} ${args.join(" ")}`,
+      diagnosticLines ? `diagnostics:\n${diagnosticLines}` : "",
       result.stdout ? `stdout:\n${result.stdout.slice(-8000)}` : "",
       result.stderr ? `stderr:\n${result.stderr.slice(-8000)}` : "",
       result.error ? `error: ${result.error.message}` : "",
