@@ -24,7 +24,6 @@ const INVENTORY = [
   ["src/core/bootstrap.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 4 }],
   ["src/core/setup.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 8 }],
   ["src/demand/evidence-dispatch.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
-  ["src/demand/findings-generator.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/demand/gate.ts", { WARN: 0, warning: 27, "best-effort": 0, skip: 0 }],
   ["src/demand/interview.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 0 }],
   ["src/demand/runtime.ts", { WARN: 3, warning: 14, "best-effort": 0, skip: 0 }],

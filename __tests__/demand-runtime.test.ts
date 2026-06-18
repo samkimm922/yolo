@@ -13,7 +13,7 @@ import { inspectDemandQuality, inspectDemandReadiness } from "../src/demand/gate
 import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
 import { demandSessionSchemaError } from "../src/demand/router.js";
-import { parseFindingsJsonOutput, validateFindings } from "../src/demand/findings-generator.js";
+import { generateFindings, parseFindingsJsonOutput, validateFindings } from "../src/demand/findings-generator.js";
 
 interface PrdResult {
   [key: string]: unknown;
@@ -101,6 +101,16 @@ function acceptanceAdapterManifest() {
 }
 
 describe("demand findings generator output parsing", () => {
+  function validFindingsJson() {
+    return JSON.stringify({
+      findings: [{
+        id: "DEV-001",
+        description: "Update the inventory module.",
+        files: ["src/inventory.ts"],
+      }],
+    });
+  }
+
   test("parses fenced explanatory output with deeply nested findings JSON", () => {
     const output = [
       "Here is the generated JSON:",
@@ -144,6 +154,70 @@ describe("demand findings generator output parsing", () => {
     assert.equal(parsed.data.findings[0].scope.targets[0].metadata.checks[0].params.required, true);
     assert.equal(parsed.data.findings[0].post_conditions[0].params.matcher.any[0].options.case_sensitive, false);
     assert.equal(validateFindings(parsed.data).ok, true);
+  });
+
+  test("uses provider adapter defaults without dangerous claude permissions", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-findings-generator-"));
+    let capturedPrompt = "";
+    let capturedOptions = null;
+    try {
+      const result = await generateFindings("build findings", 1234, {
+        projectRoot: root,
+        spawnProviderPrompt: async (prompt, runOptions) => {
+          capturedPrompt = prompt;
+          capturedOptions = runOptions;
+          return {
+            success: true,
+            provider: "claude",
+            stdout: validFindingsJson(),
+            stderr: "",
+          };
+        },
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(capturedPrompt, "build findings");
+      assert.equal(capturedOptions.timeout, 1234);
+      assert.equal(capturedOptions.rootDir, root);
+      assert.equal(capturedOptions.config.ai.claude_permission_mode, "acceptEdits");
+      assert.equal(JSON.stringify(capturedOptions.config.ai).includes("dangerously-skip-permissions"), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("adapter contract blocks dangerous claude permission mode for findings", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-findings-generator-"));
+    let spawned = false;
+    try {
+      const result = await generateFindings("build findings", 1234, {
+        projectRoot: root,
+        config: {
+          ai: {
+            provider: "claude",
+            executor: "claude",
+            model: "claude-sonnet-4",
+            settings: "",
+            claude_permission_mode: "dangerously-skip-permissions",
+          },
+        },
+        commandExists: () => true,
+        spawnImpl: () => {
+          spawned = true;
+          throw new Error("should not spawn when adapter contract blocks");
+        },
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(spawned, false);
+      const providerRun = (result as { provider_run?: any }).provider_run;
+      assert.ok(providerRun);
+      assert.equal(providerRun.blocked, true);
+      assert.equal(providerRun.reason, "agent_permission_unsafe");
+      assert.ok(providerRun.adapter_contract_inspection.blockers.some((blocker) => blocker.code === "AGENT_PERMISSION_UNSAFE"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
