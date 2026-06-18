@@ -120,9 +120,7 @@ function removePath(path, { existsSync, rmSync, execSync } = Object()) {
 }
 
 const NODE_MODULES_EXEC_MAX_BUFFER = 1024 * 1024;
-const NODE_MODULES_CLONE_TIMEOUT_MS = 15000;
-const NODE_MODULES_COPY_TIMEOUT_MS = 120000;
-const NODE_MODULES_LINK_TIMEOUT_MS = 5000;
+const NODE_MODULES_PROVISION_TIMEOUT_MS = 300000;
 const NODE_MODULES_CLEANUP_TIMEOUT_MS = 30000;
 
 function execNodeModulesCommand(execSync, command, timeout) {
@@ -170,7 +168,9 @@ function describeWorktreeNodeModules(wtPath, {
     realpath: null,
     inside_worktree: false,
     has_bin_yolo: existsSync(join(wtNodeModules, ".bin", "yolo")),
+    has_bin_tsc: existsSync(join(wtNodeModules, ".bin", "tsc")),
     has_package_yolo: existsSync(join(wtNodeModules, "yolo")),
+    has_package_typescript: existsSync(join(wtNodeModules, "typescript")),
     error: null,
   };
   try {
@@ -193,11 +193,31 @@ function describeWorktreeNodeModules(wtPath, {
   return diagnostic;
 }
 
+function validateWorktreeNodeModules(wtPath, {
+  existsSync = defaultExistsSync,
+  lstatSync = defaultLstatSync,
+  realpathSync = defaultRealpathSync,
+} = Object()) {
+  const diagnostic = describeWorktreeNodeModules(wtPath, { existsSync, lstatSync, realpathSync });
+  if (!diagnostic.exists) {
+    return { ok: false, reason: "missing", diagnostic };
+  }
+  if (!diagnostic.is_directory || diagnostic.is_symlink) {
+    return { ok: false, reason: "not_real_directory", diagnostic };
+  }
+  if (!diagnostic.inside_worktree) {
+    return { ok: false, reason: "outside_worktree", diagnostic };
+  }
+  return { ok: true, reason: null, diagnostic };
+}
+
 export function provisionWorktreeNodeModules({
   wtPath,
   rootDir,
   execSync = defaultExecSync,
   existsSync = defaultExistsSync,
+  lstatSync = defaultLstatSync,
+  realpathSync = defaultRealpathSync,
   rmSync = defaultRmSync,
   platform = process.platform,
 } = Object()) {
@@ -207,21 +227,21 @@ export function provisionWorktreeNodeModules({
 
   const cloneCommand = platform === "darwin"
     ? `cp -cR ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`
-    : `cp --reflink=auto -r ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`;
+    : `cp -a --reflink=auto ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`;
+  const copyCommand = platform === "darwin"
+    ? `cp -pR ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`
+    : `cp -a ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`;
   const attempts = [
-    { command: cloneCommand, timeout: NODE_MODULES_CLONE_TIMEOUT_MS },
-    {
-      command: `cp -r ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`,
-      timeout: NODE_MODULES_COPY_TIMEOUT_MS,
-    },
-    {
-      command: `ln -s ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`,
-      timeout: NODE_MODULES_LINK_TIMEOUT_MS,
-    },
+    { command: cloneCommand, timeout: NODE_MODULES_PROVISION_TIMEOUT_MS },
+    { command: copyCommand, timeout: NODE_MODULES_PROVISION_TIMEOUT_MS },
   ];
   for (const [index, attempt] of attempts.entries()) {
     try {
       execNodeModulesCommand(execSync, attempt.command, attempt.timeout);
+      const validation = validateWorktreeNodeModules(wtPath, { existsSync, lstatSync, realpathSync });
+      if (!validation.ok) {
+        throw new Error(`node_modules provisioning produced unusable worktree dependency tree: ${validation.reason} ${JSON.stringify(validation.diagnostic)}`);
+      }
       return true;
     } catch (error) {
       removePartialWorktreeNodeModules(wtNodeModules, { existsSync, rmSync, execSync });
