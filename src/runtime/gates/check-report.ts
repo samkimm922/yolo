@@ -198,7 +198,64 @@ function pathInsideProject(projectRoot, file) {
   return Boolean(rel && !rel.startsWith("..") && !isAbsolute(rel));
 }
 
-function productReadiness({ prd, discovery }) {
+function collectPathValues(value, out = []) {
+  if (!value) return out;
+  if (typeof value === "string") {
+    out.push(normalizeFileForContainment(value));
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectPathValues(item, out);
+    return out;
+  }
+  if (typeof value === "object") {
+    collectPathValues(value.file, out);
+    collectPathValues(value.path, out);
+  }
+  return out;
+}
+
+function normalizeFileForContainment(value) {
+  return cleanString(value).replace(/\\/g, "/").replace(/^\.\//, "").replace(/:\d+(?:-\d+)?$/, "");
+}
+
+function taskPathReferences(task = Object()) {
+  const refs = taskFiles(task).map((file) => ({ file, source: "task_scope", condition_id: null }));
+  for (const condition of asArray(task.post_conditions)) {
+    const files = [
+      ...collectPathValues(condition?.file),
+      ...collectPathValues(condition?.path),
+      ...collectPathValues(condition?.files),
+      ...collectPathValues(condition?.params?.file),
+      ...collectPathValues(condition?.params?.path),
+      ...collectPathValues(condition?.params?.files),
+    ].filter(Boolean);
+    for (const file of files) {
+      refs.push({
+        file,
+        source: "post_condition",
+        condition_id: condition?.id || null,
+      });
+    }
+  }
+  return refs;
+}
+
+function taskPathContainmentBlockers(task, projectRoot) {
+  return taskPathReferences(task)
+    .filter((ref) => !pathInsideProject(projectRoot, ref.file))
+    .map((ref) => ({
+      code: "TASK_TARGET_OUTSIDE_ROOT",
+      task_id: task.id || null,
+      condition_id: ref.condition_id || null,
+      path: ref.file,
+      source: ref.source,
+      message: `Task target path must stay inside the project root: ${ref.file}`,
+      human_needed: true,
+    }));
+}
+
+function productReadiness({ prd, discovery, projectRoot }) {
   const blockers = [];
   const warnings = [];
   const tasks = asArray(prd.tasks);
@@ -211,6 +268,7 @@ function productReadiness({ prd, discovery }) {
   for (const task of tasks) {
     const files = taskFiles(task);
     if (files.length === 0) blockers.push({ code: "PM_TASK_SCOPE_MISSING", task_id: task.id || null, message: "Task must declare scope.targets." });
+    blockers.push(...taskPathContainmentBlockers(task, projectRoot));
     if (!hasTaskAcceptance(task)) blockers.push({ code: "PM_TASK_ACCEPTANCE_MISSING", task_id: task.id || null, message: "Task must include acceptance criteria or post conditions." });
   }
   let discovery_readiness = null;
@@ -620,7 +678,7 @@ export function inspectYoloCheck(input = Object(), options = Object()) {
   const checks = [
     preflightReadiness(preflight),
     demandContractReadiness({ prd, projectRoot, strictExecution }),
-    productReadiness({ prd, discovery }),
+    productReadiness({ prd, discovery, projectRoot }),
     resolverReadiness({ resolver }),
     uiReadiness({ prd, acceptanceManifest, resolver }),
     storyAtomicityReadiness({ prd }),

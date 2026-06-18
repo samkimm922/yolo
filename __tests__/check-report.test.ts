@@ -484,6 +484,72 @@ describe("yolo check report", () => {
     }
   });
 
+  test("blocks task targets and post condition file params outside the project root", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({
+        scope: { targets: [{ file: "../outside.ts" }] },
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "../outside.ts" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+      const pmReadiness = report.checks.find((check) => check.name === "pm_readiness");
+
+      assert.equal(report.status, "blocked");
+      assert.equal(pmReadiness.status, "blocked");
+      assert.ok(report.blockers.some((blocker) => blocker.code === "TASK_TARGET_OUTSIDE_ROOT" && blocker.gate === "pm_readiness"));
+      assert.ok(report.blockers.some((blocker) => blocker.code === "TASK_TARGET_OUTSIDE_ROOT" && blocker.gate === "prd_preflight"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("allows task targets resolved inside the project root", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      const insideTarget = join(root, "src/a.js");
+      writeJson(prdPath, strictPrd({
+        scope: { targets: [{ file: insideTarget }] },
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: insideTarget },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+
+      assert.equal(report.status, "pass");
+      assert.equal(report.blockers.some((blocker) => blocker.code === "TASK_TARGET_OUTSIDE_ROOT"), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("blocks UI tasks without state matrix and evidence plan", () => {
     const root = tempProject();
     try {

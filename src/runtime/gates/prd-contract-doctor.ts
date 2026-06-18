@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   BEHAVIOR_VERIFICATION_CONDITION_TYPES as BEHAVIOR_VERIFICATION_CONDITION_TYPE_LIST,
@@ -82,6 +82,51 @@ function normalizeTargetPath(value) {
     .replace(/\\/g, "/")
     .replace(/^\.\//, "")
     .replace(/:\d+(?:-\d+)?$/, "");
+}
+
+function pathInsideProject(projectRoot, file) {
+  const root = resolve(projectRoot);
+  const target = normalizeTargetPath(file);
+  if (!target) return false;
+  const path = isAbsolute(target) ? resolve(target) : resolve(root, target);
+  const rel = relative(root, path);
+  return Boolean(rel && !rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function collectPathValues(value, out = []) {
+  if (!value) return out;
+  if (typeof value === "string") {
+    out.push(normalizeTargetPath(value));
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectPathValues(item, out);
+    return out;
+  }
+  if (typeof value === "object") {
+    collectPathValues(value.file, out);
+    collectPathValues(value.path, out);
+  }
+  return out;
+}
+
+function taskPathReferences(targets = [], postConditions = []) {
+  const refs = targets
+    .map((target) => normalizeTargetPath(target.file))
+    .filter(Boolean)
+    .map((file) => ({ file, source: "task_scope", condition: null }));
+  for (const condition of postConditions) {
+    const files = [
+      ...collectPathValues(condition?.file),
+      ...collectPathValues(condition?.path),
+      ...collectPathValues(condition?.files),
+      ...collectPathValues(condition?.params?.file),
+      ...collectPathValues(condition?.params?.path),
+      ...collectPathValues(condition?.params?.files),
+    ].filter(Boolean);
+    for (const file of files) refs.push({ file, source: "post_condition", condition });
+  }
+  return refs;
 }
 
 function isExecutableFailGate(condition) {
@@ -353,6 +398,23 @@ export function inspectPrdContract(prd, options = Object()) {
   for (const task of tasks) {
     const targets = normalizeTaskTargets(task);
     const postConditions = asArray(task?.post_conditions);
+
+    for (const ref of taskPathReferences(targets, postConditions)) {
+      if (!pathInsideProject(projectRoot, ref.file)) {
+        addFinding(
+          failures,
+          task,
+          ref.condition,
+          "TASK_TARGET_OUTSIDE_ROOT",
+          `task target path must stay inside the project root: ${ref.file}`,
+          {
+            path: ref.file,
+            source: ref.source,
+            human_needed: true,
+          },
+        );
+      }
+    }
 
     if (!task?.id) {
       failures.push({
