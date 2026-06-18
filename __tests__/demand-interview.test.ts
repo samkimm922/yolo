@@ -121,6 +121,30 @@ describe("demand interview", () => {
     assert.equal(chineseTechSession.follow_up_questions[0].reason, "technical_only");
   }));
 
+  test("does not count command-like feature lines as target user roles", () => withRoot((root) => {
+    const session = newSession(root);
+
+    answer(session, "target_users", "taskcli add creates a new task in src/tasks.ts");
+
+    assert.equal(session.answers.target_users.normalized.items.length, 0);
+    assert.equal(session.next_question.id, "target_users");
+    assert.equal(session.coverage.missing_slots.includes("target_users"), true);
+    assert.equal(session.coverage.ready_for_prd_intake, false);
+
+    const input = demandInterviewToDemandInput(session);
+    assert.deepEqual(input.target_users, []);
+  }));
+
+  test("keeps hyphenated product or fixture names inside valid role answers", () => withRoot((root) => {
+    const session = newSession(root);
+
+    answer(session, "target_users", "Release managers and fixture maintainers check Node.js basic daily before publishing and are responsible for confirming smoke results.");
+
+    assert.equal(session.answers.target_users.normalized.items.length, 1);
+    assert.equal(session.next_question.id, "status_quo");
+    assert.equal(session.coverage.missing_slots.includes("target_users"), false);
+  }));
+
   test("does not ask follow-up questions for sufficiently specific answers", () => withRoot((root) => {
     const session = newSession(root);
 
@@ -130,6 +154,15 @@ describe("demand interview", () => {
     assert.equal(coverage.follow_up_questions.some((question) => question.slot === "target_users"), false);
     assert.equal(coverage.follow_up_plan.status, "clear");
     assert.equal(coverage.quality.level, "sufficient");
+  }));
+
+  test("does not mark detailed MVP tradeoffs vague only because they mention automation", () => withRoot((root) => {
+    const session = newSession(root);
+
+    answer(session, "mvp_priority", "MVP includes threshold comparison, visible low-stock label, and filter; supplier automation is explicitly deferred out of version one.");
+
+    assert.equal(session.answers.mvp_priority.quality.level, "sufficient");
+    assert.deepEqual(session.answers.mvp_priority.quality.reasons, []);
   }));
 
   test("gates PRD intake on critical slots plus explicit approval", () => withRoot((root) => {

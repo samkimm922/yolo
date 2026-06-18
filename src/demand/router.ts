@@ -9,6 +9,7 @@ import {
   evidenceRequirementSummary,
   type EvidenceRequirement,
 } from "./evidence-requirements.js";
+import { targetUserRoleItems } from "./interview.js";
 
 export interface DemandTriageResult {
   schema_version: string;
@@ -47,7 +48,9 @@ export interface DemandPrdReadinessResult {
   evidence_agreement: { status: string; conflicts: DemandBlocker[] };
   evidence_requirements: EvidenceRequirement[];
   evidence_requirement_summary: unknown;
-  prd_ready: boolean;
+  prd_intake_ready: boolean;
+  executable_prd_ready: boolean;
+  prd_ready?: boolean;
 }
 
 export interface DemandSessionStateResult {
@@ -74,7 +77,9 @@ export interface DemandSessionStateResult {
     needed_evidence_agents: string[];
     evidence_requirements: EvidenceRequirement[];
     evidence_requirement_summary: unknown;
-    prd_ready: boolean;
+    prd_intake_ready: boolean;
+    executable_prd_ready: boolean;
+    prd_ready?: boolean;
     next_action: string;
     next_actions: string[];
   };
@@ -241,6 +246,14 @@ function hasItems(value) {
 function firstItems(...values) {
   for (const value of values) {
     const items = stringItems(value);
+    if (items.length > 0) return items;
+  }
+  return [];
+}
+
+function firstTargetUserItems(...values) {
+  for (const value of values) {
+    const items = targetUserRoleItems(value);
     if (items.length > 0) return items;
   }
   return [];
@@ -743,7 +756,7 @@ function slotValues(session = Object(), input = Object()) {
   );
   return {
     problem: firstItems(input.problem, session.problem, session.vision?.problem, session.vision?.statement, session.vision?.idea, session.idea, session.objective),
-    target_user: firstItems(input.target_user, input.target_users, session.target_users, session.project?.target_users, session.vision?.target_users),
+    target_user: firstTargetUserItems(input.target_user, input.target_users, session.target_users, session.project?.target_users, session.vision?.target_users),
     status_quo: firstItems(input.status_quo, session.status_quo, session.vision?.status_quo),
     desired_outcome: firstItems(input.desired_outcome, input.success_criteria, session.desired_outcome, session.success_criteria, session.vision?.success_criteria),
     scope_in: scopeIn,
@@ -931,6 +944,7 @@ export function inspectDemandPrdReadiness(input = Object(), options = Object()):
   const blockers = uniqueBlockers(blockerList);
   const evidenceBlocked = blockers.some((blocker) => clean(blocker.code).startsWith("EVIDENCE"));
   const questionQueue = questionQueueFor(missingSlots, { suppressApproval: evidenceBlocked });
+  const prdIntakeReady = blockers.length === 0;
 
   return {
     schema_version: DEMAND_PRD_READINESS_SCHEMA_VERSION,
@@ -946,7 +960,9 @@ export function inspectDemandPrdReadiness(input = Object(), options = Object()):
     evidence_agreement: agreement,
     evidence_requirements: evidenceRequirements,
     evidence_requirement_summary: evidenceRequirementSummary(evidenceRequirements),
-    prd_ready: blockers.length === 0,
+    prd_intake_ready: prdIntakeReady,
+    executable_prd_ready: false,
+    prd_ready: prdIntakeReady,
   };
 }
 
@@ -967,7 +983,7 @@ export function buildDemandEvidenceTasks(triage = Object(), readiness = Object()
   tasks.push({
     role: "verifier",
     protocol: DEMAND_EVIDENCE_AGENT_PROTOCOLS.verifier,
-    reason: readiness.prd_ready ? "Verify evidence supports PRD readiness." : "Verify blockers and assumptions are not promoted to facts.",
+    reason: readiness.prd_intake_ready ? "Verify evidence supports PRD intake readiness." : "Verify blockers and assumptions are not promoted to facts.",
   });
   return tasks;
 }
@@ -1000,7 +1016,7 @@ export function inspectEvidenceAgreement(results = []) {
 }
 
 function stageFrom(readiness = Object(), triage = Object()) {
-  if (readiness.prd_ready) return "prd_ready";
+  if (readiness.prd_intake_ready) return "prd_ready";
   if (asArray(readiness.evidence_requirements).some((item) => item?.status === "pending")) return "evidence";
   const missingSlots = asArray(readiness.missing_slots).map(clean).filter(Boolean);
   const nonApprovalMissing = missingSlots.filter((slot) => slot !== "approval");
@@ -1015,8 +1031,11 @@ function nextActionsFor(stage, triage = Object(), readiness = Object(), evidence
   const requirementActions = evidenceRequirementNextActions(readiness.evidence_requirements);
   const actions = [];
   actions.push(...requirementActions);
-  if (readiness.prd_ready) actions.push("Proceed to yolo prd after user confirms this demand state.");
-  else if (nextQuestion?.text) actions.push(`请回答：${nextQuestion.text}`);
+  if (readiness.prd_intake_ready) actions.push("Run yolo spec --demand <session.json|dir> after approved demand artifacts exist.");
+  else if (nextQuestion?.text) {
+    actions.push(`请回答：${nextQuestion.text}`);
+    actions.push(`Next: yolo interview answer --session <interview.json|dir> --question ${nextQuestion.slot || nextQuestion.id || "<slot>"} --answer "<answer>"`);
+  }
   else if (stage === "evidence") actions.push(`Run ${evidenceTasks.map((task) => task.role).join(" + ")} before treating project claims as facts.`);
   else if (stage === "approval") actions.push("Ask for explicit approval after missing slots and assumptions are resolved.");
   else if (stage === "requirements") actions.push("Fill missing PRD contract slots, especially acceptance criteria and scope boundaries.");
@@ -1028,7 +1047,7 @@ function nextActionsFor(stage, triage = Object(), readiness = Object(), evidence
 function nextActionFor(stage, triage = Object(), readiness = Object(), evidenceTasks = [], nextQuestion = null) {
   const actions = nextActionsFor(stage, triage, readiness, evidenceTasks, nextQuestion);
   if (actions.length > 0) return actions[0];
-  if (readiness.prd_ready) return "Proceed to yolo prd after user confirms this demand state.";
+  if (readiness.prd_intake_ready) return "Run yolo spec --demand <session.json|dir> after approved demand artifacts exist.";
   if (nextQuestion?.text) return `请回答：${nextQuestion.text}`;
   if (stage === "evidence") return `Run ${evidenceTasks.map((task) => task.role).join(" + ")} before treating project claims as facts.`;
   if (stage === "approval") return "Ask for explicit approval after missing slots and assumptions are resolved.";
@@ -1064,16 +1083,17 @@ export function buildDemandSessionState(input = Object(), options = Object()): D
     needed_evidence_agents: evidenceTasks.map((task) => task.role),
     evidence_requirements: readiness.evidence_requirements,
     evidence_requirement_summary: readiness.evidence_requirement_summary,
-    prd_ready: readiness.prd_ready,
+    prd_intake_ready: readiness.prd_intake_ready,
+    executable_prd_ready: readiness.executable_prd_ready,
     next_action: nextActions[0] || nextActionFor(stage, triage, readiness, evidenceTasks, nextQuestion),
     next_actions: nextActions,
   };
   return {
-    status: readiness.prd_ready ? "success" : "blocked",
-    code: readiness.prd_ready ? "DEMAND_PRD_READY" : "DEMAND_NOT_PRD_READY",
-    summary: readiness.prd_ready
-      ? "Demand is ready for PRD under the readiness contract."
-      : "Demand is not PRD-ready; missing slots, blockers, assumptions, or evidence remain.",
+    status: readiness.prd_intake_ready ? "success" : "blocked",
+    code: readiness.prd_intake_ready ? "DEMAND_PRD_INTAKE_READY" : "DEMAND_PRD_INTAKE_BLOCKED",
+    summary: readiness.prd_intake_ready
+      ? "Demand intake is ready for approved-demand handoff to spec."
+      : "Demand intake is blocked; missing slots, blockers, assumptions, or evidence remain.",
     triage,
     readiness,
     state,

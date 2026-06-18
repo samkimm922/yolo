@@ -3,6 +3,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { buildDemandArtifactGraph } from "./graph.js";
 import { inspectDemandReadiness } from "./gate.js";
 import { buildUnderstandingPlayback } from "./understanding-playback.js";
+import { targetUserRoleItems } from "./interview.js";
 import {
   buildEvidenceRequirements,
   evidenceRequirementSummary,
@@ -910,7 +911,7 @@ export function buildDemandSession(input = Object(), options = Object()) {
   const questionTrace = interviewContext.question_trace;
   const id = demandId({ ...input, objective }, now);
   const problem = firstField(input, ["problem"], objective, LABELS.problem);
-  const targetUsers = mergeField(input, "target_users", LABELS.target_users, objective);
+  const targetUsers = targetUserRoleItems(mergeField(input, "target_users", LABELS.target_users, objective));
   const successCriteria = mergeField(input, "success_criteria", LABELS.success_criteria, objective);
   const constraints = mergeField(input, "constraints", LABELS.constraints, objective);
   const nonGoals = mergeField(input, "non_goals", LABELS.non_goals, objective);

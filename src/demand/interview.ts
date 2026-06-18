@@ -214,6 +214,25 @@ function splitList(value) {
   )];
 }
 
+const COMMAND_VERB_START = /^(?:add|list|create|update|delete|remove|edit|run|fix|implement|build|show|display|filter|sort|export|import|sync|validate|generate|open|save|archive|restore|search|find|mark|toggle|assign|complete|move|copy|upload|download|deploy|test|check)\b/i;
+const CLI_COMMAND_START = /^\s*(?:[$>]\s*)?(?:[a-z][\w-]*(?:cli|cmd)|npm|pnpm|yarn|node|tsx|ts-node|python|pip|taskcli)(?:\s|$)/i;
+const CODE_STYLE_SIGNAL = /--[\w-]+|(?:^|\s)(?:\.{0,2}\/|src\/|app\/|lib\/|packages\/|__tests__\/)|`[^`]+`/i;
+
+export function isCommandOrCodeLikeTargetUser(value) {
+  const text = clean(value);
+  if (!text) return false;
+  if (CLI_COMMAND_START.test(text) || CODE_STYLE_SIGNAL.test(text)) return true;
+  return COMMAND_VERB_START.test(text);
+}
+
+export function targetUserRoleItems(value) {
+  return splitList(value).filter((item) => !isCommandOrCodeLikeTargetUser(item));
+}
+
+export function hasTargetUserRole(value) {
+  return targetUserRoleItems(value).length > 0;
+}
+
 function wordTokens(text) {
   return clean(text).match(/[A-Za-z0-9]+|[\u4e00-\u9fff]/g) || [];
 }
@@ -288,6 +307,7 @@ const SLOT_FOLLOW_UPS = {
   target_users: {
     missing_detail: "请补充具体业务角色、他们多久遇到一次这个场景，以及他们负责处理什么结果。",
     technical_only: "先不用写技术组件，请换成真实使用或负责的人：是什么角色、在什么频率下用、要负责什么。",
+    not_role: "这看起来像功能或命令，不像业务角色。请改写成真实使用或负责的人：是什么角色、使用频率、负责什么结果。",
     vague: "“用户”还不够具体，请写出角色名称、使用频率和责任，比如谁每天/每周要靠它完成什么。",
   },
   status_quo: {
@@ -419,13 +439,16 @@ function answerQualityFor(question, answer) {
   const tokens = wordTokens(normalized);
   const approvalClear = question.slot === "execution_approval"
     && (parseApproval(answer) || /(暂不|不批准|否|no|false|not approved|do not|don't)/i.test(normalized));
+  const hasDetail = question.slot !== "execution_approval" && hasSlotDetail(question.slot, lower);
   const tooShort = !approvalClear && (normalized.length < 14 || tokens.length <= 2);
-  const vague = hasPattern(normalized, VAGUE_PATTERNS);
+  const vague = hasPattern(normalized, VAGUE_PATTERNS) && !hasDetail;
   const techOnly = technicalOnly(normalized);
-  const missingDetail = question.slot !== "execution_approval" && !hasSlotDetail(question.slot, lower);
+  const commandOrFeatureAsRole = question.slot === "target_users" && isCommandOrCodeLikeTargetUser(normalized);
+  const missingDetail = question.slot !== "execution_approval" && !hasDetail;
   const approvalMissing = question.slot === "execution_approval" && !approvalClear;
 
   const reasons = compactReasons([
+    commandOrFeatureAsRole ? "not_role" : null,
     tooShort ? "too_short" : null,
     vague ? "vague" : null,
     techOnly ? "technical_only" : null,
@@ -437,9 +460,10 @@ function answerQualityFor(question, answer) {
     vague: 20,
     technical_only: 35,
     missing_detail: 25,
+    not_role: 45,
   }[reason] || 0), 0);
   const score = Math.max(0, Math.min(100, 100 - penalty));
-  const followUpReason = techOnly ? "technical_only" : vague ? "vague" : missingDetail || approvalMissing || tooShort ? "missing_detail" : null;
+  const followUpReason = commandOrFeatureAsRole ? "not_role" : techOnly ? "technical_only" : vague ? "vague" : missingDetail || approvalMissing || tooShort ? "missing_detail" : null;
   const needsFollowUp = score < 75 || Boolean(followUpReason);
   const followUps = needsFollowUp && followUpReason ? [{
     id: `FU-${String(question.slot).toUpperCase()}-${String(followUpReason).toUpperCase()}`,
@@ -528,6 +552,7 @@ function hasAnswer(record) {
   if (record.slot === "execution_approval") {
     return typeof record.answer === "boolean" || textFromValue(record.answer).length > 0;
   }
+  if (Array.isArray(record.normalized?.items)) return record.normalized.items.length > 0;
   if (Array.isArray(record.answer)) return splitList(record.answer).length > 0;
   if (record.answer && typeof record.answer === "object") return textFromValue(record.answer).length > 0 || Object.keys(record.answer).length > 0;
   return textFromValue(record.answer).length > 0;
@@ -542,7 +567,7 @@ function normalizeAnswer(question, answer) {
   }
   return {
     text: textFromValue(answer),
-    items: splitList(answer),
+    items: question.slot === "target_users" ? targetUserRoleItems(answer) : splitList(answer),
   };
 }
 
@@ -859,7 +884,8 @@ export function answerDemandInterviewQuestion(session, { questionId, answer, now
 function itemsForSlot(session, slot) {
   const record = answerRecordForSlot(session, slot);
   if (!record) return [];
-  return record.normalized?.items?.length ? record.normalized.items : splitList(record.answer);
+  if (Array.isArray(record.normalized?.items)) return record.normalized.items;
+  return splitList(record.answer);
 }
 
 function textForSlot(session, slot) {

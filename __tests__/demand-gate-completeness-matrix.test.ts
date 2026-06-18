@@ -84,6 +84,18 @@ describe("demand gate completeness matrix", () => {
     assert.equal(matrix.coverage.roles.roles_uncovered[0].role, "regional director");
   });
 
+  test("ignores command-like feature lines when checking role scenario coverage", () => {
+    const session = sessionWithFullCoverage();
+    session.vision.target_users.push("taskcli add writes a task to src/tasks.ts");
+    session.vision.target_users.push("list archived tasks with --done");
+
+    const result = inspectDemandReadiness(session, { phase: "discuss" });
+    const matrixCheck = result.checks.find((c) => c.code === "COMPLETENESS_MATRIX");
+    assert.ok(matrixCheck);
+    assert.equal(matrixCheck.passed, true, "command-like feature descriptions must not become uncovered roles");
+    assert.equal(matrixCheck.completeness_matrix.coverage.roles.roles_uncovered.length, 0);
+  });
+
   test("blocks when a scenario has no exception Q&A", () => {
     const session = sessionWithFullCoverage();
     // Session-level exceptions activate the per-scenario check
