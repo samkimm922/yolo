@@ -142,3 +142,119 @@ test("runMainLoopWithRuntime stops before unrelated work when immediate remediat
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("runMainLoopWithRuntime runs dependencies before higher-priority dependents", async () => {
+  const root = makeTempDir();
+  try {
+    const expandedTasksFile = join(root, "state", "expanded-tasks.json");
+    const progress = { total: 0, done: 0, failed: 0 };
+    const runResultsTracker = { completed: new Set(), failed: [] };
+    const transitions = [];
+    const runCalls = [];
+    const tasks = [
+      {
+        id: "B",
+        title: "Dependent task",
+        priority: "P0",
+        status: "pending",
+        depends_on: ["A"],
+        scope: { targets: [{ file: "src/b.ts" }] },
+      },
+      {
+        id: "A",
+        title: "Dependency task",
+        priority: "P3",
+        status: "pending",
+        depends_on: [],
+        scope: { targets: [{ file: "src/a.ts" }] },
+      },
+    ];
+
+    const result = await runMainLoopWithRuntime({
+      prdPath: join(root, "prd.json"),
+      preCompleted: new Set(),
+      mode: "fix",
+      rootDir: root,
+      yoloRoot: root,
+      expandedTasksFile,
+      progress,
+      runResultsTracker,
+      priorityOrder: { P0: 0, P1: 1, P2: 2, P3: 3 },
+      loadPRD: () => ({ version: "2.0", tasks }),
+      runTask: async (task) => {
+        runCalls.push(task.id);
+        return { status: "completed" };
+      },
+      updateTaskStatus: () => {},
+      recordTaskTransition: (transition) => transitions.push(transition),
+      taskCountsAsCompleted: (item) => item?.status === "done" || item?.status === "completed",
+      taskIsSplitParent: () => false,
+      skippedTaskPostconditionsPass: () => ({ passed: true, failed: [] }),
+      log: () => {},
+    });
+
+    assert.deepEqual(runCalls, ["A", "B"]);
+    assert.deepEqual(result.blocked, []);
+    assert.equal(transitions.some((transition) => transition.result?.skip_kind === "dependency_blocked"), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runMainLoopWithRuntime blocks circular dependencies before execution", async () => {
+  const root = makeTempDir();
+  try {
+    const expandedTasksFile = join(root, "state", "expanded-tasks.json");
+    const progress = { total: 0, done: 0, failed: 0 };
+    const runResultsTracker = { completed: new Set(), failed: [] };
+    const runCalls = [];
+    const tasks = [
+      {
+        id: "A",
+        title: "Cycle A",
+        priority: "P1",
+        status: "pending",
+        depends_on: ["B"],
+        scope: { targets: [{ file: "src/a.ts" }] },
+      },
+      {
+        id: "B",
+        title: "Cycle B",
+        priority: "P1",
+        status: "pending",
+        depends_on: ["A"],
+        scope: { targets: [{ file: "src/b.ts" }] },
+      },
+    ];
+
+    const result = await runMainLoopWithRuntime({
+      prdPath: join(root, "prd.json"),
+      preCompleted: new Set(),
+      mode: "fix",
+      rootDir: root,
+      yoloRoot: root,
+      expandedTasksFile,
+      progress,
+      runResultsTracker,
+      priorityOrder: { P0: 0, P1: 1, P2: 2, P3: 3 },
+      loadPRD: () => ({ version: "2.0", tasks }),
+      runTask: async (task) => {
+        runCalls.push(task.id);
+        return { status: "completed" };
+      },
+      updateTaskStatus: () => {},
+      recordTaskTransition: () => {},
+      taskCountsAsCompleted: (item) => item?.status === "done" || item?.status === "completed",
+      taskIsSplitParent: () => false,
+      skippedTaskPostconditionsPass: () => ({ passed: true, failed: [] }),
+      log: () => {},
+    });
+
+    assert.deepEqual(runCalls, []);
+    assert.deepEqual(result.blocked, ["A", "B"]);
+    assert.equal(result.preflight.blocks_execution, true);
+    assert.equal(result.blockers[0].code, "TASK_DEPENDENCY_CYCLE");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
