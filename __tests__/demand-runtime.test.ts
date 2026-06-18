@@ -13,6 +13,7 @@ import { inspectDemandQuality, inspectDemandReadiness } from "../src/demand/gate
 import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
 import { demandSessionSchemaError } from "../src/demand/router.js";
+import { parseFindingsJsonOutput, validateFindings } from "../src/demand/findings-generator.js";
 
 interface PrdResult {
   [key: string]: unknown;
@@ -98,6 +99,53 @@ function acceptanceAdapterManifest() {
     applies_to: ["ui", "browser"],
   };
 }
+
+describe("demand findings generator output parsing", () => {
+  test("parses fenced explanatory output with deeply nested findings JSON", () => {
+    const output = [
+      "Here is the generated JSON:",
+      "```json",
+      JSON.stringify({
+        findings: [{
+          id: "DEV-001",
+          title: "Add nested task",
+          severity: "HIGH",
+          description: "Implement nested scope and condition parsing.",
+          files: ["src/pages/nested.tsx"],
+          scope: {
+            targets: [{
+              file: "src/pages/nested.tsx",
+              metadata: {
+                owner: "demand",
+                checks: [{ name: "target", params: { required: true } }],
+              },
+            }],
+          },
+          post_conditions: [{
+            id: "POST-NESTED",
+            type: "code_contains",
+            severity: "FAIL",
+            params: {
+              file: "src/pages/nested.tsx",
+              matcher: {
+                any: [{ text: "nested", options: { case_sensitive: false } }],
+              },
+            },
+          }],
+        }],
+      }, null, 2),
+      "```",
+      "This object is ready for audit-to-prd.",
+    ].join("\n");
+
+    const parsed = parseFindingsJsonOutput(output);
+
+    assert.equal(parsed.ok, true, JSON.stringify(parsed));
+    assert.equal(parsed.data.findings[0].scope.targets[0].metadata.checks[0].params.required, true);
+    assert.equal(parsed.data.findings[0].post_conditions[0].params.matcher.any[0].options.case_sensitive, false);
+    assert.equal(validateFindings(parsed.data).ok, true);
+  });
+});
 
 describe("demand runtime", () => {
   test("brainstorm writes gsd-style demand artifact pack without business code", () => {

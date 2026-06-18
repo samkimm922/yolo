@@ -8,6 +8,7 @@ import {
   expandTasksForMainLoop,
   groupByDependency,
   mergeOverlappingTasks,
+  orderTasksByDependencies,
   splitTask,
 } from "../src/runtime/task-loop/expansion.js";
 
@@ -165,5 +166,32 @@ describe("task loop expansion", () => {
       { type: "code_not_contains", params: { text: "foo" } },
     ]);
     assert.deepEqual(merged[0].depends_on, ["PRE", "OTHER"]);
+  });
+
+  test("orders dependencies before higher-priority dependents", () => {
+    const ordered = orderTasksByDependencies([
+      baseTask({ id: "B", priority: "P0", depends_on: ["A"] }),
+      baseTask({ id: "A", priority: "P3", depends_on: [] }),
+      baseTask({ id: "C", priority: "P1", depends_on: [] }),
+    ], {
+      priorityOrder: { P0: 0, P1: 1, P2: 2, P3: 3 },
+    });
+
+    assert.equal(ordered.preflight.blocks_execution, false);
+    assert.deepEqual(ordered.tasks.map((task) => task.id), ["C", "A", "B"]);
+  });
+
+  test("blocks circular task dependencies during expansion preflight", () => {
+    const { preflight } = expandTasksForMainLoop({
+      tasks: [
+        baseTask({ id: "A", priority: "P1", depends_on: ["B"] }),
+        baseTask({ id: "B", priority: "P1", depends_on: ["A"] }),
+      ],
+      priorityOrder: { P0: 0, P1: 1, P2: 2, P3: 3 },
+    });
+
+    assert.equal(preflight.blocks_execution, true);
+    assert.equal(preflight.blockers[0].code, "TASK_DEPENDENCY_CYCLE");
+    assert.deepEqual(preflight.blockers[0].task_ids, ["A", "B"]);
   });
 });

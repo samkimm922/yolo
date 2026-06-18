@@ -5,6 +5,7 @@ import {
   updateMergedSourceTasks,
 } from "./status-helpers.js";
 import {
+  appendUniqueTaskIds,
   handleTaskOutcome,
   handleTaskPreRun,
 } from "./outcome-handler.js";
@@ -40,9 +41,9 @@ export async function runMainLoopWithRuntime({
   writeRelayArtifact = null,
 } = Object()) {
   const prd = loadPRD(prdPath);
-  const results = { completed: [], failed: [], skipped: [], blocked: [], contractReview: [], remediation: [], immediateRemediationQueue: [] };
+  const results = { completed: [], failed: [], skipped: [], blocked: [], contractReview: [], remediation: [], immediateRemediationQueue: [], preflight: null, blockers: [] };
   const completedIds = new Set(preCompleted);
-  const { expanded, beforeMerge, mergedCount } = expandTasksForMainLoop({
+  const { expanded, beforeMerge, mergedCount, preflight } = expandTasksForMainLoop({
     tasks: prd.tasks || [],
     completedIds,
     priorityOrder,
@@ -55,7 +56,6 @@ export async function runMainLoopWithRuntime({
   if (mergedCount < beforeMerge) {
     log("合并器", "", `合并前 ${beforeMerge} 个任务 → 合并后 ${mergedCount} 个`);
   }
-  const childTaskMap = buildChildTaskMap(expanded);
 
   progress.total = expanded.filter((task) => task.status !== "completed").length;
 
@@ -65,6 +65,18 @@ export async function runMainLoopWithRuntime({
     tasks: expanded,
     completedIds,
   });
+
+  if (preflight?.blocks_execution) {
+    results.preflight = preflight;
+    results.blockers = preflight.blockers || [];
+    for (const blocker of preflight.blockers || []) {
+      appendUniqueTaskIds(results.blocked, blocker.task_ids || (blocker.task_id ? [blocker.task_id] : []));
+      log("preflight", "blocked", `${blocker.code}: ${blocker.message}`);
+    }
+    return results;
+  }
+
+  const childTaskMap = buildChildTaskMap(expanded);
 
   const completedTaskSummaries = [];
   let relayText = "";

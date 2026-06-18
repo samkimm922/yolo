@@ -123,6 +123,65 @@ export function validateFindings(data) {
   return { ok: true };
 }
 
+function stripJsonCodeFences(text = "") {
+  return text
+    .replace(/```(?:json|JSON)?\s*/g, "")
+    .replace(/```/g, "");
+}
+
+function extractBalancedJsonObject(text = "") {
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index++) {
+    const char = text[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+    if (char === "{") depth += 1;
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+      if (depth < 0) return null;
+    }
+  }
+
+  return null;
+}
+
+export function parseFindingsJsonOutput(text = "") {
+  const trimmed = stripJsonCodeFences(text).trim();
+  try {
+    return { ok: true, data: JSON.parse(trimmed), json: trimmed };
+  } catch {
+    const balanced = extractBalancedJsonObject(trimmed);
+    if (!balanced) {
+      return { ok: false, error: "未找到有效 JSON 输出", raw: trimmed.slice(0, 500) };
+    }
+    try {
+      return { ok: true, data: JSON.parse(balanced), json: balanced };
+    } catch (balancedError) {
+      return { ok: false, error: `JSON 解析失败: ${balancedError.message}`, raw: balanced.slice(0, 500) };
+    }
+  }
+}
+
 // ── 调模型生成 findings ──────────────────────────────────────────
 export async function generateFindings(prompt, timeout = 300000, options = Object()) {
   const projectRoot = resolve(options.projectRoot || PACKAGE_ROOT);
@@ -171,23 +230,17 @@ export async function generateFindings(prompt, timeout = 300000, options = Objec
       if (done) return;
       done = true;
 
-      const text = out.trim();
-      const jsonMatch = text.match(/\{[\s\S]*?"findings"[\s\S]*?\}/);
-      if (!jsonMatch) {
-        res({ ok: false, error: "未找到有效 JSON 输出", raw: text.slice(0, 500) });
+      const parsed = parseFindingsJsonOutput(out);
+      if (!parsed.ok) {
+        res(parsed);
         return;
       }
-      try {
-        const parsed = JSON.parse(jsonMatch[0]);
-        const validation = validateFindings(parsed);
-        if (!validation.ok) {
-          res({ ok: false, error: validation.error, raw: jsonMatch[0].slice(0, 500) });
-          return;
-        }
-        res({ ok: true, data: parsed });
-      } catch (e) {
-        res({ ok: false, error: `JSON 解析失败: ${e.message}`, raw: jsonMatch[0].slice(0, 500) });
+      const validation = validateFindings(parsed.data);
+      if (!validation.ok) {
+        res({ ok: false, error: validation.error, raw: parsed.json.slice(0, 500) });
+        return;
       }
+      res({ ok: true, data: parsed.data });
     });
 
     child.on("error", e => {

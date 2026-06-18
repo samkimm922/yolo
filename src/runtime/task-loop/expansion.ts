@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { deriveParentTaskId } from "./status-helpers.js";
 
 const SOURCE_FILE_PATTERN = /src\/[^\s,，、]+?\.(tsx?|jsx?|css)/g;
 
@@ -291,6 +292,132 @@ export function mergeOverlappingTasks(tasks, {
   return merged;
 }
 
+function asIdArray(value) {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  return value ? [String(value)] : [];
+}
+
+function taskDependencyIds(task = Object()) {
+  return [...new Set([
+    ...asIdArray(task.depends_on),
+    ...asIdArray(task.dependencies),
+  ])];
+}
+
+function taskNodeKey(task, index) {
+  return `${task?.id || "__task"}::${index}`;
+}
+
+function taskDisplayId(task, key) {
+  return task?.id ? String(task.id) : key;
+}
+
+function addRepresentative(representatives, id, key) {
+  if (!id) return;
+  const value = String(id);
+  if (!representatives.has(value)) representatives.set(value, new Set());
+  representatives.get(value).add(key);
+}
+
+function dependencyCyclePreflight(nodes) {
+  const taskIds = nodes.map((node) => taskDisplayId(node.task, node.key));
+  return {
+    status: "blocked",
+    blocks_execution: true,
+    blockers: [{
+      code: "TASK_DEPENDENCY_CYCLE",
+      source: "task-loop-expansion",
+      task_ids: taskIds,
+      message: `Circular task dependency blocks execution: ${taskIds.join(" -> ")}`,
+    }],
+  };
+}
+
+function passPreflight() {
+  return { status: "pass", blocks_execution: false, blockers: [] };
+}
+
+export function orderTasksByDependencies(tasks = [], { priorityOrder = Object() } = Object()) {
+  const nodes = tasks.map((task, index) => ({
+    task,
+    index,
+    key: taskNodeKey(task, index),
+  }));
+  const nodesByKey = new Map<string, any>(nodes.map((node) => [node.key, node]));
+  const representatives = new Map<string, Set<string>>();
+
+  for (const node of nodes) {
+    addRepresentative(representatives, node.task?.id, node.key);
+    for (const sourceId of asIdArray(node.task?.merged_from)) addRepresentative(representatives, sourceId, node.key);
+    const parentId = deriveParentTaskId(node.task?.id);
+    if (parentId && parentId !== node.task?.id) addRepresentative(representatives, parentId, node.key);
+  }
+
+  const dependenciesByKey = new Map<string, Set<string>>(nodes.map((node) => [node.key, new Set<string>()]));
+  for (const node of nodes) {
+    const dependencies = dependenciesByKey.get(node.key);
+    for (const dependencyId of taskDependencyIds(node.task)) {
+      for (const dependencyKey of representatives.get(dependencyId) || []) {
+        if (dependencyKey !== node.key) dependencies.add(dependencyKey);
+      }
+    }
+  }
+
+  const indegree = new Map<string, number>(nodes.map((node) => [node.key, 0]));
+  const outgoing = new Map<string, Set<string>>(nodes.map((node) => [node.key, new Set<string>()]));
+  for (const [key, dependencies] of dependenciesByKey) {
+    for (const dependencyKey of dependencies) {
+      if (!indegree.has(dependencyKey)) continue;
+      if (outgoing.get(dependencyKey).has(key)) continue;
+      outgoing.get(dependencyKey).add(key);
+      indegree.set(key, indegree.get(key) + 1);
+    }
+  }
+
+  const compareReady = (leftKey, rightKey) => {
+    const left = nodesByKey.get(leftKey);
+    const right = nodesByKey.get(rightKey);
+    const priorityDiff = (priorityOrder[left?.task?.priority] ?? 9) - (priorityOrder[right?.task?.priority] ?? 9);
+    if (priorityDiff !== 0) return priorityDiff;
+    return (left?.index ?? 0) - (right?.index ?? 0);
+  };
+
+  const ready = nodes
+    .filter((node) => indegree.get(node.key) === 0)
+    .map((node) => node.key)
+    .sort(compareReady);
+  const ordered = [];
+
+  while (ready.length > 0) {
+    const key = ready.shift();
+    const node = nodesByKey.get(key);
+    if (!node) continue;
+    ordered.push(node);
+
+    for (const nextKey of outgoing.get(key) || []) {
+      indegree.set(nextKey, indegree.get(nextKey) - 1);
+      if (indegree.get(nextKey) === 0) {
+        ready.push(nextKey);
+        ready.sort(compareReady);
+      }
+    }
+  }
+
+  if (ordered.length !== nodes.length) {
+    const orderedKeys = new Set(ordered.map((node) => node.key));
+    const cycleNodes = nodes.filter((node) => !orderedKeys.has(node.key));
+    return {
+      tasks: [...ordered, ...cycleNodes].map((node) => node.task),
+      preflight: dependencyCyclePreflight(cycleNodes),
+    };
+  }
+
+  return {
+    tasks: ordered.map((node) => node.task),
+    preflight: passPreflight(),
+  };
+}
+
 export function expandTasksForMainLoop({
   tasks = [],
   completedIds = new Set(),
@@ -303,10 +430,7 @@ export function expandTasksForMainLoop({
   taskIsSplitParent = () => false,
   log = (..._args) => {},
 } = Object()) {
-  const sorted = [...tasks].sort(
-    (a, b) => (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9),
-  );
-  const expandedBeforeMerge = sorted.flatMap((task) => {
+  const expandedBeforeMerge = [...tasks].flatMap((task) => {
     const prepared = prepareTaskForExpansion(task, { completedIds });
     if (prepared.status === "completed") return [prepared];
 
@@ -321,10 +445,12 @@ export function expandTasksForMainLoop({
     taskIsSplitParent,
     log,
   });
+  const ordered = orderTasksByDependencies(expanded, { priorityOrder });
 
   return {
-    expanded,
+    expanded: ordered.tasks,
+    preflight: ordered.preflight,
     beforeMerge,
-    mergedCount: expanded.length,
+    mergedCount: ordered.tasks.length,
   };
 }
