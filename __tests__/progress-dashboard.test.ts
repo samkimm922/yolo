@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, test } from "node:test";
 import { readLifecycleDashboard } from "../src/runtime/progress/lifecycle-dashboard.js";
 import { HTML, server } from "../src/runtime/progress/server.js";
 
 const roots = [];
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 function tempRoot() {
   const root = mkdtempSync(join(tmpdir(), "progress-dashboard-"));
@@ -27,6 +29,15 @@ function walk(dir) {
 
 function snapshotFiles(dir) {
   return Object.fromEntries(walk(dir).map((path) => [path, readFileSync(path, "utf8")]));
+}
+
+function restoreFileLater(path) {
+  const existed = existsSync(path);
+  const previous = existed ? readFileSync(path, "utf8") : "";
+  return () => {
+    if (existed) writeFileSync(path, previous, "utf8");
+    else rmSync(path, { force: true });
+  };
 }
 
 afterEach(() => {
@@ -136,5 +147,41 @@ test("progress server exposes lifecycle json endpoint", async () => {
     assert.ok("next_action" in payload);
   } finally {
     await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("progress server rejects traversing task log ids and still returns valid logs", async () => {
+  const nonce = `sec2-${process.pid}-${Date.now()}`;
+  const stateDir = join(REPO_ROOT, "state");
+  const taskLogsDir = join(stateDir, "runtime", "task-logs");
+  const outsideLog = join(stateDir, `${nonce}.jsonl`);
+  const safeTaskId = `${nonce}-task`;
+  const safeLog = join(taskLogsDir, `${safeTaskId}.jsonl`);
+  const restoreOutside = restoreFileLater(outsideLog);
+  const restoreSafe = restoreFileLater(safeLog);
+
+  mkdirSync(taskLogsDir, { recursive: true });
+  writeFileSync(outsideLog, `${JSON.stringify({ type: "LEAK", secret: "outside-task-logs" })}\n`, "utf8");
+  writeFileSync(safeLog, `${JSON.stringify({ type: "TASK_START", title: "safe task" })}\n`, "utf8");
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const addr = server.address();
+    const port = typeof addr === "string" ? 0 : (addr as { port: number }).port;
+    const traversal = encodeURIComponent(`../../${nonce}`);
+    const traversalResponse = await fetch(`http://127.0.0.1:${port}/api/task-logs/${traversal}`);
+    const traversalBody = await traversalResponse.text();
+
+    assert.ok([400, 404].includes(traversalResponse.status), `expected traversal rejection, got ${traversalResponse.status}`);
+    assert.equal(traversalBody.includes("outside-task-logs"), false);
+
+    const validResponse = await fetch(`http://127.0.0.1:${port}/api/task-logs/${encodeURIComponent(safeTaskId)}`);
+    const validBody = await validResponse.json();
+    assert.equal(validResponse.status, 200);
+    assert.equal(validBody[0].title, "safe task");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    restoreSafe();
+    restoreOutside();
   }
 });

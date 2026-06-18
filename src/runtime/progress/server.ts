@@ -12,6 +12,7 @@ import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 import http from "http";
 import { readLifecycleDashboard } from "./lifecycle-dashboard.js";
+import { isSafePathComponent, resolveWithinRoot } from "../../lib/security/path-guard.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "../../..");
@@ -313,7 +314,11 @@ function readTaskLogSummaries() {
 }
 
 function readTaskLogEntries(taskId) {
-  const filePath = join(TASK_LOGS_DIR, `${taskId}.jsonl`);
+  const safeTaskId = String(taskId ?? "");
+  if (!isSafePathComponent(safeTaskId)) return null;
+  const resolved = resolveWithinRoot(TASK_LOGS_DIR, `${safeTaskId}.jsonl`);
+  if (!resolved.ok || !resolved.path) return null;
+  const filePath = resolved.path;
   if (!existsSync(filePath)) return null;
   try {
     const content = readFileSync(filePath, "utf8");
