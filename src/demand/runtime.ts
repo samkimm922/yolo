@@ -751,6 +751,175 @@ function uniqueStrings(values = []) {
   return [...new Set(values.map(clean).filter(Boolean))];
 }
 
+function normalizedTaskTargetFiles(files = []) {
+  return uniqueStrings(files).sort((a, b) => a.localeCompare(b));
+}
+
+function scenarioTaskDedupKey({ files = [], kind = "", title = "" } = Object()) {
+  return JSON.stringify({
+    files: normalizedTaskTargetFiles(files),
+    kind: clean(kind).toLowerCase() || "code",
+    title: clean(title).toLowerCase(),
+  });
+}
+
+function scenarioTaskScopeKey({ files = [], kind = "" } = Object()) {
+  return JSON.stringify({
+    files: normalizedTaskTargetFiles(files),
+    kind: clean(kind).toLowerCase() || "code",
+  });
+}
+
+const ACTION_SEQUENCE_PATTERN = /(?<![\w./-])([A-Za-z][A-Za-z0-9_-]{1,31}(?:\s*(?:\/|→|->|=>|\+)\s*[A-Za-z][A-Za-z0-9_-]{1,31}){1,})(?![\w./-])/g;
+const ACTION_SEQUENCE_SEPARATOR = /\s*(?:\/|→|->|=>|\+)\s*/u;
+const ASCII_TOKEN_PATTERN = /[A-Za-z][A-Za-z0-9_-]{1,31}/g;
+const ACTION_TOKEN_STOP_WORDS = new Set([
+  "api", "build", "ci", "cli", "e2e", "home", "http", "https", "javascript", "jest",
+  "json", "lint", "node", "rest", "smoke", "src", "test", "tests", "tsx", "typescript",
+  "typecheck", "unit", "vitest", "task", "tasks",
+]);
+
+function actionTokenList(tokens = []) {
+  return uniqueStrings(tokens.map((token) => clean(token).toLowerCase()))
+    .filter((token) => token.length >= 2 && !ACTION_TOKEN_STOP_WORDS.has(token));
+}
+
+function compactActionTokens(text = "") {
+  return actionTokenList([...clean(text).matchAll(ACTION_SEQUENCE_PATTERN)]
+    .flatMap((match) => clean(match[1]).split(ACTION_SEQUENCE_SEPARATOR)));
+}
+
+function scenarioActionTokens(text = "") {
+  const compact = compactActionTokens(text);
+  if (compact.length > 0) return compact;
+  const source = clean(text).toLowerCase();
+  const capability = source.match(/\b(?:supports?|can|allows?|lets?|includes?|provide|provides)\s+([a-z][a-z0-9_-]{1,31})\b/i);
+  if (capability) return actionTokenList([capability[1]]);
+  const commandUse = source.match(/(?:可以用|使用|运行|执行)\s+([a-z][a-z0-9_-]{1,31})(?:\s+([a-z][a-z0-9_-]{1,31}))?/i);
+  if (commandUse) return actionTokenList([commandUse[2] || commandUse[1]]);
+  const asciiTokens = actionTokenList(source.match(ASCII_TOKEN_PATTERN) || []);
+  return asciiTokens.length <= 2 ? asciiTokens : [];
+}
+
+function scenarioConceptText({ scenario = Object(), requirement = Object(), proof = "" } = Object()) {
+  return [
+    scenario.desired_behavior,
+    scenario.proof,
+    proof,
+    requirement.text,
+  ].map(clean).filter(Boolean).join("\n");
+}
+
+function verificationOnlyConcept(text = "") {
+  const source = clean(text).toLowerCase();
+  if (!source || compactActionTokens(source).length >= 2) return false;
+  const hasVerificationSignal = /\b(vitest|jest|tests?|unit|integration|typecheck|lint|build|ci|smoke)\b|测试|验证|验收/.test(source);
+  const hasPassSignal = /\b(pass|passes|passing|green|success|succeed|succeeds|ok)\b|全绿|通过|跑通/.test(source);
+  const hasChangeSignal = /\b(add|create|update|delete|remove|persist|store|save|return|show|display|support|handle|fallback|error)\b|添加|创建|修改|删除|保存|持久|返回|显示|支持|处理|降级|报错|不崩溃/.test(source);
+  return hasVerificationSignal && hasPassSignal && !hasChangeSignal;
+}
+
+function cjkBigrams(text = "") {
+  const values = [];
+  for (const run of clean(text).match(/[\u4e00-\u9fff]{2,}/g) || []) {
+    for (let index = 0; index < run.length - 1; index += 1) values.push(run.slice(index, index + 2));
+    if (run.length <= 4) values.push(run);
+  }
+  return values;
+}
+
+function conceptFingerprint(text = "") {
+  const source = clean(text)
+    .toLowerCase()
+    .replace(/requirement outcome:/g, " ")
+    .replace(/成功标准是/g, " ")
+    .replace(/\s+/g, " ");
+  return new Set([
+    ...scenarioActionTokens(source),
+    ...cjkBigrams(source),
+  ]);
+}
+
+function conceptCategories(text = "") {
+  const source = clean(text).toLowerCase();
+  const categories = [];
+  if (/\b(persist|persistence|save|store|survive|reload|rerun|refresh)\b|持久|保存|保持|刷新|重新执行/.test(source)) {
+    categories.push("persistence");
+  }
+  if (/\b(invalid|error|non-?zero|exit|missing|not found|empty)\b|非法|错误|空文本|不存在|友好|报错|非零|退出/.test(source)) {
+    categories.push("error_handling");
+  }
+  if (/\b(corrupt|corrupted|malformed|fallback|degrade|graceful)\b|损坏|降级|不崩溃/.test(source)) {
+    categories.push("corrupt_state");
+  }
+  if (/\b(filter|stable|deterministic)\b|过滤|稳定/.test(source)) {
+    categories.push("stable_filtering");
+  }
+  return uniqueStrings(categories);
+}
+
+function overlapCount(left, right) {
+  let count = 0;
+  for (const item of left) {
+    if (right.has(item)) count += 1;
+  }
+  return count;
+}
+
+function sameActionConcept(left = [], right = []) {
+  if (left.length === 0 || right.length === 0) return true;
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  const overlap = overlapCount(leftSet, rightSet);
+  return overlap / Math.max(leftSet.size, rightSet.size) >= 0.75;
+}
+
+function nearDuplicateConcept(left, right) {
+  if (!sameActionConcept(left.actionTokens, right.actionTokens)) return false;
+  const leftSize = left.fingerprint.size;
+  const rightSize = right.fingerprint.size;
+  if (leftSize === 0 || rightSize === 0) return false;
+  const overlap = overlapCount(left.fingerprint, right.fingerprint);
+  const containment = overlap / Math.min(leftSize, rightSize);
+  const union = leftSize + rightSize - overlap;
+  const jaccard = union > 0 ? overlap / union : 0;
+  return containment >= 0.72 || jaccard >= 0.58;
+}
+
+function coveredActionSummary(concept, seenConcepts = []) {
+  const summaryTokens = compactActionTokens(concept.text);
+  if (summaryTokens.length < 2) return false;
+  const coveredTokens = new Set(seenConcepts.flatMap((item) => item.actionTokens));
+  if (!summaryTokens.every((token) => coveredTokens.has(token))) return false;
+  return /\b(flow|flows|workflow|smoke|e2e|end-to-end)\b|一条龙|跑通|干净环境|干净 home/i.test(concept.text);
+}
+
+function coveredCategoryDetail(concept, seenConcepts = []) {
+  if (concept.categories.length === 0) return false;
+  return seenConcepts.some((seen) => {
+    if (!sameActionConcept(concept.actionTokens, seen.actionTokens)) return false;
+    if (seen.categories.length <= concept.categories.length) return false;
+    return concept.categories.every((category) => seen.categories.includes(category));
+  });
+}
+
+function taskConceptRecord({ scenario = Object(), requirement = Object(), proof = "" } = Object()) {
+  const text = scenarioConceptText({ scenario, requirement, proof });
+  return {
+    text,
+    actionTokens: scenarioActionTokens(text),
+    categories: conceptCategories(text),
+    fingerprint: conceptFingerprint(text),
+  };
+}
+
+function redundantScenarioTask(concept, seenConcepts = []) {
+  if (seenConcepts.length > 0 && verificationOnlyConcept(concept.text)) return true;
+  if (coveredActionSummary(concept, seenConcepts)) return true;
+  if (coveredCategoryDetail(concept, seenConcepts)) return true;
+  return seenConcepts.some((seen) => nearDuplicateConcept(concept, seen));
+}
+
 function buildTaskSessionPlan({
   demandId = "",
   taskId = "",
@@ -975,17 +1144,31 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
   const allFiles = targetFiles(session);
   const tasks = [];
   const compileErrors = [];
+  const taskConceptsByScope = new Map();
   for (const [scenarioIndex, scenario] of scenarios.entries()) {
     const requirement = requirements.get(scenario.requirement_id) || {};
     const surfaces = asArray(scenario.surfaces).length
       ? asArray(scenario.surfaces)
       : [{ id: `${scenario.id}-SFC-001`, kind: "code", label: "代码实现", target_files: allFiles }];
+    const scenarioTaskKeys = new Set();
     for (const [surfaceIndex, surface] of surfaces.entries()) {
       const maxFiles = Math.max(1, Number(surface.session_budget?.max_files || input.max_files_per_task || input.maxFilesPerTask || 2));
       const surfaceFiles = asArray(surface.target_files).length ? asArray(surface.target_files) : allFiles;
       const scenarioFiles = [...new Set(surfaces.flatMap((item) => asArray(item.target_files)).concat(allFiles).filter(Boolean))];
       const fileChunks = chunk(surfaceFiles, maxFiles);
       for (const [chunkIndex, files] of fileChunks.entries()) {
+        const taskTitle = `${surfaceTitle(surface)}: ${scenario.requirement_id || requirement.id || scenario.id || "DEMAND"}`;
+        const taskKind = clean(surface.kind).toLowerCase() || fileKind(files[0]) || "code";
+        const dedupKey = scenarioTaskDedupKey({ files, kind: taskKind, title: taskTitle });
+        if (scenarioTaskKeys.has(dedupKey)) continue;
+        scenarioTaskKeys.add(dedupKey);
+
+        const proof = clean(surface.proof || scenario.proof || requirement.text || scenario.desired_behavior);
+        const scopeKey = scenarioTaskScopeKey({ files, kind: taskKind });
+        const seenConcepts = taskConceptsByScope.get(scopeKey) || [];
+        const concept = taskConceptRecord({ scenario, requirement, proof });
+        if (redundantScenarioTask(concept, seenConcepts)) continue;
+
         const taskId = `DEMAND-${scenario.requirement_id || "REQ"}-${String(scenarioIndex + 1).padStart(3, "0")}${String(surfaceIndex + 1).padStart(2, "0")}${String(chunkIndex + 1).padStart(2, "0")}`;
         const verifyCommand = scenario.verify_command || scenario.verifyCommand;
         if (verifyCommand && !parseCommandToArgv(verifyCommand).ok) {
@@ -997,7 +1180,6 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
             suggestion: `Replace "${verifyCommand}" with a single safe command without shell metacharacters ($ ; & | > < \` ( ) { } etc.).`,
           });
         }
-        const proof = clean(surface.proof || scenario.proof || requirement.text || scenario.desired_behavior);
         const description = clean(scenario.desired_behavior || requirement.text || proof);
         const sourceQuestions = sourceQuestionIds(session, scenario, requirement);
         const taskVerificationHint = verificationHint({ scenario, surface, proof, files });
@@ -1049,7 +1231,7 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
         });
         tasks.push({
           id: taskId,
-          title: `${surfaceTitle(surface)}: ${scenario.requirement_id || requirement.id || scenario.id || taskId}`,
+          title: taskTitle,
           description,
           priority: input.priority || "P1",
           type: taskTypeForSurface(surface),
@@ -1179,6 +1361,7 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
           },
           must_fix_before_ship: true,
         });
+        taskConceptsByScope.set(scopeKey, [...seenConcepts, concept]);
       }
     }
   }
