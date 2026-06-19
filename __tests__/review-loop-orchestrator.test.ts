@@ -93,6 +93,75 @@ test("runReviewLoop exits cleanly when scanner has no findings", async () => {
   assert.ok(reviewDone.some(([status]) => status === "pass"));
 });
 
+test("runReviewLoop converts one finding into one review_fix task with non-empty post conditions", async () => {
+  const root = mkdtempSync(resolve(tmpdir(), "yolo-review-one-finding-"));
+  const prdPath = resolve(root, "prd.json");
+  const prd = {
+    id: "PRD-REVIEW-ONE-FINDING",
+    tasks: [{
+      id: "BASE-1",
+      type: "bugfix",
+      status: "completed",
+      scope: { targets: [{ file: "src/app.js" }] },
+    }],
+  };
+
+  try {
+    writeFileSync(prdPath, JSON.stringify(prd, null, 2), "utf8");
+
+    const result = await runReviewLoop({
+      prd,
+      prdPath,
+      taskResults: emptyTaskResults(),
+      runId: "run-test",
+      yoloRoot: YOLO_DIR,
+      rootDir: YOLO_DIR,
+      progress: { total: 1, done: 0, failed: 0 },
+      maxReviewRounds: 1,
+      maxReviewTasksPerRound: 5,
+      execFileSync: () => JSON.stringify({
+        coverage_artifact: {
+          scanner_version: "test-review-scanner@1",
+          scanned_files: ["src/app.js"],
+          rules: ["R6-as-any"],
+          expected_scope: ["src/app.js"],
+          coverage_status: "complete",
+        },
+        findings: [{
+          finding_id: "REV-ONE",
+          scanner_id: "R6-as-any",
+          severity: "MEDIUM",
+          fix_type: "CLAUDE_FIX",
+          dimension: "code",
+          file: "src/app.js",
+          line: 1,
+          match: "as any",
+          description: "Avoid as any",
+        }],
+      }),
+      mainLoop: async () => emptyTaskResults(),
+      loadPRD: (path) => JSON.parse(readFileSync(path, "utf8")),
+      normalizeRepoPath: (value) => value,
+    });
+
+    const written = JSON.parse(readFileSync(prdPath, "utf8"));
+    const reviewTasks = written.tasks.filter((task) => task.task_kind === "review_fix");
+    assert.equal(reviewTasks.length, 1);
+    assert.deepEqual(reviewTasks[0].source_finding_ids, ["REV-ONE"]);
+    assert.ok(reviewTasks[0].post_conditions.length > 0);
+    assert.ok(reviewTasks[0].post_conditions.some((condition) =>
+      condition.type === "code_not_contains" &&
+      condition.severity === "FAIL" &&
+      condition.params.source_finding_id === "REV-ONE"
+    ));
+    assert.deepEqual(result.failed, ["FIX-R1-001", "REVIEW-FINDINGS-PERSISTED"]);
+    assert.deepEqual(result.blocked, ["REVIEW-FINDINGS-PERSISTED"]);
+    assert.equal(result.review_outcome.reason, "review_findings_persisted");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("runReviewLoop blocks empty findings without scanner coverage artifact", async () => {
   const prd = {
     id: "PRD-REVIEW-CLEAN-NO-COVERAGE",
@@ -380,12 +449,12 @@ test("runReviewLoop fails closed when review fixes return only blocked tasks", a
   }
 });
 
-test("runReviewLoop preserves original findings when review-to-prd conversion fails", async () => {
-  const root = mkdtempSync(resolve(tmpdir(), "yolo-review-conversion-fail-"));
+test("runReviewLoop fallback classifier still writes canonical review_fix tasks when dynamic import fails", async () => {
+  const root = mkdtempSync(resolve(tmpdir(), "yolo-review-fallback-classifier-"));
   const fakeYoloRoot = resolve(root, "missing-yolo-root");
   const prdPath = resolve(root, "prd.json");
   const prd = {
-    id: "PRD-REVIEW-CONVERSION-FAIL",
+    id: "PRD-REVIEW-FALLBACK-CLASSIFIER",
     tasks: [{
       id: "FIX-1",
       type: "bugfix",
@@ -425,7 +494,7 @@ test("runReviewLoop preserves original findings when review-to-prd conversion fa
         completed: [],
         failed: [],
         skipped: [],
-        blocked: ["FIX-R1-CONVERSION-FAILED"],
+        blocked: ["FIX-R1-001"],
         contractReview: [],
       }),
       loadPRD: (path) => JSON.parse(readFileSync(path, "utf8")),
@@ -433,12 +502,99 @@ test("runReviewLoop preserves original findings when review-to-prd conversion fa
     });
 
     const written = JSON.parse(readFileSync(prdPath, "utf8"));
-    const preserved = written.tasks.find((task) => task.id === "FIX-R1-CONVERSION-FAILED");
-    assert.equal(preserved.blocks_ship, true);
-    assert.equal(preserved.review_conversion_failed.preserved_finding_count, 1);
-    assert.equal(preserved.source_findings[0].finding_id, "F-CONVERSION");
+    const preserved = written.tasks.find((task) => task.id === "FIX-R1-001");
+    assert.equal(preserved.task_kind, "review_fix");
+    assert.deepEqual(preserved.source_finding_ids, ["F-CONVERSION"]);
+    assert.ok(preserved.post_conditions.some((condition) => condition.type === "target_file_modified" && condition.severity === "FAIL"));
+    assert.ok(preserved.post_conditions.some((condition) =>
+      condition.type === "code_not_contains" &&
+      condition.severity === "FAIL" &&
+      condition.params.source_finding_id === "F-CONVERSION"
+    ));
     assert.deepEqual(result.failed, ["REVIEW-FIX-BLOCKED"]);
     assert.equal(result.review_outcome.reason, "review_fix_blocked");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runReviewLoop blocks when the same completed review finding persists across rounds", async () => {
+  const root = mkdtempSync(resolve(tmpdir(), "yolo-review-persisted-finding-"));
+  const prdPath = resolve(root, "prd.json");
+  const prd = {
+    id: "PRD-REVIEW-PERSISTED-FINDING",
+    tasks: [{
+      id: "BASE-1",
+      type: "bugfix",
+      status: "completed",
+      scope: { targets: [{ file: "src/app.js" }] },
+    }],
+  };
+  const finding = {
+    finding_id: "REV-PERSIST",
+    scanner_id: "R6-as-any",
+    severity: "HIGH",
+    fix_type: "CLAUDE_FIX",
+    dimension: "code",
+    file: "src/app.js",
+    line: 1,
+    match: "as any",
+    description: "Avoid as any",
+  };
+  let scanRuns = 0;
+
+  try {
+    writeFileSync(prdPath, JSON.stringify(prd, null, 2), "utf8");
+
+    const result = await runReviewLoop({
+      prd,
+      prdPath,
+      taskResults: emptyTaskResults(),
+      runId: "run-test",
+      yoloRoot: YOLO_DIR,
+      rootDir: YOLO_DIR,
+      progress: { total: 1, done: 0, failed: 0 },
+      maxReviewRounds: 3,
+      maxReviewTasksPerRound: 5,
+      execFileSync: () => {
+        scanRuns++;
+        return JSON.stringify({
+          coverage_artifact: {
+            scanner_version: "test-review-scanner@1",
+            scanned_files: ["src/app.js"],
+            rules: ["R6-as-any"],
+            expected_scope: ["src/app.js"],
+            coverage_status: "complete",
+          },
+          findings: [finding],
+        });
+      },
+      mainLoop: async () => {
+        const latest = JSON.parse(readFileSync(prdPath, "utf8"));
+        for (const task of latest.tasks) {
+          if (task.task_kind === "review_fix") task.status = "completed";
+        }
+        writeFileSync(prdPath, JSON.stringify(latest, null, 2), "utf8");
+        return {
+          completed: ["FIX-R1-001"],
+          failed: [],
+          skipped: [],
+          blocked: [],
+          contractReview: [],
+        };
+      },
+      loadPRD: (path) => JSON.parse(readFileSync(path, "utf8")),
+      normalizeRepoPath: (value) => value,
+    });
+
+    const written = JSON.parse(readFileSync(prdPath, "utf8"));
+    assert.equal(scanRuns, 2);
+    assert.equal(written.tasks.filter((task) => task.task_kind === "review_fix").length, 1);
+    assert.deepEqual(result.failed, ["REVIEW-FINDINGS-PERSISTED"]);
+    assert.deepEqual(result.blocked, ["REVIEW-FINDINGS-PERSISTED"]);
+    assert.equal(result.review_outcome.status, "blocked");
+    assert.equal(result.review_outcome.reason, "review_findings_persisted");
+    assert.equal(result.review_outcome.meta.persisted_findings[0].finding_id, "REV-PERSIST");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

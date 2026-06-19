@@ -108,15 +108,20 @@ function typecheckCondition(taskId) {
   };
 }
 
-function absenceCondition(taskId, finding, files) {
+function absenceCondition(taskId, finding, files, sourceFindingId) {
   const match = truncateText(finding?.match || finding?.evidence_text || finding?.pattern);
   if (!match || !files.length) return [];
   return files.slice(0, 3).map((file, index) => ({
     id: `POST-${taskId}-ABSENT-${index + 1}`,
     type: "code_not_contains",
     severity: "FAIL",
-    params: { file, text: match },
-    message: "review finding matched text must be removed or rewritten",
+    params: {
+      file,
+      text: match,
+      source_finding_id: sourceFindingId,
+      scanner_id: finding?.scanner_id || finding?.rule_id || null,
+    },
+    message: "original review finding matched text must be removed or rewritten",
   }));
 }
 
@@ -137,6 +142,7 @@ export function reviewFindingsToPrdTasks(findings = [], options = Object()) {
   const existingIds = existingTaskIds(options.existingTasks || []);
   const tasks = [];
   const skipped = [];
+  let taskIndex = 0;
 
   for (const [index, rawFinding] of findings.entries()) {
     const finding = normalizeReviewFinding(rawFinding, { source: "review-to-prd", index });
@@ -152,7 +158,8 @@ export function reviewFindingsToPrdTasks(findings = [], options = Object()) {
       continue;
     }
 
-    const taskId = taskIdForFinding(finding, round, index, existingIds);
+    const taskId = taskIdForFinding(finding, round, taskIndex, existingIds);
+    taskIndex++;
     const description = findingDescription(finding);
     const sourceFindingId = findingId(finding, index);
 
@@ -176,7 +183,7 @@ export function reviewFindingsToPrdTasks(findings = [], options = Object()) {
       pre_conditions: preConditions(taskId, finding, files),
       post_conditions: [
         ...targetConditions(taskId, files),
-        ...absenceCondition(taskId, finding, files),
+        ...absenceCondition(taskId, finding, files, sourceFindingId),
         typecheckCondition(taskId),
       ],
       acceptance_criteria: [
@@ -185,6 +192,8 @@ export function reviewFindingsToPrdTasks(findings = [], options = Object()) {
       ],
       task_kind: "review_fix",
       fix_type: finding?.fix_type === "AUTO_FIX" ? "AUTO_FIX" : "CLAUDE_FIX",
+      fix_rule: finding?.scanner_id || finding?.rule_id || finding?.code || sourceFindingId,
+      fix_findings: [finding],
       source_finding_ids: [sourceFindingId],
       source_findings: [finding],
       dedupe_key: `review:${sourceFindingId}:${files.join(",")}`,

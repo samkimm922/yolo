@@ -13,6 +13,7 @@ import { execCommand } from "../lib/security/safe-exec.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
+const REVIEW_SCANNER_VERSION = "review-scanner@1";
 
 function scannerSettings(options = Object()) {
   const cfg = options.config || config;
@@ -203,6 +204,31 @@ const RULES = [
 function ruleEnabled(rule, settings) {
   if (rule.platform === "miniprogram") return settings.enableMiniprogramRules;
   return true;
+}
+
+function repoRelativePath(absPath, settings) {
+  return absPath
+    .replace(settings.root + "/", "")
+    .replace(settings.root + "\\", "")
+    .replace(/\\/g, "/");
+}
+
+function enabledRuleIds(settings) {
+  return RULES.filter((rule) => ruleEnabled(rule, settings)).map((rule) => rule.id);
+}
+
+function buildCoverageArtifact({ settings, files }) {
+  const scannedFiles = files.map((file) => repoRelativePath(file, settings)).sort();
+  const expectedScope = settings.files.length > 0 ? settings.files : settings.sourceRoots;
+  const missingExpectedFiles = settings.files.filter((file) => !scannedFiles.includes(file));
+  return {
+    scanner_version: REVIEW_SCANNER_VERSION,
+    scanned_files: scannedFiles,
+    rules: enabledRuleIds(settings),
+    expected_scope: expectedScope,
+    coverage_status: missingExpectedFiles.length === 0 ? "complete" : "incomplete",
+    missing_expected_files: missingExpectedFiles,
+  };
 }
 
 function getAllSourceFiles(dir, settings) {
@@ -573,6 +599,7 @@ export function scanProject(options = Object()) {
   const byDimension = Object();
   const bySeverity = Object();
   const fileCount = files.length;
+  const coverageArtifact = buildCoverageArtifact({ settings, files });
 
   for (const f of normalizedFindings) {
     byDimension[f.dimension] = (byDimension[f.dimension] || 0) + 1;
@@ -586,6 +613,7 @@ export function scanProject(options = Object()) {
     generated_at: reviewOutput.generated_at,
     source: reviewOutput.source,
     scanned_files: fileCount,
+    coverage_artifact: coverageArtifact,
     total_findings: normalizedFindings.length,
     by_dimension: byDimension,
     by_severity: bySeverity,

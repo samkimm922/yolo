@@ -40,19 +40,27 @@ describe("review-loop round helpers", () => {
     assert.deepEqual(reviewScopeFilesForPrd({ ...prd, review_policy: { scope: "full" } }), []);
   });
 
-  test("fallbackClassifyFindings turns non-info findings into one CLAUDE_FIX task", () => {
+  test("fallbackClassifyFindings turns each non-info finding into one review_fix task", () => {
     const classified = fallbackClassifyFindings([
       { fix_type: "INFO", description: "FYI" },
-      { fix_type: "CLAUDE_FIX", description: "Fix this", severity: "HIGH", files: ["src/a.ts:10"] },
-      { description: "Fix that", files: ["src/b.ts"] },
+      { finding_id: "F-A", fix_type: "CLAUDE_FIX", description: "Fix this", severity: "HIGH", files: ["src/a.ts:10"], match: "badA" },
+      { finding_id: "F-B", description: "Fix that", files: ["src/b.ts"], match: "badB" },
     ], 2);
 
     assert.equal(classified.infoCount, 1);
     assert.deepEqual(classified.autoFixTasks, []);
-    assert.equal(classified.claudeFixTasks.length, 1);
+    assert.equal(classified.claudeFixTasks.length, 2);
     assert.equal(classified.claudeFixTasks[0].id, "FIX-R2-001");
-    assert.equal(classified.claudeFixTasks[0].title, "[code] 2 个代码问题");
-    assert.deepEqual(classified.claudeFixTasks[0].scope.targets, [{ file: "src/a.ts" }, { file: "src/b.ts" }]);
+    assert.equal(classified.claudeFixTasks[0].task_kind, "review_fix");
+    assert.deepEqual(classified.claudeFixTasks[0].source_finding_ids, ["F-A"]);
+    assert.deepEqual(classified.claudeFixTasks[0].scope.targets, [{ file: "src/a.ts" }]);
+    assert.ok(classified.claudeFixTasks[0].post_conditions.some((condition) => condition.type === "target_file_modified" && condition.severity === "FAIL"));
+    assert.ok(classified.claudeFixTasks[0].post_conditions.some((condition) =>
+      condition.type === "code_not_contains" &&
+      condition.severity === "FAIL" &&
+      condition.params.source_finding_id === "F-A"
+    ));
+    assert.ok(classified.claudeFixTasks[0].post_conditions.some((condition) => condition.type === "no_new_type_errors" && condition.severity === "FAIL"));
   });
 
   test("contractReviewFindings selects ship-blocking review findings", () => {
