@@ -9,6 +9,7 @@ import {
   buildEvidenceRequirements,
   evidenceRequirementSummary,
 } from "./evidence-requirements.js";
+import { splitGenericStorySlices } from "./story-atomicity.js";
 
 export const DEMAND_SESSION_SCHEMA_VERSION = "1.0";
 export const DEMAND_SESSION_SCHEMA = "yolo.demand.session.v1";
@@ -619,6 +620,8 @@ function plannedTargetFact(session = Object(), target = Object(), groundingId, g
 }
 
 export function groundDemandExecutionScope(session = Object(), options = Object()) {
+  const storyNormalization = normalizeDemandStoryAtomicity(session);
+  session = storyNormalization.session;
   const projectRoot = resolve(clean(options.projectRoot || options.project_root || options.cwd) || process.cwd());
   const existingScope = executionScopeFiles(session);
   const explicit = explicitGroundingTargets(options);
@@ -637,6 +640,7 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
       reason: "execution_scope_already_present",
       generated_at: generatedAt,
       target_files: existingScope,
+      story_normalization: storyNormalizationSummary(storyNormalization),
       session,
     };
   }
@@ -651,6 +655,7 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
       reason: "requirements_not_confirmed",
       generated_at: generatedAt,
       target_files: [],
+      story_normalization: storyNormalizationSummary(storyNormalization),
       session,
     };
   }
@@ -674,6 +679,7 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
       candidate_target_files: blockers,
       target_files: [],
       next_actions: blockers.map((file) => `Confirm ${file} explicitly before promoting it into execution scope.`),
+      story_normalization: storyNormalizationSummary(storyNormalization),
       session,
     };
   }
@@ -689,6 +695,7 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
       generated_at: generatedAt,
       target_files: [],
       next_actions: ["Pass an explicit repo-relative target file, for example: yolo spec --demand <session.json|dir> --target src/<feature>.ts"],
+      story_normalization: storyNormalizationSummary(storyNormalization),
       session,
     };
   }
@@ -737,6 +744,7 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
     })),
     source_requirements: requirementRefs(grounded),
     source_text_hash: createHash("sha1").update(demandText(grounded)).digest("hex"),
+    story_normalization: storyNormalizationSummary(storyNormalization) || null,
   };
   grounded.project_facts.grounding = grounded.grounding;
   const existingFactFiles = new Set(existingTargetFacts(grounded));
@@ -1063,6 +1071,9 @@ function buildScenarioMatrix({
   const scenarios = requirements.map((requirement, index) => {
     const requirementScenarios = asArray(requirement.acceptance_scenarios || requirement.scenarios);
     const firstScenario = requirementScenarios[0] || {};
+    const scenarioProof = requirement.story_atomicity?.split
+      ? requirement.text
+      : proof[index] || proof[0] || clean(firstScenario.then || firstScenario.text) || requirement.text;
     return {
       id: `SCN-${String(index + 1).padStart(3, "0")}`,
       requirement_id: requirement.id,
@@ -1071,14 +1082,14 @@ function buildScenarioMatrix({
       trigger: clean(firstScenario.when) || triggers[index] || triggers[0] || "the user reaches this scenario",
       current_behavior: statusQuo[index] || statusQuo[0] || "Captured in demand context.",
       desired_behavior: requirement.text,
-      proof: proof[index] || proof[0] || clean(firstScenario.then || firstScenario.text) || requirement.text,
+      proof: scenarioProof,
       out_of_scope: nonGoals,
       constraints,
       exceptions,
       surfaces: surfaces.map((surface, surfaceIndex) => ({
         ...surface,
         id: `SCN-${String(index + 1).padStart(3, "0")}-${surface.id || `SFC-${surfaceIndex + 1}`}`,
-        proof: proof[index] || proof[0] || requirement.text,
+        proof: scenarioProof,
         visual_style_source: surface.user_visible ? visualStyleSource : [],
       })),
       question_trace: sourceQuestionIds,
@@ -1149,59 +1160,18 @@ function splitRepeatedUserStories(text) {
   return parts.length > 1 ? parts : [];
 }
 
-function splitEditMoveStory(text) {
-  const match = clean(text).match(/^当用户把(.+?)编辑为(.+?)并移动到(.+?)时[，,](.+)$/);
-  if (!match) return [];
-  const [, before, after, destination, consequence] = match;
-  return [
-    `当用户把${clean(before)}编辑为${clean(after)}时，旧标题不可见，新标题可见。`,
-    `当用户将${clean(after)}移动到${clean(destination)}时，${normalizeStoryText(consequence)}`,
-  ].map(normalizeStoryText);
-}
-
-function splitCreateListCardStory(text) {
-  const match = clean(text).match(/^当用户(.+?(?:新增|新建|创建|添加|增加).+?(?:列表|清单|看板列|列).+?)并(.+?(?:新增|新建|创建|添加|增加).+?(?:卡片|任务卡|卡).+?)时[，,](.+)$/u);
-  if (!match) return [];
-  const [, listAction, cardAction, consequence] = match;
-  const clauses = normalizeStoryText(consequence)
-    .split(/\s*[，,]\s*/)
-    .map(normalizeStoryText)
-    .filter(Boolean);
-  const listClause = clauses.find((clause) => /列表|清单|看板列|列/.test(clause)) || "列表创建结果可见。";
-  const cardClause = clauses.find((clause) => /卡片|任务卡|卡/.test(clause)) || "卡片创建结果可见。";
-  return [
-    `当用户${normalizeStoryText(listAction)}时，${listClause}`,
-    `当用户${normalizeStoryText(cardAction)}时，${cardClause}`,
-  ].map(normalizeStoryText);
-}
-
-function splitArchivePersistenceStory(text) {
-  const match = clean(text).match(/^当用户归档(.+?)并(刷新|重新加载)页面时[，,](.+)$/);
-  if (!match) return [];
-  const [, item, refreshVerb, consequence] = match;
-  const clauses = normalizeStoryText(consequence)
-    .split(/\s*[，,]\s*/)
-    .map(normalizeStoryText)
-    .filter(Boolean);
-  const hiddenClause = clauses.find((clause) => /不显示|隐藏/.test(clause)) || clauses[0] || "普通列表不显示该归档项。";
-  const restoreClause = clauses.find((clause) => /恢复|保留|localStorage|持久/.test(clause)) || clauses.slice(1).join("，") || "未归档数据仍可恢复。";
-  return [
-    `当用户归档${clean(item)}时，${hiddenClause}`,
-    `当用户${refreshVerb}页面时，${restoreClause}`,
-  ].map(normalizeStoryText);
-}
-
 function storySlicesForRequirement(text) {
   const source = clean(text);
   const repeated = splitRepeatedUserStories(source);
   if (repeated.length > 1) return repeated.flatMap(storySlicesForRequirement);
-  const createListCard = splitCreateListCardStory(source);
-  if (createListCard.length > 1) return createListCard.flatMap(storySlicesForRequirement);
-  const editMove = splitEditMoveStory(source);
-  if (editMove.length > 1) return editMove.flatMap(storySlicesForRequirement);
-  const archivePersistence = splitArchivePersistenceStory(source);
-  if (archivePersistence.length > 1) return archivePersistence.flatMap(storySlicesForRequirement);
+  const generic = splitGenericStorySlices(source).map(normalizeStoryText).filter(Boolean);
+  if (generic.length > 1) return generic.flatMap(storySlicesForRequirement);
   return [source].filter(Boolean);
+}
+
+function concreteStoryText(story) {
+  const text = normalizeStoryText(story);
+  return text.length >= 10 ? text : `Requirement outcome: ${text}`;
 }
 
 function expandRequirementStories(requirements = []) {
@@ -1213,11 +1183,12 @@ function expandRequirementStories(requirements = []) {
       continue;
     }
     stories.forEach((story, storyIndex) => {
+      const storyText = concreteStoryText(story);
       const id = `${requirement.id}-S${String(storyIndex + 1).padStart(2, "0")}`;
       expanded.push({
         ...requirement,
         id,
-        text: story,
+        text: storyText,
         source_requirement_id: requirement.id,
         story_index: storyIndex + 1,
         story_count: stories.length,
@@ -1231,13 +1202,115 @@ function expandRequirementStories(requirements = []) {
         acceptance_scenarios: asArray(requirement.acceptance_scenarios || requirement.scenarios).map((scenario, scenarioIndex) => ({
           ...scenario,
           id: `SCN-${String(expanded.length + 1).padStart(3, "0")}-${String(scenarioIndex + 1).padStart(2, "0")}`,
-          then: story,
-          text: story,
+          then: storyText,
+          text: storyText,
         })),
       });
     });
   }
   return expanded;
+}
+
+function scenarioForRequirement(sourceScenarios = [], originalRequirements = [], requirement = Object(), index = 0) {
+  const sourceId = clean(requirement.source_requirement_id || requirement.id);
+  const originalIndex = originalRequirements.findIndex((item) => clean(item.id) === sourceId);
+  return sourceScenarios.find((scenario) => clean(scenario.requirement_id) === sourceId)
+    || sourceScenarios[originalIndex >= 0 ? originalIndex : index]
+    || {};
+}
+
+function atomicScenarioSurfaces(sourceScenario = Object(), scenarioId = "", proof = "", session = Object()) {
+  const sourceSurfaces = asArray(sourceScenario.surfaces);
+  const fallbackFiles = uniqueStrings(session.project?.target_files || session.target_files);
+  const surfaces = sourceSurfaces.length > 0
+    ? sourceSurfaces
+    : fallbackFiles.length > 0
+      ? [{
+        kind: surfaceKindFromFile(fallbackFiles[0]),
+        target_files: fallbackFiles,
+        readonly_files: [],
+        session_budget: {
+          expected: "single_session",
+          max_files: Math.max(1, Math.min(2, fallbackFiles.length || 1)),
+          max_lines_per_file: 120,
+        },
+      }]
+      : [];
+  return surfaces.map((surface, surfaceIndex) => {
+    const kind = clean(surface.kind) || surfaceKindFromFile(asArray(surface.target_files)[0] || "");
+    return {
+      ...surface,
+      id: `${scenarioId}-SFC-${String(surfaceIndex + 1).padStart(3, "0")}`,
+      kind,
+      label: clean(surface.label) || surfaceLabel(kind),
+      proof,
+    };
+  });
+}
+
+function rebuildAtomicScenarioMatrix(session = Object(), originalRequirements = [], expandedRequirements = []) {
+  const matrix = session.scenario_matrix || {};
+  const sourceScenarios = asArray(matrix.scenarios || session.scenarios);
+  const scenarios = expandedRequirements.map((requirement, index) => {
+    const sourceScenario = scenarioForRequirement(sourceScenarios, originalRequirements, requirement, index);
+    const scenarioId = `SCN-${String(index + 1).padStart(3, "0")}`;
+    const proof = requirement.text;
+    return {
+      ...sourceScenario,
+      id: scenarioId,
+      requirement_id: requirement.id,
+      desired_behavior: requirement.text,
+      proof,
+      surfaces: atomicScenarioSurfaces(sourceScenario, scenarioId, proof, session),
+      story_atomicity: requirement.story_atomicity || sourceScenario.story_atomicity || null,
+    };
+  });
+  return {
+    ...matrix,
+    schema: matrix.schema || "yolo.demand.scenario_matrix.v1",
+    generated_from: matrix.generated_from || "story_atomicity_normalization",
+    nontechnical_user_safe: matrix.nontechnical_user_safe !== false,
+    scenarios,
+    atomic_task_rule: matrix.atomic_task_rule || "one user-visible story with one proof becomes one task; file and surface budgets only bound implementation scope",
+  };
+}
+
+function normalizeDemandStoryAtomicity(session = Object()) {
+  const originalRequirements = cloneDemandObject(asArray(session.requirements?.active || session.requirements));
+  if (originalRequirements.length === 0) return { session, changed: false, split_count: 0 };
+  const expandedRequirements = expandRequirementStories(originalRequirements);
+  const changed = expandedRequirements.length !== originalRequirements.length
+    || expandedRequirements.some((requirement, index) => clean(requirement.id) !== clean(originalRequirements[index]?.id));
+  if (!changed) return { session, changed: false, split_count: 0 };
+  const normalized = cloneDemandObject(session);
+  if (Array.isArray(normalized.requirements)) {
+    normalized.requirements = expandedRequirements;
+  } else {
+    normalized.requirements = {
+      ...(normalized.requirements || {}),
+      active: expandedRequirements,
+    };
+  }
+  normalized.scenario_matrix = rebuildAtomicScenarioMatrix(normalized, originalRequirements, expandedRequirements);
+  normalized.story_atomicity = {
+    schema: "yolo.demand.story_atomicity_normalization.v1",
+    status: "applied",
+    source_requirement_count: originalRequirements.length,
+    normalized_requirement_count: expandedRequirements.length,
+    split_count: expandedRequirements.length - originalRequirements.length,
+  };
+  return {
+    session: normalized,
+    changed: true,
+    split_count: expandedRequirements.length - originalRequirements.length,
+  };
+}
+
+function storyNormalizationSummary(storyNormalization = Object()) {
+  return storyNormalization.changed ? {
+    status: "applied",
+    split_count: storyNormalization.split_count,
+  } : undefined;
 }
 
 function buildRounds(input = Object(), questionTrace = []) {

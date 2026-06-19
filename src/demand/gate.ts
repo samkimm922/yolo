@@ -660,6 +660,7 @@ function readinessLevel(checks, session = Object()) {
     && passed("ACCEPTANCE_SCENARIOS_PRESENT")
     && passed("SCENARIO_MATRIX_PRESENT")
     && passed("SCENARIO_SURFACES_PRESENT")
+    && passed("STORY_ATOMICITY_PASSED")
   ) {
     return "L3";
   }
@@ -684,6 +685,7 @@ const READINESS_FIELD_LABELS = {
   SCENARIO_MATRIX_PRESENT: "scenario_matrix",
   SCENARIO_PROOF_PRESENT: "scenario_proof",
   SCENARIO_SURFACES_PRESENT: "scenario_surfaces",
+  STORY_ATOMICITY_PASSED: "story_atomicity",
   COMPLETENESS_MATRIX: "completeness_matrix",
   SURFACE_SESSION_BUDGET_EXECUTABLE: "surface_session_budget",
   OUT_OF_SCOPE_PRESENT: "out_of_scope",
@@ -735,6 +737,7 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
   const factGroundingIssues = factGroundingRequired ? projectFactGrounding(session, options) : [];
   const evidenceRequirements = buildEvidenceRequirements({}, session, options);
   const requirementBlockers = evidenceRequirementBlockers(evidenceRequirements);
+  const storyAtomicity = inspectStoryAtomicityFromDemand(session, { includeRequirements: true });
 
   const checks = [
     check(
@@ -802,6 +805,13 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
       scenarioSurfaceCount(session) >= Math.max(1, scenarios.length),
       prdMode ? "error" : "warning",
       "Every scenario must map to at least one implementation surface for atomic task slicing.",
+    ),
+    check(
+      "STORY_ATOMICITY_PASSED",
+      storyAtomicity.status !== "blocked" && asArray(storyAtomicity.blockers).length === 0,
+      prdMode ? "error" : "warn" + "ing",
+      "Requirement and scenario narratives must each carry only one independent user story before executable PRD generation.",
+      { story_atomicity: storyAtomicity },
     ),
     check(
       "COMPLETENESS_MATRIX",
@@ -1407,6 +1417,16 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
   }
 
   const status = blockers.length > 0 ? "blocked" : warnings.length > 0 ? "warning" : "pass";
+  const blockedNextActions = blockers.length > 0
+    ? [
+      ...(storyAtomicityBlocked ? asArray(storyAtomicity?.next_actions) : []),
+      ...blockers.map((item) => item.message),
+      "After resolving blockers, rerun: yolo spec --demand <session.json|dir>",
+    ]
+    : [];
+  const advisoryNextActions = warnings.length > 0
+    ? warnings.map((item) => item.message)
+    : [];
 
   return {
     schema_version: DEMAND_QUALITY_SCHEMA_VERSION,
@@ -1424,9 +1444,9 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
     atomicity_status: atomicity?.status || null,
     story_atomicity_status: storyAtomicity?.status || null,
     next_actions: blockers.length > 0
-      ? blockers.map((item) => item.message)
+      ? [...new Set(blockedNextActions.filter(Boolean))]
       : warnings.length > 0
-        ? warnings.map((item) => item.message)
+        ? [...new Set(advisoryNextActions.filter(Boolean))]
         : ["Demand quality is sufficient for approved-demand PRD execution."],
   };
 }

@@ -14,6 +14,16 @@ function compact(values) {
   return values.flat(Infinity).map(clean).filter(Boolean);
 }
 
+function compactUnique(values) {
+  const seen = new Set();
+  return compact(values).filter((value) => {
+    const key = value.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -22,7 +32,9 @@ function termSource(term) {
   if (term instanceof RegExp) return term.source;
   const value = String(term);
   const escaped = escapeRegex(value);
-  return /^[A-Za-z0-9_ -]+$/.test(value) ? `\\b${escaped}\\b` : escaped;
+  return /^[A-Za-z0-9_]+(?: [A-Za-z0-9_]+)*$/.test(value)
+    ? `(?<![A-Za-z0-9_-])${escaped}(?![A-Za-z0-9_-])`
+    : escaped;
 }
 
 function termsPattern(terms) {
@@ -34,74 +46,6 @@ function hasAny(text, terms) {
   return pattern.test(text);
 }
 
-function hasNear(text, verbs, objects, maxDistance = 48) {
-  const verb = termsPattern(verbs);
-  const object = termsPattern(objects);
-  return new RegExp(`${verb}[\\s\\S]{0,${maxDistance}}${object}|${object}[\\s\\S]{0,${maxDistance}}${verb}`, "i").test(text);
-}
-
-function hasDirectAction(text, verbs, objects, maxDistance = 28) {
-  const verb = termsPattern(verbs);
-  const object = termsPattern(objects);
-  const boundary = "(?:后|之后|以后|时|的时候|显示|展示|show|display|count|数量|统计|\\+|/|,|，|、|；|;|。|\\n)";
-  const between = `(?:(?!${boundary})[\\s\\S]){0,${maxDistance}}`;
-  return new RegExp(`${verb}${between}${object}|${object}${between}${verb}`, "i").test(text);
-}
-
-function hasActionPair(text, leftTerms, rightTerms, maxDistance = 36) {
-  const left = termsPattern(leftTerms);
-  const right = termsPattern(rightTerms);
-  const connector = "(?:\\+|/|,|，|、|和|并|并且|以及|然后|同时|and|then|plus|with)";
-  return new RegExp(`${left}[\\s\\S]{0,${maxDistance}}${connector}[\\s\\S]{0,${maxDistance}}${right}|${right}[\\s\\S]{0,${maxDistance}}${connector}[\\s\\S]{0,${maxDistance}}${left}`, "i").test(text);
-}
-
-const CREATE_TERMS = ["新增", "新建", "创建", "添加", "增加", "add", "adds", "added", "adding", "create", "creates", "created", "creating", "new"];
-const EDIT_TERMS = ["编辑", "修改", "重命名", "改名", "更名", "edit", "edits", "edited", "editing", "rename", "renames", "update", "updates", "change", "changes"];
-const MOVE_TERMS = ["移动", "拖动", "拖拽", "排序", "换列", "move", "moves", "moved", "moving", "drag", "drags", "dragged", "reorder", "reorders"];
-const ARCHIVE_TERMS = [/(?<!未)归档/u, "archive", "archives", "archived", "archiving"];
-const PERSISTENCE_TERMS = ["刷新", "重新打开", "重载", "持久化", "保留", "仍然", "恢复", "reload", "refresh", "refreshed", "persist", "persists", "persistent", "persistence", "restore", "restores", "recover", "recovers", "remain", "remains"];
-
-const LIST_TERMS = ["列表", "清单", "看板列", "泳道", "列", "list", "lists", "column", "columns", "lane", "lanes"];
-const CARD_TERMS = ["卡片", "任务卡", "卡", "card", "cards", "ticket", "tickets"];
-const BOARD_ITEM_TERMS = [...LIST_TERMS, ...CARD_TERMS, "看板", "board", "boards"];
-
-const SIGNATURES = [
-  {
-    id: "create_list",
-    label: "create list",
-    matches: (text) => hasDirectAction(text, CREATE_TERMS, LIST_TERMS),
-  },
-  {
-    id: "create_card",
-    label: "create card",
-    matches: (text) => hasDirectAction(text, CREATE_TERMS, CARD_TERMS),
-  },
-  {
-    id: "edit_item",
-    label: "edit item",
-    matches: (text) => (hasAny(text, EDIT_TERMS) && hasNear(text, EDIT_TERMS, BOARD_ITEM_TERMS))
-      || hasActionPair(text, EDIT_TERMS, MOVE_TERMS),
-  },
-  {
-    id: "move_item",
-    label: "move item",
-    matches: (text) => (hasAny(text, MOVE_TERMS) && hasNear(text, MOVE_TERMS, BOARD_ITEM_TERMS))
-      || hasActionPair(text, EDIT_TERMS, MOVE_TERMS),
-  },
-  {
-    id: "archive_item",
-    label: "archive item",
-    matches: (text) => hasNear(text, ARCHIVE_TERMS, BOARD_ITEM_TERMS)
-      || hasActionPair(text, ARCHIVE_TERMS, PERSISTENCE_TERMS),
-  },
-  {
-    id: "persistence_or_restore",
-    label: "persistence or restore",
-    matches: (text) => hasActionPair(text, ARCHIVE_TERMS, PERSISTENCE_TERMS)
-      || (hasAny(text, PERSISTENCE_TERMS) && hasNear(text, PERSISTENCE_TERMS, BOARD_ITEM_TERMS)),
-  },
-];
-
 function uniqueSignatures(signatures) {
   const seen = new Set();
   return signatures.filter((signature) => {
@@ -112,23 +56,23 @@ function uniqueSignatures(signatures) {
 }
 
 // ── 通用（领域无关）原子性检测 ────────────────────────────────
-// Kanban signatures 未命中 ≥2 时的兜底层，覆盖任意领域（API/CLI/数据/移动端等）。
-// 原则：只在「显式连词连接的多个独立可交付动作」或「跨 UI+API+DB 三层」时判定非原子，
-// 保持保守，避免对 read/return/display 这类支撑性动作误报。
+// 覆盖任意领域的枚举动作、命令链、并列短语和跨层改动信号。
+// 原则：显式结构优先，避免把 read/return/display 这类支撑性动作误报为多 story。
 
-// 可独立交付的副作用/变更动词；刻意排除 read/return/show/display/get/fetch/load/render 等支撑动作。
+// 可独立交付的副作用/变更动词；刻意排除 read/return/show/display/get/fetch/render 等支撑动作。
+// 结构化命令清单由枚举形态识别，不依赖这里枚举具体业务命令名。
 const DELIVERABLE_VERB_TERMS = [
   "create", "creates", "add", "adds", "delete", "deletes", "remove", "removes",
   "update", "updates", "edit", "edits", "modify", "modifies", "rename", "renames",
-  "move", "moves", "send", "sends", "upload", "uploads", "download", "downloads",
+  "send", "sends", "upload", "uploads", "download", "downloads",
   "deploy", "deploys", "validate", "validates", "authenticate", "authorize",
   "implement", "implements", "build", "builds", "configure", "configures", "install",
   "connect", "connects", "migrate", "migrates", "sync", "syncs", "export", "exports",
   "import", "imports", "notify", "notifies", "schedule", "schedules", "integrate",
-  "transform", "transforms", "generate", "generates", "insert", "inserts", "parse",
+  "transform", "transforms", "generate", "generates", "insert", "inserts",
   "register", "registers", "login", "logout", "encrypt", "encrypts", "paginate",
   "新增", "新建", "创建", "添加", "增加", "删除", "移除", "修改", "编辑", "重命名",
-  "移动", "拖动", "发送", "上传", "下载", "部署", "校验", "鉴权", "实现",
+  "发送", "上传", "下载", "部署", "校验", "鉴权", "实现",
   "构建", "配置", "安装", "连接", "迁移", "同步", "导出", "导入", "通知", "集成", "生成", "插入",
 ];
 
@@ -140,6 +84,20 @@ const GENERIC_PAIR_DISTANCE = 40;
 const GENERIC_LAYER_UI_TERMS = ["button", "form", "page", "modal", "dialog", "screen", "component", "input", "按钮", "表单", "页面", "弹窗", "界面", "组件"];
 const GENERIC_LAYER_API_TERMS = ["endpoint", "api", "route", "request", "response", "rest", "graphql", "websocket", "接口", "路由", "请求", "响应"];
 const GENERIC_LAYER_DB_TERMS = ["database", "table", "query", "schema", "migration", "row", "column ", "数据库", "表", "查询", "字段", "记录"];
+
+const HARD_STORY_BOUNDARY = /\s*[;；。]\s*/u;
+const COMPACT_ENUM_PATTERN = /(?<![\w./-])([A-Za-z][A-Za-z0-9_-]{1,31}(?:\s*(?:\/|→|->|=>|\+)\s*[A-Za-z][A-Za-z0-9_-]{1,31}){1,})(?![\w./-])/g;
+const COMPACT_ENUM_SEPARATOR = /\s*(?:\/|→|->|=>|\+)\s*/u;
+const PHRASE_ENUM_MARKER = /(?:、|，|,|\+|\band\b|\bthen\b|以及|与|和|并且)/iu;
+const PHRASE_ENUM_SEPARATOR = /\s*(?:、|，|,|\+|\band\b|\bthen\b|以及|与|和|并且)\s*/iu;
+const SHARED_SUFFIX_PATTERN = /^(.+?)\s+(all|each|都|均|皆)\s+(.+)$/iu;
+const ENUMERATION_CUE_TAIL_PATTERN = /(?:\b(?:can|supports?|allows?|lets?|provide|provides|includes?|with)|支持|允许|可以|能够|包含|提供)\s*$/iu;
+const ASCII_COMMAND_TOKEN_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{1,31}$/;
+const LEADING_ASCII_COMMAND_PATTERN = /^([A-Za-z][A-Za-z0-9_-]{1,31})(?:\s+(.+))?$/u;
+const SUPPORT_ONLY_ACTIONS = new Set([
+  "read", "reads", "return", "returns", "show", "shows", "display", "displays",
+  "get", "gets", "fetch", "fetches", "render", "renders", "view", "views",
+]);
 
 // 名词化的可交付能力（"实现认证 + 邮箱验证 + OAuth" 这类句子动词只有一个，但列了多个独立能力）。
 const DELIVERABLE_CAPABILITY_TERMS = [
@@ -156,7 +114,6 @@ const DELIVERABLE_CAPABILITY_TERMS = [
   "报表", "统计", "report", "analytics", "dashboard",
   "日志", "审计", "logging", "audit", "audit trail",
   "备份", "恢复", "backup", "restore",
-  "导入", "导出", "import", "export",
 ];
 
 function distinctDeliverableActions(text) {
@@ -227,8 +184,151 @@ function stripStructuralLabels(text) {
   return cleaned;
 }
 
+function normalizeStorySlice(value) {
+  return clean(value)
+    .replace(/\s+/g, " ")
+    .replace(/^[,，、+/\s]+|[,，、+/\s]+$/g, "");
+}
+
+function uniqueStorySlices(values) {
+  const seen = new Set();
+  const slices = [];
+  for (const value of values.map(normalizeStorySlice).filter((item) => item.length >= 3)) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    slices.push(value);
+  }
+  return slices;
+}
+
+function splitRepeatedStoryOpeners(text) {
+  const matches = [...clean(text).matchAll(/当用户/g)];
+  if (matches.length <= 1) return [];
+  return matches.map((match, index) => {
+    const start = match.index || 0;
+    const end = index + 1 < matches.length ? matches[index + 1].index : text.length;
+    return normalizeStorySlice(text.slice(start, end));
+  }).filter((item) => item.length >= 6);
+}
+
+function actionToken(value) {
+  const text = normalizeStorySlice(value);
+  const ascii = text.match(/[A-Za-z][A-Za-z0-9_-]*/);
+  if (!ascii) return "";
+  return ascii[0].toLowerCase();
+}
+
+function containsOnlySupportActions(values) {
+  const tokens = values.map(actionToken).filter(Boolean);
+  return tokens.length > 0 && tokens.every((token) => SUPPORT_ONLY_ACTIONS.has(token));
+}
+
+function expandCompactEnumeration(clause) {
+  const source = normalizeStorySlice(clause);
+  const match = [...source.matchAll(COMPACT_ENUM_PATTERN)][0];
+  if (!match) return [];
+  const sequence = match[1];
+  const items = sequence.split(COMPACT_ENUM_SEPARATOR).map(normalizeStorySlice).filter(Boolean);
+  if (items.length < 2 || containsOnlySupportActions(items)) return [];
+  const start = match.index || 0;
+  const end = start + sequence.length;
+  const before = source.slice(0, start);
+  const after = source.slice(end);
+  return uniqueStorySlices(items.map((item) => `${before}${item}${after}`));
+}
+
+function splitFirstItemPrefix(value) {
+  const source = normalizeStorySlice(value);
+  const ascii = source.match(/^(.*\s)([A-Za-z][A-Za-z0-9_-]*)$/);
+  if (ascii) return { prefix: ascii[1], item: ascii[2] };
+  return { prefix: "", item: source };
+}
+
+function splitLastItemSuffix(value) {
+  const source = normalizeStorySlice(value);
+  const shared = source.match(SHARED_SUFFIX_PATTERN);
+  if (shared) return { item: normalizeStorySlice(shared[1]), suffix: `${shared[2]} ${shared[3]}` };
+  return { item: source, suffix: "" };
+}
+
+function splitLeadingCommandSuffix(value) {
+  const source = normalizeStorySlice(value);
+  const match = source.match(LEADING_ASCII_COMMAND_PATTERN);
+  if (!match) return { item: source, suffix: "" };
+  return { item: match[1], suffix: normalizeStorySlice(match[2] || "") };
+}
+
+function hasDeliverableIntent(value) {
+  return hasAny(value, DELIVERABLE_VERB_TERMS) || hasAny(value, DELIVERABLE_CAPABILITY_TERMS);
+}
+
+function expandCommandCueEnumeration(rawItems) {
+  const first = splitFirstItemPrefix(rawItems[0]);
+  if (!ENUMERATION_CUE_TAIL_PATTERN.test(first.prefix)) return [];
+  const lastShared = splitLastItemSuffix(rawItems[rawItems.length - 1]);
+  const last = lastShared.suffix ? lastShared : splitLeadingCommandSuffix(rawItems[rawItems.length - 1]);
+  const middle = rawItems.slice(1, -1).map((item) => splitLeadingCommandSuffix(item).item);
+  const items = [first.item, ...middle, last.item].map(normalizeStorySlice).filter(Boolean);
+  if (items.length < 2 || !items.every((item) => ASCII_COMMAND_TOKEN_PATTERN.test(item))) return [];
+  if (containsOnlySupportActions(items)) return [];
+  const suffix = last.suffix ? ` ${last.suffix}` : "";
+  return uniqueStorySlices(items.map((item) => `${first.prefix}${item}${suffix}`));
+}
+
+function expandPhraseEnumeration(clause) {
+  const source = normalizeStorySlice(clause);
+  if (!PHRASE_ENUM_MARKER.test(source)) return [];
+  if (/^当[\s\S]+?时\s*[，,]/u.test(source) || /^when\b[\s\S]+,\s*(?:then\b)?/iu.test(source)) return [];
+  const rawItems = source.split(PHRASE_ENUM_SEPARATOR).map(normalizeStorySlice).filter(Boolean);
+  if (rawItems.length < 2 || rawItems.length > 10 || containsOnlySupportActions(rawItems)) return [];
+  if (rawItems.length === 2 && rawItems[0].length < 8 && rawItems[1].length >= 12) return [];
+  const rawIntentCount = rawItems.filter(hasDeliverableIntent).length;
+  if (rawIntentCount >= 2) return uniqueStorySlices(rawItems);
+  const commandCue = expandCommandCueEnumeration(rawItems);
+  if (commandCue.length > 1) return commandCue;
+  const first = splitFirstItemPrefix(rawItems[0]);
+  const last = splitLastItemSuffix(rawItems[rawItems.length - 1]);
+  const items = [first.item, ...rawItems.slice(1, -1), last.item]
+    .map(normalizeStorySlice)
+    .filter(Boolean);
+  if (items.length < 2) return [];
+  const actionItemCount = items.filter((item) => hasAny(item, DELIVERABLE_VERB_TERMS)).length;
+  const simpleCommandItems = items.every((item) => ASCII_COMMAND_TOKEN_PATTERN.test(item));
+  if (actionItemCount < 2 && !simpleCommandItems) return [];
+  const prefix = first.prefix;
+  const suffix = last.suffix ? ` ${last.suffix}` : "";
+  const expanded = items.map((item) => `${prefix}${item}${suffix}`);
+  return uniqueStorySlices(expanded);
+}
+
+export function splitGenericStorySlices(text) {
+  const source = normalizeStorySlice(text);
+  if (!source) return [];
+  const repeated = splitRepeatedStoryOpeners(source);
+  if (repeated.length > 1) return uniqueStorySlices(repeated.flatMap(splitGenericStorySlices));
+  const clauses = source.split(HARD_STORY_BOUNDARY).map(normalizeStorySlice).filter(Boolean);
+  if (clauses.length > 1) return uniqueStorySlices(clauses.flatMap(splitGenericStorySlices));
+  const compact = expandCompactEnumeration(source);
+  if (compact.length > 1) return compact;
+  const phrase = expandPhraseEnumeration(source);
+  if (phrase.length > 1) return phrase;
+  return [source];
+}
+
+function genericStructureSignatures(text) {
+  const slices = splitGenericStorySlices(text);
+  if (slices.length < 2) return [];
+  return slices.map((slice, index) => ({
+    id: `generic_story_${index + 1}`,
+    label: `story unit ${index + 1}: ${textExcerpt(slice)}`,
+  }));
+}
+
 function detectGenericStories(rawText) {
   const text = stripStructuralLabels(rawText);
+  const structural = genericStructureSignatures(text);
+  if (structural.length >= 2) return structural;
   const stories = [];
   if (hasDeliverablePair(text)) {
     const verbs = [...distinctDeliverableActions(text)];
@@ -262,14 +362,7 @@ function textExcerpt(text) {
 
 export function inspectStoryAtomicityText(text, item = Object()) {
   const normalized = clean(text).toLowerCase();
-  let signatures = uniqueSignatures(SIGNATURES.filter((signature) => signature.matches(normalized)));
-  // 通用层只在领域 signatures 完全沉默时启用：领域文本若已被 Kanban 专家检测器判定（哪怕 1 个签名=单一
-  // story），就信任它，不用通用规则二次猜测——避免对领域内已判定原子的 task 误报。通用层覆盖 Kanban
-  // 词汇之外的领域（API/CLI/数据/移动端等）。
-  if (signatures.length === 0) {
-    const generic = detectGenericStories(normalized);
-    if (generic.length >= 2) signatures = generic;
-  }
+  let signatures = uniqueSignatures(detectGenericStories(normalized));
   // P2.17: 单动词 + 能力名词（支付/权限/登录等系统级名词）→ warn，建议 investigate_then_patch
   if (signatures.length < 2) {
     const capabilityNouns = detectSingleVerbCapabilityNouns(normalized);
@@ -386,7 +479,10 @@ export function inspectStoryAtomicityItems(items = [], options = Object()) {
     blockers,
     warnings,
     next_actions: blockers.length > 0
-      ? ["Split each blocked requirement, scenario, or task so each one carries exactly one independent user story."]
+      ? [
+        "Edit or regenerate the demand session so every blocked requirement, scenario, or task contains one enumerated action only.",
+        "Then rerun: yolo spec --demand <session.json|dir>",
+      ]
       : warnings.length > 0
         ? ["Capability nouns detected with single verb — investigate before direct execution."]
         : ["Story atomicity passed."],
@@ -394,64 +490,34 @@ export function inspectStoryAtomicityItems(items = [], options = Object()) {
   };
 }
 
-function conditionText(condition = Object()) {
-  return compact([
-    condition.message,
-    condition.params?.text,
-    condition.params?.pattern,
-    condition.params?.expected,
-  ]).join("\n");
-}
-
 function scenarioText(scenario = Object()) {
-  return compact([
+  return compactUnique([
     scenario.title,
     scenario.text,
     scenario.desired_behavior,
-    scenario.proof,
     scenario.acceptance,
-    scenario.trigger,
-    scenario.when,
     scenario.then,
-    scenario.given,
-    asArray(scenario.surfaces).map((surface) => [
-      surface?.label,
-      surface?.proof,
-      surface?.verification_hint,
-    ]),
   ]).join("\n");
 }
 
 function requirementText(requirement = Object()) {
-  return compact([
+  return compactUnique([
     requirement.title,
     requirement.text,
     requirement.description,
     requirement.goal,
     requirement.user_story,
     requirement.acceptance_criteria,
-    asArray(requirement.acceptance_scenarios || requirement.scenarios).map(scenarioText),
   ]).join("\n");
 }
 
 function taskText(task = Object()) {
   const handoff = task.handoff || {};
-  return compact([
-    task.title,
+  return compactUnique([
     task.description,
     task.goal,
-    task.user_story,
-    task.acceptance_criteria,
-    task.proof,
-    task.verification_hint,
     handoff.plain_language_goal,
     handoff.desired_behavior,
-    handoff.proof,
-    handoff.touchpoint,
-    handoff.trigger,
-    handoff.verification_hint,
-    handoff.acceptance_criteria,
-    asArray(task.post_conditions).map(conditionText),
   ]).join("\n");
 }
 
