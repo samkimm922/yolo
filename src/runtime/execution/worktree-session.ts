@@ -16,7 +16,7 @@ import {
   execSync as defaultExecSync,
 } from "node:child_process";
 import { createHash } from "node:crypto";
-import { delimiter, dirname, isAbsolute, join, relative } from "node:path";
+import { delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
@@ -368,12 +368,46 @@ export function provisionWorktreeNodeModules({
   return false;
 }
 
-function shouldCopyProjectEntry(src) {
+function normalizedFsPath(path) {
+  return resolve(path).replaceAll("\\", "/");
+}
+
+function pathContains(parent, child) {
+  const normalizedParent = normalizedFsPath(parent);
+  const normalizedChild = normalizedFsPath(child);
+  return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}/`);
+}
+
+function shouldCopyProjectEntry(src, { wtPath = null } = Object()) {
+  if (wtPath && (pathContains(src, wtPath) || pathContains(wtPath, src))) return false;
   const name = src.split("/").pop();
   if ([".git", "node_modules", ".yolo-worktrees", ".yolo-backup"].includes(name)) return false;
   if (name === ".DS_Store") return false;
   if (src.includes("/.yolo/state/runtime/")) return false;
   return true;
+}
+
+function copyProjectToFilesystemWorktree({ rootDir, wtPath, cpSync, readdirSync } = Object()) {
+  const targetInsideRoot = pathContains(rootDir, wtPath);
+  const filter = (src) => shouldCopyProjectEntry(src, { wtPath: targetInsideRoot ? wtPath : null });
+  if (!targetInsideRoot) {
+    cpSync(rootDir, wtPath, {
+      recursive: true,
+      dereference: false,
+      filter,
+    });
+    return;
+  }
+
+  for (const entry of readdirSync(rootDir)) {
+    const src = join(rootDir, entry);
+    if (!filter(src)) continue;
+    cpSync(src, join(wtPath, entry), {
+      recursive: true,
+      dereference: false,
+      filter,
+    });
+  }
 }
 
 function writeFilesystemLineBaseline({
@@ -419,6 +453,70 @@ function writeFilesystemLineBaseline({
       hashes,
     }, null, 2), "utf8");
   } catch {}
+}
+
+function gitHeadCommit(rootDir, { execSync = defaultExecSync } = Object()) {
+  try {
+    return {
+      ok: true,
+      commit: execSync("git rev-parse --verify HEAD", {
+        cwd: rootDir,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim(),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      commit: null,
+      reason: "unborn_head",
+      detail: describeCommandFailure(error),
+    };
+  }
+}
+
+function createFilesystemTaskWorktree({
+  wtPath,
+  wtBranch,
+  rootDir,
+  baseCommit,
+  config,
+  reason = "not_git_worktree",
+  detail = "",
+  mkdirSync,
+  cpSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+  execFileSync,
+  existsSync,
+} = Object()) {
+  mkdirSync(wtPath, { recursive: true });
+  copyProjectToFilesystemWorktree({ rootDir, wtPath, cpSync, readdirSync });
+  writeFilesystemLineBaseline({
+    wtPath,
+    readFileSync,
+    readdirSync,
+    statSync,
+    writeFileSync,
+  });
+  writeWorktreeBaselines({
+    wtPath,
+    config,
+    execFileSync,
+    existsSync,
+    mkdirSync,
+    writeFileSync,
+  });
+  return {
+    branch: wtBranch,
+    path: wtPath,
+    base: baseCommit,
+    mode: "filesystem",
+    reason,
+    detail,
+  };
 }
 
 function collectAllowedFilesystemPaths({
@@ -599,13 +697,8 @@ export function createTaskWorktree({
   const wtPath = join(worktreeRoot, taskId);
   const insideGitWorkTree = isInsideGitWorkTree(rootDir, { execSync });
   let baseCommit = "filesystem";
-  try {
-    baseCommit = execSync("git rev-parse HEAD", {
-      cwd: rootDir,
-      encoding: "utf8",
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
-  } catch {}
+  const head = insideGitWorkTree ? gitHeadCommit(rootDir, { execSync }) : { ok: false, commit: null, reason: "not_git_worktree", detail: "" };
+  if (head.ok) baseCommit = head.commit;
 
   ensureWorktreeRoot(worktreeRoot, { existsSync, mkdirSync });
 
@@ -622,28 +715,42 @@ export function createTaskWorktree({
   removePath(wtPath, { existsSync, rmSync, execSync });
 
   if (!insideGitWorkTree) {
-    mkdirSync(wtPath, { recursive: true });
-    cpSync(rootDir, wtPath, {
-      recursive: true,
-      dereference: false,
-      filter: shouldCopyProjectEntry,
-    });
-    writeFilesystemLineBaseline({
+    return createFilesystemTaskWorktree({
       wtPath,
+      wtBranch,
+      rootDir,
+      baseCommit,
+      config,
+      reason: "not_git_worktree",
+      mkdirSync,
+      cpSync,
       readFileSync,
       readdirSync,
       statSync,
       writeFileSync,
-    });
-    writeWorktreeBaselines({
-      wtPath,
-      config,
       execFileSync,
       existsSync,
-      mkdirSync,
-      writeFileSync,
     });
-    return { branch: wtBranch, path: wtPath, base: baseCommit, mode: "filesystem" };
+  }
+
+  if (!head.ok) {
+    return createFilesystemTaskWorktree({
+      wtPath,
+      wtBranch,
+      rootDir,
+      baseCommit,
+      config,
+      reason: head.reason,
+      detail: head.detail,
+      mkdirSync,
+      cpSync,
+      readFileSync,
+      readdirSync,
+      statSync,
+      writeFileSync,
+      execFileSync,
+      existsSync,
+    });
   }
 
   try {

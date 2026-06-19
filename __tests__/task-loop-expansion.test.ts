@@ -191,11 +191,14 @@ describe("task loop expansion", () => {
     });
 
     assert.equal(preflight.blocks_execution, true);
-    assert.equal(preflight.blockers[0].code, "TASK_DEPENDENCY_CYCLE");
-    assert.deepEqual(preflight.blockers[0].task_ids, ["A", "B"]);
+    assert.deepEqual(preflight.blockers.map((blocker) => blocker.code), [
+      "TASK_DEPENDENCY_NO_ROOT",
+      "TASK_DEPENDENCY_CYCLE",
+    ]);
+    assert.deepEqual(preflight.blockers[1].task_ids, ["A", "B"]);
   });
 
-  test("prunes demand-generated same-output mutual dependencies into source order", () => {
+  test("blocks demand-generated same-output mutual dependencies instead of hiding the cycle", () => {
     const ordered = orderTasksByDependencies([
       baseTask({
         id: "A",
@@ -213,7 +216,24 @@ describe("task loop expansion", () => {
       }),
     ]);
 
-    assert.equal(ordered.preflight.blocks_execution, false);
+    assert.equal(ordered.preflight.blocks_execution, true);
+    assert.deepEqual(ordered.preflight.blockers.map((blocker) => blocker.code), [
+      "TASK_DEPENDENCY_NO_ROOT",
+      "TASK_DEPENDENCY_CYCLE",
+    ]);
     assert.deepEqual(ordered.tasks.map((task) => task.id), ["A", "B"]);
+  });
+
+  test("blocks fully connected dependency graphs with no executable root", () => {
+    const ordered = orderTasksByDependencies([
+      baseTask({ id: "A", depends_on: ["B", "C"] }),
+      baseTask({ id: "B", depends_on: ["A", "C"] }),
+      baseTask({ id: "C", depends_on: ["A", "B"] }),
+    ]);
+
+    assert.equal(ordered.preflight.blocks_execution, true);
+    assert.equal(ordered.preflight.blockers.some((blocker) => blocker.code === "TASK_DEPENDENCY_NO_ROOT"), true);
+    assert.equal(ordered.preflight.blockers.some((blocker) => blocker.code === "TASK_DEPENDENCY_CYCLE"), true);
+    assert.deepEqual(ordered.preflight.blockers[0].task_ids, ["A", "B", "C"]);
   });
 });

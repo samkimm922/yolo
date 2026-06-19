@@ -40,6 +40,9 @@ export function createRunnerWorktreeHandlers({
         worktreeRoot: getWorktreeRoot(),
         config: resolveConfig(config),
       });
+      if (wt.mode === "filesystem" && wt.reason) {
+        log(taskId, "worktree", `filesystem fallback: ${wt.reason}${wt.detail ? ` (${wt.detail})` : ""}`);
+      }
       setActiveGitSession({ activeWorktree: wt.path, activeBranch: wt.branch });
       return wt;
     },

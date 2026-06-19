@@ -123,28 +123,30 @@ describe("P2.16 task schema enhancement", () => {
 
       // Production tasks must have depends_on derived from non-test inputs ∩ expected_output
       for (const taskB of tasks) {
+        const bOutputs = new Set((taskB.expected_output || []).filter((f) => !isTestFile(f)));
         for (const taskA of tasks) {
           if (taskA.id === taskB.id) continue;
           const aOutputs = new Set((taskA.expected_output || []).filter((f) => !isTestFile(f)));
           const bInputs = (taskB.inputs || []).filter((f) => !isTestFile(f));
-          const hasOverlap = bInputs.some((input) => aOutputs.has(input));
+          const hasOverlap = bInputs.some((input) => aOutputs.has(input) && !bOutputs.has(input));
           if (hasOverlap) {
             assert.ok(taskB.depends_on.includes(taskA.id),
-              `task ${taskB.id} must depend on ${taskA.id} because its non-test inputs overlap with ${taskA.id}'s expected_output`);
+              `task ${taskB.id} must depend on ${taskA.id} because its non-test external inputs overlap with ${taskA.id}'s expected_output`);
           }
         }
       }
 
       // No false positives: tasks without non-test overlap must not have file-derived dependency
       for (const taskB of tasks) {
+        const bOutputs = new Set((taskB.expected_output || []).filter((f) => !isTestFile(f)));
         for (const taskA of tasks) {
           if (taskA.id === taskB.id) continue;
           const aOutputs = new Set((taskA.expected_output || []).filter((f) => !isTestFile(f)));
           const bInputs = (taskB.inputs || []).filter((f) => !isTestFile(f));
-          const hasOverlap = bInputs.some((input) => aOutputs.has(input));
+          const hasOverlap = bInputs.some((input) => aOutputs.has(input) && !bOutputs.has(input));
           if (!hasOverlap) {
             assert.equal(taskB.depends_on.includes(taskA.id), false,
-              `task ${taskB.id} must NOT depend on ${taskA.id} because there is no non-test input/output overlap`);
+              `task ${taskB.id} must NOT depend on ${taskA.id} because there is no non-test external input/output overlap`);
           }
         }
       }
@@ -169,14 +171,16 @@ describe("P2.16 task schema enhancement", () => {
       assert.ok(pendingPlan.blockers.some((b) => b.task_id === dependentTask.id),
         `dependent task ${dependentTask.id} must appear in blockers when dependency is pending`);
 
-      // With dependency completed, dependent task should be scheduled
-      const dependencyId = dependentTask.depends_on[0];
-      const completedPlan = planControlledParallelWaves({ tasks, completedTaskIds: [dependencyId] });
+      // With all dependencies completed, dependent task should be scheduled
+      const dependencyIds = dependentTask.depends_on;
+      const completedPlan = planControlledParallelWaves({ tasks, completedTaskIds: dependencyIds });
       assert.equal(completedPlan.waves.some((w) => w.task_ids.includes(dependentTask.id)), true,
-        `dependent task ${dependentTask.id} must be scheduled when its dependency ${dependencyId} is completed`);
+        `dependent task ${dependentTask.id} must be scheduled when its dependencies ${dependencyIds.join(",")} are completed`);
       // Wave-planner graph must include the derived dependency edge
-      assert.ok(completedPlan.graph.edges.some((e) => e.from === dependencyId && e.to === dependentTask.id),
-        `wave-planner graph must include edge from ${dependencyId} to ${dependentTask.id}`);
+      for (const dependencyId of dependencyIds) {
+        assert.ok(completedPlan.graph.edges.some((e) => e.from === dependencyId && e.to === dependentTask.id),
+          `wave-planner graph must include edge from ${dependencyId} to ${dependentTask.id}`);
+      }
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

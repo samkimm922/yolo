@@ -91,4 +91,37 @@ describe("PRD dependency contract preflight", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("preflightPrd blocks fully connected dependency graphs with no executable root", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-prd-dependency-cycle-"));
+    try {
+      const prdPath = join(root, "prd.json");
+      const task = (id, depends_on, file) => ({
+        ...dependencyPrd({ id, depends_on, scope: { targets: [{ file }] } }).tasks[0],
+        post_conditions: [{
+          id: `POST-${id}`,
+          type: "target_file_modified",
+          severity: "FAIL",
+          params: { file },
+        }],
+      });
+      const prd = dependencyPrd({ depends_on: [] });
+      prd.tasks = [
+        task("A", ["B", "C"], "src/a.ts"),
+        task("B", ["A", "C"], "src/b.ts"),
+        task("C", ["A", "B"], "src/c.ts"),
+      ];
+      writeFileSync(prdPath, `${JSON.stringify(prd, null, 2)}\n`, "utf8");
+
+      const report = preflightPrd(prdPath);
+
+      assert.equal(report.status, "blocked");
+      assert.equal(report.contract.blocks_execution, true);
+      assert.ok(report.blocked_reasons.some((item) => item.code === "TASK_DEPENDENCY_NO_ROOT"));
+      assert.ok(report.blocked_reasons.some((item) => item.code === "TASK_DEPENDENCY_CYCLE"));
+      assert.equal(report.runner_readiness.can_execute, false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

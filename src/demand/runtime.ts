@@ -1124,12 +1124,13 @@ function addTaskDependencies(tasks = []) {
 function deriveFileDependencies(tasks = []) {
   for (const taskB of tasks) {
     const bInputs = asArray(taskB.inputs).map(clean).filter(Boolean);
+    const bOutputs = new Set(asArray(taskB.expected_output).map(clean).filter(Boolean));
     for (const taskA of tasks) {
       if (taskA.id === taskB.id) continue;
       const aOutputs = new Set(asArray(taskA.expected_output).map(clean).filter(Boolean));
       const overlap = bInputs.filter((input) => aOutputs.has(input));
-      // Only derive dependencies from non-test file overlaps to avoid impl→test cycles
-      const meaningfulOverlap = overlap.filter((file) => fileKind(file) !== "test");
+      // Own targets are read-before-edit context, not cross-task prerequisites.
+      const meaningfulOverlap = overlap.filter((file) => fileKind(file) !== "test" && !bOutputs.has(file));
       if (meaningfulOverlap.length > 0) {
         taskB.depends_on = [...new Set([...(taskB.depends_on || []), taskA.id])];
       }

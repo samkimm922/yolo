@@ -373,6 +373,39 @@ describe("yolo check report", () => {
     }
   });
 
+  test("YB-008 blocks fully connected dependency graphs with no executable root", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      const task = (id, depends_on, file) => strictPrd({
+        id,
+        depends_on,
+        scope: { targets: [{ file }] },
+        post_conditions: [
+          { id: `POST-${id}`, type: "target_file_modified", severity: "FAIL", params: { file } },
+          { id: `POST-TYPECHECK-${id}`, type: "no_new_type_errors", severity: "FAIL", params: { command: "npm run typecheck" } },
+        ],
+      }).tasks[0];
+      writeJson(prdPath, strictPrd({}, {
+        tasks: [
+          task("A", ["B", "C"], "src/a.js"),
+          task("B", ["A", "C"], "src/b.js"),
+          task("C", ["A", "B"], "src/c.js"),
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+      const dependencyPreflight = report.checks.find((check) => check.name === "task_dependency_preflight");
+
+      assert.equal(report.status, "blocked");
+      assert.equal(dependencyPreflight.status, "blocked");
+      assert.ok(report.blockers.some((blocker) => blocker.gate === "task_dependency_preflight" && blocker.code === "TASK_DEPENDENCY_NO_ROOT"));
+      assert.ok(report.blockers.some((blocker) => blocker.gate === "task_dependency_preflight" && blocker.code === "TASK_DEPENDENCY_CYCLE"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("blocks approved-demand PRDs with blocked quality reports", () => {
     const root = tempProject();
     try {
