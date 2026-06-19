@@ -508,21 +508,23 @@ function candidateFiles(session = Object()) {
   ]);
 }
 
-function isScaffoldCandidateFile(file) {
-  const path = clean(file).replace(/\\/g, "/");
-  if (!path) return false;
-  if (/^\.claude\/commands\/yolo(?:-|\.md|$)/.test(path)) return true;
-  if (/^\.codex\/skills\/yolo\//.test(path)) return true;
-  if (/^(AGENTS|CLAUDE|DESIGN)\.md$/.test(path)) return true;
-  if (/^specs\/(?:README|requirements|design|tasks)\.md$/.test(path)) return true;
-  return false;
+function candidatePromotionBlockers(candidates = [], targets = []) {
+  const candidateSet = new Set(candidates);
+  return targets
+    .filter((target) => target?.exists === true && candidateSet.has(target.file))
+    .map((target) => target.file);
 }
 
-function shouldBlockCandidatePromotion(candidates = [], targets = [], explicit = []) {
-  if (candidates.length === 0 || explicit.length > 0) return false;
-  const candidateSet = new Set(candidates);
-  if (targets.some((target) => candidateSet.has(target.file))) return true;
-  return candidates.some((file) => !isScaffoldCandidateFile(file));
+function plannedNewFileConflicts(projectRoot, targets = []) {
+  return targets
+    .filter((target) => target?.status === "planned_new_file" && existsSync(resolve(projectRoot, target.file)))
+    .map((target) => target.file);
+}
+
+function shouldBlockCandidatePromotion(candidates = [], targets = [], explicit = [], projectRoot = process.cwd()) {
+  if (explicit.length > 0) return false;
+  if (plannedNewFileConflicts(projectRoot, targets).length > 0) return true;
+  return candidates.length > 0 && candidatePromotionBlockers(candidates, targets).length > 0;
 }
 
 function existingTargetFacts(session = Object()) {
@@ -656,7 +658,11 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
   const inferred = inferGreenfieldTargetFiles(session, { ...options, projectRoot });
   const groundedTargets = inferred.filter((item) => item.file);
 
-  if (shouldBlockCandidatePromotion(candidates, groundedTargets, explicit)) {
+  if (shouldBlockCandidatePromotion(candidates, groundedTargets, explicit, projectRoot)) {
+    const blockers = uniqueStrings([
+      ...candidatePromotionBlockers(candidates, groundedTargets),
+      ...plannedNewFileConflicts(projectRoot, groundedTargets),
+    ]);
     return {
       schema_version: DEMAND_GROUNDING_SCHEMA_VERSION,
       schema: DEMAND_GROUNDING_SCHEMA,
@@ -665,9 +671,9 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
       applied: false,
       reason: "candidate_files_require_explicit_confirmation",
       generated_at: generatedAt,
-      candidate_target_files: candidates,
+      candidate_target_files: blockers,
       target_files: [],
-      next_actions: candidates.map((file) => `Confirm ${file} explicitly before promoting it into execution scope.`),
+      next_actions: blockers.map((file) => `Confirm ${file} explicitly before promoting it into execution scope.`),
       session,
     };
   }
