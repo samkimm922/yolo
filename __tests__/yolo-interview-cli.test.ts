@@ -70,6 +70,65 @@ describe("yolo interview CLI", () => {
     assert.equal(toDemand.input.command, "to-demand");
     assert.equal(toDemand.input.sessionPath, ".yolo/demand-interviews/inv");
     assert.equal(toDemand.input.approve, undefined);
+
+    const playbackConfirm = parseYoloInterviewArgs(["playback", "--session", ".yolo/demand-interviews/inv", "--confirm", "--json"]);
+    assert.equal(playbackConfirm.input.command, "playback");
+    assert.equal(playbackConfirm.input.confirm, "true");
+
+    const playbackText = parseYoloInterviewArgs(["playback", "--session", ".yolo/demand-interviews/inv", "--confirm", "Looks right", "--json"]);
+    assert.equal(playbackText.input.confirm, "Looks right");
+  });
+
+  test("playback --confirm accepts a value-less boolean flag and records confirmation", async () => {
+    const root = tempProject();
+    try {
+      const started = await startInterview(root);
+      const out = capture();
+      const exitCode = await runYoloInterviewCli([
+        "playback",
+        "--session",
+        started.session_path,
+        "--confirm",
+        "--json",
+      ], { cwd: root, stdout: out.stream });
+
+      assert.equal(exitCode, 0);
+      const result = out.json();
+      assert.equal(result.status, "success");
+      assert.equal(result.code, "PLAYBACK_CONFIRMED");
+
+      const saved = JSON.parse(readFileSync(started.session_path, "utf8"));
+      assert.equal(saved.playback.confirmed, true);
+      assert.equal(saved.playback.answer, "true");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("playback --confirm keeps explicit confirmation text", async () => {
+    const root = tempProject();
+    try {
+      const started = await startInterview(root);
+      const out = capture();
+      const exitCode = await runYoloInterviewCli([
+        "playback",
+        "--session",
+        started.session_path,
+        "--confirm",
+        "Confirmed after review",
+        "--json",
+      ], { cwd: root, stdout: out.stream });
+
+      assert.equal(exitCode, 0);
+      const result = out.json();
+      assert.equal(result.code, "PLAYBACK_CONFIRMED");
+
+      const saved = JSON.parse(readFileSync(started.session_path, "utf8"));
+      assert.equal(saved.playback.confirmed, true);
+      assert.equal(saved.playback.answer, "Confirmed after review");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("start writes the default interview state file", async () => {
