@@ -304,6 +304,56 @@ function taskDependencyIds(task = Object()) {
   ])];
 }
 
+function pathValues(value) {
+  if (Array.isArray(value)) return value.flatMap(pathValues);
+  if (value && typeof value === "object") return pathValues(value.file || value.path);
+  return value ? [String(value)] : [];
+}
+
+function isTestPath(file = "") {
+  const path = String(file).toLowerCase();
+  return /(^|\/)(__tests__|tests?|specs?)\//.test(path) || /\.(test|spec)\./.test(path);
+}
+
+function comparableOutputFiles(task = Object()) {
+  const files = pathValues(task.expected_output)
+    .map((file) => String(file).trim())
+    .filter((file) => file.length > 0);
+  return [...new Set<string>(files)]
+    .filter((file) => !isTestPath(file));
+}
+
+function sameStringSet(left = [], right = []) {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((item) => rightSet.has(item));
+}
+
+function generatedSameOutputTasks(left = Object(), right = Object()) {
+  if (left.task_kind !== "demand_atomic_task" || right.task_kind !== "demand_atomic_task") return false;
+  const leftOutputs = comparableOutputFiles(left);
+  const rightOutputs = comparableOutputFiles(right);
+  return leftOutputs.length > 0 && sameStringSet(leftOutputs, rightOutputs);
+}
+
+function pruneGeneratedSameOutputCycles(nodes = [], nodesByKey = new Map(), dependenciesByKey = new Map()) {
+  for (const node of nodes) {
+    const dependencies = dependenciesByKey.get(node.key);
+    if (!dependencies) continue;
+    for (const dependencyKey of [...dependencies]) {
+      const dependencyNode = nodesByKey.get(dependencyKey);
+      const reciprocal = dependenciesByKey.get(dependencyKey);
+      if (!dependencyNode || !reciprocal?.has(node.key)) continue;
+      if (!generatedSameOutputTasks(node.task, dependencyNode.task)) continue;
+      if (node.index < dependencyNode.index) {
+        dependencies.delete(dependencyKey);
+      } else {
+        reciprocal.delete(node.key);
+      }
+    }
+  }
+}
+
 function taskNodeKey(task, index) {
   return `${task?.id || "__task"}::${index}`;
 }
@@ -362,6 +412,7 @@ export function orderTasksByDependencies(tasks = [], { priorityOrder = Object() 
       }
     }
   }
+  pruneGeneratedSameOutputCycles(nodes, nodesByKey, dependenciesByKey);
 
   const indegree = new Map<string, number>(nodes.map((node) => [node.key, 0]));
   const outgoing = new Map<string, Set<string>>(nodes.map((node) => [node.key, new Set<string>()]));

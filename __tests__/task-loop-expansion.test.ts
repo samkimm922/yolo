@@ -194,4 +194,26 @@ describe("task loop expansion", () => {
     assert.equal(preflight.blockers[0].code, "TASK_DEPENDENCY_CYCLE");
     assert.deepEqual(preflight.blockers[0].task_ids, ["A", "B"]);
   });
+
+  test("prunes demand-generated same-output mutual dependencies into source order", () => {
+    const ordered = orderTasksByDependencies([
+      baseTask({
+        id: "A",
+        task_kind: "demand_atomic_task",
+        depends_on: ["B"],
+        inputs: ["src/tool.ts"],
+        expected_output: ["src/tool.ts"],
+      }),
+      baseTask({
+        id: "B",
+        task_kind: "demand_atomic_task",
+        depends_on: ["A"],
+        inputs: ["src/tool.ts"],
+        expected_output: ["src/tool.ts"],
+      }),
+    ]);
+
+    assert.equal(ordered.preflight.blocks_execution, false);
+    assert.deepEqual(ordered.tasks.map((task) => task.id), ["A", "B"]);
+  });
 });
