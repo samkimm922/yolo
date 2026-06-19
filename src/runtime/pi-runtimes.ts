@@ -120,10 +120,22 @@ function runPrdGenerateRuntime(params = Object()) {
     return fail(`PRD generation failed: ${result.error}`, { code: "PI_PRD_GENERATION_FAILED" });
   }
 
-  const report = ok(`Generated PRD with ${result.counts.tasks} task(s).`, {
+  const summary = result.needs_contract_review
+    ? `Generated draft PRD with ${result.counts.tasks} task(s); needs approved demand contract review.`
+    : `Generated draft PRD with ${result.counts.tasks} task(s); executable only after preflight.`;
+  const report = Object.assign(Object(), {
+    status: result.needs_contract_review ? "draft" : "success",
+    code: result.needs_contract_review ? "PI_PRD_DRAFT_NEEDS_CONTRACT_REVIEW" : "PI_PRD_DRAFT_READY_FOR_PREFLIGHT",
+    summary,
     artifacts: [output],
+    next_actions: result.needs_contract_review
+      ? ["Review and approve the demand contract, then generate the executable PRD through yolo spec --demand."]
+      : ["Run yolo check before any implementation work."],
     counts: result.counts,
     prd_path: output,
+    executable: false,
+    executable_after_preflight: result.executable_after_preflight === true,
+    needs_contract_review: result.needs_contract_review === true,
   });
   const lifecycle = lifecycleWrite("prd", report, params, "pi-prd-generate");
   if (lifecycle) {

@@ -8,16 +8,16 @@ import {
 } from "../src/workflows/registry.js";
 
 describe("workflow registry convergence", () => {
-  test("stable command surfaces are exactly 8", () => {
+  test("stable command surfaces are exactly 4", () => {
     const surfaces = listWorkflowCommandSurfaces();
     assert.equal(
       surfaces.length,
-      8,
-      `Expected exactly 8 stable command surfaces, got ${surfaces.length}: ${surfaces.map((s) => s.command).join(", ")}`
+      4,
+      `Expected exactly 4 stable command surfaces, got ${surfaces.length}: ${surfaces.map((s) => s.command).join(", ")}`
     );
   });
 
-  test("non-alias workflows map to 8 stable surfaces — no surface expansion", () => {
+  test("non-alias workflows map to 4 stable surfaces — no surface expansion", () => {
     const stableIds = new Set(
       Object.values(STABLE_WORKFLOW_COMMAND_SURFACES).flat()
     );
@@ -31,8 +31,8 @@ describe("workflow registry convergence", () => {
     }
     const surfaceNames = new Set(stableWorkflows.map((w) => w.surface));
     assert.ok(
-      surfaceNames.size <= 8,
-      `Non-alias workflows span ${surfaceNames.size} surfaces (max 8): ${[...surfaceNames].join(", ")}`
+      surfaceNames.size <= 4,
+      `Non-alias workflows span ${surfaceNames.size} surfaces (max 4): ${[...surfaceNames].join(", ")}`
     );
   });
 
@@ -69,8 +69,8 @@ describe("workflow registry convergence", () => {
     const stableWorkflows = workflows.filter((w) => w.stability === "stable");
     const surfaceNames = new Set(stableWorkflows.map((w) => w.surface));
     assert.ok(
-      surfaceNames.size <= 8,
-      `Stable workflows span ${surfaceNames.size} surfaces (max 8): ${[...surfaceNames].join(", ")}`
+      surfaceNames.size <= 4,
+      `Stable workflows span ${surfaceNames.size} surfaces (max 4): ${[...surfaceNames].join(", ")}`
     );
   });
 });

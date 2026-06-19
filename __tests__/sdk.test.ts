@@ -717,6 +717,43 @@ describe("yolo sdk", () => {
     }
   });
 
+  test("PI prd.generate returns draft when no approved demand contract is supplied", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-pi-runtime-draft-"));
+    try {
+      const findingsPath = join(root, "findings.json");
+      const prdPath = join(root, "prd.json");
+      writeFileSync(findingsPath, JSON.stringify({
+        findings: [{
+          id: "DEV-DRAFT-001",
+          severity: "HIGH",
+          kind: "atomic_fix",
+          type: "formatter_fix",
+          description: "Update label formatter trimming logic",
+          files: ["src/lib/format-label.ts"],
+        }],
+      }), "utf8");
+
+      const generated = await runPiRuntime("prd.generate", {
+        findingsPath,
+        output: prdPath,
+        title: "Draft formatter",
+        projectRoot: root,
+      });
+      const prd = JSON.parse(readFileSync(prdPath, "utf8"));
+
+      assert.equal(generated.status, "draft");
+      assert.notEqual(generated.status, "success");
+      assert.equal(generated.code, "PI_PRD_DRAFT_NEEDS_CONTRACT_REVIEW");
+      assert.equal(generated.executable, false);
+      assert.equal(generated.needs_contract_review, true);
+      assert.equal(prd.executable, false);
+      assert.equal(prd.needs_contract_review, true);
+      assert.equal(prd.tasks[0].status, "needs_contract_review");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("PI runtimes close acceptance, ship, and learn lifecycle stages", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-pi-lifecycle-"));
     const stateRoot = join(root, ".yolo");

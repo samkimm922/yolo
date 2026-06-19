@@ -343,7 +343,8 @@ export function buildPrdFromFindings(findings, options = Object()) {
   for (const [, group] of groups.atomic_fix) tasks.push(buildTask("atomic_fix", group, ++taskIndex, options));
   for (const finding of groups.atomic_feature) tasks.push(buildTask("atomic_feature", [finding], ++taskIndex, options));
   const explicitDemandContract = requireApprovedDemandContract(explicitDemandContractOption(options), tasks);
-  for (const task of tasks) task.status = explicitDemandContract ? "pending" : "needs_contract_review";
+  const needsContractReview = !explicitDemandContract;
+  for (const task of tasks) task.status = needsContractReview ? "needs_contract_review" : "pending";
   const requirements = tasks.map((task) => ({
     id: task.requirement_ids[0],
     text: task.description || task.title,
@@ -390,6 +391,10 @@ export function buildPrdFromFindings(findings, options = Object()) {
       generated_by: options.generated_by || "yolo-review-agent",
       generated_at: new Date().toISOString(),
       base_commit,
+      status: needsContractReview ? "needs_contract_review" : "draft",
+      executable: false,
+      executable_after_preflight: !needsContractReview,
+      needs_contract_review: needsContractReview,
       source: demandContract.source,
       demand_contract_required: demandContract.demand_contract_required,
       demand: demandContract.demand,
@@ -404,6 +409,10 @@ export function buildPrdFromFindings(findings, options = Object()) {
       atomic_fix: groups.atomic_fix.size,
       atomic_feature: groups.atomic_feature.length,
     },
+    status: needsContractReview ? "draft" : "success",
+    executable: false,
+    executable_after_preflight: !needsContractReview,
+    needs_contract_review: needsContractReview,
   };
 }
 
@@ -484,8 +493,10 @@ function getOpt(args, name, fallback) {
 
 function printSummary(result) {
   console.log(
-    `PRD 已生成: ${result.output}`,
+    `Draft PRD 已导入: ${result.output}`,
     `\n  ${result.counts.tasks} 个 task`,
+    `\n  状态: ${result.status}${result.needs_contract_review ? " / needs_contract_review" : ""}`,
+    `\n  可执行性: executable only after preflight`,
     `\n    mechanical: ${result.counts.mechanical} 组`,
     `\n    atomic_fix: ${result.counts.atomic_fix} 组`,
     `\n    atomic_feature: ${result.counts.atomic_feature} 个`,
@@ -504,7 +515,7 @@ export function runAuditToPrdCli() {
   if (!inputArg || inputArg === "--help" || inputArg === "-h") {
     console.log("用法: yolo audit-to-prd <audit.json> [--title=xxx] [--output=prd.json] [--force]");
     console.log("");
-    console.log("将结构化审计 JSON 转换为原子化 PRD（按调用链合并同类发现）。");
+    console.log("将结构化审计 JSON 导入为 draft PRD；executable only after preflight。");
     console.log("");
     console.log("选项:");
     console.log("  --title=xxx    PRD 标题（默认: 审计修复）");

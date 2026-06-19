@@ -264,7 +264,7 @@ export function createPiRunPlan(input = Object(), context = Object()) {
     actions.push(runtimeAction({
       id: "pi.prd.generate",
       phase: "prd_contract",
-      summary: "Convert findings into executable PRD.",
+      summary: "Convert findings into draft PRD; executable only after preflight.",
       runtime: "prd.generate",
       params: {
         findingsPath: executableFindingsPath,

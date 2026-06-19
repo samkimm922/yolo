@@ -60,15 +60,17 @@ describe("public package entrypoints", () => {
 
     assert.equal(result.stderr, "");
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /^  yolo status\b/m);
     assert.match(result.stdout, /^  yolo demand\b/m);
-    assert.match(result.stdout, /^  yolo spec\b/m);
-    assert.match(result.stdout, /^  yolo tasks\b/m);
-    assert.match(result.stdout, /^  yolo run <prd\.json>/m);
-    assert.match(result.stdout, /^  yolo check\b/m);
-    assert.match(result.stdout, /^  yolo review\b/m);
-    assert.match(result.stdout, /^  yolo release\b/m);
-    assert.match(result.stdout, /普通 Claude\/Codex\/GUI 集成只展示 8 个稳定入口/);
+    assert.match(result.stdout, /^  yolo auto\b/m);
+    assert.match(result.stdout, /^  yolo ship\b/m);
+    assert.match(result.stdout, /^  yolo status\b/m);
+    assert.match(result.stdout, /普通 Claude\/Codex\/GUI 集成只展示 4 个稳定入口/);
+    assert.doesNotMatch(result.stdout, /^  yolo spec\b/m);
+    assert.doesNotMatch(result.stdout, /^  yolo tasks\b/m);
+    assert.doesNotMatch(result.stdout, /^  yolo run\b/m);
+    assert.doesNotMatch(result.stdout, /^  yolo check\b/m);
+    assert.doesNotMatch(result.stdout, /^  yolo review\b/m);
+    assert.doesNotMatch(result.stdout, /^  yolo release\b/m);
     assert.doesNotMatch(result.stdout, /^  yolo prd\b/m);
     assert.doesNotMatch(result.stdout, /^  yolo plan\b/m);
     assert.doesNotMatch(result.stdout, /^  yolo next\b/m);

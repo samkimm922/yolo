@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectStoryAtomicityFromPrd } from "../../demand/story-atomicity.js";
 import { inspectDiscoveryReadiness } from "../../discovery/gate.js";
@@ -34,6 +34,72 @@ function nowIso() {
 function readPrd(prdPath) {
   const path = resolve(prdPath);
   return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function safeReadJson(path) {
+  try {
+    if (!existsSync(path)) return null;
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function existingPrdCandidate(projectRoot, value) {
+  const raw = String(value || "").trim();
+  if (!raw || !raw.endsWith(".json")) return "";
+  const absolute = isAbsolute(raw) ? raw : resolve(projectRoot, raw);
+  return existsSync(absolute) ? absolute : "";
+}
+
+function newestJsonFile(dir) {
+  if (!existsSync(dir)) return "";
+  const files = [];
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(".json")) continue;
+    const path = join(dir, name);
+    try {
+      const stat = statSync(path);
+      if (stat.isFile()) files.push({ path, mtimeMs: stat.mtimeMs });
+    } catch {}
+  }
+  files.sort((a, b) => b.mtimeMs - a.mtimeMs || a.path.localeCompare(b.path));
+  return files[0]?.path || "";
+}
+
+function lifecyclePrdCandidates(report = Object()) {
+  const nested = report.report || {};
+  const artifacts = [
+    ...(Array.isArray(report.artifacts) ? report.artifacts : []),
+    ...(Array.isArray(nested.artifacts) ? nested.artifacts : []),
+    ...(Array.isArray(report.evidence) ? report.evidence.map((item) => item?.path || item?.file) : []),
+    ...(Array.isArray(nested.evidence) ? nested.evidence.map((item) => item?.path || item?.file) : []),
+  ];
+  return [
+    report.prd_path,
+    report.prdPath,
+    nested.prd_path,
+    nested.prdPath,
+    ...artifacts,
+  ];
+}
+
+export function inferDefaultYoloCheckPrdPath(input = Object(), options = Object()) {
+  const projectRoot = resolve(input.projectRoot || input.project_root || options.projectRoot || options.project_root || input.cwd || options.cwd || process.cwd());
+  const stateRoot = resolve(input.stateRoot || input.state_root || options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
+  const currentPrd = newestJsonFile(join(stateRoot, "data", "prd", "current"));
+  if (currentPrd) return currentPrd;
+
+  for (const name of ["prd.json", "check-report.json", "run-report.json"]) {
+    const report = safeReadJson(join(stateRoot, "lifecycle", name));
+    if (!report) continue;
+    for (const candidate of lifecyclePrdCandidates(report)) {
+      const path = existingPrdCandidate(projectRoot, candidate);
+      if (path) return path;
+    }
+  }
+
+  return "";
 }
 
 function prdJsonErrorReport({ prdPath, projectRoot, stateRoot, error, writeLifecycle, learnFailures }) {
@@ -611,7 +677,8 @@ function preflightReadiness(preflight) {
 }
 
 export function inspectYoloCheck(input = Object(), options = Object()) {
-  const prdPath = input.prdPath || input.prd_path || options.prdPath || options.prd_path;
+  const explicitPrdPath = input.prdPath || input.prd_path || options.prdPath || options.prd_path;
+  const prdPath = explicitPrdPath || inferDefaultYoloCheckPrdPath(input, options);
   if (!prdPath) {
     return {
       schema_version: YOLO_CHECK_REPORT_SCHEMA_VERSION,

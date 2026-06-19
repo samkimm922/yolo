@@ -13,13 +13,13 @@ import { runReleaseCandidateGate } from "../release/decision-gate.js";
 import { preflightAllPrds } from "../prd/preflight.js";
 import { readReleaseCandidateChangeManifest } from "../release/change-provenance.js";
 import { runCleanEnvironmentVerify } from "../release/clean-environment-verify.js";
-import { formatYoloCheckText, inspectYoloCheck } from "../runtime/gates/check-report.js";
+import { formatYoloCheckText, inferDefaultYoloCheckPrdPath, inspectYoloCheck } from "../runtime/gates/check-report.js";
 import { refreshMemoryCenter } from "../runtime/memory/center.js";
 import { buildProgressDashboardUiEvidence } from "../runtime/progress/ui-evidence.js";
 import { runRunnerRuntime } from "../runtime/runner-runtime.js";
 import { runPiRuntime } from "../runtime/pi-runtimes.js";
 import { runPiAgent, createPiRunPlan } from "../agents/pi.js";
-import { DEFAULT_YOLO_PUBLIC_COMMAND_NAMES } from "../workflows/command-registry.js";
+import { DEFAULT_YOLO_PUBLIC_COMMAND_NAMES, getYoloCommand } from "../workflows/command-registry.js";
 import { scanProject } from "../review/scanner.js";
 import {
   runDiscoveryPlanRuntime,
@@ -57,17 +57,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const defaultYoloRoot = resolve(__dirname, "../..");
 
 export function usage() {
+  const publicCommands = DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.map((name) => {
+    const command = getYoloCommand(name);
+    return `  ${command.usage}\n    下一步执行 ${command.usage}`;
+  });
+  const publicNames = DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.join("、");
   return [
     "用法:",
-    "  yolo status [--cwd <dir>] [--json]",
-    "  yolo demand [status|dispatch] [idea|--demand <session.json|dir>] [--mode office-hours] [--json]",
-    "  yolo demand --stage brainstorm|interview|discover|discuss <idea-or-session> [--json]",
-    "  yolo spec [--discovery <discovery.json>|--demand <session.json|dir>] [--output <prd.json>] [--json]",
-    "  yolo tasks [--discovery <discovery.json>] [--json]",
-    "  yolo check <prd.json> [--json] [--no-write] [--strict|--release]",
-    "  yolo run <prd.json> [--json] [--dry-run] [--executor claude|codex|custom|auto] [--model <model>] [--agent-command <cmd>]",
-    "  yolo review [path] [--json]",
-    "  yolo release [candidate|accept|ship] [--mode rc|publish] [--dry-run] [--json]",
+    ...publicCommands,
     "",
     "`yolo status` 会读取 .yolo/lifecycle/status.json，告诉 agent 当前唯一安全的下一步。",
     "`yolo demand` 是需求阶段只读/访谈入口，会输出 context_type、route、evidence_policy、missing_slots、blockers、assumptions、needed_evidence_agents、prd_intake_ready、executable_prd_ready 和 next_action。",
@@ -78,15 +75,58 @@ export function usage() {
     "`yolo check` 会在改代码前检查 PRD、产品准备度、UI 验收准备度、任务原子性、adapter 和 evidence plan。",
     "`yolo run` 会走 PI 主线执行 PRD，并在 runner 阶段用 --executor 选择 claude -p、codex exec 或 custom shell agent。",
     "`yolo release` 是 acceptance/ship/release-candidate 的稳定入口，不是 Trello replay；默认 fail closed，只输出可解析 gate contract。",
-    "普通 Claude/Codex/GUI 集成只展示 8 个稳定入口：status、demand、spec、tasks、run、check、review、release。",
+    `普通 Claude/Codex/GUI 集成只展示 ${DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.length} 个稳定入口：${publicNames}。`,
     "未传 PRD 时，只会在目标项目 .yolo/data/prd/current、.yolo/data/prd/archive 和 .yolo/data 中寻找 PRD JSON。",
   ].join("\n");
 }
 
+function cliParseError(name) {
+  return Object.assign(new Error(`${name} requires a value.`), {
+    name: "YoloCliParseError",
+    code: "CLI_PARSE_ERROR",
+    flag: name,
+    exit_code: 2,
+  });
+}
+
+function isCliParseError(error) {
+  return error?.name === "YoloCliParseError" || error?.code === "CLI_PARSE_ERROR";
+}
+
+function cliParseErrorResult(error, command = "yolo") {
+  return {
+    schema: "yolo.cli.parse_error.v1",
+    status: "error",
+    code: error.code || "CLI_PARSE_ERROR",
+    command,
+    flag: error.flag || null,
+    summary: error.message || "CLI argument parse error.",
+    exit_code: error.exit_code || 2,
+    next_actions: error.flag
+      ? [`Provide a value for ${error.flag}, or remove that flag.`]
+      : ["Fix the CLI arguments and rerun the command."],
+  };
+}
+
+function emitCliParseError(error, argv = [], io = Object(), command = "yolo") {
+  const stdout = io.stdout || process.stdout;
+  const stderr = io.stderr || process.stderr;
+  const result = cliParseErrorResult(error, command);
+  if (argv.includes("--json")) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  else stderr.write(`${result.summary}\n${result.next_actions.join("\n")}\n`);
+  return result.exit_code;
+}
+
 function readArgValue(argv, index, name) {
   const arg = argv[index];
-  if (arg.includes("=")) return { value: arg.split("=").slice(1).join("="), consumed: 0 };
-  return { value: argv[index + 1], consumed: 1 };
+  if (arg.includes("=")) {
+    const value = arg.split("=").slice(1).join("=");
+    if (!value) throw cliParseError(name);
+    return { value, consumed: 0 };
+  }
+  const next = argv[index + 1];
+  if (!next || next.startsWith("--")) throw cliParseError(name);
+  return { value: next, consumed: 1 };
 }
 
 export function parseYoloArgs(argv = process.argv.slice(2)) {
@@ -158,6 +198,96 @@ export function parseYoloArgs(argv = process.argv.slice(2)) {
     } else if (!arg.startsWith("--") && !input.prdPath) {
       input.prdPath = arg;
     }
+  }
+
+  input.mode = input.mode || "fix";
+  return { input, options };
+}
+
+function existingJsonPath(value, cwd = process.cwd()) {
+  const text = String(value || "").trim();
+  if (!text.endsWith(".json")) return "";
+  const absolute = isAbsolute(text) ? text : resolve(cwd, text);
+  return existsSync(absolute) ? text : "";
+}
+
+export function parseYoloAutoArgs(argv = [], context = Object()) {
+  const input = Object();
+  const options = {
+    json: false,
+    help: false,
+    dryRun: false,
+    writeLifecycle: true,
+    collectEvidence: false,
+    executeAdapter: false,
+    allowAdapterCommands: false,
+    startProgressServer: undefined,
+    runReviewLoop: undefined,
+  };
+  const positionals = [];
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--json") {
+      options.json = true;
+    } else if (arg === "--help" || arg === "-h") {
+      options.help = true;
+    } else if (arg === "--dry-run") {
+      options.dryRun = true;
+    } else if (arg === "--no-write") {
+      options.writeLifecycle = false;
+    } else if (arg === "--collect-evidence") {
+      options.collectEvidence = true;
+    } else if (arg === "--execute-adapter") {
+      options.executeAdapter = true;
+    } else if (arg === "--allow-adapter-commands") {
+      options.allowAdapterCommands = true;
+    } else if (arg === "--no-progress-server") {
+      options.startProgressServer = false;
+    } else if (arg === "--no-review-loop") {
+      options.runReviewLoop = false;
+    } else if (arg === "--prd" || arg.startsWith("--prd=")) {
+      const read = readArgValue(argv, i, "--prd");
+      input.prdPath = read.value;
+      i += read.consumed;
+    } else if (arg === "--mode" || arg.startsWith("--mode=")) {
+      const read = readArgValue(argv, i, "--mode");
+      input.mode = read.value;
+      i += read.consumed;
+    } else if (arg === "--executor" || arg.startsWith("--executor=")) {
+      const read = readArgValue(argv, i, "--executor");
+      input.executor = read.value;
+      i += read.consumed;
+    } else if (arg === "--provider" || arg.startsWith("--provider=")) {
+      const read = readArgValue(argv, i, "--provider");
+      input.provider = read.value;
+      i += read.consumed;
+    } else if (arg === "--model" || arg.startsWith("--model=")) {
+      const read = readArgValue(argv, i, "--model");
+      input.model = read.value;
+      i += read.consumed;
+    } else if (arg === "--agent-command" || arg.startsWith("--agent-command=") || arg === "--custom-command" || arg.startsWith("--custom-command=")) {
+      const prefix = arg.startsWith("--custom-command") ? "--custom-command" : "--agent-command";
+      const read = readArgValue(argv, i, prefix);
+      input.agentCommand = read.value;
+      i += read.consumed;
+    } else if (arg === "--cwd" || arg.startsWith("--cwd=")) {
+      const read = readArgValue(argv, i, "--cwd");
+      input.cwd = read.value;
+      i += read.consumed;
+    } else if (!arg.startsWith("--")) {
+      positionals.push(arg);
+    }
+  }
+
+  const projectRoot = resolve(input.cwd || context.cwd || process.cwd());
+  if (!input.prdPath && positionals.length === 1) {
+    const prdPath = existingJsonPath(positionals[0], projectRoot);
+    if (prdPath) input.prdPath = prdPath;
+  }
+  if (!input.prdPath && positionals.length > 0) {
+    input.requirement = positionals.join(" ");
+    input.objective = input.objective || input.requirement;
   }
 
   input.mode = input.mode || "fix";
@@ -1858,7 +1988,14 @@ export async function runYoloReleaseCandidateCli(argv = [], io = Object()) {
 export async function runYoloCheckCli(argv = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
-  const { input, options } = parseYoloCheckArgs(argv);
+  let parsed;
+  try {
+    parsed = parseYoloCheckArgs(argv);
+  } catch (error) {
+    if (isCliParseError(error)) return emitCliParseError(error, argv, { stdout, stderr }, "yolo check");
+    throw error;
+  }
+  const { input, options } = parsed;
 
   if (options.help) {
     stdout.write(`${usage()}\n`);
@@ -1868,7 +2005,7 @@ export async function runYoloCheckCli(argv = [], io = Object()) {
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
   const prdPath = input.prdPath
     ? resolvePrdPath(input.prdPath, io.yoloRoot || defaultYoloRoot, { cwd: projectRoot })
-    : input.prdPath;
+    : inferDefaultYoloCheckPrdPath({ projectRoot, stateRoot: join(projectRoot, ".yolo") });
   const guarded = guardBlocked("yolo-check", { ...input, prdPath }, options, projectRoot, { stdout, stderr });
   if (guarded !== 0) return guarded;
   let report = inspectYoloCheck({
@@ -2740,9 +2877,16 @@ export async function runYoloAutoCli(argv = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const yoloRoot = io.yoloRoot || defaultYoloRoot;
-  const { input, options } = parseYoloArgs(argv);
+  let parsed;
+  try {
+    parsed = parseYoloAutoArgs(argv, { cwd: io.cwd });
+  } catch (error) {
+    if (isCliParseError(error)) return emitCliParseError(error, argv, { stdout, stderr }, "yolo auto");
+    throw error;
+  }
+  const { input, options } = parsed;
   const cliProjectRoot = resolve(input.cwd || io.cwd || process.cwd());
-  const requirement = input.idea || input.requirement || input.objective || input.prdPath || "";
+  const requirement = input.idea || input.requirement || input.objective || "";
 
   if (options.help) {
     stdout.write([
@@ -2754,7 +2898,7 @@ export async function runYoloAutoCli(argv = [], io = Object()) {
     return 0;
   }
 
-  if (!requirement.trim()) {
+  if (!requirement.trim() && !input.prdPath) {
     const result = {
       status: "error",
       summary: "yolo auto requires an idea or requirement.",
@@ -2767,7 +2911,8 @@ export async function runYoloAutoCli(argv = [], io = Object()) {
     return result.exit_code;
   }
 
-  const plan = createPiRunPlan({ ...input, requirement }, {
+  const planInput = requirement.trim() ? { ...input, requirement } : { ...input };
+  const plan = createPiRunPlan(planInput, {
     yoloRoot,
     projectRoot: cliProjectRoot,
     stateRoot: join(cliProjectRoot, ".yolo"),
@@ -2788,7 +2933,7 @@ export async function runYoloAutoCli(argv = [], io = Object()) {
     return result.exit_code;
   }
 
-  const result = await runPiAgent({ ...input, requirement }, {
+  const result = await runPiAgent(planInput, {
     yoloRoot,
     projectRoot: cliProjectRoot,
     stateRoot: join(cliProjectRoot, ".yolo"),
@@ -2810,7 +2955,7 @@ export const KNOWN_YOLO_COMMAND_WORDS = new Set([
   "ui-evidence",
 ]);
 
-export async function runYoloCli(argv = process.argv.slice(2), io = Object()) {
+async function runYoloCliInner(argv = process.argv.slice(2), io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const yoloRoot = io.yoloRoot || defaultYoloRoot;
@@ -2913,11 +3058,19 @@ export async function runYoloCli(argv = process.argv.slice(2), io = Object()) {
     if (!looksLikePath) {
       stderr.write(`Unknown command: yolo ${firstArg}\n`);
       stderr.write(`Available commands: ${DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.map((c) => `yolo ${c}`).join(", ")}\n`);
+      stderr.write(`下一步执行 yolo ${DEFAULT_YOLO_PUBLIC_COMMAND_NAMES[0]}\n`);
       return 2;
     }
   }
 
-  const { input, options } = parseYoloArgs(argv);
+  let parsed;
+  try {
+    parsed = parseYoloArgs(argv);
+  } catch (error) {
+    if (isCliParseError(error)) return emitCliParseError(error, argv, { stdout, stderr }, "yolo run");
+    throw error;
+  }
+  const { input, options } = parsed;
 
   if (options.help) {
     stdout.write(`${usage()}\n`);
@@ -2996,4 +3149,13 @@ export async function runYoloCli(argv = process.argv.slice(2), io = Object()) {
   else stdout.write(`${formatRunnerText(result)}\n`);
 
   return result.exit_code ?? (result.status === "success" ? 0 : 1);
+}
+
+export async function runYoloCli(argv = process.argv.slice(2), io = Object()) {
+  try {
+    return await runYoloCliInner(argv, io);
+  } catch (error) {
+    if (isCliParseError(error)) return emitCliParseError(error, argv, io, "yolo");
+    throw error;
+  }
 }
