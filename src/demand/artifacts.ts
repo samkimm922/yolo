@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { buildDemandArtifactGraph } from "./graph.js";
 import { inspectDemandReadiness } from "./gate.js";
 import { buildUnderstandingPlayback } from "./understanding-playback.js";
@@ -11,6 +12,8 @@ import {
 
 export const DEMAND_SESSION_SCHEMA_VERSION = "1.0";
 export const DEMAND_SESSION_SCHEMA = "yolo.demand.session.v1";
+export const DEMAND_GROUNDING_SCHEMA_VERSION = "1.0";
+export const DEMAND_GROUNDING_SCHEMA = "yolo.demand.grounding.v1";
 
 function asArray(value) {
   if (value == null) return [];
@@ -339,6 +342,408 @@ function candidateFilesFromFacts(facts = []) {
   return facts
     .filter((fact) => fact.status === "candidate")
     .map((fact) => fact.file);
+}
+
+function cloneDemandObject(value) {
+  return JSON.parse(JSON.stringify(value || {}));
+}
+
+function repoRelative(projectRoot, file) {
+  const root = resolve(clean(projectRoot) || process.cwd());
+  const target = clean(file);
+  if (!target || isAbsolute(target)) return "";
+  const absolute = resolve(root, target);
+  const rel = relative(root, absolute).replace(/\\/g, "/");
+  if (!rel || rel === "." || rel.startsWith("../") || rel === ".." || isAbsolute(rel)) return "";
+  return rel;
+}
+
+const GROUNDING_EXCLUDED_ROOTS = new Set([".git", ".yolo", "dist", "node_modules", "coverage", ".next", ".nuxt", "build"]);
+
+function safeRepoFile(projectRoot, file) {
+  const rel = repoRelative(projectRoot, file).replace(/^\.\/+/, "");
+  if (!rel) return "";
+  if (rel.split("/").some((part) => !part || part === "." || part === "..")) return "";
+  if (GROUNDING_EXCLUDED_ROOTS.has(rel.split("/")[0])) return "";
+  return rel;
+}
+
+function groundingAsciiSlug(value, fallback = "feature") {
+  const text = clean(value)
+    .toLowerCase()
+    .replace(/['"`]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  if (text) return text;
+  return `${fallback}-${createHash("sha1").update(clean(value) || fallback).digest("hex").slice(0, 8)}`;
+}
+
+function demandText(session = Object()) {
+  const requirements = asArray(session.requirements?.active || session.requirements);
+  const scenarios = asArray(session.scenario_matrix?.scenarios || session.scenarios);
+  return [
+    session.project?.title,
+    session.title,
+    session.vision?.statement,
+    session.vision?.idea,
+    session.objective,
+    session.idea,
+    session.problem,
+    session.prd_intake?.plain_language_problem,
+    session.prd_intake?.desired_outcomes,
+    session.prd_intake?.success_proof,
+    session.prd_intake?.boundaries,
+    session.requirements?.constraints,
+    session.requirements?.out_of_scope,
+    session.context?.summary,
+    requirements.map((item) => [
+      item.id,
+      item.title,
+      item.text,
+      item.acceptance_criteria,
+      item.acceptance_scenarios,
+      item.scenarios,
+    ]),
+    scenarios.map((item) => [
+      item.id,
+      item.desired_behavior,
+      item.proof,
+      item.acceptance,
+      item.trigger,
+      item.touchpoint,
+    ]),
+    asArray(session.question_trace).map((item) => [item.question, item.answer]),
+    asArray(session.discussion?.decisions).map((item) => item?.text || item),
+  ].flat(Infinity).map(clean).filter(Boolean).join("\n");
+}
+
+function requirementRefs(session = Object()) {
+  return asArray(session.requirements?.active || session.requirements)
+    .map((item) => ({
+      id: clean(item?.id),
+      text: clean(item?.text || item?.title),
+    }))
+    .filter((item) => item.id || item.text);
+}
+
+function hasConfirmedRequirements(session = Object()) {
+  return requirementRefs(session).some((item) => item.text.length >= 10);
+}
+
+function commandNameFromText(text) {
+  const source = clean(text);
+  const backticked = source.match(/`([a-z][a-z0-9-]{2,})`/i)?.[1];
+  if (backticked) return groundingAsciiSlug(backticked, "app");
+  const cliNamed = source.match(/\b([a-z][a-z0-9-]*(?:cli|cmd))\b/i)?.[1];
+  if (cliNamed) return groundingAsciiSlug(cliNamed, "cli");
+  const namedCommand = source.match(/\b(?:command|binary|tool|命令)\s+([a-z][a-z0-9-]{2,})\b/i)?.[1];
+  if (namedCommand) return groundingAsciiSlug(namedCommand, "cli");
+  return "";
+}
+
+function projectNameSlug(session = Object(), text = "") {
+  const commandName = commandNameFromText(text);
+  if (commandName) return commandName;
+  const title = clean(session.project?.title || session.title || session.vision?.idea || session.objective || session.idea);
+  const firstClause = title.split(/[:：.;。]/)[0];
+  return groundingAsciiSlug(firstClause, "feature");
+}
+
+function targetKind(text = "") {
+  const source = clean(text).toLowerCase();
+  if (/\b(cli|command line|terminal|argv|commander|node\b|taskcli)\b|命令行|终端/.test(source)) return "cli";
+  if (/\b(api|endpoint|route|server|controller)\b|接口|路由/.test(source)) return "api";
+  if (/\b(page|screen|component|button|form|view|ui)\b|页面|界面|按钮|组件|表单/.test(source)) return "ui";
+  if (/\b(database|db|repository|store|storage|json|persist|persistence)\b|数据库|持久|存储/.test(source)) return "service";
+  return "code";
+}
+
+function defaultTargetForKind(kind, name) {
+  if (kind === "cli") return `src/${name}.ts`;
+  if (kind === "api") return `src/api/${name}.ts`;
+  if (kind === "ui") return `src/components/${name}.tsx`;
+  if (kind === "service") return `src/${name}.ts`;
+  return `src/${name}.ts`;
+}
+
+function explicitGroundingTargets(input = Object()) {
+  return uniqueStrings(input.target_files || input.targetFiles || input.targets || input.target || input.files || input.file);
+}
+
+export function inferGreenfieldTargetFiles(session = Object(), options = Object()) {
+  const projectRoot = resolve(clean(options.projectRoot || options.project_root || options.cwd) || process.cwd());
+  const text = demandText(session);
+  const explicit = explicitGroundingTargets(options);
+  const source = explicit.length > 0
+    ? explicit
+    : [defaultTargetForKind(targetKind(text), projectNameSlug(session, text))];
+  const files = uniqueStrings(source)
+    .map((file) => safeRepoFile(projectRoot, file))
+    .filter(Boolean)
+    .slice(0, Number(options.maxTargetFiles || options.max_target_files || 2));
+  return files.map((file) => {
+    const exists = existsSync(resolve(projectRoot, file));
+    return {
+      file,
+      exists,
+      status: exists ? "verified" : "planned_new_file",
+      kind: targetKind(`${text}\n${file}`),
+      source: explicit.length > 0 ? "explicit_target" : "demand_greenfield_inference",
+    };
+  });
+}
+
+function executionScopeFiles(session = Object()) {
+  return uniqueStrings(session.project?.target_files || session.target_files);
+}
+
+function candidateFiles(session = Object()) {
+  return uniqueStrings([
+    ...asArray(session.project?.candidate_target_files),
+    ...asArray(session.project_facts?.candidate_target_files),
+    ...asArray(session.project_facts?.target_files)
+      .filter((fact) => fact?.status === "candidate")
+      .map((fact) => fact.file || fact.path),
+  ]);
+}
+
+function isScaffoldCandidateFile(file) {
+  const path = clean(file).replace(/\\/g, "/");
+  if (!path) return false;
+  if (/^\.claude\/commands\/yolo(?:-|\.md|$)/.test(path)) return true;
+  if (/^\.codex\/skills\/yolo\//.test(path)) return true;
+  if (/^(AGENTS|CLAUDE|DESIGN)\.md$/.test(path)) return true;
+  if (/^specs\/(?:README|requirements|design|tasks)\.md$/.test(path)) return true;
+  return false;
+}
+
+function shouldBlockCandidatePromotion(candidates = [], targets = [], explicit = []) {
+  if (candidates.length === 0 || explicit.length > 0) return false;
+  const candidateSet = new Set(candidates);
+  if (targets.some((target) => candidateSet.has(target.file))) return true;
+  return candidates.some((file) => !isScaffoldCandidateFile(file));
+}
+
+function existingTargetFacts(session = Object()) {
+  return asArray(session.project_facts?.target_files)
+    .filter((fact) => fact && typeof fact === "object")
+    .map((fact) => clean(fact.file || fact.path))
+    .filter(Boolean);
+}
+
+function filesForSurface(surface = Object(), files = []) {
+  const kind = clean(surface.kind).toLowerCase();
+  const matching = files.filter((file) => {
+    const fileKind = surfaceKindFromFile(file);
+    return fileKind === kind || (kind === "service" && fileKind === "code") || (kind === "code" && fileKind === "service");
+  });
+  return matching.length ? matching : files;
+}
+
+function applyFilesToScenarios(session = Object(), files = []) {
+  const scenarios = asArray(session.scenario_matrix?.scenarios || session.scenarios);
+  if (scenarios.length === 0) return;
+  for (const scenario of scenarios) {
+    const surfaces = asArray(scenario.surfaces);
+    if (surfaces.length === 0) {
+      const kind = surfaceKindFromFile(files[0] || "");
+      scenario.surfaces = [{
+        id: `${scenario.id || "SCN"}-SFC-001`,
+        kind,
+        label: surfaceLabel(kind),
+        user_visible: kind === "ui",
+        target_files: files,
+        readonly_files: [],
+        allow_new_files: true,
+        session_budget: {
+          expected: "single_session",
+          max_files: Math.max(1, Math.min(2, files.length || 1)),
+          max_lines_per_file: 120,
+        },
+        grounding_source: "demand_greenfield_execution_scope",
+      }];
+      continue;
+    }
+    for (const surface of surfaces) {
+      const current = uniqueStrings(surface.target_files);
+      if (current.length > 0) continue;
+      const scopedFiles = filesForSurface(surface, files);
+      const groundedKind = surfaceKindFromFile(scopedFiles[0] || files[0] || "");
+      surface.target_files = scopedFiles;
+      surface.kind = groundedKind;
+      surface.label = surfaceLabel(groundedKind);
+      surface.user_visible = groundedKind === "ui";
+      if (groundedKind !== "ui") surface.visual_style_source = [];
+      surface.allow_new_files = true;
+      surface.session_budget = {
+        ...(surface.session_budget || {}),
+        expected: surface.session_budget?.expected || "single_session",
+        max_files: Math.max(1, Math.min(2, scopedFiles.length || 1)),
+        max_lines_per_file: Number(surface.session_budget?.max_lines_per_file || 120),
+      };
+      surface.grounding_source = "demand_greenfield_execution_scope";
+    }
+  }
+}
+
+function groundingReason(session = Object(), file = "") {
+  const refs = requirementRefs(session);
+  const primary = refs[0]?.text || clean(session.vision?.idea || session.objective || session.project?.title);
+  return `Plan ${file} as a new execution-scope file from approved demand requirement: ${primary}`;
+}
+
+function plannedTargetFact(session = Object(), target = Object(), groundingId, generatedAt) {
+  const refs = requirementRefs(session);
+  return {
+    file: target.file,
+    status: target.status,
+    source: target.exists ? "project_read" : target.source,
+    new_file: !target.exists,
+    allow_new_files: !target.exists,
+    grounding_id: groundingId,
+    grounded_at: generatedAt,
+    requirement_ids: refs.map((item) => item.id).filter(Boolean),
+    evidence: [
+      target.exists
+        ? `${target.file} already exists in project root.`
+        : `${target.file} does not exist yet; it is planned as a new file from approved demand scope.`,
+      groundingReason(session, target.file),
+    ],
+    message: target.exists
+      ? "Target file is verified enough to enter execution scope."
+      : "Target file is grounded as a planned new file; scope.allow_new_files must be true for generated tasks.",
+  };
+}
+
+export function groundDemandExecutionScope(session = Object(), options = Object()) {
+  const projectRoot = resolve(clean(options.projectRoot || options.project_root || options.cwd) || process.cwd());
+  const existingScope = executionScopeFiles(session);
+  const explicit = explicitGroundingTargets(options);
+  const candidates = candidateFiles(session);
+  const generatedAt = nowIso(options);
+  const groundingId = clean(options.groundingId || options.grounding_id)
+    || `GRD-${createHash("sha1").update(`${session.id || ""}\n${demandText(session)}`).digest("hex").slice(0, 10).toUpperCase()}`;
+
+  if (existingScope.length > 0) {
+    return {
+      schema_version: DEMAND_GROUNDING_SCHEMA_VERSION,
+      schema: DEMAND_GROUNDING_SCHEMA,
+      id: groundingId,
+      status: "unchanged",
+      applied: false,
+      reason: "execution_scope_already_present",
+      generated_at: generatedAt,
+      target_files: existingScope,
+      session,
+    };
+  }
+
+  if (!hasConfirmedRequirements(session)) {
+    return {
+      schema_version: DEMAND_GROUNDING_SCHEMA_VERSION,
+      schema: DEMAND_GROUNDING_SCHEMA,
+      id: groundingId,
+      status: "unchanged",
+      applied: false,
+      reason: "requirements_not_confirmed",
+      generated_at: generatedAt,
+      target_files: [],
+      session,
+    };
+  }
+
+  const inferred = inferGreenfieldTargetFiles(session, { ...options, projectRoot });
+  const groundedTargets = inferred.filter((item) => item.file);
+
+  if (shouldBlockCandidatePromotion(candidates, groundedTargets, explicit)) {
+    return {
+      schema_version: DEMAND_GROUNDING_SCHEMA_VERSION,
+      schema: DEMAND_GROUNDING_SCHEMA,
+      id: groundingId,
+      status: "blocked",
+      applied: false,
+      reason: "candidate_files_require_explicit_confirmation",
+      generated_at: generatedAt,
+      candidate_target_files: candidates,
+      target_files: [],
+      next_actions: candidates.map((file) => `Confirm ${file} explicitly before promoting it into execution scope.`),
+      session,
+    };
+  }
+
+  if (groundedTargets.length === 0) {
+    return {
+      schema_version: DEMAND_GROUNDING_SCHEMA_VERSION,
+      schema: DEMAND_GROUNDING_SCHEMA,
+      id: groundingId,
+      status: "blocked",
+      applied: false,
+      reason: "unable_to_infer_execution_scope",
+      generated_at: generatedAt,
+      target_files: [],
+      next_actions: ["Pass an explicit repo-relative target file, for example: yolo spec --demand <session.json|dir> --target src/<feature>.ts"],
+      session,
+    };
+  }
+
+  const grounded = cloneDemandObject(session);
+  grounded.project = {
+    ...(grounded.project || {}),
+    target_files: groundedTargets.map((item) => item.file),
+    candidate_target_files: [],
+  };
+  const priorFacts = asArray(grounded.project_facts?.target_files)
+    .filter((fact) => fact && typeof fact === "object")
+    .filter((fact) => clean(fact.status) !== "candidate")
+    .filter((fact) => !groundedTargets.some((target) => target.file === clean(fact.file || fact.path)));
+  grounded.project_facts = {
+    ...(grounded.project_facts || {}),
+    schema: grounded.project_facts?.schema || "yolo.demand.project_facts.v1",
+    target_files: [
+      ...priorFacts,
+      ...groundedTargets.map((target) => plannedTargetFact(grounded, target, groundingId, generatedAt)),
+    ],
+    candidate_target_files: [],
+    assumptions: asArray(grounded.project_facts?.assumptions || grounded.reflection?.assumption_records),
+    policy: {
+      ...(grounded.project_facts?.policy || {}),
+      inferred_files_are_execution_scope: false,
+      greenfield_new_files_are_execution_scope: true,
+      unverified_project_facts_block_prd: true,
+      user_approval_cannot_override_fact_conflicts: true,
+    },
+  };
+  grounded.grounding = {
+    schema_version: DEMAND_GROUNDING_SCHEMA_VERSION,
+    schema: DEMAND_GROUNDING_SCHEMA,
+    id: groundingId,
+    status: "applied",
+    applied: true,
+    generated_at: generatedAt,
+    mode: explicit.length > 0 ? "explicit_target" : "greenfield_inferred",
+    project_root: projectRoot,
+    target_files: groundedTargets.map((item) => ({
+      file: item.file,
+      status: item.status,
+      allow_new_files: !item.exists,
+      reason: groundingReason(grounded, item.file),
+    })),
+    source_requirements: requirementRefs(grounded),
+    source_text_hash: createHash("sha1").update(demandText(grounded)).digest("hex"),
+  };
+  grounded.project_facts.grounding = grounded.grounding;
+  const existingFactFiles = new Set(existingTargetFacts(grounded));
+  for (const target of groundedTargets) existingFactFiles.add(target.file);
+  applyFilesToScenarios(grounded, groundedTargets.map((item) => item.file));
+
+  return {
+    ...grounded.grounding,
+    reason: "greenfield_execution_scope_grounded",
+    directories: [...new Set(groundedTargets.map((item) => dirname(item.file)).filter(Boolean))],
+    fact_files: [...existingFactFiles],
+    session: grounded,
+  };
 }
 
 function projectFactIdentifiers(text = "") {
