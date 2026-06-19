@@ -1,16 +1,18 @@
+import { DEFAULT_YOLO_PUBLIC_COMMAND_NAMES } from "./command-registry.js";
+
 export const WORKFLOW_SKILL_DESCRIPTOR_SCHEMA_VERSION = "1.0";
 export const WORKFLOW_SKILL_DESCRIPTOR_SCHEMA = "yolo.workflow.skill_descriptor.v1";
 
-export const STABLE_WORKFLOW_COMMAND_SURFACES = {
-  status: ["doctor"],
+const WORKFLOW_IDS_BY_PUBLIC_COMMAND = {
   demand: ["demand"],
-  spec: ["prd"],
-  tasks: ["plan"],
-  run: ["pi", "fix"],
-  check: ["check"],
-  review: ["review"],
-  release: ["accept", "ship", "eval"],
+  auto: ["prd", "plan", "pi", "fix", "check", "review"],
+  ship: ["accept", "ship", "eval"],
+  status: ["doctor"],
 };
+
+export const STABLE_WORKFLOW_COMMAND_SURFACES = Object.fromEntries(
+  DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.map((command) => [command, WORKFLOW_IDS_BY_PUBLIC_COMMAND[command] || []])
+);
 
 const WORKFLOW_SURFACE_BY_ID = Object.fromEntries(
   Object.entries(STABLE_WORKFLOW_COMMAND_SURFACES).flatMap(([surface, ids]) =>
@@ -23,7 +25,7 @@ const WORKFLOW_ALIAS_FOR = {
   interview: "demand",
   discover: "demand",
   discuss: "demand",
-  learn: "release",
+  learn: "ship",
 };
 
 const WORKFLOWS = {

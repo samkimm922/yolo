@@ -6,6 +6,7 @@ import {
   workflowToSkillDescriptor,
   WORKFLOW_SKILL_DESCRIPTOR_SCHEMA,
 } from "./registry.js";
+import { DEFAULT_YOLO_PUBLIC_COMMAND_NAMES } from "./command-registry.js";
 import { renderPMProtocolMarkdown } from "./pm-protocol.js";
 
 export const WORKFLOW_SKILL_INSTALL_SCHEMA_VERSION = "1.0";
@@ -302,6 +303,7 @@ function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex, markdo
       `- ${item.trigger} -> ${item.skill_id} (${item.entrypoints.cli})`
     )
     : ["- No triggers installed."];
+  const publicCommandLines = DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.map((name) => `- yolo ${name}: 下一步执行 yolo ${name}`);
 
   const lines = [
     "# YOLO Workflow Agent Rules",
@@ -321,9 +323,13 @@ function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex, markdo
     "",
     "- Start a workflow only when the current user intent, CLI event, or automation event matches a listed trigger.",
     "- Route the trigger to exactly one listed skill unless a caller explicitly selects multiple workflows.",
-    "- Default user-facing commands are limited to: status, demand, spec, tasks, run, check, review, release.",
+    `- Default user-facing commands are limited to: ${DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.join(", ")}.`,
     "- Hidden compatibility and internal workflow descriptors may exist, but they must keep alias_for, stability, and visibility metadata.",
     `- Re-read the selected \`skill.json\` before execution and use \`${markdownFile}\` only for agent-readable guidance.`,
+    "",
+    "## Public Commands",
+    "",
+    ...publicCommandLines,
     "",
     "## Gate Policy",
     "",

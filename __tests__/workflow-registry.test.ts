@@ -16,22 +16,18 @@ describe("workflow registry", () => {
     assert.deepEqual(ids, ["accept", "brainstorm", "check", "demand", "discover", "discuss", "doctor", "eval", "fix", "interview", "learn", "pi", "plan", "prd", "review", "ship"]);
   });
 
-  test("workflow registry maps internal workflows behind the 8 stable command surfaces", () => {
+  test("workflow registry maps internal workflows behind the 4 stable command surfaces", () => {
     assert.deepEqual(listWorkflowCommandSurfaces(), [
-      { command: "status", workflows: ["doctor"] },
       { command: "demand", workflows: ["demand"] },
-      { command: "spec", workflows: ["prd"] },
-      { command: "tasks", workflows: ["plan"] },
-      { command: "run", workflows: ["pi", "fix"] },
-      { command: "check", workflows: ["check"] },
-      { command: "review", workflows: ["review"] },
-      { command: "release", workflows: ["accept", "ship", "eval"] },
+      { command: "auto", workflows: ["prd", "plan", "pi", "fix", "check", "review"] },
+      { command: "ship", workflows: ["accept", "ship", "eval"] },
+      { command: "status", workflows: ["doctor"] },
     ]);
-    assert.equal(getWorkflow("prd").surface, "spec");
+    assert.equal(getWorkflow("prd").surface, "auto");
     assert.equal(getWorkflow("brainstorm").stability, "compat");
     assert.equal(getWorkflow("brainstorm").alias_for, "demand");
     assert.equal(getWorkflow("learn").visibility, "hidden");
-    assert.equal(getWorkflow(getYoloCommand("release").workflow).id, "ship");
+    assert.equal(getWorkflow(getYoloCommand("ship").workflow).id, "ship");
   });
 
   test("getWorkflow returns cloned workflow definitions", () => {
@@ -50,7 +46,7 @@ describe("workflow registry", () => {
 
     assert.equal(plan.workflow, "ship");
     assert.equal(plan.preset, "gatekeeper");
-    assert.equal(plan.surface, "release");
+    assert.equal(plan.surface, "ship");
     assert.equal(plan.stability, "stable");
     assert.deepEqual(plan.sdk_namespaces, ["spec", "contract", "review", "evidence"]);
     assert.deepEqual(plan.steps.map((step) => step.phase), [
@@ -71,7 +67,7 @@ describe("workflow registry", () => {
       name: "Fix workflow",
       workflow: "fix",
       agent: "codex",
-      surface: "run",
+      surface: "auto",
       stability: "stable",
       visibility: "default",
       alias_for: null,
