@@ -752,14 +752,16 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
     ? {
       ...readiness,
       blockers: [...readiness.blockers, ...runtimeBlockers],
+      prd_intake_ready: false,
+      executable_prd_ready: false,
       prd_ready: false,
     }
     : readiness;
   result.readiness = finalReadiness;
-  result.status = finalReadiness.prd_ready ? "pass" : "blocked";
-  result.code = finalReadiness.prd_ready ? "DEMAND_EVIDENCE_DISPATCH_READY_FOR_PRD" : "DEMAND_EVIDENCE_DISPATCH_BLOCKED";
-  result.summary = finalReadiness.prd_ready
-    ? "Demand evidence agents completed and PRD readiness passed."
+  result.status = finalReadiness.prd_intake_ready ? "pass" : "blocked";
+  result.code = finalReadiness.prd_intake_ready ? "DEMAND_EVIDENCE_DISPATCH_PRD_INTAKE_READY" : "DEMAND_EVIDENCE_DISPATCH_BLOCKED";
+  result.summary = finalReadiness.prd_intake_ready
+    ? "Demand evidence agents completed and PRD intake readiness passed."
     : "Demand evidence agents completed, but readiness still has blockers.";
   result.demand_status_after_dispatch = {
     ...plan.demand_status,
@@ -771,7 +773,8 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
       missing_slots: finalReadiness.missing_slots,
       evidence_requirements: finalReadiness.evidence_requirements || [],
       evidence_requirement_summary: evidenceRequirementSummary(finalReadiness.evidence_requirements || []),
-      prd_ready: finalReadiness.prd_ready,
+      prd_intake_ready: finalReadiness.prd_intake_ready,
+      executable_prd_ready: finalReadiness.executable_prd_ready,
     },
   };
   if (writeArtifact) result.artifacts.push(writeJson(join(plan.output_dir, "dispatch.json"), result));

@@ -30,7 +30,8 @@ interface RoutedState {
   question_queue: { slot: string }[];
   next_action: string;
   next_actions?: string[];
-  prd_ready: boolean;
+  prd_intake_ready: boolean;
+  executable_prd_ready: boolean;
   submode: string;
 }
 
@@ -288,6 +289,33 @@ describe("demand router", () => {
     assert.equal(readiness.prd_ready, false);
     assert.ok(readiness.missing_slots.includes("acceptance_criteria"));
     assert.ok(readiness.blockers.some((blocker) => blocker.code === "MISSING_ACCEPTANCE_CRITERIA"));
+  });
+
+  test("status separates PRD intake readiness from executable PRD readiness", () => {
+    const result = runDemandStatusRuntime(completeLocalDemand());
+
+    assertRoutedState(result);
+    assert.equal(result.code, "DEMAND_PRD_INTAKE_READY");
+    assert.equal(result.state.prd_intake_ready, true);
+    assert.equal(result.state.executable_prd_ready, false);
+    assert.equal(result.readiness.prd_intake_ready, true);
+    assert.equal(result.readiness.executable_prd_ready, false);
+    assert.match(result.state.next_actions.join("\n"), /yolo spec --demand/);
+  });
+
+  test("blocked demand status lists missing fields and a runnable next command", () => {
+    const result = runDemandStatusRuntime({
+      objective: "Build a lightweight task CLI.",
+      target_users: ["taskcli add creates a task in src/tasks.ts"],
+      status_quo: ["Tasks are tracked in a text file."],
+    });
+
+    assertRoutedState(result);
+    assert.equal(result.status, "blocked");
+    assert.equal(result.state.prd_intake_ready, false);
+    assert.ok(result.state.missing_slots.includes("target_user"));
+    assert.ok(result.state.blockers.some((blocker) => blocker.code === "MISSING_TARGET_USER"));
+    assert.match(result.state.next_actions.join("\n"), /yolo interview answer/);
   });
 
   test("unconfirmed assumptions prevent ready state", () => {

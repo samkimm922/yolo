@@ -20,7 +20,7 @@ function capture() {
 
 describe("yolo demand non-technical onboarding", () => {
   // Soak finding: a non-technical user running `yolo demand "<idea>"` (no flags,
-  // no prior session) used to hit a blocked DEMAND_NOT_PRD_READY snapshot with a
+  // no prior session) used to hit a blocked demand-intake snapshot with a
   // free-text question and no runnable next step. The interview stage is the
   // correct onboarding entry — it writes a session and hands back a
   // copy-pasteable `yolo interview answer ...` command. Route bare ideas there.
@@ -98,7 +98,7 @@ describe("yolo demand non-technical onboarding", () => {
 
       const result = out.json();
       // The status subcommand must keep its read-only snapshot semantics.
-      assert.equal(result.code, "DEMAND_NOT_PRD_READY");
+      assert.equal(result.code, "DEMAND_PRD_INTAKE_BLOCKED");
       assert.notEqual(result.code, "INTERVIEW_OK");
       // Blocked snapshots exit non-zero; the explicit-status path must not be
       // silently rewritten into a session-writing interview call.

@@ -9,6 +9,7 @@ import {
   evidenceRequirementNextActions,
   evidenceRequirementSummary,
 } from "./evidence-requirements.js";
+import { hasTargetUserRole, targetUserRoleItems } from "./interview.js";
 
 export const DEMAND_READINESS_SCHEMA_VERSION = "1.0";
 export const DEMAND_READINESS_SCHEMA = "yolo.demand.readiness.v1";
@@ -479,12 +480,13 @@ function scenarioHasProof(scenario = Object()) {
 
 function extractRoles(session = Object()) {
   const raw = asArray(session.vision?.target_users || session.project?.target_users || session.target_users);
-  return raw
+  const roleTexts = raw
     .map((entry) => {
       if (typeof entry === "string") return clean(entry);
       return clean(entry.role || entry.name || entry.title || entry.label || entry.id);
     })
     .filter(Boolean);
+  return targetUserRoleItems(roleTexts);
 }
 
 function roleScenarioCoverage(roles = [], scenarios = []) {
@@ -670,6 +672,53 @@ function readinessLevel(checks, session = Object()) {
   return "L0";
 }
 
+const READINESS_FIELD_LABELS = {
+  VISION_PRESENT: "vision/problem",
+  TARGET_USER_PRESENT: "target_users",
+  STATUS_QUO_PRESENT: "status_quo",
+  REFLECTION_PRESENT: "reflection/assumptions",
+  INVESTIGATION_COMPLETE: "evidence_or_assumptions",
+  QUESTIONING_ROUNDS_COMPLETE: "interview/question_trace",
+  REQUIREMENTS_PRESENT: "requirements",
+  ACCEPTANCE_SCENARIOS_PRESENT: "acceptance_scenarios",
+  SCENARIO_MATRIX_PRESENT: "scenario_matrix",
+  SCENARIO_PROOF_PRESENT: "scenario_proof",
+  SCENARIO_SURFACES_PRESENT: "scenario_surfaces",
+  COMPLETENESS_MATRIX: "completeness_matrix",
+  SURFACE_SESSION_BUDGET_EXECUTABLE: "surface_session_budget",
+  OUT_OF_SCOPE_PRESENT: "out_of_scope",
+  DEFERRED_SCOPE_CONFIRMED: "deferred_scope_confirmation",
+  ROADMAP_PRESENT: "roadmap",
+  BLOCKING_OPEN_QUESTIONS_EMPTY: "blocking_open_questions",
+  PLAYBACK_CONFIRMED: "playback_confirmation",
+  EVIDENCE_GROUNDED: "evidence_ledger",
+  USER_APPROVAL_PRESENT: "approval",
+  EXECUTION_SCOPE_PRESENT: "execution_scope",
+  PROJECT_FACTS_GROUNDED: "project_facts",
+};
+
+function readinessIssueLabel(item = Object()) {
+  return clean(item.slot || item.field || READINESS_FIELD_LABELS[item.code] || item.code || item.message || "unknown");
+}
+
+function actionableReadinessNextActions(issues = [], phase = "discuss") {
+  const issueList = asArray(issues).filter(Boolean);
+  if (issueList.length === 0) return ["Demand artifacts are ready for executable PRD compilation."];
+  const labels = [...new Set(issueList.map(readinessIssueLabel).filter(Boolean))];
+  const actions = [];
+  if (labels.length > 0) actions.push(`Missing demand fields/approvals: ${labels.join(", ")}.`);
+  for (const item of issueList.slice(0, 8)) {
+    const label = readinessIssueLabel(item);
+    const message = clean(item.message || item.detail || item.reason || item.code);
+    actions.push(`${label}: ${message}`);
+  }
+  const prdLike = ["prd", "executable_prd"].includes(clean(phase));
+  actions.push(prdLike
+    ? "Next: resolve the listed demand blockers, then run `yolo spec --demand <session.json|dir>`."
+    : "Next: run `yolo demand --stage interview \"<idea>\"` or answer the listed interview slot before handoff.");
+  return [...new Set(actions.filter(Boolean))];
+}
+
 export function inspectDemandReadiness(session = Object(), options = Object()) {
   const phase = clean(options.phase || session.phase || "discuss");
   const approval = session.approval || {};
@@ -696,7 +745,7 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
     ),
     check(
       "TARGET_USER_PRESENT",
-      hasItems(session.vision?.target_users || session.project?.target_users || session.target_users),
+      hasTargetUserRole(session.vision?.target_users || session.project?.target_users || session.target_users),
       "error",
       "Target user must be explicit before PRD work.",
     ),
@@ -839,10 +888,12 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
   const status = requirementBlockers.length > 0 ? "blocked" : statusFromChecks(checks);
   const requirementActions = evidenceRequirementNextActions(evidenceRequirements);
   const defaultNextActions = blockers.length > 0
-    ? blockers.map((item) => item.message)
+    ? actionableReadinessNextActions(blockers, phase)
     : warnings.length > 0
-      ? warnings.map((item) => item.message)
+      ? actionableReadinessNextActions(warnings, phase)
       : ["Demand artifacts are ready for executable PRD compilation."];
+  const prdIntakeReady = ["L2", "L3"].includes(level) && blockers.length === 0;
+  const executableReady = level === "L3" && blockers.length === 0;
   return {
     schema_version: DEMAND_READINESS_SCHEMA_VERSION,
     schema: DEMAND_READINESS_SCHEMA,
@@ -850,8 +901,9 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
     status,
     readiness_level: level,
     demand_ready: ["L1", "L2", "L3"].includes(level),
-    prd_ready: ["L2", "L3"].includes(level) && blockers.length === 0,
-    executable_prd_ready: level === "L3" && blockers.length === 0,
+    prd_intake_ready: prdIntakeReady,
+    prd_ready: executableReady,
+    executable_prd_ready: executableReady,
     quality_score: Math.round((checks.filter((item) => item.passed).length / checks.length) * 100),
     checks,
     blockers,
@@ -936,7 +988,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
         ),
         qualityCheck(
           "QUALITY_TARGET_USER_SPECIFIC",
-          hasItems(session.vision?.target_users || session.project?.target_users || session.target_users),
+          hasTargetUserRole(session.vision?.target_users || session.project?.target_users || session.target_users),
           15,
           "error",
           "Target users must be explicit.",
