@@ -551,7 +551,7 @@ describe("runner review fix execution flow", () => {
   });
 
   test("worktree wiring: merge based on task base commit, not dirty root state", () => {
-    assert.match(worktreeSessionSource, /baseCommit = execSync\("git rev-parse HEAD"/);
+    assert.match(worktreeSessionSource, /git rev-parse --verify HEAD/);
     assert.match(worktreeSessionSource, /return \{ branch: wtBranch,\s*path: wtPath,\s*base: baseCommit,\s*mode: "git" \}/);
     assert.match(runnerSource, /function cleanupWorktree\(wtPath,\s*wtBranch,\s*mergeToMain = false,\s*allowedScope = \[\],\s*baseRef = null\)/);
     assert.match(worktreeSessionSource, /\["diff",\s*"--name-status",\s*baseRef,\s*"HEAD"\]/);

@@ -253,7 +253,7 @@ test("runMainLoopWithRuntime blocks circular dependencies before execution", asy
     assert.deepEqual(runCalls, []);
     assert.deepEqual(result.blocked, ["A", "B"]);
     assert.equal(result.preflight.blocks_execution, true);
-    assert.equal(result.blockers[0].code, "TASK_DEPENDENCY_CYCLE");
+    assert.equal(result.blockers.some((blocker) => blocker.code === "TASK_DEPENDENCY_CYCLE"), true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

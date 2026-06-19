@@ -107,6 +107,34 @@ function duplicateTaskKeys(tasks) {
   return duplicates;
 }
 
+function assertExecutableTaskGraph(tasks: any[]) {
+  const ids = new Set(tasks.map((task) => task.id));
+  const roots = tasks.filter((task) => (task.depends_on || []).length === 0);
+  assert.ok(roots.length > 0, "task graph must have at least one zero-dependency root");
+
+  const indegree = new Map<string, number>(tasks.map((task) => [task.id, 0]));
+  const outgoing = new Map<string, string[]>(tasks.map((task) => [task.id, []]));
+  for (const task of tasks) {
+    for (const dependency of task.depends_on || []) {
+      assert.ok(ids.has(dependency), `dependency ${dependency} must reference an existing task`);
+      outgoing.get(dependency).push(task.id);
+      indegree.set(task.id, indegree.get(task.id) + 1);
+    }
+  }
+
+  const ready: string[] = [...roots.map((task) => task.id)];
+  const ordered: string[] = [];
+  while (ready.length > 0) {
+    const id = ready.shift();
+    ordered.push(id);
+    for (const next of outgoing.get(id) || []) {
+      indegree.set(next, indegree.get(next) - 1);
+      if (indegree.get(next) === 0) ready.push(next);
+    }
+  }
+  assert.equal(ordered.length, tasks.length, `task graph must be topologically sortable; ordered=${ordered.join(",")}`);
+}
+
 function acceptanceAdapterManifest() {
   return {
     schema: "yolo.manifest.v1",
@@ -517,6 +545,7 @@ describe("demand runtime", () => {
       assert.deepEqual(task.scope.targets.map((target) => target.file), ["src/taskcli.ts"]);
       assert.equal(task.scope.allow_new_files, true);
       assert.equal(prd.demand.project_facts.target_files[0].status, "planned_new_file");
+      assertExecutableTaskGraph(prd.tasks);
 
       const check = inspectYoloCheck({
         prdPath,
@@ -684,6 +713,7 @@ describe("demand runtime", () => {
         assert.equal(prd.prd.tasks.length >= item.expectedStories, true);
         assert.equal(prd.prd.tasks.length <= Math.max(8, item.expectedStories + 2), true, `${item.name} generated too many tasks: ${prd.prd.tasks.length}`);
         assert.deepEqual(duplicateTaskKeys(prd.prd.tasks), [], `${item.name} generated duplicate tasks`);
+        assertExecutableTaskGraph(prd.prd.tasks);
         assert.equal(inspectStoryAtomicityFromPrd(prd.prd).status, "pass");
         assert.equal(prd.prd.demand.quality_report.status, "pass");
 

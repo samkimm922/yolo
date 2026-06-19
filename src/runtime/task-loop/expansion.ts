@@ -304,56 +304,6 @@ function taskDependencyIds(task = Object()) {
   ])];
 }
 
-function pathValues(value) {
-  if (Array.isArray(value)) return value.flatMap(pathValues);
-  if (value && typeof value === "object") return pathValues(value.file || value.path);
-  return value ? [String(value)] : [];
-}
-
-function isTestPath(file = "") {
-  const path = String(file).toLowerCase();
-  return /(^|\/)(__tests__|tests?|specs?)\//.test(path) || /\.(test|spec)\./.test(path);
-}
-
-function comparableOutputFiles(task = Object()) {
-  const files = pathValues(task.expected_output)
-    .map((file) => String(file).trim())
-    .filter((file) => file.length > 0);
-  return [...new Set<string>(files)]
-    .filter((file) => !isTestPath(file));
-}
-
-function sameStringSet(left = [], right = []) {
-  if (left.length !== right.length) return false;
-  const rightSet = new Set(right);
-  return left.every((item) => rightSet.has(item));
-}
-
-function generatedSameOutputTasks(left = Object(), right = Object()) {
-  if (left.task_kind !== "demand_atomic_task" || right.task_kind !== "demand_atomic_task") return false;
-  const leftOutputs = comparableOutputFiles(left);
-  const rightOutputs = comparableOutputFiles(right);
-  return leftOutputs.length > 0 && sameStringSet(leftOutputs, rightOutputs);
-}
-
-function pruneGeneratedSameOutputCycles(nodes = [], nodesByKey = new Map(), dependenciesByKey = new Map()) {
-  for (const node of nodes) {
-    const dependencies = dependenciesByKey.get(node.key);
-    if (!dependencies) continue;
-    for (const dependencyKey of [...dependencies]) {
-      const dependencyNode = nodesByKey.get(dependencyKey);
-      const reciprocal = dependenciesByKey.get(dependencyKey);
-      if (!dependencyNode || !reciprocal?.has(node.key)) continue;
-      if (!generatedSameOutputTasks(node.task, dependencyNode.task)) continue;
-      if (node.index < dependencyNode.index) {
-        dependencies.delete(dependencyKey);
-      } else {
-        reciprocal.delete(node.key);
-      }
-    }
-  }
-}
-
 function taskNodeKey(task, index) {
   return `${task?.id || "__task"}::${index}`;
 }
@@ -369,17 +319,30 @@ function addRepresentative(representatives, id, key) {
   representatives.get(value).add(key);
 }
 
-function dependencyCyclePreflight(nodes) {
-  const taskIds = nodes.map((node) => taskDisplayId(node.task, node.key));
+function dependencyBlockedPreflight(blockers) {
   return {
     status: "blocked",
     blocks_execution: true,
-    blockers: [{
-      code: "TASK_DEPENDENCY_CYCLE",
-      source: "task-loop-expansion",
-      task_ids: taskIds,
-      message: `Circular task dependency blocks execution: ${taskIds.join(" -> ")}`,
-    }],
+    blockers,
+  };
+}
+
+function noRootDependencyBlocker(nodes) {
+  return {
+    code: "TASK_DEPENDENCY_NO_ROOT",
+    source: "task-loop-expansion",
+    task_ids: nodes.map((node) => taskDisplayId(node.task, node.key)),
+    message: "Task dependency graph has no zero-dependency root task; runner cannot start execution.",
+  };
+}
+
+function dependencyCycleBlocker(nodes) {
+  const taskIds = nodes.map((node) => taskDisplayId(node.task, node.key));
+  return {
+    code: "TASK_DEPENDENCY_CYCLE",
+    source: "task-loop-expansion",
+    task_ids: taskIds,
+    message: `Circular task dependency blocks execution: ${taskIds.join(" -> ")}`,
   };
 }
 
@@ -404,15 +367,19 @@ export function orderTasksByDependencies(tasks = [], { priorityOrder = Object() 
   }
 
   const dependenciesByKey = new Map<string, Set<string>>(nodes.map((node) => [node.key, new Set<string>()]));
+  const blockers = [];
+  if (nodes.length > 0 && nodes.every((node) => taskDependencyIds(node.task).length > 0)) {
+    blockers.push(noRootDependencyBlocker(nodes));
+  }
+
   for (const node of nodes) {
     const dependencies = dependenciesByKey.get(node.key);
     for (const dependencyId of taskDependencyIds(node.task)) {
       for (const dependencyKey of representatives.get(dependencyId) || []) {
-        if (dependencyKey !== node.key) dependencies.add(dependencyKey);
+        dependencies.add(dependencyKey);
       }
     }
   }
-  pruneGeneratedSameOutputCycles(nodes, nodesByKey, dependenciesByKey);
 
   const indegree = new Map<string, number>(nodes.map((node) => [node.key, 0]));
   const outgoing = new Map<string, Set<string>>(nodes.map((node) => [node.key, new Set<string>()]));
@@ -457,9 +424,17 @@ export function orderTasksByDependencies(tasks = [], { priorityOrder = Object() 
   if (ordered.length !== nodes.length) {
     const orderedKeys = new Set(ordered.map((node) => node.key));
     const cycleNodes = nodes.filter((node) => !orderedKeys.has(node.key));
+    blockers.push(dependencyCycleBlocker(cycleNodes));
     return {
       tasks: [...ordered, ...cycleNodes].map((node) => node.task),
-      preflight: dependencyCyclePreflight(cycleNodes),
+      preflight: dependencyBlockedPreflight(blockers),
+    };
+  }
+
+  if (blockers.length > 0) {
+    return {
+      tasks: ordered.map((node) => node.task),
+      preflight: dependencyBlockedPreflight(blockers),
     };
   }
 

@@ -9,6 +9,7 @@ import {
   TARGET_COVERAGE_CONDITION_TYPES as TARGET_COVERAGE_CONDITION_TYPE_LIST,
 } from "../../prd/condition-catalog.js";
 import { inspectAtomicTask } from "../execution/atomic-task-doctor.js";
+import { orderTasksByDependencies } from "../task-loop/expansion.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -393,6 +394,23 @@ export function inspectPrdContract(prd, options = Object()) {
       code: "NO_TASKS",
       detail: "PRD must contain at least one executable task",
     });
+  }
+
+  const dependencyPreflight = orderTasksByDependencies(tasks).preflight;
+  if (dependencyPreflight?.blocks_execution) {
+    for (const blocker of dependencyPreflight.blockers || []) {
+      failures.push({
+        task_id: blocker.task_id || null,
+        task_ids: blocker.task_ids || [],
+        condition_id: null,
+        condition_type: null,
+        severity: "FAIL",
+        code: blocker.code || "TASK_DEPENDENCY_GRAPH_BLOCKED",
+        detail: blocker.message || "task dependency graph blocks execution",
+        source: blocker.source || "task-loop-expansion",
+        human_needed: true,
+      });
+    }
   }
 
   for (const task of tasks) {
