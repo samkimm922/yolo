@@ -641,6 +641,69 @@ describe("yolo check report", () => {
     }
   });
 
+  test("keeps script and library surfaces non-UI without requiring acceptance adapter", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({
+        title: "Build CSV pipeline library",
+        type: "feature",
+        surface: "csv pipeline module",
+        scope: { targets: [{ file: "src/csv-pipeline.ts" }] },
+        acceptance_criteria: ["CSV pipeline unit tests pass for deterministic sample rows."],
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "src/csv-pipeline.ts" },
+          },
+          {
+            id: "POST-TEST",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+      const adapter = report.checks.find((check) => check.name === "adapter_readiness");
+
+      assert.equal(report.status, "pass", JSON.stringify(report.blockers, null, 2));
+      assert.equal(report.task_surface_summary.ui_task_count, 0);
+      assert.equal(adapter.status, "pass");
+      assert.equal(report.blockers.some((blocker) => blocker.code === "ACCEPTANCE_ADAPTER_MISSING"), false);
+      assert.equal(report.blockers.some((blocker) => blocker.code === "ADAPTER_UI_ACCEPTANCE_MISSING"), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("still requires acceptance adapter for explicit UI surface without frontend target file", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({
+        title: "Build inventory workflow",
+        type: "feature",
+        surface: "inventory page",
+        scope: { targets: [{ file: "src/inventory-workflow.ts" }] },
+        state_matrix: [{ state: "loaded" }],
+        evidence_plan: [{ type: "screenshot" }],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+
+      assert.equal(report.status, "blocked");
+      assert.equal(report.task_surface_summary.ui_task_count, 1);
+      assert.ok(report.blockers.some((blocker) => blocker.code === "ACCEPTANCE_ADAPTER_MISSING"));
+      assert.ok(report.blockers.some((blocker) => blocker.code === "ADAPTER_UI_ACCEPTANCE_MISSING"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("uses task handoff state matrix and evidence plan for UI readiness", () => {
     const root = tempProject();
     const stateRoot = join(root, ".yolo");

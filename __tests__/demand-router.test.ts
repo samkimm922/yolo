@@ -611,6 +611,32 @@ describe("demand router", () => {
     assert.ok(readiness.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"));
   });
 
+  test("self-contained URL REST service does not require external research evidence", () => {
+    const readiness = inspectDemandPrdReadiness(completeLocalDemand({
+      objective: "Build a self-contained HTTP REST service for URL short links.",
+      acceptance_criteria: [
+        "Use URL inputs for POST /shorten, redirect GET /:code to the stored URL, and expose GET /stats from local state.",
+      ],
+      constraints: ["Use local storage only; do not fetch external websites or integrate third-party APIs."],
+      target_files: ["src/url-shortener.ts"],
+    }));
+
+    assert.equal(readiness.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"), false);
+    assert.equal(readiness.evidence_requirements.some((requirement) => requirement.kind === "external"), false);
+  });
+
+  test("external website data demand still requires external research evidence", () => {
+    const readiness = inspectDemandPrdReadiness(completeLocalDemand({
+      objective: "Build a data pipeline that fetches external website data from public URLs before aggregating rows.",
+      acceptance_criteria: ["External website data is fetched, normalized, and exported."],
+      target_files: ["src/external-feed-pipeline.ts"],
+    }));
+
+    assert.equal(readiness.prd_ready, false);
+    assert.ok(readiness.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"));
+    assert.ok(readiness.evidence_requirements.some((requirement) => requirement.kind === "external"));
+  });
+
   test("external evidence with covers satisfies the matching requirement", () => {
     const base = completeLocalDemand({
       objective: "Create onboarding checklist copy modeled on https://example.com/checklist-guide.",

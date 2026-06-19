@@ -592,9 +592,72 @@ describe("demand runtime", () => {
         assert.equal(prd.prd.tasks.length >= item.expectedStories, true);
         assert.equal(inspectStoryAtomicityFromPrd(prd.prd).status, "pass");
         assert.equal(prd.prd.demand.quality_report.status, "pass");
+
+        if (item.name === "csv-pipeline" || item.name === "notes-library") {
+          const prdPath = join(root, `${item.name}-prd.json`);
+          writeJson(prdPath, prd.prd);
+          const check = inspectYoloCheck({
+            prdPath,
+            projectRoot: root,
+            stateRoot: join(root, ".yolo"),
+            writeLifecycle: false,
+          });
+          assert.equal(check.status, "pass", JSON.stringify(check.blockers, null, 2));
+          assert.equal(check.task_surface_summary.ui_task_count, 0);
+          assert.equal(check.blockers.some((blocker) => blocker.code === "ACCEPTANCE_ADAPTER_MISSING"), false);
+          assert.equal(check.blockers.some((blocker) => blocker.code === "ADAPTER_UI_ACCEPTANCE_MISSING"), false);
+        }
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
+    }
+  });
+
+  test("self-contained URL short-link REST service spec does not require external research evidence", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-url-shortener-"));
+    try {
+      seedDemandTargetFiles(root, ["src/url-shortener.ts"]);
+      const discuss = runDemandDiscussRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demand_id: "DEMAND-URL-SHORTENER",
+        idea: "Build a self-contained HTTP REST service for URL short links.",
+        target_users: ["API consumer"],
+        status_quo: ["Users paste long links into ad hoc notes and cannot track generated short codes."],
+        evidence: ["Agent read src/url-shortener.ts and confirmed it is the implementation target."],
+        assumptions: ["The URL short-link service is self-contained and can be verified with deterministic local requests."],
+        success_criteria: [
+          "Use URL inputs for POST /shorten, redirect GET /:code to the stored original URL, and expose GET /stats from local state.",
+        ],
+        proof: ["Build and unit tests cover shorten, redirect, and stats behavior without network calls."],
+        constraints: ["Use local in-memory storage only; do not fetch external websites or integrate third-party APIs."],
+        non_goals: ["No external API calls, scraping, authentication, or deployed web hosting."],
+        target_files: ["src/url-shortener.ts"],
+        decisions: ["Implement the REST handlers as a self-contained local module."],
+        roadmap: ["Deliver deterministic URL short-link behavior in one local service module."],
+        exceptions: ["Unknown short codes return a deterministic not-found response."],
+        approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
+        writeArtifacts: true,
+      });
+
+      assert.equal(discuss.status, "success", JSON.stringify(discuss.blockers, null, 2));
+      assert.equal(discuss.readiness.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"), false);
+      assert.equal(discuss.readiness.evidence_requirements.some((requirement) => requirement.kind === "external"), false);
+
+      const prd = runDemandPrdRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demandPath: discuss.demand_dir,
+        writeArtifacts: false,
+      });
+
+      assert.equal(prd.status, "success", JSON.stringify(prd.blockers, null, 2));
+      assert.equal(prd.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"), false);
+      requirePrd(prd);
+      assert.equal((prd.prd.demand.evidence_requirements || []).some((requirement) => requirement.kind === "external"), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 
