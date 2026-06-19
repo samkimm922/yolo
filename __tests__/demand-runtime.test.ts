@@ -135,6 +135,163 @@ function taskcliDemandInput(root) {
   };
 }
 
+function taskcliInterviewToDemandStyleSession() {
+  return {
+    id: "DEMAND-20260619-TASKCLI-REAL-STYLE",
+    phase: "prd_intake",
+    source: "yolo-interview",
+    project: {
+      title: "做一个命令行待办工具 taskcli(Node + TypeScript, Vitest 测试, 纯本地 JSON 文件持久化, 无 UI、无网络)。",
+      target_users: [
+        "目标用户是每天在终端工作的个人用户和开发协作者；每人每天多次记录、查看、完成自己的本地待办。",
+      ],
+      target_files: [],
+      candidate_target_files: [
+        "specs/tasks.md",
+        ".yolo-bridge-manifest.json",
+      ],
+    },
+    project_facts: {
+      schema: "yolo.demand.project_facts.v1",
+      target_files: [
+        {
+          file: "specs/tasks.md",
+          status: "candidate",
+          source: "auto_scout_candidate",
+          evidence: ["specs/tasks.md exists, but relevance is only inferred."],
+          message: "Auto-scouted file is only a candidate and must not enter execution scope until verified.",
+        },
+        {
+          file: ".yolo-bridge-manifest.json",
+          status: "candidate",
+          source: "auto_scout_candidate",
+          evidence: [".yolo-bridge-manifest.json exists, but relevance is only inferred."],
+          message: "Auto-scouted file is only a candidate and must not enter execution scope until verified.",
+        },
+      ],
+      candidate_target_files: [
+        "specs/tasks.md",
+        ".yolo-bridge-manifest.json",
+      ],
+      assumptions: [{
+        id: "ASM-001",
+        text: "Interview answers are user-provided and should be validated before implementation.",
+        status: "assumption",
+        source: "user_or_dialogue",
+      }],
+      policy: {
+        inferred_files_are_execution_scope: false,
+        unverified_project_facts_block_prd: true,
+        user_approval_cannot_override_fact_conflicts: true,
+      },
+    },
+    vision: {
+      statement: "做一个命令行待办工具 taskcli。功能包括 taskcli add/list/done/rm/stats，存 ~/.taskcli/tasks.json，非法输入友好报错并返回非零 exit code。",
+      idea: "做一个命令行待办工具 taskcli(Node + TypeScript, Vitest 测试, 纯本地 JSON 文件持久化, 无 UI、无网络)。",
+    },
+    prd_intake: {
+      schema: "yolo.demand.prd_intake.v1",
+      source: "input.interview",
+      question_ids: [
+        "target_users",
+        "status_quo",
+        "desired_outcome",
+        "success_criteria",
+        "success_proof",
+        "scope_boundaries",
+        "exceptions",
+        "execution_approval",
+      ],
+      plain_language_problem: "终端待办散落在临时笔记里，用户找回任务和确认状态很慢。",
+      audience: ["每天在终端工作的个人用户和开发协作者。"],
+      desired_outcomes: [
+        "用户可以用 taskcli add/list/done/rm/stats 在终端完成本地待办管理。",
+      ],
+      success_proof: [
+        "Vitest 全绿，并用临时 HOME 的 CLI smoke 执行 add→list→done→stats。",
+      ],
+      boundaries: [
+        "本次只做本地 Node + TypeScript CLI、Vitest 测试和 JSON 文件持久化。",
+      ],
+      exceptions: [
+        "必须处理空文本、非法日期、不存在 id、tasks.json 损坏或内容不是数组。",
+      ],
+    },
+    requirements: {
+      active: [
+        {
+          id: "REQ-001",
+          text: "用户可以用 taskcli add/list/done/rm/stats 在终端完成本地待办管理；数据持久保存到 ~/.taskcli/tasks.json；异常输入以友好信息和非零 exit code 返回。",
+          source: "demand",
+          status: "confirmed",
+          acceptance_scenarios: [{
+            id: "SCN-001",
+            when: "the user exercises this requirement",
+            then: "taskcli add→list→done→stats works in a clean HOME.",
+          }],
+          trace: {
+            evidence: [],
+            decisions: ["DEC-001"],
+            question_ids: ["desired_outcome", "success_criteria"],
+          },
+        },
+      ],
+      constraints: [
+        "仅本地文件、无网络、不引非必要依赖。",
+      ],
+      out_of_scope: [
+        "不做 UI、网络请求、账号、同步、数据库、后台服务。",
+      ],
+    },
+    scenario_matrix: {
+      schema: "yolo.demand.scenario_matrix.v1",
+      generated_from: "nontechnical_interview",
+      nontechnical_user_safe: true,
+      scenarios: [{
+        id: "SCN-001",
+        requirement_id: "REQ-001",
+        actor: "terminal user",
+        touchpoint: "terminal",
+        trigger: "the user runs taskcli",
+        current_behavior: "Todos are scattered in temporary notes.",
+        desired_behavior: "taskcli manages local todos.",
+        proof: "CLI smoke and Vitest pass.",
+        out_of_scope: ["No UI or network."],
+        constraints: ["Local JSON persistence only."],
+        exceptions: ["Invalid input exits non-zero."],
+        surfaces: [{
+          id: "SCN-001-SFC-001",
+          kind: "service",
+          label: "业务规则/服务逻辑",
+          user_visible: false,
+          target_files: [],
+          readonly_files: [],
+          session_budget: {
+            expected: "single_session",
+            max_files: 1,
+            max_lines_per_file: 120,
+          },
+          proof: "CLI smoke and Vitest pass.",
+          visual_style_source: [],
+        }],
+        question_trace: ["desired_outcome", "success_criteria"],
+        source_question_ids: ["desired_outcome", "success_criteria"],
+      }],
+    },
+    playback: {
+      schema: "yolo.demand.understanding_playback.v1",
+      confirmed: true,
+      confirmed_by: "user",
+      answer: "确认理解无误。",
+    },
+    approval: {
+      approved: true,
+      approved_by: "user",
+      reason: "批准进入 PRD intake。",
+    },
+  };
+}
+
 describe("demand findings generator output parsing", () => {
   function validFindingsJson() {
     return JSON.stringify({
@@ -282,6 +439,40 @@ describe("demand runtime", () => {
     }
   });
 
+  test("grounds greenfield planned new file from interview-to-demand session despite unrelated candidates", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-grounding-real-style-"));
+    try {
+      writeProjectFile(root, "specs/tasks.md", "# Existing generated task scaffold\n");
+      writeProjectFile(root, ".yolo-bridge-manifest.json", "{}\n");
+      const session = taskcliInterviewToDemandStyleSession();
+
+      const inferred = inferGreenfieldTargetFiles(session, { projectRoot: root });
+      assert.deepEqual(inferred.map((item) => item.file), ["src/taskcli.ts"]);
+      assert.equal(inferred[0].status, "planned_new_file");
+      assert.equal(inferred[0].source, "demand_greenfield_inference");
+
+      const grounded = groundDemandExecutionScope(session, { projectRoot: root });
+      assert.equal(grounded.applied, true, JSON.stringify(grounded, null, 2));
+      assert.equal(grounded.status, "applied");
+      assert.deepEqual(grounded.session.project.target_files, ["src/taskcli.ts"]);
+
+      const target = grounded.target_files.find((item) => item.file === "src/taskcli.ts");
+      assert.ok(target);
+      assert.equal(target.status, "planned_new_file");
+      assert.equal(target.allow_new_files, true);
+
+      const fact = grounded.session.project_facts.target_files.find((item) => item.file === "src/taskcli.ts");
+      assert.ok(fact);
+      assert.equal(fact.status, "planned_new_file");
+      assert.equal(fact.source, "demand_greenfield_inference");
+      assert.equal(fact.allow_new_files, true);
+      assert.deepEqual(grounded.session.project.candidate_target_files, []);
+      assert.deepEqual(grounded.session.project_facts.candidate_target_files, []);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("spec --demand auto-grounds greenfield demand into executable PRD accepted by check", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-grounding-prd-"));
     try {
@@ -332,7 +523,7 @@ describe("demand runtime", () => {
         requirements: {
           active: [{
             id: "REQ-001",
-            text: "Update the existing implementation so operators can see the requested behavior.",
+            text: "Update `existing` so operators can see the requested behavior in the current implementation.",
           }],
         },
         project: {
@@ -348,6 +539,8 @@ describe("demand runtime", () => {
       const grounded = groundDemandExecutionScope(session, { projectRoot: root });
       assert.equal(grounded.applied, false);
       assert.equal(grounded.status, "blocked");
+      assert.equal(grounded.reason, "candidate_files_require_explicit_confirmation");
+      assert.deepEqual(grounded.candidate_target_files, ["src/existing.ts"]);
       assert.deepEqual(grounded.target_files, []);
       assert.deepEqual(session.project.target_files, []);
     } finally {
@@ -706,28 +899,27 @@ describe("demand runtime", () => {
   test("auto-scouted files stay candidates until user or evidence verifies scope", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-candidate-scope-"));
     try {
-      seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
+      seedDemandTargetFiles(root, ["src/inventory-list.ts"]);
       const discuss = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
-        idea: "Show store managers low-stock alerts in the inventory list.",
+        idea: "Update `inventory-list` service so store managers get low-stock alert calculations.",
         target_users: ["store manager"],
         status_quo: ["Managers only see raw inventory counts."],
         evidence: ["Support tickets mention surprise stockouts weekly."],
-        success_criteria: ["Inventory list displays a visible low-stock badge on affected SKUs."],
-        proof: ["A store manager can point to the low-stock badge on an affected SKU."],
-        visual_style: ["Use an inline text label with the current list typography and no new color system."],
+        success_criteria: ["Inventory list service returns a low-stock signal when item.quantity <= item.lowStockThreshold."],
+        proof: ["A service-level test can show the low-stock rule returns true for affected SKUs."],
         constraints: ["Do not change order import behavior."],
         non_goals: ["Do not build supplier ordering."],
-        decisions: ["Start with an inline badge labelled 'Low stock' after the SKU when item.quantity <= item.lowStockThreshold."],
-        roadmap: ["MVP badge in inventory list."],
+        decisions: ["Start with the existing inventory-list service file and add the threshold rule there."],
+        roadmap: ["MVP low-stock service rule."],
         approve: true,
         playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
 
       assert.deepEqual(discuss.session.project.target_files, []);
-      assert.ok(discuss.session.project.candidate_target_files.includes("src/pages/inventory-list.tsx"));
+      assert.ok(discuss.session.project.candidate_target_files.includes("src/inventory-list.ts"));
       assert.equal(discuss.readiness.executable_prd_ready, false);
 
       const prd = runDemandPrdRuntime({
@@ -738,7 +930,9 @@ describe("demand runtime", () => {
       });
 
       assert.equal(prd.status, "blocked");
-      assert.ok(prd.blockers.some((blocker) => blocker.code === "EXECUTION_SCOPE_PRESENT"));
+      const grounding = (prd as any).grounding;
+      assert.equal(grounding?.reason, "candidate_files_require_explicit_confirmation");
+      assert.deepEqual(grounding?.candidate_target_files, ["src/inventory-list.ts"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
