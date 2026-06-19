@@ -196,6 +196,89 @@ describe("acceptance report", () => {
     }
   });
 
+  test("blocks review_fix acceptance when the source finding is still open in review report", () => {
+    const root = tempProject();
+    try {
+      const report = buildAcceptanceReport({
+        prd: prd({
+          id: "FIX-REVIEW-001",
+          title: "Fix service typing",
+          type: "bugfix",
+          task_kind: "review_fix",
+          scope: { targets: [{ file: "src/services/auth.ts" }] },
+          acceptance_criteria: ["Service typing is safe."],
+          source_finding_ids: ["REV-TYPE-001"],
+          post_conditions: [
+            {
+              id: "POST-FINDING-CLOSED",
+              type: "code_not_contains",
+              severity: "FAIL",
+              params: { file: "src/services/auth.ts", text: "as any", source_finding_id: "REV-TYPE-001" },
+            },
+            {
+              id: "POST-TYPECHECK",
+              type: "no_new_type_errors",
+              severity: "FAIL",
+              params: { command: "npm run typecheck" },
+            },
+          ],
+        }),
+        runReport: runReport(),
+        reviewReport: {
+          status: "pass",
+          findings: [{
+            finding_id: "REV-TYPE-001",
+            severity: "MEDIUM",
+            file: "src/services/auth.ts",
+            message: "Avoid as any",
+          }],
+        },
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+      });
+
+      assert.equal(report.status, "blocked");
+      assert.ok(report.issues.some((issue) =>
+        issue.code === "REVIEW_FIX_FINDING_STILL_OPEN" &&
+        issue.task_id === "FIX-REVIEW-001" &&
+        issue.finding_id === "REV-TYPE-001"
+      ));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("passes review_fix acceptance when source finding is absent from latest review report", () => {
+    const root = tempProject();
+    try {
+      const report = buildAcceptanceReport({
+        prd: prd({
+          id: "FIX-REVIEW-001",
+          title: "Fix service typing",
+          type: "bugfix",
+          task_kind: "review_fix",
+          scope: { targets: [{ file: "src/services/auth.ts" }] },
+          acceptance_criteria: ["Service typing is safe."],
+          source_finding_ids: ["REV-TYPE-001"],
+          post_conditions: [{
+            id: "POST-FINDING-CLOSED",
+            type: "code_not_contains",
+            severity: "FAIL",
+            params: { file: "src/services/auth.ts", text: "as any", source_finding_id: "REV-TYPE-001" },
+          }],
+        }),
+        runReport: runReport(),
+        reviewReport: { status: "pass", findings: [] },
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+      });
+
+      assert.equal(report.status, "pass", JSON.stringify(report.issues, null, 2));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("negative: acceptance blocks success-shaped run reports whose artifact path is missing", () => {
     const root = tempProject();
     try {

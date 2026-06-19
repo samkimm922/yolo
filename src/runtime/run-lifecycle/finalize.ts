@@ -326,6 +326,13 @@ function collectTaskResultStatusIssues(result = Object()) {
   pushIssue(issues, "RUNNER_RESULT_STATUS_ERROR", "runner result status is not clean", statusEntries.filter((entry) => !RUN_CLEAN_STATUSES.has(entry.status)).length);
   pushIssue(issues, "RUNNER_RESULT_DRY_RUN", "runner result contains dry-run evidence", collectDryRunFlags(result).length);
   pushIssue(issues, "RUNNER_RESULT_ERRORS", "runner result contains errors", countItems(result.error) + countItems(result.errors));
+  const reviewOutcomeStatus = cleanStatus(result.review_outcome?.status);
+  pushIssue(
+    issues,
+    "REVIEW_OUTCOME_BLOCKED",
+    "review loop outcome blocks finalization",
+    reviewOutcomeStatus && !RUN_CLEAN_STATUSES.has(reviewOutcomeStatus) ? 1 : 0,
+  );
   return issues;
 }
 

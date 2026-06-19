@@ -337,6 +337,34 @@ describe("run lifecycle finalization helpers", () => {
     assert.deepEqual(result.final_verdict.issues.map((issue) => issue.code), ["BLOCKED_TASKS"]);
   });
 
+  test("buildRunReturnResult fails closed for blocked review outcomes even without task arrays", () => {
+    const result = buildRunReturnResult({
+      runId: "run-review-outcome",
+      prdPath: "/repo/prd.json",
+      taskResults: {
+        completed: ["A"],
+        failed: [],
+        skipped: [],
+        blocked: [],
+        contractReview: [],
+        review_outcome: {
+          status: "blocked",
+          reason: "review_findings_persisted",
+        },
+      },
+      runReportResult: {
+        json_path: "/repo/state/report.json",
+        markdown_path: "/repo/state/report.md",
+        report: { status: "success", summary: { failed: 0, blocked: 0, evidence_failures: 0 } },
+      },
+      normalizeRepoPath: (value) => value.replace("/repo/", ""),
+    });
+
+    assert.equal(result.status, "error");
+    assert.equal(result.exit_code, 1);
+    assert.ok(result.final_verdict.issues.some((issue) => issue.code === "REVIEW_OUTCOME_BLOCKED"));
+  });
+
   test("buildRunReturnResult fails closed for contract-review-only runs", () => {
     const result = buildRunReturnResult({
       runId: "run-contract",
