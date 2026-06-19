@@ -91,6 +91,22 @@ function seedDemandTargetFiles(root, files) {
   for (const file of files) writeProjectFile(root, file);
 }
 
+function duplicateTaskKeys(tasks) {
+  const seen = new Set();
+  const duplicates = [];
+  for (const task of tasks) {
+    const targets = (task.scope?.targets || [])
+      .map((target) => target.file || target)
+      .filter(Boolean)
+      .sort()
+      .join(",");
+    const key = JSON.stringify([task.title, targets, task.type]);
+    if (seen.has(key)) duplicates.push(key);
+    seen.add(key);
+  }
+  return duplicates;
+}
+
 function acceptanceAdapterManifest() {
   return {
     schema: "yolo.manifest.v1",
@@ -514,6 +530,82 @@ describe("demand runtime", () => {
     }
   });
 
+  test("deduplicates same-scenario tasks with identical title target and type", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-task-dedup-"));
+    try {
+      seedDemandTargetFiles(root, ["src/taskcli.ts", "__tests__/taskcli.test.ts"]);
+      const discuss = runDemandDiscussRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demand_id: "DEMAND-TASK-DEDUP",
+        idea: "Build a small local command tool.",
+        target_users: ["terminal user"],
+        status_quo: ["The user tracks one task manually."],
+        evidence: ["Agent read src/taskcli.ts and __tests__/taskcli.test.ts and confirmed they are the target files."],
+        assumptions: ["The local command behavior can be implemented in one source file and verified in one test file."],
+        success_criteria: ["The command records one local task and reports it back to the user."],
+        proof: ["A unit test and CLI smoke show the recorded task is listed back."],
+        constraints: ["Keep the implementation local and deterministic."],
+        non_goals: ["No network service or UI."],
+        target_files: ["src/taskcli.ts", "__tests__/taskcli.test.ts"],
+        decisions: ["Use one source module plus one test module."],
+        roadmap: ["MVP command behavior."],
+        exceptions: ["Empty input returns a friendly error."],
+        approve: true,
+        playback: { confirmed: true, confirmed_by: "user" },
+        writeArtifacts: true,
+      });
+
+      const scenario = discuss.session.scenario_matrix.scenarios[0];
+      scenario.surfaces = [
+        {
+          id: `${scenario.id}-SFC-001`,
+          kind: "code",
+          label: "代码实现",
+          target_files: ["src/taskcli.ts"],
+          readonly_files: [],
+          session_budget: { expected: "single_session", max_files: 1, max_lines_per_file: 120 },
+          proof: scenario.proof,
+        },
+        {
+          id: `${scenario.id}-SFC-002`,
+          kind: "code",
+          label: "代码实现",
+          target_files: ["src/taskcli.ts"],
+          readonly_files: [],
+          session_budget: { expected: "single_session", max_files: 1, max_lines_per_file: 120 },
+          proof: scenario.proof,
+        },
+        {
+          id: `${scenario.id}-SFC-003`,
+          kind: "test",
+          label: "测试/验证",
+          target_files: ["__tests__/taskcli.test.ts"],
+          readonly_files: ["src/taskcli.ts"],
+          session_budget: { expected: "single_session", max_files: 1, max_lines_per_file: 120 },
+          proof: scenario.proof,
+        },
+      ];
+      writeJson(join(discuss.demand_dir, "session.json"), discuss.session);
+
+      const prd = runDemandPrdRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demandPath: discuss.demand_dir,
+        writeArtifacts: false,
+      });
+
+      assert.equal(prd.status, "success", JSON.stringify(prd.blockers, null, 2));
+      requirePrd(prd);
+      assert.deepEqual(duplicateTaskKeys(prd.prd.tasks), []);
+      assert.equal(prd.prd.tasks.filter((task) => task.scope.targets.some((target) => target.file === "src/taskcli.ts")).length, 1);
+      assert.equal(prd.prd.tasks.filter((task) => task.scope.targets.some((target) => target.file === "__tests__/taskcli.test.ts")).length, 1);
+      assert.equal(prd.prd.tasks.length, 2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("generic multi-action demands compile into atomic executable PRD tasks across unrelated domains", () => {
     const cases = [
       {
@@ -591,6 +683,7 @@ describe("demand runtime", () => {
         requirePrd(prd);
         assert.equal(prd.prd.tasks.length >= item.expectedStories, true);
         assert.equal(prd.prd.tasks.length <= Math.max(8, item.expectedStories + 2), true, `${item.name} generated too many tasks: ${prd.prd.tasks.length}`);
+        assert.deepEqual(duplicateTaskKeys(prd.prd.tasks), [], `${item.name} generated duplicate tasks`);
         assert.equal(inspectStoryAtomicityFromPrd(prd.prd).status, "pass");
         assert.equal(prd.prd.demand.quality_report.status, "pass");
 
