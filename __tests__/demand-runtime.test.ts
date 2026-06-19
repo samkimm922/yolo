@@ -15,6 +15,7 @@ import {
   inferGreenfieldTargetFiles,
 } from "../src/demand/artifacts.js";
 import { inspectDemandQuality, inspectDemandReadiness } from "../src/demand/gate.js";
+import { inspectStoryAtomicityFromPrd } from "../src/demand/story-atomicity.js";
 import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
 import { demandSessionSchemaError } from "../src/demand/router.js";
@@ -117,7 +118,7 @@ function taskcliDemandInput(root) {
     evidence: ["User interview approved a greenfield Node TypeScript CLI; no existing app files are required."],
     assumptions: ["The project is greenfield and the first implementation file can be created under src."],
     success_criteria: [
-      "Taskcli stores todos in a local JSON file and each command returns clear terminal output for add, list, done, and stats.",
+      "Taskcli stores todos in a local JSON file and supports add/list/done/stats terminal output.",
     ],
     proof: [
       "During acceptance, run taskcli add one item, list it, mark it done, and see stats count one completed item.",
@@ -510,6 +511,90 @@ describe("demand runtime", () => {
       assert.equal(check.status, "pass", JSON.stringify(check.blockers, null, 2));
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("generic multi-action demands compile into atomic executable PRD tasks across unrelated domains", () => {
+    const cases = [
+      {
+        name: "cli-actions",
+        file: "src/cli-actions.ts",
+        idea: "Build a local command tool for personal records.",
+        targetUsers: ["terminal operator"],
+        criterion: "The local tool supports add/list/done/rm/stats flows; persisted state survives another run; invalid input returns clear errors.",
+        expectedStories: 7,
+      },
+      {
+        name: "url-service",
+        file: "src/url-service.ts",
+        idea: "Build a small REST service for generated URLs.",
+        targetUsers: ["API consumer"],
+        criterion: "The REST service supports shorten/redirect/stats flows for generated URLs.",
+        expectedStories: 3,
+      },
+      {
+        name: "notes-library",
+        file: "src/notes-library.ts",
+        idea: "Build a Markdown repository helper.",
+        targetUsers: ["knowledge worker"],
+        criterion: "The Markdown repository can parse/tag/index/search note files.",
+        expectedStories: 4,
+      },
+      {
+        name: "csv-pipeline",
+        file: "src/csv-pipeline.ts",
+        idea: "Build a CSV processing pipeline.",
+        targetUsers: ["data analyst"],
+        criterion: "The data pipeline can load/clean/aggregate/export CSV rows.",
+        expectedStories: 4,
+      },
+    ];
+
+    for (const item of cases) {
+      const root = mkdtempSync(join(tmpdir(), `yolo-demand-generic-${item.name}-`));
+      try {
+        seedDemandTargetFiles(root, [item.file]);
+        const discuss = runDemandDiscussRuntime({
+          projectRoot: root,
+          stateRoot: join(root, ".yolo"),
+          demand_id: `DEMAND-${item.name.toUpperCase()}`,
+          idea: item.idea,
+          target_users: item.targetUsers,
+          status_quo: ["The user currently completes the workflow manually in separate steps."],
+          evidence: [`Agent read ${item.file} and confirmed it is the implementation target.`],
+          assumptions: ["The workflow is local and can be verified from deterministic inputs."],
+          success_criteria: [item.criterion],
+          proof: ["Acceptance observes the requested single action outcome."],
+          constraints: ["Keep each generated task to one user-visible action."],
+          non_goals: ["No unrelated workflow expansion."],
+          target_files: [item.file],
+          decisions: ["Split enumerated actions into separate implementation tasks."],
+          roadmap: ["Deliver the enumerated MVP actions as atomic tasks."],
+          exceptions: ["Invalid input should fail deterministically."],
+          approve: true,
+          playback: { confirmed: true, confirmed_by: "user" },
+          writeArtifacts: true,
+        });
+
+        assert.equal(discuss.status, "success", JSON.stringify(discuss.blockers, null, 2));
+        assert.equal(discuss.session.requirements.active.length, item.expectedStories);
+        assert.equal(discuss.session.scenario_matrix.scenarios.length, item.expectedStories);
+
+        const prd = runDemandPrdRuntime({
+          projectRoot: root,
+          stateRoot: join(root, ".yolo"),
+          demandPath: discuss.demand_dir,
+          writeArtifacts: false,
+        });
+
+        assert.equal(prd.status, "success", JSON.stringify(prd.blockers, null, 2));
+        requirePrd(prd);
+        assert.equal(prd.prd.tasks.length >= item.expectedStories, true);
+        assert.equal(inspectStoryAtomicityFromPrd(prd.prd).status, "pass");
+        assert.equal(prd.prd.demand.quality_report.status, "pass");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     }
   });
 
@@ -1415,7 +1500,7 @@ describe("demand runtime", () => {
     }
   });
 
-  test("approved demand splits compound Trello-style user stories before task generation", () => {
+  test("approved demand splits compound board-style user stories before task generation", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-story-split-"));
     try {
       seedDemandTargetFiles(root, ["package.json", "index.html", "src/styles.css", "tests/board.e2e.cjs"]);
@@ -1428,7 +1513,7 @@ describe("demand runtime", () => {
       const discuss = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
-        idea: "Build a local Trello-style board MVP.",
+        idea: "Build a local board MVP.",
         target_users: ["small team lead"],
         status_quo: ["Tasks are tracked in notes and chat messages."],
         evidence: [
@@ -1438,8 +1523,8 @@ describe("demand runtime", () => {
         assumptions: ["The local MVP can stay single-user and does not need collaboration, auth, comments, or labels."],
         success_criteria: [
           "当用户输入 Review 并提交时, 新列表 Review 出现在看板末尾, 当用户在 Todo 输入 Prepare demo 并提交时, 卡片显示在 Todo 列表。",
-          "当用户把 Prepare demo 编辑为 Prepare customer demo 并移动到 Doing 时, Todo 列表不再显示该卡片, Doing 列表显示 Prepare customer demo。",
-          "当用户归档 Prepare customer demo 并刷新页面时, 普通列表不显示该归档卡片, 未归档列表和卡片仍从 localStorage 恢复。",
+          "当用户把 Prepare demo 编辑为 Prepare customer demo 时, 新标题可见；当用户将 Prepare customer demo 移动到 Doing 时, Todo 列表不再显示该卡片, Doing 列表显示 Prepare customer demo。",
+          "当用户归档 Prepare customer demo 时, 普通列表不显示该归档卡片；当用户刷新页面时, 未归档列表和卡片仍从 localStorage 恢复。",
         ],
         proof: [
           "Playwright verifies Review appears as the final board list after submitting the list form.",
@@ -1451,7 +1536,7 @@ describe("demand runtime", () => {
         ],
         visual_style: ["Use the existing compact board layout from src/styles.css without introducing a new visual system."],
         constraints: ["Local single-page MVP only."],
-        non_goals: ["No Trello API or login."],
+        non_goals: ["No external API or login."],
         target_files: ["package.json", "index.html", "src/app.js", "src/styles.css", "tests/board.e2e.cjs"],
         decisions: ["Keep every task to one visible board behavior."],
         roadmap: ["MVP board behavior slices."],

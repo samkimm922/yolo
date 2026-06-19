@@ -688,13 +688,13 @@ describe("yolo check report", () => {
     try {
       const prdPath = join(root, "prd.json");
       writeJson(prdPath, strictPrd({
-        title: "Edit and move Trello cards",
-        description: "编辑卡片标题，并移动卡片到另一个列表。",
-        acceptance_criteria: ["编辑后的卡片标题可见；卡片移动到目标列表。"],
+        title: "Edit and notify items",
+        description: "编辑条目标题，并发送确认通知。",
+        acceptance_criteria: ["编辑后的条目标题可见；确认通知已发送。"],
       }, {
         requirements: [{
           id: "REQ-1",
-          text: "Trello 用户可以编辑卡片标题，并移动卡片到另一个列表。",
+          text: "用户可以编辑条目标题，并发送确认通知。",
         }],
       }));
 

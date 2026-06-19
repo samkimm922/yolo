@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { inspectStoryAtomicityText } from "../src/demand/story-atomicity.js";
+import { inspectStoryAtomicityText, splitGenericStorySlices } from "../src/demand/story-atomicity.js";
 
 interface StoryAtomicityFinding {
   code: string;
@@ -26,6 +26,35 @@ function hasFindingProps(
 }
 
 describe("story atomicity generic (domain-agnostic) detection", () => {
+  test("generic splitter slices four unrelated greenfield action enumerations", () => {
+    const cases = [
+      {
+        text: "The local tool supports add/list/done/rm/stats flows; persisted state survives another run; invalid input returns clear errors.",
+        expected: 7,
+      },
+      {
+        text: "The REST service supports shorten/redirect/stats flows for generated URLs.",
+        expected: 3,
+      },
+      {
+        text: "The Markdown repository can parse/tag/index/search note files.",
+        expected: 4,
+      },
+      {
+        text: "The data pipeline can load/clean/aggregate/export CSV rows.",
+        expected: 4,
+      },
+    ];
+
+    for (const item of cases) {
+      const slices = splitGenericStorySlices(item.text);
+      assert.equal(slices.length, item.expected, item.text);
+      for (const slice of slices) {
+        assert.equal(inspectStoryAtomicityText(slice, { kind: "requirement", id: "REQ-SLICE" }).status, "pass", slice);
+      }
+    }
+  });
+
   test("auth + email verification + OAuth is non-atomic", () => {
     const result = inspectStoryAtomicityText(
       "Implement user authentication with email verification and OAuth login via Google",
@@ -51,6 +80,33 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
     );
     assert.equal(result.status, "pass");
     assert.equal(result.finding, null);
+  });
+
+  test("modal verb inside a normal sentence is not a command-list cue", () => {
+    const result = inspectStoryAtomicityText(
+      "A new project can initialize local files and produce its first executable artifact.",
+      { kind: "requirement", id: "REQ-BOOTSTRAP" },
+    );
+
+    assert.equal(result.status, "pass");
+  });
+
+  test("hyphenated capability adjectives do not create extra stories", () => {
+    const result = inspectStoryAtomicityText(
+      "When a CSV export is provided, the data pipeline can export CSV rows and return report-ready metric JSON.",
+      { kind: "requirement", id: "REQ-REPORT-READY" },
+    );
+
+    assert.equal(result.status, "pass");
+  });
+
+  test("data object nouns do not create capability warnings", () => {
+    const result = inspectStoryAtomicityText(
+      "An analyst can transform a CSV export into analysis-ready metric output and verify repeatable totals.",
+      { kind: "requirement", id: "REQ-CSV-EXPORT-OBJECT" },
+    );
+
+    assert.equal(result.status, "pass");
   });
 
   test("cross-layer UI+API+DB task is non-atomic", () => {
