@@ -1337,6 +1337,28 @@ function buildRounds(input = Object(), questionTrace = []) {
   })) : [];
 }
 
+function hasImplementationDetailSignal(text = "") {
+  return /\b[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+\b/.test(text)
+    || /\b[A-Za-z_$][A-Za-z0-9_$]*(?:Threshold|Quantity|Qty|Stock|Badge)[A-Za-z0-9_$]*\b/.test(text)
+    || /(<=|>=|<|>|less than|greater than|at or below|at or above)/i.test(text);
+}
+
+function executionSafeDecisionText(text = "") {
+  const source = clean(text);
+  if (!hasImplementationDetailSignal(source)) return source;
+  return normalizeStoryText(source
+    .replace(/\b[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+\b/g, "the approved field")
+    .replace(/\b[A-Za-z_$][A-Za-z0-9_$]*(?:Threshold|Quantity|Qty|Stock|Badge)[A-Za-z0-9_$]*\b/g, "the approved field")
+    .replace(/\b(?:less than or equal|greater than or equal|less than|greater than|at or below|at or above)\b/gi, "the approved comparison")
+    .replace(/\s*(?:<=|>=|<|>)\s*/g, " the approved comparison "));
+}
+
+function implementationDecisionEvidence(decisions = []) {
+  return uniqueStrings(decisions)
+    .filter(hasImplementationDetailSignal)
+    .map((decision) => `Approved implementation detail from decision: ${decision}`);
+}
+
 function truthyConfirmation(value) {
   if (value === true) return true;
   const text = clean(value).toLowerCase();
@@ -1406,7 +1428,9 @@ export function buildDemandSession(input = Object(), options = Object()) {
   const visualStyleSource = mergeField(input, "visual_style", LABELS.visual_style, objective);
   const alternatives = uniqueStrings(input.alternatives || input.alternative);
   const risks = uniqueStrings(input.risks || input.risk);
-  const decisions = uniqueStrings(input.decisions || input.decision);
+  const rawDecisions = uniqueStrings(input.decisions || input.decision);
+  const decisions = rawDecisions.map(executionSafeDecisionText);
+  const evidenceWithDecisionDetails = uniqueStrings([...evidence, ...implementationDecisionEvidence(rawDecisions)]);
   const openQuestions = uniqueStrings(input.open_questions || input.openQuestions || ((input.answer || input.answers || questionTrace.length > 0) ? [] : input.question));
   const roadmapItems = uniqueStrings(input.roadmap || input.mvp || input.phase || input.phases);
   const deferredItems = uniqueStrings(input.deferred || input.followups || input.follow_ups);
@@ -1427,14 +1451,14 @@ export function buildDemandSession(input = Object(), options = Object()) {
     projectRoot,
     explicitFiles: explicitTargetFiles,
     inferredFiles: inferredTargetFiles,
-    evidence,
+    evidence: evidenceWithDecisionDetails,
     verifiedFiles: input.verified_target_files || input.verifiedTargetFiles,
   });
   const targetFiles = targetFilesFromFacts(targetFileFactRecords);
   const candidateTargetFiles = candidateFilesFromFacts(targetFileFactRecords);
   const assumptionFactRecords = assumptionRecords({
     assumptions,
-    evidence,
+    evidence: evidenceWithDecisionDetails,
     targetFacts: targetFileFactRecords,
     projectRoot,
   });
@@ -1453,7 +1477,7 @@ export function buildDemandSession(input = Object(), options = Object()) {
       .map((fact) => `Verify assumption ${fact.id} against project evidence before PRD execution.`),
   ];
   const rawRequirements = (successCriteria.length > 0 ? successCriteria : uniqueStrings(input.requirements || input.requirement_text))
-    .map((text, index) => requirementRecord(text, index, { ...input, evidence, decisions, questionTrace }));
+    .map((text, index) => requirementRecord(text, index, { ...input, evidence: evidenceWithDecisionDetails, decisions, questionTrace }));
   const requirements = expandRequirementStories(rawRequirements);
   const nontechnicalIntake = buildNonTechnicalIntake({
     input,
@@ -1464,7 +1488,7 @@ export function buildDemandSession(input = Object(), options = Object()) {
     successCriteria,
     constraints,
     nonGoals,
-    evidence,
+    evidence: evidenceWithDecisionDetails,
     assumptions,
     targetFiles,
     candidateTargetFiles,
@@ -1539,7 +1563,7 @@ export function buildDemandSession(input = Object(), options = Object()) {
       premise_challenges: uniqueStrings(input.premise_challenges || input.premise || input.challenge),
     },
     investigation: {
-      evidence: evidence.map((text, index) => ({ id: `EVID-${String(index + 1).padStart(3, "0")}`, text })),
+      evidence: evidenceWithDecisionDetails.map((text, index) => ({ id: `EVID-${String(index + 1).padStart(3, "0")}`, text })),
       assumptions: assumptionFactRecords,
       codebase_scouts: targetFileFactRecords.map((fact) => ({
         file: fact.file,

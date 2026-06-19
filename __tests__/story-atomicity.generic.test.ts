@@ -82,6 +82,21 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
     assert.equal(result.finding, null);
   });
 
+  test("single cohesive action with internal operands is atomic", () => {
+    const cases = [
+      "Log in with email and password",
+      "Filter and sort rows by date",
+      "Validate the request with token and timestamp",
+    ];
+
+    for (const text of cases) {
+      const result = inspectStoryAtomicityText(text, { kind: "task", id: "TASK-COHESIVE" });
+      assert.equal(result.status, "pass", text);
+      assert.equal(result.finding, null, text);
+      assert.deepEqual(splitGenericStorySlices(text), [text], text);
+    }
+  });
+
   test("modal verb inside a normal sentence is not a command-list cue", () => {
     const result = inspectStoryAtomicityText(
       "A new project can initialize local files and produce its first executable artifact.",

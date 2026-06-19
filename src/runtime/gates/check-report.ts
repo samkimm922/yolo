@@ -8,6 +8,7 @@ import { writeLifecycleStageReport } from "../../lifecycle/progress.js";
 import { resolveProjectContext } from "../../packs/resolver.js";
 import { preflightPrd } from "../../prd/preflight.js";
 import { inspectAtomicTask } from "../execution/atomic-task-doctor.js";
+import { orderTasksByDependencies } from "../task-loop/expansion.js";
 import { buildGateRemediationPlan } from "./remediation-plan.js";
 import {
   asArray,
@@ -596,6 +597,30 @@ function storyAtomicityReadiness({ prd }) {
   });
 }
 
+function taskDependencyPreflightReadiness({ prd }) {
+  const ordered = orderTasksByDependencies(asArray(prd.tasks));
+  const preflight = ordered.preflight || {};
+  const blockers = asArray((preflight as { blockers?: unknown[] }).blockers).map((blocker) => ({
+    code: blocker.code || "TASK_DEPENDENCY_CYCLE",
+    source: blocker.source || "task-loop-expansion",
+    task_id: blocker.task_id || null,
+    task_ids: asArray(blocker.task_ids),
+    message: blocker.message || "Circular task dependency blocks check/preflight.",
+    human_needed: true,
+  }));
+  const status = blockers.length > 0 ? "blocked" : "pass";
+  return checkRecord(
+    "task_dependency_preflight",
+    status,
+    status === "pass" ? "Task dependency graph passed." : "Task dependency graph blocks execution.",
+    {
+      blockers,
+      warnings: [],
+      preflight,
+    },
+  );
+}
+
 function adapterReadiness({ prd, acceptanceManifest, options, resolver }) {
   const uiTaskCount = uiTasks(prd, { acceptanceManifest, resolver }).length;
   const selectedAdapter = selectedAcceptanceAdapter(resolver);
@@ -746,6 +771,7 @@ export function inspectYoloCheck(input = Object(), options = Object()) {
     preflightReadiness(preflight),
     demandContractReadiness({ prd, projectRoot, strictExecution }),
     productReadiness({ prd, discovery, projectRoot }),
+    taskDependencyPreflightReadiness({ prd }),
     resolverReadiness({ resolver }),
     uiReadiness({ prd, acceptanceManifest, resolver }),
     storyAtomicityReadiness({ prd }),

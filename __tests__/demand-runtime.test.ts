@@ -590,6 +590,7 @@ describe("demand runtime", () => {
         assert.equal(prd.status, "success", JSON.stringify(prd.blockers, null, 2));
         requirePrd(prd);
         assert.equal(prd.prd.tasks.length >= item.expectedStories, true);
+        assert.equal(prd.prd.tasks.length <= Math.max(8, item.expectedStories + 2), true, `${item.name} generated too many tasks: ${prd.prd.tasks.length}`);
         assert.equal(inspectStoryAtomicityFromPrd(prd.prd).status, "pass");
         assert.equal(prd.prd.demand.quality_report.status, "pass");
 
@@ -1481,7 +1482,7 @@ describe("demand runtime", () => {
     }
   });
 
-  test("approved demand compiles scenario surfaces but blocks investigate-first tasks before executable write", () => {
+  test("approved demand compiles scenario surfaces without self-blocking on investigate-first atomicity", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-atomic-"));
     try {
       seedDemandTargetFiles(root, ["src/services/inventory-alerts.ts", "src/pages/inventory-list.tsx", "src/services/inventory-alerts.test.ts"]);
@@ -1515,13 +1516,23 @@ describe("demand runtime", () => {
         writeArtifacts: false,
       });
 
-      assert.equal(prd.status, "blocked");
-      assert.equal(prd.code, "DEMAND_PRD_PREFLIGHT_BLOCKED");
-      if ("prd" in prd) assert.equal(prd.prd, null);
-      assert.deepEqual(prd.artifacts, []);
-      assert.ok(prd.blockers.some((blocker) => blocker.code === "ATOMICITY_INVESTIGATE_FIRST"));
-      if (!("compiled" in prd) || !prd.compiled) throw new Error("expected compiled");
-      const compiledPrd = prd.compiled.prd;
+      assert.equal(prd.status, "success", JSON.stringify(prd.blockers, null, 2));
+      assert.equal(prd.code, "DEMAND_PRD_READY");
+      requirePrd(prd);
+      assert.equal(prd.preflight.status, "pass", JSON.stringify(prd.preflight.blocked_reasons, null, 2));
+      assert.equal(prd.blockers.some((blocker) => blocker.code === "ATOMICITY_INVESTIGATE_FIRST"), false);
+      const prdPath = join(root, "inventory-demand-prd.json");
+      writeJson(join(root, ".yolo/adapters/local-browser.manifest.json"), acceptanceAdapterManifest());
+      writeJson(prdPath, prd.prd);
+      const check = inspectYoloCheck({
+        prdPath,
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        writeLifecycle: false,
+      });
+      assert.equal(check.status, "pass", JSON.stringify(check.blockers, null, 2));
+      assert.equal(check.blockers.some((blocker) => blocker.code === "ATOMICITY_INVESTIGATE_FIRST"), false);
+      const compiledPrd = prd.prd;
       assert.equal(compiledPrd.tasks.length >= 3, true);
       assert.equal(compiledPrd.tasks.every((task) => task.task_kind === "demand_atomic_task"), true);
       assert.equal(compiledPrd.tasks.every((task) => task.scope.max_files <= 2), true);

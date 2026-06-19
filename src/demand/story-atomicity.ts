@@ -91,7 +91,10 @@ const COMPACT_ENUM_SEPARATOR = /\s*(?:\/|→|->|=>|\+)\s*/u;
 const PHRASE_ENUM_MARKER = /(?:、|，|,|\+|\band\b|\bthen\b|以及|与|和|并且)/iu;
 const PHRASE_ENUM_SEPARATOR = /\s*(?:、|，|,|\+|\band\b|\bthen\b|以及|与|和|并且)\s*/iu;
 const SHARED_SUFFIX_PATTERN = /^(.+?)\s+(all|each|都|均|皆)\s+(.+)$/iu;
-const ENUMERATION_CUE_TAIL_PATTERN = /(?:\b(?:can|supports?|allows?|lets?|provide|provides|includes?|with)|支持|允许|可以|能够|包含|提供)\s*$/iu;
+const ENUMERATION_CUE_TAIL_PATTERN = /(?:\b(?:can|supports?|allows?|lets?|provide|provides|includes?)|支持|允许|可以|能够|包含|提供)\s*$/iu;
+const ENUMERATION_LEAD_CONTEXT_PATTERN = /(?:\b(?:can|supports?|allows?|lets?|provide|provides|includes?)\b|支持|允许|可以|能够|包含|提供)[\s\S]{0,48}$/iu;
+const ENUMERATION_RESULT_CONTEXT_PATTERN = /^\s*(?:flows?|commands?|features?|operations?|actions?|capabilities?|endpoints?|routes?|handlers?|steps?|behaviors?\b|流程|命令|功能|操作|动作|能力|接口|路由|处理器|步骤|行为)/iu;
+const ARGUMENT_LIST_TAIL_PATTERN = /(?:\b(?:with|using|by|from|to|for|of|in|as|via)\s*|用|使用|通过|以|按|根据|基于)\s*$/iu;
 const ASCII_COMMAND_TOKEN_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{1,31}$/;
 const LEADING_ASCII_COMMAND_PATTERN = /^([A-Za-z][A-Za-z0-9_-]{1,31})(?:\s+(.+))?$/u;
 const SUPPORT_ONLY_ACTIONS = new Set([
@@ -235,6 +238,12 @@ function expandCompactEnumeration(clause) {
   const end = start + sequence.length;
   const before = source.slice(0, start);
   const after = source.slice(end);
+  const deliverableCount = items.filter(hasDeliverableIntent).length;
+  const commandLikeItems = items.every((item) => ASCII_COMMAND_TOKEN_PATTERN.test(item) || hasDeliverableIntent(item));
+  const hasBoundaryContext = ENUMERATION_LEAD_CONTEXT_PATTERN.test(before) || ENUMERATION_RESULT_CONTEXT_PATTERN.test(after);
+  if (!commandLikeItems) return [];
+  if (ARGUMENT_LIST_TAIL_PATTERN.test(before) && !ENUMERATION_RESULT_CONTEXT_PATTERN.test(after)) return [];
+  if (!hasBoundaryContext && deliverableCount < 2) return [];
   return uniqueStorySlices(items.map((item) => `${before}${item}${after}`));
 }
 
@@ -294,8 +303,7 @@ function expandPhraseEnumeration(clause) {
     .filter(Boolean);
   if (items.length < 2) return [];
   const actionItemCount = items.filter((item) => hasAny(item, DELIVERABLE_VERB_TERMS)).length;
-  const simpleCommandItems = items.every((item) => ASCII_COMMAND_TOKEN_PATTERN.test(item));
-  if (actionItemCount < 2 && !simpleCommandItems) return [];
+  if (actionItemCount < 2) return [];
   const prefix = first.prefix;
   const suffix = last.suffix ? ` ${last.suffix}` : "";
   const expanded = items.map((item) => `${prefix}${item}${suffix}`);
