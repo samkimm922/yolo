@@ -13,7 +13,7 @@ import { runReleaseCandidateGate } from "../release/decision-gate.js";
 import { preflightAllPrds } from "../prd/preflight.js";
 import { readReleaseCandidateChangeManifest } from "../release/change-provenance.js";
 import { runCleanEnvironmentVerify } from "../release/clean-environment-verify.js";
-import { formatYoloCheckText, inferDefaultYoloCheckPrdPath, inspectYoloCheck } from "../runtime/gates/check-report.js";
+import { formatYoloCheckText, inspectYoloCheck } from "../runtime/gates/check-report.js";
 import { refreshMemoryCenter } from "../runtime/memory/center.js";
 import { buildProgressDashboardUiEvidence } from "../runtime/progress/ui-evidence.js";
 import { runRunnerRuntime } from "../runtime/runner-runtime.js";
@@ -76,7 +76,7 @@ export function usage() {
     "`yolo run` 会走 PI 主线执行 PRD，并在 runner 阶段用 --executor 选择 claude -p、codex exec 或 custom shell agent。",
     "`yolo release` 是 acceptance/ship/release-candidate 的稳定入口，不是 Trello replay；默认 fail closed，只输出可解析 gate contract。",
     `普通 Claude/Codex/GUI 集成只展示 ${DEFAULT_YOLO_PUBLIC_COMMAND_NAMES.length} 个稳定入口：${publicNames}。`,
-    "未传 PRD 时，只会在目标项目 .yolo/data/prd/current、.yolo/data/prd/archive 和 .yolo/data 中寻找 PRD JSON。",
+    "未传 PRD 时，会在目标项目 .yolo/demand/*/prd.json、.yolo/data/prd/current、.yolo/data/prd/archive 和 .yolo/data 中寻找 PRD JSON。",
   ].join("\n");
 }
 
@@ -126,6 +126,18 @@ function readArgValue(argv, index, name) {
   }
   const next = argv[index + 1];
   if (!next || next.startsWith("--")) throw cliParseError(name);
+  return { value: next, consumed: 1 };
+}
+
+function readOptionalBooleanArgValue(argv, index, name) {
+  const arg = argv[index];
+  if (arg.includes("=")) {
+    const value = arg.split("=").slice(1).join("=");
+    if (!value) throw cliParseError(name);
+    return { value, consumed: 0 };
+  }
+  const next = argv[index + 1];
+  if (!next || next.startsWith("--")) return { value: "true", consumed: 0 };
   return { value: next, consumed: 1 };
 }
 
@@ -597,7 +609,7 @@ export function parseYoloInterviewArgs(argv = []) {
       input.answer = read.value;
       i += read.consumed;
     } else if (arg === "--confirm" || arg.startsWith("--confirm=")) {
-      const read = readArgValue(args, i, "--confirm");
+      const read = readOptionalBooleanArgValue(args, i, "--confirm");
       input.confirm = read.value;
       i += read.consumed;
     } else if (!arg.startsWith("--") && command === "start") {
@@ -792,35 +804,112 @@ export function parseYoloWorkflowArgs(argv = []) {
   return { input, options };
 }
 
+function readJsonMaybe(file) {
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function isRunnablePrdJson(value = Object()) {
+  return Array.isArray(value?.tasks) &&
+    value.tasks.length > 0 &&
+    Boolean(value.tasks[0]?.id) &&
+    Boolean(value.tasks[0]?.priority);
+}
+
+function addCliPrdCandidate(files, file) {
+  try {
+    if (!existsSync(file)) return;
+    const stat = statSync(file);
+    if (!stat.isFile()) return;
+    files.push({ path: file, mtime: stat.mtimeMs });
+  } catch {
+    // Ignore disappearing files during discovery.
+  }
+}
+
+function addJsonPrdCandidatesFromDir(files, dir) {
+  if (!existsSync(dir)) return;
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".json") || file === "package.json" || file === "tsconfig.json" || file.startsWith("retry-")) {
+      continue;
+    }
+    addCliPrdCandidate(files, join(dir, file));
+  }
+}
+
+function addDemandPrdCandidates(files, demandDir) {
+  if (!existsSync(demandDir)) return;
+  for (const name of readdirSync(demandDir)) {
+    const dir = join(demandDir, name);
+    try {
+      if (statSync(dir).isDirectory()) addCliPrdCandidate(files, join(dir, "prd.json"));
+    } catch {
+      // Ignore malformed demand entries while searching for a PRD.
+    }
+  }
+}
+
+function lifecyclePrdCandidates(report = Object()) {
+  const nested = report.report || {};
+  const artifacts = [
+    ...(Array.isArray(report.artifacts) ? report.artifacts : []),
+    ...(Array.isArray(nested.artifacts) ? nested.artifacts : []),
+  ];
+  return [
+    report.prd_path,
+    report.prdPath,
+    nested.prd_path,
+    nested.prdPath,
+    ...artifacts,
+  ].filter(Boolean);
+}
+
+function existingCliPrdCandidate(projectRoot, value) {
+  const raw = cleanCliText(value);
+  if (!raw || !raw.endsWith(".json")) return "";
+  const file = isAbsolute(raw) ? resolve(raw) : resolve(projectRoot, raw);
+  if (!existsSync(file)) return "";
+  return isRunnablePrdJson(readJsonMaybe(file)) ? file : "";
+}
+
 export function findLatestPrd(yoloRoot = defaultYoloRoot) {
   try {
     const files = [];
+    addDemandPrdCandidates(files, join(yoloRoot, "demand"));
     for (const dir of prdSearchDirs(yoloRoot)) {
-      if (!existsSync(dir)) continue;
-      for (const file of readdirSync(dir)) {
-        if (!file.endsWith(".json") || file === "package.json" || file === "tsconfig.json" || file.startsWith("retry-")) {
-          continue;
-        }
-        const candidate = join(dir, file);
-        files.push({ path: candidate, mtime: statSync(candidate).mtimeMs });
-      }
+      addJsonPrdCandidatesFromDir(files, dir);
     }
 
     files.sort((a, b) => b.mtime - a.mtime);
     for (const file of files) {
-      try {
-        const parsed = JSON.parse(readFileSync(file.path, "utf8"));
-        if (Array.isArray(parsed.tasks) && parsed.tasks.length > 0 && parsed.tasks[0].id && parsed.tasks[0].priority) {
-          return file.path;
-        }
-      } catch {
-        // Ignore invalid JSON files while searching for a runnable PRD.
-      }
+      if (isRunnablePrdJson(readJsonMaybe(file.path))) return file.path;
     }
   } catch {
     return null;
   }
   return null;
+}
+
+export function inferDefaultCliPrdPath(input = Object(), options = Object()) {
+  const projectRoot = resolve(input.projectRoot || input.project_root || options.projectRoot || options.project_root || input.cwd || options.cwd || process.cwd());
+  const stateRoot = resolve(input.stateRoot || input.state_root || options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
+  const latest = findLatestPrd(stateRoot);
+  if (latest) return latest;
+
+  for (const name of ["prd.json", "check-report.json", "run-report.json"]) {
+    const report = readJsonMaybe(join(stateRoot, "lifecycle", name));
+    if (!report) continue;
+    if (isRunnablePrdJson(report)) return join(stateRoot, "lifecycle", name);
+    for (const candidate of lifecyclePrdCandidates(report)) {
+      const file = existingCliPrdCandidate(projectRoot, candidate);
+      if (file) return file;
+    }
+  }
+
+  return "";
 }
 
 export function formatRunnerText(result) {
@@ -2005,7 +2094,7 @@ export async function runYoloCheckCli(argv = [], io = Object()) {
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
   const prdPath = input.prdPath
     ? resolvePrdPath(input.prdPath, io.yoloRoot || defaultYoloRoot, { cwd: projectRoot })
-    : inferDefaultYoloCheckPrdPath({ projectRoot, stateRoot: join(projectRoot, ".yolo") });
+    : inferDefaultCliPrdPath({ projectRoot, stateRoot: join(projectRoot, ".yolo") });
   const guarded = guardBlocked("yolo-check", { ...input, prdPath }, options, projectRoot, { stdout, stderr });
   if (guarded !== 0) return guarded;
   let report = inspectYoloCheck({
@@ -2329,9 +2418,25 @@ function isBlockingWorkflowStatus(status = "") {
   return ["blocked", "error", "warning", "draft"].includes(cleanCliText(status).toLowerCase());
 }
 
+const DRY_RUN_READY_CODES = new Set(["PI_DRY_RUN_READY", "RUNNER_DRY_RUN_READY"]);
+
+function isDryRunReadyResult(result = Object()) {
+  return cleanCliText(result.status).toLowerCase() === "dry_run" && (
+    DRY_RUN_READY_CODES.has(cleanCliText(result.code)) ||
+    result.dry_run === true ||
+    result.dryRun === true
+  );
+}
+
+function normalizeDryRunReadyExitCode(result = Object()) {
+  if (!isDryRunReadyResult(result)) return result;
+  return { ...result, exit_code: 0 };
+}
+
 function workflowExitCode(result = Object()) {
   const status = cleanCliText(result.status).toLowerCase();
   if (status === "pass" || status === "success") return 0;
+  if (isDryRunReadyResult(result)) return 0;
   if (status === "warning" || status === "draft" || status === "dry_run" || status === "not_run" || status === "indeterminate" || status === "ready" || status === "ready_for_operator") return 2;
   return isBlockingWorkflowStatus(status) ? 1 : 1;
 }
@@ -3080,7 +3185,7 @@ async function runYoloCliInner(argv = process.argv.slice(2), io = Object()) {
   const cliProjectRoot = resolve(input.cwd || io.cwd || process.cwd());
   const prdPath = input.prdPath
     ? resolvePrdPath(input.prdPath, yoloRoot, { cwd: cliProjectRoot })
-    : findLatestPrd(join(cliProjectRoot, ".yolo"));
+    : inferDefaultCliPrdPath({ projectRoot: cliProjectRoot, stateRoot: join(cliProjectRoot, ".yolo") });
 
   if (!prdPath) {
     const result = {
@@ -3121,6 +3226,7 @@ async function runYoloCliInner(argv = process.argv.slice(2), io = Object()) {
       stateRoot: join(cliProjectRoot, ".yolo"),
       execute: true,
     });
+    result = normalizeDryRunReadyExitCode(result);
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else stdout.write(`${formatPiRuntimeText("run", result)}\n`);
     return workflowExitCode(result);
@@ -3145,10 +3251,11 @@ async function runYoloCliInner(argv = process.argv.slice(2), io = Object()) {
     model: input.model,
     agentCommand: input.agentCommand,
   });
+  result = normalizeDryRunReadyExitCode(result);
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatRunnerText(result)}\n`);
 
-  return result.exit_code ?? (result.status === "success" ? 0 : 1);
+  return isDryRunReadyResult(result) ? 0 : result.exit_code ?? (result.status === "success" ? 0 : 1);
 }
 
 export async function runYoloCli(argv = process.argv.slice(2), io = Object()) {

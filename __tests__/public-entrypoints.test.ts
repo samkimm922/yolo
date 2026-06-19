@@ -10,6 +10,7 @@ import { inspectPrdContract } from "../src/runtime/gates/prd-contract-doctor.js"
 import { reviewFindingsToPrdTasks } from "../src/review/findings-to-tasks.js";
 import { runInitToFirstPrdSmoke } from "../src/core/init-smoke.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+import { inferDefaultCliPrdPath } from "../src/cli/yolo.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 const packageJson: { exports: Record<string, string>; bin: Record<string, string>; scripts: Record<string, string> } = JSON.parse(readFileSync(resolve(YOLO_DIR, "package.json"), "utf8"));
@@ -167,6 +168,89 @@ describe("public package entrypoints", () => {
     }
   });
 
+  test("yolo check and run default to demand prd.json instead of session.json", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-prd-default-"));
+    try {
+      const smoke = await runInitToFirstPrdSmoke({ projectRoot: root, projectName: "demand-default-app" });
+      const demandDir = join(root, ".yolo", "demand", "DEMAND-ENTRY");
+      mkdirSync(demandDir, { recursive: true });
+      const demandPrd = join(demandDir, "prd.json");
+      const demandSession = join(demandDir, "session.json");
+      writeFileSync(demandPrd, readFileSync(smoke.prd_path, "utf8"), "utf8");
+      writeFileSync(demandSession, JSON.stringify({
+        schema: "yolo.demand.session.v1",
+        id: "DEMAND-ENTRY",
+        tasks: [],
+      }, null, 2), "utf8");
+
+      assert.equal(inferDefaultCliPrdPath({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+      }), demandPrd);
+
+      writeLifecycleStageReport("discovery", {
+        status: "success",
+        summary: "test discovery",
+      }, {
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        source: "public-entrypoints-test",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      writeLifecycleStageReport("roadmap", {
+        status: "success",
+        summary: "test roadmap",
+      }, {
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        source: "public-entrypoints-test",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+      writeLifecycleStageReport("prd", {
+        status: "success",
+        prd_path: demandPrd,
+        artifacts: [demandPrd],
+      }, {
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        source: "public-entrypoints-test",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+
+      const check = spawnSync(process.execPath, [
+        resolve(YOLO_DIR, packageJson.bin.yolo),
+        "check",
+        `--cwd=${root}`,
+        "--json",
+      ], { cwd: YOLO_DIR, encoding: "utf8" });
+      assert.equal(check.stderr, "");
+      assert.equal(check.status, 0, check.stdout);
+      const checkPayload = JSON.parse(check.stdout);
+      assert.equal(checkPayload.prd_path, demandPrd);
+      assert.notEqual(checkPayload.prd_path, demandSession);
+
+      const run = spawnSync(process.execPath, [
+        resolve(YOLO_DIR, packageJson.bin.yolo),
+        "run",
+        `--cwd=${root}`,
+        "--dry-run",
+        "--json",
+      ], { cwd: YOLO_DIR, encoding: "utf8" });
+      assert.equal(run.stderr, "");
+      assert.equal(run.status, 0, run.stdout);
+      const runPayload = JSON.parse(run.stdout);
+      assert.equal(runPayload.status, "dry_run");
+      assert.equal(runPayload.code, "PI_DRY_RUN_READY");
+      assert.equal(runPayload.exit_code, 0);
+      assert.equal(runPayload.plan.artifacts.prdPath, demandPrd);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("yolo run uses PI by default and runner remains available as engine-only", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-run-pi-"));
     try {
@@ -224,9 +308,10 @@ describe("public package entrypoints", () => {
         "--json",
       ], { cwd: YOLO_DIR, encoding: "utf8" });
       assert.equal(pi.stderr, "");
-      assert.equal(pi.status, 2, pi.stdout);
+      assert.equal(pi.status, 0, pi.stdout);
       const piPayload = JSON.parse(pi.stdout);
       assert.equal(piPayload.status, "dry_run");
+      assert.equal(piPayload.exit_code, 0);
       assert.equal(piPayload.dry_run, true);
       assert.equal(piPayload.stop_condition, "dry_run_after_runner");
       assert.ok(piPayload.plan.actions.some((action) => action.id === "pi.acceptance"));
@@ -246,10 +331,11 @@ describe("public package entrypoints", () => {
         "--json",
       ], { cwd: YOLO_DIR, encoding: "utf8" });
       assert.equal(runner.stderr, "");
-      assert.equal(runner.status, 2, runner.stdout);
+      assert.equal(runner.status, 0, runner.stdout);
       const runnerPayload = JSON.parse(runner.stdout);
       assert.equal(runnerPayload.status, "dry_run");
       assert.equal(runnerPayload.code, "RUNNER_DRY_RUN_READY");
+      assert.equal(runnerPayload.exit_code, 0);
       assert.equal(runnerPayload.dry_run, true);
       assert.equal(runnerPayload.artifacts[0], relativePrd);
     } finally {
