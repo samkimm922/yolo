@@ -35,7 +35,7 @@ describe("discovery research decision derives from content", () => {
   test("external-reference intent (replicate) marks research required", () => {
     const input = {
       ...passingReadinessInput(),
-      idea: "For store managers, replicate the existing alert behavior in the new inventory module so an alert appears when stock is below threshold.",
+      idea: "For store managers, replicate the external alert guide behavior in the new inventory module so an alert appears when stock is below threshold.",
     };
     const readiness = inspectDiscoveryReadiness(input);
     const decision = buildResearchDecision(input, readiness);

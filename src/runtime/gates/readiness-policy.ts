@@ -36,9 +36,17 @@ function fileLooksUi(file) {
   return /\.(tsx|jsx|vue|svelte)$/.test(file) || /(^|\/)(pages|components|screens)\//.test(file);
 }
 
+function textLooksUi(value) {
+  const text = clean(value).toLowerCase();
+  return Boolean(text)
+    && (fileLooksUi(text)
+      || /\b(ui|page|screen|component|visual|browser|frontend)\b/.test(text)
+      || /页面|组件|界面|前端/.test(text));
+}
+
 function hasHardUiSignal(task = Object()) {
-  if (task.surface || task.ui_surface || task.ui?.surface) return true;
-  return taskFiles(task).some(fileLooksUi);
+  if (task.ui_surface || task.ui?.surface) return true;
+  return taskFiles(task).some(fileLooksUi) || textLooksUi(task.surface);
 }
 
 function manifestSignals(manifest = Object()) {
