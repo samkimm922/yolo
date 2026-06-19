@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { buildDemandSession, demandMarkdownArtifacts } from "./artifacts.js";
+import { buildDemandSession, demandMarkdownArtifacts, groundDemandExecutionScope } from "./artifacts.js";
 import { inspectDemandQuality, inspectDemandReadiness } from "./gate.js";
 import { buildDemandSessionState, demandSessionSchemaError, type DemandSessionStateResult, type DemandTriageResult, type DemandPrdReadinessResult, type DemandBlocker } from "./router.js";
 import { inspectAtomicTask } from "../runtime/execution/atomic-task-doctor.js";
@@ -1235,6 +1235,8 @@ export interface DemandPrdCompiledResult {
   status: string;
   code: string;
   summary: string;
+  grounding?: Record<string, unknown>;
+  grounded_session?: Record<string, unknown>;
   readiness: ReturnType<typeof inspectDemandReadiness>;
   atomicity?: ReturnType<typeof inspectAtomicity>;
   quality_report: ReturnType<typeof inspectDemandQuality>;
@@ -1248,6 +1250,13 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
   const projectRoot = input.projectRoot || input.project_root || options.projectRoot || options.project_root;
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const stateDir = join(stateRoot, "state");
+  const grounding = groundDemandExecutionScope(session, {
+    ...options,
+    ...input,
+    projectRoot,
+    stateRoot,
+  });
+  session = grounding.session || session;
   const readiness = inspectDemandReadiness(session, { phase: "prd", projectRoot, stateDir });
   if (!readiness.executable_prd_ready) {
     const quality = inspectDemandQuality(session, {
@@ -1260,6 +1269,8 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
       status: "blocked",
       code: "DEMAND_NOT_EXECUTABLE",
       summary: "Demand artifacts are not approved or complete enough for executable PRD.",
+      grounding,
+      grounded_session: session,
       readiness,
       quality_report: quality,
       blockers: readiness.blockers,
@@ -1280,6 +1291,8 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
       status: "blocked",
       code: "DEMAND_VERIFY_COMMAND_BLOCKED",
       summary: "PRD compilation blocked by illegal verify_command in task acceptance criteria.",
+      grounding,
+      grounded_session: session,
       readiness,
       quality_report: { status: "blocked", warnings: [], blockers: compileErrors.map((err) => err.task_id) } as ReturnType<typeof inspectDemandQuality>,
       blockers: compileErrors.map((err) => ({
@@ -1309,6 +1322,8 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
       status: "blocked",
       code: "DEMAND_ATOMICITY_BLOCKED",
       summary: "Demand PRD contains tasks that are too coarse for one-session execution.",
+      grounding,
+      grounded_session: session,
       readiness,
       atomicity,
       quality_report: quality,
@@ -1330,6 +1345,8 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
       summary: quality.status === "blocked"
         ? "Demand PRD quality is below the executable threshold."
         : "Demand PRD quality has warnings; executable PRD requires a clean pass.",
+      grounding,
+      grounded_session: session,
       readiness,
       atomicity,
       quality_report: quality,
@@ -1371,6 +1388,7 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
       prd_intake: session.prd_intake || session.nontechnical_intake || null,
       interview: session.interview || null,
       question_trace: session.question_trace || [],
+      grounding: grounding.applied ? grounding : null,
       readiness_level: readiness.readiness_level,
       readiness_score: readiness.quality_score,
       quality_score: quality.total_score,
@@ -1452,6 +1470,8 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
     status: "success",
     code: "DEMAND_PRD_READY",
     summary: "Executable PRD compiled from approved demand artifacts.",
+    grounding,
+    grounded_session: session,
     readiness,
     atomicity,
     quality_report: quality,
@@ -1460,6 +1480,11 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
     prd,
     next_actions: ["Run yolo check on the compiled PRD before yolo run."],
   };
+}
+
+function groundingArtifact(value = Object()) {
+  const { session: _session, ...artifact } = value || {};
+  return artifact;
 }
 
 export function runDemandPrdRuntime(input = Object(), options = Object()) {
@@ -1518,6 +1543,11 @@ export function runDemandPrdRuntime(input = Object(), options = Object()) {
   }
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
   const artifacts = [];
+  if (shouldWrite && compiled.grounding?.applied && compiled.grounded_session) {
+    artifacts.push(writeJson(read.path, compiled.grounded_session));
+    artifacts.push(writeJson(join(read.dir, "GROUNDING.json"), groundingArtifact(compiled.grounding)));
+    artifacts.push(writeJson(join(read.dir, "READINESS.json"), compiled.readiness));
+  }
   if (shouldWrite && compiled.prd && compiled.status === "success") artifacts.push(writeJson(outputFile, compiled.prd));
 
   const result = {
@@ -1529,6 +1559,7 @@ export function runDemandPrdRuntime(input = Object(), options = Object()) {
     compiled,
     prd: compiled.status === "success" ? compiled.prd : null,
     preflight,
+    grounding: compiled.grounding || null,
     readiness: compiled.readiness,
     quality_report: compiled.quality_report,
     blockers: compiled.blockers || [],

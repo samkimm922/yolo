@@ -10,7 +10,17 @@ const URL_RE = /https?:\/\//i;
 // "use/perform/fetch ... external research|web|url" — explicit request to
 // run external research. Preserved verbatim from the former demand-side
 // detection so behavior does not drift.
-const EXPLICIT_REQUEST_RE = /\b(?:use|run|perform|execute|do|fetch|search|browse|inspect|read|look up|lookup)\b.{0,80}\b(?:external research|web|fetch|search|browser|url)\b/i;
+const EXPLICIT_TARGET_RE = /(?:external research|web\s+(?:research|search|browser)|fetch|search|browser|url)/i;
+const EXPLICIT_REQUEST_RE = new RegExp(
+  "\\b(?:"
+  + [
+    `use\\s+${EXPLICIT_TARGET_RE.source}`,
+    "(?:run|perform|execute|do(?!\\s+not\\b)|fetch|search|browse|inspect|read|look up|lookup)\\b.{0,80}"
+      + EXPLICIT_TARGET_RE.source,
+  ].join("|")
+  + ")\\b",
+  "i",
+);
 const EXPLICIT_REQUIRED_RE = /\b(?:external research|web|fetch|search|browser|url)\b.{0,80}\b(?:required|must|explicitly requested|as external evidence)\b/i;
 
 // External-reference intent: "replicate the existing X", "clone behavior of",

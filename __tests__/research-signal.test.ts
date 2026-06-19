@@ -54,6 +54,14 @@ describe("detectExternalResearchSignal", () => {
     assert.equal(result.requires_external, false);
   });
 
+  test("negative scope boundary mentioning web UI does not request external research", () => {
+    const result = detectExternalResearchSignal("Do not build a web UI; keep this as a local command-line tool.");
+    assert.equal(result.requires_external, false);
+
+    const scoped = detectExternalResearchSignal("Use Node and TypeScript only; persist to a local JSON file. Do not build a web UI, network service, database server, authentication, or sync feature.");
+    assert.equal(scoped.requires_external, false);
+  });
+
   test("multiple text sources are joined and scanned together", () => {
     const result = detectExternalResearchSignal("Add a field.", "See https://example.com for reference.");
     assert.equal(result.requires_external, true);

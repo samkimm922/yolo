@@ -1,14 +1,19 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   readDemandSession,
+  runDemandApprovedRuntime,
   runDemandBrainstormRuntime,
   runDemandDiscussRuntime,
   runDemandPrdRuntime,
 } from "../src/demand/runtime.js";
+import {
+  groundDemandExecutionScope,
+  inferGreenfieldTargetFiles,
+} from "../src/demand/artifacts.js";
 import { inspectDemandQuality, inspectDemandReadiness } from "../src/demand/gate.js";
 import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
@@ -97,6 +102,36 @@ function acceptanceAdapterManifest() {
     evidence: ["screenshot", "runtime_log"],
     capabilities: ["page_reachable", "screenshot", "runtime_errors"],
     applies_to: ["ui", "browser"],
+  };
+}
+
+function taskcliDemandInput(root) {
+  return {
+    projectRoot: root,
+    stateRoot: join(root, ".yolo"),
+    demand_id: "DEMAND-TASKCLI",
+    title: "taskcli command line todo",
+    idea: "Build taskcli, a Node TypeScript command line todo tool.",
+    target_users: ["solo developer who manages a small todo list from the terminal"],
+    status_quo: ["The developer keeps todos in a scratch text file and manually counts done items."],
+    evidence: ["User interview approved a greenfield Node TypeScript CLI; no existing app files are required."],
+    assumptions: ["The project is greenfield and the first implementation file can be created under src."],
+    success_criteria: [
+      "Taskcli stores todos in a local JSON file and each command returns clear terminal output for add, list, done, and stats.",
+    ],
+    proof: [
+      "During acceptance, run taskcli add one item, list it, mark it done, and see stats count one completed item.",
+    ],
+    constraints: [
+      "Node and TypeScript only; persist data to a JSON file in the project working directory.",
+    ],
+    non_goals: ["No UI, no network service, no database server."],
+    decisions: ["Use one source module for the command line behavior and JSON persistence."],
+    roadmap: ["MVP is one command line module with add/list/done/stats."],
+    exceptions: ["If the JSON file is missing, taskcli starts with an empty todo list."],
+    approve: true,
+    playback: { confirmed: true, confirmed_by: "user" },
+    writeArtifacts: true,
   };
 }
 
@@ -222,6 +257,126 @@ describe("demand findings generator output parsing", () => {
 });
 
 describe("demand runtime", () => {
+  test("infers a traceable planned new file from greenfield CLI demand text", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-grounding-"));
+    try {
+      const approved = runDemandApprovedRuntime(taskcliDemandInput(root));
+      assert.equal(approved.status, "success");
+      assert.deepEqual(approved.session.project.target_files, []);
+
+      const inferred = inferGreenfieldTargetFiles(approved.session, { projectRoot: root });
+      assert.deepEqual(inferred.map((item) => item.file), ["src/taskcli.ts"]);
+      assert.equal(inferred[0].status, "planned_new_file");
+
+      const grounded = groundDemandExecutionScope(approved.session, { projectRoot: root });
+      assert.equal(grounded.applied, true);
+      assert.deepEqual(grounded.session.project.target_files, ["src/taskcli.ts"]);
+      const fact = grounded.session.project_facts.target_files[0];
+      assert.equal(fact.file, "src/taskcli.ts");
+      assert.equal(fact.status, "planned_new_file");
+      assert.equal(fact.allow_new_files, true);
+      assert.match(fact.evidence.join("\n"), /approved demand requirement/i);
+      assert.equal(grounded.session.project_facts.policy.inferred_files_are_execution_scope, false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("spec --demand auto-grounds greenfield demand into executable PRD accepted by check", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-grounding-prd-"));
+    try {
+      const approved = runDemandApprovedRuntime(taskcliDemandInput(root));
+      const spec = runDemandPrdRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demandPath: approved.demand_path,
+        writeArtifacts: true,
+      });
+
+      assert.equal(spec.status, "success", JSON.stringify(spec.blockers, null, 2));
+      assert.equal((spec as any).grounding?.applied, true);
+      assert.ok(spec.prd);
+      const prdPath = spec.artifacts.find((path) => path.endsWith("prd.json"));
+      assert.ok(prdPath);
+      assert.equal(existsSync(join(approved.demand_dir, "GROUNDING.json")), true);
+
+      const savedSession = JSON.parse(readFileSync(approved.demand_path, "utf8"));
+      assert.deepEqual(savedSession.project.target_files, ["src/taskcli.ts"]);
+      assert.equal(savedSession.project_facts.target_files[0].status, "planned_new_file");
+
+      const prd = spec.prd as any;
+      const task = prd.tasks[0];
+      assert.deepEqual(task.scope.targets.map((target) => target.file), ["src/taskcli.ts"]);
+      assert.equal(task.scope.allow_new_files, true);
+      assert.equal(prd.demand.project_facts.target_files[0].status, "planned_new_file");
+
+      const check = inspectYoloCheck({
+        prdPath,
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        writeLifecycle: false,
+      });
+      assert.equal(check.status, "pass", JSON.stringify(check.blockers, null, 2));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("does not promote auto-scouted brownfield candidates without explicit confirmation", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-grounding-candidate-"));
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src", "existing.ts"), "export const existing = true;\n", "utf8");
+      const session = {
+        id: "DEMAND-CANDIDATE",
+        requirements: {
+          active: [{
+            id: "REQ-001",
+            text: "Update the existing implementation so operators can see the requested behavior.",
+          }],
+        },
+        project: {
+          target_files: [],
+          candidate_target_files: ["src/existing.ts"],
+        },
+        project_facts: {
+          target_files: [{ file: "src/existing.ts", status: "candidate", source: "auto_scout_candidate" }],
+          candidate_target_files: ["src/existing.ts"],
+        },
+      };
+
+      const grounded = groundDemandExecutionScope(session, { projectRoot: root });
+      assert.equal(grounded.applied, false);
+      assert.equal(grounded.status, "blocked");
+      assert.deepEqual(grounded.target_files, []);
+      assert.deepEqual(session.project.target_files, []);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("prunes scaffold candidate facts when greenfield scope is grounded", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-grounding-scaffold-"));
+    try {
+      const approved = runDemandApprovedRuntime(taskcliDemandInput(root));
+      approved.session.project.candidate_target_files = ["specs/tasks.md"];
+      approved.session.project_facts.target_files = [
+        { file: "specs/tasks.md", status: "candidate", source: "auto_scout_candidate" },
+      ];
+      approved.session.project_facts.candidate_target_files = ["specs/tasks.md"];
+
+      const grounded = groundDemandExecutionScope(approved.session, { projectRoot: root });
+      assert.equal(grounded.applied, true);
+      assert.deepEqual(
+        grounded.session.project_facts.target_files.map((fact) => fact.status),
+        ["planned_new_file"],
+      );
+      assert.deepEqual(grounded.session.project_facts.candidate_target_files, []);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("brainstorm writes gsd-style demand artifact pack without business code", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-brainstorm-"));
     try {

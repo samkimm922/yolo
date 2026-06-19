@@ -121,14 +121,14 @@ const DELIVERABLE_VERB_TERMS = [
   "create", "creates", "add", "adds", "delete", "deletes", "remove", "removes",
   "update", "updates", "edit", "edits", "modify", "modifies", "rename", "renames",
   "move", "moves", "send", "sends", "upload", "uploads", "download", "downloads",
-  "deploy", "deploys", "validate", "validates", "verify", "authenticate", "authorize",
+  "deploy", "deploys", "validate", "validates", "authenticate", "authorize",
   "implement", "implements", "build", "builds", "configure", "configures", "install",
   "connect", "connects", "migrate", "migrates", "sync", "syncs", "export", "exports",
   "import", "imports", "notify", "notifies", "schedule", "schedules", "integrate",
   "transform", "transforms", "generate", "generates", "insert", "inserts", "parse",
   "register", "registers", "login", "logout", "encrypt", "encrypts", "paginate",
   "新增", "新建", "创建", "添加", "增加", "删除", "移除", "修改", "编辑", "重命名",
-  "移动", "拖动", "发送", "上传", "下载", "部署", "校验", "验证", "鉴权", "实现",
+  "移动", "拖动", "发送", "上传", "下载", "部署", "校验", "鉴权", "实现",
   "构建", "配置", "安装", "连接", "迁移", "同步", "导出", "导入", "通知", "集成", "生成", "插入",
 ];
 
@@ -232,16 +232,10 @@ function detectGenericStories(rawText) {
   const stories = [];
   if (hasDeliverablePair(text)) {
     const verbs = [...distinctDeliverableActions(text)];
-    verbs.forEach((verb, index) => {
-      stories.push({ id: `generic_action_${index + 1}`, label: `independent action: ${verb}` });
-    });
-    // 若去重后只剩一个词根（同一动作重复），仍按 pair 信号给出两个 story 占位以保持 ≥2。
-    if (stories.length < 2) {
-      stories.length = 0;
-      stories.push(
-        { id: "generic_action_1", label: "independent action" },
-        { id: "generic_action_2", label: "independent action" },
-      );
+    if (verbs.length >= 2) {
+      verbs.forEach((verb, index) => {
+        stories.push({ id: `generic_action_${index + 1}`, label: `independent action: ${verb}` });
+      });
     }
   } else if (crossesAllLayers(text)) {
     stories.push(
@@ -413,7 +407,6 @@ function scenarioText(scenario = Object()) {
   return compact([
     scenario.title,
     scenario.text,
-    scenario.current_behavior,
     scenario.desired_behavior,
     scenario.proof,
     scenario.acceptance,
@@ -452,7 +445,6 @@ function taskText(task = Object()) {
     task.proof,
     task.verification_hint,
     handoff.plain_language_goal,
-    handoff.current_behavior,
     handoff.desired_behavior,
     handoff.proof,
     handoff.touchpoint,

@@ -63,6 +63,44 @@ describe("story atomicity gate", () => {
     assert.equal(result.finding, null);
   });
 
+  test("ignores current behavior when checking scenario and task story atomicity", () => {
+    const result = inspectStoryAtomicityFromDemand({
+      requirements: {
+        active: [{
+          id: "REQ-CLI-ADD",
+          text: "TaskCLI should add a todo and print the new item id.",
+        }],
+      },
+      scenario_matrix: {
+        scenarios: [{
+          id: "SCN-CLI-ADD",
+          current_behavior: "Today the operator manually edits a scratch file and counts open items.",
+          desired_behavior: "TaskCLI adds one todo item and prints its id.",
+          proof: "Run taskcli add and see the new item id.",
+          surfaces: [{
+            id: "SFC-CLI",
+            kind: "code",
+            target_files: ["src/taskcli.ts"],
+          }],
+        }],
+      },
+    }, {
+      tasks: [{
+        id: "TASK-CLI-ADD",
+        title: "Add todo command",
+        description: "TaskCLI adds one todo item and prints its id.",
+        handoff: {
+          current_behavior: "Today the operator manually edits a scratch file.",
+          desired_behavior: "TaskCLI adds one todo item and prints its id.",
+        },
+        scope: { targets: [{ file: "src/taskcli.ts" }] },
+      }],
+    });
+
+    assert.equal(result.status, "pass");
+    assert.deepEqual(result.blockers, []);
+  });
+
   test("inspects demand requirements, scenarios, and generated tasks without using file count", () => {
     const result = inspectStoryAtomicityFromDemand({
       requirements: {
