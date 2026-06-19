@@ -86,4 +86,30 @@ describe("severity to priority mapping is unified across review pipelines", () =
     assert.equal(reviewCritical.tasks[0].priority, "P0");
     assert.equal(reviewCritical.tasks[0].must_fix_before_ship, true);
   });
+
+  test("scannerToTasks emits one review_fix task per source finding with machine closure checks", () => {
+    const result = scannerToTasks([{
+      finding_id: "REV-SINGLE-001",
+      scanner_id: "xss-innerHTML",
+      severity: "HIGH",
+      fix_type: "CLAUDE_FIX",
+      file: "src/profile.tsx",
+      line: 12,
+      description: "Remove unsafe innerHTML usage",
+      match: "innerHTML",
+    }], 3);
+
+    assert.equal(result.autoFixTasks.length, 0);
+    assert.equal(result.claudeFixTasks.length, 1);
+    const task = result.claudeFixTasks[0];
+    assert.equal(task.id, "FIX-R3-001");
+    assert.equal(task.task_kind, "review_fix");
+    assert.deepEqual(task.source_finding_ids, ["REV-SINGLE-001"]);
+    assert.deepEqual(task.fix_findings.map((finding) => finding.finding_id), ["REV-SINGLE-001"]);
+    assert.ok(task.post_conditions.some((condition) =>
+      condition.type === "code_not_contains" &&
+      condition.severity === "FAIL" &&
+      condition.params.source_finding_id === "REV-SINGLE-001"
+    ));
+  });
 });

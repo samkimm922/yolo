@@ -1,4 +1,5 @@
 import { normalizeReviewFinding, normalizeReviewFindings } from "../../review/findings.js";
+import { reviewFindingsToPrdTasks } from "../../review/findings-to-tasks.js";
 
 function appendUnique(target, items = []) {
   const seen = new Set(target);
@@ -37,28 +38,17 @@ export function reviewScopeFilesForPrd(prd, { normalizeRepoPath = (value) => val
 
 export function fallbackClassifyFindings(findings = [], round) {
   const normalizedFindings = normalizeReviewFindings(findings, { source: "review-classifier" });
-  const claudeFindings = normalizedFindings.filter((finding) => finding.fix_type !== "INFO");
   const infoCount = normalizedFindings.filter((finding) => finding.fix_type === "INFO").length;
+  const converted = reviewFindingsToPrdTasks(normalizedFindings, { round });
+  const autoFixTasks = [];
+  const claudeFixTasks = [];
+  for (const task of converted.tasks) {
+    if (task.fix_type === "AUTO_FIX") autoFixTasks.push(task);
+    else claudeFixTasks.push(task);
+  }
   return {
-    autoFixTasks: [],
-    claudeFixTasks: claudeFindings.length > 0 ? [{
-      id: `FIX-R${round}-001`,
-      title: `[code] ${claudeFindings.length} 个代码问题`,
-      type: "bugfix",
-      priority: "P2",
-      status: "pending",
-      depends_on: [],
-      scope: {
-        targets: [...new Set(claudeFindings.flatMap((finding) =>
-          (finding.files || []).map((file) => ({ file: file.replace(/:\d+$/, "") })),
-        ))],
-      },
-      pre_conditions: [],
-      post_conditions: [],
-      acceptance_criteria: claudeFindings.map((finding) => finding.description).slice(0, 20),
-      description: claudeFindings.map((finding) => `- [${finding.severity || "MEDIUM"}] ${finding.description}`).join("\n"),
-      source_findings: claudeFindings,
-    }] : [],
+    autoFixTasks,
+    claudeFixTasks,
     infoCount,
   };
 }
@@ -112,6 +102,53 @@ export function ensureReviewTaskShape(task) {
   if (!task.pre_conditions) task.pre_conditions = [];
   if (!task.post_conditions) task.post_conditions = [];
   if (!task.acceptance_criteria) task.acceptance_criteria = [];
+  const sourceFindings = Array.isArray(task.source_findings)
+    ? task.source_findings
+    : Array.isArray(task.fix_findings)
+      ? task.fix_findings
+      : [];
+  if (sourceFindings.length > 0 && (!Array.isArray(task.source_finding_ids) || task.source_finding_ids.length === 0)) {
+    task.source_finding_ids = sourceFindings
+      .map((finding) => finding?.finding_id || finding?.id || finding?.scanner_id || finding?.rule_id)
+      .filter(Boolean);
+  }
+  if (task.task_kind === "review_fix" && task.post_conditions.length === 0) {
+    const targets = Array.isArray(task.scope?.targets) ? task.scope.targets : [];
+    task.post_conditions.push(
+      ...targets.map((target, index) => ({
+        id: `POST-${task.id || "REVIEW"}-TARGET-${index + 1}`,
+        type: "target_file_modified",
+        severity: "FAIL",
+        params: { file: target.file },
+        message: `review fix must modify target file: ${target.file}`,
+      })),
+    );
+    for (const [index, finding] of sourceFindings.entries()) {
+      const match = String(finding?.match || finding?.evidence_text || "").trim();
+      const file = finding?.file || finding?.files?.[0] || targets[0]?.file || "";
+      if (match && file) {
+        task.post_conditions.push({
+          id: `POST-${task.id || "REVIEW"}-ABSENT-${index + 1}`,
+          type: "code_not_contains",
+          severity: "FAIL",
+          params: {
+            file: String(file).replace(/:\d+(?:-\d+)?$/, ""),
+            text: match.slice(0, 160),
+            source_finding_id: finding?.finding_id || finding?.id || finding?.scanner_id || finding?.rule_id || null,
+            scanner_id: finding?.scanner_id || finding?.rule_id || null,
+          },
+          message: "review finding matched text must be removed or rewritten",
+        });
+      }
+    }
+    task.post_conditions.push({
+      id: `POST-${task.id || "REVIEW"}-TYPECHECK`,
+      type: "no_new_type_errors",
+      severity: "FAIL",
+      params: { command: "npm run typecheck" },
+      message: "project typecheck must pass after the review fix",
+    });
+  }
   return task;
 }
 

@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   buildReviewPreCompletedSet,
-  contractReviewFindings,
   ensureReviewTaskShape,
   fallbackClassifyFindings,
   mergeClaudeReviewTasks,
@@ -66,6 +65,80 @@ function reviewScannerArtifactState(scanResult) {
   };
 }
 
+function findingFingerprint(finding = Object()) {
+  return String(
+    finding.finding_id ||
+    finding.id ||
+    [
+      finding.scanner_id || finding.rule_id || finding.code || "review",
+      finding.file || finding.path || "",
+      finding.line || "",
+      finding.match || finding.message || finding.description || "",
+    ].join("|"),
+  );
+}
+
+function taskSourceFindingIds(task = Object()) {
+  return [
+    ...(Array.isArray(task.source_finding_ids) ? task.source_finding_ids : []),
+    ...(Array.isArray(task.source_findings) ? task.source_findings.map((finding) => finding?.finding_id || finding?.id) : []),
+    ...(Array.isArray(task.fix_findings) ? task.fix_findings.map((finding) => finding?.finding_id || finding?.id) : []),
+  ].filter(Boolean).map(String);
+}
+
+function reviewFixTaskCompletedForFinding({ prd, taskResults, finding } = Object()) {
+  const sourceId = findingFingerprint(finding);
+  const completedIds = new Set([
+    ...(taskResults?.completed || []),
+    ...(taskResults?.skipped || []),
+  ]);
+  return (prd?.tasks || []).some((task) => {
+    if (task?.task_kind !== "review_fix") return false;
+    if (!taskSourceFindingIds(task).includes(sourceId)) return false;
+    const status = String(task.status || "").toLowerCase();
+    return ["completed", "done"].includes(status) || completedIds.has(task.id);
+  });
+}
+
+function persistentFindingBlock({ round, findings = [], persistence = new Map(), prd, taskResults, maxRounds }) {
+  const persisted = findings
+    .map((finding) => {
+      const fingerprint = findingFingerprint(finding);
+      const state = persistence.get(fingerprint) || { count: 0 };
+      return {
+        finding,
+        fingerprint,
+        count: state.count || 0,
+        completed_review_fix: reviewFixTaskCompletedForFinding({ prd, taskResults, finding }),
+      };
+    })
+    .filter((item) => item.count >= maxRounds || (item.count > 1 && item.completed_review_fix));
+
+  if (persisted.length === 0) return null;
+  return {
+    id: "REVIEW-FINDINGS-PERSISTED",
+    status: "blocked",
+    reason: "review_findings_persisted",
+    message: `Review findings persisted across ${round} round(s); human review is required.`,
+    humanNeeded: true,
+    meta: {
+      round,
+      phase: "REVIEW_FINDINGS_PERSISTED",
+      max_persistent_finding_rounds: maxRounds,
+      persisted_findings: persisted.map((item) => ({
+        finding_id: item.finding.finding_id || item.finding.id || null,
+        fingerprint: item.fingerprint,
+        scanner_id: item.finding.scanner_id || item.finding.rule_id || null,
+        file: item.finding.file || null,
+        line: item.finding.line || null,
+        count: item.count,
+        completed_review_fix: item.completed_review_fix,
+      })),
+      human_needed: true,
+    },
+  };
+}
+
 export async function runReviewLoop({
   prd,
   prdPath,
@@ -81,6 +154,7 @@ export async function runReviewLoop({
   normalizeRepoPath = (value) => value,
   maxReviewRounds = 5,
   maxReviewTasksPerRound = 5,
+  maxPersistentFindingRounds = 2,
   execFileSync,
   processExecPath = process.execPath,
   logProgress = noop,
@@ -98,6 +172,8 @@ export async function runReviewLoop({
   let reviewCompleted = false;
   let reviewOutcomeRecorded = false;
   let pendingReviewFailureOutcome = null;
+  const findingPersistence = new Map();
+  let lastRoundFindings = [];
   const loadLatestPrd = () => {
     try {
       return prdPath ? loadPRD(prdPath) : prd;
@@ -212,6 +288,22 @@ export async function runReviewLoop({
       }
       reviewFailCount = 0;
       pendingReviewFailureOutcome = null;
+      const currentFingerprints = new Set();
+      for (const finding of findings) {
+        const fingerprint = findingFingerprint(finding);
+        const previous = findingPersistence.get(fingerprint);
+        currentFingerprints.add(fingerprint);
+        findingPersistence.set(fingerprint, {
+          count: previous?.round === round - 1 ? previous.count + 1 : 1,
+          round,
+        });
+      }
+      for (const [fingerprint, state] of findingPersistence.entries()) {
+        if (state.round !== round && !currentFingerprints.has(fingerprint)) {
+          findingPersistence.delete(fingerprint);
+        }
+      }
+      lastRoundFindings = findings;
 
       const coverageState = inspectReviewScannerCoverage(scanResult, findings);
       if (!findings.length && coverageState.blocks_execution) {
@@ -252,9 +344,24 @@ export async function runReviewLoop({
       logProgress("REVIEW", "", `Scanner 发现 ${findings.length} 条`);
       logReviewGate("review-scanner", "pass", reviewLogMeta({ round, total_findings: findings.length }));
 
+      const persistedBlock = persistentFindingBlock({
+        round,
+        findings,
+        persistence: findingPersistence,
+        prd,
+        taskResults,
+        maxRounds: maxPersistentFindingRounds,
+      });
+      if (persistedBlock) {
+        logProgress("REVIEW", "BLOCKED", persistedBlock.message);
+        logReviewError("review finding 持续存在", persistedBlock.message, reviewLogMeta(persistedBlock.meta));
+        recordReviewOutcome(persistedBlock);
+        break;
+      }
+
       let classified;
       try {
-        const { scannerToTasks } = await importFromRoot(yoloRoot, "lib/scanner-to-task.js");
+        const { scannerToTasks } = await importFromRoot(yoloRoot, "src/lib/scanner-to-task.js");
         classified = scannerToTasks(findings, round);
       } catch (e) {
         logProgress("REVIEW", "", `scanner-to-task 不可用 (${e.message})，全部转为 CLAUDE_FIX`);
@@ -262,63 +369,10 @@ export async function runReviewLoop({
       }
 
       const { autoFixTasks, claudeFixTasks, infoCount } = classified;
-      let reviewToPrdTasks = [];
-      const contractFindings = contractReviewFindings(findings);
-      try {
-        if (contractFindings.length > 0) {
-          const { reviewFindingsToPrdTasks } = await importFromRoot(yoloRoot, "src/review/findings-to-tasks.js");
-          const converted = reviewFindingsToPrdTasks(contractFindings, {
-            round,
-            existingTasks: [...(prd.tasks || []), ...autoFixTasks, ...claudeFixTasks],
-          });
-          reviewToPrdTasks = converted.tasks || [];
-          if (converted.blocks_ship) {
-            logProgress("REVIEW", "review-to-prd", `生成 ${reviewToPrdTasks.length} 个阻断 ship 的 review_fix task`);
-          }
-        }
-      } catch (e) {
-        logProgress("REVIEW", "review-to-prd", `转换失败: ${e.message}`);
-        if (contractFindings.length > 0) {
-          const targets = [...new Set(contractFindings.flatMap((finding) =>
-            (finding.files || [finding.file]).filter(Boolean).map((file) => String(file).replace(/:\d+$/, "")),
-          ))].map((file) => ({ file }));
-          reviewToPrdTasks = [{
-            id: `FIX-R${round}-CONVERSION-FAILED`,
-            title: "[review] Preserve blocking findings after conversion failure",
-            type: "bugfix",
-            priority: "P1",
-            status: "pending",
-            depends_on: [],
-            scope: { targets },
-            pre_conditions: [],
-            post_conditions: [],
-            acceptance_criteria: [
-              "Resolve or manually convert the preserved review findings before ship.",
-              "Attach evidence that the original findings were handled.",
-            ],
-            description: [
-              `reviewFindingsToPrdTasks failed: ${e.message}`,
-              ...contractFindings.map((finding) => `- [${finding.severity || "MEDIUM"}] ${finding.finding_id || finding.id || finding.code || "review-finding"} ${finding.message || finding.description || ""}`),
-            ].join("\n"),
-            source_findings: contractFindings,
-            blocks_ship: true,
-            review_conversion_failed: {
-              message: e.message,
-              preserved_finding_count: contractFindings.length,
-            },
-          }];
-          logReviewError("review finding 转换失败", e.message, reviewLogMeta({
-            round,
-            phase: "REVIEW_FINDING_CONVERSION_FAILED",
-            preserved_finding_count: contractFindings.length,
-            generated_task_id: reviewToPrdTasks[0].id,
-          }));
-        }
-      }
 
-      logProgress("REVIEW", "", `${autoFixTasks.length} AUTO_FIX, ${claudeFixTasks.length + reviewToPrdTasks.length} CLAUDE_FIX, ${infoCount} INFO`);
+      logProgress("REVIEW", "", `${autoFixTasks.length} AUTO_FIX, ${claudeFixTasks.length} CLAUDE_FIX, ${infoCount} INFO`);
       logReviewGate("review-classifier", "pass", reviewLogMeta(
-        reviewClassifierMeta({ round, findings, autoFixTasks, claudeFixTasks, reviewToPrdTasks, infoCount }),
+        reviewClassifierMeta({ round, findings, autoFixTasks, claudeFixTasks, infoCount }),
       ));
       for (const finding of findings) {
         const issue = reviewIssueLogInput(finding);
@@ -362,7 +416,7 @@ export async function runReviewLoop({
         }
       }
 
-      const allClaudeTasks = mergeClaudeReviewTasks({ claudeFixTasks, reviewToPrdTasks, escalatedFromAuto });
+      const allClaudeTasks = mergeClaudeReviewTasks({ claudeFixTasks, escalatedFromAuto });
 
       if (allClaudeTasks.length === 0) {
         if (autoFixedCount > 0) {
@@ -505,6 +559,28 @@ export async function runReviewLoop({
         ...pendingReviewFailureOutcome.meta,
         max_review_rounds: maxReviewRounds,
         exhausted_review_rounds: true,
+      },
+    });
+  }
+  if (!reviewOutcomeRecorded && !reviewCompleted && lastRoundFindings.length > 0) {
+    recordReviewOutcome({
+      id: "REVIEW-FINDINGS-PERSISTED",
+      status: "blocked",
+      reason: "review_findings_persisted",
+      message: "Review loop exhausted while findings still existed.",
+      humanNeeded: true,
+      meta: {
+        phase: "REVIEW_FINDINGS_PERSISTED",
+        exhausted_review_rounds: true,
+        max_review_rounds: maxReviewRounds,
+        persisted_findings: lastRoundFindings.map((finding) => ({
+          finding_id: finding.finding_id || finding.id || null,
+          fingerprint: findingFingerprint(finding),
+          scanner_id: finding.scanner_id || finding.rule_id || null,
+          file: finding.file || null,
+          line: finding.line || null,
+        })),
+        human_needed: true,
       },
     });
   }

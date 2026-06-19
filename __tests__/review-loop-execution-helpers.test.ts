@@ -1,6 +1,9 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { scanProject } from "../src/review/scanner.js";
 import {
   autoFixErrorFallback,
   buildReviewScannerArgs,
@@ -70,6 +73,29 @@ describe("review-loop execution helpers", () => {
     }));
     assert.equal(complete.status, "pass");
     assert.equal(complete.blocks_execution, false);
+  });
+
+  test("scanProject emits complete coverage_artifact for clean scoped projects", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-review-scan-clean-"));
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src/app.ts"), "export const value = 1;\n", "utf8");
+
+      const result = scanProject({
+        root,
+        files: ["src/app.ts"],
+        includeExternalChecks: false,
+      });
+      const coverage = inspectReviewScannerCoverage(JSON.stringify(result), result.findings);
+
+      assert.equal(result.findings.length, 0);
+      assert.deepEqual(result.coverage_artifact.scanned_files, ["src/app.ts"]);
+      assert.equal(result.coverage_artifact.coverage_status, "complete");
+      assert.equal(coverage.status, "pass");
+      assert.equal(coverage.blocks_execution, false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("shouldStopReviewAfterFailure follows the max failure threshold", () => {

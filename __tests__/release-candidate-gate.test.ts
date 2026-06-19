@@ -157,6 +157,20 @@ describe("release candidate gate aggregator", () => {
     assert.ok(result.issue_codes.includes("RC_GATE_REPORT_MISSING"));
   });
 
+  test("blocks when lifecycle review, acceptance, or delivery reports are missing", () => {
+    for (const reportName of ["review", "acceptance", "delivery"]) {
+      const reports = passingReports();
+      delete reports[reportName];
+
+      const result = runReleaseCandidateGate({ now: NOW, reports });
+
+      assert.equal(result.status, "block", reportName);
+      assert.ok(result.blockers.some((blocker) =>
+        blocker.code === "RC_GATE_REPORT_MISSING" && blocker.report === reportName
+      ), reportName);
+    }
+  });
+
   test("blocks malformed reports instead of treating warnings as success", () => {
     const result = runReleaseCandidateGate({
       now: NOW,

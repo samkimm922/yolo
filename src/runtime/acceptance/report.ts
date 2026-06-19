@@ -430,6 +430,13 @@ function reviewFindingsFromReports(...reports) {
     ...asArray(report?.findings),
     ...asArray(report?.review?.findings),
     ...asArray(report?.review?.issues),
+    ...asArray(report?.review_output?.findings),
+    ...asArray(report?.reviewOutput?.findings),
+    ...asArray(report?.report?.findings),
+    ...asArray(report?.report?.review?.findings),
+    ...asArray(report?.report?.review?.issues),
+    ...asArray(report?.report?.review_output?.findings),
+    ...asArray(report?.report?.reviewOutput?.findings),
   ]);
 }
 
@@ -441,6 +448,64 @@ function reviewIssues(reviewReport, runReport, issues) {
         finding_id: finding.finding_id || finding.id || null,
         severity: finding.severity || null,
       });
+    }
+  }
+}
+
+function reviewFixTasks(prd) {
+  return asArray(prd?.tasks).filter((task) => task?.task_kind === "review_fix");
+}
+
+function taskSourceFindingIds(task = Object()) {
+  return [
+    ...asArray(task.source_finding_ids),
+    ...asArray(task.source_findings).map((finding) => finding?.finding_id || finding?.id),
+    ...asArray(task.fix_findings).map((finding) => finding?.finding_id || finding?.id),
+  ].map((value) => clean(value)).filter(Boolean);
+}
+
+function findingIdCandidates(finding = Object()) {
+  return [
+    finding.finding_id,
+    finding.id,
+    finding.source_finding_id,
+  ].map((value) => clean(value)).filter(Boolean);
+}
+
+function findingIsClosed(finding = Object()) {
+  const status = clean(finding.status || finding.state || finding.resolution).toLowerCase();
+  return ["closed", "resolved", "fixed", "pass", "passed"].includes(status);
+}
+
+function reviewFixClosureIssues(prd, reviewReport, runReport, issues) {
+  const tasks = reviewFixTasks(prd);
+  if (tasks.length === 0) return;
+  if (!reviewReport) {
+    pushIssue(issues, "P1", "REVIEW_FIX_REPORT_MISSING", "Review fix tasks require a review report that proves source findings are closed.", {
+      review_fix_task_count: tasks.length,
+    });
+    return;
+  }
+
+  const openFindings = reviewFindingsFromReports(reviewReport, runReport)
+    .filter((finding) => !findingIsClosed(finding));
+  const openFindingIds = new Set(openFindings.flatMap(findingIdCandidates));
+
+  for (const task of tasks) {
+    const sourceFindingIds = taskSourceFindingIds(task);
+    if (sourceFindingIds.length === 0) {
+      pushIssue(issues, "P1", "REVIEW_FIX_SOURCE_FINDINGS_MISSING", "Review fix task must bind to source_finding_ids for machine acceptance.", {
+        task_id: task.id || null,
+      });
+      continue;
+    }
+    for (const findingId of sourceFindingIds) {
+      if (openFindingIds.has(findingId)) {
+        pushIssue(issues, "P1", "REVIEW_FIX_FINDING_STILL_OPEN", "Review fix task source finding is still present in the latest review report.", {
+          task_id: task.id || null,
+          finding_id: findingId,
+        });
+      }
     }
   }
 }
@@ -595,6 +660,7 @@ export function buildAcceptanceReport(input = Object(), options = Object()) {
   adapterEvidenceIssues(adapterEvidence, issues);
   evidenceLineageIssues({ prdPath, runReport, reviewReport }, issues);
   reviewIssues(reviewReport, runReport, issues);
+  if (prd) reviewFixClosureIssues(prd, reviewReport, runReport, issues);
   const ui = prd ? uiEvidenceIssues({ prd, uiEvidence, resolver }, issues) : { ui_task_count: 0 };
   for (const blocker of asArray(resolver.blockers)) {
     pushIssue(issues, "P1", blocker.code || "RESOLVER_BLOCKED", blocker.message || "Resolver blocked acceptance.");
