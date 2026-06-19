@@ -86,6 +86,22 @@ describe("detectExternalResearchSignal", () => {
     assert.equal(result.requires_external, false);
   });
 
+  test("acceptance proof that forbids external access does not request external research", () => {
+    const result = detectExternalResearchSignal(
+      "Proof is integration tests that start the local server on an ephemeral port, call POST /shorten, request /stats, and inspect temp JSON persistence without any external network call.",
+    );
+    assert.equal(result.requires_external, false);
+    assert.deepEqual(result.matches, []);
+  });
+
+  test("out-of-scope remote sources do not request external research", () => {
+    const result = detectExternalResearchSignal(
+      "MVP includes local file read, cleaning, aggregation, export, and tests. Streaming huge files, remote sources, scheduling, UI, and database loading are out of scope.",
+    );
+    assert.equal(result.requires_external, false);
+    assert.deepEqual(result.matches, []);
+  });
+
   test("multiple text sources are joined and scanned together", () => {
     const result = detectExternalResearchSignal("Add a field.", "See https://example.com for reference.");
     assert.equal(result.requires_external, true);

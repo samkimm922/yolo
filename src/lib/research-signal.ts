@@ -24,16 +24,18 @@ const EXTERNAL_SOURCE =
   "(?:external|outside|third[_ -]?party|remote|public|online|web(?:site)?|site|url|https?:\\/\\/|source)";
 const EXTERNAL_API_SOURCE =
   "(?:(?:external|outside|third[_ -]?party|unknown|remote|public|upstream)(?:\\s+[\\w-]+){0,4}\\s+(?:api|service|provider|endpoint))";
+const SAME_SENTENCE_GAP = "[^\\n.。；;]{0,120}";
+
 const EXTERNAL_DATA_REQUEST_RE = new RegExp(
   "\\b(?:scrap(?:e|es|ing)|crawl(?:s|ing)?|fetch(?:es|ing)?|pull(?:s|ing)?|ingest(?:s|ing)?|collect(?:s|ing)?|extract(?:s|ing)?|read(?:s|ing)?|inspect(?:s|ing)?|brows(?:e|es|ing)|search(?:es|ing)?|look\\s+up|lookup|quer(?:y|ies|ying))\\b"
-  + `.{0,120}\\b(?:${EXTERNAL_SOURCE}(?:\\s+(?:data|content|records|feed|docs?|documentation|api|service|endpoint|source))?|${EXTERNAL_API_SOURCE})\\b`,
+  + `${SAME_SENTENCE_GAP}\\b(?:${EXTERNAL_SOURCE}(?:\\s+(?:data|content|records|feed|docs?|documentation|api|service|endpoint|source))?|${EXTERNAL_API_SOURCE})\\b`,
   "i",
 );
 const THIRD_PARTY_INTEGRATION_RE = new RegExp(
   "\\b(?:integrat(?:e|es|ing)|connect(?:s|ing)?|call(?:s|ing)?|consume(?:s|ing)?|quer(?:y|ies|ying)|sync(?:s|ing)?\\s+with|authenticat(?:e|es|ing)\\s+with)\\b"
-  + `.{0,120}\\b${EXTERNAL_API_SOURCE}\\b`
+  + `${SAME_SENTENCE_GAP}\\b${EXTERNAL_API_SOURCE}\\b`
   + "|"
-  + `\\b${EXTERNAL_API_SOURCE}\\b.{0,120}\\b(?:integration|connect|call|consume|query|sync|auth)\\b`,
+  + `\\b${EXTERNAL_API_SOURCE}\\b${SAME_SENTENCE_GAP}\\b(?:integration|connect|call|consume|query|sync|auth)\\b`,
   "i",
 );
 
@@ -77,8 +79,12 @@ function regexWithGlobal(regex: RegExp) {
 function isNegatedMatch(text: string, index: number, match: string) {
   const before = text.slice(Math.max(0, index - 48), index).toLowerCase();
   const matched = match.toLowerCase();
+  const window = text.slice(Math.max(0, index - 96), Math.min(text.length, index + match.length + 96)).toLowerCase();
   return /(?:\b(?:do\s+not|don't|dont|no|without|never|avoid)\b|不要|禁止|不需要|无需)[\s\w,;:/.()[\]-]{0,48}$/.test(before)
-    || /\bnot\s+(?:required|needed|requested|included|provided|recorded)\b/.test(matched);
+    || /\bnot\s+(?:required|needed|requested|included|provided|recorded)\b/.test(matched)
+    || /\b(?:without|no|not|never|avoid)\s+(?:any\s+)?(?:external|outside|third[_ -]?party|remote|public|online|web(?:site)?|internet|network)\b/.test(matched)
+    || /\b(?:out\s+of\s+scope|non[- ]?goals?|not\s+in\s+scope|excluded?|disabled)\b[^.\n。；;]{0,100}\b(?:external|outside|third[_ -]?party|remote|public|online|web(?:site)?|internet|network)\b/.test(window)
+    || /\b(?:external|outside|third[_ -]?party|remote|public|online|web(?:site)?|internet|network)\b[^.\n。；;]{0,100}\b(?:out\s+of\s+scope|non[- ]?goals?|not\s+in\s+scope|excluded?|disabled)\b/.test(window);
 }
 
 function firstNonNegatedMatch(text: string, regex: RegExp) {
