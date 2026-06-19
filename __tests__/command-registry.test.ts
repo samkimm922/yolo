@@ -35,6 +35,18 @@ function captureIo(cwd, extra = {}) {
   };
 }
 
+function publicCommandsFromHelp(text) {
+  return text
+    .split("\n")
+    .filter((line) => /^  yolo\s+\S+/.test(line))
+    .map((line) => line.trim().split(/\s+/)[1]);
+}
+
+function publicCommandsFromUnknown(text) {
+  const line = text.split("\n").find((item) => item.startsWith("Available commands:")) || "";
+  return [...line.matchAll(/yolo\s+([a-z-]+)/g)].map((match) => match[1]);
+}
+
 function runnablePrd(id = "FIX-CLI-001") {
   return {
     version: "2.0",
@@ -152,6 +164,27 @@ describe("YOLO command registry", () => {
     assert.match(renderYoloCommandUsage("auto"), /yolo auto/);
   });
 
+  test("help, unknown command, and registry expose the same public command list", async () => {
+    const root = tempProject("yolo-public-surface-");
+    try {
+      const help = captureIo(root);
+      const helpExit = await runYoloCli(["--help"], help.io);
+      assert.equal(helpExit, 0);
+      assert.deepEqual(publicCommandsFromHelp(help.stdout.text), DEFAULT_YOLO_PUBLIC_COMMAND_NAMES);
+
+      const unknown = captureIo(root);
+      const unknownExit = await runYoloCli(["wat"], unknown.io);
+      assert.equal(unknownExit, 2);
+      assert.deepEqual(publicCommandsFromUnknown(unknown.stderr.text), DEFAULT_YOLO_PUBLIC_COMMAND_NAMES);
+      assert.match(unknown.stderr.text, new RegExp(`下一步执行 yolo ${DEFAULT_YOLO_PUBLIC_COMMAND_NAMES[0]}`));
+
+      const inspection = inspectYoloCommandRegistry(buildYoloCommandRegistry());
+      assert.deepEqual(inspection.stable_commands, DEFAULT_YOLO_PUBLIC_COMMAND_NAMES);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("demand/auto/ship/status stable routes are present", async () => {
     const root = tempProject("yolo-stable-routes-");
     try {
@@ -210,6 +243,65 @@ describe("YOLO command registry", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
       rmSync(yoloRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("auto treats natural language positionals as requirements, not PRD paths", async () => {
+    const root = tempProject("yolo-auto-requirement-");
+    const requirement = "For store managers, build low stock alerts in src/inventory/alerts.ts so managers see an alert before shelf-out; success criteria: alert appears below threshold.";
+    try {
+      const { io, stdout, stderr } = captureIo(root);
+      const exitCode = await runYoloCli(["auto", requirement, "--dry-run", "--json", "--cwd", root], io);
+      const payload = JSON.parse(stdout.text);
+
+      assert.equal(stderr.text, "");
+      assert.equal(exitCode, 2);
+      assert.equal(payload.plan.input_source, "requirement");
+      assert.equal(payload.plan.artifacts.prdPath.includes(requirement), false);
+      assert.equal(JSON.stringify(payload).includes(`.yolo/${requirement}`), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("auto emits JSON parse errors when a value flag is followed by another flag", async () => {
+    const root = tempProject("yolo-auto-parse-error-");
+    try {
+      const { io, stdout, stderr } = captureIo(root);
+      const exitCode = await runYoloCli(["auto", "--prd", "--json", "--cwd", root], io);
+      const payload = JSON.parse(stdout.text);
+
+      assert.equal(stderr.text, "");
+      assert.equal(exitCode, 2);
+      assert.equal(payload.schema, "yolo.cli.parse_error.v1");
+      assert.equal(payload.code, "CLI_PARSE_ERROR");
+      assert.equal(payload.flag, "--prd");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("yolo check without a path uses the current project PRD when available", async () => {
+    const root = tempProject("yolo-check-default-prd-");
+    try {
+      initProject({ projectRoot: root });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src/value.ts"), "export const value = 'ok';\n", "utf8");
+      const prdPath = join(root, ".yolo/data/prd/current/current-prd.json");
+      mkdirSync(join(root, ".yolo/data/prd/current"), { recursive: true });
+      writeFileSync(prdPath, JSON.stringify(runnablePrd("FIX-CHECK-DEFAULT")), "utf8");
+
+      const { io, stdout, stderr } = captureIo(root);
+      const exitCode = await runYoloCli(["check", "--cwd", root, "--json", "--no-write"], io);
+      const payload = JSON.parse(stdout.text);
+
+      assert.equal(stderr.text, "");
+      assert.notEqual(exitCode, undefined);
+      assert.notEqual(payload.code, "MISSING_PRD_PATH");
+      assert.equal(payload.prd_path, prdPath);
+      assert.ok(["YOLO_CHECK_PASS", "YOLO_CHECK_WARNING", "YOLO_CHECK_BLOCKED"].includes(payload.code));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

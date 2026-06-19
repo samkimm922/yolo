@@ -572,7 +572,8 @@ describe("lifecycle guard", () => {
     const root = tempProject();
     try {
       const out = capture();
-      const exitCode = await runYoloCli(["auto", "--dry-run", "--json", "test inventory alerts feature", `--cwd=${root}`], {
+      const requirement = "For store managers, build low stock alerts in src/inventory/alerts.ts so managers see an alert before shelf-out; success criteria: alert appears below threshold.";
+      const exitCode = await runYoloCli(["auto", "--dry-run", "--json", requirement, `--cwd=${root}`], {
         cwd: root,
         stdout: out.stream,
       });
@@ -581,6 +582,7 @@ describe("lifecycle guard", () => {
       assert.equal(exitCode, 2, "auto --dry-run returns exit 2 for dry-run plan ready");
       assert.equal(result.code, "AUTO_PLAN_READY");
       assert.ok(result.plan, "result must contain a plan");
+      assert.equal((result.plan as { input_source?: string }).input_source, "requirement");
       const actions = (result.plan as Record<string, unknown>).actions as Record<string, unknown>[] | undefined;
       const phaseIds = (actions || []).map((a) => (a.phase || a.id || "") as string);
       const phaseSet = new Set(phaseIds);
