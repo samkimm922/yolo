@@ -91,7 +91,7 @@ const INVENTORY = [
   ["src/runtime/run-lifecycle/finalize.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 11 }],
   ["src/runtime/run-lifecycle/pre-execution-outcome.ts", { WARN: 0, warning: 2, "best-effort": 0, skip: 0 }],
   ["src/runtime/run-lifecycle/recovery-checkpoints.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
-  ["src/runtime/run-lifecycle/startup.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 4 }],
+  ["src/runtime/run-lifecycle/startup.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 6 }],
   ["src/runtime/run-lifecycle/state-files.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 3 }],
   ["src/runtime/run-lifecycle/task-runtime-bindings.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/runtime/runner-core-helpers.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],

@@ -30,6 +30,84 @@ export function createRunnerError(message, exitCode = 1, details = Object()) {
   return error;
 }
 
+export const RUN_INITIAL_COMMIT_MESSAGE = "chore(yolo): initial commit for run baseline";
+
+function describeCommandFailure(error) {
+  const stderr = String(error?.stderr || "").trim();
+  const stdout = String(error?.stdout || "").trim();
+  return stderr || stdout || error?.message || String(error);
+}
+
+function runGit(rootDir, args, { execFileSync = defaultExecFileSync, env = process.env } = Object()) {
+  return execFileSync("git", args, {
+    cwd: rootDir,
+    encoding: "utf8",
+    stdio: ["pipe", "pipe", "pipe"],
+    env,
+  }).trim();
+}
+
+export function ensureRunGitBaseline({
+  rootDir,
+  execFileSync = defaultExecFileSync,
+  consoleLog = (...args) => console.log(...args),
+  runnerError = createRunnerError,
+  commitMessage = RUN_INITIAL_COMMIT_MESSAGE,
+} = Object()) {
+  let insideGitWorkTree = false;
+  try {
+    insideGitWorkTree = runGit(rootDir, ["rev-parse", "--is-inside-work-tree"], { execFileSync }) === "true";
+  } catch {
+    return { status: "skipped", reason: "not_git_worktree" };
+  }
+  if (!insideGitWorkTree) return { status: "skipped", reason: "not_git_worktree" };
+
+  try {
+    const commit = runGit(rootDir, ["rev-parse", "--verify", "HEAD"], { execFileSync });
+    return { status: "ready", commit };
+  } catch (headError) {
+    let commitCount = 0;
+    try {
+      commitCount = Number(runGit(rootDir, ["rev-list", "--count", "--all"], { execFileSync }) || "0");
+    } catch (historyError) {
+      throw runnerError("Unable to inspect git history before yolo run baseline", 1, {
+        code: "GIT_HISTORY_UNAVAILABLE",
+        detail: describeCommandFailure(historyError),
+        head_detail: describeCommandFailure(headError),
+      });
+    }
+
+    if (commitCount > 0) {
+      throw runnerError("Git repository has commits but HEAD is unavailable before yolo run", 1, {
+        code: "GIT_HEAD_UNAVAILABLE",
+        detail: describeCommandFailure(headError),
+      });
+    }
+  }
+
+  consoleLog("[yolo-runner] 检测到 git 仓库尚无 HEAD；yolo 将暂存当前项目状态并创建初始 commit 作为 run baseline。");
+  const commitEnv = {
+    ...process.env,
+    GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || "YOLO Runner",
+    GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || "yolo-runner@example.invalid",
+    GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || "YOLO Runner",
+    GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL || "yolo-runner@example.invalid",
+  };
+  try {
+    runGit(rootDir, ["add", "-A"], { execFileSync, env: commitEnv });
+    runGit(rootDir, ["commit", "--allow-empty", "-m", commitMessage], { execFileSync, env: commitEnv });
+  } catch (error) {
+    throw runnerError("Unable to create initial git commit for yolo run baseline", 1, {
+      code: "GIT_INITIAL_COMMIT_FAILED",
+      detail: describeCommandFailure(error),
+    });
+  }
+
+  const commit = runGit(rootDir, ["rev-parse", "--verify", "HEAD"], { execFileSync });
+  consoleLog(`[yolo-runner] yolo 已创建初始 commit ${commit.slice(0, 12)}: ${commitMessage}`);
+  return { status: "created", commit, message: commitMessage };
+}
+
 function baselineCommandEnv(rootDir) {
   const localBin = join(rootDir, "node_modules", ".bin");
   return {
@@ -450,10 +528,14 @@ export function prepareRunStartup({
   setProgressServerProc = (..._args) => {},
   initializeBaselines = true,
   logProgress = (..._args) => {},
+  execSync = defaultExecSync,
+  execFileSync = defaultExecFileSync,
+  consoleLog = (...args) => console.log(...args),
   runnerError = createRunnerError,
   processKill = process.kill,
   processExit = process.exit,
 } = Object()) {
+  ensureRunGitBaseline({ rootDir, execFileSync, consoleLog, runnerError });
   acquireRunnerPidLock({
     pidFile: join(paths.stateDir, "runner.pid"),
     pid,
@@ -493,7 +575,7 @@ export function prepareRunStartup({
   setProgressServerProc(progressServerProc);
   // P9.M4: scope cleanup to this run's worktree root (same convention as
   // resolveRunnerContext) so a shared repo's other yolo-* state is not swept.
-  cleanupStaleGitWorktreesAndBranches({ rootDir, worktreeRoot: join(rootDir, "..", ".yolo-worktrees") });
+  cleanupStaleGitWorktreesAndBranches({ rootDir, worktreeRoot: join(rootDir, "..", ".yolo-worktrees"), execSync });
   cleanupRetryRoundFiles({ retryDir: join(yoloRoot, "data"), currentPrdPath: prdPath });
   return loadResumeCompletedFromPrd({ prdPath, taskCountsAsCompleted });
 }

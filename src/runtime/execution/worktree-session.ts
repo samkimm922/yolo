@@ -734,23 +734,7 @@ export function createTaskWorktree({
   }
 
   if (!head.ok) {
-    return createFilesystemTaskWorktree({
-      wtPath,
-      wtBranch,
-      rootDir,
-      baseCommit,
-      config,
-      reason: head.reason,
-      detail: head.detail,
-      mkdirSync,
-      cpSync,
-      readFileSync,
-      readdirSync,
-      statSync,
-      writeFileSync,
-      execFileSync,
-      existsSync,
-    });
+    throw new Error(`createWorktree: git HEAD unavailable in git repository (${head.reason}${head.detail ? `: ${head.detail}` : ""}); yolo run startup must create an initial commit baseline before task worktrees`);
   }
 
   try {
