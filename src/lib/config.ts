@@ -36,7 +36,20 @@ function findProjectRoot(startDir) {
   return resolve(__dirname, '..', '..', '..');
 }
 
-const DEFAULT_CONFIG_PATH = resolve(findProjectRoot(__dirname), 'config.yaml');
+function resolveDefaultConfigPath(startDir) {
+  const projectRoot = findProjectRoot(startDir);
+  const rootConfig = resolve(projectRoot, 'config.yaml');
+  if (existsSync(rootConfig)) return rootConfig;
+
+  const distConfig = basename(projectRoot) === 'dist'
+    ? resolve(projectRoot, 'config.yaml')
+    : resolve(projectRoot, 'dist', 'config.yaml');
+  if (existsSync(distConfig)) return distConfig;
+
+  return rootConfig;
+}
+
+const DEFAULT_CONFIG_PATH = resolveDefaultConfigPath(__dirname);
 const ENV_CONFIG_PATH = process.env.YOLO_CONFIG ? resolve(process.env.YOLO_CONFIG) : null;
 const CONFIG_PATH = ENV_CONFIG_PATH || DEFAULT_CONFIG_PATH;
 

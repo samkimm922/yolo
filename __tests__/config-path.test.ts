@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DEFAULT_CONFIG_PATH, loadConfig } from "../src/lib/config.js";
@@ -28,6 +28,33 @@ describe("CONFIG_PATH resolution", () => {
     const configPath = stdout.trim();
     assert.equal(configPath, EXPECTED_CONFIG);
     assert.equal(existsSync(configPath), true);
+  });
+
+  test("installed package layout falls back to dist config.yaml when package root config is absent", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-installed-config-"));
+    const packageRoot = join(root, "node_modules", "yolo");
+    const distRoot = join(packageRoot, "dist");
+    const distConfig = join(distRoot, "config.yaml");
+    try {
+      mkdirSync(join(distRoot, "src", "lib"), { recursive: true });
+      cpSync(join(YOLO_DIR, "dist", "src", "lib", "config.js"), join(distRoot, "src", "lib", "config.js"));
+      cpSync(join(YOLO_DIR, "dist", "config.yaml"), distConfig);
+      writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ type: "module" }), "utf8");
+      writeFileSync(join(distRoot, "package.json"), JSON.stringify({ type: "module" }), "utf8");
+
+      const stdout = execSync(
+        `node -e "import('./node_modules/yolo/dist/src/lib/config.js').then(m => console.log([m.CONFIG_PATH, m.config.project.name, m.config.build.type_check].join('\\n')))"`,
+        { cwd: root, encoding: "utf8" },
+      );
+      const [configPath, projectName, typecheck] = stdout.trim().split("\n");
+
+      assert.equal(configPath, realpathSync(distConfig));
+      assert.equal(existsSync(configPath), true);
+      assert.equal(projectName, "YOLO");
+      assert.equal(typecheck, "tsc --noEmit");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("loadConfig parses JSON config files with JSON.parse", () => {
