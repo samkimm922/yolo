@@ -350,7 +350,7 @@ async function runTask(task, prdPath) {
     updatePrdTaskStatus: (taskId, update) => updatePrdTaskStatus(prdPath, taskId, update),
     applySplitSuggestionsToPrd,
     createWorktree,
-    computeTaskTimeout: (targets) => computeTaskTimeout(targets, { rootDir: ROOT }),
+    computeTaskTimeout: (targets, options = Object()) => computeTaskTimeout(targets, { ...options, rootDir: options.rootDir || ROOT, config: options.config || runtimeConfig }),
     spawnProviderInWorktree: spawnClaudeInWorktree,
     cleanupWorktree,
     runGateInWorktree,

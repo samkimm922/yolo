@@ -100,7 +100,7 @@ export async function prepareProviderSession({
   logProgress("", "├─", `worktree: ${wt.branch}`);
 
   const startedAtMs = nowMs();
-  const timeout = computeTaskTimeout(task.scope?.targets || []);
+  const timeout = computeTaskTimeout(task.scope?.targets || [], { rootDir, config });
   const providerRun = await spawnProviderInWorktree(promptResult.stdout, wt.path, timeout);
   const providerName = providerRun.provider || "provider";
   logProgress(
