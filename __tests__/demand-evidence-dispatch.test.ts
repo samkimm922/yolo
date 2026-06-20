@@ -143,13 +143,15 @@ describe("demand evidence dispatch", () => {
       writeFileSync(badJsonPath, "{not-json", "utf8");
       writeJson(badSchemaPath, { schema_version: "1.0", schema: "wrong.schema" });
 
-      for (const [demandPath, code] of [
-        ["missing-session.json", "DEMAND_SESSION_NOT_FOUND"],
-        [badJsonPath, "DEMAND_SESSION_JSON_INVALID"],
-        [badSchemaPath, "DEMAND_SESSION_SCHEMA_INVALID"],
-      ]) {
+      const cases = [
+        { input: { demandPath: "missing-session.json" }, code: "DEMAND_SESSION_NOT_FOUND" },
+        { input: { demand: "missing-session.json" }, code: "DEMAND_SESSION_NOT_FOUND" },
+        { input: { demandPath: badJsonPath }, code: "DEMAND_SESSION_JSON_INVALID" },
+        { input: { demandPath: badSchemaPath }, code: "DEMAND_SESSION_SCHEMA_INVALID" },
+      ];
+      for (const { input, code } of cases) {
         const result = await runDemandEvidenceDispatchRuntime({
-          demandPath,
+          ...input,
         }, {
           projectRoot: root,
           stateRoot: join(root, ".yolo"),
