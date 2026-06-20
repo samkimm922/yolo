@@ -1,6 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
+import { config as loadedConfig } from "../lib/config.js";
+
+const TASK_TIMEOUT_MS_PER_LINE = 2500;
+const DEFAULT_TASK_TIMEOUT_FLOOR_SECONDS = 120;
+const DEFAULT_TASK_TIMEOUT_CAP_MINUTES = 30;
 
 export function createRunnerError(message, exitCode = 1, details = Object()) {
   const error = Object.assign(new Error(message), { exitCode }, details);
@@ -39,14 +44,30 @@ export function loadRunnerPrd(prdPath, { runnerError = createRunnerError } = Obj
   return prd;
 }
 
-export function computeTaskTimeout(targets, { rootDir }) {
+function positiveFiniteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function computeTaskTimeoutBounds(runtimeConfig) {
+  const runnerConfig = runtimeConfig?.runner || Object();
+  const capMinutes = positiveFiniteNumber(runnerConfig.task_timeout_m) ?? DEFAULT_TASK_TIMEOUT_CAP_MINUTES;
+  const capMs = Math.floor(capMinutes * 60 * 1000);
+  const floorSeconds = positiveFiniteNumber(runnerConfig.task_timeout_floor_s) ?? DEFAULT_TASK_TIMEOUT_FLOOR_SECONDS;
+  const floorMs = Math.min(Math.floor(floorSeconds * 1000), capMs);
+  return { floorMs, capMs };
+}
+
+export function computeTaskTimeout(targets, { rootDir, config = loadedConfig } = Object()) {
   let totalLines = 0;
   for (const target of (targets || [])) {
     try {
       totalLines += readFileSync(resolve(rootDir, target.file), "utf8").split("\n").length;
     } catch {}
   }
-  return Math.max(480000, Math.min(totalLines * 2500, 1800000));
+  const { floorMs, capMs } = computeTaskTimeoutBounds(config);
+  const scaledMs = totalLines * TASK_TIMEOUT_MS_PER_LINE;
+  return Math.max(floorMs, Math.min(scaledMs, capMs));
 }
 
 export function execNodeScript(script, args = [], { toolsRoot, cwd, timeout = 120000 } = Object()) {

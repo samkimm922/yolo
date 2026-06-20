@@ -1,11 +1,76 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { execNodeScript } from "../src/runtime/runner-core-helpers.js";
+import { DEFAULT_CONFIG_PATH, loadConfig } from "../src/lib/config.js";
+import { computeTaskTimeout, execNodeScript } from "../src/runtime/runner-core-helpers.js";
 
 describe("runner core helper execution", () => {
+  test("uses runner.task_timeout_m from loaded config as the task timeout cap", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-timeout-config-"));
+    const configPath = join(root, "config.yaml");
+    const srcDir = join(root, "src");
+    mkdirSync(srcDir);
+    writeFileSync(join(srcDir, "large.ts"), Array.from({ length: 100 }, (_, i) => `const value${i} = ${i};`).join("\n"), "utf8");
+    try {
+      writeFileSync(configPath, [
+        'version: "2.0"',
+        "runner:",
+        "  task_timeout_m: 2",
+        "",
+      ].join("\n"), "utf8");
+      loadConfig({ path: configPath, forceReload: true });
+
+      assert.equal(computeTaskTimeout([{ file: "src/large.ts" }], { rootDir: root }), 120000);
+    } finally {
+      loadConfig({ path: DEFAULT_CONFIG_PATH, forceReload: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("defaults to a low task timeout floor instead of the old eight minute minimum", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-timeout-default-"));
+    try {
+      assert.equal(
+        computeTaskTimeout([], { rootDir: root, config: { runner: { task_timeout_m: 30 } } }),
+        120000,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("scales timeout from target line count when rootDir is provided", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-timeout-lines-"));
+    const srcDir = join(root, "src");
+    mkdirSync(srcDir);
+    writeFileSync(join(srcDir, "medium.ts"), Array.from({ length: 80 }, (_, i) => `export const line${i} = ${i};`).join("\n"), "utf8");
+    try {
+      assert.equal(
+        computeTaskTimeout(
+          [{ file: "src/medium.ts" }],
+          { rootDir: root, config: { runner: { task_timeout_m: 30, task_timeout_floor_s: 120 } } },
+        ),
+        200000,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("allows the task timeout floor to be configured", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-timeout-floor-"));
+    try {
+      assert.equal(
+        computeTaskTimeout([], { rootDir: root, config: { runner: { task_timeout_m: 30, task_timeout_floor_s: 45 } } }),
+        45000,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("fails loudly when the requested helper script is missing", () => {
     const toolsRoot = mkdtempSync(join(tmpdir(), "yolo-tools-root-"));
     try {

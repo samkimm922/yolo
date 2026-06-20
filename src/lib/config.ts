@@ -86,6 +86,7 @@ const DEFAULTS = {
     circuit_breaker: 2,
     session_timeout_h: 4,
     task_timeout_m: 30,
+    task_timeout_floor_s: 120,
     stash_prefix: 'temp-stash-for-',
   },
 

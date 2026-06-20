@@ -151,8 +151,12 @@ describe("session attempt helpers", () => {
       onWorktreeCreated: (wt) => {
         createdWorktree = wt;
       },
-      computeTaskTimeout: (targets) => {
+      computeTaskTimeout: (targets, options) => {
         assert.deepEqual(targets, [{ file: "src/a.ts" }]);
+        assert.deepEqual(options, {
+          rootDir: "/repo",
+          config: { build: { type_check: "npm run typecheck" } },
+        });
         return 12345;
       },
       spawnProviderInWorktree: async (prompt, wtPath, timeout) => ({
