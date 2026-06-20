@@ -14,6 +14,7 @@ import {
   groundDemandExecutionScope,
   inferGreenfieldTargetFiles,
 } from "../src/demand/artifacts.js";
+import { deriveEvidenceRequirements, isGreenfieldDemandSession } from "../src/demand/evidence-requirements.js";
 import { inspectDemandQuality, inspectDemandReadiness } from "../src/demand/gate.js";
 import { inspectStoryAtomicityFromPrd } from "../src/demand/story-atomicity.js";
 import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
@@ -557,6 +558,134 @@ describe("demand runtime", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("greenfield planned new files treat success criteria and exceptions as acceptance targets", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-greenfield-evidence-"));
+    try {
+      const session = {
+        id: "DEMAND-GREENFIELD-EVIDENCE",
+        phase: "prd_intake",
+        project: {
+          title: "Build a pure TypeScript markdown notes library from scratch.",
+          target_users: ["developer using local markdown notes"],
+          target_files: ["src/notes.ts"],
+          candidate_target_files: [],
+        },
+        vision: {
+          statement: "Build a pure TypeScript markdown notes library from scratch for local note parsing and search.",
+          target_users: ["developer using local markdown notes"],
+          status_quo: ["The user currently keeps notes in loose markdown files."],
+        },
+        investigation: {
+          evidence: ["User approved a greenfield library; no existing target implementation file is required."],
+        },
+        reflection: {
+          assumptions: ["The first implementation file is planned under src and will be verified by tests after delivery."],
+        },
+        requirements: {
+          active: [
+            {
+              id: "REQ-001",
+              text: "The user-visible completion standard is concrete: a user can run the main markdown notes library workflow on local sample data, see the expected output file/API/library result, see invalid input rejected with a clear message, rerun without corrupting existing data, and confirm the same behavior through a passing test command.",
+              acceptance_scenarios: [{ id: "SCN-001", when: "the user runs local samples", then: "the expected output is produced and invalid input is rejected with a clear message" }],
+            },
+            {
+              id: "REQ-002",
+              text: "Handle missing input file, empty document, missing required fields, invalid content, duplicate entries, and data containing punctuation or whitespace where the parser supports it.",
+              acceptance_scenarios: [{ id: "SCN-002", when: "the user provides malformed local note data", then: "the library reports a clear validation result without corrupting existing data" }],
+            },
+          ],
+          constraints: ["Use local TypeScript only and make network access out of scope."],
+          out_of_scope: ["No remote sources, UI, database loading, or deployed service."],
+        },
+        scenario_matrix: {
+          scenarios: [
+            {
+              id: "SCN-001",
+              requirement_id: "REQ-001",
+              proof: "A test imports the library, parses local markdown samples, searches the in-memory index, and verifies the expected output.",
+              surfaces: [{
+                id: "SCN-001-SFC-001",
+                kind: "code",
+                target_files: ["src/notes.ts"],
+                allow_new_files: true,
+                proof: "A test imports the library, parses local markdown samples, searches the in-memory index, and verifies the expected output.",
+                session_budget: { expected: "single_session", max_files: 1, max_lines_per_file: 120 },
+              }],
+            },
+            {
+              id: "SCN-002",
+              requirement_id: "REQ-002",
+              proof: "A test passes malformed local note data and sees a clear validation result without corrupting existing data.",
+              surfaces: [{
+                id: "SCN-002-SFC-001",
+                kind: "code",
+                target_files: ["src/notes.ts"],
+                allow_new_files: true,
+                proof: "A test passes malformed local note data and sees a clear validation result without corrupting existing data.",
+                session_budget: { expected: "single_session", max_files: 1, max_lines_per_file: 120 },
+              }],
+            },
+          ],
+        },
+        project_facts: {
+          schema: "yolo.demand.project_facts.v1",
+          target_files: [{
+            file: "src/notes.ts",
+            status: "planned_new_file",
+            source: "demand_greenfield_inference",
+            new_file: true,
+            allow_new_files: true,
+          }],
+          candidate_target_files: [],
+          assumptions: [],
+          policy: {
+            greenfield_new_files_are_execution_scope: true,
+            unverified_project_facts_block_prd: true,
+          },
+        },
+        roadmap: { mvp: ["Local parser and in-memory search."] },
+        approval: { approved: true },
+        playback: { confirmed: true, confirmed_by: "user" },
+      };
+
+      assert.equal(isGreenfieldDemandSession({}, session), true);
+      assert.deepEqual(deriveEvidenceRequirements({}, session, { kinds: ["project"] }), []);
+
+      const readiness = inspectDemandReadiness(session, {
+        phase: "prd",
+        projectRoot: root,
+        stateDir: join(root, ".yolo", "state"),
+      });
+      assert.equal(readiness.blockers.some((blocker) => blocker.code === "PROJECT_FACTS_GROUNDED"), false);
+      assert.equal(readiness.blockers.some((blocker) => blocker.code === "PROJECT_EVIDENCE_REQUIREMENT_REQUIRED"), false);
+      assert.equal(readiness.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("brownfield existing payload claims still require project evidence", () => {
+    const session = {
+      project: { target_files: ["src/inventory.ts"] },
+      project_facts: {
+        target_files: [{ file: "src/inventory.ts", status: "verified" }],
+      },
+      requirements: {
+        active: [{
+          id: "REQ-001",
+          text: "Inventory list already receives quantity and threshold fields from the existing request payload.",
+          acceptance_scenarios: [{ then: "A low-stock result can use those existing fields." }],
+        }],
+      },
+    };
+
+    assert.equal(isGreenfieldDemandSession({}, session), false);
+    const requirements = deriveEvidenceRequirements({}, session, { kinds: ["project"] });
+    assert.equal(requirements.length, 1);
+    assert.equal(requirements[0].kind, "project");
+    assert.equal(requirements[0].status, "pending");
   });
 
   test("deduplicates same-scenario tasks with identical title target and type", () => {

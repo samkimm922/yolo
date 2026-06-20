@@ -8,6 +8,7 @@ import {
   evidenceRequirementBlockers,
   evidenceRequirementNextActions,
   evidenceRequirementSummary,
+  isGreenfieldDemandSession,
 } from "./evidence-requirements.js";
 import { hasTargetUserRole, targetUserRoleItems } from "./interview.js";
 
@@ -269,11 +270,12 @@ function projectFactGrounding(session = Object(), options = Object()) {
   const projectText = readProjectTargetText(session, options);
   const projectLower = projectText.toLowerCase();
   const issues = [];
+  const greenfield = isGreenfieldDemandSession({}, session, options);
   const stockOrThreshold = /\b(low[-_\s]?stock|threshold|replenishment|floor|stockout)\b/i.test(text);
   const concreteRule = /(<=|>=|<|>|less than|greater than|below|above|equal|equals|at or below|at or above|per sku|configurable)/i.test(text);
   const concreteField = /\b([a-z]+[A-Za-z0-9]*_(?:threshold|floor|quantity|qty|units|available|stock)[A-Za-z0-9_]*|[a-z]+(?:Threshold|Quantity|Qty|Units|Available|Stock)[A-Za-z0-9]*)\b/.test(text);
   const fieldPassthrough = /\b(expose|return|include|map|copy|pass(?:ed)? through|preserve|透传|返回|包含|保留)\b/i.test(text);
-  const genericFieldAssumption = detectProjectFactAssumptionSignal(text).requires_project;
+  const genericFieldAssumption = !greenfield && detectProjectFactAssumptionSignal(text).requires_project;
   const projectMentionsCriticalField = /\b(threshold|replenishment|floor|lowstock|low_stock|quantity|qty_available|qty)\b/i.test(projectText);
   const executionTargets = new Set(targetFiles(session));
   const targetFacts = targetFileFactRecords(session);
@@ -323,7 +325,7 @@ function projectFactGrounding(session = Object(), options = Object()) {
         assumption_id: fact.id || null,
         message: "Contradicted assumptions must not be promoted to executable PRD facts, even with user approval.",
       });
-    } else if (fact.status === "needs_verification") {
+    } else if (fact.status === "needs_verification" && !greenfield) {
       issues.push({
         code: "QUALITY_ASSUMPTION_VERIFIED",
         assumption_id: fact.id || null,

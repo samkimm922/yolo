@@ -17,6 +17,18 @@ const PROJECT_FACT_ASSUMPTION_RE =
   /(already|existing|receives?|contains?|present|available)[^\n.]{0,80}\b(field|payload|row|request|data|threshold|quantity|qty)\b/i;
 const PROJECT_FACT_ASSUMPTION_REVERSE =
   /\b(field|payload|row|request|data|threshold|quantity|qty)\b[^\n.]{0,80}(already|existing|receives?|contains?|present|available)/i;
+const GREENFIELD_SIGNAL_RE =
+  /\b(greenfield|from scratch|from zero|new project|brand[- ]new|scaffold|prototype|mvp)\b|从零|全新|新项目|原型/i;
+const FUTURE_DELIVERY_TEXT_RE =
+  /\b(success means|success criteria|completion standard|acceptance|post[- ]conditions?|proof|during acceptance|expected output|can run|should|must|will|implement|build|create|handle|reject|return|returns|support|out of scope|non[- ]?goals?|without corrupting|invalid input|missing|unknown|empty|repeated|delete of missing|list on an empty)\b|成功标准|验收|交付后|待实现|异常|边界|优先级/i;
+const STRONG_EXISTING_PROJECT_FACT_RE =
+  /\b(existing|current|already|legacy|implemented|production|receives?|contains?|available|present)\b[^\n.]{0,100}\b(project|codebase|repo|code|file|module|component|api|service|endpoint|route|schema|database|table|column|field|payload|request|row|threshold|quantity|qty)\b/i;
+const STRONG_EXISTING_PROJECT_FACT_REVERSE =
+  /\b(project|codebase|repo|code|file|module|component|api|service|endpoint|route|schema|database|table|column|field|payload|request|row|threshold|quantity|qty)\b[^\n.]{0,100}\b(existing|current|already|legacy|implemented|production|receives?|contains?|available|present)\b/i;
+const SCOPED_EXISTING_PROJECT_FACT_RE =
+  /\b(existing|current|already|legacy|implemented|production)\b[^\n.]{0,60}\b(project|codebase|repo|code|file|module|component|api|service|endpoint|route|schema|database|table|column)\b/i;
+const SCOPED_EXISTING_PROJECT_FACT_REVERSE =
+  /\b(project|codebase|repo|code|file|module|component|api|service|endpoint|route|schema|database|table|column)\b[^\n.]{0,60}\b(existing|current|already|legacy|implemented|production)\b/i;
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -29,6 +41,106 @@ function asArray(value) {
 
 function uniqueStrings(value) {
   return [...new Set(asArray(value).map(clean).filter(Boolean))];
+}
+
+function targetFilesFromSession(session = Object()) {
+  return uniqueStrings(session.project?.target_files || session.target_files);
+}
+
+function scenarioSurfaces(session = Object()) {
+  const scenarios = asArray(session.scenario_matrix?.scenarios || session.scenarios);
+  return scenarios.flatMap((scenario) => asArray(scenario?.surfaces));
+}
+
+function targetFileFactsFromSession(session = Object()) {
+  return asArray(session.project_facts?.target_files || session.project?.target_file_facts)
+    .filter((fact) => fact && typeof fact === "object")
+    .map((fact) => ({
+      ...fact,
+      file: clean(fact.file || fact.path),
+      status: clean(fact.status).toLowerCase(),
+    }))
+    .filter((fact) => fact.file);
+}
+
+function isPlannedNewTargetFact(fact = Object()) {
+  const status = clean(fact.status).toLowerCase();
+  return status === "planned_new_file" || fact.new_file === true || fact.allow_new_files === true;
+}
+
+function isExistingTargetFact(fact = Object()) {
+  if (isPlannedNewTargetFact(fact)) return false;
+  const status = clean(fact.status).toLowerCase();
+  return ["verified", "project_read", "existing", "exists"].includes(status)
+    || fact.exists === true
+    || fact.new_file === false
+    || fact.allow_new_files === false;
+}
+
+function targetAllowsNewFile(session = Object(), file = "") {
+  const target = clean(file);
+  if (!target) return false;
+  return scenarioSurfaces(session).some((surface) => (
+    surface?.allow_new_files === true
+    && uniqueStrings(surface.target_files).includes(target)
+  ));
+}
+
+function greenfieldText(input = Object(), session = Object()) {
+  return [
+    input.context_type,
+    input.contextType,
+    input.objective,
+    input.idea,
+    input.requirement,
+    input.text,
+    input.problem,
+    input.evidence,
+    input.assumptions,
+    session.context_type,
+    session.contextType,
+    session.objective,
+    session.idea,
+    session.problem,
+    session.evidence,
+    session.assumptions,
+    session.reflection?.assumptions,
+    session.project?.title,
+    session.vision?.statement,
+    session.vision?.idea,
+    session.project_facts?.grounding?.mode,
+    session.grounding?.mode,
+    session.grounding?.reason,
+  ].flatMap(textFromValue).join("\n");
+}
+
+export function isGreenfieldDemandSession(input = Object(), session = Object(), options = Object()) {
+  if (options.greenfield === true || options.context_type === "greenfield" || options.contextType === "greenfield") return true;
+  if (options.greenfield === false || options.context_type === "brownfield" || options.contextType === "brownfield") return false;
+
+  const targetFiles = targetFilesFromSession(session);
+  const targetFileSet = new Set(targetFiles);
+  const targetFacts = targetFileFactsFromSession(session);
+  const executionFacts = targetFileSet.size > 0
+    ? targetFacts.filter((fact) => targetFileSet.has(fact.file))
+    : targetFacts;
+  const hasExistingTargetFact = executionFacts.some(isExistingTargetFact);
+  if (hasExistingTargetFact) return false;
+
+  const hasPlannedTargetFact = executionFacts.some(isPlannedNewTargetFact);
+  const allTargetsAllowNew = targetFiles.length > 0
+    && targetFiles.every((file) => {
+      const fact = targetFacts.find((item) => item.file === file);
+      return fact ? isPlannedNewTargetFact(fact) : targetAllowsNewFile(session, file);
+    });
+  const policyGreenfield = session.project_facts?.policy?.greenfield_new_files_are_execution_scope === true;
+  const groundingGreenfield = /greenfield/.test(clean(session.project_facts?.grounding?.mode || session.grounding?.mode || session.grounding?.reason).toLowerCase());
+  const textGreenfield = GREENFIELD_SIGNAL_RE.test(greenfieldText(input, session));
+
+  return policyGreenfield
+    || groundingGreenfield
+    || (hasPlannedTargetFact && (targetFiles.length === 0 || allTargetsAllowNew))
+    || (targetFiles.length === 0 && textGreenfield);
 }
 
 function hashId(kind, topic, reason) {
@@ -164,12 +276,31 @@ function sentenceForProjectMatch(text) {
   return truncate(direct || source);
 }
 
+function isFutureDeliveryText(text) {
+  return FUTURE_DELIVERY_TEXT_RE.test(clean(text));
+}
+
+function assertsExistingProjectFact(text) {
+  const source = clean(text);
+  if (!source) return false;
+  const strong = STRONG_EXISTING_PROJECT_FACT_RE.test(source) || STRONG_EXISTING_PROJECT_FACT_REVERSE.test(source);
+  if (!strong) return false;
+  if (!isFutureDeliveryText(source)) return true;
+  return SCOPED_EXISTING_PROJECT_FACT_RE.test(source) || SCOPED_EXISTING_PROJECT_FACT_REVERSE.test(source);
+}
+
+function shouldKeepProjectFactAssumption(text) {
+  const source = clean(text);
+  if (!(PROJECT_FACT_ASSUMPTION_RE.test(source) || PROJECT_FACT_ASSUMPTION_REVERSE.test(source))) return false;
+  return !isFutureDeliveryText(source) || assertsExistingProjectFact(source);
+}
+
 export function detectProjectFactAssumptionSignal(...texts) {
   const text = texts.map(clean).filter(Boolean).join("\n");
   if (!text) return { requires_project: false, matches: [] };
   const matches = [];
   for (const item of text.split(/\r?\n/).map(clean).filter(Boolean)) {
-    if (PROJECT_FACT_ASSUMPTION_RE.test(item) || PROJECT_FACT_ASSUMPTION_REVERSE.test(item)) {
+    if (shouldKeepProjectFactAssumption(item)) {
       matches.push(sentenceForProjectMatch(item));
     }
   }
@@ -220,7 +351,9 @@ export function deriveEvidenceRequirements(input = Object(), session = Object(),
   }
 
   if (kinds.has("project")) {
+    const greenfield = isGreenfieldDemandSession(input, session, options);
     for (const text of texts) {
+      if (greenfield && !assertsExistingProjectFact(text)) continue;
       const signal = detectProjectFactAssumptionSignal(text);
       if (!signal.requires_project) continue;
       for (const match of signal.matches) {
