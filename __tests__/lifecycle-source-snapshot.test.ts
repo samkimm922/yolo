@@ -11,6 +11,7 @@ import {
   inspectWorktreeDrift,
 } from "../src/lifecycle/source-snapshot.js";
 import { inspectLifecycleDrift } from "../src/lifecycle/guard.js";
+import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
 
 function gitInit(root) {
   const result = spawnSync("git", ["init"], { cwd: root, encoding: "utf8" });
@@ -113,6 +114,67 @@ describe("source-snapshot worktree drift detection", () => {
       writeFileSync(join(root, "app.ts"), "export const x = 2;\n", "utf8");
       const after = inspectLifecycleDrift(root);
       assert.ok(after.drift_records.some((r) => r.code === "WORKTREE_DIVERGED"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("successful write-capable lifecycle stage refreshes post-run source snapshot", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-snap-run-"));
+    try {
+      if (!gitInit(root)) return;
+      writeFileSync(join(root, "app.ts"), "export const x = 1;\n", "utf8");
+      spawnSync("git", ["add", "."], { cwd: root, encoding: "utf8" });
+      spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "init"], { cwd: root, encoding: "utf8" });
+
+      const stateRoot = join(root, ".yolo");
+      writeSourceSnapshot({ projectRoot: root, stateRoot });
+      writeFileSync(join(root, "app.ts"), "export const x = 2;\n", "utf8");
+      assert.equal(inspectWorktreeDrift({ projectRoot: root, stateRoot }).has_drift, true);
+
+      const write = writeLifecycleStageReport("run", {
+        status: "success",
+        summary: "run changed source in-band",
+      }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+
+      assert.equal(write.stage_status, "completed");
+      assert.ok(write.source_snapshot);
+      assert.equal(inspectWorktreeDrift({ projectRoot: root, stateRoot }).has_drift, false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocked write-capable lifecycle stage does not bless source drift", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-snap-run-blocked-"));
+    try {
+      if (!gitInit(root)) return;
+      writeFileSync(join(root, "app.ts"), "export const x = 1;\n", "utf8");
+      spawnSync("git", ["add", "."], { cwd: root, encoding: "utf8" });
+      spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "init"], { cwd: root, encoding: "utf8" });
+
+      const stateRoot = join(root, ".yolo");
+      writeSourceSnapshot({ projectRoot: root, stateRoot });
+      writeFileSync(join(root, "app.ts"), "export const x = 2;\n", "utf8");
+
+      const write = writeLifecycleStageReport("run", {
+        status: "blocked",
+        summary: "run did not complete cleanly",
+      }, {
+        projectRoot: root,
+        stateRoot,
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+
+      assert.equal(write.stage_status, "blocked");
+      assert.equal(write.source_snapshot, null);
+      assert.equal(inspectWorktreeDrift({ projectRoot: root, stateRoot }).has_drift, true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

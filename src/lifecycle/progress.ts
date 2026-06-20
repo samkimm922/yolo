@@ -15,6 +15,7 @@ import {
   lifecycleStatusPath,
   resolveLifecycleStateRoot,
 } from "./state.js";
+import { writeSourceSnapshot } from "./source-snapshot.js";
 
 export const LIFECYCLE_PROGRESS_SCHEMA_VERSION = "1.0";
 export const LIFECYCLE_STAGE_REPORT_SCHEMA = "yolo.lifecycle.stage_report.v1";
@@ -41,6 +42,11 @@ function statusForReport(report = Object()) {
   if (["warning", "warn"].includes(status)) return "warning";
   if (["blocked", "error", "failed", "fail", "skipped", "not_run", "indeterminate"].includes(status)) return "blocked";
   return "active";
+}
+
+function shouldRefreshSourceSnapshot(stageId, stageStatus) {
+  const stage = getLifecycleStage(stageId);
+  return stage.writes_code === true && stageStatus === "completed";
 }
 
 function reportBlockers(report = Object()) {
@@ -192,6 +198,19 @@ export function writeLifecycleStageReport(stageId, report = Object(), options = 
     blocker_count: stageReport.blockers.length,
   }, { source: options.source || "lifecycle-progress", now });
 
+  let source_snapshot = null;
+  if (shouldRefreshSourceSnapshot(stageId, stageStatus)) {
+    try {
+      source_snapshot = writeSourceSnapshot({
+        ...options,
+        stateRoot,
+        now,
+      });
+    } catch {
+      source_snapshot = null;
+    }
+  }
+
   let session_memory = null;
   if (options.writeSessionMemory !== false && options.write_session_memory !== false) {
     session_memory = appendSessionMemory({
@@ -236,6 +255,7 @@ export function writeLifecycleStageReport(stageId, report = Object(), options = 
     status_path: status.path,
     validation: status.validation,
     event,
+    source_snapshot,
     session_memory,
     learning,
     report: stageReport,
