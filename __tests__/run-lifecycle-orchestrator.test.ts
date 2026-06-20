@@ -148,6 +148,66 @@ test("runTaskPipeline wires main, retry, review, and finalize phases in order", 
   ]);
 });
 
+test("runTaskPipeline skips retry and review after repeated failure fuse", async () => {
+  const calls = [];
+  const progress = { total: 0, done: 0, failed: 0 };
+  const taskResults = {
+    completed: [],
+    failed: ["FIX-1", "FIX-2"],
+    skipped: [],
+    blocked: [],
+    contractReview: [],
+    stop_reason: "repeated_failure_fuse",
+    stop_fail_key: "failed:claude 超时",
+  };
+
+  const result = await runTaskPipeline({
+    prdPath: "/repo/.yolo/data/prd.json",
+    runId: "run-test",
+    resumeCompleted: new Set(),
+    exitOnComplete: false,
+    sessionTimeoutHours: 4,
+    projectRoot: "/repo",
+    stateRoot: "/repo/.yolo",
+    toolsRoot: "/repo/scripts/yolo",
+    stateDir: "/repo/.yolo/state",
+    runtimeDir: "/repo/.yolo/state/runtime",
+    expandedTasksFile: "/repo/.yolo/state/expanded-tasks.json",
+    progress,
+    startTimeMs: 100,
+    progressServerProc: null,
+    loadPRD: () => ({ id: "PRD", tasks: [{ id: "FIX-1" }, { id: "FIX-2" }] }),
+    mainLoop: async () => {
+      calls.push(["main"]);
+      return taskResults;
+    },
+    taskPostconditionsPass: () => ({ passed: false, failed: ["not reached"] }),
+    updateTaskStatus: () => {},
+    normalizeRepoPath: (value) => value,
+    setGlobalTimeout: (ms, options) => calls.push(["timeout", ms, options]),
+    logRun: (event, payload) => calls.push(["logRun", event, payload.tasks]),
+    logProgress: (id, phase, detail) => calls.push(["logProgress", id, phase, detail]),
+    writeStateSnapshot: (phase, prdPath) => calls.push(["snapshot", phase, prdPath]),
+    retryPhase: async () => calls.push(["retry"]),
+    reviewLoop: async () => calls.push(["review"]),
+    finalize: (input) => {
+      calls.push(["finalize", [...input.taskResults.failed]]);
+      return { status: "failed", failed: input.taskResults.failed };
+    },
+  });
+
+  assert.deepEqual(result, { status: "failed", failed: ["FIX-1", "FIX-2"] });
+  assert.deepEqual(calls, [
+    ["timeout", 14_400_000, { exitOnTimeout: false }],
+    ["logRun", "run_start", 2],
+    ["snapshot", "run_start", "/repo/.yolo/data/prd.json"],
+    ["main"],
+    ["logProgress", "RETRY", "SKIP", "全局熔断已触发，跳过自动重试和 review loop"],
+    ["timeout", 0, { exitOnTimeout: false }],
+    ["finalize", ["FIX-1", "FIX-2"]],
+  ]);
+});
+
 test("runTaskPipeline defaults to the imported review loop function", async () => {
   const reviewEvents = [];
   const progress = { total: 0, done: 0, failed: 0 };

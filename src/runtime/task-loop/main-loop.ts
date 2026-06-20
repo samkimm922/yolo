@@ -41,7 +41,7 @@ export async function runMainLoopWithRuntime({
   writeRelayArtifact = null,
 } = Object()) {
   const prd = loadPRD(prdPath);
-  const results = { completed: [], failed: [], skipped: [], blocked: [], contractReview: [], remediation: [], immediateRemediationQueue: [], preflight: null, blockers: [] };
+  const results = { completed: [], failed: [], skipped: [], blocked: [], contractReview: [], remediation: [], immediateRemediationQueue: [], preflight: null, blockers: [], stop_reason: null, stop_fail_key: null };
   const completedIds = new Set(preCompleted);
   const { expanded, beforeMerge, mergedCount, preflight } = expandTasksForMainLoop({
     tasks: prd.tasks || [],
@@ -145,6 +145,8 @@ export async function runMainLoopWithRuntime({
     relayText = buildRelayInjection(completedTaskSummaries, { maxTokens: 2500 });
 
     if (outcomeResult.action === "stop") {
+      results.stop_reason = outcomeResult.reason || "stopped";
+      results.stop_fail_key = outcomeResult.lastFailKey || null;
       if (writeRelayArtifact && completedTaskSummaries.length) {
         writeRelayArtifact(relayText, completedTaskSummaries);
       }
