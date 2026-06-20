@@ -196,6 +196,32 @@ describe("yolo check report", () => {
     }
   });
 
+  test("yolo check returns structured JSON when PRD tasks is not an array", () => {
+    const root = tempProject();
+    let stdout = "";
+    let stderr = "";
+    try {
+      const prdPath = join(root, "bad-prd-shape.json");
+      writeJson(prdPath, { version: "2.0", id: "PRD-INVALID", tasks: "not-an-array" });
+
+      const exitCode = runYoloCheckCli([prdPath, "--json", "--no-write"], {
+        cwd: root,
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      const report = JSON.parse(stdout);
+
+      assert.equal(exitCode, 1);
+      assert.equal(stderr, "");
+      assert.equal(report.status, "blocked");
+      assert.equal(report.code, "YOLO_CHECK_BLOCKED");
+      assert.ok(report.blockers.some((blocker) => blocker.code === "PRD_SCHEMA_FAILED"));
+      assert.doesNotMatch(stdout, /TypeError|traceability\\.js|\\.map is not a function/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("advisory warning reports return CLI exit 2 instead of success", () => {
     const root = tempProject();
     let stdout = "";
