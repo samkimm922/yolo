@@ -535,6 +535,14 @@ describe("demand runtime", () => {
       assert.ok(spec.prd);
       const prdPath = spec.artifacts.find((path) => path.endsWith("prd.json"));
       assert.ok(prdPath);
+      assert.equal((spec as any).prd_path, prdPath);
+      assert.equal((spec as any).output_path, prdPath);
+      assert.equal(spec.artifacts[0], prdPath);
+      const outputs = (spec as any).outputs || [];
+      assert.equal(outputs.find((output) => output.type === "prd")?.path, prdPath);
+      assert.equal(outputs.find((output) => output.path.endsWith("session.json"))?.type, "demand_session");
+      assert.equal(outputs.find((output) => output.path.endsWith("GROUNDING.json"))?.type, "grounding");
+      assert.equal(outputs.find((output) => output.path.endsWith("READINESS.json"))?.type, "readiness");
       assert.equal(existsSync(join(approved.demand_dir, "GROUNDING.json")), true);
 
       const savedSession = JSON.parse(readFileSync(approved.demand_path, "utf8"));

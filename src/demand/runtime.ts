@@ -1727,12 +1727,24 @@ export function runDemandPrdRuntime(input = Object(), options = Object()) {
   }
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
   const artifacts = [];
-  if (shouldWrite && compiled.grounding?.applied && compiled.grounded_session) {
-    artifacts.push(writeJson(read.path, compiled.grounded_session));
-    artifacts.push(writeJson(join(read.dir, "GROUNDING.json"), groundingArtifact(compiled.grounding)));
-    artifacts.push(writeJson(join(read.dir, "READINESS.json"), compiled.readiness));
+  const outputs = [];
+  let prdPath = null;
+  if (shouldWrite && compiled.prd && compiled.status === "success") {
+    prdPath = writeJson(outputFile, compiled.prd);
+    artifacts.push(prdPath);
+    outputs.push({ path: prdPath, type: "prd" });
   }
-  if (shouldWrite && compiled.prd && compiled.status === "success") artifacts.push(writeJson(outputFile, compiled.prd));
+  if (shouldWrite && compiled.grounding?.applied && compiled.grounded_session) {
+    const demandSessionPath = writeJson(read.path, compiled.grounded_session);
+    const groundingPath = writeJson(join(read.dir, "GROUNDING.json"), groundingArtifact(compiled.grounding));
+    const readinessPath = writeJson(join(read.dir, "READINESS.json"), compiled.readiness);
+    artifacts.push(demandSessionPath, groundingPath, readinessPath);
+    outputs.push(
+      { path: demandSessionPath, type: "demand_session" },
+      { path: groundingPath, type: "grounding" },
+      { path: readinessPath, type: "readiness" },
+    );
+  }
 
   const result = {
     status: compiled.status,
@@ -1740,6 +1752,8 @@ export function runDemandPrdRuntime(input = Object(), options = Object()) {
     summary: compiled.summary,
     demand_path: read.path,
     demand_id: read.session.id,
+    prd_path: prdPath,
+    output_path: prdPath,
     compiled,
     prd: compiled.status === "success" ? compiled.prd : null,
     preflight,
@@ -1749,7 +1763,7 @@ export function runDemandPrdRuntime(input = Object(), options = Object()) {
     blockers: compiled.blockers || [],
     warnings: compiled.warnings || [],
     artifacts,
-    outputs: artifacts.map((path) => ({ path, type: "prd" })),
+    outputs,
     next_actions: compiled.next_actions || [],
   };
   if (shouldWrite && compiled.prd && compiled.status === "success" && shouldWriteLifecycle(input, options)) {

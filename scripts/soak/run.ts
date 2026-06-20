@@ -418,9 +418,10 @@ async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: 
     const prd = await step("prd", ["spec", "--demand", demandDir, "--json"]);
     if (failures.length) return { reports, failures, commands };
 
-    const prdPath = prd.report?.artifacts?.find((path) => String(path).endsWith(".json"))
-      || prd.report?.prd_path
-      || prd.report?.output_path;
+    const prdPath = prd.report?.prd_path
+      || prd.report?.output_path
+      || prd.report?.outputs?.find((output) => output?.type === "prd" && output?.path)?.path
+      || prd.report?.artifacts?.find((path) => /(^|[/\\])prd\.json$/.test(String(path)));
     if (!prdPath) {
       failures.push({
         round,

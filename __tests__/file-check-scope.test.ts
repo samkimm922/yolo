@@ -355,6 +355,33 @@ describe("target_file_modified changed file source", () => {
     }
   });
 
+  test("falls back to git untracked files for newly created targets", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-target-file-untracked-"));
+    try {
+      execFileSync("git", ["init", "--quiet"], { cwd: root });
+      execFileSync("git", ["commit", "--allow-empty", "--quiet", "-m", "init"], {
+        cwd: root,
+        env: {
+          ...process.env,
+          GIT_AUTHOR_NAME: "YOLO Test",
+          GIT_AUTHOR_EMAIL: "yolo@example.invalid",
+          GIT_COMMITTER_NAME: "YOLO Test",
+          GIT_COMMITTER_EMAIL: "yolo@example.invalid",
+        },
+      });
+      mkdirSync(join(root, "components/board/views"), { recursive: true });
+      writeFileSync(join(root, calendarTarget), "export const created = true;\n", "utf8");
+
+      const result = evaluateTargetFileModified({ root });
+
+      assert.equal(result.allPass, true);
+      assert.equal(targetResult(result).passed, true);
+      assert.equal(targetResult(result).found, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("normalizes leading dot path differences before matching changedFiles", () => {
     const result = evaluateTargetFileModified({
       target: `./${calendarTarget}`,
