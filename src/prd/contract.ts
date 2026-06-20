@@ -174,7 +174,20 @@ function createEvaluators(root, options = Object()) {
             detail: "无法获取 git diff，无法验证目标文件是否修改",
           };
         }
-        modified = r.out.split("\n").map((file) => normalizeRepoFilePath(file, root)).filter(Boolean);
+        const untracked = exec("git ls-files --others --exclude-standard", { timeout: 10000 });
+        if (!untracked.ok) {
+          return {
+            passed: false,
+            status: "indeterminate",
+            detail: "无法获取 git untracked 文件，无法验证目标文件是否修改",
+          };
+        }
+        modified = [...new Set(
+          `${r.out}\n${untracked.out}`
+            .split("\n")
+            .map((file) => normalizeRepoFilePath(file, root))
+            .filter(Boolean),
+        )];
       }
       const found = modified.some((f) => f === targetFile || f.endsWith(targetFile));
       return { passed: found, detail: found ? `目标文件 ${targetFile} 已修改` : `目标文件 ${targetFile} 未在修改列表中`, found: found ? 1 : 0 };
