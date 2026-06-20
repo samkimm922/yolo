@@ -107,6 +107,7 @@
     "generate-tree": "npm run build --silent && node ./dist/src/devtools/generate-tree.js",
     "memory:refresh": "npm run build --silent && node ./dist/src/devtools/memory-center.js --legacy-pointers",
     "test": "npm run build --silent && node --import tsx --test __tests__/*.test.ts __tests__/property/*.test.ts",
+    "regression-ratchet": "node --import tsx scripts/regression-ratchet.ts",
     "mutation-gate": "node --import tsx scripts/mutation-gate.ts",
     "soak": "node --import tsx scripts/soak/run.ts",
     "matrix-ci": "node --import tsx scripts/matrix-ci.ts",
