@@ -18,6 +18,8 @@ function normalizeRunnerError(error) {
     exit_code: error?.exitCode || 1,
     code: error?.code || "RUNNER_ERROR",
     artifacts: [],
+    blockers: error?.blockers || [],
+    invariant: error?.invariant || null,
     next_actions: [
       "Inspect the runner error, fix the failed gate or PRD contract issue, then resume from the same PRD.",
     ],

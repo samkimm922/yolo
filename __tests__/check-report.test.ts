@@ -426,6 +426,7 @@ describe("yolo check report", () => {
       assert.equal(report.status, "blocked");
       assert.equal(dependencyPreflight.status, "blocked");
       assert.ok(report.blockers.some((blocker) => blocker.gate === "task_dependency_preflight" && blocker.code === "TASK_DEPENDENCY_NO_ROOT"));
+      assert.ok(report.blockers.some((blocker) => blocker.gate === "task_dependency_preflight" && blocker.invariant_code === "RUNTIME_INVARIANT_VIOLATED:task_graph_no_root"));
       assert.ok(report.blockers.some((blocker) => blocker.gate === "task_dependency_preflight" && blocker.code === "TASK_DEPENDENCY_CYCLE"));
     } finally {
       rmSync(root, { recursive: true, force: true });
