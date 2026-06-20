@@ -143,6 +143,74 @@ test("runMainLoopWithRuntime stops before unrelated work when immediate remediat
   }
 });
 
+test("runMainLoopWithRuntime marks repeated failure fuse as a terminal stop", async () => {
+  const root = makeTempDir();
+  try {
+    const expandedTasksFile = join(root, "state", "expanded-tasks.json");
+    const progress = { total: 0, done: 0, failed: 0 };
+    const runResultsTracker = { completed: new Set(), failed: [] };
+    const tasks = [
+      {
+        id: "FIX-1",
+        title: "First failed provider task",
+        priority: "P1",
+        status: "pending",
+        depends_on: [],
+        scope: { targets: [{ file: "src/a.ts" }] },
+      },
+      {
+        id: "FIX-2",
+        title: "Second failed provider task",
+        priority: "P1",
+        status: "pending",
+        depends_on: [],
+        scope: { targets: [{ file: "src/b.ts" }] },
+      },
+      {
+        id: "FIX-3",
+        title: "Unrelated task must not run after fuse",
+        priority: "P2",
+        status: "pending",
+        depends_on: [],
+        scope: { targets: [{ file: "src/c.ts" }] },
+      },
+    ];
+    const runCalls = [];
+    const logs = [];
+
+    const result = await runMainLoopWithRuntime({
+      prdPath: join(root, "prd.json"),
+      preCompleted: new Set(),
+      mode: "fix",
+      rootDir: root,
+      yoloRoot: root,
+      expandedTasksFile,
+      progress,
+      runResultsTracker,
+      priorityOrder: { P0: 0, P1: 1, P2: 2, P3: 3 },
+      loadPRD: () => ({ version: "2.0", tasks }),
+      runTask: async (task) => {
+        runCalls.push(task.id);
+        return { status: "failed", reason: "claude 超时" };
+      },
+      updateTaskStatus: () => {},
+      recordTaskTransition: () => {},
+      taskCountsAsCompleted: (item) => item?.status === "done" || item?.status === "completed",
+      taskIsSplitParent: () => false,
+      skippedTaskPostconditionsPass: () => ({ passed: true, failed: [] }),
+      log: (...args) => logs.push(args),
+    });
+
+    assert.deepEqual(runCalls, ["FIX-1", "FIX-2"]);
+    assert.deepEqual(result.failed, ["FIX-1", "FIX-2"]);
+    assert.equal(result.stop_reason, "repeated_failure_fuse");
+    assert.equal(result.stop_fail_key, "failed:claude 超时");
+    assert.equal(logs.some((entry) => entry[1] === "全局熔断"), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("runMainLoopWithRuntime runs dependencies before higher-priority dependents", async () => {
   const root = makeTempDir();
   try {

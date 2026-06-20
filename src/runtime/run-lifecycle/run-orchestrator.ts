@@ -73,6 +73,10 @@ export function appendBlockedTaskFailures({ taskResults, appendUnique = appendUn
   return taskResults;
 }
 
+export function shouldHaltPostMainAutomation(taskResults = Object()) {
+  return taskResults.stop_reason === "repeated_failure_fuse";
+}
+
 export async function runTaskPipeline({
   prdPath,
   runId,
@@ -136,26 +140,31 @@ export async function runTaskPipeline({
 
     const taskResults = await mainLoop(prdPath, resumeCompleted);
     appendBlockedTaskFailures({ taskResults, appendUnique });
+    const haltPostMainAutomation = shouldHaltPostMainAutomation(taskResults);
 
-    await retryPhase({
-      prd,
-      prdPath,
-      taskResults,
-      resumeCompleted,
-      runId,
-      yoloRoot: stateRoot,
-      expandedTasksFile,
-      progress,
-      mainLoop,
-      taskPostconditionsPass,
-      updateTaskStatus,
-      appendUnique,
-      normalizeRepoPath,
-      maxRetryRounds: 3,
-      logProgress,
-    });
+    if (haltPostMainAutomation) {
+      logProgress("RETRY", "SKIP", "全局熔断已触发，跳过自动重试和 review loop");
+    } else {
+      await retryPhase({
+        prd,
+        prdPath,
+        taskResults,
+        resumeCompleted,
+        runId,
+        yoloRoot: stateRoot,
+        expandedTasksFile,
+        progress,
+        mainLoop,
+        taskPostconditionsPass,
+        updateTaskStatus,
+        appendUnique,
+        normalizeRepoPath,
+        maxRetryRounds: 3,
+        logProgress,
+      });
+    }
 
-    if (reviewLoopEnabled !== false) {
+    if (!haltPostMainAutomation && reviewLoopEnabled !== false) {
       await reviewLoop({
         prd,
         prdPath,
