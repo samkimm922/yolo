@@ -165,7 +165,8 @@ function evidenceScopeErrors(value) {
 }
 
 function explicitDemandSessionPath(input = Object()) {
-  return clean(input.demandPath || input.demand_path || input.sessionPath || input.session_path);
+  const legacyDemandPath = typeof input.demand === "string" ? input.demand : "";
+  return clean(input.demandPath || input.demand_path || input.sessionPath || input.session_path || legacyDemandPath);
 }
 
 function readExplicitDemandSession(input = Object(), projectRoot) {
