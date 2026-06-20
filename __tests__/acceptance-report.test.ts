@@ -1248,6 +1248,49 @@ describe("acceptance report", () => {
     }
   });
 
+  test("P8.H1: default acceptance prefers latest state run report over lifecycle stage wrapper", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      const servicePrd = prd({
+        title: "Build inventory service",
+        scope: { targets: [{ file: "src/services/inventory.ts" }] },
+        acceptance_criteria: ["Inventory service stores item counts."],
+        post_conditions: [{
+          id: "POST-SERVICE",
+          type: "target_file_modified",
+          severity: "FAIL",
+          params: { file: "src/services/inventory.ts" },
+        }],
+      });
+      const prdPath = join(root, "prd.json");
+      const stateRunReportPath = join(stateRoot, "state/reports/run-test-001/run-report.json");
+      writeJson(prdPath, servicePrd);
+      writeLifecycleStageReport("run", {
+        status: "success",
+        summary: "run passed",
+      }, lifecycleOptions(root));
+      writeJson(stateRunReportPath, runReport(prdPath));
+
+      const report = buildAcceptanceReport({
+        prdPath,
+        projectRoot: root,
+        reviewReport: { findings: [] },
+        stateRoot,
+      });
+
+      assert.equal(report.status, "pass");
+      assert.equal(
+        report.issues.some((issue) => issue.code === "RUN_REPORT_INSUFFICIENT"),
+        false,
+      );
+      assert.ok(report.artifacts.some((artifact) => artifact.endsWith(".yolo/state/reports/run-test-001/run-report.json")));
+      assert.equal(report.artifacts.some((artifact) => artifact.endsWith(".yolo/lifecycle/run-report.json")), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("P8.H1: a real run report with run_id, structured summary and PRD lineage passes", () => {
     const root = tempProject();
     const stateRoot = join(root, ".yolo");

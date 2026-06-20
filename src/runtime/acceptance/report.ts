@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,6 +31,43 @@ function readJsonMaybe(path) {
   const resolved = resolve(path);
   if (!existsSync(resolved)) return null;
   return JSON.parse(readFileSync(resolved, "utf8"));
+}
+
+function isLifecycleStageReport(report) {
+  return Boolean(report && typeof report === "object" &&
+    (report.schema === "yolo.lifecycle.stage_report.v1" || (report.lifecycle_schema && report.report)));
+}
+
+function latestStateRunReportPath(stateRoot) {
+  const reportsRoot = join(stateRoot, "state", "reports");
+  if (!existsSync(reportsRoot)) return "";
+  try {
+    const candidates = readdirSync(reportsRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith("run-"))
+      .map((entry) => {
+        const reportPath = join(reportsRoot, entry.name, "run-report.json");
+        if (!existsSync(reportPath)) return null;
+        const stat = statSync(reportPath);
+        return { path: reportPath, mtime: stat.mtimeMs };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.mtime - a.mtime) || b.path.localeCompare(a.path));
+    return candidates[0]?.path || "";
+  } catch {
+    return "";
+  }
+}
+
+function defaultRunReportPath(stateRoot) {
+  const lifecyclePath = join(stateRoot, "lifecycle", "run-report.json");
+  let lifecycleReport = null;
+  try {
+    lifecycleReport = readJsonMaybe(lifecyclePath);
+  } catch {
+    return lifecyclePath;
+  }
+  if (lifecycleReport && !isLifecycleStageReport(lifecycleReport)) return lifecyclePath;
+  return latestStateRunReportPath(stateRoot) || lifecyclePath;
 }
 
 function defaultAdapterEvidencePath({ stateRoot, resolver }) {
@@ -602,7 +639,7 @@ export function buildAcceptanceReport(input = Object(), options = Object()) {
     stateRoot,
     requiresAcceptanceAdapter: uiTasks(prd).length > 0,
   });
-  const runReportPath = input.runReportPath || input.run_report_path || options.runReportPath || options.run_report_path || join(stateRoot, "lifecycle", "run-report.json");
+  const runReportPath = input.runReportPath || input.run_report_path || options.runReportPath || options.run_report_path || defaultRunReportPath(stateRoot);
   const reviewReportPath = input.reviewReportPath || input.review_report_path || options.reviewReportPath || options.review_report_path || join(stateRoot, "lifecycle", "review-report.json");
   const uiEvidencePath = input.uiEvidencePath || input.ui_evidence_path || options.uiEvidencePath || options.ui_evidence_path || "";
   const adapterEvidencePath = input.adapterEvidencePath || input.adapter_evidence_path || options.adapterEvidencePath || options.adapter_evidence_path || defaultAdapterEvidencePath({ stateRoot, resolver });
