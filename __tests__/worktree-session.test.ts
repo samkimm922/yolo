@@ -380,46 +380,39 @@ describe("worktree execution session helpers", () => {
     assert.ok(writes.has("/repo/.yolo-worktrees/FIX-FS/scripts/yolo/state/runtime/tsc-baseline.json"));
   });
 
-  test("createTaskWorktree falls back to filesystem mode for unborn git HEAD", () => {
+  test("createTaskWorktree refuses filesystem fallback for unborn git HEAD", () => {
     const commands = [];
     const copies = [];
-    const writes = new Map();
-    const wt = createTaskWorktree({
-      taskId: "FIX-UNBORN",
-      rootDir: "/repo/new-project",
-      worktreeRoot: "/repo/.yolo-worktrees",
-      config: { build: { type_check: "tsc", lint: "eslint" } },
-      now: () => 789,
-      execSync: (command) => {
-        commands.push(command);
-        if (command === "git rev-parse --is-inside-work-tree") return "true\n";
-        if (command === "git rev-parse --verify HEAD") {
-          const error: Error & { stderr: string } = Object.assign(new Error("invalid reference"), { stderr: "fatal: Needed a single revision" });
-          throw error;
-        }
-        return "";
-      },
-      execFileSync: () => "",
-      existsSync: () => false,
-      mkdirSync: () => {},
-      cpSync: (src, dst) => copies.push({ src, dst }),
-      writeFileSync: (path, content) => writes.set(path, content),
-    });
 
-    assert.deepEqual(wt, {
-      branch: "yolo-FIX-UNBORN-789",
-      path: "/repo/.yolo-worktrees/FIX-UNBORN",
-      base: "filesystem",
-      mode: "filesystem",
-      reason: "unborn_head",
-      detail: "fatal: Needed a single revision",
-    });
+    assert.throws(
+      () => createTaskWorktree({
+        taskId: "FIX-UNBORN",
+        rootDir: "/repo/new-project",
+        worktreeRoot: "/repo/.yolo-worktrees",
+        config: { build: { type_check: "tsc", lint: "eslint" } },
+        now: () => 789,
+        execSync: (command) => {
+          commands.push(command);
+          if (command === "git rev-parse --is-inside-work-tree") return "true\n";
+          if (command === "git rev-parse --verify HEAD") {
+            const error: Error & { stderr: string } = Object.assign(new Error("invalid reference"), { stderr: "fatal: Needed a single revision" });
+            throw error;
+          }
+          return "";
+        },
+        execFileSync: () => "",
+        existsSync: () => false,
+        mkdirSync: () => {},
+        cpSync: (src, dst) => copies.push({ src, dst }),
+        writeFileSync: () => {},
+      }),
+      /git HEAD unavailable in git repository \(unborn_head: fatal: Needed a single revision\).*initial commit baseline/,
+    );
     assert.equal(commands.some((command) => command.includes("git worktree add --detach")), false);
-    assert.deepEqual(copies, [{ src: "/repo/new-project", dst: "/repo/.yolo-worktrees/FIX-UNBORN" }]);
-    assert.ok(writes.has("/repo/.yolo-worktrees/FIX-UNBORN/scripts/yolo/state/runtime/tsc-baseline.json"));
+    assert.deepEqual(copies, []);
   });
 
-  test("filesystem fallback excludes in-project worktree roots", () => {
+  test("filesystem fallback excludes in-project worktree roots for non-git projects", () => {
     const copies = [];
     const wt = createTaskWorktree({
       taskId: "FIX-INTERNAL",
@@ -428,11 +421,7 @@ describe("worktree execution session helpers", () => {
       config: { build: { type_check: "", lint: "" } },
       now: () => 987,
       execSync: (command) => {
-        if (command === "git rev-parse --is-inside-work-tree") return "true\n";
-        if (command === "git rev-parse --verify HEAD") {
-          const error: Error & { stderr: string } = Object.assign(new Error("invalid reference"), { stderr: "fatal: invalid reference: HEAD" });
-          throw error;
-        }
+        if (command === "git rev-parse --is-inside-work-tree") throw new Error("not a worktree");
         return "";
       },
       execFileSync: () => "",
@@ -446,7 +435,7 @@ describe("worktree execution session helpers", () => {
 
     const filesystemWt = wt as any;
     assert.equal(filesystemWt.mode, "filesystem");
-    assert.equal(filesystemWt.reason, "unborn_head");
+    assert.equal(filesystemWt.reason, "not_git_worktree");
     assert.deepEqual(copies, [
       { src: "/repo/new-project/src", dst: "/repo/new-project/.yolo/runtime/worktrees/FIX-INTERNAL/src" },
       { src: "/repo/new-project/package.json", dst: "/repo/new-project/.yolo/runtime/worktrees/FIX-INTERNAL/package.json" },

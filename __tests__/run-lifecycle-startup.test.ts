@@ -1,5 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,11 +8,13 @@ import {
   acquireRunnerPidLock,
   cleanupRetryRoundFiles,
   cleanupStaleGitWorktreesAndBranches,
+  ensureRunGitBaseline,
   initializeRuntimeState,
   initializeMissingBaselines,
   loadResumeCompletedFromPrd,
   prepareRunStartup,
   rotateTaskResults,
+  RUN_INITIAL_COMMIT_MESSAGE,
   truncateJsonlFile,
 } from "../src/runtime/run-lifecycle/startup.js";
 import { baselineArtifactHash } from "../src/runtime/execution/baselines.js";
@@ -20,7 +23,113 @@ function tempDir() {
   return mkdtempSync(join(tmpdir(), "yolo-run-startup-"));
 }
 
+function git(root, args) {
+  return execFileSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["pipe", "pipe", "pipe"],
+  }).trim();
+}
+
 describe("run lifecycle startup helpers", () => {
+  test("ensureRunGitBaseline creates a transparent initial commit for unborn git repos", () => {
+    const root = tempDir();
+    const logs = [];
+    try {
+      git(root, ["init"]);
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "README.md"), "# unborn\n", "utf8");
+      writeFileSync(join(root, "src/app.js"), "console.log('ready');\n", "utf8");
+
+      const result = ensureRunGitBaseline({
+        rootDir: root,
+        consoleLog: (message) => logs.push(message),
+      });
+
+      const head = git(root, ["rev-parse", "--verify", "HEAD"]);
+      assert.equal(result.status, "created");
+      assert.equal(result.commit, head);
+      assert.equal(git(root, ["log", "-1", "--pretty=%s"]), RUN_INITIAL_COMMIT_MESSAGE);
+      assert.equal(git(root, ["status", "--porcelain"]), "");
+      assert.deepEqual(git(root, ["ls-tree", "-r", "--name-only", "HEAD"]).split("\n").sort(), [
+        "README.md",
+        "src/app.js",
+      ]);
+      assert.match(logs.join("\n"), /尚无 HEAD/);
+      assert.match(logs.join("\n"), /yolo 已创建初始 commit/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("ensureRunGitBaseline leaves true non-git projects for filesystem fallback", () => {
+    const root = tempDir();
+    const logs = [];
+    try {
+      writeFileSync(join(root, "README.md"), "# no git\n", "utf8");
+
+      const result = ensureRunGitBaseline({
+        rootDir: root,
+        consoleLog: (message) => logs.push(message),
+      });
+
+      assert.deepEqual(result, { status: "skipped", reason: "not_git_worktree" });
+      assert.equal(existsSync(join(root, ".git")), false);
+      assert.deepEqual(logs, []);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("prepareRunStartup creates the initial commit before runtime state files", () => {
+    const root = tempDir();
+    const logs = [];
+    try {
+      git(root, ["init"]);
+      writeFileSync(join(root, "README.md"), "# startup\n", "utf8");
+      const stateDir = join(root, ".yolo", "state");
+      const runtimeDir = join(stateDir, "runtime");
+      const expandedTasksFile = join(stateDir, "expanded-tasks.json");
+      const resultsFile = join(runtimeDir, "task-results.jsonl");
+      const prdPath = join(root, ".yolo", "data", "prd.json");
+      mkdirSync(join(root, ".yolo", "data"), { recursive: true });
+      mkdirSync(stateDir, { recursive: true });
+      writeFileSync(prdPath, JSON.stringify({ tasks: [{ id: "DONE", status: "done" }] }), "utf8");
+
+      const resumeCompleted = prepareRunStartup({
+        runId: "run-unborn",
+        prdPath,
+        paths: { stateDir, runtimeDir, expandedTasksFile, resultsFile },
+        config: {
+          progress_server: { port: 0 },
+          state: { max_events: 100, max_changes: 100, max_runs: 100, max_learning: 100, max_session_memory: 100 },
+        },
+        rootDir: root,
+        yoloRoot: join(root, ".yolo"),
+        exitOnComplete: false,
+        taskCountsAsCompleted: (task) => task.status === "done",
+        initTaskLogs: () => {},
+        writeCurrentRun: () => {},
+        startProgressApiServer: () => null,
+        setProgressServerProc: () => {},
+        initializeBaselines: false,
+        logProgress: () => {},
+        consoleLog: (message) => logs.push(message),
+      });
+
+      const committedFiles = git(root, ["ls-tree", "-r", "--name-only", "HEAD"]).split("\n").sort();
+      assert.deepEqual([...resumeCompleted], ["DONE"]);
+      assert.equal(git(root, ["log", "-1", "--pretty=%s"]), RUN_INITIAL_COMMIT_MESSAGE);
+      assert.ok(committedFiles.includes("README.md"));
+      assert.ok(committedFiles.includes(".yolo/data/prd.json"));
+      assert.equal(committedFiles.includes(".yolo/state/runner.pid"), false);
+      assert.equal(committedFiles.some((file) => file.startsWith(".yolo/state/runtime/")), false);
+      assert.match(logs.join("\n"), /yolo 已创建初始 commit/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("acquireRunnerPidLock takes over a stale pid file (dead owner) via exclusive create", () => {
     const files = new Map([["/state/runner.pid", "123"]]);
     const unlinked = [];
