@@ -605,6 +605,8 @@ function taskDependencyPreflightReadiness({ prd }) {
     source: blocker.source || "task-loop-expansion",
     task_id: blocker.task_id || null,
     task_ids: asArray(blocker.task_ids),
+    invariant: blocker.invariant || null,
+    invariant_code: blocker.invariant_code || null,
     message: blocker.message || "Circular task dependency blocks check/preflight.",
     human_needed: true,
   }));

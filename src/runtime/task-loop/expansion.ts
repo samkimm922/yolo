@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { withRuntimeInvariantCode } from "../invariants.js";
 import { deriveParentTaskId } from "./status-helpers.js";
 
 const SOURCE_FILE_PATTERN = /src\/[^\s,，、]+?\.(tsx?|jsx?|css)/g;
@@ -328,12 +329,12 @@ function dependencyBlockedPreflight(blockers) {
 }
 
 function noRootDependencyBlocker(nodes) {
-  return {
+  return withRuntimeInvariantCode({
     code: "TASK_DEPENDENCY_NO_ROOT",
     source: "task-loop-expansion",
     task_ids: nodes.map((node) => taskDisplayId(node.task, node.key)),
     message: "Task dependency graph has no zero-dependency root task; runner cannot start execution.",
-  };
+  }, "task_graph_no_root");
 }
 
 function dependencyCycleBlocker(nodes) {

@@ -14,6 +14,7 @@ import { appendLearningRecord } from "./learning/center.js";
 import { runDiscoveryRuntime } from "../discovery/runtime.js";
 import { inspectYoloCheck } from "./gates/check-report.js";
 import { inspectLifecycleGuard } from "../lifecycle/guard.js";
+import { isRuntimeInvariantViolation } from "./invariants.js";
 
 function ok(summary, extra = Object()) {
   return { status: "success", summary, artifacts: [], next_actions: [], ...extra };
@@ -427,34 +428,47 @@ function runLearnRuntime(params = Object()) {
 }
 
 export async function runPiRuntime(runtime, params = Object(), context = Object()) {
-  switch (runtime) {
-    case "discovery.write":
-    case "discovery.inspect":
-      return runDiscoveryRuntime({ ...params, ...context });
-    case "pm.findings":
-      return runFindingsRuntime({ ...params, ...context });
-    case "prd.generate":
-      return runPrdGenerateRuntime({ ...params, ...context });
-    case "prd.schema_gate":
-      return runSchemaGateRuntime({ ...params, ...context });
-    case "prd.preflight":
-      return runPrdPreflightRuntime({ ...params, ...context });
-    case "prd.contract_gate":
-      return runContractGateRuntime({ ...params, ...context });
-    case "runner":
-      return runRunnerRuntime({ ...params }, context);
-    case "review.scan":
-      return runReviewScanRuntime({ ...params, ...context });
-    case "acceptance":
-      return runAcceptanceRuntime({ ...params, ...context });
-    case "ship":
-      return runShipRuntime({ ...params, ...context });
-    case "learn":
-      return runLearnRuntime({ ...params, ...context });
-    default:
-      return fail(`Unknown PI runtime action: ${runtime}`, {
-        code: "UNKNOWN_PI_RUNTIME",
-        next_actions: ["Use one of: discovery.write, pm.findings, prd.generate, prd.preflight, prd.schema_gate, prd.contract_gate, runner, review.scan, acceptance, ship, learn."],
+  try {
+    switch (runtime) {
+      case "discovery.write":
+      case "discovery.inspect":
+        return runDiscoveryRuntime({ ...params, ...context });
+      case "pm.findings":
+        return runFindingsRuntime({ ...params, ...context });
+      case "prd.generate":
+        return runPrdGenerateRuntime({ ...params, ...context });
+      case "prd.schema_gate":
+        return runSchemaGateRuntime({ ...params, ...context });
+      case "prd.preflight":
+        return runPrdPreflightRuntime({ ...params, ...context });
+      case "prd.contract_gate":
+        return runContractGateRuntime({ ...params, ...context });
+      case "runner":
+        return runRunnerRuntime({ ...params }, context);
+      case "review.scan":
+        return runReviewScanRuntime({ ...params, ...context });
+      case "acceptance":
+        return runAcceptanceRuntime({ ...params, ...context });
+      case "ship":
+        return runShipRuntime({ ...params, ...context });
+      case "learn":
+        return runLearnRuntime({ ...params, ...context });
+      default:
+        return fail(`Unknown PI runtime action: ${runtime}`, {
+          code: "UNKNOWN_PI_RUNTIME",
+          next_actions: ["Use one of: discovery.write, pm.findings, prd.generate, prd.preflight, prd.schema_gate, prd.contract_gate, runner, review.scan, acceptance, ship, learn."],
+        });
+    }
+  } catch (error) {
+    if (isRuntimeInvariantViolation(error)) {
+      return fail(error.message || "Runtime invariant violated.", {
+        code: error.code,
+        exit_code: error.exitCode || 2,
+        invariant: error.invariant || null,
+        blockers: error.blockers || [],
+        next_actions: ["Fix the invalid lifecycle state, then rerun the PI runtime."],
       });
+    }
+    throw error;
   }
 }

@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { appendStateEvent } from "../runtime/evidence/ledger.js";
 import { appendSessionMemory } from "../runtime/evidence/session-memory.js";
 import { appendLearningRecord } from "../runtime/learning/center.js";
+import { RuntimeInvariantViolation } from "../runtime/invariants.js";
 import {
   createLifecycleArtifact,
   createLifecycleStateSnapshot,
@@ -47,6 +48,65 @@ function statusForReport(report = Object()) {
 function shouldRefreshSourceSnapshot(stageId, stageStatus) {
   const stage = getLifecycleStage(stageId);
   return stage.writes_code === true && stageStatus === "completed";
+}
+
+function meaningfulEvidenceEntry(entry) {
+  if (!entry) return false;
+  if (typeof entry === "string") return Boolean(clean(entry));
+  if (typeof entry !== "object") return true;
+  return Object.keys(entry).length > 0;
+}
+
+function reportEvidenceEntries(report = Object()) {
+  return [
+    ...(Array.isArray(report.evidence) ? report.evidence : []),
+    ...(Array.isArray(report.report?.evidence) ? report.report.evidence : []),
+  ].filter(meaningfulEvidenceEntry);
+}
+
+function unresolvedManualCriteria(report = Object()) {
+  const manualCriteria = [
+    ...(Array.isArray(report.manual_criteria) ? report.manual_criteria : []),
+    ...(Array.isArray(report.report?.manual_criteria) ? report.report.manual_criteria : []),
+  ];
+  if (manualCriteria.length === 0) return [];
+
+  const manualEvidence = reportEvidenceEntries(report).filter(
+    (entry) => entry && entry.type === "manual_acceptance" && entry.task_id && entry.condition_id,
+  );
+  return manualCriteria.filter((criterion) => {
+    const taskId = criterion?.task_id;
+    const conditionId = criterion?.condition_id;
+    if (!taskId || !conditionId) return true;
+    return !manualEvidence.some((record) => record.task_id === taskId && record.condition_id === conditionId);
+  });
+}
+
+function assertDeliveryManualAcceptanceResolved(stageId, { stateRoot } = Object()) {
+  if (stageId !== "delivery") return;
+  const acceptancePath = lifecycleArtifactPath("acceptance", { stateRoot });
+  if (!existsSync(acceptancePath)) return;
+  let acceptanceReport = null;
+  try {
+    acceptanceReport = JSON.parse(readFileSync(acceptancePath, "utf8"));
+  } catch {
+    return;
+  }
+  const unresolved = unresolvedManualCriteria(acceptanceReport);
+  if (unresolved.length === 0) return;
+  throw new RuntimeInvariantViolation(
+    "delivery_manual_acceptance_unresolved",
+    "Delivery cannot be recorded while manual acceptance criteria remain unresolved.",
+    {
+      stage: "delivery",
+      source_stage: "acceptance",
+      acceptance_report_path: acceptancePath,
+      unresolved_manual_criteria: unresolved.map((criterion) => ({
+        task_id: criterion?.task_id || null,
+        condition_id: criterion?.condition_id || null,
+      })),
+    },
+  );
 }
 
 function reportBlockers(report = Object()) {
@@ -182,6 +242,8 @@ export function writeLifecycleStageReport(stageId, report = Object(), options = 
       );
     }
   }
+
+  assertDeliveryManualAcceptanceResolved(stageId, { stateRoot });
 
   const stageReport = buildLifecycleStageReport(stageId, report, { ...options, stateRoot, now });
   const stageStatus = stageReport.status;

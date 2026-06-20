@@ -15,6 +15,7 @@ import { runAdapterEvidenceCollector } from "../adapters/evidence-collector.js";
 import { verifyArtifactIntegrity } from "../evidence/artifact-integrity.js";
 import { isWithin } from "../../lib/security/path-guard.js";
 import { verifyApprovalSignature, approvalSignablePayload } from "../../lib/security/approval-signing.js";
+import { withRuntimeInvariantCode } from "../invariants.js";
 
 export const ACCEPTANCE_REPORT_SCHEMA_VERSION = "1.0";
 export const ACCEPTANCE_REPORT_SCHEMA = "yolo.acceptance.report.v1";
@@ -372,9 +373,13 @@ function runReportSufficiencyIssues(runReport, issues, { prdPath = "" } = Object
   if (!hasStructuredSummary) reasons.push("missing structured summary (planned/completed/failed/blocked)");
   if (prdPath && !payload.prd) reasons.push("missing PRD lineage binding");
   if (reasons.length > 0) {
+    const extra = isLifecycleStageReport(runReport)
+      ? withRuntimeInvariantCode({}, "acceptance_run_report_wrapper")
+      : {};
     pushIssue(issues, "P1", "RUN_REPORT_INSUFFICIENT",
       "Run report must carry a verifiable run_id, a structured task summary, and PRD lineage — a minimal lifecycle stage wrapper is not valid run evidence.",
       {
+        ...extra,
         run_id: payload.run_id || null,
         reasons,
         schema: clean(runReport.schema) || null,

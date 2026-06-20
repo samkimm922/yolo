@@ -1,6 +1,65 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { resolveWithinRoot } from "../../lib/security/path-guard.js";
+import {
+  RuntimeInvariantViolation,
+  isRuntimeInvariantViolation,
+} from "../invariants.js";
 import { inspectAtomicTask as defaultInspectAtomicTask } from "./atomic-task-doctor.js";
+
+function asArray(value) {
+  return Array.isArray(value) ? value : value == null ? [] : [value];
+}
+
+function postConditionPathEntries(condition, index) {
+  const params = condition?.params || {};
+  return [
+    ...asArray(params.file).map((value) => ({ role: `post_conditions[${index}].params.file`, value })),
+    ...asArray(params.file_path).map((value) => ({ role: `post_conditions[${index}].params.file_path`, value })),
+    ...asArray(params.files).map((value) => ({ role: `post_conditions[${index}].params.files`, value })),
+  ];
+}
+
+export function assertTaskExecutionPathsWithinProjectRoot({ task, rootDir } = Object()) {
+  if (!rootDir) return;
+  const violations = [];
+  for (const [index, target] of asArray(task?.scope?.targets).entries()) {
+    const file = typeof target === "string" ? target : target?.file;
+    if (!file) continue;
+    const resolved = resolveWithinRoot(rootDir, file);
+    if (!resolved.ok) {
+      violations.push({
+        role: `scope.targets[${index}].file`,
+        path: String(file),
+        reason: resolved.reason,
+        detail: resolved.detail,
+      });
+    }
+  }
+  for (const [index, condition] of asArray(task?.post_conditions).entries()) {
+    for (const entry of postConditionPathEntries(condition, index)) {
+      const resolved = resolveWithinRoot(rootDir, entry.value);
+      if (!resolved.ok) {
+        violations.push({
+          role: entry.role,
+          path: String(entry.value),
+          reason: resolved.reason,
+          detail: resolved.detail,
+        });
+      }
+    }
+  }
+  if (violations.length === 0) return;
+  throw new RuntimeInvariantViolation(
+    "task_path_outside_project_root",
+    "Task target or post-condition path resolves outside the project root.",
+    {
+      task_id: task?.id || null,
+      root_dir: rootDir,
+      violations,
+    },
+  );
+}
 
 export async function validateContextPackBeforeSession({
   task,
@@ -10,6 +69,7 @@ export async function validateContextPackBeforeSession({
   loadContextPackModule = () => import("./context-pack-validator.js"),
 } = Object()) {
   try {
+    assertTaskExecutionPathsWithinProjectRoot({ task, rootDir });
     const { buildContextPackForTask, validateContextPack } = await loadContextPackModule();
     const pack = buildContextPackForTask(task, { root: rootDir, attempt });
     const result = validateContextPack(pack, { root: rootDir });
@@ -17,6 +77,19 @@ export async function validateContextPackBeforeSession({
     writeFileSync(artifact, JSON.stringify({ pack, result }, null, 2), "utf8");
     return { ok: !result.blocks_execution, result, artifact };
   } catch (error) {
+    if (isRuntimeInvariantViolation(error)) {
+      return {
+        ok: false,
+        result: {
+          status: "fail",
+          blocks_execution: true,
+          failures: error.blockers || [{
+            code: error.code,
+            detail: error.message,
+          }],
+        },
+      };
+    }
     return {
       ok: false,
       result: {

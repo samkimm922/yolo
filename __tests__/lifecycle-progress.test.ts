@@ -167,4 +167,95 @@ describe("lifecycle progress", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("runtime invariant: delivery write fails closed when manual acceptance is unresolved", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      writeLifecycleStageReport("acceptance", {
+        status: "pass",
+        summary: "acceptance passed but still needs human evidence",
+        evidence: [{ path: "state/acceptance/evidence.json" }],
+        manual_criteria: [{
+          task_id: "FEAT-1",
+          condition_id: "POST-MANUAL",
+          text: "Product owner signs off.",
+        }],
+      }, {
+        projectRoot: root,
+        stateRoot,
+        source: "unit",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+
+      assert.throws(
+        () => writeLifecycleStageReport("delivery", {
+          status: "success",
+          summary: "delivery should not write",
+        }, {
+          projectRoot: root,
+          stateRoot,
+          source: "unit",
+          writeSessionMemory: false,
+          skipSequenceCheck: true,
+        }),
+        (error) => {
+          const invariantError = error as any;
+          assert.equal(invariantError.code, "RUNTIME_INVARIANT_VIOLATED:delivery_manual_acceptance_unresolved");
+          assert.equal(invariantError.blockers[0].code, "RUNTIME_INVARIANT_VIOLATED:delivery_manual_acceptance_unresolved");
+          assert.equal(invariantError.blockers[0].unresolved_manual_criteria[0].condition_id, "POST-MANUAL");
+          return true;
+        },
+      );
+      assert.equal(existsSync(join(stateRoot, "lifecycle/delivery-report.json")), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("runtime invariant: delivery write allows resolved manual acceptance", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      writeLifecycleStageReport("acceptance", {
+        status: "pass",
+        summary: "manual acceptance resolved",
+        evidence: [{
+          type: "manual_acceptance",
+          task_id: "FEAT-1",
+          condition_id: "POST-MANUAL",
+          accepted_by: "operator",
+          at: "2026-06-20T00:00:00.000Z",
+        }],
+        manual_criteria: [{
+          task_id: "FEAT-1",
+          condition_id: "POST-MANUAL",
+          text: "Product owner signs off.",
+        }],
+      }, {
+        projectRoot: root,
+        stateRoot,
+        source: "unit",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+
+      const result = writeLifecycleStageReport("delivery", {
+        status: "success",
+        summary: "delivery can write",
+      }, {
+        projectRoot: root,
+        stateRoot,
+        source: "unit",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+
+      assert.equal(result.stage_status, "completed");
+      assert.equal(existsSync(join(stateRoot, "lifecycle/delivery-report.json")), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

@@ -195,6 +195,7 @@ describe("task loop expansion", () => {
       "TASK_DEPENDENCY_NO_ROOT",
       "TASK_DEPENDENCY_CYCLE",
     ]);
+    assert.equal(preflight.blockers[0].invariant_code, "RUNTIME_INVARIANT_VIOLATED:task_graph_no_root");
     assert.deepEqual(preflight.blockers[1].task_ids, ["A", "B"]);
   });
 
@@ -221,6 +222,7 @@ describe("task loop expansion", () => {
       "TASK_DEPENDENCY_NO_ROOT",
       "TASK_DEPENDENCY_CYCLE",
     ]);
+    assert.equal(ordered.preflight.blockers[0].invariant_code, "RUNTIME_INVARIANT_VIOLATED:task_graph_no_root");
     assert.deepEqual(ordered.tasks.map((task) => task.id), ["A", "B"]);
   });
 
@@ -233,6 +235,7 @@ describe("task loop expansion", () => {
 
     assert.equal(ordered.preflight.blocks_execution, true);
     assert.equal(ordered.preflight.blockers.some((blocker) => blocker.code === "TASK_DEPENDENCY_NO_ROOT"), true);
+    assert.equal(ordered.preflight.blockers.some((blocker) => blocker.invariant_code === "RUNTIME_INVARIANT_VIOLATED:task_graph_no_root"), true);
     assert.equal(ordered.preflight.blockers.some((blocker) => blocker.code === "TASK_DEPENDENCY_CYCLE"), true);
     assert.deepEqual(ordered.preflight.blockers[0].task_ids, ["A", "B", "C"]);
   });

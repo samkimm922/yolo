@@ -1241,6 +1241,7 @@ describe("acceptance report", () => {
         `expected RUN_REPORT_INSUFFICIENT for minimal wrapper: ${JSON.stringify(report.issues.map((issue) => issue.code))}`,
       );
       const insufficient = report.issues.find((issue) => issue.code === "RUN_REPORT_INSUFFICIENT");
+      assert.equal(insufficient.invariant_code, "RUNTIME_INVARIANT_VIOLATED:acceptance_run_report_wrapper");
       assert.ok(insufficient.reasons.includes("missing run_id"));
       assert.ok(insufficient.reasons.some((reason) => reason.startsWith("missing structured summary")));
     } finally {

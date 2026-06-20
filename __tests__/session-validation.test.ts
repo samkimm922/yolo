@@ -62,6 +62,74 @@ describe("session validation helpers", () => {
     assert.equal(result.result.failures[0].code, "CONTEXT_PACK_VALIDATOR_ERROR");
   });
 
+  test("validateContextPackBeforeSession fails closed when a task target escapes the project root", async () => {
+    const rootDir = mkdtempSync(join(tmpdir(), "yolo-session-validation-target-"));
+    const runtimeDir = join(rootDir, "state/runtime");
+    try {
+      mkdirSync(runtimeDir, { recursive: true });
+      const result = await validateContextPackBeforeSession({
+        task: {
+          id: "FIX-SESSION-PATH-001",
+          title: "Unsafe target",
+          type: "bugfix",
+          status: "pending",
+          priority: "P1",
+          scope: { targets: [{ file: "../outside.ts" }] },
+          post_conditions: [{
+            id: "POST-FILE",
+            type: "file_exists",
+            severity: "FAIL",
+            params: { file: "src/value.ts" },
+          }],
+        },
+        attempt: 1,
+        rootDir,
+        runtimeDir,
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.result.blocks_execution, true);
+      assert.equal(result.result.failures[0].code, "RUNTIME_INVARIANT_VIOLATED:task_path_outside_project_root");
+      assert.equal(result.result.failures[0].violations[0].role, "scope.targets[0].file");
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  test("validateContextPackBeforeSession fails closed when a post-condition path escapes the project root", async () => {
+    const rootDir = mkdtempSync(join(tmpdir(), "yolo-session-validation-post-"));
+    const runtimeDir = join(rootDir, "state/runtime");
+    try {
+      mkdirSync(runtimeDir, { recursive: true });
+      const result = await validateContextPackBeforeSession({
+        task: {
+          id: "FIX-SESSION-PATH-002",
+          title: "Unsafe post-condition",
+          type: "bugfix",
+          status: "pending",
+          priority: "P1",
+          scope: { targets: [{ file: "src/value.ts" }] },
+          post_conditions: [{
+            id: "POST-FILE",
+            type: "file_exists",
+            severity: "FAIL",
+            params: { file: "../../outside.ts" },
+          }],
+        },
+        attempt: 1,
+        rootDir,
+        runtimeDir,
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.result.blocks_execution, true);
+      assert.equal(result.result.failures[0].code, "RUNTIME_INVARIANT_VIOLATED:task_path_outside_project_root");
+      assert.equal(result.result.failures[0].violations[0].role, "post_conditions[0].params.file");
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
   test("validateTestGenerationAfterSession delegates validator and fails closed on errors", async () => {
     const pass = await validateTestGenerationAfterSession({
       task: { id: "FIX-SESSION-003" },
