@@ -43,6 +43,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: npm test --silent
 
+  mutation-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: npm run mutation-gate --silent
+
   verify:
     runs-on: ubuntu-latest
     steps:

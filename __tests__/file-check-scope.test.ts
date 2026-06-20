@@ -320,6 +320,16 @@ describe("target_file_modified changed file source", () => {
     assert.equal(targetResult(result).found, 1);
   });
 
+  test("matches runner-provided changedFiles by target suffix", () => {
+    const result = evaluateTargetFileModified({
+      changedFiles: [`packages/web/${calendarTarget}`],
+    });
+
+    assert.equal(result.allPass, true);
+    assert.equal(targetResult(result).passed, true);
+    assert.equal(targetResult(result).found, 1);
+  });
+
   test("fails when runner-provided changedFiles does not include the target", () => {
     const result = evaluateTargetFileModified({
       changedFiles: ["components/board/views/list-view.tsx"],
