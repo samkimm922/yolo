@@ -207,7 +207,7 @@ export function validateLifecycleState(state = Object()) {
     errors.push({ code: "LIFECYCLE_STAGES_EMPTY", message: "lifecycle state must include stages" });
   }
 
-  const actualIds = stages.map((stage) => stage.id);
+  const actualIds = stages.map((stage) => stage?.id);
   const missing = expectedIds.filter((id) => !actualIds.includes(id));
   const unknown = actualIds.filter((id) => !expectedIds.includes(id));
   if (missing.length > 0) {
@@ -226,7 +226,7 @@ export function validateLifecycleState(state = Object()) {
     });
   }
 
-  const activeStages = stages.filter((stage) => stage.status === "active").map((stage) => stage.id);
+  const activeStages = stages.filter((stage) => stage?.status === "active").map((stage) => stage?.id);
   if (activeStages.length !== 1) {
     warnings.push({
       code: "LIFECYCLE_ACTIVE_STAGE_COUNT",
