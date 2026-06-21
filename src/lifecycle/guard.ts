@@ -231,7 +231,15 @@ function validateEvidencePaths(projectRoot, report = Object(), stageId = "") {
 function hasManualAcceptanceCriteria(report = Object()) {
   const manualCriteria = Array.isArray(report.manual_criteria) ? report.manual_criteria : [];
   const nested = Array.isArray(report.report?.manual_criteria) ? report.report.manual_criteria : [];
-  const allManual = [...manualCriteria, ...nested];
+  // acceptance-report.json is an external artifact that can be hand-edited,
+  // partially flushed, or git-merged into a valid-JSON-but-malformed shape.
+  // A null/number/string entry inside `manual_criteria` would crash
+  // `criterion.task_id` below and take down the entire delivery gate.
+  // Reject non-object entries first, mirroring the asConditions/isBlockingCheck
+  // pattern used elsewhere in this module.
+  const allManual = [...manualCriteria, ...nested].filter(
+    (criterion) => criterion && typeof criterion === "object" && !Array.isArray(criterion),
+  );
   if (allManual.length === 0) return false;
 
   const evidence = reportEvidenceEntries(report);
