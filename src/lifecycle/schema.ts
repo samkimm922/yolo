@@ -189,6 +189,12 @@ export function createLifecycleStateSnapshot(options = Object()) {
 }
 
 export function validateLifecycleState(state = Object()) {
+  // A status.json containing valid JSON `null` (e.g., from a botched external
+  // write, partial flush, or git merge) reaches here as null and would crash on
+  // `state.schema` below. The default `= Object()` only covers undefined, so
+  // guard null explicitly. Other non-object primitives (number/string/array/
+  // boolean) already fail safe because property access returns undefined.
+  if (state === null) state = Object();
   const errors = [];
   const warnings = [];
 
