@@ -4,7 +4,7 @@
 
 import { describe, test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, appendFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, appendFileSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { isWithin, isSafePathComponent } from "../src/lib/security/path-guard.js";
@@ -86,6 +86,21 @@ describe("P10.S2 file-check path traversal", () => {
     const r = mod.evalDirExists({ path: "../../../etc" }, {}, tmpRoot);
     assert.equal(r.passed, false);
   });
+
+  test("file_exists rejects symlink resolving outside root", () => {
+    const outsideDir = mkdtempSync(join(tmpdir(), "yolo-p10-s2-file-outside-"));
+    const linkPath = join(tmpRoot, "src", "linked-secret.ts");
+    writeFileSync(join(outsideDir, "secret.ts"), "export const secret = true;\n", "utf8");
+    try {
+      symlinkSync(join(outsideDir, "secret.ts"), linkPath);
+      const r = mod.evalFileExists({ file: "src/linked-secret.ts" }, {}, tmpRoot);
+      assert.equal(r.passed, false);
+      assert.ok(r.detail.includes("越界") || r.detail.includes("escape"));
+    } finally {
+      try { rmSync(linkPath, { force: true }); } catch {}
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ── code-check path traversal ──────────────────────────────────
@@ -126,6 +141,20 @@ describe("P10.S2 code-check path traversal", () => {
       assert.equal(r.passed, false);
     } finally {
       try { rmSync(outsideFile, { force: true }); } catch {}
+    }
+  });
+
+  test("rejects symlink path instead of reading outside-root content", () => {
+    const outsideDir = mkdtempSync(join(tmpdir(), "yolo-p10-s2-code-outside-"));
+    const linkPath = join(tmpRoot, "src", "linked-secret.ts");
+    writeFileSync(join(outsideDir, "secret.ts"), "const secret = 'outside';\n", "utf8");
+    try {
+      symlinkSync(join(outsideDir, "secret.ts"), linkPath);
+      const r = mod.evalCodeContains({ file: "src/linked-secret.ts", text: "outside" }, {}, tmpRoot);
+      assert.equal(r.passed, false);
+    } finally {
+      try { rmSync(linkPath, { force: true }); } catch {}
+      rmSync(outsideDir, { recursive: true, force: true });
     }
   });
 });

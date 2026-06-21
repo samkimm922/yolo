@@ -2,7 +2,8 @@
 // P12.I2: resolveWithinRoot咽喉 — single entry point for untrusted path resolution.
 // Asserts that externally-controlled paths resolve within a trusted root.
 
-import { resolve, relative, isAbsolute } from "node:path";
+import { lstatSync, realpathSync } from "node:fs";
+import { dirname, resolve, relative, isAbsolute } from "node:path";
 
 export interface ResolveWithinRootResult {
   ok: boolean;
@@ -22,6 +23,25 @@ export function isWithin(path: string, root: string): boolean {
   return rel === "" || (!!rel && !rel.startsWith("..") && !isAbsolute(rel));
 }
 
+function pathExists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function nearestExistingAncestor(path: string): string {
+  let current = path;
+  while (!pathExists(current)) {
+    const parent = dirname(current);
+    if (parent === current) return current;
+    current = parent;
+  }
+  return current;
+}
+
 /**
  * P12.I2咽喉: resolve an untrusted path relative to `root` and verify it stays
  * within root. Returns { ok: true, path } on success, or { ok: false, reason,
@@ -37,12 +57,38 @@ export function resolveWithinRoot(root: string, inputPath: unknown): ResolveWith
   const p = String(inputPath ?? "");
   if (!p) return { ok: false, reason: "empty", detail: "path is empty" };
   if (p.includes("\0")) return { ok: false, reason: "null_byte", detail: "path contains null byte" };
-  const resolved = resolve(root, p);
-  if (!isWithin(resolved, root)) {
+  const rootResolved = resolve(root);
+  const resolved = resolve(rootResolved, p);
+  if (!isWithin(resolved, rootResolved)) {
     return {
       ok: false,
       reason: "path_escape",
       detail: `path "${p}" resolves outside root "${root}"`,
+    };
+  }
+
+  let realRoot = "";
+  try {
+    realRoot = realpathSync(rootResolved);
+  } catch {
+    return { ok: true, path: resolved };
+  }
+
+  const existingBoundary = pathExists(resolved) ? resolved : nearestExistingAncestor(resolved);
+  try {
+    const realBoundary = realpathSync(existingBoundary);
+    if (!isWithin(realBoundary, realRoot)) {
+      return {
+        ok: false,
+        reason: "path_escape",
+        detail: `path "${p}" resolves through a symlink outside root "${root}"`,
+      };
+    }
+  } catch {
+    return {
+      ok: false,
+      reason: "path_escape",
+      detail: `path "${p}" cannot be resolved within root "${root}"`,
     };
   }
   return { ok: true, path: resolved };

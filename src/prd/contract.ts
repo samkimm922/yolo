@@ -21,6 +21,7 @@ import { evalNoForbiddenPatterns, evalNoNewTypeErrors, evalTypeErrorsContain, ev
 import { evalTestsPass, evalBuildPass, evalBusinessCodeMin } from "../lib/evaluators/runtime-check.js";
 import { parseCommandToArgv } from "../lib/security/command-guard.js";
 import { execArgv, execCommand } from "../lib/security/safe-exec.js";
+import { resolveWithinRoot } from "../lib/security/path-guard.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -207,8 +208,14 @@ function createEvaluators(root, options = Object()) {
       if (!importPath) return { passed: false, detail: "缺少 import_path 参数" };
       const missingFiles = [];
       const checkedFiles = [];
+      const unsafeFiles = [];
       for (const f of files) {
-        const absPath = resolve(root, f);
+        const guardResult = resolveWithinRoot(root, f);
+        if (!guardResult.ok) {
+          unsafeFiles.push({ file: f, reason: guardResult.reason, detail: guardResult.detail });
+          continue;
+        }
+        const absPath = guardResult.path;
         if (!existsSync(absPath)) {
           missingFiles.push(f);
           continue;
@@ -217,6 +224,15 @@ function createEvaluators(root, options = Object()) {
         const content = readFileSync(absPath, "utf8");
         const re = new RegExp(`import\\b.*from\\s*['"]${importPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}['"]`);
         if (!re.test(content)) return { passed: false, detail: `${f} 缺少导入: ${importPath}` };
+      }
+      if (unsafeFiles.length > 0) {
+        return {
+          passed: false,
+          status: "indeterminate",
+          detail: `指定文件路径越界，无法验证导入 ${importPath}: ${unsafeFiles.map((item) => item.file).join(", ")}`,
+          checked_files: checkedFiles,
+          unsafe_files: unsafeFiles,
+        };
       }
       if (missingFiles.length > 0) {
         return {

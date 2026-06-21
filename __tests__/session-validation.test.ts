@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -127,6 +127,46 @@ describe("session validation helpers", () => {
       assert.equal(result.result.failures[0].violations[0].role, "post_conditions[0].params.file");
     } finally {
       rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  test("validateContextPackBeforeSession fails closed when symlink target resolves outside the project root", async () => {
+    const rootDir = mkdtempSync(join(tmpdir(), "yolo-session-validation-symlink-"));
+    const outsideDir = mkdtempSync(join(tmpdir(), "yolo-session-validation-outside-"));
+    const runtimeDir = join(rootDir, "state/runtime");
+    try {
+      mkdirSync(join(rootDir, "src"), { recursive: true });
+      mkdirSync(runtimeDir, { recursive: true });
+      writeFileSync(join(outsideDir, "secret.ts"), "export const secret = true;\n", "utf8");
+      symlinkSync(join(outsideDir, "secret.ts"), join(rootDir, "src", "linked-secret.ts"));
+
+      const result = await validateContextPackBeforeSession({
+        task: {
+          id: "FIX-SESSION-PATH-003",
+          title: "Unsafe symlink target",
+          type: "bugfix",
+          status: "pending",
+          priority: "P1",
+          scope: { targets: [{ file: "src/linked-secret.ts" }] },
+          post_conditions: [{
+            id: "POST-FILE",
+            type: "file_exists",
+            severity: "FAIL",
+            params: { file: "src/linked-secret.ts" },
+          }],
+        },
+        attempt: 1,
+        rootDir,
+        runtimeDir,
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.result.blocks_execution, true);
+      assert.equal(result.result.failures[0].code, "RUNTIME_INVARIANT_VIOLATED:task_path_outside_project_root");
+      assert.equal(result.result.failures[0].violations[0].role, "scope.targets[0].file");
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+      rmSync(outsideDir, { recursive: true, force: true });
     }
   });
 
