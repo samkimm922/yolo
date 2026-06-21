@@ -1240,6 +1240,41 @@ describe("acceptance report", () => {
     }
   });
 
+  test("S1 manual acceptance: corrupted manual_criteria with null/non-object entries does not crash delivery gate", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      initLifecycleState({ projectRoot: root });
+      writeRunPass(root);
+      writeReviewPass(root);
+      // acceptance-report.json is an external artifact; a partial flush, hand
+      // edit, or git merge can produce valid JSON with a null/number/string
+      // entry inside manual_criteria. The delivery gate must fail closed
+      // (ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED) rather than crashing the
+      // entire inspectLifecycleGuard call with TypeError.
+      writeLifecycleStageReport("acceptance", {
+        status: "pass",
+        summary: "acceptance with corrupted manual_criteria entries",
+        evidence: [{ path: "state/acceptance/evidence.json" }],
+        manual_criteria: [
+          null,
+          42,
+          "string",
+          { task_id: "FEAT-ACCEPT-001", condition_id: "POST-ACCEPT-MANUAL" },
+        ],
+      }, lifecycleWriteOptions(root));
+
+      const guard = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot });
+      assert.equal(guard.status, "blocked");
+      assert.ok(
+        guard.blockers.some((blocker) => blocker.code === "ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED"),
+        `expected fail-closed ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED for corrupted manual_criteria: ${JSON.stringify(guard.blockers)}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("P8.H1: a minimal lifecycle run-stage wrapper is rejected as run evidence", () => {
     const root = tempProject();
     const stateRoot = join(root, ".yolo");
