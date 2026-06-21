@@ -21,6 +21,9 @@ const STATS_FILE = join(YOLO_ROOT, "state", "runtime", "learn-stats.json");
 const CURRENT_RUN_FILE = join(YOLO_ROOT, "state", "runtime", "current-run.json");
 const TASK_LOGS_DIR = join(YOLO_ROOT, "state", "runtime", "task-logs");
 const REVIEW_LOG_FILE = join(TASK_LOGS_DIR, "_review.jsonl");
+const LOCAL_CORS_ORIGIN_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+
+export const PROGRESS_SERVER_HOST = "127.0.0.1";
 
 const PORT = parseInt(
   process.argv.find((a) => a.startsWith("--port="))?.split("=")[1] || "3456",
@@ -375,6 +378,21 @@ function sseBroadcast(event, data) {
   }
 }
 
+function localCorsHeaders(req) {
+  const origin = req.headers.origin;
+  if (typeof origin !== "string") return {};
+  try {
+    const parsed = new URL(origin);
+    if ((parsed.protocol === "http:" || parsed.protocol === "https:") && LOCAL_CORS_ORIGIN_HOSTS.has(parsed.hostname)) {
+      return {
+        "Access-Control-Allow-Origin": origin,
+        "Vary": "Origin",
+      };
+    }
+  } catch {}
+  return {};
+}
+
 /** 读取 task-log 文件，返回指定偏移后的新增行 */
 function readTaskLogIncremental(filePath, lastPosition) {
   try {
@@ -392,7 +410,7 @@ function handleSSEConnection(req, res) {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
-    "Access-Control-Allow-Origin": "*",
+    ...localCorsHeaders(req),
   });
 
   // 每个连接维护自己的日志行偏移
@@ -1654,9 +1672,9 @@ export { server, getProgressData, readStats, readLifecycleProgressData, startFil
 // 只在直接运行时启动（被 import 时不启动）
 const __main = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 if (__main) {
-  server.listen(PORT, () => {
+  server.listen(PORT, PROGRESS_SERVER_HOST, () => {
     process.stdout.write(`\n  YOLO Progress Dashboard\n`);
-    process.stdout.write(`  http://localhost:${PORT}\n`);
+    process.stdout.write(`  http://${PROGRESS_SERVER_HOST}:${PORT}\n`);
     process.stdout.write(`  数据源: PRD (${resolvePrdPath()})\n`);
     process.stdout.write(`  推送方式: SSE (实时)\n`);
     startFileWatchers();
