@@ -31,7 +31,19 @@ function readJsonMaybe(path) {
   if (!path) return null;
   const resolved = resolve(path);
   if (!existsSync(resolved)) return null;
-  return JSON.parse(readFileSync(resolved, "utf8"));
+  try {
+    return JSON.parse(readFileSync(resolved, "utf8"));
+  } catch (error) {
+    return {
+      schema: "yolo.invalid_json.v1",
+      status: "error",
+      parse_error: {
+        code: "JSON_PARSE_FAILED",
+        path: resolved,
+        message: error?.message || "JSON parse failed.",
+      },
+    };
+  }
 }
 
 function isLifecycleStageReport(report) {
@@ -391,6 +403,13 @@ function runReportSufficiencyIssues(runReport, issues, { prdPath = "" } = Object
 function runtimeEvidenceIssues(runReport, issues, { releaseMode = false, prdPath = "" } = Object()) {
   if (!runReport) {
     pushIssue(issues, "P1", "RUN_REPORT_MISSING", "Acceptance requires run evidence or an explicit degraded/manual record.");
+    return;
+  }
+  if (runReport.parse_error?.code === "JSON_PARSE_FAILED") {
+    pushIssue(issues, "P1", "RUN_REPORT_JSON_INVALID", "Run report JSON could not be parsed.", {
+      path: runReport.parse_error.path || null,
+      error: runReport.parse_error.message || "JSON parse failed.",
+    });
     return;
   }
   runReportSufficiencyIssues(runReport, issues, { prdPath });

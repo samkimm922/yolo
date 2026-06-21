@@ -122,6 +122,27 @@ describe("acceptance report", () => {
     }
   });
 
+  test("blocks malformed default run report JSON instead of throwing", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, prd());
+      writeText(join(stateRoot, "lifecycle", "run-report.json"), '{"schema":"bad"');
+
+      const report = buildAcceptanceReport({
+        prdPath,
+        projectRoot: root,
+        stateRoot,
+      });
+
+      assert.equal(report.status, "blocked");
+      assert.ok(report.issues.some((issue) => issue.code === "RUN_REPORT_JSON_INVALID"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("classifies page crashes and layout blockers as P0 hard failures", () => {
     const root = tempProject();
     try {

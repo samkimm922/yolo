@@ -1,16 +1,16 @@
 // evaluators/code-check.js — evalCodeContains / evalCodeNotContains
 
 import { readFileSync, existsSync, statSync } from "node:fs";
-import { resolve } from "node:path";
-import { isWithin } from "../security/path-guard.js";
+import { resolveWithinRoot } from "../security/path-guard.js";
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function readExistingFile(ROOT, file) {
-  const absPath = resolve(ROOT, file || "");
-  if (!file || !isWithin(absPath, ROOT) || !existsSync(absPath) || statSync(absPath).isDirectory()) return null;
+  const guardResult = resolveWithinRoot(ROOT, file || "");
+  if (!file || !guardResult.ok || !existsSync(guardResult.path) || statSync(guardResult.path).isDirectory()) return null;
+  const absPath = guardResult.path;
   return readFileSync(absPath, "utf8");
 }
 
@@ -110,8 +110,9 @@ export function evalCodeContains(params, taskScope, ROOT) {
   let filesChecked = 0;
 
   for (const file of targetFiles) {
-    const absPath = resolve(ROOT, file);
-    if (!isWithin(absPath, ROOT) || !existsSync(absPath) || statSync(absPath).isDirectory()) continue;
+    const guardResult = resolveWithinRoot(ROOT, file);
+    if (!guardResult.ok || !existsSync(guardResult.path) || statSync(guardResult.path).isDirectory()) continue;
+    const absPath = guardResult.path;
     filesChecked++;
 
     const content = readFileSync(absPath, "utf8");
@@ -293,8 +294,8 @@ export function evalCodeNotContains(params, taskScope, ROOT) {
   }
 
   const existingFiles = targetFiles.filter((file) => {
-    const absPath = resolve(ROOT, file);
-    return isWithin(absPath, ROOT) && existsSync(absPath) && !statSync(absPath).isDirectory();
+    const guardResult = resolveWithinRoot(ROOT, file);
+    return guardResult.ok && existsSync(guardResult.path) && !statSync(guardResult.path).isDirectory();
   });
 
   if (existingFiles.length === 0) {
