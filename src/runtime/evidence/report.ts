@@ -15,7 +15,8 @@ function readJsonl(filePath) {
   return readFileSync(filePath, "utf8")
     .split("\n")
     .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line));
+    .map((line) => JSON.parse(line))
+    .filter((record) => record !== null && typeof record === "object" && !Array.isArray(record));
 }
 
 function walkJsonlFiles(dir, files = []) {
