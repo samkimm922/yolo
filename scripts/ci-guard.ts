@@ -173,9 +173,6 @@ const SHELL_INJECTION_ALLOWLIST: Record<string, string> = {
   // (shell:false) — no untrusted string reaches a shell. Self-scan would
   // false-positive on its own detection regex too.
   "src/lib/security/safe-exec.ts": "咽喉: spawnSync(argv, { shell: false }). argv-only executor.",
-  // Worktree git ops use shellQuote'd args on project-controlled paths.
-  // No untrusted input — paths/branches generated internally from taskId/sessionId.
-  "src/runtime/execution/worktree-session.ts": "git/ln/cp/rm ops with shellQuote'd args on project-controlled paths (wtPath/wtBranch/rootNodeModules). Args quoted; no untrusted command surface. macOS git worktree needs shell for `2>/dev/null` fallback suppression — audited P12.I1.",
   // shutdown/startup git worktree cleanup with quoted paths from session state.
   "src/runtime/run-lifecycle/shutdown.ts": "git worktree/branch cleanup with double-quoted paths from session state (activeWorktree/activeBranch). No untrusted input.",
   "src/runtime/run-lifecycle/startup.ts": "git worktree/branch cleanup with double-quoted paths from session state (wtPath/branch). No untrusted input.",

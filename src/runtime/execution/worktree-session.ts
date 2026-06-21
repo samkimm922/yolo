@@ -12,13 +12,11 @@ import {
   unlinkSync as defaultUnlinkSync,
   writeFileSync as defaultWriteFileSync,
 } from "node:fs";
-import {
-  execSync as defaultExecSync,
-} from "node:child_process";
 import { createHash } from "node:crypto";
 import { delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
-import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
+import { isSafePathComponent } from "../../lib/security/path-guard.js";
+import { safeExecFileSync as defaultExecFileSync, safeExecSync as defaultExecSync } from "../../lib/security/safe-exec.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 import {
   buildBaselineArtifact,
@@ -91,10 +89,6 @@ export function gitLines(cwd, args, { execFileSync = defaultExecFileSync, strict
   }
 }
 
-function shellQuote(value) {
-  return `"${String(value).replace(/"/g, '\\"')}"`;
-}
-
 function ensureWorktreeRoot(worktreeRoot, { existsSync, mkdirSync }) {
   if (!existsSync(worktreeRoot)) mkdirSync(worktreeRoot, { recursive: true });
 }
@@ -111,12 +105,12 @@ function isInsideGitWorkTree(rootDir, { execSync = defaultExecSync } = Object())
   }
 }
 
-function removePath(path, { existsSync, rmSync, execSync } = Object()) {
+function removePath(path, { existsSync, rmSync, execFileSync } = Object()) {
   if (!existsSync(path)) return;
   try {
     rmSync(path, { recursive: true, force: true });
   } catch {
-    execSync(`rm -rf ${shellQuote(path)}`, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
+    execFileSync("rm", ["-rf", path], { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
   }
 }
 
@@ -124,8 +118,8 @@ const NODE_MODULES_EXEC_MAX_BUFFER = 1024 * 1024;
 const NODE_MODULES_PROVISION_TIMEOUT_MS = 300000;
 const NODE_MODULES_CLEANUP_TIMEOUT_MS = 30000;
 
-function execNodeModulesCommand(execSync, command, timeout) {
-  execSync(command, {
+function execNodeModulesCommand(execFileSync, executable, args, timeout) {
+  execFileSync(executable, args, {
     encoding: "utf8",
     stdio: ["pipe", "pipe", "pipe"],
     timeout,
@@ -136,15 +130,16 @@ function execNodeModulesCommand(execSync, command, timeout) {
 function removePartialWorktreeNodeModules(wtNodeModules, {
   existsSync,
   rmSync = defaultRmSync,
-  execSync,
+  execFileSync,
 } = Object()) {
   if (!existsSync(wtNodeModules)) return;
   try {
     rmSync(wtNodeModules, { recursive: true, force: true });
   } catch {
     execNodeModulesCommand(
-      execSync,
-      `rm -rf ${shellQuote(wtNodeModules)}`,
+      execFileSync,
+      "rm",
+      ["-rf", wtNodeModules],
       NODE_MODULES_CLEANUP_TIMEOUT_MS,
     );
   }
@@ -251,13 +246,11 @@ function collectPackageSymlinkEntries(rootNodeModules, {
   return entries;
 }
 
-function copyNodeModulesEntry(execSync, source, destination) {
-  const cloneCommand = `cp -a --reflink=auto ${shellQuote(source)} ${shellQuote(destination)}`;
-  const copyCommand = `cp -a ${shellQuote(source)} ${shellQuote(destination)}`;
+function copyNodeModulesEntry(execFileSync, source, destination) {
   try {
-    execNodeModulesCommand(execSync, cloneCommand, NODE_MODULES_PROVISION_TIMEOUT_MS);
+    execNodeModulesCommand(execFileSync, "cp", ["-a", "--reflink=auto", source, destination], NODE_MODULES_PROVISION_TIMEOUT_MS);
   } catch {
-    execNodeModulesCommand(execSync, copyCommand, NODE_MODULES_PROVISION_TIMEOUT_MS);
+    execNodeModulesCommand(execFileSync, "cp", ["-a", source, destination], NODE_MODULES_PROVISION_TIMEOUT_MS);
   }
 }
 
@@ -282,7 +275,7 @@ function removeCopiedNodeModulesEntry(path, {
 function materializeExternalPackageSymlinks({
   rootNodeModules,
   wtNodeModules,
-  execSync = defaultExecSync,
+  execFileSync = defaultExecFileSync,
   readdirSync = defaultReaddirSync,
   lstatSync = defaultLstatSync,
   realpathSync = defaultRealpathSync,
@@ -308,7 +301,7 @@ function materializeExternalPackageSymlinks({
     try {
       mkdirSync(dirname(destination), { recursive: true });
       removeCopiedNodeModulesEntry(destination, { lstatSync, rmSync });
-      copyNodeModulesEntry(execSync, targetReal, destination);
+      copyNodeModulesEntry(execFileSync, targetReal, destination);
     } catch (error) {
       removeCopiedNodeModulesEntry(destination, { lstatSync, rmSync });
       throw error;
@@ -319,7 +312,7 @@ function materializeExternalPackageSymlinks({
 export function provisionWorktreeNodeModules({
   wtPath,
   rootDir,
-  execSync = defaultExecSync,
+  execFileSync = defaultExecFileSync,
   existsSync = defaultExistsSync,
   lstatSync = defaultLstatSync,
   realpathSync = defaultRealpathSync,
@@ -332,23 +325,23 @@ export function provisionWorktreeNodeModules({
   const rootNodeModules = join(rootDir, "node_modules");
   if (existsSync(wtNodeModules) || !existsSync(rootNodeModules)) return false;
 
-  const cloneCommand = platform === "darwin"
-    ? `cp -cR ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`
-    : `cp -a --reflink=auto ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`;
-  const copyCommand = platform === "darwin"
-    ? `cp -pR ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`
-    : `cp -a ${shellQuote(rootNodeModules)} ${shellQuote(wtNodeModules)}`;
+  const cloneArgs = platform === "darwin"
+    ? ["-cR", rootNodeModules, wtNodeModules]
+    : ["-a", "--reflink=auto", rootNodeModules, wtNodeModules];
+  const copyArgs = platform === "darwin"
+    ? ["-pR", rootNodeModules, wtNodeModules]
+    : ["-a", rootNodeModules, wtNodeModules];
   const attempts = [
-    { command: cloneCommand, timeout: NODE_MODULES_PROVISION_TIMEOUT_MS },
-    { command: copyCommand, timeout: NODE_MODULES_PROVISION_TIMEOUT_MS },
+    { executable: "cp", args: cloneArgs, timeout: NODE_MODULES_PROVISION_TIMEOUT_MS },
+    { executable: "cp", args: copyArgs, timeout: NODE_MODULES_PROVISION_TIMEOUT_MS },
   ];
   for (const [index, attempt] of attempts.entries()) {
     try {
-      execNodeModulesCommand(execSync, attempt.command, attempt.timeout);
+      execNodeModulesCommand(execFileSync, attempt.executable, attempt.args, attempt.timeout);
       materializeExternalPackageSymlinks({
         rootNodeModules,
         wtNodeModules,
-        execSync,
+        execFileSync,
         readdirSync,
         lstatSync,
         realpathSync,
@@ -361,7 +354,7 @@ export function provisionWorktreeNodeModules({
       }
       return true;
     } catch (error) {
-      removePartialWorktreeNodeModules(wtNodeModules, { existsSync, rmSync, execSync });
+      removePartialWorktreeNodeModules(wtNodeModules, { existsSync, rmSync, execFileSync });
       if (index === attempts.length - 1) throw error;
     }
   }
@@ -676,6 +669,24 @@ function writeWorktreeBaselines({
   } catch {}
 }
 
+const SAFE_WORKTREE_TASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function assertSafeWorktreeTaskId(taskId) {
+  const id = String(taskId ?? "");
+  if (!isSafePathComponent(id) || !SAFE_WORKTREE_TASK_ID_RE.test(id)) {
+    throw new Error("createWorktree: unsafe taskId path component");
+  }
+  return id;
+}
+
+function assertSafeWorktreeTimestamp(value) {
+  const timestamp = String(value ?? "");
+  if (!/^\d+$/.test(timestamp)) {
+    throw new Error("createWorktree: unsafe worktree timestamp component");
+  }
+  return timestamp;
+}
+
 export function createTaskWorktree({
   taskId,
   rootDir,
@@ -693,8 +704,9 @@ export function createTaskWorktree({
   cpSync = defaultCpSync,
   writeFileSync = defaultWriteFileSync,
 } = Object()) {
-  const wtBranch = `yolo-${taskId}-${now()}`;
-  const wtPath = join(worktreeRoot, taskId);
+  const safeTaskId = assertSafeWorktreeTaskId(taskId);
+  const wtBranch = `yolo-${safeTaskId}-${assertSafeWorktreeTimestamp(now())}`;
+  const wtPath = join(worktreeRoot, safeTaskId);
   const insideGitWorkTree = isInsideGitWorkTree(rootDir, { execSync });
   let baseCommit = "filesystem";
   const head = insideGitWorkTree ? gitHeadCommit(rootDir, { execSync }) : { ok: false, commit: null, reason: "not_git_worktree", detail: "" };
@@ -703,16 +715,16 @@ export function createTaskWorktree({
   ensureWorktreeRoot(worktreeRoot, { existsSync, mkdirSync });
 
   try {
-    execSync(`git worktree remove ${shellQuote(wtPath)} --force 2>/dev/null || true`, {
+    execFileSync("git", ["worktree", "remove", wtPath, "--force"], {
       cwd: rootDir, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
     });
   } catch {}
   try {
-    execSync(`git branch -D ${shellQuote(wtBranch)} 2>/dev/null || true`, {
+    execFileSync("git", ["branch", "-D", wtBranch], {
       cwd: rootDir, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
     });
   } catch {}
-  removePath(wtPath, { existsSync, rmSync, execSync });
+  removePath(wtPath, { existsSync, rmSync, execFileSync });
 
   if (!insideGitWorkTree) {
     return createFilesystemTaskWorktree({
@@ -738,7 +750,7 @@ export function createTaskWorktree({
   }
 
   try {
-    execSync(`git worktree add --detach ${shellQuote(wtPath)} HEAD`, {
+    execFileSync("git", ["worktree", "add", "--detach", wtPath, "HEAD"], {
       cwd: rootDir, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
     });
   } catch (error) {
@@ -746,15 +758,15 @@ export function createTaskWorktree({
   }
 
   try {
-    execSync(`git -C ${shellQuote(wtPath)} checkout -b ${shellQuote(wtBranch)}`, {
+    execFileSync("git", ["-C", wtPath, "checkout", "-b", wtBranch], {
       encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
     });
   } catch (error) {
-    try { execSync(`git worktree remove ${shellQuote(wtPath)} --force 2>/dev/null`, { cwd: rootDir, stdio: ["pipe", "pipe", "pipe"] }); } catch {}
+    try { execFileSync("git", ["worktree", "remove", wtPath, "--force"], { cwd: rootDir, stdio: ["pipe", "pipe", "pipe"] }); } catch {}
     throw new Error(`createWorktree: git checkout -b failed: ${error.message}`);
   }
 
-  provisionWorktreeNodeModules({ wtPath, rootDir, execSync, existsSync });
+  provisionWorktreeNodeModules({ wtPath, rootDir, execFileSync, existsSync });
 
   writeWorktreeBaselines({
     wtPath,
@@ -908,17 +920,17 @@ export function cleanupTaskWorktree({
       }))}`);
     }
     try {
-      execSync(`git worktree remove ${shellQuote(wtPath)} --force`, {
+      execFileSync("git", ["worktree", "remove", wtPath, "--force"], {
         cwd: rootDir, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
       });
     } catch {}
     try {
-      execSync(`git branch -D ${shellQuote(wtBranch)}`, {
+      execFileSync("git", ["branch", "-D", wtBranch], {
         cwd: rootDir, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
       });
     } catch {}
   }
-  removePath(wtPath, { existsSync, rmSync, execSync });
+  removePath(wtPath, { existsSync, rmSync, execFileSync });
 
   Object.defineProperty(copiedFiles, "outOfScopeSkipped", {
     value: outOfScopeSkipped,

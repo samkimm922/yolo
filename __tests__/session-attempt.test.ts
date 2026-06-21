@@ -114,6 +114,40 @@ describe("session attempt helpers", () => {
     assert.match(result.result.reason, /toolsRoot=\/tmp\/yolo/);
   });
 
+  test("returns blocked outcome when worktree creation rejects an unsafe component", async () => {
+    const result = await prepareProviderSession({
+      task: task({ id: "FIX-SESSION;touch-pwned" }),
+      prdPath: "prd.json",
+      attempt: 1,
+      mode: "fix",
+      rootDir: "/repo",
+      runtimeDir: "/repo/state/runtime",
+      validateContextPack: async () => ({
+        ok: true,
+        result: { status: "pass", blocks_execution: false, failures: [] },
+      }),
+      execNode: (script) => {
+        if (script === "learn.js") return { ok: true, stdout: "" };
+        return { ok: true, stdout: "PROMPT" };
+      },
+      captureBaselines: () => [],
+      createWorktree: () => {
+        throw new Error("createWorktree: unsafe taskId path component");
+      },
+      spawnProviderInWorktree: () => {
+        throw new Error("spawnProviderInWorktree should not be called");
+      },
+      logTaskBash: () => {},
+    });
+
+    assert.equal(result.action, "return");
+    assert.equal(result.reason, "worktree_blocked");
+    assert.equal(result.result.status, "blocked");
+    assert.equal(result.transition.prd_update.status, "blocked");
+    assert.equal(result.transition.prd_update.phase, "worktree");
+    assert.match(result.failReason, /unsafe taskId/);
+  });
+
   test("prepares prompt, baselines, worktree, and provider session", async () => {
     const bashLogs = [];
     const progressLogs = [];
