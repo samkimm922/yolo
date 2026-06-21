@@ -60,7 +60,15 @@ function readCurrentStage(statusPath) {
 }
 
 function stageStatus(state = Object(), stageId = "") {
-  return (state.stages || []).find((stage) => stage.id === stageId)?.status || "pending";
+  // status.json may contain valid JSON with a null/non-object entry inside the
+  // `stages` array, or `stages` may be a non-array value (botched external
+  // write, partial flush, git merge). Without this guard, `stage.id` crashes
+  // on null entries and `.find` crashes when `stages` is a string/object —
+  // taking down every guard call site that routes through stageReady/
+  // stageCompleted. Mirrors the optional-chaining + Array.isArray pattern
+  // used in validateLifecycleState (schema.ts).
+  const stages = Array.isArray(state?.stages) ? state.stages : [];
+  return stages.find((stage) => stage?.id === stageId)?.status || "pending";
 }
 
 function stageCompleted(state = Object(), stageId = "") {
@@ -707,14 +715,22 @@ export function inspectLifecycleDrift(projectRoot: string): LifecycleDriftResult
   } catch {
     return { has_drift: false, drift_records };
   }
+  // Filter null/non-object entries from a corrupted-but-valid-JSON stages
+  // array up front; downstream `entry.status` access would otherwise crash on
+  // null (same boundary as stageStatus above and PR #61/#65). validateLifecycle
+  // State tolerates these via optional chaining; this drift path did not.
+  const stages = Array.isArray(status.stages)
+    ? status.stages.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry))
+    : [];
+
   const completedStages = new Set(
-    (status.stages || [])
+    stages
       .filter((entry) => entry.status === "completed")
       .map((entry) => entry.id),
   );
 
   // Check artifact presence for declared completed stages.
-  for (const stageEntry of status.stages || []) {
+  for (const stageEntry of stages) {
     if (stageEntry.status !== "completed") continue;
     const artifacts = STAGE_ARTIFACTS[stageEntry.id];
     if (!artifacts) continue;

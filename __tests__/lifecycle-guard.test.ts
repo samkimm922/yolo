@@ -819,4 +819,73 @@ describe("lifecycle guard", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("inspectLifecycleGuard tolerates null/non-object entries in status.json stages array (corrupted state)", () => {
+    // status.json may contain valid JSON with a null/non-object entry inside
+    // the `stages` array (botched external write, partial flush, git merge).
+    // Previously, stageStatus did `stage.id` (crashed on null) and
+    // inspectLifecycleDrift did `entry.status` (crashed on null), taking down
+    // every guard call site. The guard must fail closed, not crash.
+    const root = tempProject();
+    try {
+      mkdirSync(join(root, ".yolo/lifecycle"), { recursive: true });
+      // Valid schema_version + every expected stage id present, but with
+      // null / number / string / array entries mixed in. validateLifecycleState
+      // already tolerates these via optional chaining; the guard and drift
+      // detector must do the same.
+      writeJson(join(root, ".yolo/lifecycle/status.json"), {
+        schema_version: "1.0",
+        schema: "yolo.lifecycle.state.v1",
+        project: { name: "probe" },
+        current_stage: "idea",
+        created_at: "2026-06-21T00:00:00.000Z",
+        updated_at: "2026-06-21T00:00:00.000Z",
+        stages: [
+          null,
+          42,
+          "idea",
+          [1, 2, 3],
+          { id: "idea", sequence: 1, label: "Idea intake", status: "active", artifact: "idea.json", writes_code: false },
+          { id: "discovery", sequence: 2, label: "Discovery", status: "pending", artifact: "discovery.json", writes_code: false },
+          { id: "setup", sequence: 3, label: "Project setup", status: "pending", artifact: "setup.json", writes_code: false },
+          { id: "roadmap", sequence: 4, label: "Roadmap and plan", status: "pending", artifact: "roadmap.json", writes_code: false },
+          { id: "prd", sequence: 5, label: "PRD and executable spec", status: "pending", artifact: "prd.json", writes_code: false },
+          { id: "check", sequence: 6, label: "Readiness check", status: "pending", artifact: "check-report.json", writes_code: false },
+          { id: "run", sequence: 7, label: "Gated execution", status: "pending", artifact: "run-report.json", writes_code: true },
+          { id: "review-fix", sequence: 8, label: "Review and fix loop", status: "pending", artifact: "review-report.json", writes_code: true },
+          { id: "acceptance", sequence: 9, label: "Acceptance", status: "pending", artifact: "acceptance-report.json", writes_code: false },
+          { id: "delivery", sequence: 10, label: "Delivery", status: "pending", artifact: "delivery-report.json", writes_code: false },
+          { id: "learn", sequence: 11, label: "Learning and retrospective", status: "pending", artifact: "retrospective.json", writes_code: false },
+        ],
+      });
+      const result = inspectLifecycleGuard({ command: "yolo-check", projectRoot: root });
+      // The guard must not crash. Whether it returns "blocked" or "pass"
+      // depends on the rest of the state; the contract is "no TypeError".
+      assert.ok(["blocked", "pass", "warning"].includes(result.status));
+      assert.equal(result.code, result.status === "pass" ? "LIFECYCLE_GUARD_PASS" : "LIFECYCLE_GUARD_BLOCKED");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("inspectLifecycleGuard tolerates non-array status.json stages field (corrupted state)", () => {
+    // If `stages` is a string/object instead of an array, `(state.stages || [])
+    // .find(...)` previously crashed because strings/objects have no .find.
+    // Fail closed instead.
+    const root = tempProject();
+    try {
+      mkdirSync(join(root, ".yolo/lifecycle"), { recursive: true });
+      writeJson(join(root, ".yolo/lifecycle/status.json"), {
+        schema_version: "1.0",
+        schema: "yolo.lifecycle.state.v1",
+        project: { name: "probe" },
+        current_stage: "idea",
+        stages: "not-an-array",
+      });
+      const result = inspectLifecycleGuard({ command: "yolo-check", projectRoot: root });
+      assert.ok(["blocked", "pass", "warning"].includes(result.status));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
