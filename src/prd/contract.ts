@@ -165,8 +165,11 @@ function createEvaluators(root, options = Object()) {
           detail: "无目标文件指定，无法验证目标文件是否修改",
         };
       }
-      let modified = changedFilesFromOptions(options, root);
-      if (!modified) {
+      const providedChangedFiles = changedFilesFromOptions(options, root);
+      let modified;
+      if (providedChangedFiles) {
+        modified = providedChangedFiles;
+      } else {
         const r = exec("git diff --name-only HEAD", { timeout: 10000 });
         if (!r.ok) {
           return {
@@ -190,7 +193,14 @@ function createEvaluators(root, options = Object()) {
             .filter(Boolean),
         )];
       }
-      const found = modified.some((f) => f === targetFile || f.endsWith(targetFile));
+      // Git-diff-sourced paths demand exact match. Bare `endsWith(targetFile)`
+      // let "tests/src/feature.ts" falsely match target "src/feature.ts"
+      // (since the literal substring overlaps) and the runner reported DONE
+      // when only a same-named file in a nested dir changed.
+      // Runner-provided changedFiles keep the monorepo-friendly suffix match.
+      const found = providedChangedFiles
+        ? modified.some((f) => f === targetFile || f.endsWith(`/${targetFile}`))
+        : modified.includes(targetFile);
       return { passed: found, detail: found ? `目标文件 ${targetFile} 已修改` : `目标文件 ${targetFile} 未在修改列表中`, found: found ? 1 : 0 };
     },
     required_imports_present: (params, ts) => {

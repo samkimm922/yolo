@@ -70,4 +70,13 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
       { id: "POST-CONTAINS", type: "code_contains", severity: "FAIL", params: { file: TARGET, text: "FLAG" } },
     ]),
   },
+  {
+    id: "notdone-target-only-twin-file-changed",
+    expect: "not_done",
+    description:
+      "Same-named file in a nested dir was edited but the actual target was NOT modified → must NOT pass (suffix-only path match is a false positive).",
+    baseFiles: { [TARGET]: "export const v = 1;\n" },
+    editFiles: { "tests/src/feature.ts": "test('twins', () => 1);\n" },
+    task: targetModifiedTask(),
+  },
 ];
