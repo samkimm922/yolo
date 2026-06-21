@@ -167,6 +167,14 @@ export const CHECK_BATTERY: CheckBatteryCase[] = [
     prd: strictPrd({ post_conditions: "not-an-array" }),
   },
   {
+    id: "bad-pre-conditions-not-array",
+    category: "hang_or_crash",
+    description: "A task whose pre_conditions is a truthy non-array (object/string) must be blocked, not crash the doctor's condition loop.",
+    expect: "blocked",
+    files: VALID_FILES,
+    prd: strictPrd({ pre_conditions: { id: "PRE-A", type: "tests_pass", severity: "FAIL", params: { command: "npm test" } } }),
+  },
+  {
     id: "bad-scope-targets-not-array",
     category: "hang_or_crash",
     description: "A task whose scope.targets is a string must be blocked, not crash on .map.",
