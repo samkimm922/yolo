@@ -84,6 +84,16 @@ describe("lifecycle state", () => {
     }
   });
 
+  test("validateLifecycleState fails closed when state is literal null (corrupted status.json)", () => {
+    // status.json containing valid JSON `null` used to crash with
+    // "Cannot read properties of null (reading 'schema')" because the
+    // `state = Object()` default only covers undefined.
+    const result = validateLifecycleState(null);
+    assert.equal(result.status, "invalid");
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.some((e) => e.code === "LIFECYCLE_STATE_SCHEMA_MISMATCH"));
+  });
+
   test("initLifecycleState writes without overwriting existing files by default", () => {
     const root = tempProject();
     try {
