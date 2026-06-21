@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { inspectPrdContractDoctorGate } from "../src/runtime/gates/prd-contract-doctor-gate.js";
@@ -377,6 +377,57 @@ describe("prd contract doctor gate", () => {
       assert.ok(result.doctor.failures.some((finding) => finding.code === "TASK_TARGET_OUTSIDE_ROOT" && finding.path === "../outside.ts"));
     } finally {
       rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks pending task targets that symlink outside the project root", () => {
+    const paths = makePaths();
+    const outside = mkdtempSync(join(tmpdir(), "yolo-prd-contract-outside-"));
+    try {
+      mkdirSync(join(paths.projectRoot, "src"), { recursive: true });
+      const outsideTarget = join(outside, "outside.ts");
+      writeFileSync(outsideTarget, "export const outside = true;\n", "utf8");
+      symlinkSync(outsideTarget, join(paths.projectRoot, "src/link-out.ts"));
+
+      const result = inspectPrdContractDoctorGate({
+        prd: {
+          version: "2.0",
+          id: "PRD-TASK-TARGET-SYMLINK-OUTSIDE-ROOT",
+          ...strictDemandFields("src/link-out.ts"),
+          tasks: [{
+            id: "FIX-GATE-SYMLINK-OUTSIDE-ROOT",
+            title: "Escaped symlink target task",
+            priority: "P1",
+            type: "bugfix",
+            status: "pending",
+            requirement_ids: ["REQ-GATE-1"],
+            scope: { targets: [{ file: "src/link-out.ts" }] },
+            post_conditions: [
+              {
+                id: "POST-TARGET",
+                type: "target_file_modified",
+                severity: "FAIL",
+                params: { file: "src/link-out.ts" },
+              },
+              {
+                id: "POST-TYPECHECK",
+                type: "no_new_type_errors",
+                severity: "FAIL",
+                params: { command: "npm run typecheck" },
+              },
+            ],
+          }],
+        },
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+      });
+
+      assert.equal(result.status, "blocked");
+      assert.ok(result.doctor.failures.some((finding) => finding.code === "TASK_TARGET_OUTSIDE_ROOT" && finding.path === "src/link-out.ts"));
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
     }
   });
 
