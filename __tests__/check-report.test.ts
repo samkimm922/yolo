@@ -222,6 +222,86 @@ describe("yolo check report", () => {
     }
   });
 
+  test("yolo check returns structured JSON when the PRD JSON value is null", () => {
+    const root = tempProject();
+    let stdout = "";
+    let stderr = "";
+    try {
+      const prdPath = join(root, "null-prd.json");
+      // `null` is valid JSON, so the file parses — the gate must still reject it
+      // structurally instead of crashing inside contract evaluation.
+      writeFileSync(prdPath, "null\n", "utf8");
+
+      const exitCode = runYoloCheckCli([prdPath, "--json", "--no-write"], {
+        cwd: root,
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      const report = JSON.parse(stdout);
+
+      assert.equal(exitCode, 1);
+      assert.equal(stderr, "");
+      assert.equal(report.status, "blocked");
+      // A null PRD is rejected up front with a dedicated shape code (a clearer
+      // fail-closed signal than the generic aggregate code); both are valid
+      // structured rejections — what matters is no crash / no silent pass.
+      assert.ok(report.code === "PRD_NOT_OBJECT" || report.code === "YOLO_CHECK_BLOCKED");
+      assert.doesNotMatch(stdout, /TypeError|Cannot read properties of null|\.map is not a function/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("yolo check returns structured JSON when a task post_conditions is not an array", () => {
+    const root = tempProject();
+    let stdout = "";
+    let stderr = "";
+    try {
+      const prdPath = join(root, "post-conditions-not-array.json");
+      writeJson(prdPath, strictPrd({ post_conditions: "not-an-array" }));
+
+      const exitCode = runYoloCheckCli([prdPath, "--json", "--no-write"], {
+        cwd: root,
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      const report = JSON.parse(stdout);
+
+      assert.equal(exitCode, 1);
+      assert.equal(stderr, "");
+      assert.equal(report.status, "blocked");
+      assert.equal(report.code, "YOLO_CHECK_BLOCKED");
+      assert.doesNotMatch(stdout, /TypeError|conditions\.map is not a function/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("yolo check returns structured JSON when a task scope.targets is not an array", () => {
+    const root = tempProject();
+    let stdout = "";
+    let stderr = "";
+    try {
+      const prdPath = join(root, "scope-targets-not-array.json");
+      writeJson(prdPath, strictPrd({ scope: { targets: "src/a.js" } }));
+
+      const exitCode = runYoloCheckCli([prdPath, "--json", "--no-write"], {
+        cwd: root,
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      const report = JSON.parse(stdout);
+
+      assert.equal(exitCode, 1);
+      assert.equal(stderr, "");
+      assert.equal(report.status, "blocked");
+      assert.equal(report.code, "YOLO_CHECK_BLOCKED");
+      assert.doesNotMatch(stdout, /TypeError|targets\.map is not a function/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("yolo check blocks PRD strings with unsafe control characters", () => {
     const root = tempProject();
     let stdout = "";

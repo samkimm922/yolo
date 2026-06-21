@@ -27,8 +27,9 @@ function normalizeEvidenceRefs(...values) {
 }
 
 function targetFiles(task = Object()) {
-  return [...new Set((task.scope?.targets || [])
-    .map((target) => target.file)
+  const targets = Array.isArray(task.scope?.targets) ? task.scope.targets : [];
+  return [...new Set(targets
+    .map((target) => target?.file)
     .filter(Boolean)
     .map((file) => String(file).replace(/:\d+(?:-\d+)?$/, "")))];
 }

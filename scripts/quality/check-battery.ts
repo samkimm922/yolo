@@ -150,4 +150,28 @@ export const CHECK_BATTERY: CheckBatteryCase[] = [
     files: VALID_FILES,
     prd: strictPrd({}, { tasks: [] }),
   },
+  {
+    id: "bad-null-prd-json",
+    category: "hang_or_crash",
+    description: "A valid-JSON null PRD must be structurally blocked, not crash inside contract evaluation.",
+    expect: "blocked",
+    files: VALID_FILES,
+    prd: null,
+  },
+  {
+    id: "bad-post-conditions-not-array",
+    category: "hang_or_crash",
+    description: "A task whose post_conditions is a string must be blocked, not crash on .filter.",
+    expect: "blocked",
+    files: VALID_FILES,
+    prd: strictPrd({ post_conditions: "not-an-array" }),
+  },
+  {
+    id: "bad-scope-targets-not-array",
+    category: "hang_or_crash",
+    description: "A task whose scope.targets is a string must be blocked, not crash on .map.",
+    expect: "blocked",
+    files: VALID_FILES,
+    prd: strictPrd({ scope: { targets: "src/a.js" } }),
+  },
 ];
