@@ -40,5 +40,6 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   // instead of slicing it. The capability soak should teach the detector/splitter
   // to catch these, then add more it finds.
   { id: "multi-signup-and-login", expect: "multi", text: "Allow users to sign up and log in." },
+  { id: "multi-signup-and-login-variant", expect: "multi", text: "Users can sign up and log in to the platform." },
   { id: "multi-validate-save-redirect", expect: "multi", text: "When the form is submitted, validate the inputs, save the record, and redirect to the list." },
 ];

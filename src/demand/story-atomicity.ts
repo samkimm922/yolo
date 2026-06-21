@@ -105,7 +105,7 @@ const SUPPORT_ONLY_ACTIONS = new Set([
 // 名词化的可交付能力（"实现认证 + 邮箱验证 + OAuth" 这类句子动词只有一个，但列了多个独立能力）。
 const DELIVERABLE_CAPABILITY_TERMS = [
   "authentication", "authorization", "verification", "validation", "migration",
-  "integration", "notification", "deployment", "login", "logout", "signup", "sign up",
+  "integration", "notification", "deployment", "login", "log in", "logout", "signup", "sign up",
   "registration", "oauth", "sso", "single sign-on", "encryption", "pagination",
   "caching", "rate limiting", "localization", "认证", "鉴权", "授权", "验证", "迁移",
   "集成", "通知", "部署", "登录", "登出", "注册", "加密", "分页", "缓存", "限流", "本地化",
