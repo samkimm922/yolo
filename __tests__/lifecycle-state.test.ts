@@ -71,6 +71,19 @@ describe("lifecycle state", () => {
     assert.equal(plan.files.some((file) => file.path === ".yolo/lifecycle/retrospective.json"), true);
   });
 
+  test("validateLifecycleState rejects null/non-object stage entries without crashing", () => {
+    const baseStage = { id: "idea", sequence: 1, label: "Idea intake", status: "active", artifact: "idea.json", writes_code: false };
+    for (const badEntry of [null, undefined, 123, "idea", [1, 2, 3]]) {
+      const result = validateLifecycleState({
+        schema: "yolo.lifecycle.state.v1",
+        current_stage: "idea",
+        stages: [badEntry, baseStage],
+      });
+      assert.equal(result.status, "invalid");
+      assert.equal(result.valid, false);
+    }
+  });
+
   test("initLifecycleState writes without overwriting existing files by default", () => {
     const root = tempProject();
     try {
