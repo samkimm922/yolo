@@ -111,6 +111,7 @@
     "mutation-gate": "node --import tsx scripts/mutation-gate.ts",
     "quality-score": "node --import tsx scripts/quality-score.ts",
     "quality-gate": "node --import tsx scripts/quality-score.ts --check",
+    "fix-bloat": "node --import tsx scripts/fix-bloat-report.ts",
     "soak": "node --import tsx scripts/soak/run.ts",
     "matrix-ci": "node --import tsx scripts/matrix-ci.ts",
     "smoke:packed-external": "node --import tsx scripts/e2e-smoke/packed-external.ts",
