@@ -13,8 +13,9 @@
 // the flags and decides. (Switch to a hard gate only when moving to unattended merge.)
 import { execFileSync } from "node:child_process";
 
-const BASE = process.argv[2] || "origin/main";
-const HEAD = process.argv[3] || "HEAD";
+const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const BASE = positional[0] || "origin/main";
+const HEAD = positional[1] || "HEAD";
 
 // Thresholds tuned for "a focused YB fix + its regression test". Above these, a reviewer
 // should look harder — not necessarily reject.
@@ -23,6 +24,15 @@ const FLAG = {
   files: 8,               // distinct files touched
   addedPerFile: 150,      // a single file growing a lot
   functionLines: 60,      // a single added function this long
+};
+
+// Hard-block thresholds for --gate mode. Deliberately generous: only an obvious
+// rewrite / sprawl / giant pasted function blocks an unattended auto-merge. Normal
+// focused fixes (even multi-YB ones like #56 at ~200 lines) pass.
+const GATE = {
+  totalLines: 400,
+  files: 12,
+  functionLines: 120,
 };
 
 function git(args: string[]): string {
@@ -108,7 +118,23 @@ function main() {
     console.log("[fix-bloat] REVIEW FLAGS:");
     for (const f of flags) console.log(`  ⚠ ${f}`);
   }
-  // Advisory only: never block.
+
+  // Hard gate (--gate): for UNATTENDED auto-merge, block only EGREGIOUS bloat (a clear
+  // rewrite / sprawl / giant pasted function). Normal focused fixes pass. Subtle quality
+  // (naming, abstraction) is NOT gated — that is the accepted trade-off of auto-merge.
+  if (process.argv.includes("--gate")) {
+    const blocks: string[] = [];
+    if (total > GATE.totalLines) blocks.push(`EGREGIOUS_DIFF: ${total} lines > ${GATE.totalLines}`);
+    if (stats.length > GATE.files) blocks.push(`EGREGIOUS_FILES: ${stats.length} files > ${GATE.files}`);
+    if (longestFn.lines > GATE.functionLines) blocks.push(`EGREGIOUS_BLOCK: ${longestFn.lines}-line added block in ${longestFn.file} > ${GATE.functionLines}`);
+    if (blocks.length > 0) {
+      console.error("[fix-bloat] GATE FAILED — change is too large/sprawling for unattended merge:");
+      for (const b of blocks) console.error(`  ✗ ${b}`);
+      console.error("[fix-bloat] split into a smaller, focused fix, or have a human review + merge it.");
+      process.exit(1);
+    }
+    console.log("[fix-bloat] GATE OK — diff is within egregious-bloat limits.");
+  }
 }
 
 main();
