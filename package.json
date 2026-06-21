@@ -113,6 +113,8 @@
     "quality-gate": "node --import tsx scripts/quality-score.ts --check",
     "fix-bloat": "node --import tsx scripts/fix-bloat-report.ts",
     "bloat-gate": "node --import tsx scripts/fix-bloat-report.ts --gate",
+    "perf-bench": "node --import tsx scripts/perf-benchmark.ts",
+    "perf-gate": "node --import tsx scripts/perf-benchmark.ts --check",
     "refresh-pin": "node --import tsx scripts/refresh-pin.ts",
     "soak": "node --import tsx scripts/soak/run.ts",
     "matrix-ci": "node --import tsx scripts/matrix-ci.ts",
