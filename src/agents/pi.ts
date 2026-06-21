@@ -123,11 +123,15 @@ function executionConfigForPi(input = Object()) {
   const agentCommand = input.agentCommand || input.agent_command || input.customCommand || input.custom_command;
   const executor = input.executor || input.provider || (agentCommand ? "custom" : null);
   const provider = input.provider || input.executor || (agentCommand ? "custom" : null);
+  const runReviewLoop = input.runReviewLoop ?? input.run_review_loop;
+  const startProgressServer = input.startProgressServer ?? input.start_progress_server;
   return {
     ...(executor ? { executor } : {}),
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
     ...(agentCommand ? { agentCommand } : {}),
+    ...(runReviewLoop !== undefined ? { runReviewLoop } : {}),
+    ...(startProgressServer !== undefined ? { startProgressServer } : {}),
     ...(input.dryRun === true || input.dry_run === true ? { dryRun: true } : {}),
     ...(input.collectEvidence === true || input.collect_evidence === true ? { collectEvidence: true } : {}),
     ...(input.executeAdapter === true || input.execute_adapter === true ? { executeAdapter: true } : {}),

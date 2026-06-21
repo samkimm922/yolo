@@ -1343,11 +1343,19 @@ function hasImplementationDetailSignal(text = "") {
     || /(<=|>=|<|>|less than|greater than|at or below|at or above)/i.test(text);
 }
 
+function shouldPreserveDottedIdentifier(source = "", match = "", offset = 0) {
+  const before = source[offset - 1] || "";
+  const after = source[offset + match.length] || "";
+  if (before === "/" || before === "\\" || after === "/" || after === "\\") return true;
+  return /\.(?:[cm]?[jt]sx?|json|md|mdx|css|scss|sass|html|ya?ml|toml|txt)$/i.test(match);
+}
+
 function executionSafeDecisionText(text = "") {
   const source = clean(text);
   if (!hasImplementationDetailSignal(source)) return source;
   return normalizeStoryText(source
-    .replace(/\b[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+\b/g, "the approved field")
+    .replace(/\b[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+\b/g, (match, offset) =>
+      shouldPreserveDottedIdentifier(source, match, offset) ? match : "the approved field")
     .replace(/\b[A-Za-z_$][A-Za-z0-9_$]*(?:Threshold|Quantity|Qty|Stock|Badge)[A-Za-z0-9_$]*\b/g, "the approved field")
     .replace(/\b(?:less than or equal|greater than or equal|less than|greater than|at or below|at or above)\b/gi, "the approved comparison")
     .replace(/\s*(?:<=|>=|<|>)\s*/g, " the approved comparison "));
