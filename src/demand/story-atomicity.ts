@@ -71,6 +71,7 @@ const DELIVERABLE_VERB_TERMS = [
   "import", "imports", "notify", "notifies", "schedule", "schedules", "integrate",
   "transform", "transforms", "generate", "generates", "insert", "inserts",
   "register", "registers", "login", "logout", "encrypt", "encrypts", "paginate",
+  "save", "saves", "persist", "persists", "reset", "resets", "redirect", "redirects",
   "新增", "新建", "创建", "添加", "增加", "删除", "移除", "修改", "编辑", "重命名",
   "发送", "上传", "下载", "部署", "校验", "鉴权", "实现",
   "构建", "配置", "安装", "连接", "迁移", "同步", "导出", "导入", "通知", "集成", "生成", "插入",
@@ -86,6 +87,7 @@ const GENERIC_LAYER_API_TERMS = ["endpoint", "api", "route", "request", "respons
 const GENERIC_LAYER_DB_TERMS = ["database", "table", "query", "schema", "migration", "row", "column ", "数据库", "表", "查询", "字段", "记录"];
 
 const HARD_STORY_BOUNDARY = /\s*[;；。]\s*/u;
+const WHEN_CLAUSE_PREFIX_PATTERN = /^(?:when\b[\s\S]*?,\s*|当[\s\S]*?时\s*[，,]\s*)/iu;
 const COMPACT_ENUM_PATTERN = /(?<![\w./-])([A-Za-z][A-Za-z0-9_-]{1,31}(?:\s*(?:\/|→|->|=>|\+)\s*[A-Za-z][A-Za-z0-9_-]{1,31}){1,})(?![\w./-])/g;
 const COMPACT_ENUM_SEPARATOR = /\s*(?:\/|→|->|=>|\+)\s*/u;
 const PHRASE_ENUM_MARKER = /(?:、|，|,|\+|\band\b|\bthen\b|以及|与|和|并且)/iu;
@@ -310,6 +312,18 @@ function expandPhraseEnumeration(clause) {
   return uniqueStorySlices(expanded);
 }
 
+function expandWhenClauseEnumeration(clause) {
+  const source = normalizeStorySlice(clause);
+  const match = source.match(WHEN_CLAUSE_PREFIX_PATTERN);
+  if (!match) return [];
+  const prefix = match[0];
+  const actionPart = normalizeStorySlice(source.slice(prefix.length));
+  if (!actionPart) return [];
+  const slices = expandPhraseEnumeration(actionPart);
+  if (slices.length < 2) return [];
+  return uniqueStorySlices(slices.map((slice) => `${prefix}${slice}`));
+}
+
 export function splitGenericStorySlices(text) {
   const source = normalizeStorySlice(text);
   if (!source) return [];
@@ -317,6 +331,8 @@ export function splitGenericStorySlices(text) {
   if (repeated.length > 1) return uniqueStorySlices(repeated.flatMap(splitGenericStorySlices));
   const clauses = source.split(HARD_STORY_BOUNDARY).map(normalizeStorySlice).filter(Boolean);
   if (clauses.length > 1) return uniqueStorySlices(clauses.flatMap(splitGenericStorySlices));
+  const whenClause = expandWhenClauseEnumeration(source);
+  if (whenClause.length > 1) return whenClause;
   const compact = expandCompactEnumeration(source);
   if (compact.length > 1) return compact;
   const phrase = expandPhraseEnumeration(source);
