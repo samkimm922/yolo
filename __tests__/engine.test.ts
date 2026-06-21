@@ -506,6 +506,26 @@ describe("edge cases", () => {
     // Non-array pre_conditions coerce to empty → allPass true (no conditions to fail).
     expect(engine.evaluatePreConditions({ id: "T", pre_conditions: "not-an-array" }, {}).allPass).toBe(true);
   });
+
+  test("non-object entries inside pre/post_conditions → fail-closed, no crash", () => {
+    // A malformed-but-array conditions field (null/string/number/sub-array
+    // entries from a botched PRD compiler or hand-edit) must not crash the
+    // contract evaluator. evaluateCondition destructures condition.id/type,
+    // and evaluatePostConditions runs .some(c => c.type) over the explicit
+    // conditions before evaluation — both throw on null/non-object elements.
+    // Filter them out as absent (fail-closed); other gates reject PRDs that
+    // end up with no executable FAIL conditions.
+    expect(() => post({
+      post_conditions: [null, "bad", 42, [], { id: "P1", type: "file_exists", params: { file: fileA } }],
+    })).not.toThrow();
+    expect(() => pre([null, "bad", 42, [], { id: "P1", type: "file_exists", params: { file: fileA } }])).not.toThrow();
+    // Valid entries still evaluate; junk is dropped.
+    const r = post({
+      post_conditions: [null, "bad", 42, [], { id: "P1", type: "file_exists", params: { file: fileA } }],
+    });
+    expect(r.results.some((item) => item.id === "P1")).toBe(true);
+    expect(r.results.some((item) => item.id == null)).toBe(false);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════
