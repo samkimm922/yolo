@@ -1,0 +1,44 @@
+// Quality-score capability battery (demand track): how accurately does yolo's story
+// atomicity detection tell an ATOMIC requirement from a MULTI-story one?
+//
+// This is a CAPABILITY metric, not a robustness one: it measures how well the demand
+// phase can slice work toward atomic tasks. Unlike the check battery (already hardened),
+// real-world phrasing genuinely trips the detector, so this score has headroom to climb.
+//
+// Category maps to the user-facing goal "让需求阶段更容易达到原子任务".
+//
+// Expectation per case:
+//   "atomic"  → inspectStoryAtomicityText must return status "pass" or "warn"
+//               (a single user story; not falsely flagged as multi-story).
+//   "multi"   → must return status "blocked" (genuinely several stories → needs split).
+
+export type AtomicityExpectation = "atomic" | "multi";
+
+export type AtomicityBatteryCase = {
+  id: string;
+  expect: AtomicityExpectation;
+  text: string;
+};
+
+export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
+  // ── Genuinely atomic single stories (must NOT be flagged as multi) ──
+  { id: "atomic-add-cart", expect: "atomic", text: "A shopper can add a product to the cart." },
+  { id: "atomic-show-total", expect: "atomic", text: "Display the running order total on the checkout page." },
+  { id: "atomic-validate-email", expect: "atomic", text: "Validate the email address field on the signup form." },
+  { id: "atomic-format-date", expect: "atomic", text: "Format the due date as a localized short date string." },
+  { id: "atomic-filter-list", expect: "atomic", text: "Filter the task list by the selected status." },
+  { id: "atomic-export-csv", expect: "atomic", text: "Export the current report table to a CSV file." },
+
+  // ── Genuinely multi-story (must be flagged as needing a split) ──
+  { id: "multi-add-edit-delete", expect: "multi", text: "A user can add, edit, and delete items in the list." },
+  { id: "multi-login-dashboard-profile", expect: "multi", text: "The user logs in, views the dashboard, and updates their profile." },
+  { id: "multi-import-and-email", expect: "multi", text: "Import the CSV file, generate a summary report, and email it to the manager." },
+  { id: "multi-create-and-notify", expect: "multi", text: "Create the order and send a confirmation notification to the customer." },
+
+  // ── Known capability gaps (currently MIS-detected as atomic → real headroom) ──
+  // These slip through today: the demand phase hands the runner a too-broad task
+  // instead of slicing it. The capability soak should teach the detector/splitter
+  // to catch these, then add more it finds.
+  { id: "multi-signup-and-login", expect: "multi", text: "Allow users to sign up and log in." },
+  { id: "multi-validate-save-redirect", expect: "multi", text: "When the form is submitted, validate the inputs, save the record, and redirect to the list." },
+];

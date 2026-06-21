@@ -18,8 +18,10 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { runYoloCheckCli } from "../src/runtime/gates/check-report.js";
 import { buildAcceptanceReport } from "../src/runtime/acceptance/report.js";
+import { inspectStoryAtomicityText } from "../src/demand/story-atomicity.js";
 import { CHECK_BATTERY, type CheckBatteryCase } from "./quality/check-battery.js";
 import { ACCEPTANCE_BATTERY, type AcceptanceBatteryCase } from "./quality/acceptance-battery.js";
+import { ATOMICITY_BATTERY, type AtomicityBatteryCase } from "./quality/atomicity-battery.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(ROOT, "scripts", "quality", "quality-baseline.json");
@@ -99,8 +101,21 @@ function runAcceptanceCase(testCase: AcceptanceBatteryCase): CaseResult {
   }
 }
 
+function runAtomicityCase(testCase: AtomicityBatteryCase): CaseResult {
+  const report = inspectStoryAtomicityText(testCase.text, {}) as { status?: string };
+  const status = String(report.status || "");
+  // "warn" (capability noun) still counts as a single/atomic story, not multi.
+  const detected = status === "blocked" ? "multi" : "atomic";
+  const correct = detected === testCase.expect;
+  return { id: testCase.id, category: "atomic_task_success", expect: testCase.expect, actualExit: correct ? 0 : 1, actualStatus: detected, correct };
+}
+
 function computeQuality() {
-  const results = [...CHECK_BATTERY.map(runCheckCase), ...ACCEPTANCE_BATTERY.map(runAcceptanceCase)];
+  const results = [
+    ...CHECK_BATTERY.map(runCheckCase),
+    ...ACCEPTANCE_BATTERY.map(runAcceptanceCase),
+    ...ATOMICITY_BATTERY.map(runAtomicityCase),
+  ];
   const total = results.length;
   const correct = results.filter((r) => r.correct).length;
   const q = total > 0 ? correct / total : 0;
