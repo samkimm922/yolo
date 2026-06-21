@@ -222,6 +222,39 @@ describe("yolo check report", () => {
     }
   });
 
+  test("yolo check blocks PRD strings with unsafe control characters", () => {
+    const root = tempProject();
+    let stdout = "";
+    let stderr = "";
+    try {
+      const prdPath = join(root, "control-char-prd.json");
+      writeJson(prdPath, strictPrd({}, {
+        title: "Check report\u0000fixture",
+        tasks: [{
+          ...strictPrd().tasks[0],
+          title: "Fix small module\u001b[31m",
+        }],
+      }));
+
+      const exitCode = runYoloCheckCli([prdPath, "--json", "--no-write"], {
+        cwd: root,
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      const report = JSON.parse(stdout);
+
+      assert.equal(exitCode, 1);
+      assert.equal(stderr, "");
+      assert.equal(report.status, "blocked");
+      assert.equal(report.code, "YOLO_CHECK_BLOCKED");
+      assert.ok(report.blockers.some((blocker) => blocker.code === "PRD_SCHEMA_FAILED"));
+      const preflight = report.checks.find((check) => check.name === "prd_preflight");
+      assert.ok(preflight.preflight.schema.details.some((detail) => detail.keyword === "unsafeControlCharacter"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("advisory warning reports return CLI exit 2 instead of success", () => {
     const root = tempProject();
     let stdout = "";

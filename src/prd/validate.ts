@@ -122,6 +122,22 @@ export function validatePrdDocument(prd, schema, ajv, options = Object()) {
     };
   }
 
+  const controlCharErrors = collectUnsafeControlCharErrors(prd);
+  if (controlCharErrors.length > 0) {
+    return {
+      ok: false,
+      error: `${controlCharErrors.length} 条 unsafe control character 违规`,
+      details: controlCharErrors,
+      summary: {
+        missing_required: 0,
+        wrong_enum: 0,
+        wrong_type: 0,
+        pattern_fail: 0,
+        unsafe_control_chars: controlCharErrors.length,
+      },
+    };
+  }
+
   // 额外语义检查（Schema 覆盖不到的逻辑）
   const warnings = [];
 
@@ -172,6 +188,56 @@ export function validatePrdDocument(prd, schema, ajv, options = Object()) {
   }
 
   return { ok: true, warnings: warnings.length > 0 ? warnings : [] };
+}
+
+const UNSAFE_CONTROL_CHAR_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u;
+const MAX_CONTROL_CHAR_ERRORS = 25;
+
+function jsonPointerEscape(value) {
+  return String(value).replace(/~/g, "~0").replace(/\//g, "~1");
+}
+
+function jsonPointer(path) {
+  return path.length > 0 ? `/${path.map(jsonPointerEscape).join("/")}` : "(root)";
+}
+
+function hasUnsafeControlChar(value) {
+  return UNSAFE_CONTROL_CHAR_PATTERN.test(value);
+}
+
+function collectUnsafeControlCharErrors(value, path = [], errors = [], seen = new WeakSet()) {
+  if (errors.length >= MAX_CONTROL_CHAR_ERRORS || value == null) return errors;
+  if (typeof value === "string") {
+    if (hasUnsafeControlChar(value)) {
+      errors.push({
+        path: jsonPointer(path),
+        keyword: "unsafeControlCharacter",
+        message: "must not contain NUL, ESC, DEL, or other non-printable control characters",
+        params: { allowed_controls: ["\\t", "\\n", "\\r"] },
+      });
+    }
+    return errors;
+  }
+  if (typeof value !== "object") return errors;
+  if (seen.has(value)) return errors;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => collectUnsafeControlCharErrors(item, [...path, String(index)], errors, seen));
+    return errors;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (hasUnsafeControlChar(key) && errors.length < MAX_CONTROL_CHAR_ERRORS) {
+      errors.push({
+        path: jsonPointer([...path, key]),
+        keyword: "unsafeControlCharacter",
+        message: "property name must not contain NUL, ESC, DEL, or other non-printable control characters",
+        params: { allowed_controls: ["\\t", "\\n", "\\r"] },
+      });
+    }
+    collectUnsafeControlCharErrors(child, [...path, key], errors, seen);
+    if (errors.length >= MAX_CONTROL_CHAR_ERRORS) break;
+  }
+  return errors;
 }
 
 export function checkAllPrds(schema, ajv) {
