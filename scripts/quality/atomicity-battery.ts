@@ -42,4 +42,6 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   { id: "multi-signup-and-login", expect: "multi", text: "Allow users to sign up and log in." },
   { id: "multi-signup-and-login-variant", expect: "multi", text: "Users can sign up and log in to the platform." },
   { id: "multi-validate-save-redirect", expect: "multi", text: "When the form is submitted, validate the inputs, save the record, and redirect to the list." },
+  { id: "multi-when-clause-save-validate-persist", expect: "multi", text: "When the user saves the draft, validate the form and persist the data." },
+  { id: "multi-create-account-reset-password", expect: "multi", text: "As a user, I want to create an account and reset my password." },
 ];
