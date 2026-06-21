@@ -488,6 +488,24 @@ describe("edge cases", () => {
   test("null scope → no crash", () => {
     expect(() => post({ scope: null })).not.toThrow();
   });
+
+  test("non-array post_conditions → fail-closed, no crash", () => {
+    // post_conditions as a truthy non-array (string/number) must not crash
+    // evaluatePostConditions on .some/.length; it must produce a structured result.
+    expect(() => post({ post_conditions: "not-an-array" })).not.toThrow();
+    expect(() => post({ post_conditions: 42 })).not.toThrow();
+    expect(() => post({ post_conditions: {} })).not.toThrow();
+    // The run produces a valid result object rather than throwing.
+    const r = post({ post_conditions: "not-an-array" });
+    expect(r.results).toBeDefined();
+  });
+
+  test("non-array pre_conditions → no crash", () => {
+    expect(() => pre("not-an-array")).not.toThrow();
+    expect(() => engine.evaluatePreConditions({ id: "T", pre_conditions: 42 }, {})).not.toThrow();
+    // Non-array pre_conditions coerce to empty → allPass true (no conditions to fail).
+    expect(engine.evaluatePreConditions({ id: "T", pre_conditions: "not-an-array" }, {}).allPass).toBe(true);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════
