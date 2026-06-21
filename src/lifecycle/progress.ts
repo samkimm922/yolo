@@ -194,7 +194,13 @@ function updateStatusForStage(stageId, stageStatus, options = Object()) {
   status.current_stage = activeStage;
   status.updated_at = now;
   status.stages = LIFECYCLE_STAGES.map((stage) => {
-    const existing = (status.stages || []).find((item) => item.id === stage.id) || {};
+    // status.stages may contain null/non-object entries when status.json is
+    // valid JSON but botched by an external write, partial flush, or git merge.
+    // `.find((item) => item.id === ...)` crashes on null; mirror the optional-
+    // chaining pattern used in validateLifecycleState (schema.ts).
+    const existing = (Array.isArray(status.stages) ? status.stages : []).find(
+      (item) => item?.id === stage.id,
+    ) || {};
     let nextStatus = existing.status || "pending";
     if (stage.id === stageId) nextStatus = stageStatus;
     else if (stage.id === activeStage) nextStatus = "active";
@@ -248,7 +254,14 @@ export function writeLifecycleStageReport(stageId, report = Object(), options = 
   if (options.skipSequenceCheck !== true && options.skip_sequence_check !== true) {
     const targetStage = getLifecycleStage(stageId);
     const status = loadOrCreateStatus(stageId, { ...options, stateRoot, now });
-    const stageStatusMap = new Map((status.stages || []).map((s) => [s.id, s.status]));
+    // Same null-entry guard as updateStatusForStage: status.stages may contain
+    // null/non-object entries from a corrupted status.json. `.map((s) => [s.id,
+    // s.status])` crashes on null; use optional chaining and drop undefined ids.
+    const stageStatusMap = new Map(
+      (Array.isArray(status.stages) ? status.stages : [])
+        .map((s) => [s?.id, s?.status])
+        .filter(([id]) => id),
+    );
     const incomplete = LIFECYCLE_STAGES.filter(
       (s) => s.sequence >= 5 && s.sequence < targetStage.sequence && stageStatusMap.get(s.id) !== "completed",
     );
