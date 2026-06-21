@@ -12,7 +12,6 @@ import {
   writeFileSync as defaultWriteFileSync,
   writeSync as defaultWriteSync,
 } from "node:fs";
-import { execSync as defaultExecSync } from "node:child_process";
 import { basename, delimiter, join, resolve, sep } from "node:path";
 import {
   BASELINE_TOOLS,
@@ -386,7 +385,7 @@ export function initializeMissingBaselines({
 export function cleanupStaleGitWorktreesAndBranches({
   rootDir,
   worktreeRoot = null,
-  execSync = defaultExecSync,
+  execFileSync = defaultExecFileSync,
   consoleLog = (...args) => console.log(...args),
 } = Object()) {
   const removed = { worktrees: [], branches: [] };
@@ -407,7 +406,7 @@ export function cleanupStaleGitWorktreesAndBranches({
   const ownedWorktrees = [];
   const ownedBranches = [];
   try {
-    const wtList = execSync("git worktree list --porcelain", {
+    const wtList = execFileSync("git", ["worktree", "list", "--porcelain"], {
       cwd: rootDir,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
@@ -435,7 +434,7 @@ export function cleanupStaleGitWorktreesAndBranches({
 
   for (const wtPath of ownedWorktrees) {
     try {
-      execSync(`git worktree remove --force "${wtPath}" 2>/dev/null`, {
+      execFileSync("git", ["worktree", "remove", "--force", wtPath], {
         cwd: rootDir,
         stdio: ["ignore", "pipe", "ignore"],
       });
@@ -446,7 +445,7 @@ export function cleanupStaleGitWorktreesAndBranches({
 
   for (const branch of ownedBranches) {
     try {
-      execSync(`git branch -D "${branch}" 2>/dev/null`, {
+      execFileSync("git", ["branch", "-D", branch], {
         cwd: rootDir,
         stdio: ["ignore", "pipe", "ignore"],
       });
@@ -528,7 +527,6 @@ export function prepareRunStartup({
   setProgressServerProc = (..._args) => {},
   initializeBaselines = true,
   logProgress = (..._args) => {},
-  execSync = defaultExecSync,
   execFileSync = defaultExecFileSync,
   consoleLog = (...args) => console.log(...args),
   runnerError = createRunnerError,
@@ -575,7 +573,7 @@ export function prepareRunStartup({
   setProgressServerProc(progressServerProc);
   // P9.M4: scope cleanup to this run's worktree root (same convention as
   // resolveRunnerContext) so a shared repo's other yolo-* state is not swept.
-  cleanupStaleGitWorktreesAndBranches({ rootDir, worktreeRoot: join(rootDir, "..", ".yolo-worktrees"), execSync });
+  cleanupStaleGitWorktreesAndBranches({ rootDir, worktreeRoot: join(rootDir, "..", ".yolo-worktrees"), execFileSync });
   cleanupRetryRoundFiles({ retryDir: join(yoloRoot, "data"), currentPrdPath: prdPath });
   return loadResumeCompletedFromPrd({ prdPath, taskCountsAsCompleted });
 }

@@ -51,7 +51,7 @@ describe("run lifecycle shutdown helpers", () => {
       writeProgressSnapshot: (data) => calls.push(["snapshot", data]),
       archiveCurrentRunFile: (data) => calls.push(["archive", data]),
       cleanupRuntimeStateFiles: (data) => calls.push(["cleanup", data]),
-      execSync: (cmd, opts) => calls.push(["exec", cmd, opts.cwd]),
+      execFileSync: (cmd, args, opts) => calls.push(["exec", cmd, opts.cwd]),
       log: (message) => calls.push(["log", message]),
       exit: (code) => calls.push(["exit", code]),
       nowMs: () => 61000,
@@ -77,7 +77,7 @@ describe("run lifecycle shutdown helpers", () => {
       writeProgressSnapshot: (data) => calls.push(["snapshot", data]),
       archiveCurrentRunFile: (data) => calls.push(["archive", data]),
       cleanupRuntimeStateFiles: (data) => calls.push(["cleanup", data]),
-      execSync: (cmd, opts) => calls.push(["exec", cmd, opts.cwd]),
+      execFileSync: (cmd, args, opts) => calls.push(["exec", cmd, opts.cwd]),
       log: (message) => calls.push(["log", message]),
       exit: (code) => calls.push(["exit", code]),
     });
@@ -100,7 +100,7 @@ describe("run lifecycle shutdown helpers", () => {
       logRun: (event, data) => calls.push(["logRun", event, data]),
       writeProgressSnapshot: (data) => calls.push(["snapshot", data]),
       cleanupRuntimeStateFiles: (data) => calls.push(["cleanup", data]),
-      execSync: (cmd, opts) => calls.push(["exec", cmd, opts.cwd]),
+      execFileSync: (cmd, args, opts) => calls.push(["exec", cmd, opts.cwd]),
       error: (_message, value) => calls.push(["error", value.message]),
       exit: (code) => calls.push(["exit", code]),
     });
@@ -121,18 +121,18 @@ describe("run lifecycle shutdown helpers", () => {
       logRun: () => {},
       writeProgressSnapshot: () => {},
       cleanupRuntimeStateFiles: () => {},
-      execSync: (cmd, opts) => calls.push([cmd, opts.cwd]),
+      execFileSync: (bin, args, opts) => calls.push([bin, args, opts.cwd]),
       error: () => {},
       exit: () => {},
     });
 
     assert.equal(
-      calls.some(([cmd, cwd]) => cmd.includes("git worktree remove --force") && cmd.includes("/tmp/wt") && cwd === "/repo"),
+      calls.some(([bin, args, cwd]) => bin === "git" && args[0] === "worktree" && args[1] === "remove" && args[2] === "--force" && args.some((a) => a.includes("/tmp/wt")) && cwd === "/repo"),
       true,
       "fatal error should remove the active worktree",
     );
     assert.equal(
-      calls.some(([cmd, cwd]) => cmd.includes("git branch -D") && cmd.includes("yolo/FIX") && cwd === "/repo"),
+      calls.some(([bin, args, cwd]) => bin === "git" && args[0] === "branch" && args[1] === "-D" && args[2] === "yolo/FIX" && cwd === "/repo"),
       true,
       "fatal error should delete the active branch",
     );
@@ -144,7 +144,7 @@ describe("run lifecycle shutdown helpers", () => {
       activeWorktree: "/tmp/wt",
       activeBranch: "yolo/FIX",
       rootDir: "/repo",
-      execSync: (cmd, opts) => execs.push([cmd, opts.cwd]),
+      execFileSync: (bin, args, opts) => execs.push([bin, args, opts.cwd]),
     });
     assert.equal(execs.length, 2);
 
@@ -165,8 +165,8 @@ describe("run lifecycle shutdown helpers", () => {
         activeWorktree: "/tmp/wt",
         activeBranch: "yolo/FIX",
         rootDir: "/repo",
-        execSync: (cmd, opts) => {
-          execs.push([cmd, opts]);
+        execFileSync: (bin, args, opts) => {
+          execs.push([bin, args, opts]);
           const error: NodeJS.ErrnoException = new Error("git cleanup timed out");
           error.code = "ETIMEDOUT";
           throw error;
@@ -175,7 +175,7 @@ describe("run lifecycle shutdown helpers", () => {
     });
 
     assert.equal(execs.length, 2);
-    for (const [, opts] of execs) {
+    for (const [, , opts] of execs) {
       assert.equal(opts.cwd, "/repo");
       assert.equal(opts.timeout, 15000);
       assert.equal(opts.maxBuffer, 1024 * 1024);

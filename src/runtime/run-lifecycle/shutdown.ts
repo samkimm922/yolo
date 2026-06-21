@@ -1,3 +1,5 @@
+import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
+
 const GIT_CLEANUP_EXEC_OPTIONS = { timeout: 15000, maxBuffer: 1024 * 1024 };
 
 export function writeRunEndOnCrashEvent(result = Object(), { logRun, startTimeMs, nowMs = Date.now } = Object()) {
@@ -20,19 +22,19 @@ export function cleanupActiveGitSession({
   activeWorktree,
   activeBranch,
   rootDir,
-  execSync,
+  execFileSync = defaultExecFileSync,
   log = (..._args) => {},
 } = Object()) {
   if (activeWorktree) {
     try {
       log(`  清理 worktree: ${activeWorktree}`);
-      execSync(`git worktree remove --force "${activeWorktree}" 2>/dev/null`, { cwd: rootDir, ...GIT_CLEANUP_EXEC_OPTIONS });
+      execFileSync("git", ["worktree", "remove", "--force", activeWorktree], { cwd: rootDir, ...GIT_CLEANUP_EXEC_OPTIONS });
     } catch {}
   }
   if (activeBranch) {
     try {
       log(`  清理分支: ${activeBranch}`);
-      execSync(`git branch -D "${activeBranch}" 2>/dev/null`, { cwd: rootDir, ...GIT_CLEANUP_EXEC_OPTIONS });
+      execFileSync("git", ["branch", "-D", activeBranch], { cwd: rootDir, ...GIT_CLEANUP_EXEC_OPTIONS });
     } catch {}
   }
 }
@@ -63,7 +65,7 @@ export function createRunnerTimeoutController({
   writeProgressSnapshot,
   archiveCurrentRunFile,
   cleanupRuntimeStateFiles,
-  execSync,
+  execFileSync = defaultExecFileSync,
   log = console.log,
   exit = process.exit,
   setTimeoutFn = setTimeout,
@@ -91,7 +93,7 @@ export function createRunnerTimeoutController({
       cleanupActiveGitSession({
         ...state.activeGitSession(),
         rootDir: state.rootDir(),
-        execSync,
+        execFileSync,
       });
       archiveCurrentRunFile({ currentRunFile: state.currentRunFile(), stateDir: state.stateDir(), interrupted: true });
       cleanupRuntimeStateFiles({ stateDir: state.stateDir() });
@@ -134,7 +136,7 @@ export function createGracefulShutdownHandler({
   writeProgressSnapshot,
   archiveCurrentRunFile,
   cleanupRuntimeStateFiles,
-  execSync,
+  execFileSync = defaultExecFileSync,
   log = console.log,
   exit = process.exit,
 } = Object()) {
@@ -155,7 +157,7 @@ export function createGracefulShutdownHandler({
     cleanupActiveGitSession({
       ...state.activeGitSession(),
       rootDir: state.rootDir(),
-      execSync,
+      execFileSync,
       log,
     });
     cleanupRuntimeStateFiles({ stateDir: state.stateDir() });
@@ -174,7 +176,7 @@ export function handleRunnerFatalError({
   logRun,
   writeProgressSnapshot,
   cleanupRuntimeStateFiles,
-  execSync,
+  execFileSync = defaultExecFileSync,
   error = console.error,
   exit = process.exit,
 } = Object()) {
@@ -190,7 +192,7 @@ export function handleRunnerFatalError({
     cleanupActiveGitSession({
       ...state.activeGitSession(),
       rootDir: state.rootDir(),
-      execSync,
+      execFileSync,
     });
     cleanupRuntimeStateFiles({ stateDir: state.stateDir() });
     void cleanupProgressServer(state.progressServerProc());

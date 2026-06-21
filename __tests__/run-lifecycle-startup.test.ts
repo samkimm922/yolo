@@ -510,14 +510,14 @@ describe("run lifecycle startup helpers", () => {
   });
 
   test("cleanupStaleGitWorktreesAndBranches removes this run's yolo worktrees and their branches", () => {
-    const commands = [];
+    const calls = [];
     const result = cleanupStaleGitWorktreesAndBranches({
       rootDir: "/repo",
       worktreeRoot: "/repo/../.yolo-worktrees",
       consoleLog: () => {},
-      execSync: (command) => {
-        commands.push(command);
-        if (command === "git worktree list --porcelain") {
+      execFileSync: (bin, args) => {
+        calls.push({ bin, args });
+        if (bin === "git" && args[0] === "worktree" && args[1] === "list") {
           return [
             "Worktree /repo",
             "HEAD abc",
@@ -535,7 +535,7 @@ describe("run lifecycle startup helpers", () => {
       worktrees: ["/repo/../.yolo-worktrees/yolo-1"],
       branches: ["yolo-a"],
     });
-    assert.ok(commands.includes('git branch -D "yolo-a" 2>/dev/null'));
+    assert.ok(calls.some((c) => c.bin === "git" && c.args[0] === "branch" && c.args[1] === "-D" && c.args[2] === "yolo-a"));
   });
 
   test("cleanupStaleGitWorktreesAndBranches leaves another runner's worktree and branch alone", () => {
@@ -544,8 +544,8 @@ describe("run lifecycle startup helpers", () => {
       rootDir: "/repo",
       worktreeRoot: "/repo/../.yolo-worktrees",
       consoleLog: () => {},
-      execSync: (command) => {
-        if (command === "git worktree list --porcelain") {
+      execFileSync: (bin, args) => {
+        if (bin === "git" && args[0] === "worktree" && args[1] === "list") {
           return [
             "Worktree /repo",
             "HEAD abc",
@@ -560,8 +560,8 @@ describe("run lifecycle startup helpers", () => {
             "",
           ].join("\n");
         }
-        if (command.includes("git worktree remove") || command.includes("git branch -D")) {
-          removed.push(command);
+        if (bin === "git" && (args[0] === "worktree" || args[0] === "branch")) {
+          removed.push({ bin, args });
         }
         return "";
       },
@@ -571,10 +571,10 @@ describe("run lifecycle startup helpers", () => {
       worktrees: ["/repo/../.yolo-worktrees/OWNED"],
       branches: ["yolo-owned-1"],
     });
-    assert.equal(removed.some((cmd) => cmd.includes("OWNED")), true, "owned worktree should be removed");
-    assert.equal(removed.some((cmd) => cmd.includes("yolo-owned-1")), true, "owned branch should be deleted");
-    assert.equal(removed.some((cmd) => cmd.includes("ALIEN")), false, "alien worktree must not be touched");
-    assert.equal(removed.some((cmd) => cmd.includes("yolo-alien-1")), false, "alien branch must not be deleted");
+    assert.equal(removed.some((c) => c.args.some((a) => typeof a === "string" && a.includes("OWNED"))), true, "owned worktree should be removed");
+    assert.equal(removed.some((c) => c.args.includes("yolo-owned-1")), true, "owned branch should be deleted");
+    assert.equal(removed.some((c) => c.args.includes("ALIEN")), false, "alien worktree must not be touched");
+    assert.equal(removed.some((c) => c.args.includes("yolo-alien-1")), false, "alien branch must not be deleted");
   });
 
   test("loadResumeCompletedFromPrd resets running tasks and returns completed ids", () => {
