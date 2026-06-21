@@ -789,4 +789,40 @@ describe("evidence run report", () => {
     }
   });
 
+  test("buildRunReport ignores null JSONL entries in ledger files", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", { run_id: "RUN-NULL", prd: "data/prd.json", tasks: 1 }, { now: "2026-06-21T10:00:00.000Z" });
+      appendRunEvent(stateDir, "run_end", { run_id: "RUN-NULL", duration_sec: "1" }, { now: "2026-06-21T10:01:00.000Z" });
+      appendStateEvent(stateDir, "run.note", { run_id: "RUN-NULL", status: "pass" }, { now: "2026-06-21T10:00:30.000Z", source: "test" });
+
+      const runsPath = join(stateDir, "runs.jsonl");
+      const eventsPath = join(stateDir, "events.jsonl");
+      const resultsFile = join(stateDir, "runtime", "task-results.jsonl");
+      mkdirSync(dirname(resultsFile), { recursive: true });
+      writeFileSync(runsPath, `${JSON.stringify(null)}\n`, { flag: "a" });
+      writeFileSync(eventsPath, `${JSON.stringify(null)}\n`, { flag: "a" });
+      writeFileSync(resultsFile, [
+        JSON.stringify({
+          task_id: "FIX-1",
+          run_id: "RUN-NULL",
+          status: "PASS",
+          attempt_id: "FIX-1-0",
+          workspace_root: "/tmp",
+          timestamp: "2026-06-21T10:00:45.000Z",
+        }),
+        JSON.stringify(null),
+      ].join("\n") + "\n", "utf8");
+
+      const report = buildRunReport({ stateDir, runId: "RUN-NULL" });
+
+      assert.equal(report.status, "success");
+      assert.equal(report.ledger.run_events, 2);
+      assert.equal(report.ledger.state_events, 1);
+      assert.deepEqual(report.tasks.completed, ["FIX-1"]);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
 });
