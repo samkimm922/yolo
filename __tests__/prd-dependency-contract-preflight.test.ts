@@ -125,3 +125,45 @@ describe("PRD dependency contract preflight", () => {
     }
   });
 });
+
+describe("inspectPrdContract structural robustness on malformed pre_conditions", () => {
+  // post_conditions was already hardened via asArray(); pre_conditions used
+  // `task.pre_conditions || []`, which only coerces null/undefined. A truthy
+  // non-array (object/string/number) reached the spread on the condition loop
+  // and crashed the gate (TypeError: not iterable) instead of failing closed.
+  // This matches the asymmetry #59 fixed for engine.evaluatePreConditions.
+  function basePrd(preConditionsOverride) {
+    return {
+      version: "2.0",
+      id: "PRD-PRECOND-SHAPE",
+      tasks: [{
+        id: "T-PRECOND",
+        title: "shape check",
+        type: "bugfix",
+        status: "pending",
+        scope: { targets: [{ file: "src/foo.ts" }] },
+        pre_conditions: preConditionsOverride,
+        post_conditions: [{
+          id: "POST-A",
+          type: "tests_pass",
+          severity: "FAIL",
+          params: { command: "npm test" },
+        }],
+      }],
+    };
+  }
+
+  for (const [label, value] of [
+    ["object literal", { id: "PRE-A", type: "tests_pass", severity: "FAIL", params: { command: "npm test" } }],
+    ["string", "tests_pass"],
+    ["number", 42],
+  ]) {
+    test(`non-array pre_conditions (${label}) → fail-closed, no crash`, () => {
+      assert.doesNotThrow(() => inspectPrdContract(basePrd(value)));
+      const result = inspectPrdContract(basePrd(value));
+      assert.equal(typeof result.status, "string");
+      assert.ok(Array.isArray(result.failures));
+      assert.equal(Array.isArray(result.warnings), true);
+    });
+  }
+});

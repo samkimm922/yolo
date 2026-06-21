@@ -639,7 +639,7 @@ export function inspectPrdContract(prd, options = Object()) {
       }
     }
 
-    for (const condition of [...(task.pre_conditions || []), ...postConditions]) {
+    for (const condition of [...asArray(task.pre_conditions), ...postConditions]) {
       const normalized = normalizeCondition(condition);
       if (!condition?.id) {
         addFinding(failures, task, condition, "CONDITION_MISSING_ID", "condition must have stable id");
