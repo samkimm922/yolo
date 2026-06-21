@@ -522,7 +522,7 @@ describe("demand runtime", () => {
   test("spec --demand auto-grounds greenfield demand into executable PRD accepted by check", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-grounding-prd-"));
     try {
-      const approved = runDemandApprovedRuntime(taskcliDemandInput(root));
+      const approved = runDemandApprovedRuntime(taskcliDemandInput(root), { writeLifecycle: false });
       const spec = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -544,6 +544,8 @@ describe("demand runtime", () => {
       assert.equal(outputs.find((output) => output.path.endsWith("GROUNDING.json"))?.type, "grounding");
       assert.equal(outputs.find((output) => output.path.endsWith("READINESS.json"))?.type, "readiness");
       assert.equal(existsSync(join(approved.demand_dir, "GROUNDING.json")), true);
+      assert.equal(existsSync(join(root, ".yolo/lifecycle/discovery.json")), true);
+      assert.equal(existsSync(join(root, ".yolo/lifecycle/roadmap.json")), true);
 
       const savedSession = JSON.parse(readFileSync(approved.demand_path, "utf8"));
       assert.deepEqual(savedSession.project.target_files, ["src/taskcli.ts"]);
@@ -563,6 +565,14 @@ describe("demand runtime", () => {
         writeLifecycle: false,
       });
       assert.equal(check.status, "pass", JSON.stringify(check.blockers, null, 2));
+      const runGuard = inspectLifecycleGuard({
+        command: "yolo-run",
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        prdPath,
+      });
+      assert.equal(runGuard.status, "blocked");
+      assert.deepEqual(runGuard.missing_required_stages, ["check"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

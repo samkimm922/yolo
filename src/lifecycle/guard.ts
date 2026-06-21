@@ -10,6 +10,7 @@ export const LIFECYCLE_GUARD_SCHEMA = "yolo.lifecycle.guard.v1";
 const SETUP_COMMANDS = new Set(["yolo-init", "yolo-install", "yolo-doctor"]);
 const EARLY_COMMANDS = new Set(["yolo", "yolo-next", "yolo-brainstorm", "yolo-interview", "yolo-discover", "yolo-discuss"]);
 const WRITE_COMMANDS = new Set(["yolo-run", "yolo-fix", "yolo-init", "yolo-install"]);
+const PRD_DEMAND_INPUTS = ["demandPath", "demand", "sessionPath", "session"];
 // Must remain empty. Adding any stage here allows warning-state artifacts to bypass gate enforcement (fail-closed policy).
 const WARNING_READY_STAGES: ReadonlySet<string> = Object.freeze(new Set<string>());
 const BLOCKING_REPORT_STATUSES = new Set(["blocked", "error", "failed", "fail", "warning", "draft", "not_run", "indeterminate"]);
@@ -76,6 +77,10 @@ function inputPathExists(projectRoot, input = Object(), keys = []) {
     const path = normalizePath(projectRoot, input[key] || input[key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)]);
     return path && existsSync(path);
   });
+}
+
+function existingDemandInputForPrd(command, projectRoot, input = Object()) {
+  return command === "yolo-prd" && inputPathExists(projectRoot, input, PRD_DEMAND_INPUTS);
 }
 
 function defaultArtifactExists(stateRoot, relativePath) {
@@ -376,8 +381,8 @@ function requiredStagesFor(command, input = Object()) {
     return [{
       stage: "roadmap",
       code: "PLAN_REQUIRED",
-      message: "A completed plan or explicit plan artifact is required before PRD compilation.",
-      satisfiedBy: ["planPath", "plan"],
+      message: "A completed plan, explicit plan artifact, or existing approved demand session is required before PRD compilation.",
+      satisfiedBy: ["planPath", "plan", ...PRD_DEMAND_INPUTS],
       defaultArtifacts: ["discovery/plan.json"],
       requireLifecycleArtifact: true,
     }];
@@ -541,7 +546,23 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
     };
   }
 
-  if (!existsSync(statusPath)) return lifecycleMissingResult({ command, projectRoot, stateRoot, statusPath });
+  if (!existsSync(statusPath)) {
+    if (existingDemandInputForPrd(command, projectRoot, input)) {
+      return {
+        ...base,
+        status: "pass",
+        code: "LIFECYCLE_GUARD_PASS",
+        summary: "Existing demand input can bootstrap PRD lifecycle state.",
+        current_stage: null,
+        missing_required_stages: [],
+        blockers: [],
+        warnings: [],
+        allowed_commands: ["yolo spec", "yolo init", "yolo status", "yolo doctor"],
+        next_actions: ["Run yolo spec with the existing demand session, then run yolo check on the compiled PRD."],
+      };
+    }
+    return lifecycleMissingResult({ command, projectRoot, stateRoot, statusPath });
+  }
 
   let state;
   try {

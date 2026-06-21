@@ -7,6 +7,7 @@ import { inspectDemandQuality, inspectDemandReadiness } from "./gate.js";
 import { buildDemandSessionState, demandSessionSchemaError, type DemandSessionStateResult, type DemandTriageResult, type DemandPrdReadinessResult, type DemandBlocker } from "./router.js";
 import { inspectAtomicTask } from "../runtime/execution/atomic-task-doctor.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
+import { lifecycleArtifactPath } from "../lifecycle/state.js";
 import { preflightPrdDocument } from "../prd/preflight.js";
 import { appendJsonlRecord } from "../runtime/evidence/ledger.js";
 import { parseCommandToArgv } from "../lib/security/command-guard.js";
@@ -76,6 +77,42 @@ function attachLifecycle(result = Object(), stageId, context = Object(), source 
     { path: lifecycle.artifact_path, type: "lifecycle_report", stage: stageId },
   ];
   return lifecycle;
+}
+
+function lifecycleStageReportReady(stateRoot, stageId) {
+  try {
+    const path = lifecycleArtifactPath(stageId, { stateRoot });
+    if (!existsSync(path)) return false;
+    const report = readJson(path);
+    return ["completed", "pass", "success"].includes(clean(report.status).toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function attachDemandPrerequisiteLifecycle(result = Object(), read = Object(), context = Object()) {
+  const demandReport = {
+    status: "success",
+    demand_id: read.session?.id || result.demand_id,
+    demand_path: read.path,
+    demand_dir: read.dir,
+    outputs: [
+      { path: read.path, type: "demand_json" },
+    ],
+  };
+  if (!lifecycleStageReportReady(context.stateRoot, "discovery")) {
+    attachLifecycle({
+      ...demandReport,
+      summary: "Approved demand session supplied discovery evidence for PRD compilation.",
+    }, "discovery", context, "yolo-prd:demand-bootstrap");
+  }
+  if (!lifecycleStageReportReady(context.stateRoot, "roadmap")) {
+    attachLifecycle({
+      ...demandReport,
+      summary: "Approved demand scenario matrix supplied roadmap evidence for PRD compilation.",
+      prd_path: result.prd_path,
+    }, "roadmap", context, "yolo-prd:demand-bootstrap");
+  }
 }
 
 export function demandStateDir(stateRoot, id = "") {
@@ -1767,6 +1804,7 @@ export function runDemandPrdRuntime(input = Object(), options = Object()) {
     next_actions: compiled.next_actions || [],
   };
   if (shouldWrite && compiled.prd && compiled.status === "success" && shouldWriteLifecycle(input, options)) {
+    attachDemandPrerequisiteLifecycle(result, read, { projectRoot, stateRoot });
     attachLifecycle(result, "prd", { projectRoot, stateRoot }, "yolo-prd");
   }
   return result;
