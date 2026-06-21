@@ -109,22 +109,38 @@ function assertDeliveryManualAcceptanceResolved(stageId, { stateRoot } = Object(
   );
 }
 
+// `checks` entries from upstream reports may be null/number/string when an
+// external producer writes malformed-but-valid JSON. `.filter((c) => c.status
+// === "blocked")` would then crash on `null.status`. Reject non-object entries
+// before reading `.status`, mirroring the asConditions/isBlockingIssue pattern.
+// `checks` entries from upstream reports may be null/number/string when an
+// external producer writes malformed-but-valid JSON. `.filter((c) => c.status
+// === "blocked")` would then crash on `null.status`. Reject non-object entries
+// before reading `.status`, mirroring the asConditions/isBlockingIssue pattern.
+function isBlockingCheck(check) {
+  if (!check || typeof check !== "object") return false;
+  return check.status === "blocked";
+}
+
 function reportBlockers(report = Object()) {
   const raw = [
     ...(Array.isArray(report.blockers) ? report.blockers : []),
     ...(Array.isArray(report.blocked_reasons) ? report.blocked_reasons : []),
     ...(Array.isArray(report.issues) ? report.issues.filter((issue) => isBlockingIssue(issue)) : []),
-    ...(Array.isArray(report.checks) ? report.checks.filter((check) => check.status === "blocked") : []),
+    ...(Array.isArray(report.checks) ? report.checks.filter((check) => isBlockingCheck(check)) : []),
   ];
-  return raw.map((item) => {
-    if (typeof item === "string") return { code: "BLOCKER", message: item };
-    return {
-      code: item.code || item.id || item.name || "BLOCKER",
-      message: item.message || item.detail || item.summary || item.reason || "",
-      source: item.source || item.gate || item.stage || null,
-      task_id: item.task_id || item.taskId || null,
-    };
-  });
+  return raw
+    .map((item) => {
+      if (typeof item === "string") return { code: "BLOCKER", message: item };
+      if (!item || typeof item !== "object") return null;
+      return {
+        code: item.code || item.id || item.name || "BLOCKER",
+        message: item.message || item.detail || item.summary || item.reason || "",
+        source: item.source || item.gate || item.stage || null,
+        task_id: item.task_id || item.taskId || null,
+      };
+    })
+    .filter(Boolean);
 }
 
 // Acceptance reports classify issues by priority level rather than status.
