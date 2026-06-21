@@ -52,7 +52,8 @@ function unique(values) {
 }
 
 function conditionText(conditions = []) {
-  return conditions.map((condition) => [
+  // Defend against malformed PRDs where pre/post_conditions are not arrays.
+  return (Array.isArray(conditions) ? conditions : []).map((condition) => [
     condition.id,
     condition.type,
     condition.message,
@@ -152,12 +153,20 @@ function fileLayerWithMap(file, layerMap) {
   return fileLayer(file);
 }
 
+// Coerce a task's condition list to an array. Malformed PRDs may carry a
+// non-array (e.g. a string) here; treat that as "no conditions" rather than
+// crashing on .filter/.map downstream.
+function taskConditions(task, field) {
+  const value = task?.[field];
+  return Array.isArray(value) ? value : [];
+}
+
 function countFailPostconditions(task) {
-  return (task.post_conditions || []).filter((condition) => (condition.severity || "FAIL") === "FAIL").length;
+  return taskConditions(task, "post_conditions").filter((condition) => (condition.severity || "FAIL") === "FAIL").length;
 }
 
 function countBehavioralFailPostconditions(task) {
-  return (task.post_conditions || []).filter((condition) => {
+  return taskConditions(task, "post_conditions").filter((condition) => {
     if ((condition.severity || "FAIL") !== "FAIL") return false;
     return !STRUCTURAL_POSTCONDITION_TYPES.has(condition.type);
   }).length;
@@ -165,10 +174,10 @@ function countBehavioralFailPostconditions(task) {
 
 function isStructuralSingleFileTask(task, files, behavioralFailPostconditions) {
   if (files.length !== 1 || behavioralFailPostconditions > 0) return false;
-  const sourceFindings = task.source_findings || [];
+  const sourceFindings = Array.isArray(task.source_findings) ? task.source_findings : [];
   const allFindingsStructural = sourceFindings.length > 0
     && sourceFindings.every((finding) => ["R9-file-length"].includes(finding.scanner_id));
-  const postconditions = task.post_conditions || [];
+  const postconditions = taskConditions(task, "post_conditions");
   const allPostconditionsStructural = postconditions.length > 0
     && postconditions.every((condition) => STRUCTURAL_POSTCONDITION_TYPES.has(condition.type));
   return allFindingsStructural || allPostconditionsStructural;
@@ -248,7 +257,7 @@ export function inspectAtomicTask(task, options = Object()) {
   const targetRoots = unique([projectRoot, PROJECT_ROOT, YOLO_ROOT]).map(String);
   const layerMap = buildLayerMap(projectRoot);
   const classify = (file) => fileLayerWithMap(file, layerMap);
-  const targets = task.scope?.targets || [];
+  const targets = Array.isArray(task.scope?.targets) ? task.scope.targets : [];
   const files = unique(targets.map((target) => normalizeFile(target.file))).map(String);
   const readonlyFiles = unique(task.scope?.readonly_files || []).map(String);
   const layers = unique(files.map(classify)).map(String);

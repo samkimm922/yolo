@@ -413,7 +413,7 @@ export function inspectPrdContract(prd, options = Object()) {
         });
       }
     }
-    for (const requirement of asArray(prd.requirements)) {
+    for (const requirement of asArray(prd?.requirements)) {
       if (!requirement.demand_trace) {
         failures.push({
           task_id: null,

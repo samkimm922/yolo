@@ -195,7 +195,16 @@ function inspectPreflightReadiness(read, schema, options = Object()) {
   let migration = null;
   let specGovernance = null;
 
-  if (read.ok) {
+  // The PRD JSON parsed (read.ok), but contract/migration/spec evaluation
+  // assume read.prd is a plain object. A valid-JSON but non-object value
+  // (null, an array, or a scalar) would crash those evaluators; the schema
+  // check above already marks such input as PRD_SCHEMA_FAILED, so omit the
+  // downstream evaluators entirely for non-object values only. (Contract/spec
+  // still run for plain-object PRDs that fail schema — they produce the
+  // specific blockers like TASK_MISSING_FILES that downstream tests rely on,
+  // and are hardened against malformed array fields separately.)
+  const prdIsPlainObject = read.ok && read.prd && typeof read.prd === "object" && !Array.isArray(read.prd);
+  if (prdIsPlainObject) {
     const requireDemandContract = options.requireDemandContract ?? options.require_demand_contract ?? true;
     const strictExecution = options.strictExecution ?? options.strict_execution ?? true;
     contract = inspectPrdContract(read.prd, {

@@ -140,6 +140,48 @@ function prdJsonErrorReport({ prdPath, projectRoot, stateRoot, error, writeLifec
   return report;
 }
 
+// A PRD that parses as valid JSON but is not a plain object (null, an array,
+// or a scalar) cannot be evaluated by any downstream check. Reject it
+// structurally instead of letting the readiness checks crash on property
+// access. Mirrors prdJsonErrorReport's shape for a consistent fail-closed
+// contract.
+function prdShapeErrorReport({ prdPath, projectRoot, stateRoot, writeLifecycle, learnFailures }) {
+  const resolvedPrdPath = resolve(prdPath);
+  const report = Object.assign(Object(), {
+    schema_version: YOLO_CHECK_REPORT_SCHEMA_VERSION,
+    schema: YOLO_CHECK_REPORT_SCHEMA,
+    status: "blocked",
+    code: "PRD_NOT_OBJECT",
+    summary: "PRD JSON must be a single object.",
+    generated_at: nowIso(),
+    prd_path: resolvedPrdPath,
+    project_root: projectRoot,
+    state_root: stateRoot,
+    checks: [],
+    blockers: [{
+      code: "PRD_NOT_OBJECT",
+      message: "PRD JSON parsed but is not an object; a PRD must be a single object.",
+      gate: "prd_parse",
+    }],
+    warnings: [],
+    advisory_warnings: [],
+    blocking_warnings: [],
+    artifacts: [resolvedPrdPath],
+    next_actions: ["Fix the PRD so its top-level JSON value is a single object, then rerun /yolo-check."],
+  });
+  if (writeLifecycle) {
+    report.lifecycle_write = writeLifecycleStageReport("check", report, {
+      projectRoot,
+      stateRoot,
+      source: "yolo-check",
+      learnFailures,
+      skipSequenceCheck: true,
+    });
+    report.artifacts.push(report.lifecycle_write.artifact_path);
+  }
+  return report;
+}
+
 function severity(status) {
   if (status === "blocked") return 3;
   if (status === "warning") return 2;
@@ -750,6 +792,17 @@ export function inspectYoloCheck(input = Object(), options = Object()) {
       projectRoot,
       stateRoot,
       error,
+      writeLifecycle: input.writeLifecycle || input.write_lifecycle || options.writeLifecycle || options.write_lifecycle,
+      learnFailures: options.learnFailures === true || input.learnFailures === true,
+    });
+  }
+  // The PRD parsed as valid JSON, but the readiness checks below assume a plain
+  // object PRD. A null/array/scalar value would crash them; reject structurally.
+  if (!prd || typeof prd !== "object" || Array.isArray(prd)) {
+    return prdShapeErrorReport({
+      prdPath: resolvedPrdPath,
+      projectRoot,
+      stateRoot,
       writeLifecycle: input.writeLifecycle || input.write_lifecycle || options.writeLifecycle || options.write_lifecycle,
       learnFailures: options.learnFailures === true || input.learnFailures === true,
     });
