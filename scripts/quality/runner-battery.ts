@@ -36,6 +36,20 @@ function targetModifiedTask(extraConditions: unknown[] = []) {
   };
 }
 
+function removedFileTask(file: string, text: string) {
+  return {
+    id: "TASK-RUNNER-2",
+    title: "Remove marker from file",
+    scope: {
+      targets: [{ file }],
+      expected_zero_business_code: true,
+    },
+    post_conditions: [
+      { id: "POST-NO-TEXT", type: "code_not_contains", severity: "FAIL", params: { file, text } },
+    ],
+  };
+}
+
 export const RUNNER_BATTERY: RunnerBatteryCase[] = [
   {
     id: "done-target-modified",
@@ -80,6 +94,15 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
     baseFiles: { [TARGET]: "export const v = 1;\n" },
     editFiles: { "tests/src/feature.ts": "test('twins', () => 1);\n" },
     task: targetModifiedTask(),
+  },
+  {
+    id: "done-code-not-contains-on-missing-file",
+    expect: "done",
+    description:
+      "Target file is absent (never existed in the project) -> code_not_contains is vacuously satisfied; runner must report done, not block on indeterminate.",
+    baseFiles: {},
+    editFiles: {},
+    task: removedFileTask("src/legacy.ts", "FLAG"),
   },
   {
     id: "notdone-code-contains-partial-missing",
