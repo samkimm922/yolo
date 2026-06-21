@@ -109,6 +109,8 @@
     "test": "npm run build --silent && node --import tsx --test __tests__/*.test.ts __tests__/property/*.test.ts",
     "regression-ratchet": "node --import tsx scripts/regression-ratchet.ts",
     "mutation-gate": "node --import tsx scripts/mutation-gate.ts",
+    "quality-score": "node --import tsx scripts/quality-score.ts",
+    "quality-gate": "node --import tsx scripts/quality-score.ts --check",
     "soak": "node --import tsx scripts/soak/run.ts",
     "matrix-ci": "node --import tsx scripts/matrix-ci.ts",
     "smoke:packed-external": "node --import tsx scripts/e2e-smoke/packed-external.ts",
