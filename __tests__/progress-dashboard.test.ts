@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, test } from "node:test";
 import { readLifecycleDashboard } from "../src/runtime/progress/lifecycle-dashboard.js";
-import { HTML, server } from "../src/runtime/progress/server.js";
+import { startEmbeddedProgressServer } from "../src/runtime/progress/embedded-server.js";
+import { HTML, PROGRESS_SERVER_HOST, server } from "../src/runtime/progress/server.js";
 
 const roots = [];
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -38,6 +39,14 @@ function restoreFileLater(path) {
     if (existed) writeFileSync(path, previous, "utf8");
     else rmSync(path, { force: true });
   };
+}
+
+async function waitFor(condition, message) {
+  const deadline = Date.now() + 2000;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(message);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
 }
 
 afterEach(() => {
@@ -145,6 +154,43 @@ test("progress server exposes lifecycle json endpoint", async () => {
     assert.equal(typeof payload.exists, "boolean");
     assert.equal(typeof payload.stage_counts, "object");
     assert.ok("next_action" in payload);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("embedded progress server binds to the loopback interface", async () => {
+  const logs = [];
+  const handle = startEmbeddedProgressServer(0, { log: (message) => logs.push(String(message)), error: () => {} });
+  try {
+    await waitFor(() => server.listening, "embedded progress server did not start");
+    const address = server.address();
+    assert.equal(typeof address, "object");
+    assert.equal(PROGRESS_SERVER_HOST, "127.0.0.1");
+    assert.equal((address as { address: string }).address, "127.0.0.1");
+    assert.match(logs.join("\n"), /http:\/\/127\.0\.0\.1:\d+/);
+  } finally {
+    await handle.close();
+  }
+});
+
+test("progress server restricts SSE CORS to local origins", async () => {
+  await new Promise<void>((resolve) => server.listen(0, PROGRESS_SERVER_HOST, resolve));
+  try {
+    const addr = server.address();
+    const port = typeof addr === "string" ? 0 : (addr as { port: number }).port;
+    const endpoint = `http://${PROGRESS_SERVER_HOST}:${port}/events`;
+    const blocked = await fetch(endpoint, { headers: { Origin: "https://attacker.example" } });
+    assert.equal(blocked.status, 200);
+    assert.equal(blocked.headers.get("access-control-allow-origin"), null);
+    await blocked.body?.cancel().catch(() => {});
+
+    const localOrigin = `http://127.0.0.1:${port}`;
+    const allowed = await fetch(endpoint, { headers: { Origin: localOrigin } });
+    assert.equal(allowed.status, 200);
+    assert.equal(allowed.headers.get("access-control-allow-origin"), localOrigin);
+    assert.equal(allowed.headers.get("vary"), "Origin");
+    await allowed.body?.cancel().catch(() => {});
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

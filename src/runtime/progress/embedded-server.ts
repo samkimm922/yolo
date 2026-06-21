@@ -22,7 +22,7 @@ export function startEmbeddedProgressServer(port, { log = console.log, error = c
         cleanupListeners();
         const address = server.address();
         const actualPort = typeof address === "object" && address ? address.port : port;
-        log(`[yolo-runner] 内嵌看板已启动: http://localhost:${actualPort}`);
+        log(`[yolo-runner] 内嵌看板已启动: http://${ps.PROGRESS_SERVER_HOST}:${actualPort}`);
         if (ps.startFileWatchers) ps.startFileWatchers();
         resolve();
       };
@@ -44,7 +44,7 @@ export function startEmbeddedProgressServer(port, { log = console.log, error = c
       server.once("listening", onListening);
       server.once("error", onError);
       try {
-        server.listen(port);
+        server.listen(port, ps.PROGRESS_SERVER_HOST);
       } catch (err) {
         onError(err);
       }
