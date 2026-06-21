@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { inspectYoloCheck, runYoloCheckCli } from "../src/runtime/gates/check-report.js";
@@ -614,6 +614,48 @@ describe("yolo check report", () => {
       assert.ok(report.blockers.some((blocker) => blocker.code === "TASK_TARGET_OUTSIDE_ROOT" && blocker.gate === "prd_preflight"));
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks task targets that symlink outside the project root", () => {
+    const root = tempProject();
+    const outside = tempProject();
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      const outsideTarget = join(outside, "outside.js");
+      writeFileSync(outsideTarget, "export const outside = true;\n", "utf8");
+      symlinkSync(outsideTarget, join(root, "src/link-out.js"));
+
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({
+        scope: { targets: [{ file: "src/link-out.js" }] },
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "src/link-out.js" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+
+      assert.equal(report.status, "blocked");
+      assert.ok(report.blockers.some((blocker) =>
+        blocker.code === "TASK_TARGET_OUTSIDE_ROOT" &&
+        blocker.gate === "prd_preflight" &&
+        /src\/link-out\.js/.test(blocker.message || "")
+      ));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
     }
   });
 

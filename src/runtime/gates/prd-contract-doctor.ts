@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -85,13 +85,57 @@ function normalizeTargetPath(value) {
     .replace(/:\d+(?:-\d+)?$/, "");
 }
 
-function pathInsideProject(projectRoot, file) {
-  const root = resolve(projectRoot);
-  const target = normalizeTargetPath(file);
-  if (!target) return false;
-  const path = isAbsolute(target) ? resolve(target) : resolve(root, target);
+function pathExists(path) {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isInsideOrSame(root, path) {
+  const rel = relative(root, path);
+  return rel === "" || (!!rel && !rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function isInsideChild(root, path) {
   const rel = relative(root, path);
   return Boolean(rel && !rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function nearestExistingAncestor(path) {
+  let current = path;
+  while (!pathExists(current)) {
+    const parent = dirname(current);
+    if (parent === current) return current;
+    current = parent;
+  }
+  return current;
+}
+
+function pathInsideProject(projectRoot, file) {
+  const lexicalRoot = resolve(projectRoot);
+  const target = normalizeTargetPath(file);
+  if (!target || target.includes("\0")) return false;
+  const path = isAbsolute(target) ? resolve(target) : resolve(lexicalRoot, target);
+  if (!isInsideChild(lexicalRoot, path)) return false;
+
+  let realRoot;
+  try {
+    realRoot = realpathSync(lexicalRoot);
+  } catch {
+    return true;
+  }
+
+  try {
+    if (pathExists(path)) {
+      return isInsideChild(realRoot, realpathSync(path));
+    }
+    return isInsideOrSame(realRoot, realpathSync(nearestExistingAncestor(path)));
+  } catch {
+    return false;
+  }
 }
 
 function collectPathValues(value, out = []) {
