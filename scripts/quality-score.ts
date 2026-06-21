@@ -19,9 +19,11 @@ import { fileURLToPath } from "node:url";
 import { runYoloCheckCli } from "../src/runtime/gates/check-report.js";
 import { buildAcceptanceReport } from "../src/runtime/acceptance/report.js";
 import { inspectStoryAtomicityText } from "../src/demand/story-atomicity.js";
+import { evaluatePostConditions } from "../src/prd/contract.js";
 import { CHECK_BATTERY, type CheckBatteryCase } from "./quality/check-battery.js";
 import { ACCEPTANCE_BATTERY, type AcceptanceBatteryCase } from "./quality/acceptance-battery.js";
 import { ATOMICITY_BATTERY, type AtomicityBatteryCase } from "./quality/atomicity-battery.js";
+import { RUNNER_BATTERY, type RunnerBatteryCase } from "./quality/runner-battery.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(ROOT, "scripts", "quality", "quality-baseline.json");
@@ -110,11 +112,29 @@ function runAtomicityCase(testCase: AtomicityBatteryCase): CaseResult {
   return { id: testCase.id, category: "atomic_task_success", expect: testCase.expect, actualExit: correct ? 0 : 1, actualStatus: detected, correct };
 }
 
+function runRunnerCase(testCase: RunnerBatteryCase): CaseResult {
+  const root = setupProject(testCase.baseFiles);
+  try {
+    for (const [rel, contents] of Object.entries(testCase.editFiles || {})) {
+      const abs = join(root, rel);
+      mkdirSync(dirname(abs), { recursive: true });
+      writeFileSync(abs, contents, "utf8");
+    }
+    const report = evaluatePostConditions(testCase.task, {}, { cwd: root, root }) as { allPass?: boolean };
+    const detected = report.allPass ? "done" : "not_done";
+    const correct = detected === testCase.expect;
+    return { id: testCase.id, category: "runner_outcome_accuracy", expect: testCase.expect, actualExit: correct ? 0 : 1, actualStatus: detected, correct };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function computeQuality() {
   const results = [
     ...CHECK_BATTERY.map(runCheckCase),
     ...ACCEPTANCE_BATTERY.map(runAcceptanceCase),
     ...ATOMICITY_BATTERY.map(runAtomicityCase),
+    ...RUNNER_BATTERY.map(runRunnerCase),
   ];
   const total = results.length;
   const correct = results.filter((r) => r.correct).length;
