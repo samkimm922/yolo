@@ -341,6 +341,14 @@ function evaluateConditions(conditions, taskScope, options = Object()) {
   return { allPass, failConditions, warnConditions, nonPassConditions, results };
 }
 
+// Coerce a task's pre/post_conditions to an array. A non-array value (string,
+// number, object) is treated as "no conditions" rather than crashing on
+// .some/.length/.map downstream — fail-closed, matching the asArray() pattern
+// used by prd-contract-doctor and other gates that consume the same PRD.
+function asConditions(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 // ── 主要 API ────────────────────────────────────────────────────
 
 /**
@@ -357,7 +365,7 @@ function loadTask(prdPath, taskId) {
  * 评估 pre_conditions（修前验证）
  */
 export function evaluatePreConditions(task, prd, options = Object()) {
-  const conditions = task.pre_conditions || [];
+  const conditions = asConditions(task?.pre_conditions);
   if (conditions.length === 0) {
     return { allPass: true, failConditions: [], warnConditions: [], nonPassConditions: [], results: [] };
   }
@@ -369,8 +377,8 @@ export function evaluatePreConditions(task, prd, options = Object()) {
  * 自动追加 auto-conditions
  */
 export function evaluatePostConditions(task, prd, options = Object()) {
-  const explicitConditions = task.post_conditions || [];
-  const scope = task.scope || {};
+  const explicitConditions = asConditions(task?.post_conditions);
+  const scope = task?.scope || {};
 
   // 自动追加 forbidden_patterns 检查（如果用户没显式添加）
   const hasForbiddenCheck = explicitConditions.some(
