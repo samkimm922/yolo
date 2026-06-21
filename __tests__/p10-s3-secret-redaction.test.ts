@@ -97,6 +97,42 @@ describe("P10.S3 task-logger redacts bash output", () => {
     const entry = JSON.parse(content.trim());
     assert.ok(!entry.output.includes("s3cret123token456"));
   });
+
+  test("writeTaskLog redacts secrets across cmd detail stack and review message fields", () => {
+    mod.writeTaskLog("TASK-DEEP-REDACT", {
+      type: "ERROR",
+      cmd: "curl -H 'Authorization: Bearer cmdsecret1234567890'",
+      detail: {
+        stderr: "api_key=mysecret123abc",
+        review: { message: "token=reviewsecret12345" },
+      },
+      stack: "Error: sk-stack1234567890abcdef",
+    });
+    mod.logReviewIssue(
+      "HIGH",
+      "src/secrets.ts",
+      7,
+      "review message leaked ghp_1234567890abcdefghijklmnopqrstuvwxyz",
+      { detail: "password=reviewpassword123" },
+    );
+
+    const taskEntry = JSON.parse(readFileSync(join(tmpRoot, "TASK-DEEP-REDACT.jsonl"), "utf8").trim());
+    const reviewEntries = readFileSync(join(tmpRoot, "_review.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    const combined = JSON.stringify({ taskEntry, reviewEntries });
+
+    for (const leaked of [
+      "cmdsecret1234567890",
+      "mysecret123abc",
+      "reviewsecret12345",
+      "sk-stack1234567890abcdef",
+      "ghp_1234567890abcdefghijklmnopqrstuvwxyz",
+      "reviewpassword123",
+    ]) {
+      assert.equal(combined.includes(leaked), false, `${leaked} must be redacted before persistence`);
+    }
+    assert.equal(taskEntry.cmd.includes("[REDACTED"), true);
+    assert.equal(taskEntry.detail.review.message.includes("[REDACTED"), true);
+  });
 });
 
 // ── scanner findings redaction ─────────────────────────────────
