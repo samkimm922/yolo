@@ -1,9 +1,10 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildLifecycleStageReport, writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+import { createLifecycleStateSnapshot } from "../src/lifecycle/schema.js";
 
 function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-lifecycle-progress-"));
@@ -315,6 +316,39 @@ describe("lifecycle progress", () => {
         stageReport.blockers.some((b) => b.code === "B"),
         `real blocker preserved despite malformed siblings: ${JSON.stringify(stageReport.blockers)}`,
       );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("tolerates null/non-object entries in status.json stages on stage write", () => {
+    // Regression: a status.json that is valid JSON but carries a null entry
+    // inside the `stages` array (botched external write, partial flush, git
+    // merge) used to crash writeLifecycleStageReport with
+    // "Cannot read properties of null (reading 'id')" inside
+    // updateStatusForStage / sequence-check, taking down stage transitions.
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      const base = createLifecycleStateSnapshot({ projectName: "demo", currentStage: "discovery" });
+      base.stages = [null, 7, "bad", ...base.stages] as unknown as typeof base.stages;
+      mkdirSync(join(stateRoot, "lifecycle"), { recursive: true });
+      writeFileSync(join(stateRoot, "lifecycle/status.json"), JSON.stringify(base, null, 2));
+
+      const result = writeLifecycleStageReport("discovery", { status: "success" }, {
+        projectRoot: root,
+        stateRoot,
+        source: "unit",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+        now: "2026-06-21T00:00:00.000Z",
+      });
+
+      assert.equal(result.status, "ok");
+      assert.equal(result.stage_status, "completed");
+      const status = JSON.parse(readFileSync(join(stateRoot, "lifecycle/status.json"), "utf8"));
+      const discovery = status.stages.find((s) => s.id === "discovery");
+      assert.equal(discovery.status, "completed");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
