@@ -345,8 +345,15 @@ function evaluateConditions(conditions, taskScope, options = Object()) {
 // number, object) is treated as "no conditions" rather than crashing on
 // .some/.length/.map downstream — fail-closed, matching the asArray() pattern
 // used by prd-contract-doctor and other gates that consume the same PRD.
+// Filter non-object entries (null/string/number/array) inside the array:
+// downstream evaluateCondition destructures `condition.id`/`condition.type`,
+// which throws on null, and `.some(c => c.type)` over the explicit conditions
+// also crashes on null elements. Treat malformed elements as absent — a
+// malformed PRD has nothing to evaluate there, and other gates already reject
+// PRDs with no executable FAIL conditions.
 function asConditions(value) {
-  return Array.isArray(value) ? value : [];
+  if (!Array.isArray(value)) return [];
+  return value.filter((item) => item && typeof item === "object" && !Array.isArray(item));
 }
 
 // ── 主要 API ────────────────────────────────────────────────────
