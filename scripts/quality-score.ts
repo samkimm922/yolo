@@ -17,7 +17,9 @@ import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { runYoloCheckCli } from "../src/runtime/gates/check-report.js";
+import { buildAcceptanceReport } from "../src/runtime/acceptance/report.js";
 import { CHECK_BATTERY, type CheckBatteryCase } from "./quality/check-battery.js";
+import { ACCEPTANCE_BATTERY, type AcceptanceBatteryCase } from "./quality/acceptance-battery.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(ROOT, "scripts", "quality", "quality-baseline.json");
@@ -35,12 +37,12 @@ function git(cwd: string, args: string[]) {
   execFileSync("git", args, { cwd, stdio: "ignore" });
 }
 
-function setupProject(testCase: CheckBatteryCase): string {
+function setupProject(files: Record<string, string> = {}): string {
   const root = mkdtempSync(join(tmpdir(), "yolo-quality-"));
   git(root, ["init"]);
   git(root, ["config", "user.email", "quality@yolo.test"]);
   git(root, ["config", "user.name", "quality"]);
-  for (const [rel, contents] of Object.entries(testCase.files || {})) {
+  for (const [rel, contents] of Object.entries(files)) {
     const abs = join(root, rel);
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, contents, "utf8");
@@ -51,8 +53,8 @@ function setupProject(testCase: CheckBatteryCase): string {
   return root;
 }
 
-function runCase(testCase: CheckBatteryCase): CaseResult {
-  const root = setupProject(testCase);
+function runCheckCase(testCase: CheckBatteryCase): CaseResult {
+  const root = setupProject(testCase.files);
   try {
     const prdPath = join(root, "prd.json");
     writeFileSync(prdPath, JSON.stringify(testCase.prd, null, 2), "utf8");
@@ -78,8 +80,27 @@ function runCase(testCase: CheckBatteryCase): CaseResult {
   }
 }
 
+function runAcceptanceCase(testCase: AcceptanceBatteryCase): CaseResult {
+  const root = setupProject(testCase.files);
+  try {
+    const input: Record<string, unknown> = {
+      prd: testCase.prd,
+      reviewReport: testCase.reviewReport,
+      projectRoot: root,
+      stateRoot: join(root, ".yolo"),
+    };
+    if (testCase.runReport !== undefined) input.runReport = testCase.runReport;
+    const report = buildAcceptanceReport(input) as { status?: string };
+    const status = String(report.status || "");
+    const correct = testCase.expect === "pass" ? status === "pass" : status === "blocked";
+    return { id: testCase.id, category: testCase.category, expect: testCase.expect, actualExit: status === "pass" ? 0 : 1, actualStatus: status, correct };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function computeQuality() {
-  const results = CHECK_BATTERY.map(runCase);
+  const results = [...CHECK_BATTERY.map(runCheckCase), ...ACCEPTANCE_BATTERY.map(runAcceptanceCase)];
   const total = results.length;
   const correct = results.filter((r) => r.correct).length;
   const q = total > 0 ? correct / total : 0;
@@ -98,7 +119,7 @@ function main() {
   const checkMode = process.argv.includes("--check");
   const { q, total, correct, results, byCategory } = computeQuality();
 
-  console.log(`[quality-score] check-battery: ${correct}/${total} correct`);
+  console.log(`[quality-score] battery: ${correct}/${total} correct`);
   for (const [cat, { total: t, correct: c }] of Object.entries(byCategory)) {
     console.log(`  ${cat}: ${c}/${t}`);
   }
