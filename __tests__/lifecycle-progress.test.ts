@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+import { buildLifecycleStageReport, writeLifecycleStageReport } from "../src/lifecycle/progress.js";
 
 function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-lifecycle-progress-"));
@@ -254,6 +254,67 @@ describe("lifecycle progress", () => {
 
       assert.equal(result.stage_status, "completed");
       assert.equal(existsSync(join(stateRoot, "lifecycle/delivery-report.json")), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("buildLifecycleStageReport tolerates null/non-object entries inside blockers/blocked_reasons/checks arrays", () => {
+    // A status='blocked' report whose `checks` array contains a null entry is
+    // well-formed JSON; without a guard, `report.checks.filter((c) => c.status
+    // === "blocked")` throws on `null.status`, taking down the whole stage
+    // write. Mirror the asConditions pattern: filter non-object entries out.
+    const stageReport = buildLifecycleStageReport("check", {
+      status: "blocked",
+      checks: [null, { status: "blocked" }],
+      blockers: [null, 42, "plain string blocker", { code: "X", message: "object blocker" }],
+      blocked_reasons: [null, { code: "R", message: "reason blocker" }],
+    }, { projectName: "probe", now: "2026-06-21T00:00:00Z" });
+
+    // No throw, blockers flattened to { code, message } objects.
+    assert.ok(Array.isArray(stageReport.blockers));
+    for (const blocker of stageReport.blockers) {
+      assert.equal(typeof blocker, "object");
+      assert.equal(typeof blocker.code, "string");
+      assert.equal(typeof blocker.message, "string");
+    }
+    const codes = stageReport.blockers.map((b) => b.code);
+    assert.ok(codes.includes("BLOCKER"), `plain string blocker preserved: ${JSON.stringify(codes)}`);
+    assert.ok(codes.includes("X"), `object blocker preserved: ${JSON.stringify(codes)}`);
+    assert.ok(codes.includes("R"), `blocked_reasons object preserved: ${JSON.stringify(codes)}`);
+
+    // The { status: "blocked" } check has no code, so it falls back to BLOCKER.
+    // After deduplication we should still see at least one BLOCKER entry from it.
+    const fromChecks = stageReport.blockers.filter((b) => b.code === "BLOCKER").length;
+    assert.ok(fromChecks >= 1, `blocking check surfaced: ${JSON.stringify(stageReport.blockers)}`);
+  });
+
+  test("writeLifecycleStageReport survives malformed-but-valid blockers/checks arrays end-to-end", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      // Regression: previously crashed with "Cannot read properties of null
+      // (reading 'status')" inside reportBlockers before the stage report was
+      // written, leaving the lifecycle stuck.
+      writeLifecycleStageReport("check", {
+        status: "blocked",
+        summary: "checks array contained a null entry",
+        checks: [null, { status: "blocked" }],
+        blockers: [null, 7, { code: "B", message: "blocker" }],
+      }, {
+        projectRoot: root,
+        stateRoot,
+        source: "unit",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+
+      const stageReport = JSON.parse(readFileSync(join(stateRoot, "lifecycle/check-report.json"), "utf8"));
+      assert.ok(Array.isArray(stageReport.blockers));
+      assert.ok(
+        stageReport.blockers.some((b) => b.code === "B"),
+        `real blocker preserved despite malformed siblings: ${JSON.stringify(stageReport.blockers)}`,
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
