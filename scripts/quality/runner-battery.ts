@@ -16,6 +16,8 @@ export type RunnerBatteryCase = {
   baseFiles: Record<string, string>;
   // Files written AFTER base (the "task's" edits). Omit to leave base untouched.
   editFiles?: Record<string, string>;
+  // Files removed AFTER base (the "task's" deletions). Omit to keep base files.
+  deleteFiles?: string[];
   // The task whose post_conditions are evaluated.
   task: unknown;
 };
@@ -97,6 +99,26 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
           severity: "FAIL",
           params: { files: ["src/a.ts", "src/b.ts"], text: "FLAG" },
         },
+      ],
+    },
+  },
+  {
+    id: "done-file-lines-max-on-missing-file",
+    expect: "done",
+    description:
+      "Target file was deleted as part of the task → file_lines_max is vacuously satisfied (no file = no lines to exceed). The runner used to mark the task as not done on a missing file even when the deletion was the intended outcome.",
+    baseFiles: { "src/legacy.ts": "export const old = 1;\n" },
+    deleteFiles: ["src/legacy.ts"],
+    task: {
+      id: "TASK-RUNNER-LINES-MISSING",
+      title: "Remove legacy file",
+      scope: {
+        targets: [{ file: "src/legacy.ts" }],
+        expected_zero_business_code: true,
+      },
+      post_conditions: [
+        { id: "POST-LINES", type: "file_lines_max", severity: "FAIL", params: { file: "src/legacy.ts", max: 150 } },
+        { id: "POST-FILE-GONE", type: "file_not_exists", severity: "FAIL", params: { file: "src/legacy.ts" } },
       ],
     },
   },
