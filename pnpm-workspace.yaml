@@ -1,0 +1,7 @@
+# pnpm 9+ reads package overrides here (package.json#pnpm.overrides is no longer honored).
+# Force esbuild to >=0.28.1 to clear GHSA-g7r4-m6w7-qqqr (arbitrary file read via path
+# traversal in the dev server, fixed in 0.28.1). tsx declares ~0.28.0, so 0.28.1 is in range.
+packages:
+  - .
+overrides:
+  esbuild: ^0.28.1
