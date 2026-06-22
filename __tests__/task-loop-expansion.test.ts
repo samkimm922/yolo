@@ -239,4 +239,72 @@ describe("task loop expansion", () => {
     assert.equal(ordered.preflight.blockers.some((blocker) => blocker.code === "TASK_DEPENDENCY_CYCLE"), true);
     assert.deepEqual(ordered.preflight.blockers[0].task_ids, ["A", "B", "C"]);
   });
+
+  test("skips null / non-object task entries instead of crashing during expansion", () => {
+    // PRD with null / string / number siblings (manual edits, migration residue,
+    // retry PRDs built from already-corrupt state). Same YB family as #104.
+    const { expanded, preflight } = expandTasksForMainLoop({
+      tasks: [
+        null,
+        "not-a-task",
+        42,
+        baseTask({ id: "VALID", depends_on: [] }),
+      ],
+      priorityOrder: { P0: 0, P1: 1, P2: 2, P3: 3 },
+    });
+
+    assert.equal(preflight.blocks_execution, false);
+    assert.deepEqual(expanded.map((task) => task.id), ["VALID"]);
+  });
+
+  test("skips null / non-object condition entries when merging overlapping tasks", () => {
+    // pre_conditions / post_conditions with null/non-object entries must not
+    // crash the merge — they are filtered out before reading .params / .type.
+    const merged = mergeOverlappingTasks([
+      baseTask({
+        id: "A",
+        pre_conditions: [
+          null,
+          { type: "code_contains", params: { text: "foo" } },
+          "not-a-condition",
+        ],
+        post_conditions: [
+          null,
+          { type: "code_not_contains", params: { text: "foo", line: 10 } },
+        ],
+      }),
+      baseTask({
+        id: "B",
+        pre_conditions: [{ type: "code_contains", params: { text: "foo bar" } }],
+        post_conditions: [{ type: "code_not_contains", params: { text: "foo", line: 20 } }],
+      }),
+    ]);
+
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].id, "A+B");
+    // Null / non-object entries are dropped during the dedupe merge.
+    assert.deepEqual(merged[0].pre_conditions, [
+      { type: "code_contains", params: { text: "foo" } },
+      { type: "code_contains", params: { text: "foo bar" } },
+    ]);
+    assert.deepEqual(merged[0].post_conditions, [
+      { type: "code_not_contains", params: { text: "foo" } },
+    ]);
+  });
+
+  test("single task with null condition entries is preserved unchanged", () => {
+    // No merge partner: the task still has null entries in its arrays, but the
+    // expansion must not crash reading them.
+    const { expanded } = expandTasksForMainLoop({
+      tasks: [
+        baseTask({
+          id: "SOLO",
+          pre_conditions: [null],
+          post_conditions: [null],
+        }),
+      ],
+    });
+
+    assert.deepEqual(expanded.map((task) => task.id), ["SOLO"]);
+  });
 });
