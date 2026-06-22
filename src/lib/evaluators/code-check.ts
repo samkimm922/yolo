@@ -109,11 +109,20 @@ export function evalCodeContains(params, taskScope, ROOT) {
   let totalMatches = 0;
   let filesChecked = 0;
   const missingFiles = [];
+  const exactZero = count.exact === 0;
 
   for (const file of targetFiles) {
     const guardResult = resolveWithinRoot(ROOT, file);
     if (!guardResult.ok || !existsSync(guardResult.path) || statSync(guardResult.path).isDirectory()) {
-      missingFiles.push(file);
+      // count.exact = 0 means "the marker must not appear". A missing file has
+      // zero occurrences, so the condition is vacuously satisfied; failing here
+      // produced false not_done on deletion tasks.
+      if (exactZero) {
+        filesChecked++;
+        details.push(`${file}: 文件不存在，按 0 处匹配 "${text.slice(0, 40)}"`);
+      } else {
+        missingFiles.push(file);
+      }
       continue;
     }
     const absPath = guardResult.path;
