@@ -14,6 +14,14 @@ import http from "http";
 import { readLifecycleDashboard } from "./lifecycle-dashboard.js";
 import { CSS as DASHBOARD_CSS, renderProgressDashboard } from "./dashboard-template.js";
 import { isSafePathComponent, resolveWithinRoot } from "../../lib/security/path-guard.js";
+import { readJsonlTail, readJsonlSince, readTextTail } from "../../lib/bounded-read.js";
+
+// Bounded tail-read ceilings for dashboard logs. These files grow with run
+// length; the caps keep per-request memory and event-loop time O(window)
+// rather than O(file size). 512 KiB covers thousands of log lines while
+// staying well clear of memory pressure under many concurrent SSE clients.
+const LOG_TAIL_MAX_BYTES = 512 * 1024;
+const LOG_TAIL_MAX_ENTRIES = 2000;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "../../..");
@@ -163,9 +171,11 @@ function findCurrentRunning() {
   const logFile = join(YOLO_ROOT, "state", "yolo-output.log");
   if (!existsSync(logFile)) return null;
   try {
-    const buf = readFileSync(logFile);
-    const tail = buf.length > 4096 ? buf.subarray(buf.length - 4096).toString("utf8") : buf.toString("utf8");
-    const lines = tail.split("\n");
+    // Bounded tail read: only the last 8 KiB is needed to find the most recent
+    // running-task marker. Avoids reading multi-megabyte logs on every poll.
+    const tail = readTextTail(logFile, 8192);
+    if (!tail) return null;
+    const lines = tail.text.split("\n");
 
     for (let i = lines.length - 1; i >= 0; i--) {
       const m = lines[i].match(/^\[([^\]]+)\]\s*\(\d+s\)\s*(\d+)\/(\d+)\s+(\S+)\s+>>\s*(\([^)]+\))?\s*(.*)/);
@@ -255,17 +265,17 @@ function readReviewLog() {
   const logFile = REVIEW_LOG_FILE;
   if (!existsSync(logFile)) return null;
   try {
-    const lines = readFileSync(logFile, "utf8")
-      .trim()
-      .split("\n")
-      .filter(Boolean);
-    const entries = lines
-      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-      .filter(Boolean);
+    // Bounded tail read: review-log.jsonl grows across review rounds; reading
+    // the whole file on every poll (1s) pins the event loop for long runs.
+    // currentRound / latestStatus / latestBugs derive from the newest entry
+    // and are exact. totalRounds / totalBugs summarize the visible tail and
+    // are exact whenever the log fits the window.
+    const tail = readJsonlTail(logFile, { maxBytes: LOG_TAIL_MAX_BYTES, maxEntries: LOG_TAIL_MAX_ENTRIES });
+    if (!tail) return null;
+    const entries = tail.entries;
     if (entries.length === 0) return null;
     const latest = entries[entries.length - 1];
-    const rounds = entries.filter((e) => e.type === "unified-review");
-    const errors = entries.filter((e) => e.type === "error");
+    const rounds = entries.filter((e) => e?.type === "unified-review");
     const totalBugs = rounds.reduce((sum, r) => sum + (r.bugs_found || 0), 0);
     return {
       currentRound: latest.round || 0,
@@ -297,21 +307,26 @@ function readTaskLogSummaries() {
     return files.map((f) => {
       const taskId = f.replace(".jsonl", "");
       const filePath = join(TASK_LOGS_DIR, f);
-      const content = readFileSync(filePath, "utf8");
-      const lines = content.trim().split("\n").filter(Boolean);
-      const entries = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-      const startEntry = entries.find((e) => e.type === "TASK_START");
-      const doneEntry = [...entries].reverse().find((e) => e.type === "DONE");
-      const hasError = entries.some((e) => e.type === "ERROR");
+      const stat = statSync(filePath);
+      const tail = readJsonlTail(filePath, { maxBytes: LOG_TAIL_MAX_BYTES, maxEntries: LOG_TAIL_MAX_ENTRIES });
+      const entries = tail ? tail.entries : [];
+      const startEntry = entries.find((e) => e?.type === "TASK_START");
+      const doneEntry = [...entries].reverse().find((e) => e?.type === "DONE");
+      const hasError = entries.some((e) => e?.type === "ERROR");
       const status = doneEntry
         ? (doneEntry.result === "completed" ? "done" : "failed")
         : hasError ? "failed" : "running";
+      // log_count historically reflected entries.length; when the log exceeds
+      // the tail window, surface the full file size instead so a truncated read
+      // does not underreport activity (callers treat this as a rough magnitude,
+      // never an exact line count to branch on).
+      const logCount = tail && !tail.meta.truncated ? entries.length : stat.size;
       return {
         id: taskId,
         title: startEntry?.title || taskId,
         status,
         duration_ms: doneEntry?.duration_ms || null,
-        log_count: entries.length,
+        log_count: logCount,
       };
     });
   } catch { return []; }
@@ -324,20 +339,16 @@ function readTaskLogEntries(taskId) {
   if (!resolved.ok || !resolved.path) return null;
   const filePath = resolved.path;
   if (!existsSync(filePath)) return null;
-  try {
-    const content = readFileSync(filePath, "utf8");
-    const lines = content.trim().split("\n").filter(Boolean);
-    return lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-  } catch { return null; }
+  // Bounded tail read: a single task log can grow large over a long-running
+  // task; the dashboard only renders the most recent entries.
+  const tail = readJsonlTail(filePath, { maxBytes: LOG_TAIL_MAX_BYTES, maxEntries: LOG_TAIL_MAX_ENTRIES });
+  return tail ? tail.entries : [];
 }
 
 function readReviewTaskLog() {
   if (!existsSync(REVIEW_LOG_FILE)) return null;
-  try {
-    const content = readFileSync(REVIEW_LOG_FILE, "utf8");
-    const lines = content.trim().split("\n").filter(Boolean);
-    return lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-  } catch { return null; }
+  const tail = readJsonlTail(REVIEW_LOG_FILE, { maxBytes: LOG_TAIL_MAX_BYTES, maxEntries: LOG_TAIL_MAX_ENTRIES });
+  return tail ? tail.entries : [];
 }
 
 function readLifecycleProgressData() {
@@ -409,15 +420,15 @@ function parseTaskLogId(pathname) {
   }
 }
 
-/** 读取 task-log 文件，返回指定偏移后的新增行 */
-function readTaskLogIncremental(filePath, lastPosition) {
-  try {
-    const content = readFileSync(filePath, "utf8");
-    const allLines = content.trim().split("\n").filter(Boolean);
-    const newLines = allLines.slice(lastPosition);
-    const entries = newLines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-    return { entries, totalLines: allLines.length };
-  } catch { return { entries: [], totalLines: lastPosition }; }
+/** 读取 task-log 文件，返回指定字节偏移之后的新增条目。
+ *  以字节偏移取代旧的「行号」实现，避免每次 watch 触发都 readFileSync 整个文件。 */
+function readTaskLogIncremental(filePath, lastOffset) {
+  const result = readJsonlSince(filePath, lastOffset, {
+    maxBytes: LOG_TAIL_MAX_BYTES,
+    maxEntries: LOG_TAIL_MAX_ENTRIES,
+  });
+  if (!result) return { entries: [], totalBytes: lastOffset };
+  return { entries: result.entries, totalBytes: result.nextOffset, rotated: result.rotated };
 }
 
 /** 处理新的 SSE 连接 */
@@ -429,10 +440,11 @@ function handleSSEConnection(req, res) {
     ...localCorsHeaders(req),
   });
 
-  // 每个连接维护自己的日志行偏移
+  // 每个连接维护自己的日志字节偏移（取代旧行号实现：每次 watch 触发
+  // 不再 readFileSync 整个文件，而是从 lastOffset 增量读取新增尾部）
   const clientState = Object.assign(Object(), {
     res,
-    taskLogPositions: new Map(), // taskId → 已发送行数
+    taskLogPositions: new Map(), // taskId → 已发送字节偏移
   });
 
   sseClients.add(clientState);
@@ -443,13 +455,11 @@ function handleSSEConnection(req, res) {
   const taskLogSummaries = readTaskLogSummaries();
   const lifecycle = progressData?.lifecycle || readLifecycleProgressData();
 
-  // 初始化每个 task-log 文件的行偏移
+  // 初始化每个 task-log 文件的字节偏移：以当前文件大小为起点，之后的
+  // watcher 事件只推送新增内容。用 statSync 取 size，不读文件内容。
   for (const summary of taskLogSummaries) {
-    const filePath = join(TASK_LOGS_DIR, `${summary.id}.jsonl`);
     try {
-      const content = readFileSync(filePath, "utf8");
-      const totalLines = content.trim().split("\n").filter(Boolean).length;
-      clientState.taskLogPositions.set(summary.id, totalLines);
+      clientState.taskLogPositions.set(summary.id, statSync(join(TASK_LOGS_DIR, `${summary.id}.jsonl`)).size);
     } catch { /* ignore */ }
   }
 
@@ -500,8 +510,8 @@ function startFileWatchers() {
         for (const client of sseClients) {
           const state = Object.assign(Object(), client);
           const lastPos = state.taskLogPositions.get(taskId) || 0;
-          const { entries, totalLines } = readTaskLogIncremental(filePath, lastPos);
-          state.taskLogPositions.set(taskId, totalLines);
+          const { entries, totalBytes } = readTaskLogIncremental(filePath, lastPos);
+          state.taskLogPositions.set(taskId, totalBytes);
 
           if (entries.length > 0) {
             try {
