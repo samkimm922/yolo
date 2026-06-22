@@ -24,6 +24,7 @@ import { CHECK_BATTERY, type CheckBatteryCase } from "./quality/check-battery.js
 import { ACCEPTANCE_BATTERY, type AcceptanceBatteryCase } from "./quality/acceptance-battery.js";
 import { ATOMICITY_BATTERY, type AtomicityBatteryCase } from "./quality/atomicity-battery.js";
 import { RUNNER_BATTERY, type RunnerBatteryCase } from "./quality/runner-battery.js";
+import { runProviderBattery } from "./quality/provider-battery.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(ROOT, "scripts", "quality", "quality-baseline.json");
@@ -133,12 +134,14 @@ function runRunnerCase(testCase: RunnerBatteryCase): CaseResult {
   }
 }
 
-function computeQuality() {
+async function computeQuality() {
+  const providerResults = await runProviderBattery();
   const results = [
     ...CHECK_BATTERY.map(runCheckCase),
     ...ACCEPTANCE_BATTERY.map(runAcceptanceCase),
     ...ATOMICITY_BATTERY.map(runAtomicityCase),
     ...RUNNER_BATTERY.map(runRunnerCase),
+    ...providerResults,
   ];
   const total = results.length;
   const correct = results.filter((r) => r.correct).length;
@@ -154,9 +157,9 @@ function computeQuality() {
   return { q, total, correct, results, byCategory };
 }
 
-function main() {
+async function main() {
   const checkMode = process.argv.includes("--check");
-  const { q, total, correct, results, byCategory } = computeQuality();
+  const { q, total, correct, results, byCategory } = await computeQuality();
 
   console.log(`[quality-score] battery: ${correct}/${total} correct`);
   for (const [cat, { total: t, correct: c }] of Object.entries(byCategory)) {
@@ -190,4 +193,4 @@ function main() {
   console.log(`[quality-score] wrote baseline ${BASELINE_PATH}`);
 }
 
-main();
+await main();
