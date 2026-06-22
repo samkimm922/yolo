@@ -56,4 +56,11 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   { id: "multi-register-and-verify-email", expect: "multi", text: "Allow users to register and verify their email." },
   { id: "multi-register-and-verify-account", expect: "multi", text: "A user can register and verify their account." },
   { id: "multi-register-and-verify-device-config", expect: "multi", text: "Allow the admin to register a device and verify its configuration." },
+
+  // ── Previously under-split: missing cancel/approve/reject in DELIVERABLE_VERB_TERMS ──
+  { id: "multi-create-and-cancel-orders", expect: "multi", text: "Allow users to create and cancel orders." },
+  { id: "multi-approve-or-reject", expect: "multi", text: "Managers can approve or reject requests." },
+  { id: "multi-subscribe-and-cancel", expect: "multi", text: "Allow users to subscribe and cancel their subscription." },
+  { id: "multi-suspend-or-reactivate", expect: "multi", text: "Moderators can suspend or reactivate accounts." },
+  { id: "multi-reserve-and-cancel", expect: "multi", text: "Customers can reserve a room and cancel the reservation." },
 ];
