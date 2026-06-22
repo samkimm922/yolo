@@ -307,4 +307,59 @@ describe("task loop expansion", () => {
 
     assert.deepEqual(expanded.map((task) => task.id), ["SOLO"]);
   });
+
+  test("non-array pre/post_conditions / acceptance_criteria / depends_on does not crash or corrupt merge", () => {
+    // Same family as #59/#63/#64 but on the merge path of mergeOverlappingTasks:
+    // a non-array truthy value (string/object/number) for any of these fields
+    // either crashed `.map` (pre_conditions) or silently iterated characters
+    // (post_conditions / acceptance_criteria / depends_on via for...of).
+    // PRD migration residue or hand-edited state can produce these shapes.
+    const merged = mergeOverlappingTasks([
+      baseTask({
+        id: "A",
+        pre_conditions: "must not crash",
+        post_conditions: "abcd",
+        acceptance_criteria: "should pass",
+        depends_on: "XYZ",
+      }),
+      baseTask({
+        id: "B",
+        pre_conditions: [{ type: "code_contains", params: { text: "foo" } }],
+        post_conditions: [{ type: "code_contains", params: { text: "baz" } }],
+        acceptance_criteria: ["c1"],
+        depends_on: ["D1"],
+      }),
+    ]);
+
+    // Both tasks survive; A's invalid fields are treated as empty, so it does
+    // not merge into B (no overlapping pre-text). No crash, no char pollution.
+    assert.ok(merged.length === 1 || merged.length === 2);
+
+    // Force an overlapping merge on A while keeping its other fields non-array.
+    // The merge must not let character iteration leak into merged output.
+    const mergedOverlap = mergeOverlappingTasks([
+      baseTask({
+        id: "A",
+        pre_conditions: [{ type: "code_contains", params: { text: "foo" } }],
+        post_conditions: "abcd",
+        acceptance_criteria: "should pass",
+        depends_on: "XYZ",
+      }),
+      baseTask({
+        id: "B",
+        pre_conditions: [{ type: "code_contains", params: { text: "foo bar" } }],
+        post_conditions: [{ type: "code_contains", params: { text: "baz" } }],
+        acceptance_criteria: ["c1"],
+        depends_on: ["D1"],
+      }),
+    ]);
+
+    assert.equal(mergedOverlap.length, 1);
+    assert.equal(mergedOverlap[0].id, "A+B");
+    // Invalid string fields yield empty — no char leaks into merged output.
+    assert.deepEqual(mergedOverlap[0].post_conditions,
+      [{ type: "code_contains", params: { text: "baz" } }]);
+    assert.deepEqual(mergedOverlap[0].acceptance_criteria, ["c1"]);
+    assert.deepEqual(mergedOverlap[0].depends_on, ["D1"]);
+  });
 });
