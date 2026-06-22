@@ -825,4 +825,30 @@ describe("evidence run report", () => {
     }
   });
 
+  test("buildRunReport tolerates malformed JSONL lines without crashing", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", { run_id: "RUN-BAD", prd: "data/prd.json", tasks: 1 }, { now: "2026-06-21T10:00:00.000Z" });
+
+      // Simulate a partial flush / SIGKILL mid-write: a truncated final line
+      // on each ledger. Before the fix, readJsonl threw SyntaxError on the
+      // truncated line and took down buildRunReport + every caller (runner
+      // finalize, acceptance, release). Now the malformed line is dropped
+      // and the remaining valid records still produce a coherent report.
+      const runsPath = join(stateDir, "runs.jsonl");
+      const eventsPath = join(stateDir, "events.jsonl");
+      writeFileSync(runsPath, `\n{"event":"run_end","run_id":"RUN-BAD","ts":"2026-06-21T10:00:0`, { flag: "a" });
+      writeFileSync(eventsPath, `\n${"n".repeat(200)} not json {{{`, { flag: "a" });
+
+      const report = buildRunReport({ stateDir, runId: "RUN-BAD" });
+
+      // Malformed trailing lines must not crash; valid run_start record still surfaces.
+      assert.equal(report.run_id, "RUN-BAD");
+      assert.equal(report.ledger.run_events, 1);
+      assert.equal(report.prd, "data/prd.json");
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
 });
