@@ -240,6 +240,38 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
     assert.equal(result.finding.code, "STORY_ATOMICITY_MULTI_STORY");
   });
 
+  test("English multi-word connectors now split multi-action stories", () => {
+    const cases = [
+      { text: "Admins can create users as well as assign roles.", verbs: "create-assign" },
+      { text: "The system should create the order as well as send the email.", verbs: "create-send" },
+      { text: "Generate the report as well as send it to the team.", verbs: "generate-send" },
+      { text: "The system should create the order along with sending the email.", verbs: "create-send" },
+      { text: "Users can filter tasks in addition to exporting them.", verbs: "filter-export" },
+      { text: "The workflow creates an invoice followed by sending a receipt.", verbs: "create-send" },
+    ];
+
+    for (const item of cases) {
+      const result = inspectStoryAtomicityText(item.text, { kind: "requirement", id: `REQ-${item.verbs.toUpperCase()}` });
+      assert.equal(result.status, "blocked", item.text);
+      assert.ok(result.finding, item.text);
+      assert.equal(result.finding!.code, "STORY_ATOMICITY_MULTI_STORY", item.text);
+    }
+  });
+
+  test("multi-word connectors do not falsely split single-action phrases", () => {
+    const cases = [
+      "Validate the form as well as the inputs.",
+      "Filter rows by date as well as time.",
+      "Log in with email as well as password.",
+    ];
+
+    for (const text of cases) {
+      const result = inspectStoryAtomicityText(text, { kind: "requirement", id: "REQ-NEG" });
+      assert.equal(result.status, "pass", text);
+      assert.equal(result.finding, null, text);
+    }
+  });
+
   // P2.18 — missing deliverable verbs (invite, track, publish, request, book, alert, cache, retry)
   test("previously missing deliverable verbs now split multi-action stories", () => {
     const cases = [

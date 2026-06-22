@@ -42,6 +42,14 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   { id: "multi-create-or-update", expect: "multi", text: "A user can create or update their profile." },
   { id: "multi-signup-or-login", expect: "multi", text: "Users can sign up or log in." },
 
+  // ── English multi-word connectors (previously mis-detected as atomic) ──
+  { id: "multi-create-users-as-well-as-assign-roles", expect: "multi", text: "Admins can create users as well as assign roles." },
+  { id: "multi-create-order-as-well-as-send-email", expect: "multi", text: "The system should create the order as well as send the email." },
+  { id: "multi-generate-report-as-well-as-send", expect: "multi", text: "Generate the report as well as send it to the team." },
+  { id: "multi-create-order-along-with-sending-email", expect: "multi", text: "The system should create the order along with sending the email." },
+  { id: "multi-filter-tasks-in-addition-to-exporting", expect: "multi", text: "Users can filter tasks in addition to exporting them." },
+  { id: "multi-create-invoice-followed-by-sending-receipt", expect: "multi", text: "The workflow creates an invoice followed by sending a receipt." },
+
   // ── Known capability gaps (currently MIS-detected as atomic → real headroom) ──
   // These slip through today: the demand phase hands the runner a too-broad task
   // instead of slicing it. The capability soak should teach the detector/splitter
