@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, test } from "node:test";
 import { readLifecycleDashboard } from "../src/runtime/progress/lifecycle-dashboard.js";
 import { startEmbeddedProgressServer } from "../src/runtime/progress/embedded-server.js";
-import { HTML, PROGRESS_SERVER_HOST, server } from "../src/runtime/progress/server.js";
+import { HTML, PROGRESS_SERVER_HOST, server, findCurrentRunning, TAIL_READ_SIZE } from "../src/runtime/progress/server.js";
 
 const roots = [];
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -278,4 +278,51 @@ test("progress server rejects traversing task log ids and still returns valid lo
     restoreSafe();
     restoreOutside();
   }
+});
+
+test("findCurrentRunning reads only tail of yolo-output.log (CWE-400)", () => {
+  const stateDir = join(REPO_ROOT, "state");
+  const logFile = join(stateDir, "yolo-output.log");
+  const restore = restoreFileLater(logFile);
+  try {
+    mkdirSync(stateDir, { recursive: true });
+
+    const padding = "x".repeat(TAIL_READ_SIZE + 1000);
+    const taskLine = "[14:30:00] (5s) 1/3 TASK-001 >> (P1) Do something";
+    writeFileSync(logFile, padding + "\n" + taskLine + "\n", "utf8");
+
+    const result = findCurrentRunning();
+
+    assert.notEqual(result, null);
+    assert.equal(result.id, "TASK-001");
+    assert.equal(result.description, "Do something");
+    assert.equal(result.priority, "(P1)");
+  } finally {
+    restore();
+  }
+});
+
+test("findCurrentRunning handles small yolo-output.log (< TAIL_READ_SIZE)", () => {
+  const stateDir = join(REPO_ROOT, "state");
+  const logFile = join(stateDir, "yolo-output.log");
+  const restore = restoreFileLater(logFile);
+  try {
+    mkdirSync(stateDir, { recursive: true });
+
+    const taskLine = "[10:00:00] (2s) 1/1 TASK-999 >> Do quick thing";
+    writeFileSync(logFile, taskLine + "\n", "utf8");
+
+    const result = findCurrentRunning();
+
+    assert.notEqual(result, null);
+    assert.equal(result.id, "TASK-999");
+    assert.equal(result.description, "Do quick thing");
+  } finally {
+    restore();
+  }
+});
+
+test("findCurrentRunning returns null when yolo-output.log does not exist", () => {
+  const result = findCurrentRunning();
+  assert.equal(result, null);
 });

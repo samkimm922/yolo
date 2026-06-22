@@ -6,7 +6,7 @@
  *
  * 用法: node scripts/yolo/src/runtime/progress/server.js [--port=3456] [--prd=audit-fix-xxx.json]
  */
-import { readFileSync, existsSync, readdirSync, statSync, watch, watchFile, unwatchFile } from "fs";
+import { readFileSync, existsSync, readdirSync, statSync, watch, watchFile, unwatchFile, openSync, readSync, closeSync } from "fs";
 import { join, dirname, basename, resolve } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
@@ -157,13 +157,25 @@ function readPrd() {
   }
 }
 
-// ── 仅从 yolo-output.log 最后几行找当前正在跑的任务 ──────────────
-function findCurrentRunning() {
+// ── 仅从 yolo-output.log 最后 TAIL_READ_SIZE 字节找当前正在跑的任务 ──
+// 使用低层文件操作只读尾部，防止大文件 OOM（CWE-400）
+export const TAIL_READ_SIZE = 4096;
+
+export function findCurrentRunning() {
   const logFile = join(YOLO_ROOT, "state", "yolo-output.log");
   if (!existsSync(logFile)) return null;
   try {
-    const buf = readFileSync(logFile);
-    const tail = buf.length > 4096 ? buf.subarray(buf.length - 4096).toString("utf8") : buf.toString("utf8");
+    const stat = statSync(logFile);
+    const readSize = Math.min(stat.size, TAIL_READ_SIZE);
+    const fd = openSync(logFile, "r");
+    let tail;
+    try {
+      const buf = Buffer.alloc(readSize);
+      readSync(fd, buf, 0, readSize, stat.size - readSize);
+      tail = buf.toString("utf8");
+    } finally {
+      closeSync(fd);
+    }
     const lines = tail.split("\n");
 
     for (let i = lines.length - 1; i >= 0; i--) {
