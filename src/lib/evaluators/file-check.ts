@@ -62,6 +62,14 @@ function splitGitFileList(output = "") {
   return String(output || "").split("\n").map((file) => file.trim()).filter(Boolean);
 }
 
+function countLines(content = "") {
+  // Match `wc -l`: count newline characters. A file whose last line lacks a
+  // trailing newline still counts that line. `String.prototype.split("\n")`
+  // adds an extra empty segment after a trailing newline, so we subtract it.
+  const text = String(content || "");
+  return text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
+}
+
 function changedFilesFromOptions(options = Object(), taskScope = Object()) {
   const candidates = [
     options.changedFiles,
@@ -177,7 +185,7 @@ export function evalFileLinesMax(params, taskScope, ROOT) {
         encoding: "utf8",
         stdio: ["pipe", "pipe", "pipe"],
       });
-      return content.split("\n").length;
+      return countLines(content);
     } catch {
       return null;
     }
@@ -204,7 +212,7 @@ export function evalFileLinesMax(params, taskScope, ROOT) {
     if (statSync(absPath).isDirectory()) continue;
     if (/\.md$/i.test(file)) continue;
     const content = readFileSync(absPath, "utf8");
-    const lines = content.split("\n").length;
+    const lines = countLines(content);
     if (lines > maxLines) {
       const baselineLines = readBaselineLines(file);
       const delta = Number.isFinite(baselineLines) ? lines - baselineLines : null;
@@ -251,7 +259,7 @@ export function evalNoFileOverMaxLines(params, _taskScope, ROOT) {
           scanDir(full);
         } else if (/.(ts|tsx)$/.test(entry.name)) {
           const content = readFileSync(full, "utf8");
-          const lines = content.split("\n").length;
+          const lines = countLines(content);
           if (lines > maxLines) violations.push({ file: full.replace(ROOT + "/", ""), lines });
         }
       }
