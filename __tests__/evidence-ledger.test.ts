@@ -270,6 +270,26 @@ describe("evidence ledger", () => {
     assert.ok(validateLedgerRecord(null).errors.includes("record must be a plain object"));
   });
 
+  test("validateEvidenceArtifact tolerates null/non-object artifacts instead of crashing", () => {
+    // Evidence artifact JSON on disk may parse as valid JSON but not be a plain
+    // object — `null` after a truncated flush, an array/scalar from a botched
+    // external edit, etc. validateEvidenceArtifact must return a structured
+    // failure instead of throwing TypeError on `artifact.schema_version`.
+    // Symmetric with the validateLedgerRecord null/non-object guard (#70/#82);
+    // createEvidenceLedger exposes both validators to SDK callers.
+    assert.equal(validateEvidenceArtifact(null).ok, false);
+    assert.equal(validateEvidenceArtifact(42).ok, false);
+    assert.equal(validateEvidenceArtifact("bad").ok, false);
+    assert.equal(validateEvidenceArtifact(["array"]).ok, false);
+    assert.ok(validateEvidenceArtifact(null).errors.includes("artifact must be a plain object"));
+
+    // A well-formed artifact still passes.
+    const artifact = buildEvidenceArtifact("gate.failure", { status: "fail" }, {
+      now: "2026-05-24T15:00:03.000Z", source: "test",
+    });
+    assert.equal(validateEvidenceArtifact(artifact).ok, true);
+  });
+
   test("readLedgerJsonl tolerates malformed/truncated JSONL lines", () => {
     const root = tempDir();
     try {

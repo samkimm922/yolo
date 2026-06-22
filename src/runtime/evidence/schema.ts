@@ -141,6 +141,16 @@ export function validateLedgerRecord(record = Object()) {
 
 export function validateEvidenceArtifact(artifact = Object()) {
   const errors = [];
+  // Evidence artifact JSON files on disk may parse as valid JSON but not be a
+  // plain object — `null` after a truncated flush, an array or scalar from an
+  // external edit, etc. Accessing `artifact.schema_version` below would then
+  // throw a TypeError instead of returning a structured rejection. Mirror the
+  // null/non-object guard that validateLedgerRecord already has (#70/#82);
+  // createEvidenceLedger exposes both validators symmetrically to SDK callers.
+  if (artifact === null || typeof artifact !== "object" || Array.isArray(artifact)) {
+    errors.push("artifact must be a plain object");
+    return { ok: false, errors };
+  }
   if (artifact.schema_version !== EVIDENCE_SCHEMA_VERSION) errors.push("schema_version must be 1.0");
   if (artifact.schema !== EVIDENCE_ARTIFACT_SCHEMA) errors.push(`schema must be ${EVIDENCE_ARTIFACT_SCHEMA}`);
   if (!requiredString(artifact.artifact_type)) errors.push("artifact_type is required");
