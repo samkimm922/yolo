@@ -108,10 +108,14 @@ export function evalCodeContains(params, taskScope, ROOT) {
   const details = [];
   let totalMatches = 0;
   let filesChecked = 0;
+  const missingFiles = [];
 
   for (const file of targetFiles) {
     const guardResult = resolveWithinRoot(ROOT, file);
-    if (!guardResult.ok || !existsSync(guardResult.path) || statSync(guardResult.path).isDirectory()) continue;
+    if (!guardResult.ok || !existsSync(guardResult.path) || statSync(guardResult.path).isDirectory()) {
+      missingFiles.push(file);
+      continue;
+    }
     const absPath = guardResult.path;
     filesChecked++;
 
@@ -176,6 +180,15 @@ export function evalCodeContains(params, taskScope, ROOT) {
     details.push(`${file}${lineInfo}: 找到 ${matches} 处匹配 "${text.slice(0, 40)}"`);
   }
 
+  if (missingFiles.length === targetFiles.length) {
+    return { passed: false, detail: `指定文件均不存在: ${targetFiles.join(", ")}` };
+  }
+  if (missingFiles.length > 0) {
+    return {
+      passed: false,
+      detail: `部分指定文件不存在，无法验证全部 code_contains: ${missingFiles.join(", ")}`,
+    };
+  }
   if (filesChecked === 0) {
     return { passed: false, detail: `指定文件均不存在: ${targetFiles.join(", ")}` };
   }

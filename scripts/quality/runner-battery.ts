@@ -79,4 +79,25 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
     editFiles: { "tests/src/feature.ts": "test('twins', () => 1);\n" },
     task: targetModifiedTask(),
   },
+  {
+    id: "notdone-code-contains-partial-missing",
+    expect: "not_done",
+    description:
+      "code_contains with multiple files, only one exists and contains the marker; the other is missing → must NOT pass (missing file cannot satisfy 'must contain').",
+    baseFiles: { "src/a.ts": "export const A = 1;\n" },
+    editFiles: { "src/a.ts": "export const A = 2;\nexport const FLAG = true;\n" },
+    task: {
+      id: "TASK-RUNNER-MULTI",
+      title: "Implement feature across two files",
+      scope: { targets: [{ file: "src/a.ts" }, { file: "src/b.ts" }] },
+      post_conditions: [
+        {
+          id: "POST-CONTAINS-MULTI",
+          type: "code_contains",
+          severity: "FAIL",
+          params: { files: ["src/a.ts", "src/b.ts"], text: "FLAG" },
+        },
+      ],
+    },
+  },
 ];
