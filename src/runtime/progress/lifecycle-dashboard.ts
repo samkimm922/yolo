@@ -76,6 +76,9 @@ function walk(dir) {
 function countStages(stages = []) {
   const counts = { ...EMPTY_STAGE_COUNTS };
   for (const stage of stages) {
+    // Tolerate null/non-object entries from corrupted status.json (same guard
+    // pattern as lifecycle/guard.ts:730-731 and lifecycle/progress.ts:197).
+    if (!stage || typeof stage !== "object" || Array.isArray(stage)) continue;
     const status = clean(stage.status).toLowerCase() || "pending";
     counts.total += 1;
     counts[status] = (counts[status] || 0) + 1;

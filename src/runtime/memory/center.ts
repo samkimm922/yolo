@@ -449,7 +449,9 @@ function lifecycleSummary(paths) {
     };
   }
 
-  const stages = Array.isArray(status.stages) ? status.stages : [];
+  const stages = Array.isArray(status.stages)
+    ? status.stages.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry))
+    : [];
   const current = stages.find((stage) => stage.id === status.current_stage) || null;
   const blocked = stages.filter((stage) => stage.status === "blocked");
   return {
