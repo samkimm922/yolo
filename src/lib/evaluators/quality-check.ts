@@ -4,6 +4,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { isWithin } from "../security/path-guard.js";
 import { execCommand } from "../security/safe-exec.js";
+import { safeRegExp, validateRegexPattern } from "../security/regex-guard.js";
 import { config } from "../config.js";
 
 function configuredCommand(params = Object(), key) {
@@ -89,7 +90,25 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
       const msg = p.message || p.description || "";
       let matched;
       if (isRegex) {
-        matched = new RegExp(pattern, flags).test(addedLines);
+        const validation = validateRegexPattern(pattern);
+        if (!validation.ok) {
+          return {
+            passed: false,
+            status: "fail",
+            detail: `禁用模式正则被拒绝: ${validation.reason}`,
+            type: "no_forbidden_patterns",
+          };
+        }
+        const re = safeRegExp(pattern, flags);
+        if (!re) {
+          return {
+            passed: false,
+            status: "fail",
+            detail: "禁用模式正则无法编译",
+            type: "no_forbidden_patterns",
+          };
+        }
+        matched = re.test(addedLines);
       } else {
         matched = addedLines.includes(pattern);
       }
@@ -226,9 +245,28 @@ export function evalTypeErrorsContain(params = Object(), _taskScope, ROOT, exec)
   const needle = params.text || params.pattern || params.code;
   if (!needle) return { passed: false, detail: "缺少 text/pattern/code 参数", type: "type_errors_contain" };
 
-  const matched = params.pattern
-    ? new RegExp(params.pattern, params.flags || "").test(output)
-    : output.includes(String(needle));
+  let matched;
+  if (params.pattern) {
+    const validation = validateRegexPattern(params.pattern);
+    if (!validation.ok) {
+      return {
+        passed: false,
+        detail: `类型检查正则被拒绝: ${validation.reason}`,
+        type: "type_errors_contain",
+      };
+    }
+    const re = safeRegExp(params.pattern, params.flags || "");
+    if (!re) {
+      return {
+        passed: false,
+        detail: "类型检查正则无法编译",
+        type: "type_errors_contain",
+      };
+    }
+    matched = re.test(output);
+  } else {
+    matched = output.includes(String(needle));
+  }
   return {
     passed: matched,
     detail: matched ? `类型检查输出包含 ${String(needle).slice(0, 80)}` : `类型检查输出不包含 ${String(needle).slice(0, 80)}`,
