@@ -79,7 +79,7 @@ const DELIVERABLE_VERB_TERMS = [
 
 // 仅用真正的并列连词，刻意排除 / , 、 这类标点——它们会出现在结构性 surface 标签里（如"测试/验证"），
 // 用作连词会把自动生成的元数据误判成独立动作。
-const GENERIC_STRICT_CONNECTOR = "(?:\\band\\b|\\bplus\\b|\\bthen\\b|\\+|并且|并|以及|同时|然后)";
+const GENERIC_STRICT_CONNECTOR = "(?:\\band\\b|\\bor\\b|\\bplus\\b|\\bthen\\b|\\+|并且|并|以及|同时|然后|或者|或)";
 const GENERIC_PAIR_DISTANCE = 40;
 
 const GENERIC_LAYER_UI_TERMS = ["button", "form", "page", "modal", "dialog", "screen", "component", "input", "按钮", "表单", "页面", "弹窗", "界面", "组件"];

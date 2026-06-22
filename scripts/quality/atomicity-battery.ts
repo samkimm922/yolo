@@ -36,6 +36,12 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   { id: "multi-build-push", expect: "multi", text: "Build the Docker image and push it to the registry." },
   { id: "multi-create-and-notify", expect: "multi", text: "Create the order and send a confirmation notification to the customer." },
 
+  // ── or 连接的多故事（修复前被误判为 atomic）──
+  { id: "multi-import-or-export", expect: "multi", text: "Users can import or export their data." },
+  { id: "multi-add-or-remove", expect: "multi", text: "Admins can add or remove users." },
+  { id: "multi-create-or-update", expect: "multi", text: "A user can create or update their profile." },
+  { id: "multi-signup-or-login", expect: "multi", text: "Users can sign up or log in." },
+
   // ── Known capability gaps (currently MIS-detected as atomic → real headroom) ──
   // These slip through today: the demand phase hands the runner a too-broad task
   // instead of slicing it. The capability soak should teach the detector/splitter
