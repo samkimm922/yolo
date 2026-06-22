@@ -530,4 +530,132 @@ describe("provider execution adapter", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  // Regression: provider stdout/stderr used to accumulate without bound (`out += chunk` /
+  // `err += chunk`). A runaway provider emitting megabytes of output would grow resident
+  // memory until the runner OOMed or stalled. The fix caps each stream at maxOutputBytes,
+  // records the dropped tail, and kills the child once killBytes is exceeded.
+  test("spawnProviderPrompt caps runaway provider stdout to a bounded size and reports truncation", async () => {
+    // Emit far more than the cap (50MB across many chunks) so the collector must stop
+    // appending and the hard-limit kill must fire. Chunks are small so the data handler runs
+    // many times — exercising the "already capped" accounting path, not a single write.
+    const CAP = 64 * 1024;
+    const KILL_MULT = 5;
+    const FLOOD_BYTES = 50 * 1024 * 1024;
+    const CHUNK = 256 * 1024;
+    let killSignal = null;
+    const floodSpawn = () => {
+      const stdin = new PassThrough();
+      const stdoutStream = new PassThrough();
+      const stderrStream = new PassThrough();
+      const child: EventEmitter & { pid: number; stdin: PassThrough; stdout: PassThrough; stderr: PassThrough; kill?: (sig: string) => boolean } = Object.assign(new EventEmitter(), {
+        pid: 4242,
+        stdin,
+        stdout: stdoutStream,
+        stderr: stderrStream,
+        kill: (sig) => { killSignal = sig; return true; },
+      });
+      // Write asynchronously so the data handler is invoked repeatedly across ticks; resolve
+      // via close once everything has drained.
+      (async () => {
+        let written = 0;
+        const buf = Buffer.alloc(CHUNK, 0x61); // 'a'
+        while (written < FLOOD_BYTES) {
+          if (!stdoutStream.write(buf)) await new Promise((r) => stdoutStream.once("drain", r));
+          written += CHUNK;
+        }
+        stdoutStream.end();
+        setImmediate(() => child.emit("close", 0, null));
+      })();
+      return child;
+    };
+
+    const run = await spawnProviderPrompt("prompt", spawnOptions({
+      maxOutputBytes: CAP,
+      outputKillMultiplier: KILL_MULT,
+      spawnImpl: floodSpawn,
+    }));
+
+    // Stable exit: the run resolved without throwing/OOMing.
+    assert.equal(typeof run.success, "boolean");
+    // Output-flood kill is surfaced as killed, not a clean completion.
+    assert.equal(run.status, "killed");
+    assert.equal(run.success, false);
+    // The child was killed once it crossed the hard ceiling.
+    assert.equal(killSignal, "SIGKILL");
+    // stdout was truncated to within the cap (captured prefix kept).
+    assert.ok(run.stdout.length <= CAP, `stdout ${run.stdout.length} must be <= cap ${CAP}`);
+    // Truncation metadata is present and accounts for dropped bytes.
+    assert.ok(run.output_limits, "output_limits metadata must be present on truncation");
+    assert.equal(run.output_limits.kill_triggered, true);
+    assert.equal(run.output_limits.reason, "OUTPUT_LIMIT_EXCEEDED");
+    assert.equal(run.output_limits.kill_bytes, CAP * KILL_MULT);
+    assert.equal(run.output_limits.stdout.truncated, true);
+    assert.equal(run.output_limits.stdout.captured_bytes, CAP);
+    assert.equal(run.output_limits.stdout.max_bytes, CAP);
+    // Every byte past the captured prefix is accounted for as dropped.
+    assert.ok(run.output_limits.stdout.dropped_bytes >= FLOOD_BYTES - CAP - CHUNK,
+      `dropped_bytes ${run.output_limits.stdout.dropped_bytes} should account for ~flood minus cap`);
+  });
+
+  test("spawnProviderPrompt leaves normal small output untouched (no truncation metadata)", async () => {
+    // The cap must not change the happy path: small outputs are captured verbatim and no
+    // output_limits metadata is attached.
+    const run = await spawnProviderPrompt("prompt", spawnOptions({
+      spawnImpl: fakeProviderSpawn({ stdout: "done\n", code: 0 }),
+    }));
+
+    assert.equal(run.success, true);
+    assert.equal(run.status, "completed");
+    assert.equal(run.stdout, "done");
+    assert.equal(run.output_limits, undefined);
+  });
+
+  test("spawnProviderPrompt caps runaway provider stderr independently and reports truncation", async () => {
+    // stderr has its own cap and kill accounting so a chatty stderr alone can trip the limit.
+    const CAP = 32 * 1024;
+    const KILL_MULT = 5;
+    const FLOOD_BYTES = 5 * 1024 * 1024;
+    const CHUNK = 128 * 1024;
+    let killSignal = null;
+    const stderrFloodSpawn = () => {
+      const stdin = new PassThrough();
+      const stdoutStream = new PassThrough();
+      const stderrStream = new PassThrough();
+      const child: EventEmitter & { pid: number; stdin: PassThrough; stdout: PassThrough; stderr: PassThrough; kill?: (sig: string) => boolean } = Object.assign(new EventEmitter(), {
+        pid: 4243,
+        stdin,
+        stdout: stdoutStream,
+        stderr: stderrStream,
+        kill: (sig) => { killSignal = sig; return true; },
+      });
+      (async () => {
+        let written = 0;
+        const buf = Buffer.alloc(CHUNK, 0x62); // 'b'
+        while (written < FLOOD_BYTES) {
+          if (!stderrStream.write(buf)) await new Promise((r) => stderrStream.once("drain", r));
+          written += CHUNK;
+        }
+        stderrStream.end();
+        setImmediate(() => child.emit("close", 0, null));
+      })();
+      return child;
+    };
+
+    const run = await spawnProviderPrompt("prompt", spawnOptions({
+      maxOutputBytes: CAP,
+      outputKillMultiplier: KILL_MULT,
+      spawnImpl: stderrFloodSpawn,
+    }));
+
+    assert.equal(run.status, "killed");
+    assert.equal(killSignal, "SIGKILL");
+    assert.equal(run.output_limits.kill_triggered, true);
+    assert.equal(run.output_limits.stderr.truncated, true);
+    assert.equal(run.output_limits.stderr.captured_bytes, CAP);
+    assert.ok(run.output_limits.stderr.dropped_bytes >= FLOOD_BYTES - CAP - CHUNK,
+      `stderr dropped_bytes ${run.output_limits.stderr.dropped_bytes} should account for ~flood minus cap`);
+    // stdout stayed clean (no stderr-induced stdout truncation).
+    assert.equal(run.output_limits.stdout.truncated, false);
+  });
 });
