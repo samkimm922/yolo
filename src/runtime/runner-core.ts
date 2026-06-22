@@ -426,7 +426,7 @@ const globalTimeoutController = createRunnerTimeoutController({
   writeProgressSnapshot,
   archiveCurrentRunFile,
   cleanupRuntimeStateFiles,
-  execSync,
+  execFileSync,
 });
 
 function _setGlobalTimeout(ms, options = Object()) {
@@ -451,7 +451,7 @@ if (isMain) {
     writeProgressSnapshot,
     archiveCurrentRunFile,
     cleanupRuntimeStateFiles,
-    execSync,
+    execFileSync,
   });
 }
 
@@ -594,7 +594,7 @@ export async function runCli(argv = process.argv) {
       writeProgressSnapshot,
       archiveCurrentRunFile,
       cleanupRuntimeStateFiles,
-      execSync,
+      execFileSync,
     });
   }
 }

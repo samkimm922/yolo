@@ -6,6 +6,7 @@ import {
   saveRunnerProgressSnapshot,
   writeRunEndOnCrashEvent,
 } from "./shutdown.js";
+import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
 
 export function registerRunnerProcessHandlers({
   processLike = process,
@@ -17,7 +18,7 @@ export function registerRunnerProcessHandlers({
   writeProgressSnapshot,
   archiveCurrentRunFile,
   cleanupRuntimeStateFiles,
-  execSync,
+  execFileSync = defaultExecFileSync,
 } = Object()) {
   const gracefulShutdown = createGracefulShutdownHandler({
     progress,
@@ -28,7 +29,7 @@ export function registerRunnerProcessHandlers({
     writeProgressSnapshot,
     archiveCurrentRunFile,
     cleanupRuntimeStateFiles,
-    execSync,
+    execFileSync,
   });
 
   processLike.on("SIGINT", () => gracefulShutdown("SIGINT"));
@@ -43,7 +44,7 @@ export function registerRunnerProcessHandlers({
       logRun,
       writeProgressSnapshot,
       cleanupRuntimeStateFiles,
-      execSync,
+      execFileSync,
       error: (_message, value) => console.error("[yolo-runner] 未捕获的 Promise rejection:", value),
     });
   });
@@ -57,7 +58,7 @@ export function registerRunnerProcessHandlers({
       logRun,
       writeProgressSnapshot,
       cleanupRuntimeStateFiles,
-      execSync,
+      execFileSync,
       error: (_message, value) => console.error("[yolo-runner] 未捕获的异常:", value),
     });
   });
@@ -74,7 +75,7 @@ export function handleRunCliFailure({
   writeProgressSnapshot,
   archiveCurrentRunFile,
   cleanupRuntimeStateFiles,
-  execSync,
+  execFileSync = defaultExecFileSync,
   logError = console.error,
   exit = process.exit,
 } = Object()) {
@@ -94,7 +95,7 @@ export function handleRunCliFailure({
     cleanupActiveGitSession({
       ...state.activeGitSession(),
       rootDir: state.rootDir(),
-      execSync,
+      execFileSync,
     });
     archiveCurrentRunFile({ currentRunFile: state.currentRunFile(), stateDir: state.stateDir(), interrupted: true });
     cleanupRuntimeStateFiles({ stateDir: state.stateDir() });
