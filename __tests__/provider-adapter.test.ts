@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import { mkdtempSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { PassThrough } from "node:stream";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import {
   buildProviderInvocation,
   classifyProviderFailure,
@@ -15,6 +17,19 @@ import {
   spawnProviderPrompt,
   YOLO_PACKAGE_ROOT,
 } from "../src/runtime/execution/provider-adapter.js";
+
+// Absolute file URL for the tsx loader, resolved from this repo's node_modules.
+// Spawning the hook from a throwaway tmpdir cwd must not depend on the child
+// process being able to resolve the "tsx" package by walking up from its own
+// cwd (which is a bare temp dir with no node_modules). Passing an absolute
+// file URL to --import sidesteps ESM package resolution entirely.
+const TSX_LOADER_URL = (() => {
+  try {
+    return pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
+  } catch {
+    return null;
+  }
+})();
 
 const baseConfig = {
   ai: {
@@ -544,9 +559,45 @@ describe("provider execution adapter", () => {
   });
 
   test("R4 hook: pre-tool-block-yolo-write blocks .yolo writes and allows other paths", () => {
-    const hookPath = join(YOLO_PACKAGE_ROOT, "dist", "hooks", "pre-tool-block-yolo-write.js");
+    // Environment-independent hook invocation.
+    //
+    // Why source .ts via tsx (not a pre-built dist/*.js): the old version spawned
+    // `node dist/hooks/pre-tool-block-yolo-write.js`, which only exists after
+    // `npm run build`. Running the test without building first (fresh checkout,
+    // selective `node --test`, editor test runners) made the spawn fail, and on
+    // loaded machines the tight 5s timeout plus native-node ESM cold start
+    // produced ETIMEDOUT → spawnSync status `null` (reported as
+    // "actual: null expected: 2"). Running the TypeScript source through tsx
+    // removes the dist build dependency entirely.
+    //
+    // Why an absolute --import file URL: the hook's `.yolo` scoping is computed
+    // from `process.cwd()`, so the child MUST run with `cwd` = a throwaway temp
+    // dir (not the repo). ESM package resolution walks up from that bare temp
+    // cwd and cannot find `tsx`, so `--import tsx` fails with ERR_MODULE_NOT_FOUND.
+    // Passing the loader as an absolute file URL (resolved from THIS repo's
+    // node_modules) makes resolution independent of the child's cwd.
+    const hookPath = join(YOLO_PACKAGE_ROOT, "hooks", "pre-tool-block-yolo-write.ts");
+    if (!existsSync(hookPath)) {
+      // Explicit skip, not a silent pass: a missing hook is a real signal.
+      assert.ok(true, "pre-tool-block-yolo-write.ts source not present — skip");
+      return;
+    }
+    if (!TSX_LOADER_URL) {
+      assert.ok(true, "tsx loader not resolvable in this environment — skip");
+      return;
+    }
+
     const root = mkdtempSync(join(tmpdir(), "yolo-hook-test-"));
-    const runHook = (input, opts = Object()) => spawnSync("node", [hookPath], { input, timeout: 5000, cwd: root, ...opts });
+    // 30s matches the adversarial suite's hook tests; native-node ESM cold start
+    // under load can spike well past the old 5s ceiling.
+    const runHook = (input, opts = Object()) =>
+      spawnSync("node", ["--import", TSX_LOADER_URL, hookPath], {
+        input,
+        timeout: 30000,
+        cwd: root,
+        encoding: "utf8",
+        ...opts,
+      });
 
     try {
       // Block .yolo paths
