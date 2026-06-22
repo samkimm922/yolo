@@ -210,6 +210,13 @@ function parseYAML(yaml) {
     } else if (rawValue.startsWith('[') && rawValue.endsWith(']')) {
       // 单行数组 [a, b, c]
       parent[key] = parseInlineArray(rawValue);
+    } else if (rawValue.startsWith('[')) {
+      // Malformed inline array (opening '[' without matching closing ']').
+      // Skip the assignment so deepMerge keeps the default value. Without
+      // this guard the value would fall through to parseScalar and silently
+      // become a string (e.g. "[src, test"), which later crashes consumers
+      // that expect an array (e.g. scanner.ts sourceRoots.some()).
+      console.warn(`[config] 跳过格式错误的内联数组 (缺少 ']'): ${key}: ${rawValue}`);
     } else {
       // 标量值
       parent[key] = parseScalar(rawValue);
