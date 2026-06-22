@@ -23,6 +23,29 @@ const TASK_LOGS_DIR = join(YOLO_ROOT, "state", "runtime", "task-logs");
 const REVIEW_LOG_FILE = join(TASK_LOGS_DIR, "_review.jsonl");
 const LOCAL_CORS_ORIGIN_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
+// Max size for task-log and review-log reads (50MB). Prevents OOM from oversized files.
+export let TASK_LOG_MAX_SIZE = 50 * 1024 * 1024;
+
+/** Override TASK_LOG_MAX_SIZE (for testing). */
+export function setTaskLogMaxSize(size) {
+  TASK_LOG_MAX_SIZE = size;
+}
+
+/** Read a file with a size limit. Returns null if file exceeds maxSize or can't be read. */
+export function safeReadFile(filePath, maxSize = TASK_LOG_MAX_SIZE) {
+  try {
+    const stat = statSync(filePath, { throwIfNoEntry: false });
+    if (!stat) return null;
+    if (stat.size > maxSize) {
+      console.warn(`[progress-server] safeReadFile: file too large (${stat.size} > ${maxSize} bytes): ${filePath}`);
+      return null;
+    }
+    return readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+
 export const PROGRESS_SERVER_HOST = "127.0.0.1";
 
 const PORT = parseInt(
@@ -254,10 +277,9 @@ function readReviewLog() {
   const logFile = REVIEW_LOG_FILE;
   if (!existsSync(logFile)) return null;
   try {
-    const lines = readFileSync(logFile, "utf8")
-      .trim()
-      .split("\n")
-      .filter(Boolean);
+    const content = safeReadFile(logFile);
+    if (!content) return null;
+    const lines = content.trim().split("\n").filter(Boolean);
     const entries = lines
       .map((l) => { try { return JSON.parse(l); } catch { return null; } })
       .filter(Boolean);
@@ -296,7 +318,8 @@ function readTaskLogSummaries() {
     return files.map((f) => {
       const taskId = f.replace(".jsonl", "");
       const filePath = join(TASK_LOGS_DIR, f);
-      const content = readFileSync(filePath, "utf8");
+      const content = safeReadFile(filePath);
+      if (!content) return null;
       const lines = content.trim().split("\n").filter(Boolean);
       const entries = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
       const startEntry = entries.find((e) => e.type === "TASK_START");
@@ -312,7 +335,7 @@ function readTaskLogSummaries() {
         duration_ms: doneEntry?.duration_ms || null,
         log_count: entries.length,
       };
-    });
+    }).filter(Boolean);
   } catch { return []; }
 }
 
@@ -324,7 +347,8 @@ function readTaskLogEntries(taskId) {
   const filePath = resolved.path;
   if (!existsSync(filePath)) return null;
   try {
-    const content = readFileSync(filePath, "utf8");
+    const content = safeReadFile(filePath);
+    if (!content) return null;
     const lines = content.trim().split("\n").filter(Boolean);
     return lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
   } catch { return null; }
@@ -333,7 +357,8 @@ function readTaskLogEntries(taskId) {
 function readReviewTaskLog() {
   if (!existsSync(REVIEW_LOG_FILE)) return null;
   try {
-    const content = readFileSync(REVIEW_LOG_FILE, "utf8");
+    const content = safeReadFile(REVIEW_LOG_FILE);
+    if (!content) return null;
     const lines = content.trim().split("\n").filter(Boolean);
     return lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
   } catch { return null; }
@@ -411,7 +436,8 @@ function parseTaskLogId(pathname) {
 /** 读取 task-log 文件，返回指定偏移后的新增行 */
 function readTaskLogIncremental(filePath, lastPosition) {
   try {
-    const content = readFileSync(filePath, "utf8");
+    const content = safeReadFile(filePath);
+    if (!content) return { entries: [], totalLines: lastPosition };
     const allLines = content.trim().split("\n").filter(Boolean);
     const newLines = allLines.slice(lastPosition);
     const entries = newLines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
@@ -446,7 +472,8 @@ function handleSSEConnection(req, res) {
   for (const summary of taskLogSummaries) {
     const filePath = join(TASK_LOGS_DIR, `${summary.id}.jsonl`);
     try {
-      const content = readFileSync(filePath, "utf8");
+      const content = safeReadFile(filePath);
+      if (!content) continue;
       const totalLines = content.trim().split("\n").filter(Boolean).length;
       clientState.taskLogPositions.set(summary.id, totalLines);
     } catch { /* ignore */ }

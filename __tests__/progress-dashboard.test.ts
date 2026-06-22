@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, test } from "node:test";
 import { readLifecycleDashboard } from "../src/runtime/progress/lifecycle-dashboard.js";
 import { startEmbeddedProgressServer } from "../src/runtime/progress/embedded-server.js";
-import { HTML, PROGRESS_SERVER_HOST, server } from "../src/runtime/progress/server.js";
+import { HTML, PROGRESS_SERVER_HOST, server, safeReadFile, setTaskLogMaxSize, TASK_LOG_MAX_SIZE } from "../src/runtime/progress/server.js";
 
 const roots = [];
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -277,5 +277,51 @@ test("progress server rejects traversing task log ids and still returns valid lo
     await new Promise((resolve) => server.close(resolve));
     restoreSafe();
     restoreOutside();
+  }
+});
+
+test("safeReadFile rejects files exceeding size limit", () => {
+  const tmp = join(tmpdir(), `safe-read-file-${process.pid}-${Date.now()}`);
+  writeFileSync(tmp, "x".repeat(1000), "utf8");
+  try {
+    const result = safeReadFile(tmp, 100);
+    assert.equal(result, null);
+
+    const content = safeReadFile(tmp, 10000);
+    assert.equal(content?.length, 1000);
+
+    const missing = safeReadFile("/nonexistent/path", 100);
+    assert.equal(missing, null);
+  } finally {
+    rmSync(tmp, { force: true });
+  }
+});
+
+test("progress server rejects oversized task log file reads (CWE-400)", async () => {
+  const nonce = `oversize-${process.pid}-${Date.now()}`;
+  const stateDir = join(REPO_ROOT, "state");
+  const taskLogsDir = join(stateDir, "runtime", "task-logs");
+  const taskLogFile = join(taskLogsDir, `${nonce}.jsonl`);
+  const restoreFile = restoreFileLater(taskLogFile);
+
+  mkdirSync(taskLogsDir, { recursive: true });
+  writeFileSync(taskLogFile, JSON.stringify({ type: "TASK_START", title: "oversize" }) + "\n", "utf8");
+
+  const origSize = TASK_LOG_MAX_SIZE;
+  setTaskLogMaxSize(1);
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const addr = server.address();
+    const port = typeof addr === "string" ? 0 : (addr as { port: number }).port;
+    const response = await fetch(`http://127.0.0.1:${port}/api/task-logs/${encodeURIComponent(nonce)}`);
+    assert.equal(response.status, 404);
+
+    const alive = await fetch(`http://127.0.0.1:${port}/lifecycle.json`);
+    assert.equal(alive.status, 200);
+  } finally {
+    setTaskLogMaxSize(origSize);
+    await new Promise((resolve) => server.close(resolve));
+    restoreFile();
   }
 });
