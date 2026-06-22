@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { safeExecSync as execSync } from "../../lib/security/safe-exec.js";
 import { classifyTaskExecution } from "./router.js";
 import { isBusinessFile } from "../execution/change-set.js";
 import { handleGatePassFlow } from "../execution/gate-pass-flow.js";
