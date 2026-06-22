@@ -3,6 +3,10 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 
 const EMPTY_STAGE_COUNTS = { total: 0, pending: 0, active: 0, completed: 0, blocked: 0, warning: 0 };
 
+// P10.S5: bound per-file read to prevent OOM from oversized JSONL files
+const MAX_EVENT_FILE_SIZE = 50 * 1024 * 1024;
+let _testEventsMaxSizeOverride;
+
 function clean(value) {
   return String(value ?? "").trim();
 }
@@ -151,8 +155,13 @@ function readReports(root) {
 }
 
 function readEvents(root, limit) {
+  const effectiveMax = _testEventsMaxSizeOverride ?? MAX_EVENT_FILE_SIZE;
   return walk(join(root, "state"))
     .filter((path) => path.endsWith(".jsonl"))
+    .filter((path) => {
+      // P10.S5: bound per-file read to prevent OOM from oversized JSONL files
+      try { return statSync(path).size <= effectiveMax; } catch { return false; }
+    })
     .flatMap((path) =>
       readFileSync(path, "utf8")
         .split("\n")
@@ -181,4 +190,17 @@ export function readLifecycleDashboard(options = Object()) {
   const blockerCount = reports.reduce((sum, report) => sum + report.blockers.length, 0);
   const evidenceCount = reports.reduce((sum, report) => sum + report.evidence.length, 0);
   return { exists: true, state_root: root, status_path: normalizePath(root, statusPath), current_stage: clean(status.current_stage) || null, stage_counts: stageCounts, blocker_count: Math.max(blockerCount, stageCounts.blocked || 0), evidence_count: evidenceCount, latest_reports: latestReports, recent_events: readEvents(root, eventLimit), next_action: blockerCount || stageCounts.blocked ? "Resolve blocked lifecycle items." : "Continue lifecycle work." };
+}
+
+// ── Test helpers ──────────────────────────────────────────────────────────────
+// Exposed as setters (not export let) because ESM imported `let` bindings are
+// read-only. Used by __tests__/lifecycle-dashboard-oom.test.ts to override the
+// per-file size limit without creating 50 MB fixtures.
+
+export function setEventsMaxSizeOverride(bytes) {
+  _testEventsMaxSizeOverride = bytes;
+}
+
+export function resetEventsMaxSizeOverride() {
+  _testEventsMaxSizeOverride = undefined;
 }
