@@ -175,4 +175,28 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
       ],
     },
   },
+  {
+    id: "done-lint-warning-only",
+    expect: "done",
+    description:
+      "eslint exits 0 with only warnings (severity 1) → no_new_lint_errors must pass. Previously the runner counted warnings as new lint errors and reported a false not_done.",
+    baseFiles: { "src/feature.ts": "export const x = 1;\n" },
+    editFiles: { "src/feature.ts": "export const x = 1;\n// harmless edit\n" },
+    task: {
+      id: "TASK-RUNNER-LINT-WARN",
+      title: "Edit feature without adding lint errors",
+      scope: { targets: [{ file: "src/feature.ts" }], expected_zero_business_code: true },
+      post_conditions: [
+        {
+          id: "POST-LINT-WARN",
+          type: "no_new_lint_errors",
+          severity: "FAIL",
+          params: {
+            command:
+              'node -e \'console.log(JSON.stringify([{filePath:"src/feature.ts",messages:[{ruleId:"no-console",severity:1,line:1}]}]))\'',
+          },
+        },
+      ],
+    },
+  },
 ];

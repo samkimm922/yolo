@@ -34,7 +34,7 @@ const INVENTORY = [
   ["src/eval/benchmark.ts", { WARN: 0, warning: 7, "best-effort": 0, skip: 0 }],
   ["src/lib/auto-fix.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 1 }],
   ["src/lib/evaluators/file-check.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
-  ["src/lib/evaluators/quality-check.ts", { WARN: 1, warning: 1, "best-effort": 0, skip: 0 }],
+  ["src/lib/evaluators/quality-check.ts", { WARN: 1, warning: 3, "best-effort": 0, skip: 0 }],
   ["src/lifecycle/guard.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 0 }],
   ["src/lifecycle/progress.ts", { WARN: 0, warning: 2, "best-effort": 0, skip: 1 }],
   ["src/lifecycle/schema.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 0 }],
