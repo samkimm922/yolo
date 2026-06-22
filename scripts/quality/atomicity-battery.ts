@@ -74,4 +74,10 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   { id: "multi-track-and-alert", expect: "multi", text: "The system tracks shipments and alerts customers of delays." },
   { id: "multi-request-and-approve", expect: "multi", text: "Users can request time off and managers approve it." },
   { id: "multi-book-and-cancel", expect: "multi", text: "Customers can book a room and cancel the reservation." },
+  // ── Previously under-split: missing share/review/compose/decrypt/receive in DELIVERABLE_VERB_TERMS ──
+  { id: "multi-upload-and-share", expect: "multi", text: "As a user, I want to upload a document and share it with my team." },
+  { id: "multi-review-and-publish", expect: "multi", text: "The admin can review submissions and publish approved articles." },
+  { id: "multi-compose-and-send", expect: "multi", text: "The user can compose a message and send it to multiple recipients." },
+  { id: "multi-encrypt-and-decrypt", expect: "multi", text: "The system must encrypt data at rest and decrypt it on access." },
+  { id: "multi-book-and-receive", expect: "multi", text: "Customers can book tickets and receive digital receipts." },
 ];

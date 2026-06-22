@@ -88,10 +88,16 @@ const DELIVERABLE_VERB_TERMS = [
   "alert", "alerts", "alerted", "alerting",
   "cache", "caches", "cached", "caching",
   "retry", "retries", "retried", "retrying",
+  "share", "shares", "shared", "sharing",
+  "review", "reviews", "reviewed", "reviewing",
+  "compose", "composes", "composed", "composing",
+  "decrypt", "decrypts", "decrypted", "decrypting",
+  "receive", "receives", "received", "receiving",
   "新增", "新建", "创建", "添加", "增加", "删除", "移除", "修改", "编辑", "重命名",
   "发送", "上传", "下载", "部署", "校验", "鉴权", "实现",
   "构建", "配置", "安装", "连接", "迁移", "同步", "导出", "导入", "合并", "运行", "通知", "集成", "生成", "插入",
   "取消", "审批", "批准", "驳回", "拒绝", "暂停", "冻结", "激活", "订阅", "退订",
+  "分享", "审核", "解密", "接收",
 ];
 
 // 仅用真正的并列连词，刻意排除 / , 、 这类标点——它们会出现在结构性 surface 标签里（如"测试/验证"），
