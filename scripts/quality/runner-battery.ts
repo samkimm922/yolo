@@ -138,4 +138,25 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
       },
     ]),
   },
+  {
+    id: "done-code-contains-exact-zero-missing-file",
+    expect: "done",
+    description:
+      "code_contains with count.exact = 0 passes when the target file was deleted; a missing file has zero occurrences, so the runner must not report a false not_done.",
+    baseFiles: { [TARGET]: "export const v = 1;\nexport const LEGACY = true;\n" },
+    deleteFiles: [TARGET],
+    task: {
+      id: "TASK-RUNNER-EXACT-ZERO-MISSING",
+      title: "Remove legacy marker",
+      scope: { targets: [{ file: TARGET }] },
+      post_conditions: [
+        {
+          id: "POST-EXACT-ZERO-MISSING",
+          type: "code_contains",
+          severity: "FAIL",
+          params: { file: TARGET, text: "LEGACY", count: { exact: 0 } },
+        },
+      ],
+    },
+  },
 ];
