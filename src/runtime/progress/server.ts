@@ -350,6 +350,14 @@ function readLifecycleProgressData() {
 
 // ── SSE 连接管理 ──────────────────────────────────────────────────
 const sseClients = new Set<any>();
+
+/** 最大 SSE 并发连接数（CWE-770 缓解） */
+export const MAX_SSE_CLIENTS = 128;
+/** 测试用 override，设为较小值以触发连接限制 */
+export let _testSseMaxOverride: number | undefined;
+export function _setSseMaxOverrideForTest(v: number | undefined) { _testSseMaxOverride = v; }
+export function getSseClientCount(): number { return sseClients.size; }
+export function resetSseClientsForTest() { sseClients.clear(); }
 let taskLogsWatcher = null;
 let currentRunWatcher = null;
 let reviewLogWatcher = null;
@@ -421,6 +429,12 @@ function readTaskLogIncremental(filePath, lastPosition) {
 
 /** 处理新的 SSE 连接 */
 function handleSSEConnection(req, res) {
+  const sseLimit = _testSseMaxOverride ?? MAX_SSE_CLIENTS;
+  if (sseClients.size >= sseLimit) {
+    res.writeHead(503, { "Content-Type": "application/json", ...localCorsHeaders(req) });
+    res.end(JSON.stringify({ error: "SSE connection limit reached", max: sseLimit }));
+    return;
+  }
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
