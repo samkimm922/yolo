@@ -2,6 +2,7 @@
 
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { resolveWithinRoot } from "../security/path-guard.js";
+import { safeRegExp, validateRegexPattern } from "../security/regex-guard.js";
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -142,7 +143,14 @@ export function evalCodeContains(params, taskScope, ROOT) {
     let matches;
 
     if (isRegex) {
-      const re = new RegExp(text, "g");
+      const validation = validateRegexPattern(text);
+      if (!validation.ok) {
+        return { passed: false, detail: `不安全的正则表达式: ${validation.reason}`, found: 0 };
+      }
+      const re = safeRegExp(text, "g");
+      if (!re) {
+        return { passed: false, detail: `无法编译正则表达式: ${text.slice(0, 40)}`, found: 0 };
+      }
       matches = (searchContent.match(re) || []).length;
     } else {
       const normalizeWS = (s) => s.replace(/\s+/g, ' ');
@@ -215,7 +223,12 @@ export function evalFunctionContainsText(params, _taskScope, ROOT) {
   if (body === null) return { passed: false, detail: `${file} 未找到函数 ${functionName}` };
 
   const matched = params.is_regex || params.pattern
-    ? new RegExp(text, "m").test(body)
+    ? (() => {
+        const validation = validateRegexPattern(text);
+        if (!validation.ok) return false;
+        const re = safeRegExp(text, "m");
+        return re ? re.test(body) : false;
+      })()
     : body.includes(text);
   return {
     passed: matched,
