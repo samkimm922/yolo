@@ -7,7 +7,7 @@ import { appendFileSync, mkdirSync, readdirSync, unlinkSync, existsSync } from "
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isSafePathComponent } from "../../lib/security/path-guard.js";
-import { redact } from "../../lib/security/redact.js";
+import { redact, redactDeep } from "../../lib/security/redact.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "../../..");
@@ -71,7 +71,8 @@ export function writeTaskLog(taskId, entry) {
       return;
     }
     const runContext = taskLogRunId ? { run_id: taskLogRunId } : {};
-    const line = JSON.stringify({ ts: isoLocal(), ...entry, task_id: taskId, ...runContext }) + "\n";
+    const safeEntry = redactDeep(entry || Object());
+    const line = JSON.stringify({ ts: isoLocal(), ...safeEntry, task_id: taskId, ...runContext }) + "\n";
     appendFileSync(join(taskLogsDir, `${taskId}.jsonl`), line, "utf8");
   } catch (e) {
     console.error('[task-logger] writeTaskLog 失败:', e.message);
