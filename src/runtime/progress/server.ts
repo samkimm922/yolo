@@ -9,13 +9,13 @@
 import { readFileSync, existsSync, readdirSync, statSync, watch, watchFile, unwatchFile } from "fs";
 import { join, dirname, basename, resolve } from "path";
 import { fileURLToPath } from "url";
-import { execSync } from "child_process";
 import http from "http";
 import { readLifecycleDashboard } from "./lifecycle-dashboard.js";
 import { CSS as DASHBOARD_CSS, renderProgressDashboard } from "./dashboard-template.js";
 import { isSafePathComponent, resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { readJsonlTail, readJsonlSince, readTextTail } from "../../lib/bounded-read.js";
 import { redactDeep } from "../../lib/security/redact.js";
+import { safeExecSync } from "../../lib/security/safe-exec.js";
 
 // Bounded tail-read ceilings for dashboard logs. These files grow with run
 // length; the caps keep per-request memory and event-loop time O(window)
@@ -236,9 +236,9 @@ function isRunnerActive() {
       }
     } catch {}
   }
-  // 回退到 pgrep
+  // 回退到 pgrep (P12.I1: safeExecSync routes through parseCommandToArgv + spawnSync, no shell)
   try {
-    const out = execSync('pgrep -f "runner.js" || true', { encoding: "utf8", timeout: 3000 });
+    const out = safeExecSync('pgrep -f "runner.js"', { timeout: 3000 });
     return out.trim().length > 0;
   } catch { return false; }
 }
