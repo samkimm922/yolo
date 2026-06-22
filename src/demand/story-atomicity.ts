@@ -62,7 +62,7 @@ function uniqueSignatures(signatures) {
 // 可独立交付的副作用/变更动词；刻意排除 read/return/show/display/get/fetch/render 等支撑动作。
 // 结构化命令清单由枚举形态识别，不依赖这里枚举具体业务命令名。
 const DELIVERABLE_VERB_TERMS = [
-  "create", "creates", "add", "adds", "delete", "deletes", "remove", "removes",
+  "create", "creates", "add", "adds", "assign", "assigns", "delete", "deletes", "remove", "removes",
   "update", "updates", "edit", "edits", "modify", "modifies", "rename", "renames",
   "send", "sends", "upload", "uploads", "download", "downloads",
   "deploy", "deploys", "validate", "validates", "authenticate", "authorize",
