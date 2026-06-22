@@ -5,7 +5,21 @@ import {
   parseStoryAtomicityResponse,
   combineStoryCounts,
   llmInspectStories,
+  augmentStoryAtomicityWithLlm,
 } from "../src/demand/llm-atomicity.js";
+
+// A minimal heuristic report: one story the heuristic judged atomic (pass).
+function heuristicPassReport() {
+  return {
+    status: "pass",
+    inspected: [{ kind: "requirement", id: "REQ-1", status: "pass", story_count: 1 }],
+    findings: [],
+    finding_count: 0,
+    blockers: [],
+    warnings: [],
+  };
+}
+const multiVerdict = '[{"index":1,"story_count":2,"slices":["manage roles","manage permissions"]}]';
 
 describe("llm-atomicity", () => {
   test("combineStoryCounts takes the stricter (max) — LLM can only add splits", () => {
@@ -49,6 +63,54 @@ describe("llm-atomicity", () => {
     assert.equal(await llmInspectStories(["x"], { spawnProviderPrompt: async () => ({ success: false }) }), null);
     assert.equal(await llmInspectStories(["x"], { spawnProviderPrompt: async () => ({ success: true, stdout: "nope" }) }), null);
     assert.equal(await llmInspectStories(["x"], { spawnProviderPrompt: async () => { throw new Error("boom"); } }), null);
+  });
+
+  const items = [{ kind: "requirement", id: "REQ-1", text: "Manage user roles and permissions." }];
+
+  test("augment is a no-op when disabled (default off) — heuristic report returned unchanged", async () => {
+    const report = heuristicPassReport();
+    const stub = async () => ({ success: true, stdout: multiVerdict });
+    const out = await augmentStoryAtomicityWithLlm(report, items, { spawnProviderPrompt: stub }); // enabled omitted
+    assert.equal(out, report);
+    assert.equal(out.status, "pass");
+  });
+
+  test("augment fails open: enabled but provider returns garbage → report unchanged", async () => {
+    const report = heuristicPassReport();
+    const stub = async () => ({ success: true, stdout: "no json" });
+    const out = await augmentStoryAtomicityWithLlm(report, items, { enabled: true, spawnProviderPrompt: stub });
+    assert.equal(out.status, "pass");
+    assert.equal(out.blockers.length, 0);
+  });
+
+  test("augment upgrades a heuristic-pass item to blocked when the LLM catches a multi-story", async () => {
+    const report = heuristicPassReport();
+    const stub = async () => ({ success: true, stdout: multiVerdict });
+    const out = await augmentStoryAtomicityWithLlm(report, items, { enabled: true, spawnProviderPrompt: stub });
+    assert.equal(out.status, "blocked");
+    assert.equal(out.blockers.length, 1);
+    assert.equal((out.blockers[0] as { code?: string }).code, "STORY_ATOMICITY_MULTI_STORY_LLM");
+    assert.equal(out.inspected[0].status, "blocked");
+    assert.equal(out.inspected[0].story_count, 2);
+    assert.equal(out.llm_upgraded_count, 1);
+    // never mutates the input report (immutability)
+    assert.equal(report.status, "pass");
+    assert.equal(report.blockers.length, 0);
+  });
+
+  test("augment never downgrades or duplicates an already-blocked heuristic finding", async () => {
+    const blocked = {
+      status: "blocked",
+      inspected: [{ kind: "requirement", id: "REQ-1", status: "blocked", story_count: 2 }],
+      findings: [{ code: "STORY_ATOMICITY_MULTI_STORY" }],
+      finding_count: 1,
+      blockers: [{ code: "STORY_ATOMICITY_MULTI_STORY" }],
+      warnings: [],
+    };
+    const stub = async () => ({ success: true, stdout: multiVerdict });
+    const out = await augmentStoryAtomicityWithLlm(blocked, items, { enabled: true, spawnProviderPrompt: stub });
+    assert.equal(out, blocked); // unchanged — no upgrade needed
+    assert.equal(out.blockers.length, 1);
   });
 
   test("buildStoryAtomicityPrompt numbers the stories and asks for a JSON array", () => {
