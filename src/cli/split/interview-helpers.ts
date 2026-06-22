@@ -1,0 +1,235 @@
+// Demand-interview state helpers for the CLI interview flow.
+// Extracted from src/cli/yolo.ts as a pure structural refactor (no behavior change).
+
+import { existsSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import {
+  answerDemandInterviewQuestion,
+  createDemandInterviewSession,
+  inspectDemandInterviewCoverage,
+  selectDemandInterviewNextQuestion,
+} from "../../demand/interview.js";
+import {
+  appendJsonlFile,
+  cleanCliText,
+  cloneJson,
+  readJsonFile,
+  writeJsonFile,
+} from "./shared.js";
+
+export function slugForPath(value, fallback = "interview") {
+  const slug = cleanCliText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 56);
+  return slug || fallback;
+}
+
+export function demandIdFromInterview(id) {
+  const cleanId = cleanCliText(id);
+  if (/^DEMAND-/i.test(cleanId)) return cleanId;
+  return `DEMAND-${slugForPath(cleanId, "interview").toUpperCase()}`;
+}
+
+export function defaultInterviewPath(stateRoot, id) {
+  return join(stateRoot, "demand-interviews", id, "interview.json");
+}
+
+export function resolveInterviewPath(pathOrDir, cwd = process.cwd()) {
+  const resolved = resolve(cwd, cleanCliText(pathOrDir));
+  if (existsSync(resolved)) {
+    try {
+      if (statSync(resolved).isDirectory()) return join(resolved, "interview.json");
+    } catch {
+      return join(resolved, "interview.json");
+    }
+  }
+  return resolved.endsWith(".json") ? resolved : join(resolved, "interview.json");
+}
+
+export function decorateInterviewState(state = Object()) {
+  const questions = Array.isArray(state.questions) ? state.questions : [];
+  const coverage = inspectDemandInterviewCoverage({ ...state, questions });
+  const next = selectDemandInterviewNextQuestion({ ...state, questions }, coverage);
+  return {
+    ...state,
+    questions,
+    status: coverage.ready_for_prd_intake ? "complete" : "in_progress",
+    readiness: coverage.readiness,
+    next_question: next ? {
+      id: next.id,
+      question_id: next.question_id || next.id,
+      slot: next.slot,
+      text: next.plain_language_prompt || next.text || next.id,
+      category: next.category,
+      why_it_matters: next.why_it_matters,
+      follow_up: next.follow_up === true,
+      follow_up_id: next.follow_up_id,
+      follow_up_code: next.follow_up_code,
+      follow_up_reason: next.follow_up_reason,
+      original_prompt: next.original_prompt,
+    } : null,
+    coverage,
+  };
+}
+
+export function createInterviewState(input = Object(), projectRoot, stateRoot) {
+  const session = createDemandInterviewSession({
+    projectRoot,
+    stateRoot,
+    id: input.id,
+    demand_id: input.id ? demandIdFromInterview(input.id) : undefined,
+    title: input.title,
+    idea: input.idea || input.title,
+    source: "yolo-interview",
+  });
+  return decorateInterviewState({
+    ...session,
+    interview_path: defaultInterviewPath(stateRoot, session.id),
+  });
+}
+
+export function readInterviewState(pathOrDir, cwd = process.cwd()) {
+  const path = resolveInterviewPath(pathOrDir, cwd);
+  if (!existsSync(path)) {
+    return { ok: false, path, error: `Interview session not found: ${path}` };
+  }
+  try {
+    const state = decorateInterviewState({ ...readJsonFile(path), interview_path: path });
+    return { ok: true, path, dir: dirname(path), state };
+  } catch (error) {
+    return { ok: false, path, error: `Interview session JSON parse failed: ${error.message}` };
+  }
+}
+
+export function resolveInterviewQuestionId(state = Object(), value) {
+  const questions = state.questions || [];
+  const clean = cleanCliText(value);
+  if (/^\d+$/.test(clean)) return questions[Number(clean) - 1]?.id || clean;
+  const qMatch = clean.toUpperCase().match(/^Q0*(\d+)$/);
+  if (qMatch) return questions[Number(qMatch[1]) - 1]?.id || clean;
+  return questions.find((question) => question.id === clean)?.id
+    || questions.find((question) => question.id?.toLowerCase() === clean.toLowerCase())?.id
+    || clean;
+}
+
+export function coverageCounts(coverage = Object(), state = Object()) {
+  const answered = Array.isArray(coverage.answered) ? coverage.answered.length : Number(coverage.answered || 0);
+  const missing = Array.isArray(coverage.missing) ? coverage.missing.length : 0;
+  const total = Array.isArray(state.questions) && state.questions.length
+    ? state.questions.length
+    : answered + missing;
+  return {
+    answered,
+    total,
+    percent: total > 0 ? Math.round((answered / total) * 100) : 100,
+  };
+}
+
+export function coverageForCli(coverage = Object(), state = Object()) {
+  const counts = coverageCounts(coverage, state);
+  return {
+    ...coverage,
+    answered_questions: coverage.answered || [],
+    missing: (coverage.missing || []).map((item) => ({
+      id: item.question_id || item.id,
+      slot: item.slot,
+      text: item.plain_language_prompt || item.text || item.slot,
+      category: item.category,
+    })),
+    answered: counts.answered,
+    total: counts.total,
+    percent: counts.percent,
+    complete: coverage.ready_for_prd_intake === true,
+  };
+}
+
+export function writeInterviewAnswerLedger(state = Object(), question = Object(), answer = "") {
+  const stateRoot = state.stateRoot || state.state_root;
+  if (!stateRoot) return null;
+  return appendJsonlFile(join(stateRoot, "state", "questions.jsonl"), {
+    ts: new Date().toISOString(),
+    type: "demand_interview_answer",
+    source: "yolo-interview",
+    interview_id: state.id,
+    demand_id: state.demand_id,
+    question_id: question.id,
+    slot: question.slot,
+    category: question.category,
+    question: question.plain_language_prompt || question.text || question.id,
+    answer,
+  });
+}
+
+export function writeInterviewDecisionLedger(state = Object(), demandResult = Object()) {
+  const stateRoot = state.stateRoot || state.state_root;
+  if (!stateRoot) return null;
+  return appendJsonlFile(join(stateRoot, "state", "decisions.jsonl"), {
+    ts: new Date().toISOString(),
+    type: "demand_interview_to_demand",
+    source: "yolo-interview",
+    interview_id: state.id,
+    demand_id: demandResult.demand_id || state.demand_id,
+    approved: state.coverage?.approval?.approved === true,
+    demand_dir: demandResult.demand_dir,
+    readiness_level: demandResult.readiness?.readiness_level,
+  });
+}
+
+export function interviewNextActions(state = Object(), extra = Object()) {
+  const path = state.interview_path;
+  const actions = [];
+  if (state.next_question) {
+    actions.push(`Answer ${state.next_question.id}: yolo interview answer --session ${path} --question ${state.next_question.id} --answer "<answer>"`);
+    actions.push(`Check progress: yolo interview status --session ${path}`);
+    return actions;
+  }
+  if (state.playback?.confirmed !== true) {
+    actions.push(`Confirm understanding: yolo interview playback --session ${path}`);
+    if (!extra.demand_dir) actions.push(`Then create demand artifacts: yolo interview to-demand --session ${path}`);
+    return actions;
+  }
+  if (!extra.demand_dir) actions.push(`Create demand artifacts: yolo interview to-demand --session ${path}`);
+  if (extra.demand_dir) {
+    actions.push(`yolo spec --demand ${extra.demand_path || extra.demand_dir}`);
+  }
+  for (const action of extra.runtime_next_actions || []) {
+    if (actions.length >= 3) break;
+    if (!actions.includes(action)) actions.push(action);
+  }
+  return actions;
+}
+
+export function interviewResult(command, state = Object(), extra = Object()) {
+  const decorated = decorateInterviewState(state);
+  const result = Object.assign(Object(), {
+    status: extra.status || "success",
+    code: extra.code || "INTERVIEW_OK",
+    command,
+    summary: extra.summary || "Interview state updated.",
+    session_path: decorated.interview_path,
+    interview: decorated,
+    next_question: decorated.next_question,
+    coverage: coverageForCli(decorated.coverage, decorated),
+    coverage_detail: decorated.coverage,
+    artifacts: extra.artifacts || [],
+    outputs: extra.outputs || [],
+    demand_dir: extra.demand_dir,
+    demand_path: extra.demand_path,
+    demand_result: extra.demand_result,
+  });
+  result.next_actions = extra.next_actions || interviewNextActions(decorated, extra);
+  result.next_action = extra.next_action || result.next_actions?.[0] || null;
+  if (extra.blockers) result.blockers = extra.blockers;
+  return result;
+}
+
+// Re-exported so interview-helpers callers (e.g. the interview command) can use
+// the same answer application entry point the original yolo.ts used. Note
+// decorateInterviewState is already exported as a function above.
+export {
+  cloneJson,
+  writeJsonFile,
+  answerDemandInterviewQuestion,
+};
