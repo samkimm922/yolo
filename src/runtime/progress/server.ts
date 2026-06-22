@@ -104,7 +104,7 @@ function readPrd() {
     try {
       const etData = JSON.parse(readFileSync(etFile, "utf8"));
       const runnerActive = isRunnerActive();
-      const tasks = (etData.tasks || []).map((t) => ({
+      const tasks = (etData.tasks || []).map((t) => redactDeep({
         id: t.id,
         status: t.status === "done" ? "done"
           : t.status === "skipped" ? "skipped"
@@ -130,7 +130,7 @@ function readPrd() {
       const prdFile = etData.source || resolvePrdPath();
       let prdMeta = Object();
       try { prdMeta = JSON.parse(readFileSync(prdFile, "utf8")); } catch (e) { console.warn('[progress-server] PRD 元数据解析失败:', e.message); }
-      return { tasks, done: done + skipped, failed, total: tasks.length, prd: { ...prdMeta, tasks: etData.tasks } };
+      return { tasks, done: done + skipped, failed, total: tasks.length, prd: { ...prdMeta, tasks: (etData.tasks || []).map((t) => redactDeep(t)) } };
     } catch (e) { console.warn('[progress-server] PRD 解析失败:', e.message); }
   }
   // fallback: 读 PRD 原文件
@@ -139,7 +139,7 @@ function readPrd() {
   try {
     const prd = JSON.parse(readFileSync(prdFile, "utf8"));
     const runnerActive = isRunnerActive();
-    const tasks = (prd.tasks || []).map((t) => ({
+    const tasks = (prd.tasks || []).map((t) => redactDeep({
       id: t.id,
       status: t.status === "done" ? "done"
         : t.status === "skipped" ? "skipped"
@@ -201,12 +201,12 @@ function findCurrentRunning() {
             failReason = pl.trim();
           }
         }
-        return {
+        return redactDeep({
           id, time,
           priority: priority || "",
           description: description?.trim() || "",
           phase, phaseDetail, retry, failReason,
-        };
+        });
       }
     }
     return null;
