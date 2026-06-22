@@ -30,6 +30,74 @@ export const DEFAULT_CLAUDE_SETTINGS_FILE = "settings-minimal.json";
 export const DEFAULT_CLAUDE_SETTINGS_PATH = resolve(YOLO_PACKAGE_ROOT, DEFAULT_CLAUDE_SETTINGS_FILE);
 export const DEFAULT_CLAUDE_PERMISSION_MODE = "acceptEdits";
 const DEFAULT_PROVIDER_TIMEOUT_MS = 480000;
+// Provider stdout/stderr are collected into memory for the run result. Without a cap a
+// runaway provider (infinite logging, binary dump, loop) can grow the buffer without bound
+// and OOM or stall the runner. These defaults bound each stream at 10MB; reaching the hard
+// limit (maxBytes * killMultiplier) kills the child and reports OUTPUT_LIMIT_EXCEEDED.
+const DEFAULT_PROVIDER_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
+const DEFAULT_PROVIDER_OUTPUT_KILL_MULTIPLIER = 5;
+
+// Bounded collector for a provider child's stdout or stderr. Accumulates bytes into a string
+// until maxBytes is reached, then stops appending (keeping the captured prefix) and records
+// how many bytes were dropped. This caps resident memory regardless of how much the child emits.
+class BoundedOutputCollector {
+  maxBytes;
+  buffer;
+  bytes;
+  droppedBytes;
+  truncated;
+  constructor(maxBytes) {
+    this.maxBytes = maxBytes;
+    this.buffer = "";
+    this.bytes = 0;
+    this.droppedBytes = 0;
+    this.truncated = false;
+  }
+
+  // Chunk may be a string or a Buffer; byte accounting uses utf8 length so the cap reflects
+  // real resident memory rather than UTF-16 code-unit counts.
+  push(chunk) {
+    const text = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+    const chunkBytes = Buffer.byteLength(text, "utf8");
+    this.bytes += chunkBytes;
+    if (this.buffer.length >= this.maxBytes) {
+      // Already capped: keep the prefix, just account for what we discarded.
+      this.droppedBytes += chunkBytes;
+      this.truncated = true;
+      return;
+    }
+    if (this.buffer.length + text.length <= this.maxBytes) {
+      this.buffer += text;
+      return;
+    }
+    // Partial append: keep up to the byte cap, drop the overflow tail.
+    const remaining = this.maxBytes - this.buffer.length;
+    this.buffer += text.slice(0, remaining);
+    this.droppedBytes += Buffer.byteLength(text.slice(remaining), "utf8");
+    this.truncated = true;
+  }
+
+  toString() {
+    return this.buffer;
+  }
+
+  // Summary attached to the run result when the cap was hit, so callers can tell a truncated
+  // stream apart from a complete one without guessing from length.
+  toSummary() {
+    return {
+      truncated: this.truncated,
+      captured_bytes: Buffer.byteLength(this.buffer, "utf8"),
+      dropped_bytes: this.droppedBytes,
+      max_bytes: this.maxBytes,
+    };
+  }
+}
+
+function resolveOutputLimit(configValue, defaultValue) {
+  const value = Number(configValue);
+  if (!Number.isFinite(value) || value <= 0) return defaultValue;
+  return Math.floor(value);
+}
 
 function selectedProvider(value) {
   const provider = typeof value === "string" ? value : value?.selected;
@@ -174,6 +242,7 @@ function buildProviderRunResult({
   startedAtMs = null,
   endedAtMs = Date.now(),
   outputVerification = null,
+  outputLimits = null,
 } = Object()) {
   const exitCode = Number.isInteger(terminal.exitCode) ? terminal.exitCode : null;
   const signal = terminal.signal || null;
@@ -203,6 +272,7 @@ function buildProviderRunResult({
     durationMs: Number.isFinite(startedAtMs) && Number.isFinite(endedAtMs) ? endedAtMs - startedAtMs : null,
   });
   if (outputVerification) run.output_verification = outputVerification;
+  if (outputLimits) run.output_limits = outputLimits;
   run.attempt_ledger = [buildProviderAttemptLedgerEntry(run)];
   return run;
 }
@@ -510,6 +580,8 @@ export function spawnProviderPrompt(prompt, {
   existsSync = defaultExistsSync,
   readFileSync = defaultReadFileSync,
   packageRoot = YOLO_PACKAGE_ROOT,
+  maxOutputBytes,
+  outputKillMultiplier,
 } = Object()) {
   if (!config?.ai) throw new Error("spawnProviderPrompt requires config.ai");
   if (!rootDir) throw new Error("spawnProviderPrompt requires rootDir");
@@ -606,17 +678,57 @@ export function spawnProviderPrompt(prompt, {
       invocation.args,
       { cwd: workDir, stdio: ["pipe", "pipe", "pipe"] },
     );
-    let out = "";
-    let err = "";
+    // Resolve per-stream caps from explicit options or config.ai. Both streams share the same
+    // limit; a runaway either side should trip the cap. killBytes is the hard ceiling past
+    // which we kill the child to stop the flood, reported as OUTPUT_LIMIT_EXCEEDED.
+    const maxBytes = resolveOutputLimit(maxOutputBytes ?? config?.ai?.provider_max_output_bytes, DEFAULT_PROVIDER_MAX_OUTPUT_BYTES);
+    const killMultiplier = resolveOutputLimit(outputKillMultiplier ?? config?.ai?.provider_output_kill_multiplier, DEFAULT_PROVIDER_OUTPUT_KILL_MULTIPLIER);
+    const killBytes = maxBytes * Math.max(1, Math.floor(killMultiplier || DEFAULT_PROVIDER_OUTPUT_KILL_MULTIPLIER));
+    const outCollector = new BoundedOutputCollector(maxBytes);
+    const errCollector = new BoundedOutputCollector(maxBytes);
+    let outputLimitExceeded = false;
+
+    const tryKillOnOutputFlood = () => {
+      // Once either stream passes the hard ceiling, kill the child once so it cannot keep
+      // filling the OS pipe buffer (and our accounting) indefinitely. The captured prefix and
+      // dropped-byte counts are preserved on the collectors.
+      if (outputLimitExceeded) return;
+      if (outCollector.bytes < killBytes && errCollector.bytes < killBytes) return;
+      outputLimitExceeded = true;
+      try {
+        if (typeof child.kill === "function") child.kill("SIGKILL");
+        if (killTree) killTree(child.pid);
+      } catch {
+        // Best-effort kill; the close handler will still resolve the run.
+      }
+    };
 
     child.stdout.on("data", (chunk) => {
-      out += chunk;
+      outCollector.push(chunk);
+      tryKillOnOutputFlood();
     });
     child.stderr.on("data", (chunk) => {
-      err += chunk;
+      errCollector.push(chunk);
+      tryKillOnOutputFlood();
     });
     child.stdin.write(prompt);
     child.stdin.end();
+
+    // Builds the output_limits metadata attached to the result. Present whenever a cap was
+    // hit or the child was killed for flooding, so callers can distinguish truncation from a
+    // clean capture.
+    const buildOutputLimits = () => {
+      if (!outputLimitExceeded && !outCollector.truncated && !errCollector.truncated) {
+        return null;
+      }
+      return {
+        stdout: outCollector.toSummary(),
+        stderr: errCollector.toSummary(),
+        kill_triggered: outputLimitExceeded,
+        kill_bytes: killBytes,
+        reason: outputLimitExceeded ? "OUTPUT_LIMIT_EXCEEDED" : "OUTPUT_TRUNCATED",
+      };
+    };
 
     const timer = timeout > 0
       ? setTimeout(() => {
@@ -628,12 +740,13 @@ export function spawnProviderPrompt(prompt, {
               resolveRun(buildProviderRunResult({
                 provider,
                 command: invocation.command,
-                stdout: out.trim(),
-                stderr: err.trim(),
+                stdout: outCollector.toString().trim(),
+                stderr: errCollector.toString().trim(),
                 terminal: { exitCode: null, signal: "TIMEOUT", timedOut: true },
                 commandSucceeded: false,
                 startedAtMs,
                 endedAtMs: Date.now(),
+                outputLimits: buildOutputLimits(),
               }));
             }
           }, 5000);
@@ -690,12 +803,21 @@ export function spawnProviderPrompt(prompt, {
         startedAtMs,
         endedAtMs,
         outputVerification,
+        outputLimits: buildOutputLimits(),
       }));
     };
 
     child.on("close", (code, signal) => {
-      if (signal) err += `\n[signal:${signal}]`;
-      finish(code === 0, out, err, { exitCode: code, signal, timedOut: timeoutTriggered });
+      const effectiveSignal = signal || (outputLimitExceeded ? "SIGKILL" : null);
+      if (effectiveSignal) errCollector.push(`\n[signal:${effectiveSignal}]`);
+      // An output-flood kill is not a normal provider completion: surface it as killed so the
+      // run does not report success on a truncated/partial result.
+      const success = outputLimitExceeded ? false : code === 0;
+      finish(success, outCollector.toString(), errCollector.toString(), {
+        exitCode: code,
+        signal: effectiveSignal,
+        timedOut: timeoutTriggered,
+      });
     });
     child.on("error", (error) => {
       finish(false, "", error.message, { exitCode: null, signal: null, timedOut: false });
