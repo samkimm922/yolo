@@ -92,4 +92,7 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   { id: "multi-compose-and-send", expect: "multi", text: "The user can compose a message and send it to multiple recipients." },
   { id: "multi-encrypt-and-decrypt", expect: "multi", text: "The system must encrypt data at rest and decrypt it on access." },
   { id: "multi-book-and-receive", expect: "multi", text: "Customers can book tickets and receive digital receipts." },
+
+  // ── Previously under-split: missing place verb for order/checkout placement ──
+  { id: "multi-place-order-and-track", expect: "multi", text: "Customers can place an order and track delivery." },
 ];
