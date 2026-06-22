@@ -89,22 +89,46 @@ function cliParseError(name) {
   });
 }
 
+// Collect unknown `--*` arguments during parsing. The first unknown flag is
+// recorded as the primary `flag`, but every unknown flag is surfaced in
+// `unknown_flags` so the user can fix them all in one pass. Unknown flags
+// must never be silently dropped: a typo like `--prd-path` would otherwise
+// fall through to a misleading "missing PRD path" / "missing requirement"
+// error and send the user (especially a non-technical one) down the wrong path.
+// Each entry is expected to already be the normalized bare flag (e.g. `--foo`).
+function throwUnknownFlags(unknownFlags) {
+  if (!unknownFlags.length) return;
+  const unique = Array.from(new Set(unknownFlags));
+  throw Object.assign(new Error(`Unknown flag: ${unique.join(", ")}.`), {
+    name: "YoloCliParseError",
+    code: "CLI_UNKNOWN_FLAG",
+    flag: unique[0],
+    unknown_flags: unique,
+    exit_code: 2,
+  });
+}
+
 function isCliParseError(error) {
-  return error?.name === "YoloCliParseError" || error?.code === "CLI_PARSE_ERROR";
+  return error?.name === "YoloCliParseError" || error?.code === "CLI_PARSE_ERROR" || error?.code === "CLI_UNKNOWN_FLAG";
 }
 
 function cliParseErrorResult(error, command = "yolo") {
+  const isUnknownFlag = error?.code === "CLI_UNKNOWN_FLAG";
+  const unknownFlags = Array.from(new Set(error.unknown_flags || (error.flag ? [error.flag] : [])));
   return {
     schema: "yolo.cli.parse_error.v1",
     status: "error",
     code: error.code || "CLI_PARSE_ERROR",
     command,
     flag: error.flag || null,
+    unknown_flags: unknownFlags.length ? unknownFlags : null,
     summary: error.message || "CLI argument parse error.",
     exit_code: error.exit_code || 2,
-    next_actions: error.flag
-      ? [`Provide a value for ${error.flag}, or remove that flag.`]
-      : ["Fix the CLI arguments and rerun the command."],
+    next_actions: isUnknownFlag
+      ? [`Remove ${unknownFlags.join(", ")} or check the spelling with \`yolo --help\`.`]
+      : error.flag
+        ? [`Provide a value for ${error.flag}, or remove that flag.`]
+        : ["Fix the CLI arguments and rerun the command."],
   };
 }
 
@@ -155,6 +179,7 @@ export function parseYoloArgs(argv = process.argv.slice(2)) {
     startProgressServer: undefined,
     runReviewLoop: undefined,
   };
+  const unknownFlags = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -209,9 +234,12 @@ export function parseYoloArgs(argv = process.argv.slice(2)) {
       i += read.consumed;
     } else if (!arg.startsWith("--") && !input.prdPath) {
       input.prdPath = arg;
+    } else if (arg.startsWith("--")) {
+      unknownFlags.push(`--${arg.replace(/^--?/, "").split("=")[0]}`);
     }
   }
 
+  throwUnknownFlags(unknownFlags);
   input.mode = input.mode || "fix";
   return { input, options };
 }
@@ -237,6 +265,7 @@ export function parseYoloAutoArgs(argv = [], context = Object()) {
     runReviewLoop: undefined,
   };
   const positionals = [];
+  const unknownFlags = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -289,8 +318,12 @@ export function parseYoloAutoArgs(argv = [], context = Object()) {
       i += read.consumed;
     } else if (!arg.startsWith("--")) {
       positionals.push(arg);
+    } else if (arg.startsWith("--")) {
+      unknownFlags.push(`--${arg.replace(/^--?/, "").split("=")[0]}`);
     }
   }
+
+  throwUnknownFlags(unknownFlags);
 
   const projectRoot = resolve(input.cwd || context.cwd || process.cwd());
   if (!input.prdPath && positionals.length === 1) {
@@ -309,6 +342,7 @@ export function parseYoloAutoArgs(argv = [], context = Object()) {
 export function parseYoloInitArgs(argv = []) {
   const input = Object();
   const options = { json: false, help: false, force: false, dryRun: false };
+  const unknownFlags = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -334,9 +368,12 @@ export function parseYoloInitArgs(argv = []) {
       i += read.consumed;
     } else if (!arg.startsWith("--") && !input.cwd) {
       input.cwd = arg;
+    } else if (arg.startsWith("--")) {
+      unknownFlags.push(`--${arg.replace(/^--?/, "").split("=")[0]}`);
     }
   }
 
+  throwUnknownFlags(unknownFlags);
   return { input, options };
 }
 
@@ -350,6 +387,7 @@ export function parseYoloSetupArgs(argv = []) {
     target: "both",
     scope: "project",
   };
+  const unknownFlags = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -387,9 +425,12 @@ export function parseYoloSetupArgs(argv = []) {
       i += read.consumed;
     } else if (!arg.startsWith("--") && !input.cwd) {
       input.cwd = arg;
+    } else if (arg.startsWith("--")) {
+      unknownFlags.push(`--${arg.replace(/^--?/, "").split("=")[0]}`);
     }
   }
 
+  throwUnknownFlags(unknownFlags);
   return { input, options };
 }
 
@@ -404,6 +445,8 @@ export function parseYoloMemoryArgs(argv = []) {
     migrateLearning: true,
     pruneGeneratedArchives: true,
   });
+
+  const unknownFlags = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -434,9 +477,12 @@ export function parseYoloMemoryArgs(argv = []) {
       i += read.consumed;
     } else if (!arg.startsWith("--") && !input.cwd) {
       input.cwd = arg;
+    } else if (arg.startsWith("--")) {
+      unknownFlags.push(`--${arg.replace(/^--?/, "").split("=")[0]}`);
     }
   }
 
+  throwUnknownFlags(unknownFlags);
   return { input, options };
 }
 
@@ -449,6 +495,8 @@ export function parseYoloReleaseCandidateArgs(argv = []) {
     allowUntracked: false,
     allowUnknown: false,
   };
+
+  const unknownFlags = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -471,9 +519,12 @@ export function parseYoloReleaseCandidateArgs(argv = []) {
       i += read.consumed;
     } else if (!arg.startsWith("--") && !input.scope) {
       input.scope = arg;
+    } else if (arg.startsWith("--")) {
+      unknownFlags.push(`--${arg.replace(/^--?/, "").split("=")[0]}`);
     }
   }
 
+  throwUnknownFlags(unknownFlags);
   input.mode = input.mode || "rc";
   return { input, options };
 }
@@ -481,6 +532,7 @@ export function parseYoloReleaseCandidateArgs(argv = []) {
 export function parseYoloProgressUiEvidenceArgs(argv = []) {
   const input = Object();
   const options = { json: false, help: false, writeArtifacts: true };
+  const unknownFlags = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -500,15 +552,19 @@ export function parseYoloProgressUiEvidenceArgs(argv = []) {
       i += read.consumed;
     } else if (!arg.startsWith("--") && !input.cwd) {
       input.cwd = arg;
+    } else if (arg.startsWith("--")) {
+      unknownFlags.push(`--${arg.replace(/^--?/, "").split("=")[0]}`);
     }
   }
 
+  throwUnknownFlags(unknownFlags);
   return { input, options };
 }
 
 export function parseYoloCheckArgs(argv = []) {
   const input = Object();
   const options = { json: false, help: false, writeLifecycle: true, collectEvidence: false, executeAdapter: false, allowAdapterCommands: false };
+  const unknownFlags = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -560,9 +616,12 @@ export function parseYoloCheckArgs(argv = []) {
       i += read.consumed;
     } else if (!arg.startsWith("--") && !input.prdPath) {
       input.prdPath = arg;
+    } else if (arg.startsWith("--")) {
+      unknownFlags.push(`--${arg.replace(/^--?/, "").split("=")[0]}`);
     }
   }
 
+  throwUnknownFlags(unknownFlags);
   return { input, options };
 }
 
@@ -575,6 +634,7 @@ export function parseYoloInterviewArgs(argv = []) {
   const input = Object.assign(Object(), { command, ideaParts: [] });
   const options = { json: false, help: false, writeArtifacts: true };
   const args = command ? argv.slice(1) : argv;
+  const unknownFlags = [];
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -614,9 +674,12 @@ export function parseYoloInterviewArgs(argv = []) {
       i += read.consumed;
     } else if (!arg.startsWith("--") && command === "start") {
       input.ideaParts.push(arg);
+    } else if (arg.startsWith("--")) {
+      unknownFlags.push(`--${arg.replace(/^--?/, "").split("=")[0]}`);
     }
   }
 
+  throwUnknownFlags(unknownFlags);
   input.idea = input.ideaParts.join(" ").trim();
   return { input, options };
 }
@@ -630,6 +693,7 @@ export function parseYoloWorkflowArgs(argv = []) {
     executeAgents: false,
     allowAgentDispatch: false,
   };
+  const unknownFlags = [];
 
   function pushList(key, value) {
     if (!input[key]) input[key] = [];
@@ -797,9 +861,12 @@ export function parseYoloWorkflowArgs(argv = []) {
     } else if (!arg.startsWith("--")) {
       if (!input.prdPath && arg.endsWith(".json")) input.prdPath = arg;
       else input.objectiveParts.push(arg);
+    } else if (arg.startsWith("--")) {
+      unknownFlags.push(`--${arg.replace(/^--?/, "").split("=")[0]}`);
     }
   }
 
+  throwUnknownFlags(unknownFlags);
   input.objective = input.objectiveParts.join(" ").trim();
   return { input, options };
 }

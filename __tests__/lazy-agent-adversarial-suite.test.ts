@@ -235,11 +235,15 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
   });
 
   // ── F8: --approve flag removed ──
-  test("F8: lazy agent tries --approve CLI flag → flag does not exist in parser", () => {
-    const { input, options } = parseYoloArgs(["demand", "--approve", "true"]);
-    assert.equal(input.approve, undefined, "--approve must not be parsed as a recognized flag");
-    assert.equal(options.json, false);
-    // The "true" would be consumed as positional argument if demand path, but not as approve
+  test("F8: lazy agent tries --approve CLI flag → unknown flag is rejected with a structured error", () => {
+    assert.throws(
+      () => parseYoloArgs(["demand", "--approve", "true"]),
+      (error) => {
+        const e = error as { code?: string; flag?: string };
+        return e.code === "CLI_UNKNOWN_FLAG" && e.flag === "--approve";
+      },
+      "--approve must be rejected as an unknown flag instead of being silently ignored"
+    );
   });
 
   // ── F9: warning-ack deleted ──

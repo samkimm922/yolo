@@ -356,7 +356,7 @@ describe("YOLO command registry", () => {
         { stage: "brainstorm", argv: ["demand", "--stage", "brainstorm", demandText, "--cwd", root, "--json", "--no-write"], codes: ["DEMAND_READY", "DEMAND_WARNING"] },
         { stage: "interview", argv: ["demand", "--stage", "interview", "Need low stock alerts", "--cwd", root, "--json", "--no-write"], code: "INTERVIEW_OK" },
         { stage: "discover", argv: ["demand", "--stage", "discover", "Inventory alerts need clearer success criteria", "--cwd", root, "--json", "--no-write"], code: "DISCOVERY_BLOCKED" },
-        { stage: "discuss", argv: ["demand", "--stage", "discuss", demandText, "--approve", "--cwd", root, "--json", "--no-write"], code: "DEMAND_BLOCKED" },
+        { stage: "discuss", argv: ["demand", "--stage", "discuss", demandText, "--cwd", root, "--json", "--no-write"], code: "DEMAND_BLOCKED" },
         { stage: "office-hours", argv: ["demand", "--mode", "office-hours", "Need low stock alerts", "--cwd", root, "--json", "--no-write"], codes: ["DEMAND_BLOCKED", "DEMAND_STATUS_READY", "OFFICE_HOURS_CHOICE_REQUIRED"] },
       ];
 
