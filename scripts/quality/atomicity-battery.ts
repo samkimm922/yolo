@@ -79,6 +79,9 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   // ── Git/workflow verbs that were missing from the heuristic verb list ──
   { id: "multi-merge-and-deploy", expect: "multi", text: "Merge the branch and deploy to staging." },
 
+  // ── Previously under-split: missing parse in DELIVERABLE_VERB_TERMS ──
+  { id: "multi-parse-and-generate", expect: "multi", text: "The workflow parses the file and generates a report." },
+
   // ── Previously under-split: missing invite/track/publish/request/book/alert/cache/retry in DELIVERABLE_VERB_TERMS ──
   { id: "multi-create-teams-and-invite-members", expect: "multi", text: "Managers can create teams and invite members." },
   { id: "multi-publish-and-schedule-posts", expect: "multi", text: "Editors can publish an article and schedule social posts." },
