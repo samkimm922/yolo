@@ -148,6 +148,7 @@ function preflightReason(blockers = []) {
   if (codes.includes("AGENT_ALLOWED_ROOTS_MISSING") || codes.includes("AGENT_ROOT_POLICY_MISSING")) return "agent_root_policy_missing";
   if (codes.includes("PROVIDER_INVOCATION_BUILD_FAILED")) return "provider_invocation_build_failed";
   if (codes.includes("PROVIDER_TIMEOUT_INVALID")) return "provider_timeout_invalid";
+  if (codes.includes("CUSTOM_COMMAND_UNPARSEABLE")) return "custom_command_unparseable";
   return "provider_preflight_blocked";
 }
 
@@ -179,6 +180,42 @@ function blockedProviderRun({
     durationMs: 0,
   });
   run.attempt_ledger = [buildProviderAttemptLedgerEntry(run)];
+  return run;
+}
+
+function shellCustomCommandWarning() {
+  return {
+    code: "CUSTOM_COMMAND_SHELL_OPT_IN",
+    provider: "custom",
+    message: "allowShellCustomCommand is enabled; custom_command is executed via sh -c and shell metacharacters/expansion are honored.",
+  };
+}
+
+function customCommandUnparseableInvocation(customCommand, parsedCustom = Object()) {
+  const detail = cleanString(parsedCustom.detail || parsedCustom.reason || "command could not be parsed to argv");
+  return {
+    ok: false,
+    provider: "custom",
+    command: null,
+    args: [],
+    customCommand,
+    outputFile: null,
+    code: "CUSTOM_COMMAND_UNPARSEABLE",
+    message: `custom_command could not be parsed to argv: ${detail}. Refusing implicit sh -c fallback; remove shell metacharacters or set ai.allowShellCustomCommand=true to explicitly opt into shell execution.`,
+    parse: {
+      reason: parsedCustom.reason || "unparseable",
+      detail,
+    },
+  };
+}
+
+function attachInvocationMetadata(run, invocation = Object()) {
+  if (Array.isArray(invocation.warnings) && invocation.warnings.length > 0) {
+    run.provider_warnings = invocation.warnings;
+  }
+  if (invocation.shellCustomCommand === true) {
+    run.shell_custom_command = true;
+  }
   return run;
 }
 
@@ -351,6 +388,16 @@ export function inspectProviderInvocationPreflight(invocation = Object(), {
   commandExists = null,
 } = Object()) {
   const blockers = [];
+  const warnings = Array.isArray(invocation.warnings) ? [...invocation.warnings] : [];
+  if (invocation.ok === false) {
+    blockers.push({
+      code: invocation.code || "PROVIDER_INVOCATION_INVALID",
+      provider: invocation.provider,
+      command: invocation.customCommand || invocation.command || null,
+      message: invocation.message || "provider invocation is invalid",
+      parse: invocation.parse || null,
+    });
+  }
   if (invocation.command && typeof commandExists === "function") {
     const exists = commandExists(invocation.command);
     if (exists === false) {
@@ -376,7 +423,7 @@ export function inspectProviderInvocationPreflight(invocation = Object(), {
     status: blockers.length > 0 ? "blocked" : "pass",
     blocks_execution: blockers.length > 0,
     blockers,
-    warnings: [],
+    warnings,
   };
 }
 
@@ -508,9 +555,8 @@ export function buildProviderInvocation({
       throw new Error("buildProviderInvocation custom provider requires config.ai.custom_command");
     }
     // P12.I1: prefer argv form when customCommand parses cleanly (no shell
-    // metacharacters) so spawnSync runs without shell:true. If the operator's
-    // config uses shell features (pipes, redirects, env vars), keep the
-    // explicit sh -c opt-in — the operator has chosen shell semantics.
+    // metacharacters) so spawnSync runs without shell:true. Shell syntax is
+    // fail-closed unless the operator explicitly opts into sh -c semantics.
     const parsedCustom = parseCommandToArgv(customCommand);
     if (parsedCustom.ok && parsedCustom.argv && parsedCustom.argv.length > 0) {
       return {
@@ -521,12 +567,17 @@ export function buildProviderInvocation({
         outputFile: null,
       };
     }
+    if (ai.allowShellCustomCommand !== true) {
+      return customCommandUnparseableInvocation(customCommand, parsedCustom);
+    }
     return {
       provider: "custom",
       command: "sh",
       args: ["-c", customCommand],
       customCommand,
       outputFile: null,
+      shellCustomCommand: true,
+      warnings: [shellCustomCommandWarning()],
     };
   }
 
@@ -737,7 +788,7 @@ export function spawnProviderPrompt(prompt, {
           setTimeout(() => {
             if (!done) {
               done = true;
-              resolveRun(buildProviderRunResult({
+              resolveRun(attachInvocationMetadata(buildProviderRunResult({
                 provider,
                 command: invocation.command,
                 stdout: outCollector.toString().trim(),
@@ -747,7 +798,7 @@ export function spawnProviderPrompt(prompt, {
                 startedAtMs,
                 endedAtMs: Date.now(),
                 outputLimits: buildOutputLimits(),
-              }));
+              }), invocation));
             }
           }, 5000);
         }, timeout)
@@ -793,7 +844,7 @@ export function spawnProviderPrompt(prompt, {
           reason: "codex_output_missing",
         };
       }
-      resolveRun(buildProviderRunResult({
+      resolveRun(attachInvocationMetadata(buildProviderRunResult({
         provider,
         command: invocation.command,
         stdout: finalStdout,
@@ -804,7 +855,7 @@ export function spawnProviderPrompt(prompt, {
         endedAtMs,
         outputVerification,
         outputLimits: buildOutputLimits(),
-      }));
+      }), invocation));
     };
 
     child.on("close", (code, signal) => {
