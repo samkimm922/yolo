@@ -111,6 +111,17 @@ export function buildEvidenceArtifact(artifactType, payload = Object(), options 
 
 export function validateLedgerRecord(record = Object()) {
   const errors = [];
+  // ledger.jsonl files live on disk and may be corrupted by partial flushes,
+  // SIGKILL mid-write, or external edits (the same boundary that readJsonl in
+  // report.ts already defends against). A line that parses as valid JSON but
+  // is `null`, a number, a string, or an array would otherwise crash on
+  // `record.schema_version` / `"prev_hash" in record` below. Reject these
+  // structurally rather than throwing — validateLedgerChain calls this per
+  // record and the SDK exposes both functions publicly via createEvidenceLedger.
+  if (record === null || typeof record !== "object" || Array.isArray(record)) {
+    errors.push("record must be a plain object");
+    return { ok: false, errors };
+  }
   if (record.schema_version !== EVIDENCE_SCHEMA_VERSION) errors.push("schema_version must be 1.0");
   if (record.schema !== LEDGER_EVENT_SCHEMA) errors.push(`schema must be ${LEDGER_EVENT_SCHEMA}`);
   if (!requiredString(record.ts)) errors.push("ts is required");

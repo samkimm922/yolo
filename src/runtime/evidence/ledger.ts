@@ -37,6 +37,16 @@ export function validateLedgerChain(records = [], options = Object()) {
     for (const error of validation.errors) {
       errors.push({ index, code: "LEDGER_RECORD_INVALID", message: error });
     }
+    // validateLedgerRecord above already rejected null/non-object records with
+    // a structured LEDGER_RECORD_INVALID error. Skip the chain-continuity check
+    // for those records — accessing `record.prev_hash`/`record.record_hash`
+    // would crash on null/number/string. The chain is already broken; we just
+    // need to report it without throwing. Mirror the boundary that readJsonl
+    // (report.ts) and #70/#82 already defend.
+    if (record === null || typeof record !== "object" || Array.isArray(record)) {
+      previousHash = null;
+      return;
+    }
     if (record.prev_hash !== previousHash) {
       errors.push({
         index,
