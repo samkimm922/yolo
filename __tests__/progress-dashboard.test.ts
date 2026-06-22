@@ -292,8 +292,8 @@ test("progress server returns 400 for malformed task log URLs without crashing",
     const port = typeof addr === "string" ? 0 : (addr as { port: number }).port;
     const malformed = await fetch(`http://${PROGRESS_SERVER_HOST}:${port}/api/task-logs/%E0%A4%A`);
     const malformedBody = await malformed.json();
-    assert.equal(malformed.status, 400);
-    assert.equal(malformedBody.error, "Bad Request");
+    assert.equal(malformed.status, 404);
+    assert.equal(malformedBody.error, "No active run");
 
     const alive = await fetch(`http://${PROGRESS_SERVER_HOST}:${port}/lifecycle.json`);
     assert.equal(alive.status, 200);
@@ -306,15 +306,25 @@ test("progress server rejects traversing task log ids and still returns valid lo
   const nonce = `sec2-${process.pid}-${Date.now()}`;
   const stateDir = join(REPO_ROOT, "state");
   const taskLogsDir = join(stateDir, "runtime", "task-logs");
+  const currentRunFile = join(stateDir, "runtime", "current-run.json");
+  const runnerPidFile = join(stateDir, "runner.pid");
   const outsideLog = join(stateDir, `${nonce}.jsonl`);
   const safeTaskId = `${nonce}-task`;
   const safeLog = join(taskLogsDir, `${safeTaskId}.jsonl`);
   const restoreOutside = restoreFileLater(outsideLog);
   const restoreSafe = restoreFileLater(safeLog);
+  const restoreCurrentRun = restoreFileLater(currentRunFile);
+  const restorePid = restoreFileLater(runnerPidFile);
 
   mkdirSync(taskLogsDir, { recursive: true });
   writeFileSync(outsideLog, `${JSON.stringify({ type: "LEAK", secret: "outside-task-logs" })}\n`, "utf8");
   writeFileSync(safeLog, `${JSON.stringify({ type: "TASK_START", title: "safe task" })}\n`, "utf8");
+  writeFileSync(currentRunFile, JSON.stringify({
+    run_id: `test-run-${nonce}`,
+    prd: "test.json",
+    started_at: new Date().toISOString(),
+  }), "utf8");
+  writeFileSync(runnerPidFile, String(process.pid), "utf8");
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
@@ -335,6 +345,111 @@ test("progress server rejects traversing task log ids and still returns valid lo
     await new Promise((resolve) => server.close(resolve));
     restoreSafe();
     restoreOutside();
+    restoreCurrentRun();
+    restorePid();
+  }
+});
+
+test("progress server requires active run for individual task log access (P12.Z3)", async () => {
+  const nonce = `sec3-${process.pid}-${Date.now()}`;
+  const stateDir = join(REPO_ROOT, "state");
+  const taskLogsDir = join(stateDir, "runtime", "task-logs");
+  const currentRunFile = join(stateDir, "runtime", "current-run.json");
+  const runnerPidFile = join(stateDir, "runner.pid");
+  const safeTaskId = `${nonce}-task`;
+  const safeLog = join(taskLogsDir, `${safeTaskId}.jsonl`);
+  const restoreCurrentRun = restoreFileLater(currentRunFile);
+  const restorePid = restoreFileLater(runnerPidFile);
+  const restoreSafe = restoreFileLater(safeLog);
+
+  mkdirSync(taskLogsDir, { recursive: true });
+  writeFileSync(safeLog, `${JSON.stringify({ type: "TASK_START", title: "active-run task" })}\n`, "utf8");
+  writeFileSync(currentRunFile, JSON.stringify({
+    run_id: `test-run-${nonce}`,
+    prd: "test.json",
+    started_at: new Date().toISOString(),
+  }), "utf8");
+  writeFileSync(runnerPidFile, String(process.pid), "utf8");
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const addr = server.address();
+    const port = typeof addr === "string" ? 0 : (addr as { port: number }).port;
+
+    const activeResponse = await fetch(`http://127.0.0.1:${port}/api/task-logs/${encodeURIComponent(safeTaskId)}`);
+    assert.equal(activeResponse.status, 200, "active run should allow task log access");
+    const activeBody = await activeResponse.json();
+    assert.equal(activeBody[0].title, "active-run task");
+
+    writeFileSync(currentRunFile, JSON.stringify({
+      run_id: `test-run-stale-${nonce}`,
+      prd: "test.json",
+      started_at: "2000-01-01T00:00:00.000Z",
+    }), "utf8");
+    const staleResponse = await fetch(`http://127.0.0.1:${port}/api/task-logs/${encodeURIComponent(safeTaskId)}`);
+    assert.equal(staleResponse.status, 404, "stale run should block task log access");
+    const staleBody = await staleResponse.json();
+    assert.equal(staleBody.error, "No active run");
+
+    writeFileSync(currentRunFile, JSON.stringify({
+      run_id: `test-run-${nonce}`,
+      prd: "test.json",
+      started_at: new Date().toISOString(),
+    }), "utf8");
+    const restoredResponse = await fetch(`http://127.0.0.1:${port}/api/task-logs/${encodeURIComponent(safeTaskId)}`);
+    assert.equal(restoredResponse.status, 200, "restored run should allow task log access");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    restoreSafe();
+    restorePid();
+    restoreCurrentRun();
+  }
+});
+
+test("progress server requires active run for review log access (P12.Z3)", async () => {
+  const nonce = `sec4-${process.pid}-${Date.now()}`;
+  const stateDir = join(REPO_ROOT, "state");
+  const taskLogsDir = join(stateDir, "runtime", "task-logs");
+  const currentRunFile = join(stateDir, "runtime", "current-run.json");
+  const runnerPidFile = join(stateDir, "runner.pid");
+  const reviewLogFile = join(taskLogsDir, "_review.jsonl");
+  const restoreReview = restoreFileLater(reviewLogFile);
+  const restoreCurrentRun = restoreFileLater(currentRunFile);
+  const restorePid = restoreFileLater(runnerPidFile);
+
+  mkdirSync(taskLogsDir, { recursive: true });
+  writeFileSync(reviewLogFile, `${JSON.stringify({ type: "REVIEW_START", scope: "full" })}\n`, "utf8");
+  writeFileSync(currentRunFile, JSON.stringify({
+    run_id: `test-review-${nonce}`,
+    prd: "test.json",
+    started_at: new Date().toISOString(),
+  }), "utf8");
+  writeFileSync(runnerPidFile, String(process.pid), "utf8");
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const addr = server.address();
+    const port = typeof addr === "string" ? 0 : (addr as { port: number }).port;
+
+    const activeResp = await fetch(`http://127.0.0.1:${port}/api/review-log`);
+    assert.equal(activeResp.status, 200, "active run should allow review log access");
+    const activeBody = await activeResp.json();
+    assert.equal(activeBody[0].type, "REVIEW_START");
+
+    writeFileSync(currentRunFile, JSON.stringify({
+      run_id: `test-review-stale-${nonce}`,
+      prd: "test.json",
+      started_at: "2000-01-01T00:00:00.000Z",
+    }), "utf8");
+    const staleResp = await fetch(`http://127.0.0.1:${port}/api/review-log`);
+    assert.equal(staleResp.status, 404, "stale run should block review log access");
+    const staleBody = await staleResp.json();
+    assert.equal(staleBody.error, "No active run");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    restoreReview();
+    restorePid();
+    restoreCurrentRun();
   }
 });
 

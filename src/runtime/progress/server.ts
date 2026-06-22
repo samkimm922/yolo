@@ -1712,6 +1712,12 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ tasks: summaries }));
 
   } else if (url.startsWith("/api/task-logs/")) {
+    // P12.Z3: require active run for individual task log access
+    if (!readCurrentRun()) {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "No active run" }));
+      return;
+    }
     const taskId = parseTaskLogId(url);
     if (taskId === null) {
       writeBadRequest(res);
@@ -1727,6 +1733,12 @@ const server = http.createServer((req, res) => {
     }
 
   } else if (url === "/api/review-log") {
+    // P12.Z3: require active run for review log access
+    if (!readCurrentRun()) {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "No active run" }));
+      return;
+    }
     const entries = readReviewTaskLog();
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(entries || []));
