@@ -93,6 +93,9 @@ const DELIVERABLE_VERB_TERMS = [
   "compose", "composes", "composed", "composing",
   "decrypt", "decrypts", "decrypted", "decrypting",
   "receive", "receives", "received", "receiving",
+  "sending",
+  "exporting",
+  "scheduling",
   "新增", "新建", "创建", "添加", "增加", "删除", "移除", "修改", "编辑", "重命名",
   "发送", "上传", "下载", "部署", "校验", "鉴权", "实现",
   "构建", "配置", "安装", "连接", "迁移", "同步", "导出", "导入", "合并", "运行", "通知", "集成", "生成", "插入",
@@ -102,7 +105,7 @@ const DELIVERABLE_VERB_TERMS = [
 
 // 仅用真正的并列连词，刻意排除 / , 、 这类标点——它们会出现在结构性 surface 标签里（如"测试/验证"），
 // 用作连词会把自动生成的元数据误判成独立动作。
-const GENERIC_STRICT_CONNECTOR = "(?:\\band\\b|\\bor\\b|\\bplus\\b|\\bthen\\b|\\+|并且|并|以及|同时|然后|或者|或)";
+const GENERIC_STRICT_CONNECTOR = "(?:\\bas well as\\b|\\balong with\\b|\\bin addition to\\b|\\bfollowed by\\b|\\band\\b|\\bor\\b|\\bplus\\b|\\bthen\\b|\\+|并且|并|以及|同时|然后|或者|或)";
 const GENERIC_PAIR_DISTANCE = 40;
 
 const GENERIC_LAYER_UI_TERMS = ["button", "form", "page", "modal", "dialog", "screen", "component", "input", "按钮", "表单", "页面", "弹窗", "界面", "组件"];
