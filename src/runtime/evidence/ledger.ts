@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   buildLedgerRecord,
@@ -14,6 +14,109 @@ import {
   validateEvidenceArtifact,
   validateLedgerRecord,
 } from "./schema.js";
+
+const DEFAULT_LEDGER_LOCK_TIMEOUT_MS = 30_000;
+const DEFAULT_LEDGER_LOCK_STALE_MS = 120_000;
+const DEFAULT_LEDGER_LOCK_RETRY_MS = 10;
+const LOCK_WAIT_BUFFER = new Int32Array(new SharedArrayBuffer(4));
+
+function asPositiveNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function ledgerAppendError(code, message, details = Object(), cause = undefined) {
+  const error = new Error(message);
+  return Object.assign(error, {
+    code,
+    ...details,
+    ...(cause ? { cause } : {}),
+  });
+}
+
+function sleepSync(ms) {
+  Atomics.wait(LOCK_WAIT_BUFFER, 0, 0, Math.max(1, ms));
+}
+
+function ledgerLockPath(filePath) {
+  return `${filePath}.lock`;
+}
+
+function readLockAgeMs(lockPath, nowMs) {
+  try {
+    return nowMs - statSync(lockPath).mtimeMs;
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function removeStaleLedgerLock(lockPath, filePath, staleMs, nowMs) {
+  const lockAgeMs = readLockAgeMs(lockPath, nowMs);
+  if (lockAgeMs === null || lockAgeMs < staleMs) return false;
+  try {
+    rmSync(lockPath, { recursive: true, force: true });
+    return true;
+  } catch (error) {
+    throw ledgerAppendError("LEDGER_APPEND_LOCK_STALE_CLEANUP_FAILED", "Failed to clean stale evidence ledger append lock.", {
+      ledger_path: filePath,
+      lock_path: lockPath,
+      stale_ms: staleMs,
+      lock_age_ms: lockAgeMs,
+    }, error);
+  }
+}
+
+function acquireLedgerAppendLock(filePath, options = Object()) {
+  const timeoutMs = asPositiveNumber(options.lockTimeoutMs ?? options.lock_timeout_ms, DEFAULT_LEDGER_LOCK_TIMEOUT_MS);
+  const staleMs = asPositiveNumber(options.lockStaleMs ?? options.lock_stale_ms, DEFAULT_LEDGER_LOCK_STALE_MS);
+  const retryMs = asPositiveNumber(options.lockRetryMs ?? options.lock_retry_ms, DEFAULT_LEDGER_LOCK_RETRY_MS);
+  const lockPath = ledgerLockPath(filePath);
+  const deadline = Date.now() + timeoutMs;
+  let attempts = 0;
+
+  mkdirSync(dirname(filePath), { recursive: true });
+
+  while (Date.now() <= deadline) {
+    attempts += 1;
+    try {
+      mkdirSync(lockPath);
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        try {
+          rmSync(lockPath, { recursive: true, force: true });
+        } catch (error) {
+          throw ledgerAppendError("LEDGER_APPEND_LOCK_RELEASE_FAILED", "Failed to release evidence ledger append lock.", {
+            ledger_path: filePath,
+            lock_path: lockPath,
+          }, error);
+        }
+      };
+    } catch (error) {
+      if (error?.code !== "EEXIST") {
+        if (error?.code?.startsWith?.("LEDGER_APPEND_")) throw error;
+        throw ledgerAppendError("LEDGER_APPEND_LOCK_ACQUIRE_FAILED", "Failed to acquire evidence ledger append lock.", {
+          ledger_path: filePath,
+          lock_path: lockPath,
+        }, error);
+      }
+
+      removeStaleLedgerLock(lockPath, filePath, staleMs, Date.now());
+      if (Date.now() > deadline) break;
+      sleepSync(retryMs);
+    }
+  }
+
+  throw ledgerAppendError("LEDGER_APPEND_LOCK_TIMEOUT", "Timed out waiting for evidence ledger append lock.", {
+    ledger_path: filePath,
+    lock_path: lockPath,
+    timeout_ms: timeoutMs,
+    stale_ms: staleMs,
+    attempts,
+  });
+}
 
 function readJsonlRecords(filePath) {
   if (!existsSync(filePath)) return [];
@@ -83,21 +186,49 @@ export function readLedgerJsonl(filePath) {
   return readJsonlRecords(filePath);
 }
 
-export function appendJsonlRecord(filePath, record, options = Object()) {
-  const now = options.now || new Date().toISOString();
-  mkdirSync(dirname(filePath), { recursive: true });
-  const payload = buildLedgerRecord(record?.event, record, {
-    ...options,
-    now,
-    ledger: record?.ledger || options.ledger,
-    prevHash: options.prevHash ?? options.prev_hash ?? record?.prev_hash ?? previousRecordHash(filePath),
-  });
-  const validation = validateLedgerRecord(payload);
-  if (!validation.ok) {
-    throw new Error(`Invalid evidence ledger record: ${validation.errors.join("; ")}`);
+function withLedgerAppendLock(filePath, options, append) {
+  let release;
+  let appendError;
+  try {
+    release = acquireLedgerAppendLock(filePath, options);
+    return append();
+  } catch (error) {
+    appendError = error;
+    if (error?.code?.startsWith?.("LEDGER_APPEND_")) throw error;
+    throw ledgerAppendError("LEDGER_APPEND_FAILED", "Failed to append evidence ledger record.", {
+      ledger_path: filePath,
+    }, error);
+  } finally {
+    if (release) {
+      try {
+        release();
+      } catch (releaseError) {
+        if (!appendError) throw releaseError;
+      }
+    }
   }
-  appendFileSync(filePath, `${JSON.stringify(payload)}\n`, "utf8");
-  return payload;
+}
+
+export function appendJsonlRecord(filePath, record, options = Object()) {
+  return withLedgerAppendLock(filePath, options, () => {
+    const now = options.now || new Date().toISOString();
+    mkdirSync(dirname(filePath), { recursive: true });
+    const payload = buildLedgerRecord(record?.event, record, {
+      ...options,
+      now,
+      ledger: record?.ledger || options.ledger,
+      prevHash: options.prevHash ?? options.prev_hash ?? record?.prev_hash ?? previousRecordHash(filePath),
+    });
+    const validation = validateLedgerRecord(payload);
+    if (!validation.ok) {
+      throw ledgerAppendError("LEDGER_APPEND_RECORD_INVALID", `Invalid evidence ledger record: ${validation.errors.join("; ")}`, {
+        ledger_path: filePath,
+        validation_errors: validation.errors,
+      });
+    }
+    appendFileSync(filePath, `${JSON.stringify(payload)}\n`, "utf8");
+    return payload;
+  });
 }
 
 export function appendStateEvent(stateDir, event, data = Object(), options = Object()) {

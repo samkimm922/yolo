@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -31,6 +32,41 @@ function readJsonl(filePath) {
     .split("\n")
     .filter(Boolean)
     .map((line) => JSON.parse(line));
+}
+
+function runConcurrentAppendWorker(filePath, worker) {
+  const childCode = `
+    import { appendJsonlRecord } from "./src/runtime/evidence/ledger.js";
+    appendJsonlRecord(process.env.LEDGER_PATH, {
+      event: "concurrent.append",
+      worker: Number(process.env.WORKER),
+      ledger: "state",
+      source: "test"
+    }, { lockTimeoutMs: 60000 });
+  `;
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(process.execPath, ["--import", "tsx", "-e", childCode], {
+      cwd: resolve(import.meta.dirname, ".."),
+      env: {
+        ...process.env,
+        LEDGER_PATH: filePath,
+        WORKER: String(worker),
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolvePromise(undefined);
+      } else {
+        reject(new Error(`ledger append worker ${worker} exited ${code}: ${stderr}`));
+      }
+    });
+  });
 }
 
 describe("evidence ledger", () => {
@@ -161,6 +197,27 @@ describe("evidence ledger", () => {
       const validation = validateLedgerChain(tampered);
       assert.equal(validation.status, "fail");
       assert.ok(validation.errors.some((error) => error.code === "LEDGER_RECORD_INVALID"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("appendJsonlRecord preserves the hash chain across concurrent processes", async () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+      const workerCount = 80;
+
+      await Promise.all(Array.from({ length: workerCount }, (_, index) => runConcurrentAppendWorker(filePath, index)));
+
+      const records = readLedgerJsonl(filePath);
+      const validation = validateLedgerChain(records);
+      assert.equal(records.length, workerCount);
+      assert.equal(validation.ok, true, JSON.stringify(validation.errors.slice(0, 3), null, 2));
+      assert.equal(validation.status, "pass");
+      for (const [index, record] of records.entries()) {
+        assert.equal(record.prev_hash, index === 0 ? null : records[index - 1].record_hash);
+      }
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
