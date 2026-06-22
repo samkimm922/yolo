@@ -235,7 +235,7 @@ export function safeExecSync(command: string, options: { cwd?: string; timeout?:
  * execArgv (no shell). The first arg is the executable; the second is argv.
  * Same throw shape as safeExecSync.
  */
-export function safeExecFileSync(executable: string, argv: string[] = [], options: { cwd?: string; timeout?: number; encoding?: BufferEncoding; env?: NodeJS.ProcessEnv; stdio?: Array<"pipe" | "ignore" | "inherit" | null> } = {}): string {
+export function safeExecFileSync(executable: string, argv: string[] = [], options: { cwd?: string; timeout?: number; encoding?: BufferEncoding; env?: NodeJS.ProcessEnv; stdio?: Array<"pipe" | "ignore" | "inherit" | null>; maxBuffer?: number } = {}): string {
   const result = execArgv([executable, ...argv], options);
   if (!result.ok) {
     const err: Error & { status: number | null; stdout: string; stderr: string; code?: string } = Object.assign(

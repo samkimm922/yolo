@@ -2,6 +2,11 @@ import { captureExecutionBaselines } from "./baselines.js";
 import { buildContextPackFailureOutcome } from "./context-pack-outcome.js";
 import { buildPromptSession } from "./session-prompt.js";
 import { validateContextPackBeforeSession } from "./session-validation.js";
+import { blockedTaskTransition } from "../task-state/transitions.js";
+
+function isUnsafeWorktreeError(error) {
+  return String(error?.message || error).startsWith("createWorktree: unsafe ");
+}
 
 export async function prepareProviderSession({
   task,
@@ -95,7 +100,28 @@ export async function prepareProviderSession({
     eslintBaselinePath,
   });
 
-  const wt = createWorktree(task.id);
+  let wt;
+  try {
+    wt = createWorktree(task.id);
+  } catch (error) {
+    if (!isUnsafeWorktreeError(error)) throw error;
+    const failReason = String(error?.message || error);
+    return {
+      action: "return",
+      reason: "worktree_blocked",
+      failReason,
+      transition: blockedTaskTransition({
+        taskId: task.id,
+        reason: failReason,
+        result: { retries: attempt },
+        prdUpdate: {
+          phase: "worktree",
+          phaseDetail: "unsafe_component",
+        },
+      }),
+      result: { status: "blocked", reason: failReason },
+    };
+  }
   onWorktreeCreated(wt);
   logProgress("", "├─", `worktree: ${wt.branch}`);
 

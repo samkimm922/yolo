@@ -82,12 +82,12 @@ describe("worktree execution session helpers", () => {
       existsSync: (path) => path === "/repo/node_modules" || (darwinCopied && path === "/repo/.yolo-worktrees/FIX-1/node_modules"),
       lstatSync: fakeLstat,
       realpathSync: fakeRealpath,
-      execSync: (command, options) => {
-        darwinCalls.push({ command, options });
+      execFileSync: (command, args, options) => {
+        darwinCalls.push({ command, args, options });
         darwinCopied = true;
       },
     }), true);
-    assert.deepEqual(darwinCalls.map((call) => call.command), ['cp -cR "/repo/node_modules" "/repo/.yolo-worktrees/FIX-1/node_modules"']);
+    assert.deepEqual(darwinCalls.map((call) => [call.command, call.args]), [["cp", ["-cR", "/repo/node_modules", "/repo/.yolo-worktrees/FIX-1/node_modules"]]]);
     assertNodeModulesExecOptions(darwinCalls[0].options, 300000);
 
     assert.equal(provisionWorktreeNodeModules({
@@ -97,12 +97,12 @@ describe("worktree execution session helpers", () => {
       existsSync: (path) => path === "/repo/node_modules" || (linuxCopied && path === "/repo/.yolo-worktrees/FIX-2/node_modules"),
       lstatSync: fakeLstat,
       realpathSync: fakeRealpath,
-      execSync: (command, options) => {
-        linuxCalls.push({ command, options });
+      execFileSync: (command, args, options) => {
+        linuxCalls.push({ command, args, options });
         linuxCopied = true;
       },
     }), true);
-    assert.deepEqual(linuxCalls.map((call) => call.command), ['cp -a --reflink=auto "/repo/node_modules" "/repo/.yolo-worktrees/FIX-2/node_modules"']);
+    assert.deepEqual(linuxCalls.map((call) => [call.command, call.args]), [["cp", ["-a", "--reflink=auto", "/repo/node_modules", "/repo/.yolo-worktrees/FIX-2/node_modules"]]]);
     assertNodeModulesExecOptions(linuxCalls[0].options, 300000);
   });
 
@@ -116,17 +116,17 @@ describe("worktree execution session helpers", () => {
       existsSync: (path) => path === "/repo/node_modules" || (copied && path === "/repo/.yolo-worktrees/FIX-CP/node_modules"),
       lstatSync: () => ({ isDirectory: () => true, isSymbolicLink: () => false }),
       realpathSync: (path) => path,
-      execSync: (command, options) => {
-        calls.push({ command, options });
-        if (command.startsWith("cp -cR ")) throw new Error("clone unsupported");
+      execFileSync: (command, args, options) => {
+        calls.push({ command, args, options });
+        if (args[0] === "-cR") throw new Error("clone unsupported");
         copied = true;
         return "";
       },
     }), true);
 
-    assert.deepEqual(calls.map((call) => call.command), [
-      'cp -cR "/repo/node_modules" "/repo/.yolo-worktrees/FIX-CP/node_modules"',
-      'cp -pR "/repo/node_modules" "/repo/.yolo-worktrees/FIX-CP/node_modules"',
+    assert.deepEqual(calls.map((call) => [call.command, call.args]), [
+      ["cp", ["-cR", "/repo/node_modules", "/repo/.yolo-worktrees/FIX-CP/node_modules"]],
+      ["cp", ["-pR", "/repo/node_modules", "/repo/.yolo-worktrees/FIX-CP/node_modules"]],
     ]);
     assertNodeModulesExecOptions(calls[0].options, 300000);
     assertNodeModulesExecOptions(calls[1].options, 300000);
@@ -140,17 +140,17 @@ describe("worktree execution session helpers", () => {
         rootDir: "/repo",
         platform: "linux",
         existsSync: (path) => path === "/repo/node_modules",
-        execSync: (command, options) => {
-          calls.push({ command, options });
+        execFileSync: (command, args, options) => {
+          calls.push({ command, args, options });
           throw new Error("copy failed");
         },
       }),
       /copy failed/,
     );
 
-    assert.deepEqual(calls.map((call) => call.command), [
-      'cp -a --reflink=auto "/repo/node_modules" "/repo/.yolo-worktrees/FIX-LINK/node_modules"',
-      'cp -a "/repo/node_modules" "/repo/.yolo-worktrees/FIX-LINK/node_modules"',
+    assert.deepEqual(calls.map((call) => [call.command, call.args]), [
+      ["cp", ["-a", "--reflink=auto", "/repo/node_modules", "/repo/.yolo-worktrees/FIX-LINK/node_modules"]],
+      ["cp", ["-a", "/repo/node_modules", "/repo/.yolo-worktrees/FIX-LINK/node_modules"]],
     ]);
     assertNodeModulesExecOptions(calls[0].options, 300000);
     assertNodeModulesExecOptions(calls[1].options, 300000);
@@ -167,10 +167,10 @@ describe("worktree execution session helpers", () => {
       writeFileSync(join(rootDir, "node_modules", "pkg", "index.js"), "module.exports = 1;\n", "utf8");
 
       const calls = [];
-      const execSync = (command, options) => {
-        calls.push({ command, options });
-        if (command.startsWith("cp -a --reflink=auto ")) throw new Error("clone unsupported");
-        if (command.startsWith("cp -a ")) {
+      const execFileSync = (command, args, options) => {
+        calls.push({ command, args, options });
+        if (args[0] === "-a" && args[1] === "--reflink=auto") throw new Error("clone unsupported");
+        if (args[0] === "-a") {
           mkdirSync(wtNodeModules, { recursive: true });
           writeFileSync(join(wtNodeModules, "partial.txt"), "partial\n", "utf8");
           throw Object.assign(new Error("copy timed out"), { code: "ETIMEDOUT" });
@@ -183,14 +183,14 @@ describe("worktree execution session helpers", () => {
           wtPath,
           rootDir,
           platform: "linux",
-          execSync,
+          execFileSync,
         }),
         /copy timed out/,
       );
 
-      assert.deepEqual(calls.map((call) => call.command), [
-        `cp -a --reflink=auto "${join(rootDir, "node_modules")}" "${wtNodeModules}"`,
-        `cp -a "${join(rootDir, "node_modules")}" "${wtNodeModules}"`,
+      assert.deepEqual(calls.map((call) => [call.command, call.args]), [
+        ["cp", ["-a", "--reflink=auto", join(rootDir, "node_modules"), wtNodeModules]],
+        ["cp", ["-a", join(rootDir, "node_modules"), wtNodeModules]],
       ]);
       assertNodeModulesExecOptions(calls[0].options, 300000);
       assertNodeModulesExecOptions(calls[1].options, 300000);
@@ -295,6 +295,7 @@ describe("worktree execution session helpers", () => {
 
   test("createTaskWorktree creates a deterministic worktree and writes gate baselines", () => {
     const commands = [];
+    const fileCommands = [];
     const writes = new Map();
     const mkdirs = [];
     const execSync = (command) => {
@@ -303,7 +304,8 @@ describe("worktree execution session helpers", () => {
       if (command === "git rev-parse --verify HEAD") return "abc123\n";
       return "";
     };
-    const execFileSync = (bin, _args) => {
+    const execFileSync = (bin, args) => {
+      fileCommands.push({ bin, args });
       if (bin === "tsc") return "src/a.ts(1,1): error TS1000: bad\n";
       if (bin === "eslint") {
         return JSON.stringify([{ filePath: "/repo/.yolo-worktrees/FIX-1/src/a.ts", messages: [{ line: 2, ruleId: "semi" }] }]);
@@ -330,8 +332,8 @@ describe("worktree execution session helpers", () => {
       base: "abc123",
       mode: "git",
     });
-    assert.ok(commands.some((command) => command.includes("git worktree add --detach")));
-    assert.ok(commands.some((command) => command.includes("checkout -b")));
+    assert.ok(fileCommands.some((call) => call.bin === "git" && call.args.join("\0") === ["worktree", "add", "--detach", "/repo/.yolo-worktrees/FIX-1", "HEAD"].join("\0")));
+    assert.ok(fileCommands.some((call) => call.bin === "git" && call.args.join("\0") === ["-C", "/repo/.yolo-worktrees/FIX-1", "checkout", "-b", "yolo-FIX-1-123"].join("\0")));
     assert.ok(mkdirs.includes("/repo/.yolo-worktrees"));
     const tscBaseline = JSON.parse(writes.get("/repo/.yolo-worktrees/FIX-1/scripts/yolo/state/runtime/tsc-baseline.json"));
     const eslintBaseline = JSON.parse(writes.get("/repo/.yolo-worktrees/FIX-1/scripts/yolo/state/runtime/eslint-baseline.json"));
@@ -342,6 +344,37 @@ describe("worktree execution session helpers", () => {
     assert.deepEqual(eslintBaseline.keys, ["src/a.ts:2:semi"]);
     assert.equal(eslintBaseline.meta.command, "eslint");
     assert.equal(eslintBaseline.meta.artifact_hash, baselineArtifactHash(eslintBaseline));
+  });
+
+  test("createTaskWorktree rejects unsafe task IDs before git or filesystem execution", () => {
+    const calls = [];
+
+    for (const taskId of ["FIX-1;touch-pwned", "../FIX-1", "FIX-1/child", "FIX-1 $(touch pwned)"]) {
+      assert.throws(
+        () => createTaskWorktree({
+          taskId,
+          rootDir: "/repo",
+          worktreeRoot: "/repo/.yolo-worktrees",
+          config: { build: { type_check: "", lint: "" } },
+          now: () => 123,
+          execSync: (...args) => {
+            calls.push(["execSync", ...args]);
+            return "";
+          },
+          execFileSync: (...args) => {
+            calls.push(["execFileSync", ...args]);
+            return "";
+          },
+          existsSync: () => false,
+          mkdirSync: (...args) => calls.push(["mkdirSync", ...args]),
+          cpSync: (...args) => calls.push(["cpSync", ...args]),
+          writeFileSync: (...args) => calls.push(["writeFileSync", ...args]),
+        }),
+        /unsafe taskId/,
+      );
+    }
+
+    assert.deepEqual(calls, []);
   });
 
   test("createTaskWorktree falls back to a filesystem copy outside a git worktree", () => {
@@ -445,8 +478,10 @@ describe("worktree execution session helpers", () => {
   test("cleanupTaskWorktree copies scoped files, skips out-of-scope business files, and cleans worktree", () => {
     const copied = [];
     const commands = [];
+    const fileCommands = [];
     const logs = [];
-    const execFileSync = (_command, args) => {
+    const execFileSync = (command, args) => {
+      fileCommands.push({ command, args });
       if (args[0] === "-C" && args[2] === "status") {
         return [
           " M src/a.ts",
@@ -487,8 +522,8 @@ describe("worktree execution session helpers", () => {
     assert.deepEqual(copied, [{ src: "/wt/FIX-1/src/a.ts", dst: "/repo/src/a.ts" }]);
     assert.ok(logs.some((entry) => entry.phase === "BLOCK" && entry.detail.includes("src/b.ts")));
     assert.ok(logs.some((entry) => entry.phase === "MERGED" && entry.detail.includes("跳过 1 个运行时文件")));
-    assert.ok(commands.some((command) => command.includes("git worktree remove")));
-    assert.ok(commands.some((command) => command.includes("git branch -D")));
+    assert.ok(fileCommands.some((call) => call.command === "git" && call.args.join("\0") === ["worktree", "remove", "/wt/FIX-1", "--force"].join("\0")));
+    assert.ok(fileCommands.some((call) => call.command === "git" && call.args.join("\0") === ["branch", "-D", "yolo-FIX-1"].join("\0")));
   });
 
   test("cleanupTaskWorktree blocks when merge diff verification throws", () => {
