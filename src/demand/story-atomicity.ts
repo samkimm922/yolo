@@ -65,7 +65,7 @@ const DELIVERABLE_VERB_TERMS = [
   "create", "creates", "add", "adds", "assign", "assigns", "delete", "deletes", "remove", "removes",
   "update", "updates", "edit", "edits", "modify", "modifies", "rename", "renames",
   "send", "sends", "upload", "uploads", "download", "downloads",
-  "deploy", "deploys", "validate", "validates", "authenticate", "authorize",
+  "deploy", "deploys", "push", "pushes", "validate", "validates", "authenticate", "authorize",
   "implement", "implements", "build", "builds", "configure", "configures", "install",
   "connect", "connects", "migrate", "migrates", "sync", "syncs", "export", "exports",
   "import", "imports", "notify", "notifies", "schedule", "schedules", "integrate",

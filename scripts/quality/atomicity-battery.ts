@@ -33,6 +33,7 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   { id: "multi-add-edit-delete", expect: "multi", text: "A user can add, edit, and delete items in the list." },
   { id: "multi-login-dashboard-profile", expect: "multi", text: "The user logs in, views the dashboard, and updates their profile." },
   { id: "multi-import-and-email", expect: "multi", text: "Import the CSV file, generate a summary report, and email it to the manager." },
+  { id: "multi-build-push", expect: "multi", text: "Build the Docker image and push it to the registry." },
   { id: "multi-create-and-notify", expect: "multi", text: "Create the order and send a confirmation notification to the customer." },
 
   // ── Known capability gaps (currently MIS-detected as atomic → real headroom) ──
