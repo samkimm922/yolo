@@ -123,12 +123,12 @@ describe("files_modified_max scope filtering", () => {
 });
 
 describe("file_lines_max target existence", () => {
-  test("fails when an explicit target file is missing", () => {
+  test("passes when an explicit target file is missing (vacuous truth)", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-file-lines-"));
     try {
       const result = evalFileLinesMax({ file: "src/missing.ts", max: 150 }, {}, root);
-      assert.equal(result.passed, false);
-      assert.match(result.detail, /文件不存在/);
+      assert.equal(result.passed, true);
+      assert.match(result.detail, /未超限|不存在的文件/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

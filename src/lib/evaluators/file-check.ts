@@ -194,7 +194,11 @@ export function evalFileLinesMax(params, taskScope, ROOT) {
     }
     const absPath = guardResult.path;
     if (!existsSync(absPath)) {
-      violations.push({ file, missing: true });
+      // Vacuously satisfied: the file has no lines to exceed the limit if it
+      // does not exist. The runner used to mark these tasks as "not done" even
+      // when the file was correctly removed, so e.g. a refactor that deletes
+      // src/legacy.ts reported FAIL on the AUTO-file_lines_max post-condition.
+      // Tasks that need the file to exist can layer file_exists separately.
       continue;
     }
     if (statSync(absPath).isDirectory()) continue;
@@ -216,7 +220,7 @@ export function evalFileLinesMax(params, taskScope, ROOT) {
     return {
       passed: false,
       detail: violations
-        .map((v) => v.missing ? `${v.file}: 文件不存在` : `${v.file}: ${v.lines} 行（限制 ${maxLines} 行）`)
+        .map((v) => v.escape ? `${v.file}: 路径越界` : `${v.file}: ${v.lines} 行（限制 ${maxLines} 行）`)
         .join("; "),
       violations,
     };

@@ -12,7 +12,7 @@
 // (or hold it). Expanding the battery is a separate, deliberate step that may lower Q to
 // expose new territory.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -119,6 +119,10 @@ function runRunnerCase(testCase: RunnerBatteryCase): CaseResult {
       const abs = join(root, rel);
       mkdirSync(dirname(abs), { recursive: true });
       writeFileSync(abs, contents, "utf8");
+    }
+    for (const rel of testCase.deleteFiles || []) {
+      const abs = join(root, rel);
+      try { unlinkSync(abs); } catch { /* already absent */ }
     }
     const report = evaluatePostConditions(testCase.task, {}, { cwd: root, root }) as { allPass?: boolean };
     const detected = report.allPass ? "done" : "not_done";
