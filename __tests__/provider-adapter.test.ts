@@ -269,6 +269,27 @@ describe("provider execution adapter", () => {
     assert.equal(run.attempt_ledger[0].timed_out, true);
   });
 
+  test("spawnProviderPrompt fails closed before spawning when timeout is zero or invalid", async () => {
+    for (const invalidTimeout of [0, -1, Infinity, NaN]) {
+      let spawned = false;
+      const run = await spawnProviderPrompt("prompt", spawnOptions({
+        timeout: invalidTimeout,
+        spawnImpl: () => {
+          spawned = true;
+          throw new Error("spawn should not be called");
+        },
+      }));
+
+      assert.equal(spawned, false, `timeout=${invalidTimeout} must not spawn`);
+      assert.equal(run.success, false, `timeout=${invalidTimeout}`);
+      assert.equal(run.status, "blocked", `timeout=${invalidTimeout}`);
+      assert.equal(run.blocked, true, `timeout=${invalidTimeout}`);
+      assert.equal(run.reason, "provider_timeout_invalid", `timeout=${invalidTimeout}`);
+      assert.ok(run.preflight.blocks_execution, `timeout=${invalidTimeout}`);
+      assert.ok(run.preflight.blockers.some((b) => b.code === "PROVIDER_TIMEOUT_INVALID"), `timeout=${invalidTimeout}`);
+    }
+  });
+
   test("spawnProviderPrompt distinguishes killed provider processes", async () => {
     const run = await spawnProviderPrompt("prompt", spawnOptions({
       spawnImpl: fakeProviderSpawn({ stdout: "partial", code: null, signal: "SIGTERM" }),

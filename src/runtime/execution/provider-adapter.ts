@@ -29,6 +29,7 @@ export const YOLO_PACKAGE_ROOT = findPackageRoot(MODULE_DIR);
 export const DEFAULT_CLAUDE_SETTINGS_FILE = "settings-minimal.json";
 export const DEFAULT_CLAUDE_SETTINGS_PATH = resolve(YOLO_PACKAGE_ROOT, DEFAULT_CLAUDE_SETTINGS_FILE);
 export const DEFAULT_CLAUDE_PERMISSION_MODE = "acceptEdits";
+const DEFAULT_PROVIDER_TIMEOUT_MS = 480000;
 
 function selectedProvider(value) {
   const provider = typeof value === "string" ? value : value?.selected;
@@ -78,6 +79,7 @@ function preflightReason(blockers = []) {
   if (codes.includes("AGENT_BUDGET_NOT_ENFORCEABLE")) return "agent_budget_not_enforceable";
   if (codes.includes("AGENT_ALLOWED_ROOTS_MISSING") || codes.includes("AGENT_ROOT_POLICY_MISSING")) return "agent_root_policy_missing";
   if (codes.includes("PROVIDER_INVOCATION_BUILD_FAILED")) return "provider_invocation_build_failed";
+  if (codes.includes("PROVIDER_TIMEOUT_INVALID")) return "provider_timeout_invalid";
   return "provider_preflight_blocked";
 }
 
@@ -496,7 +498,7 @@ export function buildProviderInvocation({
 }
 
 export function spawnProviderPrompt(prompt, {
-  timeout = 0,
+  timeout = DEFAULT_PROVIDER_TIMEOUT_MS,
   cwd,
   config,
   rootDir,
@@ -512,6 +514,26 @@ export function spawnProviderPrompt(prompt, {
   if (!config?.ai) throw new Error("spawnProviderPrompt requires config.ai");
   if (!rootDir) throw new Error("spawnProviderPrompt requires rootDir");
   if (!runtimeDir) throw new Error("spawnProviderPrompt requires runtimeDir");
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    return Promise.resolve(blockedProviderRun({
+      provider: "unknown",
+      command: null,
+      blockers: [{
+        code: "PROVIDER_TIMEOUT_INVALID",
+        message: `Provider timeout must be a positive finite number (got ${timeout})`,
+      }],
+      inspection: null,
+      preflight: {
+        status: "blocked",
+        blocks_execution: true,
+        blockers: [{
+          code: "PROVIDER_TIMEOUT_INVALID",
+          message: `Provider timeout must be a positive finite number (got ${timeout})`,
+        }],
+        warnings: [],
+      },
+    }));
+  }
   const workDir = cwd || rootDir;
   const stubPath = resolveProviderStubPath(process.env.YOLO_PROVIDER_STUB, { rootDir });
   const stubEnabled = Boolean(stubPath);
