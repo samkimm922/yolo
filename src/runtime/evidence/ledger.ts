@@ -14,6 +14,7 @@ import {
   validateEvidenceArtifact,
   validateLedgerRecord,
 } from "./schema.js";
+import { redactDeep } from "../../lib/security/redact.js";
 
 const DEFAULT_LEDGER_LOCK_TIMEOUT_MS = 30_000;
 const DEFAULT_LEDGER_LOCK_STALE_MS = 120_000;
@@ -213,11 +214,15 @@ export function appendJsonlRecord(filePath, record, options = Object()) {
   return withLedgerAppendLock(filePath, options, () => {
     const now = options.now || new Date().toISOString();
     mkdirSync(dirname(filePath), { recursive: true });
-    const payload = buildLedgerRecord(record?.event, record, {
+    // P10.S3: redact credential patterns before building the record (which
+    // computes record_hash) so the hash is self-consistent with the redacted
+    // payload. Readers see only redacted data; the chain integrity is preserved.
+    const safeRecord = redactDeep(record || Object());
+    const payload = buildLedgerRecord(safeRecord?.event, safeRecord, {
       ...options,
       now,
-      ledger: record?.ledger || options.ledger,
-      prevHash: options.prevHash ?? options.prev_hash ?? record?.prev_hash ?? previousRecordHash(filePath),
+      ledger: safeRecord?.ledger || options.ledger,
+      prevHash: options.prevHash ?? options.prev_hash ?? safeRecord?.prev_hash ?? previousRecordHash(filePath),
     });
     const validation = validateLedgerRecord(payload);
     if (!validation.ok) {
