@@ -81,6 +81,7 @@ const INVENTORY = [
   ["src/runtime/memory/retention.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   ["src/runtime/parallel/wave-planner.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 2 }],
   ["src/runtime/pi-runtimes.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 0 }],
+  ["src/runtime/progress/dashboard-template.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 8 }],
   ["src/runtime/progress/lifecycle-dashboard.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 0 }],
   ["src/runtime/progress/server.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 18 }],
   ["src/runtime/progress/ui-evidence.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 4 }],

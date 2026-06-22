@@ -12,6 +12,7 @@ import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 import http from "http";
 import { readLifecycleDashboard } from "./lifecycle-dashboard.js";
+import { CSS as DASHBOARD_CSS, renderProgressDashboard } from "./dashboard-template.js";
 import { isSafePathComponent, resolveWithinRoot } from "../../lib/security/path-guard.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1373,7 +1374,7 @@ const CLIENT_JS = `
 `;
 
 // ── HTML 页面 ──────────────────────────────────────────────────────
-const HTML = (data, stats) => {
+const LEGACY_HTML = (data, stats) => {
   const currentRun = data?.currentRun || null;
   const hasActiveRun = !!currentRun;
   const lifecycle = data?.lifecycle || readLifecycleProgressData();
@@ -1616,6 +1617,11 @@ const HTML = (data, stats) => {
 </html>`;
 };
 
+const HTML = (data, stats) => renderProgressDashboard(data, stats, {
+  lifecycle: data?.lifecycle || readLifecycleProgressData(),
+  prdPath: resolvePrdPath() || "unknown",
+});
+
 // ── HTTP Server ────────────────────────────────────────────────────
 const server = http.createServer((req, res) => {
   let requestUrl;
@@ -1693,7 +1699,7 @@ const server = http.createServer((req, res) => {
 });
 
 // 导出供 runner 内嵌使用
-export { server, getProgressData, readStats, readLifecycleProgressData, startFileWatchers, closeProgressServerResources, HTML, CSS };
+export { server, getProgressData, readStats, readLifecycleProgressData, startFileWatchers, closeProgressServerResources, HTML, DASHBOARD_CSS as CSS };
 
 // 只在直接运行时启动（被 import 时不启动）
 const __main = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
