@@ -109,63 +109,52 @@ export function evalCodeContains(params, taskScope, ROOT) {
   let totalMatches = 0;
   let filesChecked = 0;
   const missingFiles = [];
-  const exactZero = count.exact === 0;
 
   for (const file of targetFiles) {
     const guardResult = resolveWithinRoot(ROOT, file);
-    if (!guardResult.ok || !existsSync(guardResult.path) || statSync(guardResult.path).isDirectory()) {
-      // count.exact = 0 means "the marker must not appear". A missing file has
-      // zero occurrences, so the condition is vacuously satisfied; failing here
-      // produced false not_done on deletion tasks.
-      if (exactZero) {
-        filesChecked++;
-        details.push(`${file}: 文件不存在，按 0 处匹配 "${text.slice(0, 40)}"`);
-      } else {
-        missingFiles.push(file);
-      }
-      continue;
-    }
-    const absPath = guardResult.path;
-    filesChecked++;
-
-    const content = readFileSync(absPath, "utf8");
-
-    let searchContent = content;
+    const isMissing = !guardResult.ok || !existsSync(guardResult.path) || statSync(guardResult.path).isDirectory();
+    let matches = 0;
     let lineInfo = "";
-    if (lineConstraint !== null) {
-      const allLines = content.split("\n");
-      let targetLines;
-      if (Array.isArray(lineConstraint)) {
-        const start = Math.max(1, lineConstraint[0]);
-        const end = Math.min(allLines.length, lineConstraint[1]);
-        targetLines = allLines.slice(start - 1, end);
-        lineInfo = ` (行 ${start}-${end})`;
+
+    if (!isMissing) {
+      const absPath = guardResult.path;
+      const content = readFileSync(absPath, "utf8");
+
+      let searchContent = content;
+      if (lineConstraint !== null) {
+        const allLines = content.split("\n");
+        let targetLines;
+        if (Array.isArray(lineConstraint)) {
+          const start = Math.max(1, lineConstraint[0]);
+          const end = Math.min(allLines.length, lineConstraint[1]);
+          targetLines = allLines.slice(start - 1, end);
+          lineInfo = ` (行 ${start}-${end})`;
+        } else {
+          const lineNum = Math.max(1, Math.min(allLines.length, lineConstraint));
+          targetLines = [allLines[lineNum - 1]];
+          lineInfo = ` (行 ${lineNum})`;
+        }
+        searchContent = targetLines.join("\n");
+      }
+
+      if (isRegex) {
+        const re = new RegExp(text, "g");
+        matches = (searchContent.match(re) || []).length;
       } else {
-        const lineNum = Math.max(1, Math.min(allLines.length, lineConstraint));
-        targetLines = [allLines[lineNum - 1]];
-        lineInfo = ` (行 ${lineNum})`;
-      }
-      searchContent = targetLines.join("\n");
-    }
+        const normalizeWS = (s) => s.replace(/\s+/g, ' ');
+        const normContent = normalizeWS(searchContent);
+        const normText = normalizeWS(text);
 
-    let matches;
+        matches = normContent.split(normText).length - 1;
 
-    if (isRegex) {
-      const re = new RegExp(text, "g");
-      matches = (searchContent.match(re) || []).length;
-    } else {
-      const normalizeWS = (s) => s.replace(/\s+/g, ' ');
-      const normContent = normalizeWS(searchContent);
-      const normText = normalizeWS(text);
-
-      matches = normContent.split(normText).length - 1;
-
-      if (matches === 0 && /['"],\s*\(\)/.test(normText)) {
-        const asyncText = normText.replace(/(['"]),\s*\(\)/, '$1, async ()');
-        matches = normContent.split(asyncText).length - 1;
+        if (matches === 0 && /['"],\s*\(\)/.test(normText)) {
+          const asyncText = normText.replace(/(['"]),\s*\(\)/, '$1, async ()');
+          matches = normContent.split(asyncText).length - 1;
+        }
       }
     }
 
+    filesChecked++;
     totalMatches += matches;
 
     const min = count.min ?? 1;
@@ -176,6 +165,7 @@ export function evalCodeContains(params, taskScope, ROOT) {
       if (matches !== exact) {
         allPassed = false;
         details.push(`${file}${lineInfo}: 期望精确 ${exact} 处匹配 "${text.slice(0, 40)}"，实际 ${matches} 处`);
+        if (isMissing) missingFiles.push(file);
         continue;
       }
       details.push(`${file}${lineInfo}: 找到 ${matches} 处匹配 "${text.slice(0, 40)}"`);
@@ -187,6 +177,7 @@ export function evalCodeContains(params, taskScope, ROOT) {
       const rangeDesc =
         min === max ? `恰好 ${min}` : `${min}~${max === Infinity ? "∞" : max}`;
       details.push(`${file}${lineInfo}: 期望 ${rangeDesc} 处匹配 "${text.slice(0, 40)}"，实际 ${matches} 处`);
+      if (isMissing) missingFiles.push(file);
       continue;
     }
 

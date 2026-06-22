@@ -199,4 +199,25 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
       ],
     },
   },
+  {
+    id: "done-code-contains-range-zero-missing-file",
+    expect: "done",
+    description:
+      "code_contains with count.min=0/max=N passes when the target file was deleted; a missing file has zero occurrences, so the runner must not report a false not_done for removal tasks.",
+    baseFiles: { [TARGET]: "export const v = 1;\nexport const LEGACY = true;\nexport const LEGACY2 = true;\n" },
+    deleteFiles: [TARGET],
+    task: {
+      id: "TASK-RUNNER-RANGE-ZERO-MISSING",
+      title: "Remove legacy marker file",
+      scope: { targets: [{ file: TARGET }], expected_zero_business_code: true },
+      post_conditions: [
+        {
+          id: "POST-RANGE-ZERO-MISSING",
+          type: "code_contains",
+          severity: "FAIL",
+          params: { file: TARGET, text: "LEGACY", count: { min: 0, max: 1 } },
+        },
+      ],
+    },
+  },
 ];
