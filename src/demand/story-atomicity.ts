@@ -63,7 +63,7 @@ function uniqueSignatures(signatures) {
 // 结构化命令清单由枚举形态识别，不依赖这里枚举具体业务命令名。
 const DELIVERABLE_VERB_TERMS = [
   "create", "creates", "add", "adds", "assign", "assigns", "delete", "deletes", "remove", "removes",
-  "update", "updates", "edit", "edits", "modify", "modifies", "rename", "renames",
+  "update", "updates", "edit", "edits", "modify", "modifies", "rename", "renames", "manage", "manages",
   "send", "sends", "upload", "uploads", "download", "downloads",
   "deploy", "deploys", "push", "pushes", "validate", "validates", "authenticate", "authorize",
   "implement", "implements", "build", "builds", "configure", "configures", "install",

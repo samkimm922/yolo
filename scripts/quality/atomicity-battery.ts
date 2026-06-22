@@ -46,5 +46,5 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   { id: "multi-when-clause-save-validate-persist", expect: "multi", text: "When the user saves the draft, validate the form and persist the data." },
   { id: "multi-create-account-reset-password", expect: "multi", text: "As a user, I want to create an account and reset my password." },
   { id: "multi-create-users-assign-roles", expect: "multi", text: "As an admin, I want to create users and assign roles." },
-  { id: "multi-create-users-assign-permissions", expect: "multi", text: "The admin can create user accounts and assign permissions." },
+  { id: "multi-create-products-manage-inventory", expect: "multi", text: "Admins can create products and manage inventory." },
 ];
