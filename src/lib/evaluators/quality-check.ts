@@ -254,7 +254,11 @@ export function evalNoNewLintErrors(params = Object(), _taskScope, ROOT, exec) {
   for (const issue of issues) {
     const file = issue.filePath?.replace(ROOT + "/", "") || "";
     for (const msg of issue.messages || []) {
-      if (msg.ruleId) currentKeys.add(`${file}:${msg.line}:${msg.ruleId}`);
+      // ESLint JSON severity: 1 = warning, 2 = error. Only errors should block
+      // the lint gate; warnings do not cause eslint to exit non-zero by default.
+      // Counting warnings produced false not_done when the toolchain reported
+      // only warnings (e.g., no-console as a warning).
+      if (msg.ruleId && msg.severity === 2) currentKeys.add(`${file}:${msg.line}:${msg.ruleId}`);
     }
   }
 
