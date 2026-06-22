@@ -65,6 +65,10 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   { id: "multi-register-and-verify-account", expect: "multi", text: "A user can register and verify their account." },
   { id: "multi-register-and-verify-device-config", expect: "multi", text: "Allow the admin to register a device and verify its configuration." },
 
+  // ── Previously under-split: gerund forms of deliverable verbs following enabling verbs ──
+  { id: "multi-support-creating-and-sending", expect: "multi", text: "Support creating user accounts and sending welcome emails." },
+  { id: "multi-allow-uploading-and-sharing", expect: "multi", text: "Allow uploading files and sharing them with the team." },
+
   // ── Previously under-split: missing cancel/approve/reject in DELIVERABLE_VERB_TERMS ──
   { id: "multi-create-and-cancel-orders", expect: "multi", text: "Allow users to create and cancel orders." },
   { id: "multi-approve-or-reject", expect: "multi", text: "Managers can approve or reject requests." },

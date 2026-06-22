@@ -103,6 +103,102 @@ const DELIVERABLE_VERB_TERMS = [
   "分享", "审核", "解密", "接收",
 ];
 
+// 动作 gerund 形式：只在成对出现（gerund + connector + gerund 或 base + connector + gerund）
+// 时才视为独立交付动作。这样避免单个形容词性 gerund（如 "running total"）
+// 在 capability-noun 检测中被误报为动词。
+const DELIVERABLE_GERUND_TERMS = [
+  "creating", "adding", "assigning", "deleting", "removing",
+  "updating", "editing", "modifying", "renaming", "managing",
+  "uploading", "downloading",
+  "deploying", "pushing", "validating", "authenticating", "authorizing",
+  "implementing", "building", "configuring", "installing",
+  "connecting", "migrating", "syncing", "importing", "merging", "running",
+  "notifying", "integrating",
+  "transforming", "generating", "inserting",
+  "registering", "encrypting", "paginating", "verifying",
+  "saving", "persisting", "resetting", "redirecting",
+  "canceling", "cancelling", "approving", "rejecting",
+  "subscribing", "unsubscribing",
+  "suspending", "reactivating",
+  "reserving",
+  "inviting", "tracking", "publishing", "requesting", "booking", "alerting", "caching", "retrying",
+  "sharing", "reviewing", "composing", "decrypting", "receiving",
+];
+
+const GERUND_ROOT_MAP = new Map([
+  ["creating", "create"],
+  ["adding", "add"],
+  ["assigning", "assign"],
+  ["deleting", "delete"],
+  ["removing", "remove"],
+  ["updating", "update"],
+  ["editing", "edit"],
+  ["modifying", "modify"],
+  ["renaming", "rename"],
+  ["managing", "manage"],
+  ["sending", "send"],
+  ["uploading", "upload"],
+  ["downloading", "download"],
+  ["deploying", "deploy"],
+  ["pushing", "push"],
+  ["validating", "validate"],
+  ["authenticating", "authenticate"],
+  ["authorizing", "authorize"],
+  ["implementing", "implement"],
+  ["building", "build"],
+  ["configuring", "configure"],
+  ["installing", "install"],
+  ["connecting", "connect"],
+  ["migrating", "migrate"],
+  ["syncing", "sync"],
+  ["exporting", "export"],
+  ["importing", "import"],
+  ["merging", "merge"],
+  ["running", "run"],
+  ["notifying", "notify"],
+  ["scheduling", "schedule"],
+  ["integrating", "integrate"],
+  ["transforming", "transform"],
+  ["generating", "generate"],
+  ["inserting", "insert"],
+  ["registering", "register"],
+  ["encrypting", "encrypt"],
+  ["paginating", "paginate"],
+  ["verifying", "verify"],
+  ["saving", "save"],
+  ["persisting", "persist"],
+  ["resetting", "reset"],
+  ["redirecting", "redirect"],
+  ["canceling", "cancel"],
+  ["cancelling", "cancel"],
+  ["approving", "approve"],
+  ["rejecting", "reject"],
+  ["subscribing", "subscribe"],
+  ["unsubscribing", "unsubscribe"],
+  ["suspending", "suspend"],
+  ["reactivating", "reactivate"],
+  ["reserving", "reserve"],
+  ["inviting", "invite"],
+  ["tracking", "track"],
+  ["publishing", "publish"],
+  ["requesting", "request"],
+  ["booking", "book"],
+  ["alerting", "alert"],
+  ["caching", "cache"],
+  ["retrying", "retry"],
+  ["sharing", "share"],
+  ["reviewing", "review"],
+  ["composing", "compose"],
+  ["decrypting", "decrypt"],
+  ["receiving", "receive"],
+]);
+
+function deliverableVerbRoot(verb) {
+  const key = String(verb).toLowerCase();
+  return GERUND_ROOT_MAP.get(key)
+    || key.replace(/(s|es)$/i, "").replace(/^(创建|新建|新增|添加|增加)$/, "create");
+}
+
 // 仅用真正的并列连词，刻意排除 / , 、 这类标点——它们会出现在结构性 surface 标签里（如"测试/验证"），
 // 用作连词会把自动生成的元数据误判成独立动作。
 const GENERIC_STRICT_CONNECTOR = "(?:\\bas well as\\b|\\balong with\\b|\\bin addition to\\b|\\bfollowed by\\b|\\band\\b|\\bor\\b|\\bplus\\b|\\bthen\\b|\\+|并且|并|以及|同时|然后|或者|或)";
@@ -152,8 +248,15 @@ function distinctDeliverableActions(text) {
   for (const verb of DELIVERABLE_VERB_TERMS) {
     if (new RegExp(termSource(verb), "i").test(text)) {
       // 归并英文时态变体到词根，避免 create/creates 计成两个
-      const root = verb.replace(/(s|es)$/i, "").replace(/(创建|新建|新增|添加|增加)/, "create");
-      found.add(root.toLowerCase());
+      found.add(deliverableVerbRoot(verb));
+    }
+  }
+  // 动作 gerund 只在成对出现时才视为独立动作，避免单个形容词性 gerund（如 running）误报。
+  if (hasDeliverablePair(text)) {
+    for (const verb of DELIVERABLE_GERUND_TERMS) {
+      if (new RegExp(termSource(verb), "i").test(text)) {
+        found.add(deliverableVerbRoot(verb));
+      }
     }
   }
   for (const noun of DELIVERABLE_CAPABILITY_TERMS) {
@@ -174,8 +277,16 @@ function detectSingleVerbCapabilityNouns(text) {
     // 跳过同时出现在能力名词列表中的动词（如"配置"在中文既是动词 configure 也是名词 configuration）
     if (capabilityNounSet.has(String(verb).toLowerCase())) continue;
     if (new RegExp(termSource(verb), "i").test(text)) {
-      const root = verb.replace(/(s|es)$/i, "").replace(/(创建|新建|新增|添加|增加)/, "create");
-      verbRoots.add(root.toLowerCase());
+      verbRoots.add(deliverableVerbRoot(verb));
+    }
+  }
+  // 成对出现时，gerund 才贡献动词计数；避免单个形容词性 gerund 触发 capability-noun warn。
+  if (hasDeliverablePair(text)) {
+    for (const verb of DELIVERABLE_GERUND_TERMS) {
+      if (capabilityNounSet.has(String(verb).toLowerCase())) continue;
+      if (new RegExp(termSource(verb), "i").test(text)) {
+        verbRoots.add(deliverableVerbRoot(verb));
+      }
     }
   }
   const nouns = [];
@@ -188,10 +299,12 @@ function detectSingleVerbCapabilityNouns(text) {
 }
 
 // 两个可交付动作由并列连词在邻近范围连接 → 多 story 信号（避免全局共现误报）。
+// 基础动词、能力名词以及成对出现的动作 gerund 都参与配对。
 function hasDeliverablePair(text) {
-  const deliv = termsPattern([...DELIVERABLE_VERB_TERMS, ...DELIVERABLE_CAPABILITY_TERMS]);
+  const baseTerms = [...DELIVERABLE_VERB_TERMS, ...DELIVERABLE_CAPABILITY_TERMS];
   const window = `[\\s\\S]{0,${GENERIC_PAIR_DISTANCE}}`;
-  return new RegExp(`${deliv}${window}${GENERIC_STRICT_CONNECTOR}${window}${deliv}`, "i").test(text);
+  const combinedPattern = `(?:${termsPattern(baseTerms)}|${termsPattern(DELIVERABLE_GERUND_TERMS)})`;
+  return new RegExp(`${combinedPattern}${window}${GENERIC_STRICT_CONNECTOR}${window}${combinedPattern}`, "i").test(text);
 }
 
 function crossesAllLayers(text) {
