@@ -163,9 +163,13 @@ export function evalCodeContains(params, taskScope, ROOT) {
     const max = count.max ?? Infinity;
     const exact = count.exact;
 
-    if (exact !== undefined && matches !== exact) {
-      allPassed = false;
-      details.push(`${file}${lineInfo}: 期望精确 ${exact} 处匹配 "${text.slice(0, 40)}"，实际 ${matches} 处`);
+    if (exact !== undefined) {
+      if (matches !== exact) {
+        allPassed = false;
+        details.push(`${file}${lineInfo}: 期望精确 ${exact} 处匹配 "${text.slice(0, 40)}"，实际 ${matches} 处`);
+        continue;
+      }
+      details.push(`${file}${lineInfo}: 找到 ${matches} 处匹配 "${text.slice(0, 40)}"`);
       continue;
     }
 

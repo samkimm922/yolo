@@ -122,4 +122,20 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
       ],
     },
   },
+  {
+    id: "done-code-contains-exact-zero",
+    expect: "done",
+    description:
+      "code_contains with count.exact = 0 passes when the marker is absent; previously exact:0 fell through to the default min=1 check and reported a false not_done.",
+    baseFiles: { [TARGET]: "export const v = 1;\nexport const LEGACY = true;\n" },
+    editFiles: { [TARGET]: "export const v = 2;\n" },
+    task: targetModifiedTask([
+      {
+        id: "POST-EXACT-ZERO",
+        type: "code_contains",
+        severity: "FAIL",
+        params: { file: TARGET, text: "LEGACY", count: { exact: 0 } },
+      },
+    ]),
+  },
 ];
