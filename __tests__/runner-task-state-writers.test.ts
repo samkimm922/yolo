@@ -43,6 +43,34 @@ describe("runner task state writers", () => {
     }
   });
 
+  test("redacts credential patterns in persisted task result (CWE-532)", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-state-"));
+    try {
+      const resultsFile = join(root, "task-results.jsonl");
+      appendTaskResult(resultsFile, {
+        id: "SEC-REDACT-001",
+        status: "FAIL",
+        reason: "API call failed: Bearer sk-proj-ABC123DEF456GHI789JKL",
+      }, {
+        now: "2026-06-22T00:00:00.000Z",
+        runId: "RUN-SEC",
+        workspaceRoot: root,
+        allowInitialAttempt: true,
+      });
+
+      const written = readFileSync(resultsFile, "utf8").trim();
+      const parsed = JSON.parse(written);
+      // 磁盘上已脱敏：sk-proj-* 被替换为 [REDACTED:sk-key]
+      assert.ok(parsed.reason.includes("[REDACTED:"), "reason should be redacted");
+      assert.doesNotMatch(parsed.reason, /sk-proj-[A-Za-z0-9_-]{16,}/, "OpenAI key should not appear in plaintext");
+      // 元数据字段（task_id, status）保持不变
+      assert.equal(parsed.task_id, "SEC-REDACT-001");
+      assert.equal(parsed.status, "FAIL");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("preserves explicit task result timestamps", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-task-state-"));
     try {
