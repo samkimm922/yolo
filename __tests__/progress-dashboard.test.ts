@@ -149,6 +149,46 @@ test("tolerates null/non-object entries in status.stages without crashing", () =
   });
 });
 
+test("tolerates null/non-object entries in stage report blockers/issues/checks without crashing", () => {
+  const projectRoot = tempRoot();
+  const lifecycleDir = join(projectRoot, ".yolo", "lifecycle");
+  const stateDir = join(projectRoot, ".yolo", "state");
+  mkdirSync(join(stateDir, "reports"), { recursive: true });
+  mkdirSync(lifecycleDir, { recursive: true });
+
+  writeJson(join(lifecycleDir, "status.json"), {
+    current_stage: "check",
+    stages: [{ id: "check", status: "active" }],
+  });
+  // Corrupted/hand-edited stage report: blockers, blocked_reasons, issues, and
+  // checks all contain null / string / number entries mixed with real objects.
+  // Without the guard, reportBlockers crashes on `null.status` or `null.code`.
+  writeJson(join(stateDir, "reports", "check.json"), {
+    schema: "yolo.lifecycle.stage_report.v1",
+    stage_id: "check",
+    status: "blocked",
+    updated_at: "2026-01-02T00:00:00.000Z",
+    blockers: [null, "string blocker", 42, { code: "GATE", message: "gate failed" }],
+    blocked_reasons: [null, { code: "DEP", message: "missing dependency" }],
+    issues: [null, { status: "blocked", code: "FAIL" }, { status: "pass" }, "garbage", 7],
+    checks: [null, { status: "blocked", code: "CHECK" }],
+  });
+
+  const dashboard = readLifecycleDashboard({ projectRoot });
+
+  assert.equal(dashboard.exists, true);
+  assert.equal(dashboard.latest_reports.length, 1);
+  const report = dashboard.latest_reports[0];
+  assert.equal(report.stage_id, "check");
+  // Only valid entries survive: string "string blocker" is kept as code=BLOCKER
+  // (existing string→object mapping), and the four real blocked objects
+  // (GATE/DEP/FAIL/CHECK). Null/number/non-blocked entries are dropped.
+  assert.deepEqual(
+    report.blockers.map((b) => b.code).sort(),
+    ["BLOCKER", "CHECK", "DEP", "FAIL", "GATE"],
+  );
+});
+
 test("idle HTML renders lifecycle summary when no run is active", () => {
   const html = HTML({
     currentRun: null,
