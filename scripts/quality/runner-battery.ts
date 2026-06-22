@@ -159,4 +159,20 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
       ],
     },
   },
+  {
+    id: "done-file-lines-max-trailing-newline",
+    expect: "done",
+    description:
+      "A 150-line file with a trailing newline is within a 150-line limit. Previously split('\\n').length counted the trailing empty segment as an extra line, producing a false not_done.",
+    baseFiles: { [TARGET]: Array(100).fill("// base").join("\n") + "\n" },
+    editFiles: { [TARGET]: Array(150).fill("// line").join("\n") + "\n" },
+    task: {
+      id: "TASK-RUNNER-LINES-TRAILING",
+      title: "Implement feature in exactly 150 lines",
+      scope: { targets: [{ file: TARGET }], expected_zero_business_code: true },
+      post_conditions: [
+        { id: "POST-LINES", type: "file_lines_max", severity: "FAIL", params: { file: TARGET, max: 150 } },
+      ],
+    },
+  },
 ];
