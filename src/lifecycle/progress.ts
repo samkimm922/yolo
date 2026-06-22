@@ -17,6 +17,7 @@ import {
   resolveLifecycleStateRoot,
 } from "./state.js";
 import { writeSourceSnapshot } from "./source-snapshot.js";
+import { redactDeep } from "../lib/security/redact.js";
 
 export const LIFECYCLE_PROGRESS_SCHEMA_VERSION = "1.0";
 export const LIFECYCLE_STAGE_REPORT_SCHEMA = "yolo.lifecycle.stage_report.v1";
@@ -218,7 +219,7 @@ function updateStatusForStage(stageId, stageStatus, options = Object()) {
   const validation = validateLifecycleState(status);
   const path = lifecycleStatusPath(options);
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, stableJson(status), "utf8");
+  writeFileSync(path, stableJson(redactDeep(status)), "utf8");
   return { path, state: status, validation };
 }
 
@@ -278,7 +279,7 @@ export function writeLifecycleStageReport(stageId, report = Object(), options = 
   const stageStatus = stageReport.status;
   const artifactPath = lifecycleArtifactPath(stageId, { ...options, stateRoot });
   mkdirSync(dirname(artifactPath), { recursive: true });
-  writeFileSync(artifactPath, stableJson(stageReport), "utf8");
+  writeFileSync(artifactPath, stableJson(redactDeep(stageReport)), "utf8");
   const status = updateStatusForStage(stageId, stageStatus, { ...options, stateRoot, now });
   const stateDir = stateDirFor({ ...options, stateRoot });
   mkdirSync(stateDir, { recursive: true });
