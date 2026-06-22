@@ -177,6 +177,37 @@ describe("post-precheck helpers", () => {
     assert.equal(outcome.result.counts_as_completed, true);
   });
 
+  test("explicitCodePostconditionsPass rejects path traversal in params.file", () => {
+    const readers = createFileReaders({});
+    const result = explicitCodePostconditionsPass({
+      task: {
+        post_conditions: [
+          { type: "code_contains", params: { file: "../../../etc/passwd", text: "root" } },
+        ],
+      },
+      rootDir: ROOT,
+      ...readers,
+    });
+    assert.equal(result.passed, false);
+    assert.equal(result.reason, "unsafe_path");
+    assert.equal(result.file, "../../../etc/passwd");
+  });
+
+  test("explicitCodePostconditionsPass still accepts in-root files", () => {
+    const readers = createFileReaders({
+      "/repo/src/a.ts": "export const fixed = true;\n",
+    });
+    assert.deepEqual(explicitCodePostconditionsPass({
+      task: {
+        post_conditions: [
+          { type: "code_contains", params: { file: "src/a.ts", text: "fixed = true" } },
+        ],
+      },
+      rootDir: ROOT,
+      ...readers,
+    }), { passed: true });
+  });
+
   test("inspectPostPrecheckSkip rejects shell metacharacters in typeCheckCommand", () => {
     const readers = createFileReaders({
       "/repo/src/a.ts": "export const fixed = true;\n",
