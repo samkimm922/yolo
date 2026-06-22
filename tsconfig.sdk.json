@@ -1,0 +1,20 @@
+{
+  "//": "Strict type-check for the public SDK boundary source (sdk.ts) only. This does NOT enable strict mode repo-wide. It compiles sdk.ts under strict:true so implicit-any and other boundary type regressions in the SDK entry point itself are caught. Internal modules imported by sdk.ts surface their own (out-of-scope) strict errors; the typecheck:sdk script filters to sdk.ts errors only, since those are the SDK-boundary defects this gate owns. Run via `npm run typecheck:sdk`.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "sdk.ts"
+  ],
+  "exclude": []
+}
