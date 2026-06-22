@@ -336,21 +336,30 @@ function parseInlineArray(raw) {
 // 深度合并（defaults 为底，parsed 覆盖）
 // ============================================================
 
-function deepMerge(base, override) {
+function deepMerge(base, override, keyPath = '') {
   if (override === undefined || override === null) return base;
   // If override is an array or scalar, use it directly (replaces base)
   if (Array.isArray(override) || typeof override !== 'object') {
     return override;
   }
+  // override is a plain object. If base is an array, silently replacing it
+  // with an object crashes downstream consumers that expect .some()/.map()
+  // or `new Set(...)` (e.g. scanner.ts on source_roots/exclude). Skip the
+  // override and keep the default array so config load stays recoverable.
+  if (Array.isArray(base)) {
+    console.warn(`[config] 跳过类型不匹配的字段${keyPath ? ` (${keyPath})` : ''}: 期望数组, 收到对象`);
+    return base;
+  }
   // Both are plain objects — merge recursively
-  if (typeof base === 'object' && !Array.isArray(base)) {
+  if (typeof base === 'object' && base !== null && !Array.isArray(base)) {
     const result = { ...base };
     for (const key of Object.keys(override)) {
-      result[key] = deepMerge(base[key], override[key]);
+      const childPath = keyPath ? `${keyPath}.${key}` : key;
+      result[key] = deepMerge(base[key], override[key], childPath);
     }
     return result;
   }
-  // base is array/scalar/undefined but override is object — return override
+  // base is scalar/undefined/null but override is object — return override
   return override;
 }
 
