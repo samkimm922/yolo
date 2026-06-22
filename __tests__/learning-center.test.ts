@@ -104,6 +104,44 @@ describe("learning center", () => {
     }
   });
 
+  test("migrateLegacyLearning ignores null / non-object JSONL lines instead of crashing", () => {
+    const root = tempProject();
+    try {
+      write(join(root, "package.json"), JSON.stringify({ name: "yolo", type: "module" }));
+      write(join(root, "src/runtime/.keep"), "");
+      // Each legacy file has a valid entry plus a `null` line plus a non-JSON line.
+      // Without the guard, the null line throws "Cannot read properties of null".
+      write(join(root, "closed-loop/knowledge-base.jsonl"), [
+        JSON.stringify({ id: "KN-1", type: "trap", content: "real entry", status: "active" }),
+        "null",
+        "not-json{",
+        "",
+      ].join("\n"));
+      write(join(root, "closed-loop/lessons.jsonl"), [
+        JSON.stringify({ task_id: "TASK-1", timestamp: "2026-05-25T00:00:00.000Z", result: "FAIL", knowledge: "real lesson" }),
+        "null",
+        "",
+      ].join("\n"));
+      write(join(root, "closed-loop/red-team-report.jsonl"), [
+        JSON.stringify({ timestamp: "2026-05-25T00:00:01.000Z", attack_type: "console.log", blocked: true }),
+        "null",
+        "",
+      ].join("\n"));
+
+      const result = migrateLegacyLearning({ projectRoot: root, stateRoot: root });
+
+      assert.equal(result.status, "ok");
+      assert.equal(result.sources.legacy_knowledge, 1);
+      assert.equal(result.sources.legacy_lessons, 1);
+      assert.equal(result.sources.legacy_red_team, 1);
+      const records = readFileSync(join(root, "state/learning.jsonl"), "utf8").trim().split("\n").map((text: string) => JSON.parse(text));
+      assert.ok(records.some((record) => record.source === "legacy_knowledge" && record.lesson === "real entry"));
+      assert.ok(records.some((record) => record.source === "legacy_lessons" && record.lesson === "real lesson"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("appendLearningRecord and docs summarize the unified ledger", () => {
     const root = tempProject();
     try {

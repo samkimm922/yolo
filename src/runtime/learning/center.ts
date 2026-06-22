@@ -258,24 +258,27 @@ export function appendLearningRecord(input = Object(), options = Object()) {
 }
 
 function legacyKnowledgeRecords(paths) {
-  return readJsonl(paths.legacyKnowledgeFile).map((entry) => createLearningRecord({
-    type: entry.type,
-    lesson: entry.content,
-    prevention: entry.strategy || entry.content,
-    confidence: entry.confidence,
-    status: entry.status === "active" ? "advisory" : "deprecated",
-    source: "legacy_knowledge",
-    legacy_source: rel(paths.projectRoot, paths.legacyKnowledgeFile),
-    legacy_id: entry.id,
-    task_id: entry.source_task,
-    related_files: entry.related_files,
-    evidence_refs: entry.related_files,
-    ts: entry.last_used,
-  }));
+  return readJsonl(paths.legacyKnowledgeFile)
+    .filter((entry) => entry && typeof entry === "object" && !entry.parse_error)
+    .map((entry) => createLearningRecord({
+      type: entry.type,
+      lesson: entry.content,
+      prevention: entry.strategy || entry.content,
+      confidence: entry.confidence,
+      status: entry.status === "active" ? "advisory" : "deprecated",
+      source: "legacy_knowledge",
+      legacy_source: rel(paths.projectRoot, paths.legacyKnowledgeFile),
+      legacy_id: entry.id,
+      task_id: entry.source_task,
+      related_files: entry.related_files,
+      evidence_refs: entry.related_files,
+      ts: entry.last_used,
+    }));
 }
 
 function legacyLessonRecords(paths) {
   return readJsonl(paths.legacyLessonsFile)
+    .filter((entry) => entry && typeof entry === "object" && !entry.parse_error)
     .filter((entry) => entry.knowledge || entry.result === "FAIL" || entry.result === "PARTIAL")
     .map((entry) => createLearningRecord({
       type: entry.knowledge_type || "failure",
@@ -294,21 +297,23 @@ function legacyLessonRecords(paths) {
 }
 
 function legacyRedTeamRecords(paths) {
-  return readJsonl(paths.legacyRedTeamFile).map((entry) => createLearningRecord({
-    type: "red_team",
-    lesson: `${entry.attack_type || "red-team case"} was ${entry.blocked ? "blocked" : "not blocked"}`,
-    prevention: entry.blocked
-      ? `Keep deterministic protection for ${entry.attack_type || "this red-team case"}.`
-      : `Add deterministic protection for ${entry.attack_type || "this red-team case"}.`,
-    confidence: entry.blocked ? 7 : 8,
-    status: entry.blocked ? "advisory" : "candidate",
-    source: "legacy_red_team",
-    legacy_source: rel(paths.projectRoot, paths.legacyRedTeamFile),
-    legacy_id: entry.filename || entry.attack_type || "",
-    filename: entry.filename,
-    ts: entry.timestamp,
-    tags: ["red_team", entry.blocked ? "blocked" : "unblocked"],
-  }));
+  return readJsonl(paths.legacyRedTeamFile)
+    .filter((entry) => entry && typeof entry === "object" && !entry.parse_error)
+    .map((entry) => createLearningRecord({
+      type: "red_team",
+      lesson: `${entry.attack_type || "red-team case"} was ${entry.blocked ? "blocked" : "not blocked"}`,
+      prevention: entry.blocked
+        ? `Keep deterministic protection for ${entry.attack_type || "this red-team case"}.`
+        : `Add deterministic protection for ${entry.attack_type || "this red-team case"}.`,
+      confidence: entry.blocked ? 7 : 8,
+      status: entry.blocked ? "advisory" : "candidate",
+      source: "legacy_red_team",
+      legacy_source: rel(paths.projectRoot, paths.legacyRedTeamFile),
+      legacy_id: entry.filename || entry.attack_type || "",
+      filename: entry.filename,
+      ts: entry.timestamp,
+      tags: ["red_team", entry.blocked ? "blocked" : "unblocked"],
+    }));
 }
 
 function learnedRuleRecords(paths) {
