@@ -393,6 +393,21 @@ function localCorsHeaders(req) {
   return {};
 }
 
+function writeBadRequest(res) {
+  res.writeHead(400, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "Bad Request" }));
+}
+
+function parseTaskLogId(pathname) {
+  const encodedTaskId = pathname.slice("/api/task-logs/".length);
+  try {
+    const taskId = decodeURIComponent(encodedTaskId);
+    return isSafePathComponent(taskId) ? taskId : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 读取 task-log 文件，返回指定偏移后的新增行 */
 function readTaskLogIncremental(filePath, lastPosition) {
   try {
@@ -1603,7 +1618,14 @@ const HTML = (data, stats) => {
 
 // ── HTTP Server ────────────────────────────────────────────────────
 const server = http.createServer((req, res) => {
-  const url = req.url;
+  let requestUrl;
+  try {
+    requestUrl = new URL(req.url || "/", "http://127.0.0.1");
+  } catch {
+    writeBadRequest(res);
+    return;
+  }
+  const url = requestUrl.pathname;
 
   if (url === "/" || url === "/index.html") {
     const data = getProgressData();
@@ -1645,7 +1667,11 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ tasks: summaries }));
 
   } else if (url.startsWith("/api/task-logs/")) {
-    const taskId = decodeURIComponent(url.replace("/api/task-logs/", ""));
+    const taskId = parseTaskLogId(url);
+    if (taskId === null) {
+      writeBadRequest(res);
+      return;
+    }
     const entries = readTaskLogEntries(taskId);
     if (entries === null) {
       res.writeHead(404, { "Content-Type": "application/json" });

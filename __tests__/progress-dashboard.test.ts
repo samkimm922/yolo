@@ -196,6 +196,23 @@ test("progress server restricts SSE CORS to local origins", async () => {
   }
 });
 
+test("progress server returns 400 for malformed task log URLs without crashing", async () => {
+  await new Promise<void>((resolve) => server.listen(0, PROGRESS_SERVER_HOST, resolve));
+  try {
+    const addr = server.address();
+    const port = typeof addr === "string" ? 0 : (addr as { port: number }).port;
+    const malformed = await fetch(`http://${PROGRESS_SERVER_HOST}:${port}/api/task-logs/%E0%A4%A`);
+    const malformedBody = await malformed.json();
+    assert.equal(malformed.status, 400);
+    assert.equal(malformedBody.error, "Bad Request");
+
+    const alive = await fetch(`http://${PROGRESS_SERVER_HOST}:${port}/lifecycle.json`);
+    assert.equal(alive.status, 200);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("progress server rejects traversing task log ids and still returns valid logs", async () => {
   const nonce = `sec2-${process.pid}-${Date.now()}`;
   const stateDir = join(REPO_ROOT, "state");
