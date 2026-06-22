@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, test } from "node:test";
 import { readLifecycleDashboard } from "../src/runtime/progress/lifecycle-dashboard.js";
 import { startEmbeddedProgressServer } from "../src/runtime/progress/embedded-server.js";
-import { HTML, PROGRESS_SERVER_HOST, server } from "../src/runtime/progress/server.js";
+import { HTML, PROGRESS_SERVER_HOST, server, _setSseMaxOverrideForTest, getSseClientCount, resetSseClientsForTest, MAX_SSE_CLIENTS } from "../src/runtime/progress/server.js";
 
 const roots = [];
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -327,5 +327,35 @@ test("progress server rejects traversing task log ids and still returns valid lo
     await new Promise((resolve) => server.close(resolve));
     restoreSafe();
     restoreOutside();
+  }
+});
+
+test("P10.S7: SSE connection limit blocks excess clients (CWE-770)", async () => {
+  _setSseMaxOverrideForTest(2);
+  await new Promise<void>((resolve) => server.listen(0, PROGRESS_SERVER_HOST, resolve));
+  try {
+    const addr = server.address();
+    const port = typeof addr === "string" ? 0 : (addr as { port: number }).port;
+    const endpoint = `http://${PROGRESS_SERVER_HOST}:${port}/events`;
+
+    const conns = [];
+    for (let i = 0; i < 3; i++) {
+      const res = await fetch(endpoint);
+      conns.push(res);
+    }
+    assert.equal(conns[0].status, 200);
+    assert.equal(conns[1].status, 200);
+    assert.equal(conns[2].status, 503);
+    const body = await conns[2].json();
+    assert.equal(body.error, "SSE connection limit reached");
+    assert.equal(body.max, 2);
+
+    for (const c of conns) {
+      try { await c.body?.cancel().catch(() => {}); } catch {}
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    _setSseMaxOverrideForTest(undefined);
+    resetSseClientsForTest();
   }
 });
