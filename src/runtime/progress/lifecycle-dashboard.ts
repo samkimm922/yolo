@@ -93,13 +93,18 @@ function reportStageId(report = Object()) {
 }
 
 function reportBlockers(report = Object()) {
-  const blocked = (items) => (Array.isArray(items) ? items.filter((item) => item.status === "blocked") : []);
+  // Tolerate null/non-object entries from corrupted/hand-edited stage reports
+  // (same guard pattern as countStages above and lifecycle/guard.ts:730-731).
+  // Without this, a single null in report.issues / report.checks / report.blockers
+  // crashes the dashboard read path with TypeError on .status / .code access.
+  const isBlockerEntry = (item) => typeof item === "string" || (item && typeof item === "object" && !Array.isArray(item));
+  const blocked = (items) => (Array.isArray(items) ? items.filter((item) => isBlockerEntry(item) && item.status === "blocked") : []);
   const raw = [
     ...(Array.isArray(report.blockers) ? report.blockers : []),
     ...(Array.isArray(report.blocked_reasons) ? report.blocked_reasons : []),
     ...blocked(report.issues),
     ...blocked(report.checks),
-  ];
+  ].filter(isBlockerEntry);
   return raw.map((item) =>
     typeof item === "string"
       ? { code: "BLOCKER", message: item }
