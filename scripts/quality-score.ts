@@ -159,6 +159,7 @@ async function computeQuality() {
 
 async function main() {
   const checkMode = process.argv.includes("--check");
+  const updateBaseline = process.argv.includes("--update-baseline");
   const { q, total, correct, results, byCategory } = await computeQuality();
 
   console.log(`[quality-score] battery: ${correct}/${total} correct`);
@@ -175,7 +176,7 @@ async function main() {
     try {
       baseline = Number(JSON.parse(readFileSync(BASELINE_PATH, "utf8")).q) || 0;
     } catch {
-      console.error("[quality-score] no baseline found; run without --check to write one.");
+      console.error("[quality-score] no baseline found; run with --update-baseline to write one.");
       process.exit(1);
     }
     console.log(`[quality-score] baseline Q = ${baseline.toFixed(4)}`);
@@ -185,6 +186,14 @@ async function main() {
       process.exit(1);
     }
     console.log("[quality-score] ratchet OK (Q did not regress).");
+    return;
+  }
+
+  // Default is read-only so running the score never dirties the committed baseline
+  // (a tool side effect, not a result). Writing the ratchet baseline is an explicit,
+  // deliberate act gated behind --update-baseline.
+  if (!updateBaseline) {
+    console.log("[quality-score] read-only (pass --update-baseline to write the ratchet baseline).");
     return;
   }
 

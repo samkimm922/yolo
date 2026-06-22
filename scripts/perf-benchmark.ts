@@ -67,7 +67,7 @@ function main() {
   if (process.argv.includes("--check")) {
     let baseline = 0;
     try { baseline = Number(JSON.parse(readFileSync(BASELINE, "utf8")).ratio) || 0; }
-    catch { console.error("[perf] no baseline; run without --check to write one."); process.exit(1); }
+    catch { console.error("[perf] no baseline; run with --update-baseline to write one."); process.exit(1); }
     const limit = baseline * TOLERANCE;
     console.log(`[perf] baseline ${baseline.toFixed(4)} · limit ${limit.toFixed(4)} (×${TOLERANCE})`);
     if (ratio > limit) {
@@ -75,6 +75,13 @@ function main() {
       process.exit(1);
     }
     console.log("[perf] gate OK (no meaningful slowdown).");
+    return;
+  }
+
+  // Read-only by default — measuring perf must not rewrite the committed baseline
+  // (it is load-sensitive; an accidental write could ratchet in a bad number).
+  if (!process.argv.includes("--update-baseline")) {
+    console.log("[perf] read-only (pass --update-baseline to write the baseline).");
     return;
   }
 
