@@ -62,8 +62,20 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
     if (!unstagedDiff.ok && !stagedDiff.ok) {
       return { passed: false, status: "indeterminate", detail: `无法获取 ${file} 的 diff，无法验证禁用模式`, type: "no_forbidden_patterns" };
     }
-    const diffOut = `${unstagedDiff.out || ""}\n${stagedDiff.out || ""}`;
-    if (!diffOut.trim()) continue;
+    let diffOut = `${unstagedDiff.out || ""}\n${stagedDiff.out || ""}`;
+    if (!diffOut.trim()) {
+      // Untracked file — git diff returns empty. Read file directly.
+      const tracked = exec(`git ls-files --error-unmatch -- "${file}"`);
+      if (!tracked.ok) {
+        try {
+          const raw = readFileSync(abs, "utf8").trim();
+          if (!raw) continue;
+          diffOut = raw.split("\n").map((l) => `+${l}`).join("\n");
+        } catch { continue; }
+      } else {
+        continue; // Tracked but unchanged — nothing to check.
+      }
+    }
 
     const addedLines = diffOut
       .split("\n")
