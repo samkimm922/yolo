@@ -1,8 +1,8 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   appendJsonlRecord,
   appendRunEvent,
@@ -14,6 +14,7 @@ import {
   evidenceArtifactDigest,
   LEDGER_EVENT_SCHEMA,
   ledgerRecordHash,
+  readLedgerJsonl,
   validateLedgerChain,
   validateEvidenceArtifact,
   validateLedgerRecord,
@@ -210,6 +211,35 @@ describe("evidence ledger", () => {
     assert.equal(validateLedgerRecord("bad").ok, false);
     assert.equal(validateLedgerRecord(["array"]).ok, false);
     assert.ok(validateLedgerRecord(null).errors.includes("record must be a plain object"));
+  });
+
+  test("readLedgerJsonl tolerates malformed/truncated JSONL lines", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+      mkdirSync(dirname(filePath), { recursive: true });
+
+      // Build a valid two-record chain using the normal append path.
+      const first = appendJsonlRecord(filePath, { event: "first" }, { now: "2026-05-24T15:00:00.000Z" });
+      const second = appendJsonlRecord(filePath, { event: "second" }, { now: "2026-05-24T15:00:01.000Z" });
+      assert.equal(second.prev_hash, first.record_hash);
+
+      // Corrupt the file with partial/truncated lines and an invalid JSON token.
+      const original = readFileSync(filePath, "utf8").trimEnd();
+      writeFileSync(filePath, `${original}\n{truncated\nnot-valid-json\n`, "utf8");
+
+      // Reading must skip the bad lines without throwing and keep the good records.
+      const records = readLedgerJsonl(filePath);
+      assert.deepEqual(records, [first, second]);
+
+      // Appending to a corrupted ledger must recover from the last good record
+      // instead of crashing while computing prev_hash.
+      const third = appendJsonlRecord(filePath, { event: "third" }, { now: "2026-05-24T15:00:02.000Z" });
+      assert.equal(third.prev_hash, second.record_hash);
+      assert.equal(validateLedgerChain(readLedgerJsonl(filePath)).status, "pass");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("P8.M4: JSON schema requires the same hash fields as the runtime validator", async () => {
