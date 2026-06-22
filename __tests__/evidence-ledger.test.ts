@@ -180,6 +180,38 @@ describe("evidence ledger", () => {
     }
   });
 
+  test("validateLedgerChain tolerates null/non-object records instead of crashing", () => {
+    // ledger.jsonl files on disk may contain valid-JSON-but-non-object lines
+    // (null, numbers, strings, arrays) after a partial flush, SIGKILL mid-
+    // write, or external edit. validateLedgerChain must report a structured
+    // LEDGER_RECORD_INVALID failure for those entries instead of throwing a
+    // TypeError on `record.schema_version` / `"prev_hash" in record`.
+    // Mirrors the readJsonl null/non-object defense in report.ts (#70/#82).
+    const first = buildLedgerRecord("first", {}, {
+      now: "2026-05-24T15:00:00.000Z", ledger: "state", source: "test",
+    });
+
+    // null record
+    let validation = validateLedgerChain([null]);
+    assert.equal(validation.status, "fail");
+    assert.equal(validation.ok, false);
+    assert.ok(validation.errors.some((error) => error.code === "LEDGER_RECORD_INVALID" && error.message.includes("plain object")));
+
+    // Mixed: valid record followed by null, number, string, array
+    validation = validateLedgerChain([first, null, 42, "bad", ["array"]]);
+    assert.equal(validation.status, "fail");
+    const invalidRecords = validation.errors.filter((error) => error.code === "LEDGER_RECORD_INVALID");
+    assert.equal(invalidRecords.length, 4, "each non-object entry produces one LEDGER_RECORD_INVALID");
+    assert.deepEqual(invalidRecords.map((error) => error.index), [1, 2, 3, 4]);
+
+    // validateLedgerRecord mirrors the defense and stays fail-closed.
+    assert.equal(validateLedgerRecord(null).ok, false);
+    assert.equal(validateLedgerRecord(42).ok, false);
+    assert.equal(validateLedgerRecord("bad").ok, false);
+    assert.equal(validateLedgerRecord(["array"]).ok, false);
+    assert.ok(validateLedgerRecord(null).errors.includes("record must be a plain object"));
+  });
+
   test("P8.M4: JSON schema requires the same hash fields as the runtime validator", async () => {
     let Ajv;
     const ajvMod = await import("ajv");
