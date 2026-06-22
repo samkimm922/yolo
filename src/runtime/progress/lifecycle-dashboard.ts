@@ -11,6 +11,19 @@ import { redactDeep } from "../../lib/security/redact.js";
 const EVENTS_TAIL_MAX_BYTES = 512 * 1024;
 const EVENTS_TAIL_MAX_ENTRIES = 5000;
 
+// Maximum per-file size (in bytes) for report/event JSON files read by readJson.
+// Files exceeding this limit are silently skipped (treated as absent) to prevent
+// OOM from bloated or malicious state files. Match the convention used by
+// progress/server.ts (TASK_LOG_MAX_SIZE = 50 MB).
+const MAX_REPORT_FILE_SIZE = 50 * 1024 * 1024;
+let _testFileSizeOverride: number | null = null;
+export function setReportFileSizeMax(bytes: number | null): void {
+  _testFileSizeOverride = bytes;
+}
+export function resetReportFileSizeMax(): void {
+  _testFileSizeOverride = null;
+}
+
 const EMPTY_STAGE_COUNTS = { total: 0, pending: 0, active: 0, completed: 0, blocked: 0, warning: 0 };
 
 function clean(value) {
@@ -59,8 +72,14 @@ function stateRoot(options = Object()) {
   return candidates.find((root) => existsSync(join(root, "lifecycle", "status.json"))) || candidates[0];
 }
 
+function effectiveMaxSize(): number {
+  return _testFileSizeOverride !== null ? _testFileSizeOverride : MAX_REPORT_FILE_SIZE;
+}
+
 function readJson(path) {
   try {
+    const stat = statSync(path);
+    if (!stat.isFile() || stat.size > effectiveMaxSize()) return null;
     return parseJson(readFileSync(path, "utf8"));
   } catch {
     return null;
