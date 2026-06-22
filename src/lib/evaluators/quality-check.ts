@@ -15,9 +15,14 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
   if (patterns.length === 0) return { passed: true, detail: "无禁用模式" };
 
   const scanScope = params.scan_scope || taskScope?.scan_scope;
+  // Coerce targets/files to arrays: a hand-edited PRD can put a string (or
+  // other non-array) on params.targets/params.files. Without this guard the
+  // downstream `for (const file of targets)` iterates *characters* of the
+  // string; single-char paths resolve within root and vacuously `continue`,
+  // so a forbidden pattern smuggled past this condition silently passes.
   let targets =
-    params.targets ||
-    params.files ||
+    (Array.isArray(params.targets) ? params.targets : null) ||
+    (Array.isArray(params.files) ? params.files : null) ||
     (params.file ? [params.file] : null) ||
     (taskScope?.targets || []).map((t) => t.file).filter(Boolean);
 
