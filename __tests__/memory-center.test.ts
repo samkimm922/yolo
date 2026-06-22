@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
+  buildCurrentStatusMarkdown,
   buildMemoryAudit,
   refreshMemoryCenter,
 } from "../src/runtime/memory/center.js";
@@ -122,6 +123,31 @@ describe("memory center", () => {
       assert.equal(archiveFiles.length, 1);
       assert.match(readFileSync(join(archiveMonthDir, archiveFiles[0]), "utf8"), /one/);
       assert.match(readFileSync(join(root, "docs/memory/CURRENT_STATUS.md"), "utf8"), /Archived ledger files: 1/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("buildCurrentStatusMarkdown tolerates null/non-object entries in lifecycle status.stages", () => {
+    const root = tempProject();
+    try {
+      write(join(root, "package.json"), JSON.stringify({ name: "demo", version: "0.0.0", type: "module" }), "utf8");
+      write(join(root, ".yolo/lifecycle/status.json"), JSON.stringify({
+        current_stage: "check",
+        stages: [
+          { id: "idea", status: "completed" },
+          null,
+          "garbage",
+          42,
+          { id: "check", status: "blocked" },
+        ],
+      }), "utf8");
+
+      const md = buildCurrentStatusMarkdown({ projectRoot: root });
+
+      // Null/string/number entries are skipped; the blocked "check" stage still surfaces.
+      assert.match(md, /Blocked lifecycle stages: check/);
+      assert.match(md, /Completed lifecycle stages: 1/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

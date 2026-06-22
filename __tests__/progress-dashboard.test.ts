@@ -118,6 +118,37 @@ test("returns stage counts, latest reports, evidence, blockers, and recent event
   assert.deepEqual(after, before);
 });
 
+test("tolerates null/non-object entries in status.stages without crashing", () => {
+  const projectRoot = tempRoot();
+  const lifecycleDir = join(projectRoot, ".yolo", "lifecycle");
+  mkdirSync(lifecycleDir, { recursive: true });
+
+  writeJson(join(lifecycleDir, "status.json"), {
+    current_stage: "check",
+    stages: [
+      { id: "idea", status: "completed" },
+      null,
+      "garbage",
+      42,
+      { id: "check", status: "active" },
+    ],
+  });
+
+  const dashboard = readLifecycleDashboard({ projectRoot });
+
+  assert.equal(dashboard.exists, true);
+  assert.equal(dashboard.current_stage, "check");
+  // Null/string/number entries are skipped; only the two valid stage objects count.
+  assert.deepEqual(dashboard.stage_counts, {
+    total: 2,
+    pending: 0,
+    active: 1,
+    completed: 1,
+    blocked: 0,
+    warning: 0,
+  });
+});
+
 test("idle HTML renders lifecycle summary when no run is active", () => {
   const html = HTML({
     currentRun: null,
