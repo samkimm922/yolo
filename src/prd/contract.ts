@@ -232,7 +232,13 @@ function createEvaluators(root, options = Object()) {
         }
         checkedFiles.push(f);
         const content = readFileSync(absPath, "utf8");
-        const re = new RegExp(`import\\b.*from\\s*['"]${importPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}['"]`);
+        // Accept both named/default imports (`import ... from "path"`) and
+        // side-effect imports (`import "path"`). The previous `from`-only
+        // regex marked a real side-effect import as missing and reported a
+        // false not_done, e.g. for tasks that ask the runner to add
+        // `import "reflect-metadata"` or `import "./polyfills"`.
+        const escapedPath = importPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const re = new RegExp(`import\\s+(?:[^;\\n]*\\bfrom\\s*)?['"]${escapedPath}['"]`);
         if (!re.test(content)) return { passed: false, detail: `${f} 缺少导入: ${importPath}` };
       }
       if (unsafeFiles.length > 0) {

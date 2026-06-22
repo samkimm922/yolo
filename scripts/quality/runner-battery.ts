@@ -220,4 +220,25 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
       ],
     },
   },
+  {
+    id: "done-required-imports-side-effect",
+    expect: "done",
+    description:
+      "required_imports_present must accept side-effect imports like `import \"reflect-metadata\"`. The previous regex required a `from` clause and reported a false not_done when the runner correctly added the side-effect import.",
+    baseFiles: { [TARGET]: "export const v = 1;\n" },
+    editFiles: { [TARGET]: 'import "reflect-metadata";\nexport const v = 2;\n' },
+    task: {
+      id: "TASK-RUNNER-IMPORT-SIDE-EFFECT",
+      title: "Wire reflect-metadata side-effect import",
+      scope: { targets: [{ file: TARGET }], expected_zero_business_code: true },
+      post_conditions: [
+        {
+          id: "POST-IMPORT-SIDE-EFFECT",
+          type: "required_imports_present",
+          severity: "FAIL",
+          params: { file: TARGET, import_path: "reflect-metadata" },
+        },
+      ],
+    },
+  },
 ];
