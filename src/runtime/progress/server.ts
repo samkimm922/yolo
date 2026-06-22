@@ -9,10 +9,10 @@
 import { readFileSync, existsSync, readdirSync, statSync, watch, watchFile, unwatchFile } from "fs";
 import { join, dirname, basename, resolve } from "path";
 import { fileURLToPath } from "url";
-import { execSync } from "child_process";
 import http from "http";
 import { readLifecycleDashboard } from "./lifecycle-dashboard.js";
 import { isSafePathComponent, resolveWithinRoot } from "../../lib/security/path-guard.js";
+import { safeExecSync } from "../../lib/security/safe-exec.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "../../..");
@@ -222,9 +222,9 @@ function isRunnerActive() {
       }
     } catch {}
   }
-  // 回退到 pgrep
+  // 回退到 pgrep (P12.I1: safeExecSync routes through parseCommandToArgv + spawnSync, no shell)
   try {
-    const out = execSync('pgrep -f "runner.js" || true', { encoding: "utf8", timeout: 3000 });
+    const out = safeExecSync('pgrep -f "runner.js"', { timeout: 3000 });
     return out.trim().length > 0;
   } catch { return false; }
 }

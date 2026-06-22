@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, test } from "node:test";
 import { readLifecycleDashboard } from "../src/runtime/progress/lifecycle-dashboard.js";
@@ -51,6 +51,14 @@ async function waitFor(condition, message) {
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+test("progress server uses safeExecSync (P12.I1 chokepoint) not raw child_process execSync", () => {
+  const content = readFileSync(resolve(REPO_ROOT, "src/runtime/progress/server.ts"), "utf8");
+  assert.equal(content.includes('from "child_process"'), false,
+    "server.ts must not import from raw child_process — use safe-exec chokepoint");
+  assert.ok(content.includes("safeExecSync") && content.includes("safe-exec.js"),
+    "server.ts must use safeExecSync from safe-exec.js (P12.I1)");
 });
 
 test("returns a plain next action when lifecycle files are missing", () => {
