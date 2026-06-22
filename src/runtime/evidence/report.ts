@@ -12,10 +12,21 @@ import { normalizeReviewFinding } from "../../review/findings.js";
 
 function readJsonl(filePath) {
   if (!existsSync(filePath)) return [];
+  // Tolerate malformed/truncated JSONL lines (partial flush, SIGKILL mid-write,
+  // botched external edit). A dropped line breaks the ledger chain, which
+  // summarizeLedgerIntegrity surfaces as LEDGER_PREV_HASH_MISMATCH — the
+  // corruption stays visible in the report instead of crashing buildRunReport
+  // and every downstream caller (runner finalize, acceptance, release).
   return readFileSync(filePath, "utf8")
     .split("\n")
     .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line))
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line)];
+      } catch {
+        return [];
+      }
+    })
     .filter((record) => record !== null && typeof record === "object" && !Array.isArray(record));
 }
 
