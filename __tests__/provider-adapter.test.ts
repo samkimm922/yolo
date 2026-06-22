@@ -125,7 +125,7 @@ describe("provider execution adapter", () => {
 
   test("default claude settings resolve to the YOLO package root instead of the target project", () => {
     const targetRoot = "/tmp/yolo-consumer-project";
-    const invocation = buildProviderInvocation({
+    const invocation: any = buildProviderInvocation({
       provider: "claude",
       config: {
         ai: {
@@ -150,7 +150,7 @@ describe("provider execution adapter", () => {
 
   test("explicit root default claude settings path resolves to the YOLO package root", () => {
     const targetRoot = "/tmp/yolo-consumer-project";
-    const invocation = buildProviderInvocation({
+    const invocation: any = buildProviderInvocation({
       provider: "claude",
       config: {
         ai: {
@@ -397,6 +397,110 @@ describe("provider execution adapter", () => {
     assert.deepEqual(invocation.args, ["./agent.js", "--mode", "yolo"]);
     assert.equal(invocation.customCommand, "node ./agent.js --mode yolo");
     assert.equal(invocation.outputFile, null);
+  });
+
+  test("buildProviderInvocation rejects unparseable custom_command by default", () => {
+    const invocation: any = buildProviderInvocation({
+      provider: "shell",
+      config: {
+        ai: {
+          custom_command: "printf provider-output; touch /tmp/yolo-custom-command-poc",
+        },
+      },
+      workDir: "/repo/worktree",
+      rootDir: "/repo",
+      runtimeDir: "/repo/state/runtime",
+    });
+
+    assert.equal(invocation.ok, false);
+    assert.equal(invocation.provider, "custom");
+    assert.equal(invocation.command, null);
+    assert.equal(invocation.code, "CUSTOM_COMMAND_UNPARSEABLE");
+    assert.match(invocation.message, /Refusing implicit sh -c fallback/);
+  });
+
+  test("spawnProviderPrompt blocks injected custom_command payloads without spawning shell", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-custom-command-block-"));
+    try {
+      const payloads = [
+        (marker) => `printf provider-output; touch ${marker}`,
+        (marker) => `printf provider-output $(touch ${marker})`,
+      ];
+
+      for (const payload of payloads) {
+        const marker = join(root, `marker-${Math.random().toString(16).slice(2)}`);
+        let spawned = false;
+        const run = await spawnProviderPrompt("prompt", {
+          config: { ai: { provider: "custom", custom_command: payload(marker) } },
+          rootDir: root,
+          runtimeDir: root,
+          commandExists: () => true,
+          spawnImpl: () => {
+            spawned = true;
+            throw new Error("spawn should not be called");
+          },
+        });
+
+        assert.equal(spawned, false);
+        assert.equal(existsSync(marker), false);
+        assert.equal(run.success, false);
+        assert.equal(run.status, "blocked");
+        assert.equal(run.reason, "custom_command_unparseable");
+        assert.ok(run.preflight.blockers.some((blocker) => blocker.code === "CUSTOM_COMMAND_UNPARSEABLE"));
+        assert.match(run.stderr, /Refusing implicit sh -c fallback/);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("spawnProviderPrompt runs parseable custom_command through argv", async () => {
+    let capturedCommand = null;
+    let capturedArgs = null;
+    const run = await spawnProviderPrompt("prompt", {
+      config: { ai: { provider: "custom", custom_command: "node ./agent.js --mode yolo" } },
+      rootDir: "/repo",
+      runtimeDir: "/repo/state/runtime",
+      commandExists: () => true,
+      spawnImpl: (command, args) => {
+        capturedCommand = command;
+        capturedArgs = args;
+        return fakeProviderSpawn({ stdout: "done\n", code: 0 })();
+      },
+    });
+
+    assert.equal(capturedCommand, "node");
+    assert.deepEqual(capturedArgs, ["./agent.js", "--mode", "yolo"]);
+    assert.equal(run.success, true);
+    assert.equal(run.status, "completed");
+  });
+
+  test("spawnProviderPrompt allows shell custom_command only with explicit opt-in", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-custom-command-shell-"));
+    try {
+      const marker = join(root, "marker");
+      const run = await spawnProviderPrompt("prompt", {
+        config: {
+          ai: {
+            provider: "custom",
+            custom_command: `printf shell-opt-in; touch ${marker}`,
+            allowShellCustomCommand: true,
+          },
+        },
+        rootDir: root,
+        runtimeDir: root,
+        commandExists: () => true,
+      });
+
+      assert.equal(existsSync(marker), true);
+      assert.equal(run.success, true);
+      assert.equal(run.status, "completed");
+      assert.equal(run.stdout, "shell-opt-in");
+      assert.equal(run.shell_custom_command, true);
+      assert.ok(run.provider_warnings.some((warning) => warning.code === "CUSTOM_COMMAND_SHELL_OPT_IN"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("classifyProviderFailure turns budget exhaustion into a terminal blocker", () => {
