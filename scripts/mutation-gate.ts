@@ -35,6 +35,13 @@ type CommandResult = {
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const THRESHOLD = 1;
+// Each mutation test runs in a fresh `node --import tsx --test` process, so every spawn
+// pays a cold start (node boot + tsx/esbuild transpile of the imported module graph)
+// before the test's own logic runs. The per-test timeoutMs budgets size the *test*, not
+// this fixed startup overhead — so we add a cold-start allowance on top. Adding headroom
+// only lets a legitimately-slow test finish; it can never hide a mutation (detection is
+// about the test's pass/fail result, not whether it timed out), so this is safe.
+const COLD_START_BUDGET_MS = 45_000;
 
 const tests = {
   targetUntracked: {
@@ -320,7 +327,7 @@ function runTest(test: TestSpec): CommandResult {
   const result = spawnSync(process.execPath, args, {
     cwd: ROOT,
     encoding: "utf8",
-    timeout: test.timeoutMs ?? 120_000,
+    timeout: (test.timeoutMs ?? 120_000) + COLD_START_BUDGET_MS,
     env: { ...process.env, FORCE_COLOR: "0" },
   });
   return {
