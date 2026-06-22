@@ -117,11 +117,12 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
 
   test("data object nouns do not create capability warnings", () => {
     const result = inspectStoryAtomicityText(
-      "An analyst can transform a CSV export into analysis-ready metric output and verify repeatable totals.",
+      "An analyst can transform a CSV export into analysis-ready metric output.",
       { kind: "requirement", id: "REQ-CSV-EXPORT-OBJECT" },
     );
 
     assert.equal(result.status, "pass");
+    assert.equal(result.finding, null);
   });
 
   test("cross-layer UI+API+DB task is non-atomic", () => {
@@ -226,5 +227,16 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
     );
     assert.equal(result.status, "warn");
     assert.equal(result.finding.code, "STORY_ATOMICITY_CAPABILITY_NOUN");
+  });
+
+  test("register-and-verify is non-atomic (deliverable verb gap)", () => {
+    const result = inspectStoryAtomicityText(
+      "Allow users to register and verify their email.",
+      { kind: "requirement", id: "REQ-REGISTER-VERIFY" },
+    );
+    assert.equal(result.status, "blocked");
+    assert.equal(result.story_count, 2);
+    assert.ok(result.finding);
+    assert.equal(result.finding.code, "STORY_ATOMICITY_MULTI_STORY");
   });
 });

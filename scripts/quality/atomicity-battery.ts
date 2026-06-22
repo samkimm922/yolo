@@ -47,4 +47,7 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   { id: "multi-create-account-reset-password", expect: "multi", text: "As a user, I want to create an account and reset my password." },
   { id: "multi-create-users-assign-roles", expect: "multi", text: "As an admin, I want to create users and assign roles." },
   { id: "multi-create-products-manage-inventory", expect: "multi", text: "Admins can create products and manage inventory." },
+  { id: "multi-register-and-verify-email", expect: "multi", text: "Allow users to register and verify their email." },
+  { id: "multi-register-and-verify-account", expect: "multi", text: "A user can register and verify their account." },
+  { id: "multi-register-and-verify-device-config", expect: "multi", text: "Allow the admin to register a device and verify its configuration." },
 ];
