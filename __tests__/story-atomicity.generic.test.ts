@@ -258,4 +258,22 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
       assert.equal(result.finding!.code, "STORY_ATOMICITY_MULTI_STORY", item.text);
     }
   });
+
+  // P2.19 — missing deliverable verbs (share, review, compose, decrypt, receive)
+  test("previously missing deliverable verbs now split multi-action stories", () => {
+    const cases = [
+      { text: "As a user, I want to upload a document and share it with my team.", verb: "share" },
+      { text: "The admin can review submissions and publish approved articles.", verb: "review" },
+      { text: "The user can compose a message and send it to multiple recipients.", verb: "compose" },
+      { text: "The system must encrypt data at rest and decrypt it on access.", verb: "decrypt" },
+      { text: "Customers can book tickets and receive digital receipts.", verb: "receive" },
+    ];
+
+    for (const item of cases) {
+      const result = inspectStoryAtomicityText(item.text, { kind: "requirement", id: `REQ-${item.verb.toUpperCase()}` });
+      assert.equal(result.status, "blocked", item.text);
+      assert.ok(result.finding, item.text);
+      assert.equal(result.finding!.code, "STORY_ATOMICITY_MULTI_STORY", item.text);
+    }
+  });
 });
