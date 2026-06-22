@@ -200,7 +200,7 @@ export function mergeOverlappingTasks(tasks, {
       continue;
     }
 
-    const preTexts = (task.pre_conditions || [])
+    const preTexts = asArray(task.pre_conditions)
       .map((condition) => condition && typeof condition === "object"
         ? (condition.params?.text || condition.params?.pattern || "")
         : "")
@@ -220,7 +220,7 @@ export function mergeOverlappingTasks(tasks, {
       if (candidateTarget !== target) continue;
       if (taskCountsAsCompleted(candidate) || taskIsSplitParent(candidate)) continue;
 
-      const candidatePreTexts = (candidate.pre_conditions || [])
+      const candidatePreTexts = asArray(candidate.pre_conditions)
         .map((condition) => condition && typeof condition === "object"
           ? (condition.params?.text || condition.params?.pattern || "")
           : "")
@@ -252,7 +252,7 @@ export function mergeOverlappingTasks(tasks, {
     const seenPreTexts = new Set();
     const mergedPre = [];
     for (const item of group) {
-      for (const condition of item.pre_conditions || []) {
+      for (const condition of asArray(item.pre_conditions)) {
         if (!condition || typeof condition !== "object") continue;
         const key = condition.params?.text || condition.params?.pattern || JSON.stringify(condition.params);
         if (!seenPreTexts.has(key)) {
@@ -266,7 +266,7 @@ export function mergeOverlappingTasks(tasks, {
     const seenPostTexts = new Set();
     const mergedPost = [];
     for (const item of group) {
-      for (const condition of item.post_conditions || []) {
+      for (const condition of asArray(item.post_conditions)) {
         if (!condition || typeof condition !== "object") continue;
         if (condition.type !== "code_not_contains" && condition.type !== "code_contains") {
           mergedPost.push(condition);
@@ -285,13 +285,13 @@ export function mergeOverlappingTasks(tasks, {
 
     const allCriteria = new Set();
     for (const item of group) {
-      for (const criterion of item.acceptance_criteria || []) allCriteria.add(criterion);
+      for (const criterion of asArray(item.acceptance_criteria)) allCriteria.add(criterion);
     }
     base.acceptance_criteria = [...allCriteria];
 
-    const allDeps = new Set(base.depends_on || []);
+    const allDeps = new Set(asArray(base.depends_on));
     for (const item of group.slice(1)) {
-      for (const dependency of item.depends_on || []) allDeps.add(dependency);
+      for (const dependency of asArray(item.depends_on)) allDeps.add(dependency);
     }
     base.depends_on = [...allDeps];
 
@@ -305,6 +305,14 @@ export function mergeOverlappingTasks(tasks, {
 function asIdArray(value) {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
   return value ? [String(value)] : [];
+}
+
+// Coerce non-arrays to empty for safe iteration of condition/criteria/dep fields.
+// Same family as #59/#63/#64: PRD migration residue or hand-edited state can put
+// strings/objects/numbers where an array is expected, which either crashes .map
+// or silently iterates characters via for...of.
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
 }
 
 function taskDependencyIds(task = Object()) {
