@@ -191,6 +191,9 @@ export function mergeOverlappingTasks(tasks, {
   for (let i = 0; i < tasks.length; i++) {
     if (consumed.has(i)) continue;
     const task = tasks[i];
+    // Tolerate null/non-object task entries (manual edits, migration residue,
+    // retry PRDs constructed from already-corrupt state). Same family as #104.
+    if (!task || typeof task !== "object") continue;
     const target = task.scope?.targets?.[0]?.file;
     if (!target || taskCountsAsCompleted(task) || taskIsSplitParent(task)) {
       merged.push(task);
@@ -198,7 +201,9 @@ export function mergeOverlappingTasks(tasks, {
     }
 
     const preTexts = (task.pre_conditions || [])
-      .map((condition) => condition.params?.text || condition.params?.pattern || "")
+      .map((condition) => condition && typeof condition === "object"
+        ? (condition.params?.text || condition.params?.pattern || "")
+        : "")
       .filter(Boolean);
     if (preTexts.length === 0) {
       merged.push(task);
@@ -216,7 +221,9 @@ export function mergeOverlappingTasks(tasks, {
       if (taskCountsAsCompleted(candidate) || taskIsSplitParent(candidate)) continue;
 
       const candidatePreTexts = (candidate.pre_conditions || [])
-        .map((condition) => condition.params?.text || condition.params?.pattern || "")
+        .map((condition) => condition && typeof condition === "object"
+          ? (condition.params?.text || condition.params?.pattern || "")
+          : "")
         .filter(Boolean);
       if (candidatePreTexts.length === 0) continue;
 
@@ -246,6 +253,7 @@ export function mergeOverlappingTasks(tasks, {
     const mergedPre = [];
     for (const item of group) {
       for (const condition of item.pre_conditions || []) {
+        if (!condition || typeof condition !== "object") continue;
         const key = condition.params?.text || condition.params?.pattern || JSON.stringify(condition.params);
         if (!seenPreTexts.has(key)) {
           seenPreTexts.add(key);
@@ -259,6 +267,7 @@ export function mergeOverlappingTasks(tasks, {
     const mergedPost = [];
     for (const item of group) {
       for (const condition of item.post_conditions || []) {
+        if (!condition || typeof condition !== "object") continue;
         if (condition.type !== "code_not_contains" && condition.type !== "code_contains") {
           mergedPost.push(condition);
           continue;
@@ -457,7 +466,10 @@ export function expandTasksForMainLoop({
   taskIsSplitParent = () => false,
   log = (..._args) => {},
 } = Object()) {
-  const expandedBeforeMerge = [...tasks].flatMap((task) => {
+  // Tolerate null/non-object task entries (manual edits, migration residue,
+  // retry PRDs constructed from already-corrupt state). Same family as #104.
+  const validTasks = (Array.isArray(tasks) ? tasks : []).filter((task) => task && typeof task === "object");
+  const expandedBeforeMerge = [...validTasks].flatMap((task) => {
     const prepared = prepareTaskForExpansion(task, { completedIds });
     if (prepared.status === "completed") return [prepared];
 
