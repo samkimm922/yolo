@@ -239,4 +239,23 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
     assert.ok(result.finding);
     assert.equal(result.finding.code, "STORY_ATOMICITY_MULTI_STORY");
   });
+
+  // P2.18 — missing deliverable verbs (invite, track, publish, request, book, alert, cache, retry)
+  test("previously missing deliverable verbs now split multi-action stories", () => {
+    const cases = [
+      { text: "Managers can create teams and invite members.", verb: "invite" },
+      { text: "Editors can publish an article and schedule social posts.", verb: "publish" },
+      { text: "The app should cache results and retry failed requests.", verb: "cache/retry" },
+      { text: "The system tracks shipments and alerts customers of delays.", verb: "track/alert" },
+      { text: "Users can request time off and managers approve it.", verb: "request" },
+      { text: "Customers can book a room and cancel the reservation.", verb: "book" },
+    ];
+
+    for (const item of cases) {
+      const result = inspectStoryAtomicityText(item.text, { kind: "requirement", id: `REQ-${item.verb.toUpperCase()}` });
+      assert.equal(result.status, "blocked", item.text);
+      assert.ok(result.finding, item.text);
+      assert.equal(result.finding!.code, "STORY_ATOMICITY_MULTI_STORY", item.text);
+    }
+  });
 });
