@@ -70,7 +70,7 @@ const DELIVERABLE_VERB_TERMS = [
   "connect", "connects", "migrate", "migrates", "sync", "syncs", "export", "exports",
   "import", "imports", "notify", "notifies", "schedule", "schedules", "integrate",
   "transform", "transforms", "generate", "generates", "insert", "inserts",
-  "register", "registers", "login", "logout", "encrypt", "encrypts", "paginate",
+  "register", "registers", "login", "logout", "encrypt", "encrypts", "paginate", "verify", "verifies",
   "save", "saves", "persist", "persists", "reset", "resets", "redirect", "redirects",
   "新增", "新建", "创建", "添加", "增加", "删除", "移除", "修改", "编辑", "重命名",
   "发送", "上传", "下载", "部署", "校验", "鉴权", "实现",
