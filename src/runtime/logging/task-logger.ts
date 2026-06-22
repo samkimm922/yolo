@@ -48,7 +48,7 @@ export function initTaskLogs(options = Object()) {
   setTaskLogRunId(options.runId || options.run_id || null);
   try {
     if (!existsSync(taskLogsDir)) {
-      mkdirSync(taskLogsDir, { recursive: true });
+      mkdirSync(taskLogsDir, { recursive: true, mode: 0o700 });
     } else {
       // 清理上次运行的日志文件（保留目录）
       for (const f of readdirSync(taskLogsDir)) {
@@ -73,7 +73,7 @@ export function writeTaskLog(taskId, entry) {
     const runContext = taskLogRunId ? { run_id: taskLogRunId } : {};
     const safeEntry = redactDeep(entry || Object());
     const line = JSON.stringify({ ts: isoLocal(), ...safeEntry, task_id: taskId, ...runContext }) + "\n";
-    appendFileSync(join(taskLogsDir, `${taskId}.jsonl`), line, "utf8");
+    appendFileSync(join(taskLogsDir, `${taskId}.jsonl`), line, { encoding: "utf8", mode: 0o600 });
   } catch (e) {
     console.error('[task-logger] writeTaskLog 失败:', e.message);
     // crash-safe: 日志写入失败不阻塞主流程
