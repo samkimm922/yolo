@@ -66,4 +66,12 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
 
   // ── Git/workflow verbs that were missing from the heuristic verb list ──
   { id: "multi-merge-and-deploy", expect: "multi", text: "Merge the branch and deploy to staging." },
+
+  // ── Previously under-split: missing invite/track/publish/request/book/alert/cache/retry in DELIVERABLE_VERB_TERMS ──
+  { id: "multi-create-teams-and-invite-members", expect: "multi", text: "Managers can create teams and invite members." },
+  { id: "multi-publish-and-schedule-posts", expect: "multi", text: "Editors can publish an article and schedule social posts." },
+  { id: "multi-cache-and-retry", expect: "multi", text: "The app should cache results and retry failed requests." },
+  { id: "multi-track-and-alert", expect: "multi", text: "The system tracks shipments and alerts customers of delays." },
+  { id: "multi-request-and-approve", expect: "multi", text: "Users can request time off and managers approve it." },
+  { id: "multi-book-and-cancel", expect: "multi", text: "Customers can book a room and cancel the reservation." },
 ];
