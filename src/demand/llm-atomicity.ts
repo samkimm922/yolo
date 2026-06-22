@@ -97,3 +97,100 @@ export async function llmInspectStories(
     return null;
   }
 }
+
+// ---- v2 wiring: augment a heuristic story-atomicity report with the LLM pass ----
+//
+// The heuristic report (from inspectStoryAtomicityItems) is the deterministic, gated
+// truth. This opt-in async layer runs the LLM over the same item texts and, where the
+// LLM raises a story_count the heuristic missed (stricter-wins), upgrades that item to a
+// blocker. It NEVER downgrades a heuristic blocker and NEVER mutates the input report —
+// on any failure (disabled, no provider, garbage) it returns the original report as-is.
+
+type StoryItem = { kind?: string; id?: string | null; text?: string };
+type StoryReport = {
+  status?: string;
+  inspected?: Array<{ kind?: string; id?: string | null; status?: string; story_count?: number }>;
+  findings?: unknown[];
+  blockers?: unknown[];
+  [k: string]: unknown;
+};
+
+const txt = (s: unknown): string => (typeof s === "string" ? s.trim() : "");
+
+export async function augmentStoryAtomicityWithLlm(
+  report: StoryReport,
+  items: StoryItem[],
+  options: {
+    enabled?: boolean;
+    spawnProviderPrompt?: SpawnProviderPrompt;
+    config?: Record<string, unknown>;
+    cwd?: string;
+    timeout?: number;
+  } = {},
+): Promise<StoryReport> {
+  if (!report || options.enabled !== true) return report;
+  const texted = (Array.isArray(items) ? items : []).filter((i) => txt(i?.text));
+  if (texted.length === 0) return report;
+
+  const verdicts = await llmInspectStories(texted.map((i) => txt(i.text)), {
+    spawnProviderPrompt: options.spawnProviderPrompt,
+    config: options.config,
+    cwd: options.cwd,
+    timeout: options.timeout,
+  });
+  if (!verdicts) return report; // fail-open: keep pure heuristic
+
+  const inspected = Array.isArray(report.inspected) ? report.inspected.slice() : [];
+  const findings = Array.isArray(report.findings) ? report.findings.slice() : [];
+  const blockers = Array.isArray(report.blockers) ? report.blockers.slice() : [];
+  let upgraded = 0;
+
+  for (let i = 0; i < texted.length; i++) {
+    const verdict = verdicts[i];
+    if (!verdict) continue;
+    const item = texted[i];
+    const entry = inspected.find((e) => e && e.id === (item.id ?? null) && (e.kind || "story") === (item.kind || "story"));
+    if (!entry) continue;
+    const combined = combineStoryCounts(Number(entry.story_count) || 1, verdict.story_count);
+    if (combined < 2 || entry.status === "blocked") continue; // heuristic already strict enough
+
+    entry.status = "blocked";
+    entry.story_count = combined;
+    const finding = {
+      code: "STORY_ATOMICITY_MULTI_STORY_LLM",
+      severity: "error",
+      kind: item.kind || "story",
+      item_id: item.id ?? null,
+      task_id: item.kind === "task" ? item.id ?? null : null,
+      requirement_id: item.kind === "requirement" ? item.id ?? null : null,
+      scenario_id: item.kind === "scenario" ? item.id ?? null : null,
+      message: `${item.kind || "Story"} ${item.id || ""} bundles ${combined} independent user stories (LLM semantic split the heuristic missed): ${verdict.slices.join("; ")}.`,
+      story_count: combined,
+      split_suggestions: verdict.slices,
+    };
+    findings.push(finding);
+    blockers.push({
+      code: finding.code,
+      message: finding.message,
+      kind: finding.kind,
+      item_id: finding.item_id,
+      task_id: finding.task_id,
+      requirement_id: finding.requirement_id,
+      scenario_id: finding.scenario_id,
+      story_count: combined,
+      split_suggestions: verdict.slices,
+    });
+    upgraded++;
+  }
+
+  if (upgraded === 0) return report;
+  return {
+    ...report,
+    status: "blocked",
+    inspected,
+    findings,
+    finding_count: findings.length,
+    blockers,
+    llm_upgraded_count: upgraded,
+  };
+}

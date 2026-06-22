@@ -739,7 +739,7 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
   const factGroundingIssues = factGroundingRequired ? projectFactGrounding(session, options) : [];
   const evidenceRequirements = buildEvidenceRequirements({}, session, options);
   const requirementBlockers = evidenceRequirementBlockers(evidenceRequirements);
-  const storyAtomicity = inspectStoryAtomicityFromDemand(session, { includeRequirements: true });
+  const storyAtomicity = options.storyAtomicity || options.story_atomicity || inspectStoryAtomicityFromDemand(session, { includeRequirements: true });
 
   const checks = [
     check(
