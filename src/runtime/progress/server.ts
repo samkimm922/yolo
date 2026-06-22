@@ -15,6 +15,7 @@ import { readLifecycleDashboard } from "./lifecycle-dashboard.js";
 import { CSS as DASHBOARD_CSS, renderProgressDashboard } from "./dashboard-template.js";
 import { isSafePathComponent, resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { readJsonlTail, readJsonlSince, readTextTail } from "../../lib/bounded-read.js";
+import { redactDeep } from "../../lib/security/redact.js";
 
 // Bounded tail-read ceilings for dashboard logs. These files grow with run
 // length; the caps keep per-request memory and event-loop time O(window)
@@ -28,8 +29,10 @@ const YOLO_ROOT = resolve(__dirname, "../../..");
 const PROJECT_ROOT = resolve(YOLO_ROOT, "../..");
 const STATS_FILE = join(YOLO_ROOT, "state", "runtime", "learn-stats.json");
 const CURRENT_RUN_FILE = join(YOLO_ROOT, "state", "runtime", "current-run.json");
-const TASK_LOGS_DIR = join(YOLO_ROOT, "state", "runtime", "task-logs");
-const REVIEW_LOG_FILE = join(TASK_LOGS_DIR, "_review.jsonl");
+let taskLogsDir = join(YOLO_ROOT, "state", "runtime", "task-logs");
+function getReviewLogFile() { return join(taskLogsDir, "_review.jsonl"); }
+function getTaskLogsDir() { return taskLogsDir; }
+function setTaskLogsDir(dir) { taskLogsDir = resolve(dir); }
 const LOCAL_CORS_ORIGIN_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
 export const PROGRESS_SERVER_HOST = "127.0.0.1";
@@ -262,7 +265,7 @@ function readCurrentRun() {
 
 // ── 读 review-log.jsonl ──────────────────────────────────────────
 function readReviewLog() {
-  const logFile = REVIEW_LOG_FILE;
+  const logFile = getReviewLogFile();
   if (!existsSync(logFile)) return null;
   try {
     // Bounded tail read: review-log.jsonl grows across review rounds; reading
@@ -297,19 +300,19 @@ function readReviewLog() {
 
 // ── Task Logs 读取 ──────────────────────────────────────────────
 function readTaskLogSummaries() {
-  if (!existsSync(TASK_LOGS_DIR)) return [];
+  if (!existsSync(taskLogsDir)) return [];
   try {
     // 只读当前 run 的 task-logs
     const currentRun = readCurrentRun();
     if (!currentRun) return [];
 
-    const files = readdirSync(TASK_LOGS_DIR).filter((f) => f.endsWith(".jsonl") && f !== "_review.jsonl");
+    const files = readdirSync(taskLogsDir).filter((f) => f.endsWith(".jsonl") && f !== "_review.jsonl");
     return files.map((f) => {
       const taskId = f.replace(".jsonl", "");
-      const filePath = join(TASK_LOGS_DIR, f);
+      const filePath = join(taskLogsDir, f);
       const stat = statSync(filePath);
       const tail = readJsonlTail(filePath, { maxBytes: LOG_TAIL_MAX_BYTES, maxEntries: LOG_TAIL_MAX_ENTRIES });
-      const entries = tail ? tail.entries : [];
+      const entries = tail ? tail.entries.map((entry) => redactDeep(entry)) : [];
       const startEntry = entries.find((e) => e?.type === "TASK_START");
       const doneEntry = [...entries].reverse().find((e) => e?.type === "DONE");
       const hasError = entries.some((e) => e?.type === "ERROR");
@@ -335,20 +338,21 @@ function readTaskLogSummaries() {
 function readTaskLogEntries(taskId) {
   const safeTaskId = String(taskId ?? "");
   if (!isSafePathComponent(safeTaskId)) return null;
-  const resolved = resolveWithinRoot(TASK_LOGS_DIR, `${safeTaskId}.jsonl`);
+  const resolved = resolveWithinRoot(taskLogsDir, `${safeTaskId}.jsonl`);
   if (!resolved.ok || !resolved.path) return null;
   const filePath = resolved.path;
   if (!existsSync(filePath)) return null;
   // Bounded tail read: a single task log can grow large over a long-running
   // task; the dashboard only renders the most recent entries.
   const tail = readJsonlTail(filePath, { maxBytes: LOG_TAIL_MAX_BYTES, maxEntries: LOG_TAIL_MAX_ENTRIES });
-  return tail ? tail.entries : [];
+  return tail ? tail.entries.map((entry) => redactDeep(entry)) : [];
 }
 
 function readReviewTaskLog() {
-  if (!existsSync(REVIEW_LOG_FILE)) return null;
-  const tail = readJsonlTail(REVIEW_LOG_FILE, { maxBytes: LOG_TAIL_MAX_BYTES, maxEntries: LOG_TAIL_MAX_ENTRIES });
-  return tail ? tail.entries : [];
+  const reviewLogFile = getReviewLogFile();
+  if (!existsSync(reviewLogFile)) return null;
+  const tail = readJsonlTail(reviewLogFile, { maxBytes: LOG_TAIL_MAX_BYTES, maxEntries: LOG_TAIL_MAX_ENTRIES });
+  return tail ? tail.entries.map((entry) => redactDeep(entry)) : [];
 }
 
 function readLifecycleProgressData() {
@@ -428,7 +432,11 @@ function readTaskLogIncremental(filePath, lastOffset) {
     maxEntries: LOG_TAIL_MAX_ENTRIES,
   });
   if (!result) return { entries: [], totalBytes: lastOffset };
-  return { entries: result.entries, totalBytes: result.nextOffset, rotated: result.rotated };
+  return {
+    entries: result.entries.map((entry) => redactDeep(entry)),
+    totalBytes: result.nextOffset,
+    rotated: result.rotated,
+  };
 }
 
 /** 处理新的 SSE 连接 */
@@ -459,7 +467,7 @@ function handleSSEConnection(req, res) {
   // watcher 事件只推送新增内容。用 statSync 取 size，不读文件内容。
   for (const summary of taskLogSummaries) {
     try {
-      clientState.taskLogPositions.set(summary.id, statSync(join(TASK_LOGS_DIR, `${summary.id}.jsonl`)).size);
+      clientState.taskLogPositions.set(summary.id, statSync(join(taskLogsDir, `${summary.id}.jsonl`)).size);
     } catch { /* ignore */ }
   }
 
@@ -501,11 +509,11 @@ function startFileWatchers() {
   fileWatchersStarted = true;
   // 监听 task-logs 目录变化
   try {
-    if (existsSync(TASK_LOGS_DIR)) {
-      taskLogsWatcher = watch(TASK_LOGS_DIR, { recursive: false }, (eventType, filename) => {
+    if (existsSync(taskLogsDir)) {
+      taskLogsWatcher = watch(taskLogsDir, { recursive: false }, (eventType, filename) => {
         if (!filename || !filename.endsWith(".jsonl")) return;
         const taskId = filename.replace(".jsonl", "");
-        const filePath = join(TASK_LOGS_DIR, filename);
+        const filePath = join(taskLogsDir, filename);
 
         for (const client of sseClients) {
           const state = Object.assign(Object(), client);
@@ -533,8 +541,8 @@ function startFileWatchers() {
   }
 
   // 监听 review-log.jsonl 变化
-  if (existsSync(REVIEW_LOG_FILE)) {
-    watchFileTracked(REVIEW_LOG_FILE, { interval: 1000 }, () => {
+  if (existsSync(getReviewLogFile())) {
+    watchFileTracked(getReviewLogFile(), { interval: 1000 }, () => {
       const review = readReviewLog();
       sseBroadcast("review-status", { review });
     });
@@ -1709,7 +1717,7 @@ const server = http.createServer((req, res) => {
 });
 
 // 导出供 runner 内嵌使用
-export { server, getProgressData, readStats, readLifecycleProgressData, startFileWatchers, closeProgressServerResources, HTML, DASHBOARD_CSS as CSS };
+export { server, getProgressData, readStats, readLifecycleProgressData, startFileWatchers, closeProgressServerResources, HTML, DASHBOARD_CSS as CSS, readTaskLogEntries, readTaskLogIncremental, readReviewTaskLog, getTaskLogsDir, setTaskLogsDir };
 
 // 只在直接运行时启动（被 import 时不启动）
 const __main = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
