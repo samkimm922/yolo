@@ -1,7 +1,7 @@
 // evaluators/quality-check.js — evalNoForbiddenPatterns / evalNoNewTypeErrors / evalNoNewLintErrors / evalNoNewDeadCode
 
-import { readFileSync, existsSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { readFileSync, existsSync, realpathSync } from "node:fs";
+import { resolve, join, relative } from "node:path";
 import { isWithin } from "../security/path-guard.js";
 import { execCommand } from "../security/safe-exec.js";
 import { safeRegExp, validateRegexPattern } from "../security/regex-guard.js";
@@ -9,6 +9,34 @@ import { config } from "../config.js";
 
 function configuredCommand(params = Object(), key) {
   return params.command || config.build?.[key] || "";
+}
+
+function normalizeDiagnosticFilePath(filePath, ROOT) {
+  const raw = String(filePath || "").trim().replace(/^\.\//, "");
+  if (!raw) return raw;
+
+  const repoRoot = resolve(ROOT);
+  const absolute = resolve(repoRoot, raw);
+  if (isWithin(absolute, repoRoot)) {
+    return relative(repoRoot, absolute).replace(/\\/g, "/");
+  }
+
+  try {
+    const realRoot = realpathSync(repoRoot);
+    const realAbsolute = existsSync(absolute) ? realpathSync(absolute) : absolute;
+    if (isWithin(realAbsolute, realRoot)) {
+      return relative(realRoot, realAbsolute).replace(/\\/g, "/");
+    }
+  } catch {}
+
+  return raw.replace(/\\/g, "/");
+}
+
+function normalizeTypeErrorKey(key, ROOT) {
+  const raw = String(key || "");
+  const match = raw.match(/^(.*):(\d+):(TS\d+)$/);
+  if (!match) return raw;
+  return `${normalizeDiagnosticFilePath(match[1], ROOT)}:${match[2]}:${match[3]}`;
 }
 
 export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
@@ -148,7 +176,7 @@ export function evalNoNewTypeErrors(params = Object(), taskScope, ROOT, exec) {
   if (existsSync(baselinePath)) {
     try {
       const json = JSON.parse(readFileSync(baselinePath, "utf8"));
-      if (json && Array.isArray(json.keys)) baselineKeys = json.keys;
+      if (json && Array.isArray(json.keys)) baselineKeys = json.keys.map((key) => normalizeTypeErrorKey(key, ROOT));
     } catch {}
   }
 
@@ -167,7 +195,7 @@ export function evalNoNewTypeErrors(params = Object(), taskScope, ROOT, exec) {
     const m = line.match(/^(.+?)\((\d+),\d+\):\s+error\s+(TS\d+)/) ||
       line.match(/^(.+?):(\d+):\d+\s+-\s+error\s+(TS\d+)/);
     if (m) {
-      const normalizedFile = m[1].replace(/^\.\//, "");
+      const normalizedFile = normalizeDiagnosticFilePath(m[1], ROOT);
       currentKeys.add(`${normalizedFile}:${m[2]}:${m[3]}`);
     }
   }
