@@ -273,7 +273,14 @@ function reportClaimsDryRun(report = Object()) {
 function commandPassed(record) {
   if (!isObject(record)) return false;
   const status = normalizeReportStatus(record.status);
-  return status === "pass" || record.exit_code === 0 || record.exitCode === 0;
+  const exitCode = record.exit_code ?? record.exitCode;
+  const hasExitCode = exitCode !== undefined && exitCode !== null;
+  const exitPassed = hasExitCode && Number(exitCode) === 0;
+  if (status && hasExitCode) {
+    return status === "pass" && exitPassed;
+  }
+  if (status) return status === "pass";
+  return exitPassed;
 }
 
 function collectCommandEvidence(report = Object()) {
@@ -299,7 +306,12 @@ function hasPassingCommandEvidence(report = Object()) {
 function stepPassed(stepRecord) {
   if (!isObject(stepRecord)) return false;
   const status = normalizeReportStatus(stepRecord.status);
-  return status === "pass" || commandPassed(stepRecord.command);
+  const hasCommand = isObject(stepRecord.command);
+  if (status && hasCommand) {
+    return status === "pass" && commandPassed(stepRecord.command);
+  }
+  if (status) return status === "pass";
+  return hasCommand && commandPassed(stepRecord.command);
 }
 
 function cleanEnvironmentEvidencePasses(report = Object()) {

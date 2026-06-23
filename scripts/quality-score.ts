@@ -28,6 +28,7 @@ import { RUNNER_BATTERY, type RunnerBatteryCase } from "./quality/runner-battery
 import { runProviderBattery } from "./quality/provider-battery.js";
 import { runConfigBattery } from "./quality/config-battery.js";
 import { runParallelBattery } from "./quality/parallel-battery.js";
+import { runReleaseBattery } from "./quality/release-battery.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(ROOT, "scripts", "quality", "quality-baseline.json");
@@ -162,6 +163,7 @@ async function computeQuality() {
     ...providerResults,
     ...runConfigBattery(),
     ...runParallelBattery(),
+    ...runReleaseBattery(),
   ];
   const total = results.length;
   const correct = results.filter((r) => r.correct).length;
