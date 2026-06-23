@@ -762,6 +762,11 @@ export function spawnProviderPrompt(prompt, {
       errCollector.push(chunk);
       tryKillOnOutputFlood();
     });
+    // A provider that exits (or closes stdin) before reading the prompt — e.g. a fast
+    // shell custom_command that ignores stdin — makes this write emit EPIPE. Without a
+    // handler that surfaces as an uncaughtException and crashes the runner. The child not
+    // reading the prompt is benign here, so swallow the broken-pipe write error.
+    child.stdin.on("error", () => {});
     child.stdin.write(prompt);
     child.stdin.end();
 
