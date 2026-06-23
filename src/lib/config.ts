@@ -346,6 +346,11 @@ function deepMerge(base, override, keyPath = '') {
     console.warn(`[config] 跳过类型不匹配的字段${keyPath ? ` (${keyPath})` : ''}: 期望数组, 收到${received}`);
     return base;
   }
+  if (isPlainObject(base) && !isPlainObject(override)) {
+    const received = Array.isArray(override) ? '数组' : '标量';
+    console.warn(`[config] 跳过类型不匹配的字段${keyPath ? ` (${keyPath})` : ''}: 期望对象, 收到${received}`);
+    return base;
+  }
   // If override is an array or scalar, use it directly (replaces base)
   if (Array.isArray(override) || typeof override !== 'object') {
     return override;
