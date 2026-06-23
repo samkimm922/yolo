@@ -252,16 +252,26 @@ test("progress server restricts SSE CORS to local origins", async () => {
     const port = typeof addr === "string" ? 0 : (addr as { port: number }).port;
     const endpoint = `http://${PROGRESS_SERVER_HOST}:${port}/events`;
     const blocked = await fetch(endpoint, { headers: { Origin: "https://attacker.example" } });
+    const blockedCors = blocked.headers.get("access-control-allow-origin");
     assert.equal(blocked.status, 200);
-    assert.equal(blocked.headers.get("access-control-allow-origin"), null);
     await blocked.body?.cancel().catch(() => {});
+    assert.equal(blockedCors, null);
+
+    const otherLocalPort = `http://127.0.0.1:${port === 65535 ? port - 1 : port + 1}`;
+    const otherLocalPortResponse = await fetch(endpoint, { headers: { Origin: otherLocalPort } });
+    const otherLocalPortCors = otherLocalPortResponse.headers.get("access-control-allow-origin");
+    assert.equal(otherLocalPortResponse.status, 200);
+    await otherLocalPortResponse.body?.cancel().catch(() => {});
+    assert.equal(otherLocalPortCors, null);
 
     const localOrigin = `http://127.0.0.1:${port}`;
     const allowed = await fetch(endpoint, { headers: { Origin: localOrigin } });
+    const allowedCors = allowed.headers.get("access-control-allow-origin");
+    const allowedVary = allowed.headers.get("vary");
     assert.equal(allowed.status, 200);
-    assert.equal(allowed.headers.get("access-control-allow-origin"), localOrigin);
-    assert.equal(allowed.headers.get("vary"), "Origin");
     await allowed.body?.cancel().catch(() => {});
+    assert.equal(allowedCors, localOrigin);
+    assert.equal(allowedVary, "Origin");
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
