@@ -393,9 +393,16 @@ function sseBroadcast(event, data) {
 function localCorsHeaders(req) {
   const origin = req.headers.origin;
   if (typeof origin !== "string") return {};
+  const host = req.headers.host;
+  if (typeof host !== "string" || !host) return {};
   try {
     const parsed = new URL(origin);
-    if ((parsed.protocol === "http:" || parsed.protocol === "https:") && LOCAL_CORS_ORIGIN_HOSTS.has(parsed.hostname)) {
+    const requestOrigin = new URL(`http://${host}`);
+    if (
+      parsed.protocol === "http:" &&
+      parsed.origin === requestOrigin.origin &&
+      LOCAL_CORS_ORIGIN_HOSTS.has(requestOrigin.hostname)
+    ) {
       return {
         "Access-Control-Allow-Origin": origin,
         "Vary": "Origin",
