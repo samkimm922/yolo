@@ -30,6 +30,7 @@ import { runConfigBattery } from "./quality/config-battery.js";
 import { runParallelBattery } from "./quality/parallel-battery.js";
 import { runReleaseBattery } from "./quality/release-battery.js";
 import { runEvidenceBattery } from "./quality/evidence-battery.js";
+import { runShipBattery } from "./quality/ship-battery.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(ROOT, "scripts", "quality", "quality-baseline.json");
@@ -156,6 +157,7 @@ function runRunnerCase(testCase: RunnerBatteryCase): CaseResult {
 
 async function computeQuality() {
   const providerResults = await runProviderBattery();
+  const shipResults = await runShipBattery();
   const results = [
     ...CHECK_BATTERY.map(runCheckCase),
     ...ACCEPTANCE_BATTERY.map(runAcceptanceCase),
@@ -166,6 +168,7 @@ async function computeQuality() {
     ...runParallelBattery(),
     ...runReleaseBattery(),
     ...runEvidenceBattery(),
+    ...shipResults,
   ];
   const total = results.length;
   const correct = results.filter((r) => r.correct).length;

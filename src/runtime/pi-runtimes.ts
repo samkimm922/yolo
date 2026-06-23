@@ -331,6 +331,24 @@ function runShipRuntime(params = Object()) {
       actual_prd: resolve(acceptancePrd),
     });
   }
+  if (acceptanceReport) {
+    const revalidated = buildAcceptanceReport({
+      prdPath: expectedPrd || acceptancePrd,
+      projectRoot,
+      stateRoot,
+      mode: "ship",
+      writeLifecycle: false,
+    });
+    if (revalidated.status !== "pass") {
+      blockers.push({
+        code: "ACCEPTANCE_REVALIDATION_FAILED",
+        message: "Ship requires acceptance evidence that revalidates against the current PRD, run report, and artifacts.",
+        acceptance_status: revalidated.status || "unknown",
+        issue_summary: revalidated.issue_summary || null,
+        issues: (revalidated.issues || []).slice(0, 20),
+      });
+    }
+  }
 
   const status = blockers.length > 0 ? "blocked" : "success";
   const report = Object.assign(Object(), {
