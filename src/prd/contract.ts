@@ -100,6 +100,8 @@ function escapeRegExp(value) {
 function collectStaticImports(content, importPath) {
   const info = { count: 0, defaultLocal: "", named: new Set() };
   const source = escapeRegExp(importPath);
+  const sideEffectImportRe = new RegExp(`\\bimport\\s*['"]${source}['"]`, "g");
+  info.count += (content.match(sideEffectImportRe) || []).length;
   const importRe = new RegExp(`\\bimport\\s+(?:type\\s+)?([\\s\\S]*?)\\s+from\\s*['"]${source}['"]`, "g");
   let match;
   while ((match = importRe.exec(content)) !== null) {
