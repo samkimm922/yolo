@@ -320,10 +320,15 @@ export function evalCodeNotContains(params, taskScope, ROOT) {
   });
 
   if (existingFiles.length === 0) {
+    // Vacuously satisfied: the text is not in a file that does not exist.
+    // The runner used to mark these tasks as "not done" (indeterminate) even
+    // when the file was correctly removed/didn't exist, so e.g. "make sure
+    // FLAG is not in src/feature.ts" reported FAIL after the file was
+    // deleted. Return pass; users that need the file to exist can layer
+    // file_exists as a separate post-condition.
     return {
-      passed: false,
-      status: "indeterminate",
-      detail: `指定文件均不存在，无法验证 code_not_contains: ${targetFiles.join(", ")}`,
+      passed: true,
+      detail: `指定文件均不存在，code_not_contains 视为通过: ${targetFiles.join(", ")}`,
       found: 0,
     };
   }
