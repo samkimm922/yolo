@@ -26,6 +26,15 @@ export function taskEvidenceDir(taskId, { yoloRoot }) {
   return dir;
 }
 
+function safeEvidenceFileStem(value, fallback = "prd") {
+  const stem = String(value || "")
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return isSafePathComponent(stem) ? stem : fallback;
+}
+
 export function writeJsonEvidence(filePath, evidence) {
   return writeJsonArtifact(filePath, evidence);
 }
@@ -116,7 +125,8 @@ export function buildPrdContractDoctorEvidence({
 
 export function writePrdContractDoctorEvidence(input, { stateDir, projectRoot }) {
   const evidence = buildPrdContractDoctorEvidence({ ...input, projectRoot });
-  const evidenceFile = join(stateDir, "evidence", "prd-contract-doctor", `${input.prd.id || "prd"}-${Date.now()}.json`);
+  const prdId = safeEvidenceFileStem(input.prd?.id);
+  const evidenceFile = join(stateDir, "evidence", "prd-contract-doctor", `${prdId}-${Date.now()}.json`);
   writeJsonEvidence(evidenceFile, evidence);
   return {
     evidence,
