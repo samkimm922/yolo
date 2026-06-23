@@ -129,6 +129,44 @@ describe("adapter evidence collector", () => {
     }
   });
 
+  test("rejects escaping evidence paths before executing adapter commands", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      writeJson(join(stateRoot, "adapters/local-browser.manifest.json"), {
+        ...adapterManifest(),
+        commands: [{
+          command: "node tools/write-evidence.cjs",
+          evidence_path: "../outside.json",
+          platform: "h5",
+        }],
+        applies_to: ["h5"],
+      });
+      writeText(join(root, "tools/write-evidence.cjs"), [
+        "const fs = require('fs');",
+        "fs.mkdirSync('.yolo', { recursive: true });",
+        "fs.writeFileSync('.yolo/side-effect.txt', 'executed');",
+        "",
+      ].join("\n"));
+
+      const result = runAdapterEvidenceCollector({
+        projectRoot: root,
+        stateRoot,
+        requiresAcceptanceAdapter: true,
+        requiredPlatform: "h5",
+        execute: true,
+        allowAdapterCommands: true,
+      });
+
+      assert.equal(result.status, "blocked");
+      assert.equal(result.command_results[0].status, "failed");
+      assert.match(result.command_results[0].error, /evidence_path escapes project root/);
+      assert.equal(existsSync(join(stateRoot, "side-effect.txt")), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("blocks executed evidence when it proves a different platform", () => {
     const root = tempProject();
     const stateRoot = join(root, ".yolo");
