@@ -81,7 +81,7 @@ describe("review-loop execution helpers", () => {
     const missing = inspectReviewScannerCoverage(JSON.stringify({ findings: [] }));
     assert.equal(missing.status, "blocked");
     assert.equal(missing.reason, "scanner_coverage_missing");
-    assert.ok(missing.missing_fields.includes("scanner_version"));
+    assert.ok(missing["missing_fields"].includes("scanner_version"));
 
     const complete = inspectReviewScannerCoverage(JSON.stringify({
       scanner_version: "test-review-scanner@1",

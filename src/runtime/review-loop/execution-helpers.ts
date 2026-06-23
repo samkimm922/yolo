@@ -70,6 +70,51 @@ function coverageArtifact(parsed = Object()) {
   return parsed.coverage_artifact || parsed.coverage || parsed.scan_coverage || parsed.review_coverage || parsed;
 }
 
+function isCoverageObject(coverage) {
+  return coverage && typeof coverage === "object" && !Array.isArray(coverage);
+}
+
+function missingExpectedFiles(coverage) {
+  if (!isCoverageObject(coverage) || !Array.isArray(coverage.missing_expected_files)) return [];
+  return coverage.missing_expected_files.map((file) => clean(file)).filter(Boolean);
+}
+
+function incompleteCoverageBlock(coverage) {
+  if (!isCoverageObject(coverage)) return null;
+  const coverageStatus = clean(coverage.coverage_status).toLowerCase();
+  if (coverageStatus && !["complete", "pass", "covered"].includes(coverageStatus)) {
+    return {
+      status: "blocked",
+      blocks_execution: true,
+      reason: "scanner_coverage_incomplete",
+      message: `Scanner coverage is not complete: ${coverage.coverage_status}`,
+      coverage,
+      blockers: [{
+        code: "REVIEW_SCANNER_COVERAGE_INCOMPLETE",
+        message: "Review findings cannot pass when scanner coverage is incomplete.",
+        coverage_status: coverage.coverage_status,
+      }],
+    };
+  }
+  const missing = missingExpectedFiles(coverage);
+  if (missing.length > 0) {
+    return {
+      status: "blocked",
+      blocks_execution: true,
+      reason: "scanner_coverage_missing_expected_files",
+      message: `Scanner did not cover expected files: ${missing.join(", ")}`,
+      coverage,
+      missing_expected_files: missing,
+      blockers: [{
+        code: "REVIEW_SCANNER_COVERAGE_MISSING_EXPECTED_FILES",
+        message: "Review scanner coverage is missing expected files.",
+        missing_expected_files: missing,
+      }],
+    };
+  }
+  return null;
+}
+
 export function inspectReviewScannerCoverage(scanResult, findings = null) {
   let parsed;
   try {
@@ -103,19 +148,21 @@ export function inspectReviewScannerCoverage(scanResult, findings = null) {
     rawReviewFindings(parsed),
     { source: parsed?.source || "review-parser" },
   );
+  const coverage = coverageArtifact(parsed);
+  const coverageBlock = incompleteCoverageBlock(coverage);
   if (normalizedFindings.length > 0) {
+    if (coverageBlock) return coverageBlock;
     return {
       status: "pass",
       blocks_execution: false,
       reason: null,
-      coverage: coverageArtifact(parsed),
+      coverage,
       blockers: [],
     };
   }
 
-  const coverage = coverageArtifact(parsed);
   const missingFields = [];
-  if (!coverage || typeof coverage !== "object" || Array.isArray(coverage)) {
+  if (!isCoverageObject(coverage)) {
     missingFields.push("coverage_artifact");
   } else {
     if (!clean(coverage.scanner_version)) missingFields.push("scanner_version");
@@ -140,21 +187,7 @@ export function inspectReviewScannerCoverage(scanResult, findings = null) {
     };
   }
 
-  const coverageStatus = clean(coverage.coverage_status).toLowerCase();
-  if (!["complete", "pass", "covered"].includes(coverageStatus)) {
-    return {
-      status: "blocked",
-      blocks_execution: true,
-      reason: "scanner_coverage_incomplete",
-      message: `Scanner coverage is not complete: ${coverage.coverage_status}`,
-      coverage,
-      blockers: [{
-        code: "REVIEW_SCANNER_COVERAGE_INCOMPLETE",
-        message: "Empty review findings cannot pass when scanner coverage is incomplete.",
-        coverage_status: coverage.coverage_status,
-      }],
-    };
-  }
+  if (coverageBlock) return coverageBlock;
 
   return {
     status: "pass",
