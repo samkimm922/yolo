@@ -172,4 +172,27 @@ describe("gate failure flow (real buildGateFailureRetryDecision)", () => {
     assert.equal(record.transitions[0].result.remediation.action, "ASK_HUMAN");
     assert.deepEqual(record.done[0], ["FIX-FAIL", "blocked", 75, "contract_suspect"]);
   });
+
+  test("gate_fail event redacts secrets from stdout before logging", () => {
+    const record = logs();
+    const secretGate = {
+      exitCode: 1,
+      stdout: "Bearer sk-leaked-key-1234567890abcdef and more output",
+    };
+    const result = handleGateFailureFlow(baseOptions(record, {
+      gate: secretGate,
+      maxRetryForGate: 1,
+    }));
+    assert.equal(result.action, "return");
+    const gateFailEvent = record.events.find((e) => e[0] === "gate_fail");
+    assert.ok(gateFailEvent, "gate_fail event must be logged");
+    assert.ok(
+      !gateFailEvent[1].reason.includes("sk-leaked-key"),
+      "gate_fail reason must not contain raw secret",
+    );
+    assert.ok(
+      gateFailEvent[1].reason.includes("[REDACTED"),
+      "gate_fail reason must contain redaction marker",
+    );
+  });
 });

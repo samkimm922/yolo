@@ -14,6 +14,7 @@ import {
   applyGateFailureLearningEffects,
   gateFailureLearnArgs,
 } from "./gate-learning.js";
+import { redactDeep } from "../../lib/security/redact.js";
 
 export function handleGateFailureFlow({
   task,
@@ -46,11 +47,11 @@ export function handleGateFailureFlow({
   startedAtMs = nowMs(),
 } = Object()) {
   const gateExitCode = gate.exitCode;
-  logEvent("gate_fail", {
+  logEvent("gate_fail", redactDeep({
     task: task.id,
     exitCode: gateExitCode,
     reason: (gate.stdout || "").slice(0, 200),
-  });
+  }));
 
   const failures = analyzeFromGateLog(task.id, runtimeDir) ||
     analyzeOutput((gate.stdout || "").slice(0, 500));
