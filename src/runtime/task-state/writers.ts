@@ -1,4 +1,5 @@
 import { appendFileSync, readFileSync } from "node:fs";
+import { redactDeep } from "../../lib/security/redact.js";
 import { writeStateAtomic } from "../persist/atomic-state.js";
 
 function clean(value) {
@@ -60,7 +61,8 @@ export function normalizeTaskResultRecord(record = Object(), options = Object())
 
 export function appendTaskResult(resultsFile, record, options = Object()) {
   const payload = normalizeTaskResultRecord(record, options);
-  appendFileSync(resultsFile, `${JSON.stringify(payload)}\n`, "utf8");
+  const safe = redactDeep(payload);
+  appendFileSync(resultsFile, `${JSON.stringify(safe)}\n`, "utf8");
   return payload;
 }
 
