@@ -35,9 +35,29 @@ export function scannerFailureDiagnostic(error) {
   };
 }
 
+function isReviewFindingRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function rawReviewFindings(parsed) {
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && typeof parsed === "object" && Array.isArray(parsed.findings)) return parsed.findings;
+  return [];
+}
+
+function malformedFindingsMessage(parsed) {
+  const hasFindings = parsed && typeof parsed === "object" && Object.prototype.hasOwnProperty.call(parsed, "findings");
+  const raw = Array.isArray(parsed) ? parsed : (hasFindings ? parsed.findings : null);
+  if (raw === null || raw === undefined) return null;
+  if (!Array.isArray(raw)) return "Scanner findings must be an array.";
+  return raw.some((finding) => !isReviewFindingRecord(finding))
+    ? "Scanner findings entries must be objects."
+    : null;
+}
+
 export function parseReviewFindings(scanResult) {
   const parsed = JSON.parse(scanResult);
-  const findings = Array.isArray(parsed) ? parsed : (parsed?.findings || []);
+  const findings = rawReviewFindings(parsed).filter(isReviewFindingRecord);
   return normalizeReviewFindings(findings, { source: parsed?.source || "review-parser" });
 }
 
@@ -64,8 +84,23 @@ export function inspectReviewScannerCoverage(scanResult, findings = null) {
       blockers: [{ code: "REVIEW_SCANNER_NON_JSON", message: error.message }],
     };
   }
+  const malformedFindings = malformedFindingsMessage(parsed);
+  if (malformedFindings) {
+    return {
+      status: "blocked",
+      blocks_execution: true,
+      reason: "scanner_findings_malformed",
+      message: malformedFindings,
+      coverage: coverageArtifact(parsed),
+      blockers: [{
+        code: "REVIEW_SCANNER_FINDINGS_MALFORMED",
+        message: malformedFindings,
+      }],
+    };
+  }
+
   const normalizedFindings = findings || normalizeReviewFindings(
-    Array.isArray(parsed) ? parsed : (parsed?.findings || []),
+    rawReviewFindings(parsed),
     { source: parsed?.source || "review-parser" },
   );
   if (normalizedFindings.length > 0) {

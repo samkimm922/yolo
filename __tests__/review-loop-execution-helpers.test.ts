@@ -57,6 +57,26 @@ describe("review-loop execution helpers", () => {
     assert.throws(() => parseReviewFindings("{not-json"));
   });
 
+  test("malformed scanner findings are blocked without parser TypeError", () => {
+    const coverage = {
+      scanner_version: "test-review-scanner@1",
+      scanned_files: ["src/app.ts"],
+      rules: ["R-test"],
+      expected_scope: ["src/app.ts"],
+      coverage_status: "complete",
+    };
+
+    for (const findings of [{ id: "not-an-array" }, [null]]) {
+      const scanResult = JSON.stringify({ ...coverage, findings });
+      assert.doesNotThrow(() => parseReviewFindings(scanResult));
+
+      const result = inspectReviewScannerCoverage(scanResult, parseReviewFindings(scanResult));
+      assert.equal(result.status, "blocked");
+      assert.equal(result.reason, "scanner_findings_malformed");
+      assert.equal(result.blockers[0].code, "REVIEW_SCANNER_FINDINGS_MALFORMED");
+    }
+  });
+
   test("inspectReviewScannerCoverage blocks empty findings without complete coverage", () => {
     const missing = inspectReviewScannerCoverage(JSON.stringify({ findings: [] }));
     assert.equal(missing.status, "blocked");
