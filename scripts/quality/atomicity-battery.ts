@@ -102,6 +102,9 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   // ── Previously under-split: missing place verb for order/checkout placement ──
   { id: "multi-place-order-and-track", expect: "multi", text: "Customers can place an order and track delivery." },
 
+  // ── Previously under-split: status marking verbs were not treated as deliverable actions ──
+  { id: "multi-mark-paid-and-generate-receipt", expect: "multi", text: "Users can mark invoices as paid and generate receipts." },
+
   // ── Previously under-split: Chinese add/join-to-cart phrasing missed "加入" as a deliverable verb ──
   { id: "multi-zh-search-and-add-to-cart", expect: "multi", text: "用户可以搜索商品并加入购物车。" },
 
