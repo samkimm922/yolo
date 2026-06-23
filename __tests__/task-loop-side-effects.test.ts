@@ -95,6 +95,55 @@ describe("task-loop side effects", () => {
     }
   });
 
+  test("writeExpandedTasksSnapshot redacts secrets in task fields", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "expanded-tasks.json");
+      const result = writeExpandedTasksSnapshot({
+        filePath,
+        source: "data/prd.json",
+        tasks: [
+          { id: "TASK-001", status: "pending", description: "use api key sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz" },
+          { id: "TASK-002", status: "pending", title: "configure Bearer ya29.a0AfH6SMCxExampleTokenValue" },
+        ],
+        now: "2026-06-22T00:00:00.000Z",
+      });
+
+      assert.equal(result.wrote, true);
+      const saved = readJson(filePath);
+      assert.ok(saved.tasks[0].description.includes("[REDACTED:sk-key]"));
+      assert.ok(!saved.tasks[0].description.includes("sk-proj-"));
+      assert.ok(saved.tasks[1].title.includes("[REDACTED:token]"));
+      assert.ok(!saved.tasks[1].title.includes("ya29."));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("updateExpandedTaskSnapshot redacts secrets in outcome.failReason", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "expanded-tasks.json");
+      writeFileSync(filePath, JSON.stringify({
+        source: "data/prd.json",
+        tasks: [{ id: "FIX-P36-001", status: "pending" }],
+      }, null, 2), "utf8");
+
+      updateExpandedTaskSnapshot({
+        filePath,
+        taskId: "FIX-P36-001",
+        outcome: { status: "failed", reason: "error using gh_token_ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx failed" },
+        now: "2026-06-22T00:00:00.000Z",
+      });
+
+      const saved = readJson(filePath);
+      assert.ok(saved.tasks[0].failReason.includes("[REDACTED:gh-token]"));
+      assert.ok(!saved.tasks[0].failReason.includes("ghp_"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("writeProgressSnapshot writes completed and failed ids with total", () => {
     const root = tempDir();
     try {

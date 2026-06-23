@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { writeStateAtomic } from "../persist/atomic-state.js";
+import { redactDeep } from "../../lib/security/redact.js";
 
 function result(error, fallback) {
   if (!error) return fallback;
@@ -23,7 +24,8 @@ export function buildExpandedTasksSnapshot({ source, tasks = [], completedIds = 
 
 export function writeExpandedTasksSnapshot({ filePath, source, tasks = [], completedIds = new Set(), now = undefined }) {
   try {
-    const payload = buildExpandedTasksSnapshot({ source, tasks, completedIds, now });
+    const raw = buildExpandedTasksSnapshot({ source, tasks, completedIds, now });
+    const payload = redactDeep(raw);
     mkdirSync(dirname(filePath), { recursive: true });
     writeStateAtomic(filePath, payload);
     return { wrote: true, payload };
@@ -42,7 +44,7 @@ export function updateExpandedTaskSnapshot({ filePath, taskId, outcome, now = ne
     payload.tasks[idx].status = outcome.status === "completed" ? "done" : outcome.status;
     if (outcome.skip_kind) payload.tasks[idx].skip_kind = outcome.skip_kind;
     if (outcome.counts_as_completed != null) payload.tasks[idx].counts_as_completed = outcome.counts_as_completed;
-    if (outcome.reason) payload.tasks[idx].failReason = outcome.reason;
+    if (outcome.reason) payload.tasks[idx].failReason = redactDeep(outcome.reason);
     payload.tasks[idx].updatedAt = now;
     writeStateAtomic(filePath, payload);
     return { wrote: true, payload, task: payload.tasks[idx] };
