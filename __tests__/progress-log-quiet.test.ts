@@ -66,3 +66,35 @@ describe("createRunnerProgressLogger — quiet mode", () => {
     assert.equal(consoleLogs.length, 2);
   });
 });
+
+// ── P10.S3: redaction tests ─────────────────────────────────────
+describe("createRunnerProgressLogger — secret redaction (P10.S3)", () => {
+  test("redacts OpenAI-style API keys from file output", () => {
+    const { logger, fileLogs } = makeLogger();
+    logger("task-1", "claude", "Bearer sk-test123456789abcdefghijk");
+    assert.equal(fileLogs.length, 1);
+    assert.equal(fileLogs[0].includes("sk-test123456789abcdefghijk"), false);
+    assert.equal(fileLogs[0].includes("[REDACTED:sk-key]"), true);
+  });
+
+  test("redacts GitHub tokens from file output", () => {
+    const { logger, fileLogs } = makeLogger();
+    logger("task-1", "!! error", "ghp_test123456789abcdefghijklmnopqrstuvwxyz");
+    assert.equal(fileLogs.length, 1);
+    assert.equal(fileLogs[0].includes("[REDACTED:gh-token]"), true);
+  });
+
+  test("redacts secrets from console output too", () => {
+    const { logger, consoleLogs } = makeLogger({ quiet: false });
+    logger("task-1", "detail", "api_key=sk-test123456789abcdefghijk");
+    assert.equal(consoleLogs.length, 1);
+    assert.equal(consoleLogs[0].includes("[REDACTED:sk-key]"), true);
+  });
+
+  test("normal text is not affected by redaction", () => {
+    const { logger, fileLogs, consoleLogs } = makeLogger({ quiet: false });
+    logger("task-1", "├ step 1", "normal status message");
+    assert.equal(fileLogs[0].includes("normal status message"), true);
+    assert.equal(consoleLogs[0].includes("normal status message"), true);
+  });
+});

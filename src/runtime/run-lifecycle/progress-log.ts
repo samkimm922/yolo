@@ -1,3 +1,5 @@
+import { redact } from "../../lib/security/redact.js";
+
 const MILESTONE_PREFIXES = [">>", "DONE", "!!"];
 
 function isMilestoneLine(line) {
@@ -19,7 +21,8 @@ export function createRunnerProgressLogger({
     const elapsedSeconds = ((nowMs() - startTimeMs) / 1000).toFixed(0);
     const indent = phase[0] === "├" || phase[0] === "└" ? "  " : "";
     const line = `[${ts}] (${elapsedSeconds}s) ${progress.done + progress.failed}/${progress.total} ${indent}${id ? id + " " : ""}${phase} ${detail || ""}`;
-    if (!quiet || isMilestoneLine(line)) log(line);
-    try { appendFileSync(getOutputLog(), line + "\n", "utf8"); } catch {}
+    const safeLine = redact(line);
+    if (!quiet || isMilestoneLine(safeLine)) log(safeLine);
+    try { appendFileSync(getOutputLog(), safeLine + "\n", "utf8"); } catch {}
   };
 }
