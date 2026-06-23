@@ -1,10 +1,11 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { DEFAULT_CONFIG_PATH, loadConfig } from "../src/lib/config.js";
+import { scanProject } from "../src/review/scanner.js";
 
 describe("config deepMerge — object overrides array default", () => {
   test("nested mapping for array-typed field does not silently replace the array", () => {
@@ -74,6 +75,43 @@ describe("config deepMerge — object overrides array default", () => {
       assert.equal(Array.isArray(value), true, "exclude must stay an array");
       // `new Set(non-iterable)` is the second crash site in scanner.ts.
       assert.doesNotThrow(() => new Set(value));
+    } finally {
+      console.warn = originalWarn;
+      loadConfig({ path: DEFAULT_CONFIG_PATH, forceReload: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("scalar override of project.source_roots keeps scanner input iterable", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-config-source-roots-scalar-"));
+    const configPath = join(root, "config.yaml");
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "index.ts"), "export const value = 1;\n", "utf8");
+    writeFileSync(
+      configPath,
+      [
+        "project:",
+        "  root: .",
+        "  source_roots: src",
+        "  source_extensions: [\".ts\"]",
+        "build:",
+        "  type_check: \"\"",
+      ].join("\n") + "\n",
+    );
+
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args.join(" "));
+    try {
+      const cfg = loadConfig({ path: configPath, forceReload: true });
+      const value = cfg?.project?.source_roots;
+      assert.equal(Array.isArray(value), true, "source_roots must stay an array");
+      assert.doesNotThrow(() => scanProject({ root, config: cfg, includeExternalChecks: false }));
+      assert.match(
+        warnings.join("\n"),
+        /类型不匹配.*source_roots|source_roots.*类型不匹配/,
+        "deepMerge should warn about the array/scalar mismatch",
+      );
     } finally {
       console.warn = originalWarn;
       loadConfig({ path: DEFAULT_CONFIG_PATH, forceReload: true });
