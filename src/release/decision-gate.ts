@@ -448,10 +448,14 @@ function releaseCandidateArtifactIssues(reportName, report, options = Object()) 
       )],
     };
   }
-  const integrity = verifyArtifactIntegrity(paths, {
-    rootDir: options.artifactRoot || options.artifact_root || options.cwd || process.cwd(),
+  const explicitArtifactRoot = options.artifactRoot || options.artifact_root || options.cwd;
+  const integrityOptions: Record<string, unknown> = {
     expectedSha256ByPath: reportExpectedDigests(report),
-  });
+  };
+  if (explicitArtifactRoot) {
+    integrityOptions.rootDir = explicitArtifactRoot;
+  }
+  const integrity = verifyArtifactIntegrity(paths, integrityOptions);
   const issues = [
     ...integrity.missing.map((artifact) => issue(
       "RC_GATE_ARTIFACT_MISSING",

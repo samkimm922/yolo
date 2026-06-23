@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { runYoloCheckCli } from "../src/runtime/gates/check-report.js";
 import { buildAcceptanceReport } from "../src/runtime/acceptance/report.js";
+import { verifyArtifactIntegrity } from "../src/runtime/evidence/artifact-integrity.js";
 import { inspectStoryAtomicityText } from "../src/demand/story-atomicity.js";
 import { evaluatePostConditions } from "../src/prd/contract.js";
 import { CHECK_BATTERY, type CheckBatteryCase } from "./quality/check-battery.js";
@@ -61,6 +62,21 @@ function setupProject(files: Record<string, string> = {}): string {
 
 function runCheckCase(testCase: CheckBatteryCase): CaseResult {
   const root = setupProject(testCase.files);
+  if (testCase.kind === "artifact_integrity_escape") {
+    const outsideRoot = mkdtempSync(join(tmpdir(), "yolo-quality-outside-"));
+    try {
+      const outsidePath = join(outsideRoot, "secret.txt");
+      writeFileSync(outsidePath, "outside root\n", "utf8");
+      const report = verifyArtifactIntegrity([outsidePath], { rootDir: root }) as { status?: string; artifacts?: Array<Record<string, unknown>> };
+      const escaped = report.artifacts?.some((artifact) => artifact.issue === "path_escape");
+      const status = report.status === "fail" && escaped ? "blocked" : String(report.status || "unknown");
+      const correct = testCase.expect === "blocked" ? status === "blocked" : status === "pass";
+      return { id: testCase.id, category: testCase.category, expect: testCase.expect, actualExit: correct ? 0 : 1, actualStatus: status, correct };
+    } finally {
+      rmSync(outsideRoot, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
   try {
     const prdPath = join(root, "prd.json");
     writeFileSync(prdPath, JSON.stringify(testCase.prd, null, 2), "utf8");

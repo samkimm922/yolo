@@ -13,11 +13,12 @@ export type CheckExpectation = "pass" | "blocked";
 
 export type CheckBatteryCase = {
   id: string;
+  kind?: "prd_check" | "artifact_integrity_escape";
   category: "hang_or_crash" | "cannot_develop";
   description: string;
   expect: CheckExpectation;
   files?: Record<string, string>;
-  prd: unknown;
+  prd?: unknown;
 };
 
 const VALID_TARGET = "src/a.js";
@@ -208,5 +209,12 @@ export const CHECK_BATTERY: CheckBatteryCase[] = [
     expect: "blocked",
     files: VALID_FILES,
     prd: strictPrd({ scope: { targets: "src/a.js" } }),
+  },
+  {
+    id: "artifact_path_escape_blocked",
+    kind: "artifact_integrity_escape",
+    category: "hang_or_crash",
+    description: "Artifact integrity must not read or pass an absolute file outside rootDir.",
+    expect: "blocked",
   },
 ];

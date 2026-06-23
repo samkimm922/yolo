@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import { isWithin, resolveWithinRoot } from "../../lib/security/path-guard.js";
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -11,13 +12,17 @@ function asArray(value) {
   return Array.isArray(value) ? value : [value];
 }
 
-function normalizePath(value) {
+function normalizePath(value, rootDir = "") {
   const text = clean(value);
+  if (text && rootDir) {
+    const rootResolved = resolve(rootDir);
+    return resolve(rootResolved, text);
+  }
   return text ? resolve(text) : "";
 }
 
-function expectedDigestFor(path, expected = Object()) {
-  const resolved = normalizePath(path);
+function expectedDigestFor(path, expected = Object(), rootDir = "") {
+  const resolved = normalizePath(path, rootDir);
   const candidates = [
     path,
     resolved,
@@ -34,10 +39,27 @@ export function sha256File(path) {
 }
 
 export function artifactIntegrityRecord(path, options = Object()) {
-  const resolved = normalizePath(path);
   const rootDir = options.rootDir || options.root_dir || "";
-  const expectedSha256 = clean(options.expectedSha256 || options.expected_sha256 || expectedDigestFor(path, options.expectedSha256ByPath || options.expected_sha256_by_path || {}));
+  const rootResolved = rootDir ? resolve(rootDir) : "";
+  const resolved = normalizePath(path, rootResolved);
+  const expectedSha256 = clean(options.expectedSha256 || options.expected_sha256 || expectedDigestFor(path, options.expectedSha256ByPath || options.expected_sha256_by_path || {}, rootResolved));
   const displayPath = rootDir ? relative(resolve(rootDir), resolved) || "." : resolved;
+  if (rootResolved) {
+    const guarded = resolveWithinRoot(rootResolved, path);
+    if (!guarded.ok || !isWithin(resolved, rootResolved)) {
+      return {
+        path: displayPath,
+        absolute_path: resolved,
+        exists: false,
+        bytes: 0,
+        sha256: null,
+        expected_sha256: expectedSha256 || null,
+        digest_match: expectedSha256 ? false : null,
+        issue: "path_escape",
+        issue_detail: guarded.detail || `path resolves outside root "${rootResolved}"`,
+      };
+    }
+  }
   if (!resolved || !existsSync(resolved)) {
     return {
       path: displayPath,
@@ -76,4 +98,3 @@ export function verifyArtifactIntegrity(paths = [], options = Object()) {
     digest_mismatches: digestMismatches,
   };
 }
-
