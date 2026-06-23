@@ -2,9 +2,9 @@ import {
   existsSync as defaultExistsSync,
   readFileSync as defaultReadFileSync,
 } from "node:fs";
-import { resolve } from "node:path";
 import { safeExecSync as defaultExecSync } from "../../lib/security/safe-exec.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
+import { resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { skipTaskTransition } from "../task-state/transitions.js";
 
 export function taskForValidSkipPostconditions(task = Object()) {
@@ -36,12 +36,15 @@ export function explicitCodePostconditionsPass({
     const text = condition.params?.text;
     if (!file || !text) continue;
 
-    const absolutePath = resolve(rootDir, file);
-    if (!existsSync(absolutePath)) {
+    const guarded = resolveWithinRoot(rootDir, file);
+    if (!guarded.ok || !guarded.path) {
+      return { passed: false, reason: "unsafe_path", file };
+    }
+    if (!existsSync(guarded.path)) {
       return { passed: false, reason: "target_missing", file };
     }
 
-    const content = readFileSync(absolutePath, "utf8");
+    const content = readFileSync(guarded.path, "utf8");
     const contains = content.includes(text);
     if (condition.type === "code_contains" && !contains) {
       return { passed: false, reason: "code_contains_failed", file };

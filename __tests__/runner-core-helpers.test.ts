@@ -71,6 +71,45 @@ describe("runner core helper execution", () => {
     }
   });
 
+  test("rejects path traversal in target file that escapes rootDir", () => {
+    const base = mkdtempSync(join(tmpdir(), "yolo-trav-"));
+    const root = join(base, "project");
+    mkdirSync(root, { recursive: true });
+    writeFileSync(join(base, "trap.txt"), "x\n".repeat(60), "utf8");
+    writeFileSync(join(root, "legit.txt"), "ok\n", "utf8");
+    try {
+      const baselineResult = computeTaskTimeout(
+        [{ file: "legit.txt" }],
+        { rootDir: root, config: { runner: { task_timeout_m: 30, task_timeout_floor_s: 1 } } },
+      );
+      assert.ok(baselineResult > 1000, "in-root file should scale timeout above floor");
+
+      const traversalResult = computeTaskTimeout(
+        [{ file: "../trap.txt" }],
+        { rootDir: root, config: { runner: { task_timeout_m: 30, task_timeout_floor_s: 1 } } },
+      );
+      assert.equal(traversalResult, 1000, "traversal result should be floor (trap file NOT read)");
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  test("still reads in-root files for timeout scaling", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-timeout-inroot-"));
+    const srcDir = join(root, "src");
+    mkdirSync(srcDir, { recursive: true });
+    writeFileSync(join(srcDir, "work.ts"), "x\n".repeat(100), "utf8");
+    try {
+      const result = computeTaskTimeout(
+        [{ file: "src/work.ts" }],
+        { rootDir: root, config: { runner: { task_timeout_m: 30, task_timeout_floor_s: 1 } } },
+      );
+      assert.ok(result > 1000, "in-root file should contribute to timeout");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("fails loudly when the requested helper script is missing", () => {
     const toolsRoot = mkdtempSync(join(tmpdir(), "yolo-tools-root-"));
     try {

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { config as loadedConfig } from "../lib/config.js";
+import { resolveWithinRoot } from "../lib/security/path-guard.js";
 
 const TASK_TIMEOUT_MS_PER_LINE = 2500;
 const DEFAULT_TASK_TIMEOUT_FLOOR_SECONDS = 120;
@@ -62,7 +63,10 @@ export function computeTaskTimeout(targets, { rootDir, config = loadedConfig } =
   let totalLines = 0;
   for (const target of (targets || [])) {
     try {
-      totalLines += readFileSync(resolve(rootDir, target.file), "utf8").split("\n").length;
+      const guarded = resolveWithinRoot(rootDir, target.file);
+      if (guarded.ok && guarded.path) {
+        totalLines += readFileSync(guarded.path, "utf8").split("\n").length;
+      }
     } catch {}
   }
   const { floorMs, capMs } = computeTaskTimeoutBounds(config);
