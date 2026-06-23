@@ -20,7 +20,15 @@ const INVENTORY = [
   ["src/cli/prd-preflight.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 0 }],
   ["src/cli/prompt.ts", { WARN: 1, warning: 2, "best-effort": 0, skip: 0 }],
   ["src/cli/review.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
-  ["src/cli/yolo.ts", { WARN: 0, warning: 17, "best-effort": 0, skip: 5 }],
+  // yolo.ts was split into focused modules under src/cli/split/. The token
+  // counts below are the relocated warning/skip paths previously counted in
+  // the single src/cli/yolo.ts entry (warning: 17, skip: 5) — totals preserved.
+  ["src/cli/split/commands-interview.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 0 }],
+  ["src/cli/split/commands.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 0 }],
+  ["src/cli/split/release-candidate.ts", { WARN: 0, warning: 2, "best-effort": 0, skip: 0 }],
+  ["src/cli/split/review-scope.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 0 }],
+  ["src/cli/split/shared.ts", { WARN: 0, warning: 2, "best-effort": 0, skip: 0 }],
+  ["src/cli/split/text-format.ts", { WARN: 0, warning: 8, "best-effort": 0, skip: 5 }],
   ["src/core/bootstrap.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 4 }],
   ["src/core/setup.ts", { WARN: 0, warning: 4, "best-effort": 0, skip: 8 }],
   ["src/demand/evidence-dispatch.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
