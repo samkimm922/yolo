@@ -221,6 +221,7 @@ const GENERIC_LAYER_API_TERMS = ["endpoint", "api", "route", "request", "respons
 const GENERIC_LAYER_DB_TERMS = ["database", "table", "query", "schema", "migration", "row", "column ", "数据库", "表", "查询", "字段", "记录"];
 
 const HARD_STORY_BOUNDARY = /\s*[;；。]\s*/u;
+const ASCII_SENTENCE_BOUNDARY = /\.(?=\s+[A-Za-z])/g;
 const WHEN_CLAUSE_PREFIX_PATTERN = /^(?:when\b[\s\S]*?,\s*|当[\s\S]*?时\s*[，,]\s*)/iu;
 const COMPACT_ENUM_PATTERN = /(?<![\w./-])([A-Za-z][A-Za-z0-9_-]{1,31}(?:\s*(?:\/|→|->|=>|\+)\s*[A-Za-z][A-Za-z0-9_-]{1,31}){1,})(?![\w./-])/g;
 const COMPACT_ENUM_SEPARATOR = /\s*(?:\/|→|->|=>|\+)\s*/u;
@@ -425,6 +426,26 @@ function hasDeliverableIntent(value) {
   return hasAny(value, DELIVERABLE_VERB_TERMS) || hasAny(value, DELIVERABLE_CAPABILITY_TERMS);
 }
 
+function hasSentenceStoryIntent(value) {
+  const source = clean(value);
+  if (hasDeliverableIntent(source)) return true;
+  const enablingVerb = /\b(?:allows?|supports?|enables?|lets?|can)\b/i.test(source);
+  return enablingVerb && hasAny(source, DELIVERABLE_GERUND_TERMS);
+}
+
+function splitHardStoryClauses(text) {
+  const source = normalizeStorySlice(text);
+  const hardClauses = source.split(HARD_STORY_BOUNDARY).map(normalizeStorySlice).filter(Boolean);
+  if (hardClauses.length > 1) return hardClauses;
+  ASCII_SENTENCE_BOUNDARY.lastIndex = 0;
+  if (!ASCII_SENTENCE_BOUNDARY.test(source)) return hardClauses;
+  ASCII_SENTENCE_BOUNDARY.lastIndex = 0;
+  const sentenceClauses = source.split(ASCII_SENTENCE_BOUNDARY).map(normalizeStorySlice).filter(Boolean);
+  return sentenceClauses.length > 1 && sentenceClauses.every(hasSentenceStoryIntent)
+    ? sentenceClauses
+    : hardClauses;
+}
+
 function expandCommandCueEnumeration(rawItems) {
   const first = splitFirstItemPrefix(rawItems[0]);
   if (!ENUMERATION_CUE_TAIL_PATTERN.test(first.prefix)) return [];
@@ -480,7 +501,7 @@ export function splitGenericStorySlices(text) {
   if (!source) return [];
   const repeated = splitRepeatedStoryOpeners(source);
   if (repeated.length > 1) return uniqueStorySlices(repeated.flatMap(splitGenericStorySlices));
-  const clauses = source.split(HARD_STORY_BOUNDARY).map(normalizeStorySlice).filter(Boolean);
+  const clauses = splitHardStoryClauses(source);
   if (clauses.length > 1) return uniqueStorySlices(clauses.flatMap(splitGenericStorySlices));
   const whenClause = expandWhenClauseEnumeration(source);
   if (whenClause.length > 1) return whenClause;
