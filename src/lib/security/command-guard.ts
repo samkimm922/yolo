@@ -15,16 +15,82 @@ const DANGEROUS_CHARS = new Set([
   "\n", "\r", "\\",
 ]);
 
-const SHELL_INTERPRETERS = new Set([
-  "sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh", "pwsh", "powershell",
+const SHELL_EXECUTABLES = new Set([
+  "sh", "bash", "dash", "zsh", "ksh", "fish", "csh", "tcsh",
+  "cmd", "powershell", "pwsh",
 ]);
 
 function executableName(command: string): string {
-  return (command.split(/[\\/]/).pop() || command).toLowerCase();
+  const name = String(command || "").replace(/\\/g, "/").split("/").pop() || "";
+  return name.toLowerCase().replace(/\.exe$/, "");
 }
 
-function isShellCommandFlag(arg: string): boolean {
-  return /^-[A-Za-z]*c[A-Za-z]*$/.test(arg);
+function isEnvAssignment(arg: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*=/.test(arg);
+}
+
+function envTargetIndex(argv: string[]): { ok: true; index: number } | { ok: false; detail: string } {
+  let index = 1;
+  while (index < argv.length) {
+    const arg = argv[index];
+    if (arg === "--") {
+      index += 1;
+      break;
+    }
+    if (!arg.startsWith("-") || arg === "-") break;
+    if (arg === "-S" || arg === "--split-string" || arg.startsWith("--split-string=")) {
+      return { ok: false, detail: "env -S/--split-string can re-parse a command string" };
+    }
+    if (arg === "-u" || arg === "--unset" || arg === "-C" || arg === "--chdir" ||
+      arg === "--block-signal" || arg === "--ignore-signal" || arg === "--default-signal") {
+      index += 2;
+      continue;
+    }
+    if (arg === "-i" || arg === "-0" || arg === "--ignore-environment" || arg === "--null" ||
+      arg.startsWith("--unset=") || arg.startsWith("--chdir=") ||
+      arg.startsWith("--block-signal=") || arg.startsWith("--ignore-signal=") ||
+      arg.startsWith("--default-signal=")) {
+      index += 1;
+      continue;
+    }
+    return { ok: false, detail: `unsupported env option "${arg}" before command target` };
+  }
+  while (index < argv.length && isEnvAssignment(argv[index])) index += 1;
+  return { ok: true, index };
+}
+
+function isShellCommandFlag(shell: string, arg: string): boolean {
+  const flag = String(arg || "").toLowerCase();
+  if (shell === "cmd") return flag === "/c" || flag === "/k";
+  if (shell === "powershell" || shell === "pwsh") {
+    return flag === "-command" || flag === "-c" || flag === "-encodedcommand" || flag === "-enc" ||
+      flag.startsWith("-command:") || flag.startsWith("-encodedcommand:");
+  }
+  return /^-[a-z]*c[a-z]*$/i.test(arg) || flag === "--command" || flag.startsWith("--command=");
+}
+
+function shellCommandModeRejection(argv: string[]): ArgvParseResult | null {
+  if (argv.length === 0) return null;
+  let commandIndex = 0;
+  if (executableName(argv[0]) === "env") {
+    const envTarget = envTargetIndex(argv);
+    if (envTarget.ok === false) {
+      return { ok: false, reason: "shell_command", detail: envTarget.detail };
+    }
+    commandIndex = envTarget.index;
+  }
+
+  const shell = executableName(argv[commandIndex] || "");
+  if (!SHELL_EXECUTABLES.has(shell)) return null;
+  const shellArgs = argv.slice(commandIndex + 1);
+  if (shellArgs.some((arg) => isShellCommandFlag(shell, arg))) {
+    return {
+      ok: false,
+      reason: "shell_command",
+      detail: `shell command mode via "${shell}" is not allowed`,
+    };
+  }
+  return null;
 }
 
 /**
@@ -95,14 +161,8 @@ export function parseCommandToArgv(command: unknown): ArgvParseResult {
     return { ok: false, reason: "empty", detail: "command parsed to empty argv" };
   }
 
-  const executable = executableName(argv[0] || "");
-  if (SHELL_INTERPRETERS.has(executable) && argv.slice(1).some(isShellCommandFlag)) {
-    return {
-      ok: false,
-      reason: "shell_interpreter",
-      detail: `shell interpreter "${argv[0]}" with -c is not allowed on argv-only execution paths`,
-    };
-  }
+  const shellRejection = shellCommandModeRejection(argv);
+  if (shellRejection) return shellRejection;
 
   return { ok: true, argv };
 }
