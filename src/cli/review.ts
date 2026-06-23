@@ -10,6 +10,7 @@ import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveClaudeSettings, YOLO_PACKAGE_ROOT } from '../runtime/execution/provider-adapter.js';
+import { redact, redactDeep } from '../lib/security/redact.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..', '..');
@@ -138,39 +139,44 @@ if (result.error) {
 
 if (result.status !== 0 && result.status !== null) {
   console.error(`[yolo-review] claude 退出码 ${result.status} (round ${round})`);
-  if (result.stderr) console.error(result.stderr.slice(0, 500));
+  if (result.stderr) console.error(redact(result.stderr.slice(0, 500)));
   console.log('[]');
   process.exit(1);
 }
 
 if (result.signal) {
   console.error(`[yolo-review] claude 被信号 ${result.signal} 终止 (round ${round})`);
-  if (result.stderr) console.error(result.stderr.slice(0, 500));
+  if (result.stderr) console.error(redact(result.stderr.slice(0, 500)));
   console.log('[]');
   process.exit(1);
 }
 
 const rawOutput = result.stdout || '';
 const bugs = extractJsonArray(rawOutput);
+const safeBugs = bugs === null ? null : redactDeep(bugs);
 
 // 写日志（包含原始输出，便于调试解析失败）
 if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
 const logFile = join(LOG_DIR, `review-round${round}-${Date.now()}.json`);
-writeFileSync(logFile, JSON.stringify({ bugs, rawOutputLength: rawOutput.length, rawOutputPreview: rawOutput.slice(0, 500) }, null, 2));
+writeFileSync(
+  logFile,
+  JSON.stringify({ bugs: safeBugs, rawOutputLength: rawOutput.length, rawOutputPreview: redact(rawOutput.slice(0, 500)) }, null, 2),
+  { encoding: "utf8", mode: 0o600 },
+);
 
 // 非空输出无法解析为 JSON → 工具失败，拒绝 []+exit0 的假绿
 if (bugs === null) {
   console.error(`[yolo-review] claude 输出无法解析为 JSON (round ${round})，原始长度 ${rawOutput.length}`);
-  console.error(`[yolo-review] preview: ${rawOutput.slice(0, 200)}`);
+  console.error(`[yolo-review] preview: ${redact(rawOutput.slice(0, 200))}`);
   process.exit(1);
 }
 
 // 输出到 stdout（供 runner 读取）
-console.log(JSON.stringify(bugs));
+console.log(JSON.stringify(safeBugs));
 
 // 写到指定路径（如果 --output 参数存在）
 if (outputPath) {
   const outDir = dirname(outputPath);
   if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
-  writeFileSync(outputPath, JSON.stringify(bugs, null, 2));
+  writeFileSync(outputPath, JSON.stringify(safeBugs, null, 2), { encoding: "utf8", mode: 0o600 });
 }
