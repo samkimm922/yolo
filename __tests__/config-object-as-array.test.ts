@@ -119,6 +119,43 @@ describe("config deepMerge — object overrides array default", () => {
     }
   });
 
+  test("object override of project.root keeps scanner root path usable", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-config-root-object-"));
+    const configPath = join(root, "config.yaml");
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "index.ts"), "export const value = 1;\n", "utf8");
+    writeFileSync(
+      configPath,
+      [
+        "project:",
+        "  root:",
+        "    nested: value",
+        "  source_roots: [\"src\"]",
+        "  source_extensions: [\".ts\"]",
+        "build:",
+        "  type_check: \"\"",
+      ].join("\n") + "\n",
+    );
+
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args.join(" "));
+    try {
+      const cfg = loadConfig({ path: configPath, forceReload: true });
+      assert.equal(typeof cfg?.project?.root, "string", "project.root must stay a string");
+      assert.doesNotThrow(() => scanProject({ root, config: cfg, includeExternalChecks: false }));
+      assert.match(
+        warnings.join("\n"),
+        /类型不匹配.*project\.root|project\.root.*类型不匹配/,
+        "deepMerge should warn about the scalar/object mismatch",
+      );
+    } finally {
+      console.warn = originalWarn;
+      loadConfig({ path: DEFAULT_CONFIG_PATH, forceReload: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("legitimate array override still replaces the default array", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-config-arr-override-"));
     const configPath = join(root, "config.yaml");
