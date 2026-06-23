@@ -10,10 +10,27 @@ import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, readFileSync,
  *   `readStateWithFallback` recovers from .bak. The .bak is overwritten
  *   on every successful write, so it always reflects the most recent
  *   consistent predecessor state.
+ *
+ * Security note (TOCTOU prevention):
+ *   The backup uses openSync + readFileSync on the file descriptor instead
+ *   of existsSync + copyFileSync. This eliminates the time-of-check-to-
+ *   time-of-use window where an attacker could replace the file with a
+ *   symlink pointing to a sensitive file (/etc/passwd, .env, etc.),
+ *   which copyFileSync would follow and leak into .bak.
  */
 export function writeStateAtomic(path: string, data: unknown): void {
-  // 1. backup current as .bak — last consistent predecessor state
-  if (existsSync(path)) copyFileSync(path, `${path}.bak`);
+  // 1. backup current as .bak — use fd to prevent TOCTOU symlink race
+  try {
+    const fd = openSync(path, "r");
+    try {
+      const content = readFileSync(fd);
+      writeFileSync(`${path}.bak`, content);
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    // first write or file not readable — no backup to create
+  }
   // 2. write tmp + fsync — ensure data hits disk before rename
   const tmp = `${path}.tmp`;
   writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
