@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { evidenceArtifactDigest } from "../src/runtime/evidence/ledger.js";
 import {
@@ -122,6 +122,29 @@ describe("runner evidence writers", () => {
       assert.equal(evidence.generated_at, "2026-05-24T00:00:00.000Z");
       assert.equal(evidence.prd, "data/prd.json");
       assert.equal(evidence.warning_count, 1);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps PRD contract doctor evidence inside state evidence for unsafe PRD ids", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "yolo-evidence-"));
+    const yoloRoot = join(projectRoot, "scripts/yolo");
+    const stateDir = join(yoloRoot, "state");
+    try {
+      const result = writePrdContractDoctorEvidence({
+        prd: { id: "../../escaped/pwned" },
+        prdPath: join(yoloRoot, "data/prd.json"),
+        result: { blocks_execution: false, warning_count: 0, failures: [] },
+        now: "2026-05-24T00:00:00.000Z",
+      }, { stateDir, projectRoot });
+
+      const expectedDir = join(stateDir, "evidence", "prd-contract-doctor");
+      const rel = relative(expectedDir, result.evidence_path);
+      assert.equal(Boolean(rel) && !rel.startsWith("..") && !isAbsolute(rel), true);
+      assert.match(result.evidence_file, /^scripts\/yolo\/state\/evidence\/prd-contract-doctor\/escaped-pwned-\d+\.json$/);
+      assert.equal(existsSync(result.evidence_path), true);
+      assert.equal(existsSync(join(stateDir, "escaped")), false);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
