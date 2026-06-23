@@ -316,7 +316,8 @@ describe("task-loop outcome handler", () => {
     // crashing the main loop on a legitimately parseable PRD.
     const state = makeLoopState();
     const callbacks = makeOutcomeCallbacks({
-      prd: { tasks: [null, { id: "FIX-P36-010", status: "pending" }, "stray", 42] },
+      // Deliberately malformed entries (null/string/number) to exercise the skip guard.
+      prd: { tasks: [null, { id: "FIX-P36-010", status: "pending" }, "stray", 42] as unknown as { id: string; status: string }[] },
       post: { passed: true, failed: [] },
     });
 
