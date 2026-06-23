@@ -1,0 +1,25 @@
+{
+  "//": "Strict type-check for the consumer-facing SDK contract test. Compiles __tests__/sdk-types.test-d.ts under strict:true against the published dist/sdk.d.ts (refreshed by the build step in scripts/typecheck-sdk.ts). Run via the typecheck:sdk orchestrator, not directly.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": [
+    "__tests__/sdk-types.test-d.ts"
+  ]
+}

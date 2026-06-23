@@ -424,9 +424,25 @@ export let config;
 let loadedConfigPath;
 
 /**
+ * Public options accepted by {@link loadConfig}.
+ *
+ * `loadConfig` is re-exported through the SDK entry point (`sdk.ts`), so this
+ * type is part of the published contract. It accepts either an options object
+ * or (for backwards compatibility) a bare boolean meaning "force reload".
+ */
+export interface LoadConfigOptions {
+  /** Path to a yolo config file. Defaults to the canonical config path. */
+  path?: string;
+  /** Alias of `path` accepted by the loader for convenience. */
+  configPath?: string;
+  /** Bypass the config cache and reload from disk. */
+  forceReload?: boolean;
+}
+
+/**
  * 标准化配置加载参数，兼容旧的 loadConfig(true) 调用。
  */
-export function normalizeLoadConfigOptions(input = undefined) {
+export function normalizeLoadConfigOptions(input: LoadConfigOptions | boolean | null | undefined = undefined) {
   if (input === null || input === undefined) {
     return { forceReload: false, path: CONFIG_PATH };
   }
@@ -447,7 +463,7 @@ export function normalizeLoadConfigOptions(input = undefined) {
  * @param {boolean|object} options - true 表示强制重载；对象支持 path/configPath/forceReload。
  * @returns {object} 配置对象
  */
-export function loadConfig(options = undefined) {
+export function loadConfig(options: LoadConfigOptions | boolean | null | undefined = undefined) {
   const { forceReload, path } = normalizeLoadConfigOptions(options);
 
   if (config !== undefined && loadedConfigPath === path && !forceReload) {

@@ -331,7 +331,63 @@ import { preflightAllPrds, preflightPrd } from "./src/prd/preflight.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function buildStableSdkFacade(sdk) {
+/**
+ * Public options for {@link createYoloSdk}.
+ *
+ * The SDK entry point accepts these as a loosely-typed object so consumers can
+ * pass partial overrides (e.g. `createYoloSdk({ projectRoot })`) without having
+ * to satisfy a rigid schema. Fields mirror the runtime knobs used below.
+ */
+export interface CreateYoloSdkOptions {
+  /** Pre-loaded config object. When omitted, config is loaded via {@link loadConfig}. */
+  config?: unknown;
+  /** Force a config reload from disk on the next {@link loadConfig} call. */
+  forceConfigReload?: boolean;
+  /** Explicit path to a yolo config file used when no `config` is supplied. */
+  configPath?: string;
+  /** Package/install root of the yolo toolchain itself. Defaults to the SDK dir. */
+  yoloRoot?: string;
+  /** Project working directory. Defaults to `process.cwd()`. */
+  projectRoot?: string;
+  /** Root directory for yolo state (`.yolo`). Defaults to `<projectRoot>/.yolo`. */
+  stateRoot?: string;
+  /** Snake_case alias of `stateRoot`, kept for backwards compatibility. */
+  state_root?: string;
+  /** When true, ensure the canonical yolo state directories exist on disk. */
+  ensureDirs?: boolean;
+  /** Alias of `ensureDirs`. */
+  ensureCanonicalDirs?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Options accepted by {@link createYoloSdk}'s `lifecycle.writeStageReport`.
+ *
+ * The SDK path always strips sequence-check bypass flags (`skipSequenceCheck`
+ * and its snake_case alias) before forwarding to the internal writer, so the
+ * public lifecycle writer enforces stage ordering regardless of caller input.
+ * Any other option is forwarded verbatim to the underlying writer.
+ */
+export interface LifecycleStageWriteOptions {
+  /** camelCase sequence-check bypass; always stripped on the SDK path. */
+  skipSequenceCheck?: boolean;
+  /** snake_case sequence-check bypass; always stripped on the SDK path. */
+  skip_sequence_check?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Structural view of the SDK passed to the stable/experimental facade builders.
+ *
+ * The facades read named namespaces from `sdk` and re-export a curated subset.
+ * The parameter is typed as a namespace map (not the full SDK return type) to
+ * avoid a circular `ReturnType<typeof createYoloSdk>` annotation. The forwarded
+ * members keep their concrete types because the facade return values are cast
+ * to the inferred SDK type at the call site (see `Object.assign` below).
+ */
+type SdkFacadeSource = Record<string, Record<string, unknown>>;
+
+function buildStableSdkFacade(sdk: SdkFacadeSource) {
   return {
     agents: {
       createPlan: sdk.agents.createPlan,
@@ -360,7 +416,7 @@ function buildStableSdkFacade(sdk) {
   };
 }
 
-function buildExperimentalSdkFacade(sdk) {
+function buildExperimentalSdkFacade(sdk: SdkFacadeSource) {
   return {
     acceptance: sdk.acceptance,
     agents: {
@@ -421,7 +477,7 @@ function buildExperimentalSdkFacade(sdk) {
   };
 }
 
-export function createYoloSdk(options = Object()) {
+export function createYoloSdk(options: CreateYoloSdkOptions = {}) {
   const cfg = options.config || loadConfig({
     forceReload: Boolean(options.forceConfigReload),
     path: options.configPath,
@@ -439,8 +495,8 @@ export function createYoloSdk(options = Object()) {
       yoloRoot,
       projectRoot,
       stateRoot,
-      yoloPath: (key) => yoloPath(key, stateRoot),
-      resolvePrdPath: (input) => resolvePrdPath(input, stateRoot),
+      yoloPath: (key: string) => yoloPath(key, stateRoot),
+      resolvePrdPath: (input: string) => resolvePrdPath(input, stateRoot),
     },
     project: {
       buildInitPlan: (projectOptions = Object()) => buildProjectBootstrapPlan({ projectRoot, ...projectOptions }),
@@ -452,8 +508,8 @@ export function createYoloSdk(options = Object()) {
       runInitToFirstPrdSmoke: (projectOptions = Object()) => runInitToFirstPrdSmoke({ projectRoot, ...projectOptions }),
     },
     contract: {
-      evaluatePreConditions: (task, prd, evalOptions = Object()) => evaluatePreConditions(task, prd, { root: projectRoot, ...evalOptions }),
-      evaluatePostConditions: (task, prd, evalOptions = Object()) => evaluatePostConditions(task, prd, { root: projectRoot, ...evalOptions }),
+      evaluatePreConditions: (task: object, prd: object, evalOptions: object = {}) => evaluatePreConditions(task, prd, { root: projectRoot, ...evalOptions }),
+      evaluatePostConditions: (task: object, prd: object, evalOptions: object = {}) => evaluatePostConditions(task, prd, { root: projectRoot, ...evalOptions }),
       supportedConditionTypes,
       toGateFormat,
       inspectPrdContract,
@@ -508,7 +564,7 @@ export function createYoloSdk(options = Object()) {
     },
     lifecycle: {
       buildStageReport: buildLifecycleStageReport,
-      writeStageReport: (stageId, report = Object(), lifecycleOptions = Object()) => {
+      writeStageReport: (stageId: string, report: object = {}, lifecycleOptions: LifecycleStageWriteOptions = {}) => {
         // Strip skipSequenceCheck — SDK path always enforces sequence validation.
         // Internal callers needing exemption must import writeLifecycleStageReport directly.
         const { skipSequenceCheck, skip_sequence_check, ...safe } = lifecycleOptions;
@@ -530,7 +586,7 @@ export function createYoloSdk(options = Object()) {
         ...discoveryOptions,
       }),
       buildPlan: buildDiscoveryPlan,
-      buildPrd: (discovery, prdInput = Object(), prdOptions = Object()) => buildPrdFromDiscovery(discovery, prdInput, {
+      buildPrd: (discovery: object, prdInput: object = {}, prdOptions: object = {}) => buildPrdFromDiscovery(discovery, prdInput, {
         projectRoot,
         stateRoot,
         ...prdOptions,
@@ -800,11 +856,11 @@ export function createYoloSdk(options = Object()) {
     fixtures: {
       fixtureEvidenceRecord,
       copyFixtureToWorkspace,
-      getFixtureDefinition: (id, fixtureOptions = Object()) => getFixtureDefinition(id, { yoloRoot, ...fixtureOptions }),
+      getFixtureDefinition: (id: string, fixtureOptions: object = {}) => getFixtureDefinition(id, { yoloRoot, ...fixtureOptions }),
       inspectFixtureDefinition,
-      inspectFixtureRegistry: (fixtureOptions = Object()) => inspectFixtureRegistry({ yoloRoot, ...fixtureOptions }),
-      listFixtureDefinitions: (fixtureOptions = Object()) => listFixtureDefinitions({ yoloRoot, ...fixtureOptions }),
-      runFixtureHarness: (id, fixtureOptions = Object()) => runFixtureHarness(id, { yoloRoot, ...fixtureOptions }),
+      inspectFixtureRegistry: (fixtureOptions: object = {}) => inspectFixtureRegistry({ yoloRoot, ...fixtureOptions }),
+      listFixtureDefinitions: (fixtureOptions: object = {}) => listFixtureDefinitions({ yoloRoot, ...fixtureOptions }),
+      runFixtureHarness: (id: string, fixtureOptions: object = {}) => runFixtureHarness(id, { yoloRoot, ...fixtureOptions }),
     },
     release: {
       buildPackageInstallSmokePlan: (releaseOptions = Object()) => buildPackageInstallSmokePlan({ yoloRoot, ...releaseOptions }),
@@ -956,8 +1012,8 @@ export function createYoloSdk(options = Object()) {
       run: (input = Object(), agentOptions = Object()) => runPiAgent(input, { yoloRoot, projectRoot, stateRoot, ...agentOptions }),
     },
     review: {
-      scanProject: (scanOptions = Object()) => scanProject({ root: projectRoot, config: cfg, ...scanOptions }),
-      scanFile: (file, scanOptions = Object()) => scanFile(file, { root: projectRoot, config: cfg, ...scanOptions }),
+      scanProject: (scanOptions: object = {}) => scanProject({ root: projectRoot, config: cfg, ...scanOptions }),
+      scanFile: (file: string, scanOptions: object = {}) => scanFile(file, { root: projectRoot, config: cfg, ...scanOptions }),
       buildReviewOutput,
       buildReviewFixPrd,
       inspectReviewFixLoop: (input = Object(), reviewOptions = Object()) => inspectReviewFixLoop({
@@ -978,8 +1034,13 @@ export function createYoloSdk(options = Object()) {
     },
   };
   return Object.assign(sdk, {
-    stable: buildStableSdkFacade(sdk),
-    experimental: buildExperimentalSdkFacade(sdk),
+    // Cast the curated facades through the inferred SDK type so the published
+    // signatures stay concrete (sdk.agents.createPlan etc.) rather than
+    // widening to the structural `unknown` the facade builders see. The cast is
+    // safe because each facade only forwards references that already exist on
+    // `sdk` — it never synthesizes new values.
+    stable: buildStableSdkFacade(sdk) as Pick<typeof sdk, "agents" | "config" | "contract" | "paths" | "prd" | "provider" | "review" | "task">,
+    experimental: buildExperimentalSdkFacade(sdk) as Omit<typeof sdk, "stable" | "experimental">,
   });
 }
 
