@@ -17,7 +17,29 @@ export const DEMAND_READINESS_SCHEMA = "yolo.demand.readiness.v1";
 export const DEMAND_QUALITY_SCHEMA_VERSION = "1.0";
 export const DEMAND_QUALITY_SCHEMA = "yolo.demand.quality.v1";
 
-function hasLedgerEvidence(stateDir) {
+const DEMAND_DISCUSS_EVENT = "demand.discuss";
+const DEMAND_APPROVED_EVENT = "demand.approved";
+
+function cleanLedgerValue(value) {
+  return String(value ?? "").trim();
+}
+
+function demandEvidenceEventsForPhase(phase) {
+  const normalized = cleanLedgerValue(phase).toLowerCase();
+  if (["prd", "prd_intake", "executable_prd", "approved", "approval"].includes(normalized)) {
+    return new Set([DEMAND_APPROVED_EVENT]);
+  }
+  return new Set([DEMAND_DISCUSS_EVENT, DEMAND_APPROVED_EVENT]);
+}
+
+function ledgerRecordMatchesDemandEvidence(record, requiredEvents, demandId) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return false;
+  if (!requiredEvents.has(cleanLedgerValue(record.event))) return false;
+  if (!demandId) return true;
+  return cleanLedgerValue(record.demand_id || record.demandId) === demandId;
+}
+
+function hasLedgerEvidence(stateDir, context = Object()) {
   if (!stateDir) return false;
   try {
     const ledgerPath = join(stateDir, "evidence", "ledger.jsonl");
@@ -25,7 +47,10 @@ function hasLedgerEvidence(stateDir) {
     const records = readLedgerJsonl(ledgerPath);
     if (records.length === 0) return false;
     const validation = validateLedgerChain(records);
-    return validation.ok;
+    if (!validation.ok) return false;
+    const requiredEvents = demandEvidenceEventsForPhase(context.phase);
+    const demandId = cleanLedgerValue(context.demandId || context.demand_id);
+    return records.some((record) => ledgerRecordMatchesDemandEvidence(record, requiredEvents, demandId));
   } catch {
     return false;
   }
@@ -735,6 +760,7 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
   const hasDeclaredTargetFacts = targetFileFactRecords(session).length > 0;
   const deepMode = ["discuss", "prd", "executable_prd"].includes(phase);
   const prdMode = ["prd", "executable_prd"].includes(phase);
+  const evidenceGroundingRequired = deepMode || prdMode || phase === "prd_intake";
   const factGroundingRequired = prdMode || (deepMode && approval.approved === true && (hasExecutionScope || hasDeclaredTargetFacts));
   const factGroundingIssues = factGroundingRequired ? projectFactGrounding(session, options) : [];
   const evidenceRequirements = buildEvidenceRequirements({}, session, options);
@@ -866,8 +892,8 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
     ),
     check(
       "EVIDENCE_GROUNDED",
-      hasLedgerEvidence(options.stateDir),
-      prdMode || deepMode ? "error" : "warning",
+      hasLedgerEvidence(options.stateDir, { phase, demandId: session.id || session.demand_id }),
+      evidenceGroundingRequired ? "error" : "warning",
       "Demand evidence must be grounded in a validated evidence ledger before executable PRD compilation.",
     ),
     check(
@@ -983,7 +1009,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
   const storyAtomicityBlocked = storyAtomicity?.status === "blocked" || asArray(storyAtomicity?.blockers).length > 0;
   const factGroundingIssues = projectFactGrounding(session, options);
   const hasFactIssue = (code) => factGroundingIssues.some((issue) => issue.code === code);
-  const evidence_grounded = hasLedgerEvidence(options.stateDir);
+  const evidence_grounded = hasLedgerEvidence(options.stateDir, { phase, demandId: session.id || session.demand_id });
 
   const dimensions = [
     qualityDimension({

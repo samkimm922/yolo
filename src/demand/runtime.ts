@@ -243,6 +243,17 @@ export function runDemandDiscussRuntime(input = Object(), options = Object()) {
         phase: "discuss",
         ledger: "state",
       });
+      if (session.approval?.approved === true) {
+        appendJsonlRecord(join(stateDir, "evidence", "ledger.jsonl"), {
+          event: "demand.approved",
+          project_root: projectRoot,
+          state_root: stateRoot,
+          demand_id: session.id,
+          demand_dir: outputDir,
+          phase: "prd_intake",
+          ledger: "state",
+        });
+      }
     } catch (_) {
       // Ledger write is nonblocking; gate will catch missing evidence
     }

@@ -29,12 +29,27 @@ describe("demand gate ledger evidence integration", () => {
     }
   });
 
-  test("with valid ledger chain, evidence_grounded is true", () => {
+  test("with unrelated valid ledger chain, evidence_grounded is false", () => {
     const dir = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
     try {
       const ledgerPath = join(dir, "evidence", "ledger.jsonl");
       appendJsonlRecord(ledgerPath, { event: "project_read", file: "src/foo.ts", ledger: "state" });
       const result = inspectDemandQuality({ tasks: [] }, { stateDir: dir });
+      assert.ok(result !== null);
+      const factDim = result.dimensions?.find((d) => d.code === "project_fact_grounding");
+      assert.ok(factDim !== undefined);
+      assert.equal(factDim.evidence_grounded, false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("with valid approved demand ledger chain, evidence_grounded is true", () => {
+    const dir = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
+    try {
+      const ledgerPath = join(dir, "evidence", "ledger.jsonl");
+      appendJsonlRecord(ledgerPath, { event: "demand.approved", demand_id: "DEMAND-1", ledger: "state" });
+      const result = inspectDemandQuality({ id: "DEMAND-1", tasks: [] }, { stateDir: dir });
       assert.ok(result !== null);
       const factDim = result.dimensions?.find((d) => d.code === "project_fact_grounding");
       assert.ok(factDim !== undefined);
@@ -84,9 +99,10 @@ describe("demand gate ledger evidence integration", () => {
     const dir = mkdtempSync(join(tmpdir(), "yolo-ledger-"));
     try {
       const ledgerPath = join(dir, "evidence", "ledger.jsonl");
-      appendJsonlRecord(ledgerPath, { event: "project_read", file: "src/foo.ts", ledger: "state" });
+      appendJsonlRecord(ledgerPath, { event: "demand.discuss", demand_id: "DEMAND-1", ledger: "state" });
 
       const result = inspectDemandReadiness({
+        id: "DEMAND-1",
         playback: { confirmed: true, confirmed_by: "user" },
         approval: { approved: true },
         requirements: { active: [{ text: "User can do X." }] },
