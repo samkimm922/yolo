@@ -245,7 +245,7 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
         expected_zero_business_code: true,
       },
       post_conditions: [
-        { id: "POST-LINES", type: "file_lines_max", severity: "FAIL", params: { file: "src/legacy.ts", max: 150 } },
+        { id: "POST-LINES", type: "file_lines_max", severity: "FAIL", params: { file: "src/legacy.ts", max: 150, delete_intent: true } },
         { id: "POST-FILE-GONE", type: "file_not_exists", severity: "FAIL", params: { file: "src/legacy.ts" } },
       ],
     },

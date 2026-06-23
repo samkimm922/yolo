@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { evalCodeNotContains } from "../../src/lib/evaluators/code-check.js";
+import { evalFileLinesMax } from "../../src/lib/evaluators/file-check.js";
 
 type ConditionBatteryCase = {
   id: string;
@@ -31,6 +32,17 @@ const CONDITION_BATTERY: ConditionBatteryCase[] = [
     expect: "blocked",
     run: (root) => evalCodeNotContains(
       { file: "src/missing.ts", text: "SECRET" },
+      { targets: [{ file: "src/missing.ts" }] },
+      root,
+    ),
+  },
+  {
+    id: "file_lines_max_missing_target_blocks",
+    category: "condition_evaluator_robustness",
+    description: "file_lines_max must not pass when the requested target file is missing.",
+    expect: "blocked",
+    run: (root) => evalFileLinesMax(
+      { file: "src/missing.ts", max: 150 },
       { targets: [{ file: "src/missing.ts" }] },
       root,
     ),
