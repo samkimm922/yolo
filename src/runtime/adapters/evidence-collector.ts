@@ -334,13 +334,6 @@ export function runAdapterEvidenceCollector(input = Object(), options = Object()
   const evidenceRecords = [];
   for (const command of plan.commands) {
     const startedAt = nowIso();
-    // P12.I1: route adapter command through safe-exec — argv parsing rejects
-    // shell metacharacters, never invokes sh -c. shell:true is banned by ci-guard.
-    const executed = execCommand(command.command, {
-      cwd: plan.project_root,
-      timeout: command.timeout_ms,
-      env: { ...process.env },
-    });
     // P12.I2: route untrusted evidence_path through resolveWithinRoot咽喉.
     const evidenceGuard = command.evidence_path
       ? resolveWithinRoot(plan.project_root, command.evidence_path)
@@ -366,6 +359,13 @@ export function runAdapterEvidenceCollector(input = Object(), options = Object()
       });
       continue;
     }
+    // P12.I1: route adapter command through safe-exec — argv parsing rejects
+    // shell metacharacters, never invokes sh -c. shell:true is banned by ci-guard.
+    const executed = execCommand(command.command, {
+      cwd: plan.project_root,
+      timeout: command.timeout_ms,
+      env: { ...process.env },
+    });
     const evidencePath = evidenceGuard.ok ? (evidenceGuard.path || "") : "";
     const evidence = readJsonEvidence(evidencePath);
     if (evidence) evidenceRecords.push(evidence);
