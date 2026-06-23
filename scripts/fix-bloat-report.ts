@@ -17,6 +17,23 @@ const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const BASE = positional[0] || "origin/main";
 const HEAD = positional[1] || "HEAD";
 
+// Returns the reason from a `[bloat-ack: <reason>]` marker in any commit message of the
+// PR range (BASE..HEAD), or null. Lets a human deliberately acknowledge a reviewed large
+// change while keeping the gate hard for unattended/agent merges (which never add it).
+function bloatAckReason(): string | null {
+  try {
+    const log = execFileSync("git", ["log", `${BASE}..${HEAD}`, "--format=%B"], { encoding: "utf8" });
+    // Must START a line (a deliberate dedicated line, like a conventional-commit footer) —
+    // so prose merely mentioning the marker (e.g. this feature's own docs) does not trigger.
+    const m = log.match(/^\[bloat-ack:\s*([^\]]+)\]/im);
+    const reason = m ? m[1].trim() : "";
+    if (!reason || reason === "<reason>") return null; // ignore the placeholder
+    return reason;
+  } catch {
+    return null;
+  }
+}
+
 // Thresholds tuned for "a focused YB fix + its regression test". Above these, a reviewer
 // should look harder — not necessarily reject.
 const FLAG = {
@@ -128,12 +145,26 @@ function main() {
     if (stats.length > GATE.files) blocks.push(`EGREGIOUS_FILES: ${stats.length} files > ${GATE.files}`);
     if (longestFn.lines > GATE.functionLines) blocks.push(`EGREGIOUS_BLOCK: ${longestFn.lines}-line added block in ${longestFn.file} > ${GATE.functionLines}`);
     if (blocks.length > 0) {
-      console.error("[fix-bloat] GATE FAILED — change is too large/sprawling for unattended merge:");
-      for (const b of blocks) console.error(`  ✗ ${b}`);
-      console.error("[fix-bloat] split into a smaller, focused fix, or have a human review + merge it.");
-      process.exit(1);
+      // Auditable human-review escape. This gate exists to stop UNATTENDED auto-merge of
+      // egregious sprawl — soak/agent prompts never carry this marker, so unattended merges
+      // stay hard-blocked. A human who has reviewed a legitimately large change (e.g. a new
+      // module landing with its full test) can add `[bloat-ack: <reason>]` to a commit
+      // message; the reason stays auditable in git history.
+      const ack = bloatAckReason();
+      if (ack) {
+        console.warn("[fix-bloat] EGREGIOUS bloat ACKNOWLEDGED by human review via [bloat-ack]:");
+        for (const b of blocks) console.warn(`  ⚠ ${b}`);
+        console.warn(`  reason: ${ack}`);
+        console.warn("[fix-bloat] downgraded to warning (auditable in commit history; unattended merges never carry this marker).");
+      } else {
+        console.error("[fix-bloat] GATE FAILED — change is too large/sprawling for unattended merge:");
+        for (const b of blocks) console.error(`  ✗ ${b}`);
+        console.error("[fix-bloat] split into a smaller, focused fix, or — if a human has reviewed it — add [bloat-ack: <reason>] to a commit message.");
+        process.exit(1);
+      }
+    } else {
+      console.log("[fix-bloat] GATE OK — diff is within egregious-bloat limits.");
     }
-    console.log("[fix-bloat] GATE OK — diff is within egregious-bloat limits.");
   }
 }
 
