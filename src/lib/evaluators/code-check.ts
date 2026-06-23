@@ -327,21 +327,43 @@ export function evalCodeNotContains(params, taskScope, ROOT) {
     };
   }
 
+  const missingFiles = [];
+  const escapedFiles = [];
   const existingFiles = targetFiles.filter((file) => {
     const guardResult = resolveWithinRoot(ROOT, file);
-    return guardResult.ok && existsSync(guardResult.path) && !statSync(guardResult.path).isDirectory();
+    if (!guardResult.ok) {
+      escapedFiles.push(file);
+      return false;
+    }
+    if (!existsSync(guardResult.path) || statSync(guardResult.path).isDirectory()) {
+      missingFiles.push(file);
+      return false;
+    }
+    return true;
   });
 
+  if (escapedFiles.length > 0) {
+    return {
+      passed: false,
+      status: "not_run",
+      detail: `路径越界，无法验证 code_not_contains: ${escapedFiles.join(", ")}`,
+      found: 0,
+    };
+  }
+  if (missingFiles.length > 0 && params.allow_missing !== true) {
+    return {
+      passed: false,
+      status: "not_run",
+      detail: `目标文件不存在，无法验证 code_not_contains: ${missingFiles.join(", ")}`,
+      missing_files: missingFiles,
+      found: 0,
+    };
+  }
+
   if (existingFiles.length === 0) {
-    // Vacuously satisfied: the text is not in a file that does not exist.
-    // The runner used to mark these tasks as "not done" (indeterminate) even
-    // when the file was correctly removed/didn't exist, so e.g. "make sure
-    // FLAG is not in src/feature.ts" reported FAIL after the file was
-    // deleted. Return pass; users that need the file to exist can layer
-    // file_exists as a separate post-condition.
     return {
       passed: true,
-      detail: `指定文件均不存在，code_not_contains 视为通过: ${targetFiles.join(", ")}`,
+      detail: `指定文件均不存在，且 allow_missing=true: ${targetFiles.join(", ")}`,
       found: 0,
     };
   }

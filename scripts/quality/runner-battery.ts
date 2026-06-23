@@ -122,10 +122,10 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
     task: targetModifiedTask(),
   },
   {
-    id: "done-code-not-contains-on-missing-file",
-    expect: "done",
+    id: "notdone-code-not-contains-missing-file",
+    expect: "not_done",
     description:
-      "Target file is absent (never existed in the project) -> code_not_contains is vacuously satisfied; runner must report done, not block on indeterminate.",
+      "Target file is absent without allow_missing/file_not_exists intent -> code_not_contains must block instead of passing vacuously.",
     baseFiles: {},
     editFiles: {},
     task: removedFileTask("src/legacy.ts", "FLAG"),
