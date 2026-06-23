@@ -15,6 +15,18 @@ const DANGEROUS_CHARS = new Set([
   "\n", "\r", "\\",
 ]);
 
+const SHELL_INTERPRETERS = new Set([
+  "sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh", "pwsh", "powershell",
+]);
+
+function executableName(command: string): string {
+  return (command.split(/[\\/]/).pop() || command).toLowerCase();
+}
+
+function isShellCommandFlag(arg: string): boolean {
+  return /^-[A-Za-z]*c[A-Za-z]*$/.test(arg);
+}
+
 /**
  * Parse a command string into an argv array, respecting single/double quotes.
  * Rejects unquoted shell metacharacters to prevent injection.
@@ -81,6 +93,15 @@ export function parseCommandToArgv(command: unknown): ArgvParseResult {
 
   if (argv.length === 0) {
     return { ok: false, reason: "empty", detail: "command parsed to empty argv" };
+  }
+
+  const executable = executableName(argv[0] || "");
+  if (SHELL_INTERPRETERS.has(executable) && argv.slice(1).some(isShellCommandFlag)) {
+    return {
+      ok: false,
+      reason: "shell_interpreter",
+      detail: `shell interpreter "${argv[0]}" with -c is not allowed on argv-only execution paths`,
+    };
   }
 
   return { ok: true, argv };

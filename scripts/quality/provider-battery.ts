@@ -6,6 +6,7 @@
 
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
+import { parseCommandToArgv } from "../../src/lib/security/command-guard.js";
 import { spawnProviderPrompt } from "../../src/runtime/execution/provider-adapter.js";
 
 export type ProviderBatteryExpectation = "blocked" | "hung";
@@ -16,6 +17,14 @@ export type ProviderBatteryCase = {
   description: string;
   expect: ProviderBatteryExpectation;
   timeoutValue: number;
+};
+
+type ShellInterpreterBatteryCase = {
+  id: string;
+  category: "provider_preflight_robustness";
+  description: string;
+  expect: "blocked";
+  command: string;
 };
 
 type ProviderBatteryResult = {
@@ -98,6 +107,48 @@ export const PROVIDER_BATTERY: ProviderBatteryCase[] = [
   },
 ];
 
+const SHELL_INTERPRETER_BATTERY: ShellInterpreterBatteryCase[] = [
+  {
+    id: "shell_interpreter_argv_rejected_sh_c",
+    category: "provider_preflight_robustness",
+    description: "sh -c must be rejected on argv-only provider paths unless shell execution was explicitly allowed.",
+    expect: "blocked",
+    command: "sh -c 'echo unsafe'",
+  },
+  {
+    id: "shell_interpreter_argv_rejected_bash_lc",
+    category: "provider_preflight_robustness",
+    description: "bash -lc must be rejected on argv-only provider paths unless shell execution was explicitly allowed.",
+    expect: "blocked",
+    command: "bash -lc 'echo unsafe'",
+  },
+  {
+    id: "shell_interpreter_argv_rejected_zsh_c",
+    category: "provider_preflight_robustness",
+    description: "zsh -c must be rejected on argv-only provider paths unless shell execution was explicitly allowed.",
+    expect: "blocked",
+    command: "zsh -c 'echo unsafe'",
+  },
+];
+
+function runShellInterpreterCase(testCase: ShellInterpreterBatteryCase): ProviderBatteryResult {
+  const parsed = parseCommandToArgv(testCase.command);
+  const status = parsed.ok ? "resolved" : "blocked";
+  const correct = status === testCase.expect;
+  return {
+    id: testCase.id,
+    category: testCase.category,
+    expect: testCase.expect,
+    actualExit: correct ? 0 : 1,
+    actualStatus: status,
+    correct,
+  };
+}
+
 export async function runProviderBattery(): Promise<ProviderBatteryResult[]> {
-  return Promise.all(PROVIDER_BATTERY.map(runProviderCase));
+  const providerResults = await Promise.all(PROVIDER_BATTERY.map(runProviderCase));
+  return [
+    ...providerResults,
+    ...SHELL_INTERPRETER_BATTERY.map(runShellInterpreterCase),
+  ];
 }

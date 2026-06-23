@@ -84,6 +84,14 @@ describe("P10.S1 parseCommandToArgv", () => {
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.reason, "empty");
   });
+
+  test("rejects shell interpreters with -c argv escape", () => {
+    for (const command of ["sh -c 'echo unsafe'", "bash -lc 'echo unsafe'", "zsh -c 'echo unsafe'"]) {
+      const r = parseCommandToArgv(command);
+      assert.equal(r.ok, false, command);
+      if (!r.ok) assert.equal(r.reason, "shell_interpreter");
+    }
+  });
 });
 
 // ── contract.ts acceptance_criteria verify_command ─────────────
