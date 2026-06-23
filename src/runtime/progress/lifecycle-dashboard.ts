@@ -1,5 +1,14 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { readJsonlTail } from "../../lib/bounded-read.js";
+
+// Bounded tail-read ceiling for lifecycle event logs (state/*.jsonl). These
+// files grow with run length; the dashboard only surfaces the `eventLimit`
+// most-recent events, so reading the whole file on every poll wastes memory
+// and event-loop time. We parse up to 512 KiB of the tail per file and then
+// sort/slice in memory — comfortably above eventLimit for any realistic run.
+const EVENTS_TAIL_MAX_BYTES = 512 * 1024;
+const EVENTS_TAIL_MAX_ENTRIES = 5000;
 
 const EMPTY_STAGE_COUNTS = { total: 0, pending: 0, active: 0, completed: 0, blocked: 0, warning: 0 };
 
@@ -156,15 +165,21 @@ function readReports(root) {
 }
 
 function readEvents(root, limit) {
+  // Bounded tail read: each state/*.jsonl is read with readJsonlTail instead of
+  // readFileSync so memory/event-loop time stays O(window) regardless of how
+  // large the event log has grown. `limit` is typically small (8–10), so the
+  // 512 KiB tail window always contains enough events to satisfy it.
   return walk(join(root, "state"))
     .filter((path) => path.endsWith(".jsonl"))
-    .flatMap((path) =>
-      readFileSync(path, "utf8")
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => ({ path, event: parseJson(line) }))
-        .filter(({ event }) => event && typeof event === "object" && !Array.isArray(event)),
-    )
+    .flatMap((path) => {
+      const tail = readJsonlTail(path, {
+        maxBytes: EVENTS_TAIL_MAX_BYTES,
+        maxEntries: EVENTS_TAIL_MAX_ENTRIES,
+      });
+      const events = tail ? tail.entries : [];
+      return events.map((event) => ({ path, event }))
+        .filter(({ event }) => event && typeof event === "object" && !Array.isArray(event));
+    })
     .map(({ path, event }) => Object.assign(Object(), event, { path: normalizePath(root, path) }))
     .sort((a, b) => clean(b.created_at || b.timestamp || b.ts).localeCompare(clean(a.created_at || a.timestamp || a.ts)))
     .slice(0, limit);
