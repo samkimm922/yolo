@@ -153,6 +153,32 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
     },
   },
   {
+    id: "done-required-side-effect-import-present",
+    expect: "done",
+    description:
+      "required_imports_present with only import_path must accept a valid side-effect import. `import \"./polyfill\";` is complete when no named/default binding is required; previously the runner reported a false not_done.",
+    baseFiles: {
+      "src/app.ts": "export const ready = false;\n",
+      "src/polyfill.ts": "globalThis.__polyfilled = true;\n",
+    },
+    editFiles: {
+      "src/app.ts": "import \"./polyfill\";\nexport const ready = true;\n",
+    },
+    task: {
+      id: "TASK-RUNNER-IMPORT-SIDE-EFFECT",
+      title: "Load the feature polyfill",
+      scope: { targets: [{ file: "src/app.ts" }] },
+      post_conditions: [
+        {
+          id: "POST-IMPORT",
+          type: "required_imports_present",
+          severity: "FAIL",
+          params: { file: "src/app.ts", import_path: "./polyfill" },
+        },
+      ],
+    },
+  },
+  {
     id: "notdone-required-named-import-missing",
     expect: "not_done",
     description:
