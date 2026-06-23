@@ -68,7 +68,13 @@ export function updatePrdTaskStatusFile(prdPath, taskId, update) {
   try {
     const raw = readFileSync(prdPath, "utf8");
     const prd = JSON.parse(raw);
-    const task = (prd.tasks || []).find((item) => item.id === taskId);
+    // Guard: legacy/migrated PRDs may contain null/non-object entries inside `tasks`.
+    // Without this, `.find((item) => item.id === taskId)` throws TypeError on null
+    // entries, which is caught by the outer try/catch and silently reported as
+    // `write_failed` — dropping the status update for an otherwise-valid task.
+    const task = (Array.isArray(prd.tasks) ? prd.tasks : []).find(
+      (item) => item && typeof item === "object" && item.id === taskId,
+    );
     if (!task) return { wrote: false, reason: "task_not_found" };
 
     Object.assign(task, update);

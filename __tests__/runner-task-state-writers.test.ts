@@ -143,6 +143,42 @@ describe("runner task state writers", () => {
     }
   });
 
+  test("ignores null/non-object entries in PRD tasks instead of silently skipping status update", () => {
+    // Regression: a `null` (or non-object) entry in `prd.tasks` previously made
+    // `.find((item) => item.id === taskId)` throw TypeError, which the outer
+    // try/catch swallowed as `write_failed` — silently dropping the status
+    // update for an otherwise-valid task. The runner continued as if the write
+    // had succeeded (it only checks `result.wrote` to write a checkpoint).
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-state-"));
+    try {
+      const prdPath = join(root, "prd.json");
+      writeFileSync(
+        prdPath,
+        JSON.stringify({
+          id: "RUN-NULL-TASKS",
+          version: "1",
+          tasks: [null, { id: "FIX-STATE-NULL-001", status: "pending" }, "not-an-object"],
+        }),
+        "utf8",
+      );
+
+      const result = updatePrdTaskStatusFile(prdPath, "FIX-STATE-NULL-001", {
+        status: "done",
+        phase: "done",
+      });
+
+      assert.equal(result.wrote, true, "must write when target task is valid even with null siblings");
+      assert.equal(result.reason, undefined);
+      const prd = JSON.parse(readFileSync(prdPath, "utf8"));
+      assert.deepEqual(prd.tasks[1], { id: "FIX-STATE-NULL-001", status: "done", phase: "done" });
+      // Untouched sibling slots stay as-is; we only update the matched task.
+      assert.equal(prd.tasks[0], null);
+      assert.equal(prd.tasks[2], "not-an-object");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("builds standard terminal task transitions", () => {
     assert.deepEqual(failTaskTransition({
       taskId: "FIX-STATE-006",
