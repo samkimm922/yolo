@@ -308,4 +308,27 @@ describe("task-loop outcome handler", () => {
     );
     assert.ok(failedTransition, "the fuse trip must still persist the failure to the PRD");
   });
+
+  test("handleTaskOutcome tolerates null/non-object siblings in prd.tasks during valid-skip check (same family as #104)", () => {
+    // PRD state can carry null / string / number siblings (hand-edits, migration
+    // residue, retry from corrupt state). Without the guard, the skip path's
+    // `.find((item) => item.id === task.id)` reads `.id` on null and throws,
+    // crashing the main loop on a legitimately parseable PRD.
+    const state = makeLoopState();
+    const callbacks = makeOutcomeCallbacks({
+      // Deliberately malformed entries (null/string/number) to exercise the skip guard.
+      prd: { tasks: [null, { id: "FIX-P36-010", status: "pending" }, "stray", 42] as unknown as { id: string; status: string }[] },
+      post: { passed: true, failed: [] },
+    });
+
+    const result = handleTaskOutcome({
+      ...state,
+      task: { id: "FIX-P36-010" },
+      outcome: { status: "skipped", counts_as_completed: true, skip_kind: "valid_skip_already_satisfied" },
+      ...callbacks,
+    });
+
+    assert.deepEqual(result, { action: "continue", lastFailKey: "" });
+    assert.deepEqual(state.results.skipped, ["FIX-P36-010"]);
+  });
 });

@@ -140,7 +140,12 @@ export function handleTaskOutcome({
 
   if (r.status === "skipped" && r.counts_as_completed === true) {
     const prdForSkipCheck = loadPrd();
-    const latestTask = (prdForSkipCheck.tasks || []).find((item) => item.id === task.id) || task;
+    // Skip-path sibling of #104: tolerate null/non-object entries in prd.tasks
+    // (manual edits, migration residue, retry from corrupt state). Without this
+    // guard, `.find` reads `.id` on null and throws, crashing the main loop on a
+    // PRD whose only invalid sibling is a legitimately parseable JSON value.
+    const latestTask = (Array.isArray(prdForSkipCheck.tasks) ? prdForSkipCheck.tasks : [])
+      .find((item) => item && typeof item === "object" && item.id === task.id) || task;
     const post = skippedTaskPostconditionsPass(latestTask, prdForSkipCheck);
     if (!post.passed) {
       const reason = `invalid_skip_postconditions_failed: ${post.failed.join("; ")}`;
