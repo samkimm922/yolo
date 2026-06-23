@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { readJsonlTail } from "../../lib/bounded-read.js";
+import { redactDeep } from "../../lib/security/redact.js";
 
 // Bounded tail-read ceiling for lifecycle event logs (state/*.jsonl). These
 // files grow with run length; the dashboard only surfaces the `eventLimit`
@@ -200,5 +201,5 @@ export function readLifecycleDashboard(options = Object()) {
   const latestReports = reports.slice(0, reportLimit);
   const blockerCount = reports.reduce((sum, report) => sum + report.blockers.length, 0);
   const evidenceCount = reports.reduce((sum, report) => sum + report.evidence.length, 0);
-  return { exists: true, state_root: root, status_path: normalizePath(root, statusPath), current_stage: clean(status.current_stage) || null, stage_counts: stageCounts, blocker_count: Math.max(blockerCount, stageCounts.blocked || 0), evidence_count: evidenceCount, latest_reports: latestReports, recent_events: readEvents(root, eventLimit), next_action: blockerCount || stageCounts.blocked ? "Resolve blocked lifecycle items." : "Continue lifecycle work." };
+  return redactDeep({ exists: true, state_root: root, status_path: normalizePath(root, statusPath), current_stage: clean(status.current_stage) || null, stage_counts: stageCounts, blocker_count: Math.max(blockerCount, stageCounts.blocked || 0), evidence_count: evidenceCount, latest_reports: latestReports, recent_events: readEvents(root, eventLimit), next_action: blockerCount || stageCounts.blocked ? "Resolve blocked lifecycle items." : "Continue lifecycle work." });
 }
