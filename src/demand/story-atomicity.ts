@@ -73,6 +73,7 @@ const DELIVERABLE_VERB_TERMS = [
   "transform", "transforms", "generate", "generates", "insert", "inserts",
   "register", "registers", "login", "logout", "encrypt", "encrypts", "paginate", "parse", "parses", "verify", "verifies",
   "save", "saves", "persist", "persists", "reset", "resets", "redirect", "redirects",
+  "archive", "archives", "archiving",
   "cancel", "cancels", "cancelled", "canceling",
   "accept", "accepts", "accepted", "accepting",
   "decline", "declines", "declined", "declining",

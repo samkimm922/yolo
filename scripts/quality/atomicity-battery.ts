@@ -104,4 +104,7 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
 
   // ── Previously under-split: Chinese add/join-to-cart phrasing missed "加入" as a deliverable verb ──
   { id: "multi-zh-search-and-add-to-cart", expect: "multi", text: "用户可以搜索商品并加入购物车。" },
+
+  // ── Previously under-split: archive lifecycle actions were not treated as deliverable verbs ──
+  { id: "multi-archive-and-restore-tasks", expect: "multi", text: "Archive completed tasks and restore archived tasks." },
 ];
