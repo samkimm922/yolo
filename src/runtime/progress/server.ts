@@ -279,7 +279,7 @@ function readReviewLog() {
     const latest = entries[entries.length - 1];
     const rounds = entries.filter((e) => e?.type === "unified-review");
     const totalBugs = rounds.reduce((sum, r) => sum + (r.bugs_found || 0), 0);
-    return {
+    return redactDeep({
       currentRound: latest.round || 0,
       totalRounds: rounds.length,
       totalBugs,
@@ -291,7 +291,7 @@ function readReviewLog() {
             : "clean",
       latestBugs: latest.bugs_found || 0,
       latestError: latest.type === "error" ? latest.error : null,
-    };
+    });
   } catch {
     return null;
   }
