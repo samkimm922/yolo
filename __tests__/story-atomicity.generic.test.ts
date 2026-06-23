@@ -97,6 +97,15 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
     }
   });
 
+  test("or-connected enable disable lifecycle actions split into separate stories", () => {
+    const text = "Admins can enable or disable accounts.";
+    assert.deepEqual(splitGenericStorySlices(text), [
+      "Admins can enable accounts.",
+      "Admins can disable accounts.",
+    ]);
+    assert.equal(inspectStoryAtomicityText(text, { kind: "requirement", id: "REQ-ACCOUNT-LIFECYCLE" }).status, "blocked");
+  });
+
   test("modal verb inside a normal sentence is not a command-list cue", () => {
     const result = inspectStoryAtomicityText(
       "A new project can initialize local files and produce its first executable artifact.",
