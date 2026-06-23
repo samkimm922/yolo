@@ -5,6 +5,7 @@
 // provider lifecycle control must be rejected before any process is spawned.
 
 import { EventEmitter } from "node:events";
+import { readFileSync } from "node:fs";
 import { PassThrough } from "node:stream";
 import { parseCommandToArgv } from "../../src/lib/security/command-guard.js";
 import { spawnProviderPrompt } from "../../src/runtime/execution/provider-adapter.js";
@@ -25,6 +26,14 @@ type ShellInterpreterBatteryCase = {
   description: string;
   expect: "blocked";
   command: string;
+};
+
+type SourceFlagBatteryCase = {
+  id: string;
+  category: "provider_preflight_robustness";
+  description: string;
+  expect: "blocked";
+  file: string;
 };
 
 type ProviderBatteryResult = {
@@ -131,9 +140,34 @@ const SHELL_INTERPRETER_BATTERY: ShellInterpreterBatteryCase[] = [
   },
 ];
 
+const SOURCE_FLAG_BATTERY: SourceFlagBatteryCase[] = [
+  {
+    id: "legacy_review_no_claude_permission_bypass",
+    category: "provider_preflight_robustness",
+    description: "legacy review must not pass Claude's permission bypass flag directly.",
+    expect: "blocked",
+    file: "src/cli/review.ts",
+  },
+];
+
 function runShellInterpreterCase(testCase: ShellInterpreterBatteryCase): ProviderBatteryResult {
   const parsed = parseCommandToArgv(testCase.command);
   const status = parsed.ok ? "resolved" : "blocked";
+  const correct = status === testCase.expect;
+  return {
+    id: testCase.id,
+    category: testCase.category,
+    expect: testCase.expect,
+    actualExit: correct ? 0 : 1,
+    actualStatus: status,
+    correct,
+  };
+}
+
+function runSourceFlagCase(testCase: SourceFlagBatteryCase): ProviderBatteryResult {
+  const source = readFileSync(testCase.file, "utf8");
+  const forbiddenFlag = ["--dangerously", "skip", "permissions"].join("-");
+  const status = source.includes(forbiddenFlag) ? "resolved" : "blocked";
   const correct = status === testCase.expect;
   return {
     id: testCase.id,
@@ -150,5 +184,6 @@ export async function runProviderBattery(): Promise<ProviderBatteryResult[]> {
   return [
     ...providerResults,
     ...SHELL_INTERPRETER_BATTERY.map(runShellInterpreterCase),
+    ...SOURCE_FLAG_BATTERY.map(runSourceFlagCase),
   ];
 }

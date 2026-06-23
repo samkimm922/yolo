@@ -10,6 +10,7 @@ import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveClaudeSettings, YOLO_PACKAGE_ROOT } from '../runtime/execution/provider-adapter.js';
+import { inspectAgentAdapterContract } from '../runtime/adapters/agent-contract.js';
 import { redact, redactDeep } from '../lib/security/redact.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -24,6 +25,18 @@ const outputArg = args.find(a => a.startsWith('--output='));
 const outputPath = outputArg ? outputArg.split('=')[1] : null;
 
 const claudeSettings = resolveClaudeSettings(ROOT, 'settings-minimal.json', { packageRoot: YOLO_PACKAGE_ROOT });
+const adapterInspection = inspectAgentAdapterContract({
+  provider: 'claude',
+  rootDir: ROOT,
+  workDir: ROOT,
+  runtimeDir: join(ROOT, '.yolo', 'state', 'runtime'),
+});
+
+if (adapterInspection.blocks_execution) {
+  console.error(`[yolo-review] claude adapter contract blocked execution: ${JSON.stringify(redactDeep(adapterInspection.blockers))}`);
+  console.log('[]');
+  process.exit(1);
+}
 
 // --- 审查 Prompt ---
 const REVIEW_PROMPT = `你是一个高级代码审查员。审查整个项目的 src/ 目录，找出所有 bug 和安全问题。
@@ -115,7 +128,6 @@ function extractJsonArray(text) {
 // --- 调用 claude -p（全新窗口，10 分钟超时） ---
 const result = spawnSync('claude', [
   '-p', REVIEW_PROMPT,
-  '--dangerously-skip-permissions',
   '--settings', claudeSettings.value,
 ], {
   cwd: ROOT,

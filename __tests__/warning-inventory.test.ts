@@ -19,7 +19,6 @@ const INVENTORY = [
   ["src/cli/gate.ts", { WARN: 4, warning: 0, "best-effort": 0, skip: 0 }],
   ["src/cli/prd-preflight.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 0 }],
   ["src/cli/prompt.ts", { WARN: 1, warning: 2, "best-effort": 0, skip: 0 }],
-  ["src/cli/review.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 1 }],
   // yolo.ts was split into focused modules under src/cli/split/. The token
   // counts below are the relocated warning/skip paths previously counted in
   // the single src/cli/yolo.ts entry (warning: 17, skip: 5) — totals preserved.
