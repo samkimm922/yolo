@@ -351,6 +351,15 @@ function deepMerge(base, override, keyPath = '') {
     console.warn(`[config] 跳过类型不匹配的字段${keyPath ? ` (${keyPath})` : ''}: 期望对象, 收到${received}`);
     return base;
   }
+  if (base !== undefined && base !== null && typeof base !== 'object') {
+    const expected = typeof base;
+    const received = Array.isArray(override) ? '数组' : typeof override === 'object' ? '对象' : typeof override;
+    const compatible = typeof override === expected && (expected !== 'number' || Number.isFinite(override));
+    if (!compatible) {
+      console.warn(`[config] 跳过类型不匹配的字段${keyPath ? ` (${keyPath})` : ''}: 期望${expected}, 收到${received}`);
+      return base;
+    }
+  }
   // If override is an array or scalar, use it directly (replaces base)
   if (Array.isArray(override) || typeof override !== 'object') {
     return override;

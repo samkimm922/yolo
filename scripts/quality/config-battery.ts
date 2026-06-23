@@ -33,6 +33,13 @@ export const CONFIG_BATTERY: ConfigBatteryCase[] = [
     expect: "fallback_defaults",
     config: { version: "2.0", project: [] },
   },
+  {
+    id: "bad-project-root-object",
+    category: "config_preflight_robustness",
+    description: "project.root as an object must preserve the default string root so scanner path resolution does not crash.",
+    expect: "fallback_defaults",
+    config: { version: "2.0", project: { root: { nested: "value" } } },
+  },
 ];
 
 function runConfigCase(testCase: ConfigBatteryCase): ConfigBatteryResult {
