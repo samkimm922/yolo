@@ -323,6 +323,31 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
     },
   },
   {
+    id: "done-pretty-tsc-baseline-error",
+    expect: "done",
+    description:
+      "TypeScript pretty-format errors that already exist in tsc-baseline.json are not new type errors; no_new_type_errors must pass instead of reporting a false not_done.",
+    baseFiles: {
+      "src/feature.ts": "export const v = 1;\n",
+      "src/legacy.ts": "export const legacy: string = 1;\n",
+      "scripts/yolo/state/runtime/tsc-baseline.json": "{\n  \"keys\": [\n    \"src/legacy.ts:1:TS2322\"\n  ]\n}\n",
+      "tsc.js":
+        "console.log('src/legacy.ts:1:14 - error TS2322: Type number is not assignable to type string.');\nprocess.exit(1);\n",
+    },
+    editFiles: {
+      "src/feature.ts": "export const v = 2;\n",
+    },
+    task: {
+      id: "TASK-RUNNER-TSC-PRETTY-BASELINE",
+      title: "Implement feature without new type errors",
+      scope: { targets: [{ file: "src/feature.ts" }] },
+      post_conditions: [
+        { id: "POST-TARGET", type: "target_file_modified", severity: "FAIL", params: { file: "src/feature.ts" } },
+        { id: "POST-TSC", type: "no_new_type_errors", severity: "FAIL", params: { command: "node tsc.js" } },
+      ],
+    },
+  },
+  {
     id: "notdone-type-error-outside-target",
     expect: "not_done",
     description:
