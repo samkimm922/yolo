@@ -18,6 +18,12 @@ export type RunnerBatteryCase = {
   editFiles?: Record<string, string>;
   // Files removed AFTER base (the "task's" deletions). Omit to keep base files.
   deleteFiles?: string[];
+  // Files that should be executable for command-runner fixtures.
+  executableFiles?: string[];
+  // Relative directories to prepend to PATH while evaluating this case.
+  envPathPrepend?: string[];
+  // Override config.build.test while evaluating this case.
+  buildTestCommand?: string;
   // The task whose post_conditions are evaluated.
   task: unknown;
 };
@@ -85,6 +91,26 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
     task: targetModifiedTask([
       { id: "POST-CONTAINS", type: "code_contains", severity: "FAIL", params: { file: TARGET, text: "FLAG" } },
     ]),
+  },
+  {
+    id: "evalTestsPass_empty_output_fails",
+    expect: "not_done",
+    description:
+      "tests_pass with a successful vitest process but no JSON result is untrusted and must not mark the task done.",
+    baseFiles: {
+      "bin/pnpm": "#!/usr/bin/env node\nprocess.exit(0);\n",
+    },
+    executableFiles: ["bin/pnpm"],
+    envPathPrepend: ["bin"],
+    buildTestCommand: "",
+    task: {
+      id: "TASK-RUNNER-TESTS-EMPTY",
+      title: "Verify tests",
+      scope: { expected_zero_business_code: true },
+      post_conditions: [
+        { id: "POST-TESTS", type: "tests_pass", severity: "FAIL", params: {} },
+      ],
+    },
   },
   {
     id: "notdone-target-only-twin-file-changed",

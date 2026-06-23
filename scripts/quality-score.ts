@@ -12,10 +12,11 @@
 // (or hold it). Expanding the battery is a separate, deliberate step that may lower Q to
 // expose new territory.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { config } from "../src/lib/config.js";
 import { runYoloCheckCli } from "../src/runtime/gates/check-report.js";
 import { buildAcceptanceReport } from "../src/runtime/acceptance/report.js";
 import { verifyArtifactIntegrity } from "../src/runtime/evidence/artifact-integrity.js";
@@ -136,6 +137,8 @@ function runAtomicityCase(testCase: AtomicityBatteryCase): CaseResult {
 
 function runRunnerCase(testCase: RunnerBatteryCase): CaseResult {
   const root = setupProject(testCase.baseFiles);
+  const originalPath = process.env.PATH;
+  const originalBuildTest = config.build?.test;
   try {
     for (const [rel, contents] of Object.entries(testCase.editFiles || {})) {
       const abs = join(root, rel);
@@ -146,11 +149,33 @@ function runRunnerCase(testCase: RunnerBatteryCase): CaseResult {
       const abs = join(root, rel);
       try { unlinkSync(abs); } catch { /* already absent */ }
     }
+    for (const rel of testCase.executableFiles || []) {
+      chmodSync(join(root, rel), 0o755);
+    }
+    if (testCase.envPathPrepend?.length) {
+      process.env.PATH = [
+        ...testCase.envPathPrepend.map((rel) => join(root, rel)),
+        originalPath || "",
+      ].filter(Boolean).join(delimiter);
+    }
+    if (Object.hasOwn(testCase, "buildTestCommand")) {
+      config.build ??= {};
+      config.build.test = testCase.buildTestCommand;
+    }
     const report = evaluatePostConditions(testCase.task, {}, { cwd: root, root }) as { allPass?: boolean };
     const detected = report.allPass ? "done" : "not_done";
     const correct = detected === testCase.expect;
     return { id: testCase.id, category: "runner_outcome_accuracy", expect: testCase.expect, actualExit: correct ? 0 : 1, actualStatus: detected, correct };
   } finally {
+    if (originalPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = originalPath;
+    }
+    if (Object.hasOwn(testCase, "buildTestCommand")) {
+      config.build ??= {};
+      config.build.test = originalBuildTest;
+    }
     rmSync(root, { recursive: true, force: true });
   }
 }
