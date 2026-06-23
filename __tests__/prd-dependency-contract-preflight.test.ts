@@ -71,6 +71,61 @@ describe("PRD dependency contract preflight", () => {
     assert.equal(dependencyFailure?.dependency_id, "MISSING_ALIAS");
   });
 
+  test("inspectPrdContract blocks duplicate task ids before runner state becomes ambiguous", () => {
+    const base = dependencyPrd({ depends_on: [] });
+    const runnableTask = {
+      ...base.tasks[0],
+      depends_on: [],
+      post_conditions: [
+        {
+          id: "POST-TARGET-A",
+          type: "target_file_modified",
+          severity: "FAIL",
+          params: { file: "src/runtime/gates/prd-contract-doctor.ts" },
+        },
+        {
+          id: "POST-TESTS-A",
+          type: "tests_pass",
+          severity: "FAIL",
+          params: { command: "npm test" },
+        },
+      ],
+    };
+    const prd = {
+      ...base,
+      tasks: [
+        runnableTask,
+        {
+          ...runnableTask,
+          title: "Duplicate id task",
+          scope: { targets: [{ file: "src/runtime/gates/check-report.ts" }] },
+          post_conditions: [
+            {
+              id: "POST-TARGET-B",
+              type: "target_file_modified",
+              severity: "FAIL",
+              params: { file: "src/runtime/gates/check-report.ts" },
+            },
+            {
+              id: "POST-TESTS-B",
+              type: "tests_pass",
+              severity: "FAIL",
+              params: { command: "npm test" },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = inspectPrdContract(prd);
+    const duplicateFailure = result.failures.find((failure) => failure.code === "TASK_DUPLICATE_ID");
+
+    assert.equal(result.blocks_execution, true);
+    assert.equal(duplicateFailure?.task_id, "FIX-DEP-001");
+    assert.equal(duplicateFailure?.duplicate_id, "FIX-DEP-001");
+    assert.match(duplicateFailure?.detail || "", /unique/);
+  });
+
   test("preflightPrd reports missing task dependencies as blocked reasons", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-prd-dependency-preflight-"));
     try {
@@ -87,6 +142,49 @@ describe("PRD dependency contract preflight", () => {
       assert.equal(reason?.source, "contract");
       assert.equal(reason?.task_id, "FIX-DEP-001");
       assert.match(reason?.detail || "", /MISSING/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("preflightPrd reports duplicate task ids as blocked reasons", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-prd-duplicate-task-preflight-"));
+    try {
+      const prdPath = join(root, "prd.json");
+      const base = dependencyPrd({ depends_on: [] });
+      const task = {
+        ...base.tasks[0],
+        depends_on: [],
+        scope: { targets: [{ file: "src/a.ts" }] },
+        post_conditions: [
+          { id: "POST-TARGET-A", type: "target_file_modified", severity: "FAIL", params: { file: "src/a.ts" } },
+          { id: "POST-TESTS-A", type: "tests_pass", severity: "FAIL", params: { command: "npm test" } },
+        ],
+      };
+      writeFileSync(prdPath, `${JSON.stringify({
+        ...base,
+        tasks: [
+          task,
+          {
+            ...task,
+            title: "Second task with duplicate id",
+            scope: { targets: [{ file: "src/b.ts" }] },
+            post_conditions: [
+              { id: "POST-TARGET-B", type: "target_file_modified", severity: "FAIL", params: { file: "src/b.ts" } },
+              { id: "POST-TESTS-B", type: "tests_pass", severity: "FAIL", params: { command: "npm test" } },
+            ],
+          },
+        ],
+      }, null, 2)}\n`, "utf8");
+
+      const report = preflightPrd(prdPath, { requireDemandContract: false });
+      const reason = report.blocked_reasons.find((item) => item.code === "TASK_DUPLICATE_ID");
+
+      assert.equal(report.status, "blocked");
+      assert.equal(report.contract.blocks_execution, true);
+      assert.equal(report.runner_readiness.can_execute, false);
+      assert.equal(reason?.source, "contract");
+      assert.equal(reason?.task_id, "FIX-DEP-001");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -69,6 +69,25 @@ function strictPrd(taskOverrides: Record<string, unknown> = {}, prdOverrides: Re
   };
 }
 
+function duplicateTaskIdPrd() {
+  const prd = strictPrd();
+  const firstTask = prd.tasks[0];
+  return {
+    ...prd,
+    tasks: [
+      firstTask,
+      {
+        ...firstTask,
+        title: "Duplicate task id fixture",
+        post_conditions: [
+          { id: "POST-TARGET-DUP", type: "target_file_modified", severity: "FAIL", params: { file: VALID_TARGET } },
+          { id: "POST-TYPECHECK-DUP", type: "no_new_type_errors", severity: "FAIL", params: { command: "npm run typecheck" } },
+        ],
+      },
+    ],
+  };
+}
+
 const altTargetDemand = {
   id: "DEMAND-QUALITY",
   approval: { approved: true, effective_for_prd: true },
@@ -149,6 +168,14 @@ export const CHECK_BATTERY: CheckBatteryCase[] = [
     expect: "blocked",
     files: VALID_FILES,
     prd: strictPrd({}, { tasks: [] }),
+  },
+  {
+    id: "bad-duplicate-task-id",
+    category: "hang_or_crash",
+    description: "Duplicate task ids must be blocked because runner state updates are keyed by task id.",
+    expect: "blocked",
+    files: VALID_FILES,
+    prd: duplicateTaskIdPrd(),
   },
   {
     id: "bad-null-prd-json",

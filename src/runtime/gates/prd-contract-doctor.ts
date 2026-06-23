@@ -266,8 +266,20 @@ export function inspectPrdContract(prd, options = Object()) {
   const warnings = [];
   const tasks = Array.isArray(prd?.tasks) ? prd.tasks.filter((task) => task && typeof task === "object") : [];
   const taskIds = new Set(tasks.map((task) => task?.id).filter(Boolean));
+  const duplicateTaskIds = [];
+  const seenTaskIds = new Set();
   const strictExecution = strictExecutionPolicy(prd, options);
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
+
+  for (const task of tasks) {
+    const id = cleanString(task?.id);
+    if (!id) continue;
+    if (seenTaskIds.has(id)) {
+      if (!duplicateTaskIds.includes(id)) duplicateTaskIds.push(id);
+    } else {
+      seenTaskIds.add(id);
+    }
+  }
 
   if (prd?.execution_mode === "planning_only") {
     failures.push({
@@ -437,6 +449,19 @@ export function inspectPrdContract(prd, options = Object()) {
       severity: "FAIL",
       code: "NO_TASKS",
       detail: "PRD must contain at least one executable task",
+    });
+  }
+
+  for (const id of duplicateTaskIds) {
+    failures.push({
+      task_id: id,
+      condition_id: null,
+      condition_type: null,
+      severity: "FAIL",
+      code: "TASK_DUPLICATE_ID",
+      detail: `task id must be unique across PRD tasks: ${id}`,
+      duplicate_id: id,
+      human_needed: true,
     });
   }
 
