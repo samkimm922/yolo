@@ -103,6 +103,33 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
     },
   },
   {
+    id: "notdone-forbidden-pattern-new-file",
+    expect: "not_done",
+    description:
+      "New untracked file contains a forbidden pattern (as any); no_forbidden_patterns must detect it. Previously the evaluator skipped untracked files because git diff returns empty for them — false DONE.",
+    baseFiles: { "src/old.ts": "export const a = 1;\n" },
+    editFiles: { "src/new.ts": "const x = y as any;\n" },
+    task: {
+      id: "TASK-RUNNER-FORBIDDEN",
+      title: "Add new file with forbidden pattern",
+      scope: {
+        targets: [{ file: "src/new.ts" }],
+        expected_zero_business_code: true,
+      },
+      post_conditions: [
+        {
+          id: "POST-FORBIDDEN",
+          type: "no_forbidden_patterns",
+          severity: "FAIL",
+          params: {
+            patterns: [{ pattern: "as any", severity: "FAIL" }],
+            targets: ["src/new.ts"],
+          },
+        },
+      ],
+    },
+  },
+  {
     id: "done-file-lines-max-on-missing-file",
     expect: "done",
     description:

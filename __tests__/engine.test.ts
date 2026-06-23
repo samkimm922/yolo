@@ -266,14 +266,32 @@ describe("no_forbidden_patterns", () => {
     unlinkSync(clean);
   });
 
-  test("no uncommitted git diff → PASS (no violations to report)", () => {
-    // no_forbidden_patterns checks git diff added lines, not file contents.
-    // fileA is in .tmp-test (untracked) so git diff returns nothing → PASS.
+  test("clean untracked file with diff scan → PASS", () => {
+    // Untracked file without forbidden patterns should pass.
+    // The evaluator reads untracked file content directly (git diff returns
+    // empty for untracked files) and finds no violations.
+    const clean = join(mockDir, "clean2.ts");
+    writeFileSync(clean, "export const OK = 42;\n", "utf8");
     const r = pre([{
       id: "c1", type: "no_forbidden_patterns", severity: "FAIL",
-      params: { patterns: [{ pattern: "as any" }], targets: [fileA] }, message: "",
+      params: { patterns: [{ pattern: "should_not_exist" }], targets: [clean] }, message: "",
     }]);
     expect(r.results[0].passed).toBe(true);
+    unlinkSync(clean);
+  });
+
+  test("untracked file with diff scan catches forbidden pattern → FAIL", () => {
+    // Untracked file containing a forbidden pattern must FAIL.
+    // Previously the evaluator skipped untracked files because git diff
+    // returns empty for them — this was a false DONE bug.
+    const bad = join(mockDir, "bad.ts");
+    writeFileSync(bad, "const x = y as any;\n", "utf8");
+    const r = pre([{
+      id: "c1", type: "no_forbidden_patterns", severity: "FAIL",
+      params: { patterns: [{ pattern: "as any" }], targets: [bad] }, message: "",
+    }]);
+    expect(r.results[0].passed).toBe(false);
+    unlinkSync(bad);
   });
 
   test("pattern found in git diff added lines → FAIL", () => {
