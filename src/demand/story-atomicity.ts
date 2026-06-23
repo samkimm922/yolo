@@ -85,6 +85,8 @@ const DELIVERABLE_VERB_TERMS = [
   "reactivate", "reactivates", "reactivated",
   "activate", "activates", "activated", "activating",
   "deactivate", "deactivates", "deactivated", "deactivating",
+  "enable", "enables",
+  "disable", "disables",
   "reserve", "reserves", "reserved",
   "invite", "invites", "invited", "inviting",
   "track", "tracks", "tracked", "tracking",
@@ -130,6 +132,7 @@ const DELIVERABLE_GERUND_TERMS = [
   "subscribing", "unsubscribing",
   "suspending", "reactivating",
   "activating", "deactivating",
+  "enabling", "disabling",
   "reserving",
   "inviting", "tracking", "publishing", "requesting", "booking", "alerting", "caching", "retrying",
   "sharing", "reviewing", "composing", "decrypting", "receiving",
@@ -193,6 +196,8 @@ const GERUND_ROOT_MAP = new Map([
   ["reactivating", "reactivate"],
   ["activating", "activate"],
   ["deactivating", "deactivate"],
+  ["enabling", "enable"],
+  ["disabling", "disable"],
   ["reserving", "reserve"],
   ["inviting", "invite"],
   ["tracking", "track"],
@@ -363,6 +368,18 @@ function uniqueStorySlices(values) {
   return slices;
 }
 
+function expandEnableDisableEnumeration(clause) {
+  const source = normalizeStorySlice(clause);
+  const verb = "(?:enable|enables|enabled|enabling|disable|disables|disabled|disabling)";
+  const match = source.match(new RegExp(`^([\\s\\S]*?\\b)(${verb})\\s+(?:or|或者|或)\\s+(${verb})\\s+([\\s\\S]+)$`, "iu"));
+  if (!match) return [];
+  const [, prefix, first, second, suffix] = match;
+  return uniqueStorySlices([
+    `${prefix}${first} ${suffix}`,
+    `${prefix}${second} ${suffix}`,
+  ]);
+}
+
 function splitRepeatedStoryOpeners(text) {
   const matches = [...clean(text).matchAll(/当用户/g)];
   if (matches.length <= 1) return [];
@@ -509,6 +526,8 @@ export function splitGenericStorySlices(text) {
   if (clauses.length > 1) return uniqueStorySlices(clauses.flatMap(splitGenericStorySlices));
   const whenClause = expandWhenClauseEnumeration(source);
   if (whenClause.length > 1) return whenClause;
+  const enableDisable = expandEnableDisableEnumeration(source);
+  if (enableDisable.length > 1) return enableDisable;
   const compact = expandCompactEnumeration(source);
   if (compact.length > 1) return compact;
   const phrase = expandPhraseEnumeration(source);

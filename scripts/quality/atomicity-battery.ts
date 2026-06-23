@@ -77,6 +77,7 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   { id: "multi-subscribe-and-cancel", expect: "multi", text: "Allow users to subscribe and cancel their subscription." },
   { id: "multi-suspend-or-reactivate", expect: "multi", text: "Moderators can suspend or reactivate accounts." },
   { id: "multi-activate-and-deactivate-accounts", expect: "multi", text: "As an admin, I want to activate and deactivate accounts." },
+  { id: "multi-enable-or-disable-accounts", expect: "multi", text: "Admins can enable or disable accounts." },
   { id: "multi-reserve-and-cancel", expect: "multi", text: "Customers can reserve a room and cancel the reservation." },
 
   // ── Git/workflow verbs that were missing from the heuristic verb list ──
