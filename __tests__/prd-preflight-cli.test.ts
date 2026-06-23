@@ -171,6 +171,42 @@ describe("prd preflight CLI warning policy", () => {
     }
   });
 
+  test("malformed null task is schema-blocked without crashing contract/spec preflight", () => {
+    const root = tempProject();
+    let stdout = "";
+    let stderr = "";
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, {
+        version: "2.0",
+        id: "PRD-20260623-NULL-TASK",
+        title: "Malformed task boundary",
+        project: { name: "test", language: "typescript" },
+        generated_by: "other",
+        generated_at: "2026-06-23T00:00:00.000Z",
+        base_commit: "abcdef0",
+        requirements: [{ id: "REQ-1", text: "Schema should reject bad tasks." }],
+        designs: [{ id: "DES-1", text: "Preflight should still return JSON." }],
+        tasks: [null],
+      });
+
+      const exitCode = runPrdPreflightCli([prdPath, "--json"], {
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      });
+      const payload = JSON.parse(stdout);
+
+      assert.equal(stderr, "");
+      assert.equal(exitCode, 1);
+      assert.equal(payload.status, "blocked");
+      assert.equal(payload.schema.ok, false);
+      assert.ok(payload.schema.details.some((detail) => detail.path === "/tasks/0" && detail.keyword === "type"));
+      assert.ok(payload.blocked_reasons.some((reason) => reason.code === "PRD_SCHEMA_FAILED"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("advisory mode removed — warning PRDs are blocked regardless of mode", () => {
     const root = tempProject();
     let stdout = "";

@@ -81,7 +81,7 @@ export function buildTraceabilityMatrix(prd = Object()) {
   const designs = normalizeRefs(prd.designs, prd.design, prd.spec?.designs, prd.spec?.design);
   const knownRequirements = new Set(requirements);
   const knownDesigns = new Set(designs);
-  const prdTasks = Array.isArray(prd.tasks) ? prd.tasks : [];
+  const prdTasks = Array.isArray(prd.tasks) ? prd.tasks.filter((task) => task && typeof task === "object") : [];
   const tasks = prdTasks.map((task) => {
     const requirementIds = taskRequirementIds(task);
     const designIds = taskDesignIds(task);

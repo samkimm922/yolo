@@ -264,7 +264,7 @@ function addFinding(list, task, condition, code, detail, extra = Object()) {
 export function inspectPrdContract(prd, options = Object()) {
   const failures = [];
   const warnings = [];
-  const tasks = Array.isArray(prd?.tasks) ? prd.tasks : [];
+  const tasks = Array.isArray(prd?.tasks) ? prd.tasks.filter((task) => task && typeof task === "object") : [];
   const taskIds = new Set(tasks.map((task) => task?.id).filter(Boolean));
   const strictExecution = strictExecutionPolicy(prd, options);
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
