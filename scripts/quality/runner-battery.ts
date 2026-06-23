@@ -153,6 +153,32 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
     },
   },
   {
+    id: "notdone-required-named-import-missing",
+    expect: "not_done",
+    description:
+      "required_imports_present with named imports must verify the requested symbol, not only the import source path. Importing a different symbol from the same module is incomplete work and must not pass.",
+    baseFiles: {
+      "src/app.ts": "export function run() { return 1; }\n",
+      "src/dep.ts": "export const useFeature = () => true;\nexport const other = 1;\n",
+    },
+    editFiles: {
+      "src/app.ts": "import { other } from \"./dep\";\nexport function run() { return other; }\n",
+    },
+    task: {
+      id: "TASK-RUNNER-IMPORT-NAMED",
+      title: "Use the required feature helper",
+      scope: { targets: [{ file: "src/app.ts" }] },
+      post_conditions: [
+        {
+          id: "POST-IMPORT",
+          type: "required_imports_present",
+          severity: "FAIL",
+          params: { file: "src/app.ts", import_path: "./dep", named: ["useFeature"] },
+        },
+      ],
+    },
+  },
+  {
     id: "done-file-lines-max-on-missing-file",
     expect: "done",
     description:

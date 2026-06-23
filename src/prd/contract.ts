@@ -93,6 +93,34 @@ function changedFilesFromOptions(options = Object(), root = ROOT) {
   return [...new Set(files.map((file) => normalizeRepoFilePath(file, root)).filter(Boolean))];
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function collectStaticImports(content, importPath) {
+  const info = { count: 0, defaultLocal: "", named: new Set() };
+  const source = escapeRegExp(importPath);
+  const importRe = new RegExp(`\\bimport\\s+(?:type\\s+)?([\\s\\S]*?)\\s+from\\s*['"]${source}['"]`, "g");
+  let match;
+  while ((match = importRe.exec(content)) !== null) {
+    info.count += 1;
+    const clause = String(match[1] || "").trim();
+    const namedMatch = clause.match(/\{([\s\S]*?)\}/);
+    if (namedMatch) {
+      for (const part of namedMatch[1].split(",")) {
+        const sourceName = part.trim().replace(/^type\s+/, "").split(/\s+as\s+/i)[0]?.trim();
+        if (sourceName) info.named.add(sourceName);
+      }
+    }
+    const beforeNamed = clause.split("{")[0].replace(/,\s*$/, "").trim();
+    const defaultName = beforeNamed.split(",")[0]?.trim();
+    if (defaultName && !defaultName.startsWith("*") && !info.defaultLocal) {
+      info.defaultLocal = defaultName;
+    }
+  }
+  return info;
+}
+
 // ── 条件类型调度表 ──────────────────────────────────────────────
 
 function createEvaluators(root, options = Object()) {
@@ -232,8 +260,17 @@ function createEvaluators(root, options = Object()) {
         }
         checkedFiles.push(f);
         const content = readFileSync(absPath, "utf8");
-        const re = new RegExp(`import\\b.*from\\s*['"]${importPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}['"]`);
-        if (!re.test(content)) return { passed: false, detail: `${f} 缺少导入: ${importPath}` };
+        const requiredNamed = Array.isArray(params.named) ? params.named.map(String).map((name) => name.trim()).filter(Boolean) : [];
+        const requiredDefault = typeof params.default === "string" ? params.default.trim() : "";
+        const imports = collectStaticImports(content, importPath);
+        if (imports.count === 0) return { passed: false, detail: `${f} 缺少导入: ${importPath}` };
+        const missingNamed = requiredNamed.filter((name) => !imports.named.has(name));
+        if (missingNamed.length > 0) {
+          return { passed: false, detail: `${f} 缺少命名导入 ${missingNamed.join(", ")} from ${importPath}` };
+        }
+        if (requiredDefault && imports.defaultLocal !== requiredDefault) {
+          return { passed: false, detail: `${f} 缺少默认导入 ${requiredDefault} from ${importPath}` };
+        }
       }
       if (unsafeFiles.length > 0) {
         return {
