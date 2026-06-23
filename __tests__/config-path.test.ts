@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -73,6 +73,41 @@ describe("CONFIG_PATH resolution", () => {
       assert.equal(cfg.build.type_check, "echo json-typecheck");
       assert.equal(cfg.build.lint, "echo json-lint");
     } finally {
+      loadConfig({ path: DEFAULT_CONFIG_PATH, forceReload: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("loadConfig keeps object-typed defaults when a section is an array", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-config-project-array-"));
+    const configPath = join(root, "config.json");
+    const warnings = [];
+    const originalWarn = console.warn;
+    try {
+      writeFileSync(configPath, JSON.stringify({
+        version: "2.0",
+        project: [],
+      }, null, 2), "utf8");
+      console.warn = (...args) => warnings.push(args.join(" "));
+
+      const cfg = loadConfig({ path: configPath, forceReload: true });
+
+      assert.equal(Array.isArray(cfg.project), false, "project config must stay an object");
+      assert.equal(typeof cfg.project.root, "string");
+      assert.match(warnings.join("\n"), /类型不匹配.*project.*期望对象.*数组/);
+      const stdout = execFileSync(
+        process.execPath,
+        ["-e", "import('./dist/src/runtime/runner-core.js').then(() => console.log('loaded'))"],
+        {
+          cwd: YOLO_DIR,
+          encoding: "utf8",
+          env: { ...process.env, YOLO_CONFIG: configPath },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      assert.equal(stdout.trim(), "loaded");
+    } finally {
+      console.warn = originalWarn;
       loadConfig({ path: DEFAULT_CONFIG_PATH, forceReload: true });
       rmSync(root, { recursive: true, force: true });
     }
