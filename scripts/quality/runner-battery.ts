@@ -296,4 +296,29 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
       ],
     },
   },
+  {
+    id: "notdone-type-error-outside-target",
+    expect: "not_done",
+    description:
+      "no_new_type_errors is a project gate: a task that edits the target file but introduces a new TS error in another changed file is not done. Previously the runner filtered errors outside scope.targets and reported a false DONE.",
+    baseFiles: {
+      "src/feature.ts": "export const v = 1;\n",
+      "src/other.ts": "export const other = 1;\n",
+      "tsc.js":
+        "console.log('src/other.ts(1,14): error TS2322: Type number is not assignable to type string.');\nprocess.exit(1);\n",
+    },
+    editFiles: {
+      "src/feature.ts": "export const v = 2;\n",
+      "src/other.ts": "export const other: string = 1;\n",
+    },
+    task: {
+      id: "TASK-RUNNER-TSC-OUTSIDE-TARGET",
+      title: "Implement feature without new type errors",
+      scope: { targets: [{ file: "src/feature.ts" }] },
+      post_conditions: [
+        { id: "POST-TARGET", type: "target_file_modified", severity: "FAIL", params: { file: "src/feature.ts" } },
+        { id: "POST-TSC", type: "no_new_type_errors", severity: "FAIL", params: { command: "node tsc.js" } },
+      ],
+    },
+  },
 ];

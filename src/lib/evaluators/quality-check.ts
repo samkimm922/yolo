@@ -124,8 +124,6 @@ export function evalNoNewTypeErrors(params = Object(), taskScope, ROOT, exec) {
     "TS2304", "TS2305", "TS2307", "TS2322", "TS2345", "TS2554", "TS2741",
   ]);
 
-  const targetFiles = (taskScope?.targets || []).map((t) => t.file).filter(Boolean);
-
   const baselinePath = join(ROOT, "scripts", "yolo", "state", "runtime", "tsc-baseline.json");
   let baselineKeys = [];
   if (existsSync(baselinePath)) {
@@ -167,36 +165,22 @@ export function evalNoNewTypeErrors(params = Object(), taskScope, ROOT, exec) {
 
   const allNewIssues = [...currentKeys].filter((k) => !baseSet.has(k));
 
-  const extractFile = (k) => k.split(":").slice(0, -2).join(":");
+  const newIssues = allNewIssues;
 
-  const relevantNewIssues = targetFiles.length > 0
-    ? allNewIssues.filter((k) => {
-        const file = extractFile(k);
-        return targetFiles.some((tf) => file === tf);
-      })
-    : allNewIssues;
-
-  const filteredOutIssues = allNewIssues.filter((k) => !relevantNewIssues.includes(k));
-  const filteredWarn = filteredOutIssues.length > 0
-    ? `（注意：${filteredOutIssues.length} 个新增错误不在目标文件列表中: ${filteredOutIssues.slice(0, 5).join("; ")}${filteredOutIssues.length > 5 ? "..." : ""}）`
-    : "";
-
-  const newFatalIssues = relevantNewIssues.filter((k) => {
+  const newFatalIssues = newIssues.filter((k) => {
     const code = String(k).split(":").pop();
     return FATAL_CODES.has(code);
   });
 
-  const otherNewIssues = relevantNewIssues.filter((k) => {
+  const otherNewIssues = newIssues.filter((k) => {
     const code = String(k).split(":").pop();
     return !FATAL_CODES.has(code);
   });
 
-  const newIssues = [...newFatalIssues, ...otherNewIssues];
-
   if (newFatalIssues.length > 0) {
     return {
       passed: false,
-      detail: `新增致命 tsc 错误 ${newFatalIssues.length} 个: ${newFatalIssues.slice(0, 5).join(", ")}${filteredWarn}`,
+      detail: `新增致命 tsc 错误 ${newFatalIssues.length} 个: ${newFatalIssues.slice(0, 5).join(", ")}`,
       newIssues,
     };
   }
@@ -204,7 +188,7 @@ export function evalNoNewTypeErrors(params = Object(), taskScope, ROOT, exec) {
   if (otherNewIssues.length > 0) {
     return {
       passed: false,
-      detail: `新增 ${otherNewIssues.length} 个 tsc 错误: ${otherNewIssues.slice(0, 3).join(", ")}${filteredWarn}`,
+      detail: `新增 ${otherNewIssues.length} 个 tsc 错误: ${otherNewIssues.slice(0, 3).join(", ")}`,
       newIssues,
     };
   }
@@ -212,8 +196,8 @@ export function evalNoNewTypeErrors(params = Object(), taskScope, ROOT, exec) {
   return {
     passed: true,
     detail: baselineKeys.length > 0
-      ? `(预存 ${baselineKeys.length} 个 tsc 错误，无新增)${filteredWarn}`
-      : `tsc 零错误${filteredWarn}`,
+      ? `(预存 ${baselineKeys.length} 个 tsc 错误，无新增)`
+      : "tsc 零错误",
   };
 }
 
