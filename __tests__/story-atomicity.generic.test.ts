@@ -240,6 +240,18 @@ describe("story atomicity generic (domain-agnostic) detection", () => {
     assert.equal(result.finding.code, "STORY_ATOMICITY_MULTI_STORY");
   });
 
+  test("accept-or-decline invitations is non-atomic", () => {
+    const result = inspectStoryAtomicityText(
+      "Allow users to accept or decline invitations.",
+      { kind: "requirement", id: "REQ-ACCEPT-DECLINE" },
+    );
+    assert.equal(result.status, "blocked");
+    assert.deepEqual(
+      result.story_signatures.map((signature) => signature.label),
+      ["independent action: accept", "independent action: decline"],
+    );
+  });
+
   test("English multi-word connectors now split multi-action stories", () => {
     const cases = [
       { text: "Admins can create users as well as assign roles.", verbs: "create-assign" },
