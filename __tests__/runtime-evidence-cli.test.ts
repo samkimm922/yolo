@@ -85,4 +85,66 @@ describe("runtime evidence CLI modules", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  // P10.S3 chokepoint: session-memory.jsonl is broadcast verbatim by the progress
+  // dashboard via /lifecycle.json (readEvents walks state/*.jsonl). summary/refs
+  // originate from runner checkpoints (task failReason, command-output fragments)
+  // and can carry secrets. The writer must redact before persisting.
+  describe("session-memory redacts secrets before persisting", () => {
+    function runWithSummary(summary, refs = "") {
+      const root = mkdtempSync(join(tmpdir(), "yolo-session-memory-redact-"));
+      try {
+        const argv = [
+          `--state-root=${root}`,
+          "--type=runner_checkpoint",
+          "--source=test",
+          `--summary=${summary}`,
+        ];
+        if (refs) argv.push(`--refs=${refs}`);
+        const result = appendSessionMemory({ argv, now: FIXED_NOW });
+        const persisted = JSON.parse(readFileSync(result.file, "utf8").trim());
+        return { result, persisted };
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+
+    test("redacts OpenAI-style API key in summary", () => {
+      const { result, persisted } = runWithSummary(
+        "task TASK-001 failed: invalid api key sk-proj-ABCDEFGHIJKLMNOPQRSTUVWX1234 in gate output",
+      );
+      assert.equal(
+        persisted.summary,
+        "task TASK-001 failed: invalid api key [REDACTED:sk-key] in gate output",
+      );
+      assert.equal(result.record.summary, persisted.summary);
+      assert.equal(persisted.summary.includes("sk-proj-ABCDEFGHIJKLMNOPQRSTUVWX1234"), false);
+    });
+
+    test("redacts GitHub token in summary", () => {
+      const { persisted } = runWithSummary(
+        "push failed: gh auth token ghp_1234567890abcdefghijklmnopqrstuvwxYZ01 not authorized",
+      );
+      assert.equal(persisted.summary.includes("ghp_1234567890abcdefghijklmnopqrstuvwxYZ01"), false);
+      assert.equal(persisted.summary.includes("[REDACTED:gh-token]"), true);
+    });
+
+    test("redacts secrets in refs array", () => {
+      const { persisted } = runWithSummary(
+        "checkpoint",
+        "state/foo.json,bearer token sk-proj-REFSSECRET1234567890ABCDEFGH",
+      );
+      assert.equal(persisted.refs.some((r) => r.includes("sk-proj-REFSSECRET")), false);
+      assert.equal(persisted.refs.some((r) => r.includes("[REDACTED:sk-key]")), true);
+    });
+
+    test("preserves non-secret content unchanged", () => {
+      const { persisted } = runWithSummary(
+        "task TASK-002 done: gate passed, commit ok",
+        "state/foo.json,state/bar.json",
+      );
+      assert.equal(persisted.summary, "task TASK-002 done: gate passed, commit ok");
+      assert.deepEqual(persisted.refs, ["state/foo.json", "state/bar.json"]);
+    });
+  });
 });

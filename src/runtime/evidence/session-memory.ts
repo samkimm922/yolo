@@ -2,6 +2,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { redactDeep } from "../../lib/security/redact.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "../../..");
@@ -19,6 +20,12 @@ export function appendSessionMemory({ argv = [], now = new Date() } = Object()) 
     summary: argValue(argv, "--summary=") || "",
     refs: (argValue(argv, "--refs=") || "").split(",").filter(Boolean),
   };
+  // P10.S3 chokepoint: session-memory is a long-lived ledger that the progress
+  // dashboard broadcasts verbatim via /lifecycle.json (readEvents walks state/*.jsonl).
+  // summary/refs originate from runner checkpoints (task failReason, command output
+  // fragments) which can carry secrets. Redact before persisting and before returning
+  // so neither the JSONL record nor the CLI stdout can leak.
+  const safeRecord = redactDeep(record);
   const stateRootArg = argValue(argv, "--state-root=") || argValue(argv, "--yolo-root=");
   const stateDirArg = argValue(argv, "--state-dir=");
   const stateDir = stateDirArg
@@ -26,8 +33,8 @@ export function appendSessionMemory({ argv = [], now = new Date() } = Object()) 
     : join(resolve(stateRootArg || YOLO_ROOT), "state");
   mkdirSync(stateDir, { recursive: true });
   const file = join(stateDir, "session-memory.jsonl");
-  appendFileSync(file, `${JSON.stringify(record)}\n`, "utf8");
-  return { status: "ok", file, record };
+  appendFileSync(file, `${JSON.stringify(safeRecord)}\n`, "utf8");
+  return { status: "ok", file, record: safeRecord };
 }
 
 export function runSessionMemoryCli(argv = process.argv.slice(2), io = Object()) {
