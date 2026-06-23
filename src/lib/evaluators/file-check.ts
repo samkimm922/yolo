@@ -160,8 +160,15 @@ export function evalFilesModifiedMax(params, taskScope, ROOT, exec, options = Ob
 export function evalFileLinesMax(params, taskScope, ROOT) {
   const maxLines = params.max ?? 150;
   const legacyDeltaMax = params.legacy_delta_max ?? params.max_delta_on_legacy ?? 40;
+  // Coerce targets/files to arrays: a hand-edited PRD can put a string (or
+  // other non-array) on params.targets/params.files. Without this guard the
+  // downstream `for (const file of targets)` iterates *characters* of the
+  // string; single-char paths resolve within root and vacuously `continue`
+  // on existsSync==false, so an over-limit file silently passes.
   const targets =
-    params.targets || params.files || (params.file ? [params.file] : null) ||
+    (Array.isArray(params.targets) ? params.targets : null) ||
+    (Array.isArray(params.files) ? params.files : null) ||
+    (params.file ? [params.file] : null) ||
     (taskScope?.targets || []).map((t) => t.file).filter(Boolean);
   if (!targets.length) {
     return {

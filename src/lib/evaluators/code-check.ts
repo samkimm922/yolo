@@ -90,7 +90,11 @@ function extractFunctionBody(content, functionName) {
 export function evalCodeContains(params, taskScope, ROOT) {
   // 兼容 pattern/files（PRD 写法）和 text/file（旧写法）
   const text = params.text || params.pattern;
-  const targetFiles = params.files || (params.file ? [params.file] : []);
+  // Coerce params.files to array: hand-edited PRDs sometimes put a string on
+  // params.files. Without this guard `for (const file of targetFiles)` iterates
+  // characters, and downstream targetFiles.join()/targetFiles.filter() crash
+  // with "not a function" because strings lack Array methods.
+  const targetFiles = (Array.isArray(params.files) ? params.files : null) || (params.file ? [params.file] : []);
   const count = params.count || {};
   const isRegex = params.is_regex !== undefined ? params.is_regex : !!params.pattern;
   const lineConstraint = params.line || null;
@@ -264,7 +268,7 @@ export function evalAstCallbackUsesParam(params, _taskScope, ROOT) {
 }
 
 export function evalAstFindByProperty(params, _taskScope, ROOT) {
-  const files = params.files || (params.file ? [params.file] : []);
+  const files = (Array.isArray(params.files) ? params.files : null) || (params.file ? [params.file] : []);
   const property = params.property || params.key;
   const value = params.value;
   if (!files.length || !property) return { passed: false, detail: "缺少 file(s)/property 参数" };
@@ -299,7 +303,7 @@ export function evalAstFindByProperty(params, _taskScope, ROOT) {
 
 export function evalCodeNotContains(params, taskScope, ROOT) {
   const text = params.text || params.pattern;
-  const targetFiles = params.files || (params.file ? [params.file] : []);
+  const targetFiles = (Array.isArray(params.files) ? params.files : null) || (params.file ? [params.file] : []);
   if (!text) return { passed: false, detail: "缺少 text/pattern 参数" };
   if (!targetFiles.length) {
     return {
