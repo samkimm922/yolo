@@ -32,6 +32,16 @@ describe("story atomicity gate", () => {
     assert.deepEqual(signatureIds(result), ["generic_story_1", "generic_story_2"]);
   });
 
+  test("blocks Chinese search and add-to-cart as independent stories", () => {
+    const result = inspectStoryAtomicityText("用户可以搜索商品并加入购物车。", {
+      kind: "requirement",
+      id: "REQ-SEARCH-CART",
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.deepEqual(signatureIds(result), ["generic_action_1", "generic_action_2"]);
+  });
+
   test("blocks compact command-style action sequences", () => {
     const result = inspectStoryAtomicityText("Operator can delete/restore item state.", {
       kind: "task",
