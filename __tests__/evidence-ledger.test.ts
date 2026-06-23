@@ -21,6 +21,7 @@ import {
   validateLedgerRecord,
   writeJsonArtifact,
 } from "../src/runtime/evidence/ledger.js";
+import { redact, redactDeep } from "../src/lib/security/redact.js";
 
 function tempDir() {
   return mkdtempSync(join(tmpdir(), "yolo-ledger-"));
@@ -358,5 +359,91 @@ describe("evidence ledger", () => {
     // Runtime validator must reject the same tampered payloads.
     assert.equal(validateLedgerRecord(recordWithoutHashes).ok, false);
     assert.equal(validateEvidenceArtifact(artifactWithoutDigest).ok, false);
+  });
+
+  test("P10.S3: appendJsonlRecord redacts credential patterns before write (CWE-532)", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+
+      // append a record with a fake API key in the payload data
+      const payload = appendJsonlRecord(filePath, {
+        event: "task_log",
+        task_id: "TEST-001",
+        detail: "using key sk-fake-test-key-1234567890123456",
+        cmd: "curl -H 'Authorization: Bearer ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' https://api.example.com",
+        error_stack: "Error: connect ECONNREFUSED\n  at Object._errnoException (util.js:1)\n  at key sk-another-fake-key-9999999999999999",
+      }, {
+        now: "2026-06-21T12:00:00.000Z",
+        source: "test-redact",
+      });
+
+      // The returned payload must have sensitive fields redacted
+      assert.ok(payload.detail.includes("[REDACTED:sk-key]"),
+        `detail should be redacted: ${payload.detail}`);
+      assert.ok(!payload.detail.includes("sk-fake-test-key-1234567890123456"),
+        "raw sk-key must not appear in returned payload");
+      assert.ok(payload.error_stack.includes("[REDACTED:sk-key]"),
+        "error_stack should be redacted");
+      assert.ok(payload.cmd.includes("Bearer [REDACTED:token]"),
+        `Bearer token should be redacted: ${payload.cmd}`);
+      // The ghp_ token inside the Bearer value is consumed by the Bearer pattern
+      // before the gh-token pattern runs, so the assertion is on the Bearer label:
+      assert.ok(!payload.cmd.includes("ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+        "raw GitHub token must not appear");
+
+      // The persisted record must match the returned (redacted) payload
+      const persisted = readLedgerJsonl(filePath);
+      assert.equal(persisted.length, 1);
+      assert.deepEqual(persisted[0], payload);
+
+      // Chain validation must pass — hash is computed on redacted data
+      const chain = validateLedgerChain(persisted);
+      assert.equal(chain.ok, true);
+      assert.equal(chain.status, "pass");
+      assert.equal(chain.checked_count, 1);
+      assert.equal(chain.head_hash, payload.record_hash);
+      assert.equal(chain.errors.length, 0);
+      assert.equal(payload.record_hash, ledgerRecordHash(payload));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("P10.S3: appendStateEvent redacts secrets in event data (CWE-532)", () => {
+    const root = tempDir();
+    try {
+      appendStateEvent(root, "test.event", {
+        task_id: "TEST-002",
+        api_key: "sk-test-key-9876543210987654",
+        message: "Bearer ghp_testtoken98765432109876543210",
+      }, {
+        now: "2026-06-21T12:00:00.000Z",
+        source: "test-redact",
+      });
+
+      const events = readJsonl(join(root, "events.jsonl"));
+      assert.equal(events.length, 1);
+      const event = events[0];
+      // The credential fields in the payload should be redacted
+      assert.ok(event.api_key.includes("[REDACTED:sk-key]"),
+        `api_key should be redacted: ${event.api_key}`);
+      assert.ok(!event.api_key.includes("sk-test-key-9876543210987654"),
+        "raw sk-key must not appear in persisted data");
+      assert.ok(event.message.includes("[REDACTED:gh-token]") || event.message.includes("Bearer [REDACTED:token]"),
+        `message should contain redacted: ${event.message}`);
+      assert.ok(!event.message.includes("ghp_testtoken98765432109876543210"),
+        "raw token must not appear in persisted data");
+
+      // Metadata fields must be preserved
+      assert.equal(event.event, "test.event");
+      assert.equal(event.ledger, "state");
+      assert.equal(event.source, "test-redact");
+      assert.equal(event.task_id, "TEST-002"); // task_id is not a credential pattern
+      assert.equal(event.schema, LEDGER_EVENT_SCHEMA);
+      assert.equal(event.record_hash, ledgerRecordHash(event));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
