@@ -226,7 +226,7 @@ export function appendJsonlRecord(filePath, record, options = Object()) {
         validation_errors: validation.errors,
       });
     }
-    appendFileSync(filePath, `${JSON.stringify(payload)}\n`, "utf8");
+    appendFileSync(filePath, `${JSON.stringify(payload)}\n`, { encoding: "utf8", mode: 0o600 });
     return payload;
   });
 }
@@ -241,7 +241,7 @@ export function appendRunEvent(stateDir, event, data = Object(), options = Objec
 
 export function writeJsonArtifact(filePath, payload) {
   mkdirSync(dirname(filePath), { recursive: true });
-  writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
+  writeFileSync(filePath, JSON.stringify(payload, null, 2), { encoding: "utf8", mode: 0o600 });
   return filePath;
 }
 
