@@ -164,7 +164,8 @@ export function evalNoNewTypeErrors(params = Object(), taskScope, ROOT, exec) {
 
   const currentKeys = new Set();
   for (const line of tscOut.split("\n")) {
-    const m = line.match(/^(.+?)\((\d+),\d+\):\s+error\s+(TS\d+)/);
+    const m = line.match(/^(.+?)\((\d+),\d+\):\s+error\s+(TS\d+)/) ||
+      line.match(/^(.+?):(\d+):\d+\s+-\s+error\s+(TS\d+)/);
     if (m) {
       const normalizedFile = m[1].replace(/^\.\//, "");
       currentKeys.add(`${normalizedFile}:${m[2]}:${m[3]}`);
