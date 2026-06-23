@@ -338,17 +338,17 @@ function parseInlineArray(raw) {
 
 function deepMerge(base, override, keyPath = '') {
   if (override === undefined || override === null) return base;
+  // Array-typed defaults must stay arrays. A scalar/object override from a
+  // hand-written YAML config would otherwise crash consumers that call array
+  // methods such as .map()/.some().
+  if (Array.isArray(base) && !Array.isArray(override)) {
+    const received = typeof override === 'object' ? '对象' : '标量';
+    console.warn(`[config] 跳过类型不匹配的字段${keyPath ? ` (${keyPath})` : ''}: 期望数组, 收到${received}`);
+    return base;
+  }
   // If override is an array or scalar, use it directly (replaces base)
   if (Array.isArray(override) || typeof override !== 'object') {
     return override;
-  }
-  // override is a plain object. If base is an array, silently replacing it
-  // with an object crashes downstream consumers that expect .some()/.map()
-  // or `new Set(...)` (e.g. scanner.ts on source_roots/exclude). Skip the
-  // override and keep the default array so config load stays recoverable.
-  if (Array.isArray(base)) {
-    console.warn(`[config] 跳过类型不匹配的字段${keyPath ? ` (${keyPath})` : ''}: 期望数组, 收到对象`);
-    return base;
   }
   // Both are plain objects — merge recursively
   if (typeof base === 'object' && base !== null && !Array.isArray(base)) {
