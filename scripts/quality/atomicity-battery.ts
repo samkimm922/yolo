@@ -49,6 +49,7 @@ export const ATOMICITY_BATTERY: AtomicityBatteryCase[] = [
   { id: "multi-create-order-along-with-sending-email", expect: "multi", text: "The system should create the order along with sending the email." },
   { id: "multi-filter-tasks-in-addition-to-exporting", expect: "multi", text: "Users can filter tasks in addition to exporting them." },
   { id: "multi-create-invoice-followed-by-sending-receipt", expect: "multi", text: "The workflow creates an invoice followed by sending a receipt." },
+  { id: "multi-create-project-period-invite", expect: "multi", text: "Create a project. Invite team members." },
 
   // ── Known capability gaps (currently MIS-detected as atomic → real headroom) ──
   // These slip through today: the demand phase hands the runner a too-broad task
