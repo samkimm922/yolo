@@ -225,8 +225,8 @@ describe("parallel adversarial suite — bypass and edge case blocking", () => {
     });
 
     assert.equal(graph.blockers.length, 2);
-    assert.ok(graph.blockers.some((b) => b.dependency_id === "missing-a"));
-    assert.ok(graph.blockers.some((b) => b.dependency_id === "missing-b"));
+    assert.ok(graph.blockers.some((b) => (b as Record<string, unknown>).dependency_id === "missing-a"));
+    assert.ok(graph.blockers.some((b) => (b as Record<string, unknown>).dependency_id === "missing-b"));
   });
 
   // ── A13: conflict detection ignores already-completed tasks ──
@@ -265,8 +265,8 @@ describe("parallel adversarial suite — bypass and edge case blocking", () => {
     assert.equal(plan.blockers.length, 0);
   });
 
-  // ── A15: task with empty ID is ignored ──
-  test("A15: task with empty or missing ID is ignored by planner", () => {
+  // ── A15: task with empty ID is blocked ──
+  test("A15: task with empty or missing ID is blocked by planner", () => {
     const plan = planControlledParallelWaves({
       tasks: [
         { id: "", files: ["src/a.ts"] },
@@ -275,7 +275,12 @@ describe("parallel adversarial suite — bypass and edge case blocking", () => {
       ],
     });
 
+    assert.equal(plan.status, "blocked");
     assert.equal(plan.task_count, 1);
     assert.deepEqual(plan.waves[0].task_ids, ["valid"]);
+    assert.equal(
+      plan.blockers.filter((blocker) => blocker.code === "PARALLEL_UNSAFE_TASK_ID").length,
+      2,
+    );
   });
 });

@@ -27,6 +27,7 @@ import { ATOMICITY_BATTERY, type AtomicityBatteryCase } from "./quality/atomicit
 import { RUNNER_BATTERY, type RunnerBatteryCase } from "./quality/runner-battery.js";
 import { runProviderBattery } from "./quality/provider-battery.js";
 import { runConfigBattery } from "./quality/config-battery.js";
+import { runParallelBattery } from "./quality/parallel-battery.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(ROOT, "scripts", "quality", "quality-baseline.json");
@@ -160,6 +161,7 @@ async function computeQuality() {
     ...RUNNER_BATTERY.map(runRunnerCase),
     ...providerResults,
     ...runConfigBattery(),
+    ...runParallelBattery(),
   ];
   const total = results.length;
   const correct = results.filter((r) => r.correct).length;
