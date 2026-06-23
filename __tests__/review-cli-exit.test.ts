@@ -1,12 +1,13 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, chmodSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 const REVIEW_SCRIPT = resolve(YOLO_DIR, "dist/src/cli/review.js");
+const REVIEW_LOG_DIR = resolve(YOLO_DIR, "dist/src/cli/logs");
 
 function runReviewWithFakeClaude(fakeClaudeCode: string, args: string[] = []) {
   const tmpDir = mkdtempSync(join(tmpdir(), "yolo-review-exit-"));
@@ -22,6 +23,16 @@ function runReviewWithFakeClaude(fakeClaudeCode: string, args: string[] = []) {
 
   rmSync(tmpDir, { recursive: true, force: true });
   return result;
+}
+
+function latestReviewLog(round: number) {
+  if (!existsSync(REVIEW_LOG_DIR)) return null;
+  const prefix = `review-round${round}-`;
+  const files = readdirSync(REVIEW_LOG_DIR)
+    .filter((file) => file.startsWith(prefix) && file.endsWith(".json"))
+    .sort()
+    .reverse();
+  return files.length > 0 ? join(REVIEW_LOG_DIR, files[0]) : null;
 }
 
 describe("review CLI exit code propagation", () => {
@@ -58,5 +69,38 @@ describe("review CLI exit code propagation", () => {
     const parsed = JSON.parse(result.stdout.trim());
     assert.equal(Array.isArray(parsed), true);
     assert.equal(parsed.length, 1);
+  });
+
+  test("redacts provider secrets before review logs, stdout, and output file", () => {
+    const round = 991;
+    const secret = "ghp_1234567890abcdefghijklmnopqrstuvwxyzABCD";
+    const outputRoot = mkdtempSync(join(tmpdir(), "yolo-review-redact-"));
+    const outputPath = join(outputRoot, "bugs.json");
+    try {
+      const payload = JSON.stringify([{
+        id: "BUG-R991-001",
+        severity: "HIGH",
+        file: "src/secrets.ts",
+        line: 1,
+        category: "security",
+        description: `leaked ${secret}`,
+        suggestion: `remove ${secret}`,
+      }]);
+      const fake = `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(payload)});\nprocess.exit(0);\n`;
+      const result = runReviewWithFakeClaude(fake, [`--round=${round}`, `--output=${outputPath}`]);
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout.includes(secret), false, "stdout findings must not leak provider secrets");
+      assert.equal(readFileSync(outputPath, "utf8").includes(secret), false, "--output findings must not leak provider secrets");
+
+      const logFile = latestReviewLog(round);
+      assert.ok(logFile, "review debug log should be written");
+      const logContent = readFileSync(logFile, "utf8");
+      assert.equal(logContent.includes(secret), false, "review debug log must not leak provider secrets");
+      assert.match(logContent, /REDACTED:gh-token/);
+      rmSync(logFile, { force: true });
+    } finally {
+      rmSync(outputRoot, { recursive: true, force: true });
+    }
   });
 });
