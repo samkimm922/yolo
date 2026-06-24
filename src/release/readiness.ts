@@ -20,55 +20,157 @@ export const REQUIRED_RELIABILITY_INCIDENT_IDS = Object.freeze([
   "YB-012",
 ]);
 
-function readJson(filePath) {
+export type ReleaseRecord = Record<string, unknown>;
+
+export interface ReleaseCheck extends ReleaseRecord {
+  code: string;
+  passed: boolean;
+  message: string;
+}
+
+export interface ReleaseIssue extends ReleaseRecord {
+  code: string;
+  message?: string;
+}
+
+export interface IncidentEvidenceEntry extends ReleaseRecord {
+  id?: string;
+  incident_id?: string;
+  code?: string;
+  status?: string;
+  passed?: boolean;
+  evidence?: unknown;
+  evidence_file?: unknown;
+  artifact?: unknown;
+}
+
+export interface NormalizedIncidentEvidence extends ReleaseRecord {
+  id: string;
+  status: unknown;
+  passed: boolean;
+  evidence: unknown;
+}
+
+export interface ReliabilityEvidence extends ReleaseRecord {
+  incidents?: IncidentEvidenceEntry[];
+  results?: IncidentEvidenceEntry[];
+  checks?: IncidentEvidenceEntry[];
+}
+
+export interface RunReport extends ReleaseRecord {
+  run_id?: string;
+  status?: string;
+  outcome?: string;
+  final_answer?: {
+    outcome?: string;
+    summary?: ReleaseRecord;
+  };
+  summary?: ReleaseRecord;
+  files_changed_total?: unknown;
+  filesChangedTotal?: unknown;
+  file_changes?: unknown;
+  fileChanges?: unknown;
+  changed_files?: unknown[];
+  changedFiles?: unknown[];
+}
+
+export interface FakeSuccessClassification extends ReleaseRecord {
+  run_id: string | null;
+  reasons: string[];
+}
+
+export interface PackageJsonLike extends ReleaseRecord {
+  name?: string;
+  version?: string;
+  license?: string;
+  private?: boolean;
+  files?: string[];
+  exports?: Record<string, unknown>;
+  bin?: Record<string, unknown>;
+}
+
+export interface ApiBoundaryEntry extends ReleaseRecord {
+  export?: string;
+  target?: unknown;
+  tier?: string;
+}
+
+export interface ApiBoundaryNamespace extends ReleaseRecord {
+  entries?: Record<string, string>;
+}
+
+export interface ApiBoundaryDocument extends ReleaseRecord {
+  package_exports?: ApiBoundaryEntry[];
+  version_policy?: Record<string, unknown>;
+  sdk_module_exports?: Record<string, unknown>;
+  create_yolo_sdk?: {
+    namespaces?: ApiBoundaryNamespace[];
+  };
+}
+
+export interface PublicBetaReadinessOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  packageJson?: PackageJsonLike;
+  reliabilityIncidentEvidence?: ReliabilityEvidence;
+  reliability_incident_evidence?: ReliabilityEvidence;
+  reliabilityRunReports?: RunReport[];
+  reliability_run_reports?: RunReport[];
+  externalRemediation?: ReleaseRecord[];
+  external_remediation?: ReleaseRecord[];
+}
+
+function readJson(filePath: string): ReleaseRecord {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = Object()) {
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function asArray(value) {
-  return Array.isArray(value) ? value : [];
+function asArray<T extends ReleaseRecord>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
 }
 
-function rateValue(numerator, denominator) {
+function rateValue(numerator: number, denominator: number): number {
   if (!denominator || denominator <= 0) return 0;
   return Number(((numerator / denominator) * 100).toFixed(1));
 }
 
-function normalizeIncidentEvidence(evidence = Object()) {
-  const source = asArray(evidence.incidents).length
-    ? evidence.incidents
-    : asArray(evidence.results).length
-      ? evidence.results
-      : asArray(evidence.checks);
+function normalizeIncidentEvidence(evidence: ReliabilityEvidence = Object()): NormalizedIncidentEvidence[] {
+  const incidents = asArray<IncidentEvidenceEntry>(evidence.incidents);
+  const results = asArray<IncidentEvidenceEntry>(evidence.results);
+  const checks = asArray<IncidentEvidenceEntry>(evidence.checks);
+  const source = incidents.length ? incidents : results.length ? results : checks;
   return source
-    .map((entry) => ({
-      id: entry.id || entry.incident_id || entry.code || null,
-      status: entry.status || (entry.passed === true ? "pass" : entry.passed === false ? "fail" : null),
-      passed: entry.passed === true || ["pass", "passed", "fixed", "closed"].includes(String(entry.status || "").toLowerCase()),
-      evidence: entry.evidence || entry.evidence_file || entry.artifact || null,
-    }))
-    .filter((entry) => entry.id);
+    .map((entry): NormalizedIncidentEvidence | null => {
+      const id = entry.id || entry.incident_id || entry.code || null;
+      if (!id) return null;
+      return {
+        id,
+        status: entry.status || (entry.passed === true ? "pass" : entry.passed === false ? "fail" : null),
+        passed: entry.passed === true || ["pass", "passed", "fixed", "closed"].includes(String(entry.status || "").toLowerCase()),
+        evidence: entry.evidence || entry.evidence_file || entry.artifact || null,
+      };
+    })
+    .filter((entry): entry is NormalizedIncidentEvidence => entry !== null);
 }
 
-function cleanStatus(value) {
+function cleanStatus(value: unknown): string {
   return String(value || "").trim().toLowerCase();
 }
 
-function claimsPass(report = Object()) {
+function claimsPass(report: RunReport = Object()): boolean {
   const status = cleanStatus(report.status);
   const outcome = cleanStatus(report.outcome || report.final_answer?.outcome);
   return ["pass", "passed", "success", "completed"].includes(status)
     || ["success", "completed"].includes(outcome);
 }
 
-function numericZero(value) {
+function numericZero(value: unknown): boolean {
   return value != null && Number(value) === 0;
 }
 
-function explicitlyNoFileChanges(report = Object()) {
+function explicitlyNoFileChanges(report: RunReport = Object()): boolean {
   const summary = report.summary || report.final_answer?.summary || {};
   if (numericZero(report.files_changed_total ?? report.filesChangedTotal ?? summary.files_changed_total ?? summary.filesChangedTotal)) return true;
   if (numericZero(report.file_changes ?? report.fileChanges ?? summary.file_changes ?? summary.fileChanges)) return true;
@@ -79,13 +181,13 @@ function explicitlyNoFileChanges(report = Object()) {
   return false;
 }
 
-function fakeSuccessReasons(report = Object()) {
+function fakeSuccessReasons(report: RunReport = Object()): string[] {
   const status = String(report.status || "").toLowerCase();
   const outcome = String(report.outcome || report.final_answer?.outcome || "").toLowerCase();
   const summary = report.summary || report.final_answer?.summary || {};
   const runSuccessRate = Number(summary.run_success_rate);
   const taskSuccessRate = Number(summary.task_success_rate);
-  const reasons = [];
+  const reasons: string[] = [];
   if ((status === "error" || status === "blocked" || outcome === "needs_attention")
     && (runSuccessRate === 100 || taskSuccessRate === 100 || outcome === "completed")) {
     reasons.push("failed_with_100_percent_metrics");
@@ -96,7 +198,7 @@ function fakeSuccessReasons(report = Object()) {
   return reasons;
 }
 
-export function classifyFakeSuccessReport(report = Object()) {
+export function classifyFakeSuccessReport(report: RunReport = Object()): FakeSuccessClassification | null {
   const reasons = fakeSuccessReasons(report);
   if (reasons.length === 0) return null;
   const summary = report.summary || report.final_answer?.summary || {};
@@ -112,9 +214,9 @@ export function classifyFakeSuccessReport(report = Object()) {
   };
 }
 
-export function inspectYoloReliabilityReadiness(options = Object()) {
+export function inspectYoloReliabilityReadiness(options: PublicBetaReadinessOptions = Object()) {
   const incidentEvidence = options.incidentEvidence || options.incident_evidence || null;
-  const incidents = normalizeIncidentEvidence(incidentEvidence || {});
+  const incidents = normalizeIncidentEvidence(incidentEvidence || Object());
   const incidentIds = new Set(incidents.map((entry) => entry.id));
   const missingIncidentIds = REQUIRED_RELIABILITY_INCIDENT_IDS.filter((id) => !incidentIds.has(id));
   const failedIncidents = incidents.filter((entry) =>
@@ -123,7 +225,7 @@ export function inspectYoloReliabilityReadiness(options = Object()) {
   const runReports = asArray(options.runReports || options.run_reports);
   const fakeSuccessReports = runReports
     .map(classifyFakeSuccessReport)
-    .filter(Boolean);
+    .filter((report): report is FakeSuccessClassification => report !== null);
   const externalRemediation = asArray(options.externalRemediation || options.external_remediation);
   const contaminatedExternalRemediation = externalRemediation.filter((entry) =>
     entry.counts_as_yolo_success === true || entry.internal === true || entry.yolo_runner_success === true
@@ -178,7 +280,7 @@ export function inspectYoloReliabilityReadiness(options = Object()) {
   };
 }
 
-function inspectApiBoundaryDocument({ yoloRoot, packageJson }) {
+function inspectApiBoundaryDocument({ yoloRoot, packageJson }: { yoloRoot: string; packageJson: PackageJsonLike }): ReleaseCheck[] {
   const boundaryPath = join(yoloRoot, "docs/public-sdk-api-boundary.json");
   const checks = [
     check("API_BOUNDARY_EXISTS", existsSync(boundaryPath), "docs/public-sdk-api-boundary.json must exist", { file: "docs/public-sdk-api-boundary.json" }),
@@ -187,19 +289,19 @@ function inspectApiBoundaryDocument({ yoloRoot, packageJson }) {
     return checks;
   }
 
-  let boundary;
+  let boundary: ApiBoundaryDocument;
   try {
     boundary = readJson(boundaryPath);
     checks.push(check("API_BOUNDARY_JSON", true, "public SDK API boundary must be valid JSON"));
   } catch (error) {
-    checks.push(check("API_BOUNDARY_JSON", false, "public SDK API boundary must be valid JSON", { error: error.message }));
+    checks.push(check("API_BOUNDARY_JSON", false, "public SDK API boundary must be valid JSON", { error: error instanceof Error ? error.message : String(error) }));
     return checks;
   }
 
   const exportsEntries = Array.isArray(boundary.package_exports) ? boundary.package_exports : [];
   const packageExports = packageJson.exports || {};
   const byExport = new Map(exportsEntries.map((entry) => {
-    const exportEntry = Object.assign(Object(), entry);
+    const exportEntry: ApiBoundaryEntry = Object.assign(Object(), entry);
     return [String(exportEntry.export), exportEntry];
   }));
   const packageExportKeys = Object.keys(packageExports).sort();
@@ -247,7 +349,7 @@ function inspectApiBoundaryDocument({ yoloRoot, packageJson }) {
   return checks;
 }
 
-export function inspectPackageReadiness(packageJson = Object()) {
+export function inspectPackageReadiness(packageJson: PackageJsonLike = Object()) {
   const packageFiles = Array.isArray(packageJson.files) ? packageJson.files : [];
   const forbiddenFileEntries = packageFiles.filter((entry) =>
     ["__tests__", "closed-loop", "data", "logs", "node_modules", "state", "tmp", "scripts", "hooks"].some((forbidden) =>
@@ -283,10 +385,10 @@ export function inspectPackageReadiness(packageJson = Object()) {
   };
 }
 
-export function inspectPublicBetaReadiness(options = Object()) {
+export function inspectPublicBetaReadiness(options: PublicBetaReadinessOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || DEFAULT_YOLO_ROOT);
   const packageJsonPath = join(yoloRoot, "package.json");
-  const packageJson = options.packageJson || readJson(packageJsonPath);
+  const packageJson: PackageJsonLike = options.packageJson || readJson(packageJsonPath);
   const packageReadiness = inspectPackageReadiness(packageJson);
   const requiredDocs = [
     "README.md",

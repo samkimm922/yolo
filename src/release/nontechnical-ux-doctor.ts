@@ -7,6 +7,7 @@ import {
   buildCodexSourceCommandSkill,
   buildYoloNativeSkill,
 } from "../../tools/install-agent-bridge.js";
+import type { ReleaseCheck, ReleaseRecord } from "./readiness.js";
 
 export const NONTECHNICAL_UX_DOCTOR_SCHEMA_VERSION = "1.0";
 
@@ -14,11 +15,35 @@ export const YOLO_ONE_SENTENCE_ENTRY = "/yolo 你的需求，先读状态并选�
 export const YOLO_CODEX_FALLBACK_ENTRY = "使用 yolo skill 执行 /yolo：你的需求，先读状态并选择安全阶段，不要改代码。";
 export const YOLO_STAGE_COMMAND_CONTRACT = "If the user asks to talk through a requirement, use `/yolo-demand` as the single demand-stage entry instead of asking them to choose brainstorm/interview/discover/discuss.";
 
-function check(code, passed, message, extra = Object()) {
+export interface NonTechnicalUxDoctorPlan extends ReleaseRecord {
+  yolo_root: string;
+  one_sentence_entry: string;
+  codex_fallback_entry: string;
+  docs: string[];
+  writes_workspace: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  executes_billable_provider: boolean;
+}
+
+export interface NonTechnicalUxDoctorOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  plan?: NonTechnicalUxDoctorPlan;
+}
+
+export interface FileContainsResult {
+  path: string;
+  exists: boolean;
+  contains: boolean;
+}
+
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function readText(filePath) {
+function readText(filePath: string): string {
   try {
     return readFileSync(filePath, "utf8");
   } catch {
@@ -26,7 +51,7 @@ function readText(filePath) {
   }
 }
 
-function fileContains(root, relativePath, needle) {
+function fileContains(root: string, relativePath: string, needle: string): FileContainsResult {
   const filePath = join(root, relativePath);
   return {
     path: filePath,
@@ -35,7 +60,7 @@ function fileContains(root, relativePath, needle) {
   };
 }
 
-export function buildNonTechnicalUxDoctorPlan(options = Object()) {
+export function buildNonTechnicalUxDoctorPlan(options: NonTechnicalUxDoctorOptions = Object()): NonTechnicalUxDoctorPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   return {
     schema_version: NONTECHNICAL_UX_DOCTOR_SCHEMA_VERSION,
@@ -64,7 +89,7 @@ export function buildNonTechnicalUxDoctorPlan(options = Object()) {
   };
 }
 
-export function runNonTechnicalUxDoctor(options = Object()) {
+export function runNonTechnicalUxDoctor(options: NonTechnicalUxDoctorOptions = Object()) {
   const plan = options.plan || buildNonTechnicalUxDoctorPlan(options);
   const yoloRoot = resolve(plan.yolo_root);
   const docs = Object.fromEntries(plan.docs.map((doc) => [doc, fileContains(yoloRoot, doc, plan.one_sentence_entry)]));

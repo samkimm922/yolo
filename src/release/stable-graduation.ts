@@ -3,40 +3,109 @@ import { join, resolve } from "node:path";
 import { inspectPublicBetaReadiness } from "./readiness.js";
 import { runPostReleaseAuditGate } from "./post-release-audit.js";
 import { inspectRunnerRuntimeApiFreeze } from "../runtime/run-lifecycle/runtime-api-freeze.js";
+import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const STABLE_GRADUATION_SCHEMA_VERSION = "1.0";
 
 const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const DEFAULT_MAX_ROOT_ENTRYPOINTS = 8;
 
-function readJson(filePath) {
+export interface StableGraduationPlan extends ReleaseRecord {
+  yolo_root: string;
+  writes_workspace: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  executes_billable_provider: boolean;
+  publishes_dogfood_report: boolean;
+  max_root_entrypoints: number;
+  required_evidence: string[];
+}
+
+export interface ReleaseComponentResult extends ReleaseRecord {
+  status?: string;
+  blocks_release?: boolean;
+  blockers?: ReleaseIssue[];
+  frozen?: boolean;
+  components?: {
+    dogfood_audit?: ReleaseRecord;
+  };
+  dogfood_audit?: ReleaseRecord;
+}
+
+export interface StabilityReview extends ReleaseRecord {
+  approved?: boolean;
+  approver?: string;
+  approved_at?: string;
+  version_policy_reviewed?: boolean;
+  api_boundary_reviewed?: boolean;
+  breaking_changes_reviewed?: boolean;
+  deprecation_policy_reviewed?: boolean;
+  rollback_plan?: string;
+}
+
+export interface StableGraduationOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  packageJson?: ReleaseRecord;
+  plan?: StableGraduationPlan;
+  maxRootEntrypoints?: number;
+  max_root_entrypoints?: number;
+  postReleaseAudit?: ReleaseComponentResult;
+  post_release_audit?: ReleaseComponentResult;
+  readiness?: ReleaseComponentResult;
+  publicBetaReadiness?: ReleaseComponentResult;
+  public_beta_readiness?: ReleaseComponentResult;
+  stabilityReview?: StabilityReview;
+  stability_review?: StabilityReview;
+  rootEntrypointCount?: number;
+  root_entrypoint_count?: number;
+  runnerRuntimeApiFrozen?: boolean;
+  runner_runtime_api_frozen?: boolean;
+  runtimeApiFreeze?: ReleaseComponentResult;
+  runtime_api_freeze?: ReleaseComponentResult;
+  timeout_ms?: number;
+  commandExists?: (command: string) => boolean;
+  now?: unknown;
+  random?: unknown;
+  providerConfigs?: unknown;
+  apiBoundary?: ReleaseRecord;
+  api_boundary?: ReleaseRecord;
+  maxRunnerCoreLines?: number;
+  max_runner_core_lines?: number;
+  runPostReleaseAuditGate?: (options: ReleaseRecord) => ReleaseComponentResult;
+  inspectPublicBetaReadiness?: (options: ReleaseRecord) => ReleaseComponentResult;
+  inspectRunnerRuntimeApiFreeze?: (options: ReleaseRecord) => ReleaseComponentResult;
+}
+
+function readJson(filePath: string): ReleaseRecord {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = Object()) {
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function nonEmptyString(value) {
+function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function validTimestamp(value) {
+function validTimestamp(value: unknown): boolean {
   return nonEmptyString(value) && !Number.isNaN(Date.parse(value));
 }
 
-function stableSemver(version) {
-  const match = SEMVER_RE.exec(version || "");
-  return Boolean(match) && Number(match[1]) >= 1;
+function stableSemver(version: unknown): boolean {
+  const match = SEMVER_RE.exec(String(version || ""));
+  return match !== null && Number(match[1]) >= 1;
 }
 
-function countRootMjs(yoloRoot) {
+function countRootMjs(yoloRoot: string): number {
   return readdirSync(yoloRoot, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".js"))
     .length;
 }
 
-function stabilityReviewApproved(review = Object()) {
+function stabilityReviewApproved(review: StabilityReview = Object()): boolean {
   return review.approved === true
     && nonEmptyString(review.approver)
     && validTimestamp(review.approved_at)
@@ -47,13 +116,13 @@ function stabilityReviewApproved(review = Object()) {
     && nonEmptyString(review.rollback_plan);
 }
 
-function dogfoodEvidencePublic(postReleaseAudit = Object()) {
+function dogfoodEvidencePublic(postReleaseAudit: ReleaseComponentResult = Object()): boolean {
   const dogfoodAudit = postReleaseAudit.components?.dogfood_audit || postReleaseAudit.dogfood_audit || {};
   return dogfoodAudit.status === "pass"
     && nonEmptyString(dogfoodAudit.public_url || dogfoodAudit.report_path || dogfoodAudit.artifact_path);
 }
 
-export function buildStableGraduationPlan(options = Object()) {
+export function buildStableGraduationPlan(options: StableGraduationOptions = Object()): StableGraduationPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   return {
     schema_version: STABLE_GRADUATION_SCHEMA_VERSION,
@@ -85,21 +154,21 @@ export function buildStableGraduationPlan(options = Object()) {
   };
 }
 
-export function runStableGraduationGate(options = Object()) {
+export function runStableGraduationGate(options: StableGraduationOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const plan = options.plan || buildStableGraduationPlan({
     yoloRoot,
     maxRootEntrypoints: options.maxRootEntrypoints || options.max_root_entrypoints,
   });
-  const postReleaseAudit = options.postReleaseAudit || options.post_release_audit || (options.runPostReleaseAuditGate || runPostReleaseAuditGate)({
+  const postReleaseAudit = (options.postReleaseAudit || options.post_release_audit || (options.runPostReleaseAuditGate || runPostReleaseAuditGate)({
     yoloRoot,
     timeout_ms: options.timeout_ms || 120000,
     commandExists: options.commandExists,
     now: options.now,
     random: options.random,
     providerConfigs: options.providerConfigs,
-  });
+  })) as ReleaseComponentResult;
   const readiness = options.readiness || options.publicBetaReadiness || options.public_beta_readiness || (options.inspectPublicBetaReadiness || inspectPublicBetaReadiness)({
     yoloRoot,
     packageJson,

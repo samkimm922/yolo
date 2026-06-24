@@ -2,23 +2,91 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { runAgentIntegrationDoctor } from "./agent-integration-doctor.js";
 import { buildDogfoodMatrixPlan, buildDogfoodMatrixReport } from "./dogfood-matrix.js";
+import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const REAL_PROJECT_DOGFOOD_SCHEMA_VERSION = "1.0";
 
 const DOGFOOD_MODES = ["plan", "check", "review"];
 export const REAL_PROJECT_DOGFOOD_V2_MODES = ["idea", "discovery", "plan", "prd", "check", "review", "accept", "controlled_run"];
 
-function asArray(value) {
+export interface DogfoodEvidence extends ReleaseRecord {
+  mode?: string;
+  workflow?: string;
+  command_mode?: string;
+  status?: string;
+  artifact_path?: unknown;
+  report_path?: unknown;
+  public_url?: unknown;
+  evidence_files?: unknown[];
+  evidence?: unknown[];
+}
+
+export type EvidenceByMode = Record<string, DogfoodEvidence | undefined>;
+export type DogfoodMatrixPlanLike = ReturnType<typeof buildDogfoodMatrixPlan>;
+export type DogfoodMatrixReportOptions = NonNullable<Parameters<typeof buildDogfoodMatrixReport>[0]>;
+
+export interface ComponentResult extends ReleaseRecord {
+  status?: string;
+  blockers?: ReleaseIssue[];
+  blocked_reasons?: ReleaseIssue[];
+  missing_evidence?: unknown[];
+}
+
+export interface RealProjectDogfoodPlan extends ReleaseRecord {
+  yolo_root: string;
+  project_root: string;
+  modes: string[];
+  dogfood_matrix: DogfoodMatrixPlanLike;
+  writes_workspace: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  executes_billable_provider: boolean;
+}
+
+export interface RealProjectDogfoodOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  projectRoot?: string;
+  project_root?: string;
+  modes?: unknown;
+  dogfoodMatrixPlan?: DogfoodMatrixPlanLike;
+  dogfood_matrix_plan?: DogfoodMatrixPlanLike;
+  plan?: RealProjectDogfoodPlan;
+  agentIntegration?: ComponentResult;
+  agent_integration?: ComponentResult;
+  homeDir?: string;
+  home_dir?: string;
+  targets?: unknown;
+  scopes?: unknown;
+  scope?: string;
+  installScope?: string;
+  install_scope?: string;
+  dogfoodEvidence?: EvidenceByMode;
+  dogfood_evidence?: EvidenceByMode;
+  planEvidence?: DogfoodEvidence;
+  plan_evidence?: DogfoodEvidence;
+  checkEvidence?: DogfoodEvidence;
+  check_evidence?: DogfoodEvidence;
+  reviewEvidence?: DogfoodEvidence;
+  review_evidence?: DogfoodEvidence;
+  dogfoodMatrixReport?: ComponentResult;
+  dogfood_matrix_report?: ComponentResult;
+  dogfoodMatrixEvidence?: DogfoodMatrixReportOptions["evidenceByScenario"];
+  dogfood_matrix_evidence?: DogfoodMatrixReportOptions["evidenceByScenario"];
+}
+
+function asArray(value: unknown): unknown[] {
   if (Array.isArray(value)) return value.filter(Boolean);
   if (value == null || value === "") return [];
   return [value];
 }
 
-function unique(values = []) {
+function unique(values: unknown = []): string[] {
   return [...new Set(asArray(values).map(String).filter(Boolean))];
 }
 
-function commandForMode(mode) {
+function commandForMode(mode: string): string {
   if (mode === "idea") return "/yolo";
   if (mode === "discovery") return "/yolo-demand";
   if (mode === "plan") return "/yolo-plan";
@@ -30,15 +98,15 @@ function commandForMode(mode) {
   return `/yolo-${mode.replace(/_/g, "-")}`;
 }
 
-function check(code, passed, message, extra = Object()) {
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function isObject(value) {
+function isObject(value: unknown): value is ReleaseRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function evidencePresent(value = Object()) {
+function evidencePresent(value: DogfoodEvidence = Object()): boolean {
   return Boolean(value.artifact_path)
     || Boolean(value.report_path)
     || Boolean(value.public_url)
@@ -46,7 +114,7 @@ function evidencePresent(value = Object()) {
     || (Array.isArray(value.evidence) && value.evidence.length > 0);
 }
 
-function noExecutionSideEffects(value = Object()) {
+function noExecutionSideEffects(value: DogfoodEvidence = Object()): boolean {
   return value.writes_workspace !== true
     && value.mutates_workspace !== true
     && value.edits_code !== true
@@ -56,7 +124,7 @@ function noExecutionSideEffects(value = Object()) {
     && value.executed_by_sdk !== true;
 }
 
-function evidenceForMode(mode, options = Object()) {
+function evidenceForMode(mode: string, options: RealProjectDogfoodOptions = Object()): DogfoodEvidence | null {
   const dogfoodEvidence = options.dogfoodEvidence || options.dogfood_evidence || {};
   if (isObject(dogfoodEvidence[mode])) return dogfoodEvidence[mode];
   if (mode === "plan") return options.planEvidence || options.plan_evidence || null;
@@ -65,7 +133,7 @@ function evidenceForMode(mode, options = Object()) {
   return null;
 }
 
-function dogfoodModePassed(mode, evidence) {
+function dogfoodModePassed(mode: string, evidence: unknown): boolean {
   if (!isObject(evidence)) return false;
   const evidenceMode = evidence.mode || evidence.workflow || evidence.command_mode || mode;
   return evidence.status === "pass"
@@ -74,11 +142,11 @@ function dogfoodModePassed(mode, evidence) {
     && noExecutionSideEffects(evidence);
 }
 
-export function buildRealProjectDogfoodPlan(options = Object()) {
+export function buildRealProjectDogfoodPlan(options: RealProjectDogfoodOptions = Object()): RealProjectDogfoodPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const modes = unique(options.modes || DOGFOOD_MODES);
-  const dogfoodMatrix = options.dogfoodMatrixPlan || options.dogfood_matrix_plan || buildDogfoodMatrixPlan({ yoloRoot, projectRoot });
+  const dogfoodMatrix: DogfoodMatrixPlanLike = options.dogfoodMatrixPlan || options.dogfood_matrix_plan || buildDogfoodMatrixPlan({ yoloRoot, projectRoot });
   return {
     schema_version: REAL_PROJECT_DOGFOOD_SCHEMA_VERSION,
     schema: "yolo.release.real_project_dogfood_plan.v1",
@@ -107,12 +175,12 @@ export function buildRealProjectDogfoodPlan(options = Object()) {
   };
 }
 
-export function runRealProjectDogfoodGate(options = Object()) {
+export function runRealProjectDogfoodGate(options: RealProjectDogfoodOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const plan = options.plan || buildRealProjectDogfoodPlan({ yoloRoot, projectRoot });
   const modes = unique(options.modes || plan.modes || DOGFOOD_MODES);
-  const agentIntegration = options.agentIntegration
+  const agentIntegration: ComponentResult = options.agentIntegration
     || options.agent_integration
     || runAgentIntegrationDoctor({
       yoloRoot,
@@ -128,7 +196,7 @@ export function runRealProjectDogfoodGate(options = Object()) {
     status: dogfoodModePassed(mode, modeEvidence[mode]) ? "pass" : "blocked",
     evidence: modeEvidence[mode],
   }));
-  const dogfoodMatrix = options.dogfoodMatrixReport
+  const dogfoodMatrix: ComponentResult = options.dogfoodMatrixReport
     || options.dogfood_matrix_report
     || buildDogfoodMatrixReport({
       plan: options.dogfoodMatrixPlan || options.dogfood_matrix_plan || plan.dogfood_matrix,

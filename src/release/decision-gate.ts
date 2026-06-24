@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { DOGFOOD_MATRIX_SCENARIO_IDS, listDogfoodMatrixScenarios } from "./dogfood-matrix.js";
 import { runPublicBetaHardeningDrill } from "./hardening-drill.js";
 import { verifyArtifactIntegrity } from "../runtime/evidence/artifact-integrity.js";
+import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const CONTROLLED_BETA_RELEASE_DECISION_SCHEMA_VERSION = "1.0";
 
@@ -15,7 +16,159 @@ export const CONTROLLED_BETA_RELEASE_ACTIONS = Object.freeze([
 
 export const RELEASE_CANDIDATE_GATE_SCHEMA_VERSION = "1.0";
 
-export const RELEASE_CANDIDATE_REQUIRED_REPORTS = Object.freeze([
+export type ReleaseCandidateReportName =
+  | "verify"
+  | "prdPreflight"
+  | "review"
+  | "acceptance"
+  | "delivery"
+  | "cleanEnvironment"
+  | "dogfoodMatrix"
+  | "changeManifest";
+
+export type NormalizedReportStatus = "pass" | "block" | null;
+
+export interface GateIssue extends ReleaseIssue {
+  report: string;
+  issue_code?: string;
+}
+
+export interface ApprovalRecord extends ReleaseRecord {
+  id?: string;
+  approval_id?: string;
+  approved_by?: string;
+  approvedBy?: string;
+  approved_at?: string;
+  approvedAt?: string;
+  expires_at?: string;
+  expiresAt?: string;
+  valid_until?: string;
+  validUntil?: string;
+  issue_codes?: unknown[];
+  issueCodes?: unknown[];
+  codes?: unknown[];
+}
+
+export interface ReleaseCandidateReport extends ReleaseRecord {
+  status?: unknown;
+  provenance?: unknown;
+  blockers?: unknown[];
+  warnings?: unknown[];
+  approvals?: ApprovalRecord[];
+  commands?: unknown[];
+  command_results?: unknown[];
+  commandResults?: unknown[];
+  command?: unknown;
+  steps?: ReleaseRecord[];
+  scenarios?: ReleaseRecord[];
+  results?: ReleaseRecord[];
+  entries?: ReleaseRecord[];
+}
+
+export interface DecisionRecord extends ReleaseRecord {
+  approved?: boolean;
+  approver?: string;
+  approved_at?: string;
+  scope?: string;
+  release_scope?: string;
+  package_version?: string;
+  version?: string;
+  approved_actions?: string[];
+  actions?: string[];
+  approvals?: Record<string, boolean>;
+  risk_acceptance?: boolean | unknown[];
+  hardening_drill_reviewed?: boolean;
+  private_blocker_acknowledged?: boolean;
+}
+
+export interface PackageJsonLike extends ReleaseRecord {
+  version?: string;
+  private?: boolean;
+}
+
+export interface HardeningDrillResult extends ReleaseRecord {
+  status?: string;
+  blockers?: ReleaseIssue[];
+  release_blockers?: ReleaseIssue[];
+}
+
+export interface ControlledBetaReleaseDecisionPlan extends ReleaseRecord {
+  release_scope: string;
+  requested_actions: string[];
+  writes_workspace: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  required_decision_fields: string[];
+}
+
+export interface DecisionGateOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  releaseScope?: string;
+  release_scope?: string;
+  requestedActions?: unknown;
+  requested_actions?: unknown;
+  plan?: ControlledBetaReleaseDecisionPlan;
+  decision?: DecisionRecord | null;
+  hardeningDrill?: HardeningDrillResult;
+  runPublicBetaHardeningDrill?: (options: ReleaseRecord) => HardeningDrillResult;
+  timeout_ms?: number;
+  keepWorkspace?: boolean;
+  commandExists?: (command: string) => boolean;
+  now?: unknown;
+  random?: unknown;
+  providerConfigs?: unknown;
+}
+
+export interface ReleaseCandidateGateOptions extends ReleaseRecord {
+  mode?: string;
+  releaseMode?: string;
+  release_mode?: string;
+  now?: string | number | Date;
+  reports?: ReleaseRecord;
+  artifactRoot?: string;
+  artifact_root?: string;
+  cwd?: string;
+}
+
+export interface NormalizedWarning extends ReleaseRecord {
+  report: string;
+  issue_code: string;
+  approved: boolean;
+}
+
+export interface ArtifactIntegritySummary extends ReleaseRecord {
+  status: string;
+  checked_count: number;
+  artifacts: ReleaseRecord[];
+  missing: ReleaseRecord[];
+  digest_mismatches: ReleaseRecord[];
+}
+
+export interface ReleaseCandidateArtifactResult {
+  integrity: ArtifactIntegritySummary;
+  issues: GateIssue[];
+}
+
+export interface NormalizedReleaseCandidateReport extends ReleaseRecord {
+  status: string;
+  provenance?: unknown;
+  blocker_count: number;
+  warning_count: number;
+  approval_count: number;
+  artifact_integrity: ArtifactIntegritySummary;
+}
+
+export interface ReleaseCandidateGateResult extends ReleaseRecord {
+  status: string;
+  issue_codes: string[];
+  blockers: GateIssue[];
+  warnings: NormalizedWarning[];
+  reports: Record<string, NormalizedReleaseCandidateReport>;
+}
+
+export const RELEASE_CANDIDATE_REQUIRED_REPORTS: readonly ReleaseCandidateReportName[] = Object.freeze([
   "verify",
   "prdPreflight",
   "review",
@@ -26,7 +179,7 @@ export const RELEASE_CANDIDATE_REQUIRED_REPORTS = Object.freeze([
   "changeManifest",
 ]);
 
-const RELEASE_CANDIDATE_REPORT_ALIASES = Object.freeze({
+const RELEASE_CANDIDATE_REPORT_ALIASES: Readonly<Record<ReleaseCandidateReportName, string[]>> = Object.freeze({
   verify: ["verify", "verifyResult", "verify_result"],
   prdPreflight: ["prdPreflight", "prd_preflight", "prdPreflightResult", "prd_preflight_result"],
   review: ["review", "reviewReport", "review_report", "reviewResult", "review_result"],
@@ -71,36 +224,36 @@ const DEFAULT_RELEASE_SCOPE = "public-beta";
 const DEFAULT_REQUESTED_ACTIONS = ["remove_private", "publish_public_beta"];
 const PRIVATE_RELEASE_BLOCKER = "PACKAGE_PRIVATE_RELEASE_BLOCK";
 
-function readJson(filePath) {
+function readJson(filePath: string): ReleaseRecord {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = Object()) {
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function normalizeRequestedActions(input) {
+function normalizeRequestedActions(input: unknown): string[] {
   const source = Array.isArray(input) && input.length > 0 ? input : DEFAULT_REQUESTED_ACTIONS;
   return [...new Set(source.map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
-function isObject(value) {
+function isObject(value: unknown): value is ReleaseRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function nonEmptyString(value) {
+function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function validTimestamp(value) {
+function validTimestamp(value: unknown): boolean {
   return nonEmptyString(value) && !Number.isNaN(Date.parse(value));
 }
 
-function asArray(value) {
-  return Array.isArray(value) ? value : [];
+function asArray<T = unknown>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
 }
 
-function cleanIssueCode(value, fallback) {
+function cleanIssueCode(value: unknown, fallback: string): string {
   return String(value || fallback || "")
     .trim()
     .replace(/[^A-Z0-9_.:-]+/gi, "_")
@@ -108,15 +261,15 @@ function cleanIssueCode(value, fallback) {
     .toUpperCase();
 }
 
-function issue(code, report, message, extra = Object()) {
+function issue(code: string, report: string, message: string, extra: ReleaseRecord = Object()): GateIssue {
   return { code, report, message, ...extra };
 }
 
-function normalizeReleaseCandidateMode(value) {
+function normalizeReleaseCandidateMode(value: unknown): "publish" | "rc" {
   return value === "publish" ? "publish" : "rc";
 }
 
-function getAliasedReport(source, reportName) {
+function getAliasedReport(source: ReleaseRecord, reportName: ReleaseCandidateReportName): unknown {
   for (const key of RELEASE_CANDIDATE_REPORT_ALIASES[reportName] || [reportName]) {
     if (Object.hasOwn(source, key)) {
       return source[key];
@@ -125,21 +278,21 @@ function getAliasedReport(source, reportName) {
   return undefined;
 }
 
-function normalizeReportStatus(status) {
+function normalizeReportStatus(status: unknown): NormalizedReportStatus {
   const value = String(status || "").trim().toLowerCase();
   if (RELEASE_CANDIDATE_PASS_STATUSES.has(value)) return "pass";
   if (RELEASE_CANDIDATE_BLOCK_STATUSES.has(value)) return "block";
   return null;
 }
 
-function provenanceSource(report) {
+function provenanceSource(report: ReleaseCandidateReport): string {
   const provenance = report?.provenance;
   if (typeof provenance === "string") return provenance.trim().toLowerCase();
   if (!isObject(provenance)) return "";
   return String(provenance.source || provenance.kind || provenance.system || provenance.tool || "").trim().toLowerCase();
 }
 
-function provenanceId(report) {
+function provenanceId(report: ReleaseCandidateReport): string {
   const provenance = report?.provenance;
   if (isObject(provenance)) {
     return String(provenance.id || provenance.run_id || provenance.runId || provenance.artifact_id || "").trim();
@@ -147,7 +300,7 @@ function provenanceId(report) {
   return String(report?.run_id || report?.runId || report?.artifact_id || "").trim();
 }
 
-function reportArtifactPaths(report = Object()) {
+function reportArtifactPaths(report: ReleaseCandidateReport = Object()): string[] {
   const provenance = report.provenance;
   return [
     report.artifact_path,
@@ -166,7 +319,7 @@ function reportArtifactPaths(report = Object()) {
   ].map((item) => String(item || "").trim()).filter(Boolean);
 }
 
-function reportExpectedDigests(report = Object()) {
+function reportExpectedDigests(report: ReleaseCandidateReport = Object()): Record<string, unknown> {
   const expected = {
     ...(isObject(report.artifact_digests) ? report.artifact_digests : {}),
     ...(isObject(report.artifactDigests) ? report.artifactDigests : {}),
@@ -175,11 +328,11 @@ function reportExpectedDigests(report = Object()) {
   };
   const path = report.artifact_path || report.artifactPath || report.report_path || report.reportPath;
   const digest = report.artifact_sha256 || report.artifactSha256 || report.sha256;
-  if (path && digest) expected[path] = digest;
+  if (path && digest) expected[String(path)] = digest;
   return expected;
 }
 
-function provenanceKnown(report) {
+function provenanceKnown(report: ReleaseCandidateReport): boolean {
   const provenance = report?.provenance;
   if (!isObject(report) || provenance === "unknown" || provenance === null || provenance === undefined) {
     return false;
@@ -191,7 +344,7 @@ function provenanceKnown(report) {
   return RELEASE_CANDIDATE_KNOWN_PROVENANCE.has(source);
 }
 
-function approvalIssueCodes(approval = Object()) {
+function approvalIssueCodes(approval: ApprovalRecord = Object()): string[] {
   const source = Array.isArray(approval.issue_codes)
     ? approval.issue_codes
     : Array.isArray(approval.issueCodes)
@@ -202,28 +355,28 @@ function approvalIssueCodes(approval = Object()) {
   return source.map((code) => cleanIssueCode(code, "")).filter(Boolean);
 }
 
-function approvalId(approval = Object()) {
+function approvalId(approval: ApprovalRecord = Object()): string {
   return String(approval.id || approval.approval_id || "").trim();
 }
 
-function approvalApprovedAt(approval = Object()) {
+function approvalApprovedAt(approval: ApprovalRecord = Object()): unknown {
   return approval.approved_at || approval.approvedAt || null;
 }
 
-function approvalExpiresAt(approval = Object()) {
+function approvalExpiresAt(approval: ApprovalRecord = Object()): unknown {
   return approval.expires_at || approval.expiresAt || approval.valid_until || approval.validUntil || null;
 }
 
-function approvalHasValidExpiry(approval = Object()) {
+function approvalHasValidExpiry(approval: ApprovalRecord = Object()): boolean {
   return validTimestamp(approvalExpiresAt(approval));
 }
 
-function approvalExpired(approval, now) {
+function approvalExpired(approval: ApprovalRecord, now: Date): boolean {
   const expiresAt = approvalExpiresAt(approval);
-  return validTimestamp(expiresAt) && Date.parse(expiresAt) <= now.getTime();
+  return validTimestamp(expiresAt) && Date.parse(String(expiresAt)) <= now.getTime();
 }
 
-function approvalValidForIssue(approval, issueCode, now) {
+function approvalValidForIssue(approval: unknown, issueCode: string, now: Date): boolean {
   return isObject(approval)
     && nonEmptyString(approvalId(approval))
     && nonEmptyString(approval.approved_by || approval.approvedBy)
@@ -233,14 +386,14 @@ function approvalValidForIssue(approval, issueCode, now) {
     && !approvalExpired(approval, now);
 }
 
-function warningIssueCode(warning, reportName, index) {
+function warningIssueCode(warning: unknown, reportName: string, index: number): string {
   return cleanIssueCode(
     isObject(warning) ? warning.code || warning.issue_code || warning.issueCode : warning,
     `${reportName}_WARNING_${index + 1}`,
   );
 }
 
-function warningHasApproval(warning, approvals, issueCode, now) {
+function warningHasApproval(warning: unknown, approvals: ApprovalRecord[], issueCode: string, now: Date): boolean {
   if (isObject(warning) && isObject(warning.approval) && approvalValidForIssue(warning.approval, issueCode, now)) {
     return true;
   }
@@ -251,18 +404,22 @@ function warningHasApproval(warning, approvals, issueCode, now) {
   );
 }
 
-function collectReportBlockerIssues(reportName, report) {
+function nestedApprovalRecord(value: unknown): ReleaseRecord | null {
+  return isObject(value) && isObject(value.approval) ? value.approval : null;
+}
+
+function collectReportBlockerIssues(reportName: string, report: ReleaseCandidateReport): GateIssue[] {
   return asArray(report.blockers).map((blocker, index) => issue(
     "RC_GATE_REPORT_BLOCKER",
     reportName,
-    isObject(blocker) && blocker.message ? blocker.message : "release candidate input report contains a blocker",
+    isObject(blocker) && blocker.message ? String(blocker.message) : "release candidate input report contains a blocker",
     {
       issue_code: cleanIssueCode(isObject(blocker) ? blocker.code || blocker.issue_code : blocker, `${reportName}_BLOCKER_${index + 1}`),
     },
   ));
 }
 
-function reportClaimsDryRun(report = Object()) {
+function reportClaimsDryRun(report: ReleaseCandidateReport = Object()): boolean {
   return report.dry_run === true
     || report.dryRun === true
     || report.plan_only === true
@@ -270,7 +427,7 @@ function reportClaimsDryRun(report = Object()) {
     || (isObject(report.dryRun) && report.dryRun.dry_run === true);
 }
 
-function commandPassed(record) {
+function commandPassed(record: unknown): boolean {
   if (!isObject(record)) return false;
   const status = normalizeReportStatus(record.status);
   const exitCode = record.exit_code ?? record.exitCode;
@@ -283,8 +440,8 @@ function commandPassed(record) {
   return exitPassed;
 }
 
-function collectCommandEvidence(report = Object()) {
-  const commands = [];
+function collectCommandEvidence(report: ReleaseCandidateReport = Object()): ReleaseRecord[] {
+  const commands: ReleaseRecord[] = [];
   for (const record of asArray(report.commands || report.command_results || report.commandResults)) {
     if (isObject(record)) commands.push(record);
   }
@@ -292,18 +449,18 @@ function collectCommandEvidence(report = Object()) {
   if (nonEmptyString(report.command) && (report.exit_code !== undefined || report.exitCode !== undefined || report.status)) {
     commands.push({ command: report.command, exit_code: report.exit_code ?? report.exitCode, status: report.status });
   }
-  for (const stepRecord of asArray(report.steps)) {
+  for (const stepRecord of asArray<ReleaseRecord>(report.steps)) {
     if (isObject(stepRecord?.command)) commands.push(stepRecord.command);
   }
   return commands;
 }
 
-function hasPassingCommandEvidence(report = Object()) {
+function hasPassingCommandEvidence(report: ReleaseCandidateReport = Object()): boolean {
   const commands = collectCommandEvidence(report);
   return commands.length > 0 && commands.every(commandPassed);
 }
 
-function stepPassed(stepRecord) {
+function stepPassed(stepRecord: unknown): boolean {
   if (!isObject(stepRecord)) return false;
   const status = normalizeReportStatus(stepRecord.status);
   const hasCommand = isObject(stepRecord.command);
@@ -314,31 +471,31 @@ function stepPassed(stepRecord) {
   return hasCommand && commandPassed(stepRecord.command);
 }
 
-function cleanEnvironmentEvidencePasses(report = Object()) {
-  const steps = asArray(report.steps);
+function cleanEnvironmentEvidencePasses(report: ReleaseCandidateReport = Object()): boolean {
+  const steps = asArray<ReleaseRecord>(report.steps);
   const byId = new Map(steps.map((stepRecord) => [stepRecord?.id, stepRecord]));
   return report.dry_run === false
     && nonEmptyString(report.tarball || report.package_tarball || report.packageTarball)
     && CLEAN_ENVIRONMENT_REQUIRED_STEPS.every((stepId) => stepPassed(byId.get(stepId)));
 }
 
-function scenarioId(scenario, index) {
-  return scenario?.id || scenario?.scenario || scenario?.name || `scenario-${index + 1}`;
+function scenarioId(scenario: ReleaseRecord | null | undefined, index: number): string {
+  return String(scenario?.id || scenario?.scenario || scenario?.name || `scenario-${index + 1}`);
 }
 
-function scenarioExpectedOutcome(scenario) {
+function scenarioExpectedOutcome(scenario: ReleaseRecord | null | undefined): unknown {
   if (scenario?.expected_outcome) return scenario.expected_outcome;
   if (typeof scenario?.expected === "string") return scenario.expected;
   if (isObject(scenario?.expected) && scenario.expected.outcome) return scenario.expected.outcome;
   return DOGFOOD_EXPECTED_OUTCOME_BY_ID.get(scenarioId(scenario, 0)) || "pass";
 }
 
-function failClosedStatus(value) {
+function failClosedStatus(value: unknown): boolean {
   return ["blocked", "block", "fail", "failed", "fail_closed"].includes(String(value || "").trim().toLowerCase());
 }
 
-function dogfoodMatrixCompletenessIssues(report) {
-  const scenarios = asArray(report.scenarios || report.results || report.entries);
+function dogfoodMatrixCompletenessIssues(report: ReleaseCandidateReport): GateIssue[] {
+  const scenarios = asArray<ReleaseRecord>(report.scenarios || report.results || report.entries);
   const ids = scenarios.map((scenario, index) => scenarioId(scenario, index));
   const uniqueIds = new Set(ids);
   const missing = DOGFOOD_MATRIX_SCENARIO_IDS.filter((id) => !uniqueIds.has(id));
@@ -361,8 +518,8 @@ function dogfoodMatrixCompletenessIssues(report) {
   )];
 }
 
-function dogfoodFailureIssues(report) {
-  const scenarios = asArray(report.scenarios || report.results || report.entries);
+function dogfoodFailureIssues(report: ReleaseCandidateReport): GateIssue[] {
+  const scenarios = asArray<ReleaseRecord>(report.scenarios || report.results || report.entries);
   return scenarios
     .map((scenario, index) => ({
       scenario,
@@ -386,7 +543,7 @@ function dogfoodFailureIssues(report) {
     ));
 }
 
-function changeManifestEvidencePasses(report = Object()) {
+function changeManifestEvidencePasses(report: ReleaseCandidateReport = Object()): boolean {
   const manifest = report.manifest || report.change_manifest || report.changeManifest;
   return isObject(manifest)
     && manifest.schema === "yolo.release_change_provenance.v1"
@@ -396,8 +553,8 @@ function changeManifestEvidencePasses(report = Object()) {
     && isObject(manifest.generated_from);
 }
 
-function releaseCandidateEvidenceIssues(reportName, report) {
-  const evidenceIssues = [];
+function releaseCandidateEvidenceIssues(reportName: ReleaseCandidateReportName, report: ReleaseCandidateReport): GateIssue[] {
+  const evidenceIssues: GateIssue[] = [];
   if (reportClaimsDryRun(report)) {
     evidenceIssues.push(issue(
       "RC_GATE_REPORT_DRY_RUN",
@@ -442,7 +599,7 @@ function releaseCandidateEvidenceIssues(reportName, report) {
   return evidenceIssues;
 }
 
-function releaseCandidateArtifactIssues(reportName, report, options = Object()) {
+function releaseCandidateArtifactIssues(reportName: ReleaseCandidateReportName, report: ReleaseCandidateReport, options: ReleaseCandidateGateOptions = Object()): ReleaseCandidateArtifactResult {
   const paths = reportArtifactPaths(report);
   if (paths.length === 0) {
     return {
@@ -489,8 +646,8 @@ function releaseCandidateArtifactIssues(reportName, report, options = Object()) 
   return { integrity, issues };
 }
 
-function validateApprovals(reportName, approvals, now) {
-  const approvalIssues = [];
+function validateApprovals(reportName: string, approvals: ApprovalRecord[], now: Date): GateIssue[] {
+  const approvalIssues: GateIssue[] = [];
   for (const approval of approvals) {
     if (!isObject(approval)
       || !nonEmptyString(approvalId(approval))
@@ -525,7 +682,7 @@ function validateApprovals(reportName, approvals, now) {
   return approvalIssues;
 }
 
-function actionApproved(decision, action) {
+function actionApproved(decision: DecisionRecord | null | undefined, action: string): boolean {
   const approvals = isObject(decision?.approvals) ? decision.approvals : {};
   const approvedActions = Array.isArray(decision?.approved_actions)
     ? decision.approved_actions
@@ -535,16 +692,16 @@ function actionApproved(decision, action) {
   return approvals[action] === true || approvedActions.includes(action);
 }
 
-function riskAccepted(decision) {
+function riskAccepted(decision: DecisionRecord | null | undefined): boolean {
   return decision?.risk_acceptance === true
     || (Array.isArray(decision?.risk_acceptance) && decision.risk_acceptance.length > 0);
 }
 
-function hardeningReleaseBlockerCodes(hardeningDrill = Object()) {
+function hardeningReleaseBlockerCodes(hardeningDrill: HardeningDrillResult = Object()): string[] {
   return (hardeningDrill.release_blockers || []).map((blocker) => blocker.code).filter(Boolean);
 }
 
-function sanitizeDecision(decision) {
+function sanitizeDecision(decision: unknown) {
   if (!isObject(decision)) {
     return null;
   }
@@ -569,7 +726,7 @@ function sanitizeDecision(decision) {
   };
 }
 
-export function buildControlledBetaReleaseDecisionPlan(options = Object()) {
+export function buildControlledBetaReleaseDecisionPlan(options: DecisionGateOptions = Object()): ControlledBetaReleaseDecisionPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const releaseScope = options.releaseScope || options.release_scope || DEFAULT_RELEASE_SCOPE;
   const requestedActions = normalizeRequestedActions(options.requestedActions || options.requested_actions);
@@ -609,10 +766,10 @@ export function buildControlledBetaReleaseDecisionPlan(options = Object()) {
   };
 }
 
-export function runControlledBetaReleaseDecisionGate(options = Object()) {
+export function runControlledBetaReleaseDecisionGate(options: DecisionGateOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJsonPath = join(yoloRoot, "package.json");
-  const packageBefore = readJson(packageJsonPath);
+  const packageBefore: PackageJsonLike = readJson(packageJsonPath);
   const plan = options.plan || buildControlledBetaReleaseDecisionPlan({
     yoloRoot,
     releaseScope: options.releaseScope || options.release_scope,
@@ -621,9 +778,9 @@ export function runControlledBetaReleaseDecisionGate(options = Object()) {
   const requestedActions = normalizeRequestedActions(plan.requested_actions);
   const knownActions = new Set(CONTROLLED_BETA_RELEASE_ACTIONS);
   const unknownActions = requestedActions.filter((action) => !knownActions.has(action));
-  const decision = options.decision || null;
+  const decision: DecisionRecord | null = options.decision || null;
   const releaseScope = plan.release_scope || DEFAULT_RELEASE_SCOPE;
-  const hardeningDrill = options.hardeningDrill || (options.runPublicBetaHardeningDrill || runPublicBetaHardeningDrill)({
+  const hardeningDrill: HardeningDrillResult = options.hardeningDrill || (options.runPublicBetaHardeningDrill || runPublicBetaHardeningDrill)({
     yoloRoot,
     timeout_ms: options.timeout_ms || 120000,
     keepWorkspace: options.keepWorkspace === true,
@@ -632,7 +789,7 @@ export function runControlledBetaReleaseDecisionGate(options = Object()) {
     random: options.random,
     providerConfigs: options.providerConfigs,
   });
-  const packageAfter = readJson(packageJsonPath);
+  const packageAfter: PackageJsonLike = readJson(packageJsonPath);
   const releaseBlockerCodes = hardeningReleaseBlockerCodes(hardeningDrill);
   const nonPrivateReleaseBlockers = releaseBlockerCodes.filter((code) => code !== PRIVATE_RELEASE_BLOCKER);
   const hasPrivateReleaseBlocker = releaseBlockerCodes.includes(PRIVATE_RELEASE_BLOCKER);
@@ -779,13 +936,13 @@ export function runControlledBetaReleaseDecisionGate(options = Object()) {
   };
 }
 
-export function runReleaseCandidateGate(options = Object()) {
+export function runReleaseCandidateGate(options: ReleaseCandidateGateOptions = Object()): ReleaseCandidateGateResult {
   const mode = normalizeReleaseCandidateMode(options.mode || options.releaseMode || options.release_mode);
   const now = options.now ? new Date(options.now) : new Date();
   const reportSource = isObject(options.reports) ? options.reports : options;
-  const blockers = [];
-  const warnings = [];
-  const normalizedReports = Object();
+  const blockers: GateIssue[] = [];
+  const warnings: NormalizedWarning[] = [];
+  const normalizedReports: Record<string, NormalizedReleaseCandidateReport> = Object();
 
   if (!["rc", "publish"].includes(String(options.mode || options.releaseMode || options.release_mode || "rc"))) {
     blockers.push(issue(
@@ -817,7 +974,7 @@ export function runReleaseCandidateGate(options = Object()) {
     }
 
     const status = normalizeReportStatus(report.status);
-    const reportMalformed = [];
+    const reportMalformed: string[] = [];
     if (!status) {
       reportMalformed.push("status must be one of pass, block, blocked, fail, failed, or error");
     }
@@ -849,15 +1006,16 @@ export function runReleaseCandidateGate(options = Object()) {
 
     const reportBlockers = Array.isArray(report.blockers) ? report.blockers : [];
     const reportWarnings = Array.isArray(report.warnings) ? report.warnings : [];
-    const reportApprovals = Array.isArray(report.approvals) ? report.approvals : [];
-    const normalizedWarnings = reportWarnings.map((warning, index) => {
+    const reportApprovals: ApprovalRecord[] = Array.isArray(report.approvals) ? report.approvals : [];
+    const normalizedWarnings: NormalizedWarning[] = reportWarnings.map((warning, index) => {
       const issueCode = warningIssueCode(warning, reportName, index);
+      const approval = nestedApprovalRecord(warning);
       return {
         report: reportName,
         issue_code: issueCode,
         code: isObject(warning) ? warning.code || warning.issue_code || warning.issueCode || issueCode : issueCode,
         message: isObject(warning) && warning.message ? warning.message : "release candidate gate warning",
-        approval_id: isObject(warning) ? warning.approval_id || warning.approvalId || warning.approval?.id || null : null,
+        approval_id: isObject(warning) ? warning.approval_id || warning.approvalId || approval?.id || null : null,
         approved: warningHasApproval(warning, reportApprovals, issueCode, now),
       };
     });

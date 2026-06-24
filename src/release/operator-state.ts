@@ -2,6 +2,7 @@ import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { inspectPublicBetaReadiness } from "./readiness.js";
 import { runControlledBetaReleaseDecisionGate } from "./decision-gate.js";
+import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const OPERATOR_RELEASE_STATE_SCHEMA_VERSION = "1.0";
 
@@ -9,38 +10,96 @@ const DEFAULT_RELEASE_SCOPE = "public-beta";
 const DEFAULT_REQUESTED_ACTIONS = ["remove_private", "publish_public_beta"];
 const PRIVATE_RELEASE_BLOCKER = "PACKAGE_PRIVATE_RELEASE_BLOCK";
 
-function readJson(filePath) {
+export interface PackageJsonLike extends ReleaseRecord {
+  private?: boolean;
+}
+
+export interface DecisionGateResult extends ReleaseRecord {
+  status?: string;
+  blockers?: ReleaseIssue[];
+  action_authorization?: {
+    remove_private?: boolean;
+    publish_public_beta?: boolean;
+  };
+  approved_actions?: string[];
+}
+
+export interface ReadinessResult extends ReleaseRecord {
+  blockers?: ReleaseIssue[];
+}
+
+export interface OperatorReleaseStatePlan extends ReleaseRecord {
+  yolo_root: string;
+  release_scope: string;
+  requested_actions: string[];
+  mode: string;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+}
+
+export interface MutationRecord extends ReleaseRecord {
+  applied: boolean;
+  file: string;
+  private_before: boolean;
+  private_after: boolean;
+  changed_fields: string[];
+}
+
+export interface OperatorReleaseStateOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  releaseScope?: string;
+  release_scope?: string;
+  requestedActions?: unknown;
+  requested_actions?: unknown;
+  apply?: boolean;
+  allowWorkspaceMutation?: boolean;
+  allow_workspace_mutation?: boolean;
+  plan?: OperatorReleaseStatePlan;
+  decisionGate?: DecisionGateResult;
+  decision?: ReleaseRecord;
+  timeout_ms?: number;
+  commandExists?: (command: string) => boolean;
+  now?: unknown;
+  random?: unknown;
+  providerConfigs?: unknown;
+  inspectPostMutationReadiness?: (options: ReleaseRecord) => ReadinessResult;
+  runControlledBetaReleaseDecisionGate?: (options: ReleaseRecord) => DecisionGateResult;
+}
+
+function readJson(filePath: string): ReleaseRecord {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function writeJsonAtomic(filePath, value) {
+function writeJsonAtomic(filePath: string, value: ReleaseRecord): void {
   const tmpPath = join(dirname(filePath), `.tmp-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
   writeFileSync(tmpPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   renameSync(tmpPath, filePath);
 }
 
-function check(code, passed, message, extra = Object()) {
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function normalizeRequestedActions(input) {
+function normalizeRequestedActions(input: unknown): string[] {
   const source = Array.isArray(input) && input.length > 0 ? input : DEFAULT_REQUESTED_ACTIONS;
   return [...new Set(source.map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
-function removePrivateRequested(actions) {
+function removePrivateRequested(actions: string[]): boolean {
   return actions.includes("remove_private");
 }
 
-function publishRequested(actions) {
+function publishRequested(actions: string[]): boolean {
   return actions.includes("publish_public_beta");
 }
 
-function privateBlockerCodes(readiness = Object()) {
+function privateBlockerCodes(readiness: ReadinessResult = Object()): string[] {
   return (readiness.blockers || []).map((blocker) => blocker.code).filter((code) => code === PRIVATE_RELEASE_BLOCKER);
 }
 
-function buildNextPackageJson(packageJson, actions) {
+function buildNextPackageJson(packageJson: PackageJsonLike, actions: string[]): PackageJsonLike {
   if (!removePrivateRequested(actions)) {
     return { ...packageJson };
   }
@@ -49,7 +108,7 @@ function buildNextPackageJson(packageJson, actions) {
   return next;
 }
 
-export function buildOperatorReleaseStatePlan(options = Object()) {
+export function buildOperatorReleaseStatePlan(options: OperatorReleaseStateOptions = Object()): OperatorReleaseStatePlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const requestedActions = normalizeRequestedActions(options.requestedActions || options.requested_actions);
   const apply = options.apply === true;
@@ -79,10 +138,10 @@ export function buildOperatorReleaseStatePlan(options = Object()) {
   };
 }
 
-export function runOperatorReleaseStateMutation(options = Object()) {
+export function runOperatorReleaseStateMutation(options: OperatorReleaseStateOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJsonPath = join(yoloRoot, "package.json");
-  const packageBefore = readJson(packageJsonPath);
+  const packageBefore: PackageJsonLike = readJson(packageJsonPath);
   const plan = options.plan || buildOperatorReleaseStatePlan({
     yoloRoot,
     releaseScope: options.releaseScope || options.release_scope,
@@ -92,7 +151,7 @@ export function runOperatorReleaseStateMutation(options = Object()) {
   const requestedActions = normalizeRequestedActions(plan.requested_actions);
   const apply = plan.mode === "apply" || options.apply === true;
   const allowWorkspaceMutation = options.allowWorkspaceMutation === true || options.allow_workspace_mutation === true;
-  const decisionGate = options.decisionGate || (options.runControlledBetaReleaseDecisionGate || runControlledBetaReleaseDecisionGate)({
+  const decisionGate: DecisionGateResult = options.decisionGate || (options.runControlledBetaReleaseDecisionGate || runControlledBetaReleaseDecisionGate)({
     yoloRoot,
     decision: options.decision,
     requestedActions,
@@ -104,7 +163,7 @@ export function runOperatorReleaseStateMutation(options = Object()) {
     providerConfigs: options.providerConfigs,
   });
   const nextPackageJson = buildNextPackageJson(packageBefore, requestedActions);
-  const postMutationReadiness = (options.inspectPostMutationReadiness || inspectPublicBetaReadiness)({
+  const postMutationReadiness: ReadinessResult = (options.inspectPostMutationReadiness || inspectPublicBetaReadiness)({
     yoloRoot,
     packageJson: nextPackageJson,
   });
@@ -156,7 +215,7 @@ export function runOperatorReleaseStateMutation(options = Object()) {
   ];
 
   const preApplyBlockers = checks.filter((item) => item.passed !== true);
-  let mutation = Object.assign(Object(), {
+  let mutation: MutationRecord = Object.assign(Object(), {
     applied: false,
     file: "package.json",
     private_before: packageBefore.private === true,
@@ -166,7 +225,7 @@ export function runOperatorReleaseStateMutation(options = Object()) {
 
   if (preApplyBlockers.length === 0 && apply && removePrivateRequested(requestedActions)) {
     writeJsonAtomic(packageJsonPath, nextPackageJson);
-    const packageAfterWrite = readJson(packageJsonPath);
+    const packageAfterWrite: PackageJsonLike = readJson(packageJsonPath);
     mutation = {
       applied: true,
       file: "package.json",
@@ -176,7 +235,7 @@ export function runOperatorReleaseStateMutation(options = Object()) {
     };
   }
 
-  const packageAfter = readJson(packageJsonPath);
+  const packageAfter: PackageJsonLike = readJson(packageJsonPath);
   if (!apply) {
     mutation = {
       ...mutation,

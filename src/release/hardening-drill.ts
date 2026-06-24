@@ -7,24 +7,93 @@ import { inspectProviderCliDryRunMatrix } from "../runtime/adapters/provider-run
 import { runWorkflowSkillTargetSmoke } from "../workflows/install.js";
 import { runPackageInstallSmoke } from "./pack-smoke.js";
 import { inspectPublicBetaReadiness } from "./readiness.js";
+import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const PUBLIC_BETA_HARDENING_DRILL_SCHEMA_VERSION = "1.0";
 
 const DEFAULT_PROVIDER_COMMANDS = new Set(["claude", "codex", "cat", "node", "sh"]);
 
-function readJson(filePath) {
+export interface PackageJsonLike extends ReleaseRecord {
+  private?: boolean;
+}
+
+export interface ReadinessResult extends ReleaseRecord {
+  status?: string;
+  blocks_release?: boolean;
+  blockers?: ReleaseIssue[];
+  checks?: ReleaseCheck[];
+}
+
+export interface ProviderMatrixEntry extends ReleaseRecord {
+  dry_run?: boolean;
+  execution_allowed?: boolean;
+  will_spawn?: boolean;
+  stop_conditions?: string[];
+}
+
+export interface ProviderCliDryRunResult extends ReleaseRecord {
+  status?: string;
+  blocks_execution?: boolean;
+  warnings?: unknown[];
+  matrix?: {
+    dry_run?: boolean;
+    execution_allowed?: boolean;
+    providers?: ProviderMatrixEntry[];
+    stop_conditions?: string[];
+  };
+}
+
+export interface ComponentResult extends ReleaseRecord {
+  status?: string;
+  dry_run?: boolean;
+  summary?: string;
+  fixture_count?: number;
+}
+
+export interface PublicBetaHardeningPlan extends ReleaseRecord {
+  publish_allowed: boolean;
+  external_publish_commands_allowed: boolean;
+  package_private_mutation_allowed: boolean;
+  billable_provider_execution_allowed: boolean;
+  credential_access_allowed: boolean;
+  steps: ReleaseRecord[];
+}
+
+export interface PublicBetaHardeningOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  plan?: PublicBetaHardeningPlan;
+  commandExists?: (command: string) => boolean;
+  inspectPublicBetaReadiness?: (options: ReleaseRecord) => ReadinessResult;
+  packageInstall?: boolean;
+  runPackageInstallSmoke?: (options: ReleaseRecord) => ComponentResult;
+  timeout_ms?: number;
+  keepWorkspace?: boolean;
+  inspectFixtureRegistry?: (options: ReleaseRecord) => ComponentResult;
+  inspectProviderCliDryRunMatrix?: (options: ReleaseRecord) => ProviderCliDryRunResult;
+  config?: unknown;
+  projectRoot?: string;
+  stateRoot?: string;
+  now?: unknown;
+  random?: unknown;
+  providerConfigs?: unknown;
+  workflowTargetSmoke?: boolean;
+  runWorkflowSkillTargetSmoke?: (options: ReleaseRecord) => ComponentResult;
+}
+
+function readJson(filePath: string): ReleaseRecord {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = Object()) {
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function packagePrivateBlocker(readiness = Object()) {
+function packagePrivateBlocker(readiness: ReadinessResult = Object()): boolean {
   return (readiness.blockers || []).some((item) => item.code === "PACKAGE_PRIVATE_RELEASE_BLOCK");
 }
 
-function providerDryRunSafe(providerCliDryRun = Object()) {
+function providerDryRunSafe(providerCliDryRun: ProviderCliDryRunResult = Object()): boolean {
   const matrix = providerCliDryRun.matrix || {};
   return matrix.dry_run === true
     && matrix.execution_allowed === false
@@ -33,7 +102,7 @@ function providerDryRunSafe(providerCliDryRun = Object()) {
     );
 }
 
-function providerCredentialStopConditionPresent(providerCliDryRun = Object()) {
+function providerCredentialStopConditionPresent(providerCliDryRun: ProviderCliDryRunResult = Object()): boolean {
   const matrix = providerCliDryRun.matrix || {};
   const text = [
     ...(matrix.stop_conditions || []),
@@ -42,18 +111,18 @@ function providerCredentialStopConditionPresent(providerCliDryRun = Object()) {
   return /credentials|billable|external network|model execution/i.test(text);
 }
 
-function prefixedChecks(readiness, prefix) {
+function prefixedChecks(readiness: ReadinessResult, prefix: string): ReleaseCheck[] {
   return (readiness.checks || []).filter((item) => item.code?.startsWith(prefix));
 }
 
-function allPassed(items = []) {
+function allPassed(items: ReleaseCheck[] = []): boolean {
   return items.length > 0 && items.every((item) => item.passed === true);
 }
 
 function runWorkflowTargetSmokeInTemp({
   yoloRoot,
   runWorkflowSkillTargetSmokeImpl = runWorkflowSkillTargetSmoke,
-} = Object()) {
+}: { yoloRoot?: string; runWorkflowSkillTargetSmokeImpl?: (options: ReleaseRecord) => ComponentResult } = Object()): ComponentResult {
   const workspace = mkdtempSync(join(tmpdir(), "yolo-release-workflow-smoke-"));
   try {
     return runWorkflowSkillTargetSmokeImpl({
@@ -68,7 +137,7 @@ function runWorkflowTargetSmokeInTemp({
   }
 }
 
-export function buildPublicBetaHardeningDrillPlan(options = Object()) {
+export function buildPublicBetaHardeningDrillPlan(options: PublicBetaHardeningOptions = Object()): PublicBetaHardeningPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   return {
     schema_version: PUBLIC_BETA_HARDENING_DRILL_SCHEMA_VERSION,
@@ -129,12 +198,12 @@ export function buildPublicBetaHardeningDrillPlan(options = Object()) {
   };
 }
 
-export function runPublicBetaHardeningDrill(options = Object()) {
+export function runPublicBetaHardeningDrill(options: PublicBetaHardeningOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJsonPath = join(yoloRoot, "package.json");
-  const packageBefore = readJson(packageJsonPath);
+  const packageBefore: PackageJsonLike = readJson(packageJsonPath);
   const plan = options.plan || buildPublicBetaHardeningDrillPlan({ yoloRoot });
-  const commandExists = options.commandExists || ((command) => DEFAULT_PROVIDER_COMMANDS.has(command));
+  const commandExists = options.commandExists || ((command: string) => DEFAULT_PROVIDER_COMMANDS.has(command));
 
   const readiness = (options.inspectPublicBetaReadiness || inspectPublicBetaReadiness)({ yoloRoot });
   const packageInstall = options.packageInstall === false
@@ -159,7 +228,7 @@ export function runPublicBetaHardeningDrill(options = Object()) {
     : (options.runWorkflowSkillTargetSmoke
         ? options.runWorkflowSkillTargetSmoke({ yoloRoot })
         : runWorkflowTargetSmokeInTemp({ yoloRoot }));
-  const packageAfter = readJson(packageJsonPath);
+  const packageAfter: PackageJsonLike = readJson(packageJsonPath);
 
   const apiBoundaryChecks = prefixedChecks(readiness, "API_BOUNDARY_");
   const docChecks = prefixedChecks(readiness, "DOC_");
@@ -199,7 +268,7 @@ export function runPublicBetaHardeningDrill(options = Object()) {
     ),
     check(
       "FIXTURE_REGISTRY_PASS",
-      fixtureRegistry.status === "pass" && fixtureRegistry.fixture_count > 0,
+      fixtureRegistry.status === "pass" && (fixtureRegistry.fixture_count || 0) > 0,
       "fixture registry must pass and include public beta fixtures",
       { fixture_count: fixtureRegistry.fixture_count || 0 },
     ),

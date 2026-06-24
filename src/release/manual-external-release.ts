@@ -6,6 +6,7 @@ import {
 } from "./operator-runbook.js";
 import { runPostReleaseAuditGate } from "./post-release-audit.js";
 import { runStableGraduationGate } from "./stable-graduation.js";
+import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const MANUAL_EXTERNAL_RELEASE_SCHEMA_VERSION = "1.0";
 
@@ -17,36 +18,124 @@ const DEFAULT_REQUESTED_OPERATIONS = [
   "public_dogfood_report",
 ];
 
-function readJson(filePath) {
+export interface PackageJsonLike extends ReleaseRecord {
+  name?: string;
+  version?: string;
+  private?: boolean;
+}
+
+export interface ManualCommand extends ReleaseRecord {
+  execute?: boolean;
+  requires_human?: boolean;
+}
+
+export interface ReleaseComponentResult extends ReleaseRecord {
+  status?: string;
+  blockers?: ReleaseIssue[];
+  guarantees?: ReleaseRecord;
+  manual_commands?: ManualCommand[];
+}
+
+export interface ManualExternalReleasePlan extends ReleaseRecord {
+  yolo_root: string;
+  release_scope: string;
+  requested_operations: string[];
+  writes_workspace: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  executes_billable_provider: boolean;
+  publishes_dogfood_report: boolean;
+  requires_human_operator: boolean;
+  required_evidence: string[];
+}
+
+export interface ManualExternalReleaseOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  packageJson?: PackageJsonLike;
+  plan?: ManualExternalReleasePlan;
+  releaseScope?: string;
+  release_scope?: string;
+  requestedOperations?: unknown;
+  requested_operations?: unknown;
+  manualReleaseRecord?: ReleaseRecord | null;
+  manual_release_record?: ReleaseRecord | null;
+  credentialEvidence?: ReleaseRecord | null;
+  credential_evidence?: ReleaseRecord | null;
+  billableProviderEvidence?: ReleaseRecord | null;
+  billable_provider_evidence?: ReleaseRecord | null;
+  dogfoodPublicationEvidence?: ReleaseRecord | null;
+  dogfood_publication_evidence?: ReleaseRecord | null;
+  dogfoodAudit?: ReleaseRecord | null;
+  dogfood_audit?: ReleaseRecord | null;
+  externalRemediationEvidence?: ReleaseRecord | null;
+  external_remediation_evidence?: ReleaseRecord | null;
+  claudePRemediation?: ReleaseRecord | null;
+  claude_p_remediation?: ReleaseRecord | null;
+  operatorRunbook?: ReleaseComponentResult;
+  operator_runbook?: ReleaseComponentResult;
+  postReleaseAudit?: ReleaseComponentResult;
+  post_release_audit?: ReleaseComponentResult;
+  stableGraduation?: ReleaseComponentResult;
+  stable_graduation?: ReleaseComponentResult;
+  providerCommand?: string;
+  provider_command?: string;
+  timeout_ms?: number;
+  commandExists?: (command: string) => boolean;
+  now?: unknown;
+  random?: unknown;
+  providerConfigs?: unknown;
+  hardeningDrill?: ReleaseComponentResult;
+  hardening_drill?: ReleaseComponentResult;
+  postReleaseChecks?: ReleaseComponentResult;
+  post_release_checks?: ReleaseComponentResult;
+  readiness?: ReleaseComponentResult;
+  publicBetaReadiness?: ReleaseComponentResult;
+  public_beta_readiness?: ReleaseComponentResult;
+  stabilityReview?: ReleaseRecord;
+  stability_review?: ReleaseRecord;
+  runnerRuntimeApiFrozen?: boolean;
+  runner_runtime_api_frozen?: boolean;
+  rootEntrypointCount?: number;
+  root_entrypoint_count?: number;
+  maxRootEntrypoints?: number;
+  max_root_entrypoints?: number;
+  runOperatorReleaseRunbookGate?: (options: ReleaseRecord) => ReleaseComponentResult;
+  runPostReleaseAuditGate?: (options: ReleaseRecord) => ReleaseComponentResult;
+  runStableGraduationGate?: (options: ReleaseRecord) => ReleaseComponentResult;
+}
+
+function readJson(filePath: string): ReleaseRecord {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = Object()) {
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function isObject(value) {
+function isObject(value: unknown): value is ReleaseRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function nonEmptyString(value) {
+function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function validTimestamp(value) {
+function validTimestamp(value: unknown): boolean {
   return nonEmptyString(value) && !Number.isNaN(Date.parse(value));
 }
 
-function normalizeRequestedOperations(input) {
+function normalizeRequestedOperations(input: unknown): string[] {
   const source = Array.isArray(input) && input.length > 0 ? input : DEFAULT_REQUESTED_OPERATIONS;
   return [...new Set(source.map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
-function operationRequested(operations, operation) {
+function operationRequested(operations: string[], operation: string): boolean {
   return operations.includes(operation);
 }
 
-function evidencePresent(value) {
+function evidencePresent(value: unknown): boolean {
   if (!isObject(value)) {
     return false;
   }
@@ -57,7 +146,7 @@ function evidencePresent(value) {
     || (Array.isArray(value.evidence) && value.evidence.length > 0);
 }
 
-function externalOnly(record = Object()) {
+function externalOnly(record: unknown = Object()): boolean {
   const summary = isObject(record) ? record : {};
   return summary.executed_by_sdk !== true
     && summary.published_by_sdk !== true
@@ -66,13 +155,13 @@ function externalOnly(record = Object()) {
     && summary.dogfood_report_published_by_sdk !== true;
 }
 
-function manualCommandsOnly(runbook = Object()) {
+function manualCommandsOnly(runbook: ReleaseComponentResult = Object()): boolean {
   const commands = Array.isArray(runbook.manual_commands) ? runbook.manual_commands : [];
   return commands.length > 0
     && commands.every((command) => command.execute === false && command.requires_human === true);
 }
 
-function credentialEvidenceApproved(evidence = Object()) {
+function credentialEvidenceApproved(evidence: unknown = Object()): boolean {
   const summary = isObject(evidence) ? evidence : {};
   return summary.status === "pass"
     && nonEmptyString(summary.operator)
@@ -84,7 +173,7 @@ function credentialEvidenceApproved(evidence = Object()) {
     && !nonEmptyString(summary.raw_token);
 }
 
-function billableProviderEvidenceApproved(evidence = Object()) {
+function billableProviderEvidenceApproved(evidence: unknown = Object()): boolean {
   const summary = isObject(evidence) ? evidence : {};
   return summary.status === "pass"
     && nonEmptyString(summary.operator)
@@ -96,7 +185,7 @@ function billableProviderEvidenceApproved(evidence = Object()) {
     && externalOnly(summary);
 }
 
-function dogfoodPublicationApproved(evidence = Object()) {
+function dogfoodPublicationApproved(evidence: unknown = Object()): boolean {
   const summary = isObject(evidence) ? evidence : {};
   return summary.status === "pass"
     && evidencePresent(summary)
@@ -107,7 +196,7 @@ function dogfoodPublicationApproved(evidence = Object()) {
     && externalOnly(summary);
 }
 
-function externalRemediationEvidenceApproved(evidence = Object()) {
+function externalRemediationEvidenceApproved(evidence: unknown = Object()): boolean {
   const summary = isObject(evidence) ? evidence : {};
   return summary.status === "pass"
     && nonEmptyString(summary.operator)
@@ -121,7 +210,7 @@ function externalRemediationEvidenceApproved(evidence = Object()) {
     && !nonEmptyString(summary.yolo_run_id);
 }
 
-function manualReleaseRecordApproved(record = Object(), packageJson = Object()) {
+function manualReleaseRecordApproved(record: unknown = Object(), packageJson: PackageJsonLike = Object()): boolean {
   const summary = isObject(record) ? record : {};
   return nonEmptyString(summary.operator)
     && validTimestamp(summary.published_at || summary.executed_at)
@@ -131,7 +220,7 @@ function manualReleaseRecordApproved(record = Object(), packageJson = Object()) 
     && externalOnly(summary);
 }
 
-function noReleaseSideEffects(result = Object()) {
+function noReleaseSideEffects(result: ReleaseComponentResult = Object()): boolean {
   return result.guarantees?.published === false
     && result.guarantees?.credential_access === false
     && result.guarantees?.provider_execution === false
@@ -140,7 +229,7 @@ function noReleaseSideEffects(result = Object()) {
     && result.guarantees?.dogfood_report_published === false;
 }
 
-export function buildManualExternalReleasePlan(options = Object()) {
+export function buildManualExternalReleasePlan(options: ManualExternalReleaseOptions = Object()): ManualExternalReleasePlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const requestedOperations = normalizeRequestedOperations(options.requestedOperations || options.requested_operations);
   return {
@@ -174,9 +263,9 @@ export function buildManualExternalReleasePlan(options = Object()) {
   };
 }
 
-export function runManualExternalReleaseGate(options = Object()) {
+export function runManualExternalReleaseGate(options: ManualExternalReleaseOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
-  const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
+  const packageJson: PackageJsonLike = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const plan = options.plan || buildManualExternalReleasePlan({
     yoloRoot,
     releaseScope: options.releaseScope || options.release_scope,
@@ -198,7 +287,7 @@ export function runManualExternalReleaseGate(options = Object()) {
     || options.claudePRemediation
     || options.claude_p_remediation
     || null;
-  const operatorRunbook = options.operatorRunbook || options.operator_runbook || (options.runOperatorReleaseRunbookGate || runOperatorReleaseRunbookGate)({
+  const operatorRunbook = (options.operatorRunbook || options.operator_runbook || (options.runOperatorReleaseRunbookGate || runOperatorReleaseRunbookGate)({
     yoloRoot,
     requestedOperations,
     dogfoodReport: dogfoodPublicationEvidence,
@@ -208,8 +297,8 @@ export function runManualExternalReleaseGate(options = Object()) {
     now: options.now,
     random: options.random,
     providerConfigs: options.providerConfigs,
-  });
-  const postReleaseAudit = options.postReleaseAudit || options.post_release_audit || (options.runPostReleaseAuditGate || runPostReleaseAuditGate)({
+  })) as ReleaseComponentResult;
+  const postReleaseAudit = (options.postReleaseAudit || options.post_release_audit || (options.runPostReleaseAuditGate || runPostReleaseAuditGate)({
     yoloRoot,
     packageJson,
     operatorRunbook,
@@ -222,7 +311,7 @@ export function runManualExternalReleaseGate(options = Object()) {
     now: options.now,
     random: options.random,
     providerConfigs: options.providerConfigs,
-  });
+  })) as ReleaseComponentResult;
   const stableGraduation = options.stableGraduation || options.stable_graduation || (options.runStableGraduationGate || runStableGraduationGate)({
     yoloRoot,
     packageJson,

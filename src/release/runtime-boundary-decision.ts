@@ -1,26 +1,89 @@
 import { resolve } from "node:path";
 import { inspectRuntimeBoundaryCandidate } from "./runtime-boundary-candidate.js";
+import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const RUNTIME_BOUNDARY_DECISION_SCHEMA_VERSION = "1.0";
 
-function check(code, passed, message, extra = Object()) {
+export interface RuntimeBoundaryDecisionPlan extends ReleaseRecord {
+  yolo_root: string;
+  target_export: string;
+  writes_workspace: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  executes_billable_provider: boolean;
+  applies_boundary_change: boolean;
+}
+
+export interface RuntimeBoundaryCandidateSummary extends ReleaseRecord {
+  export?: string;
+  current_tier?: string;
+  proposed_tier?: string;
+}
+
+export interface RuntimeBoundaryCandidateResult extends ReleaseRecord {
+  status: string;
+  candidate?: RuntimeBoundaryCandidateSummary;
+  blockers?: ReleaseIssue[];
+  suggested_changes?: unknown[];
+}
+
+export interface RuntimeBoundaryDecisionRecord extends ReleaseRecord {
+  approved?: boolean;
+  approver?: string;
+  operator?: string;
+  approved_at?: string;
+  executed_at?: string;
+  target_export?: string;
+  current_tier?: string;
+  proposed_tier?: string;
+  stability_reviewed?: boolean;
+  rollback_plan_approved?: boolean;
+  rollback_plan?: string;
+  rollback_plan_path?: string;
+}
+
+export interface RuntimeBoundaryDecisionOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  targetExport?: string;
+  target_export?: string;
+  expectedTarget?: string;
+  expected_target?: string;
+  packageJson?: ReleaseRecord;
+  apiBoundary?: ReleaseRecord;
+  api_boundary?: ReleaseRecord;
+  runtimeApiFreeze?: ReleaseRecord;
+  runtime_api_freeze?: ReleaseRecord;
+  inspectRunnerRuntimeApiFreeze?: (options: ReleaseRecord) => ReleaseRecord;
+  maxRunnerCoreLines?: number;
+  max_runner_core_lines?: number;
+  plan?: RuntimeBoundaryDecisionPlan;
+  candidate?: ReleaseRecord;
+  runtimeBoundaryCandidate?: ReleaseRecord;
+  runtime_boundary_candidate?: ReleaseRecord;
+  decisionRecord?: RuntimeBoundaryDecisionRecord | null;
+  decision_record?: RuntimeBoundaryDecisionRecord | null;
+}
+
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function isObject(value) {
+function isObject(value: unknown): value is ReleaseRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function nonEmptyString(value) {
+function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function validTimestamp(value) {
+function validTimestamp(value: unknown): boolean {
   return nonEmptyString(value) && !Number.isNaN(Date.parse(value));
 }
 
-function decisionApproved(record = Object(), candidate = Object()) {
-  const summary = isObject(record) ? record : {};
+function decisionApproved(record: unknown = Object(), candidate: RuntimeBoundaryCandidateSummary = Object()): boolean {
+  const summary: RuntimeBoundaryDecisionRecord = isObject(record) ? record : {};
   return summary.approved === true
     && nonEmptyString(summary.approver || summary.operator)
     && validTimestamp(summary.approved_at || summary.executed_at)
@@ -32,7 +95,7 @@ function decisionApproved(record = Object(), candidate = Object()) {
     && nonEmptyString(summary.rollback_plan || summary.rollback_plan_path);
 }
 
-export function buildRuntimeBoundaryDecisionPlan(options = Object()) {
+export function buildRuntimeBoundaryDecisionPlan(options: RuntimeBoundaryDecisionOptions = Object()): RuntimeBoundaryDecisionPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const targetExport = options.targetExport || options.target_export || "./runtime";
   return {
@@ -64,13 +127,13 @@ export function buildRuntimeBoundaryDecisionPlan(options = Object()) {
   };
 }
 
-export function runRuntimeBoundaryDecisionGate(options = Object()) {
+export function runRuntimeBoundaryDecisionGate(options: RuntimeBoundaryDecisionOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const plan = options.plan || buildRuntimeBoundaryDecisionPlan({
     yoloRoot,
     targetExport: options.targetExport || options.target_export,
   });
-  const candidate = options.candidate || options.runtimeBoundaryCandidate || options.runtime_boundary_candidate || inspectRuntimeBoundaryCandidate({
+  const candidate = (options.candidate || options.runtimeBoundaryCandidate || options.runtime_boundary_candidate || inspectRuntimeBoundaryCandidate({
     yoloRoot,
     targetExport: plan.target_export,
     expectedTarget: options.expectedTarget || options.expected_target,
@@ -79,9 +142,9 @@ export function runRuntimeBoundaryDecisionGate(options = Object()) {
     runtimeApiFreeze: options.runtimeApiFreeze || options.runtime_api_freeze,
     inspectRunnerRuntimeApiFreeze: options.inspectRunnerRuntimeApiFreeze,
     maxRunnerCoreLines: options.maxRunnerCoreLines || options.max_runner_core_lines,
-  });
+  })) as RuntimeBoundaryCandidateResult;
   const decisionRecord = options.decisionRecord || options.decision_record || null;
-  const candidateSummary = candidate.candidate || {};
+  const candidateSummary: RuntimeBoundaryCandidateSummary = candidate.candidate || {};
   const approved = decisionApproved(decisionRecord, candidateSummary);
 
   const checks = [

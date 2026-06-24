@@ -1,5 +1,6 @@
 import { execFileSync as defaultExecFileSync } from "node:child_process";
 import { resolve } from "node:path";
+import type { ReleaseIssue } from "./readiness.js";
 
 export const RELEASE_CHANGE_DOMAINS = Object.freeze([
   "runner/finalize",
@@ -15,6 +16,78 @@ export const RELEASE_CHANGE_DOMAINS = Object.freeze([
 const RISK_ORDER = Object.freeze(["none", "low", "medium", "high", "critical"]);
 const SOURCE_OR_TEST_RE = /^(src|bin|lib|tools|__tests__|tests|hooks|scripts|fixtures)\//;
 const CODE_FILE_RE = /\.(cjs|cts|js|jsx|mjs|mts|ts|tsx|json|yaml|yml)$/i;
+
+export type RiskLevel = "none" | "low" | "medium" | "high" | "critical";
+
+export interface GitStatusEntry {
+  path: string;
+  old_path: string | null;
+  status: string;
+  index_status?: string;
+  worktree_status?: string;
+  kind: string;
+}
+
+export interface GitDiffNameStatusEntry {
+  path: string;
+  old_path: string | null;
+  status: string;
+}
+
+export interface ReleaseChangeEntryBase extends GitStatusEntry {
+  domain: string;
+  diff_status: string | null;
+  possibly_not_current_round: boolean;
+}
+
+export interface ReleaseChangeEntry extends ReleaseChangeEntryBase {
+  risk_level: RiskLevel;
+}
+
+export interface ChangeGroup {
+  domain: string;
+  files: string[];
+  tracked_modified: string[];
+  untracked: string[];
+  deleted_or_renamed: string[];
+  risk_level: RiskLevel;
+  recommendation: string;
+}
+
+export type ChangeGroups = Record<string, ChangeGroup>;
+
+export interface RiskOptions {
+  allowUntracked?: boolean;
+  allowUnknown?: boolean;
+}
+
+export interface ErrorManifestOptions {
+  rootDir?: string | null;
+  command: string;
+  error: unknown;
+}
+
+export interface BuildChangeManifestOptions {
+  rootDir?: string;
+  statusOutput?: string;
+  diffNameStatusOutput?: string;
+  allowUntracked?: boolean;
+  allow_untracked?: boolean;
+  allowUnknown?: boolean;
+  currentRoundFiles?: string[] | null;
+}
+
+export interface ReadChangeManifestOptions extends BuildChangeManifestOptions {
+  execFileSync?: (
+    command: string,
+    args: string[],
+    options: { cwd: string; encoding: "utf8"; stdio: ["pipe", "pipe", "pipe"] },
+  ) => string;
+}
+
+function gitExecFileSync(command: string, args: string[], options: { cwd: string; encoding: "utf8"; stdio: ["pipe", "pipe", "pipe"] }): string {
+  return defaultExecFileSync(command, args, options);
+}
 
 const DOMAIN_RULES = [
   {
@@ -90,30 +163,34 @@ const DOMAIN_RULES = [
   },
 ];
 
-function splitNul(output = "") {
+function splitNul(output: string = ""): string[] {
   return String(output || "").split("\0").filter((part) => part.length > 0);
 }
 
-function normalizePath(filePath = "") {
+function normalizePath(filePath: string = ""): string {
   return String(filePath || "").replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
-function unique(items = []) {
+function unique<T>(items: T[] = []): T[] {
   return [...new Set(items.filter(Boolean))];
 }
 
-function highestRisk(risks = []) {
+function highestRisk(risks: RiskLevel[] = []): RiskLevel {
   return risks.reduce((current, risk) =>
     RISK_ORDER.indexOf(risk) > RISK_ORDER.indexOf(current) ? risk : current
   , "none");
 }
 
-function commandErrorMessage(error) {
-  const output = `${error?.stdout || ""}${error?.stderr || ""}`.trim();
-  return output || error?.message || String(error || "unknown git error");
+function commandErrorMessage(error: unknown): string {
+  if (error && typeof error === "object") {
+    const record = error as { stdout?: unknown; stderr?: unknown; message?: unknown };
+    const output = `${record.stdout || ""}${record.stderr || ""}`.trim();
+    return output || String(record.message || error || "unknown git error");
+  }
+  return String(error || "unknown git error");
 }
 
-export function classifyReleaseChangeDomain(filePath = "") {
+export function classifyReleaseChangeDomain(filePath: string = ""): string {
   const normalized = normalizePath(filePath);
   for (const rule of DOMAIN_RULES) {
     if (rule.patterns.some((pattern) => pattern.test(normalized))) {
@@ -123,14 +200,14 @@ export function classifyReleaseChangeDomain(filePath = "") {
   return "unknown";
 }
 
-export function isSourceOrTestFile(filePath = "") {
+export function isSourceOrTestFile(filePath: string = ""): boolean {
   const normalized = normalizePath(filePath);
   return SOURCE_OR_TEST_RE.test(normalized) && CODE_FILE_RE.test(normalized);
 }
 
-export function parseGitStatusPorcelainZ(output = "") {
+export function parseGitStatusPorcelainZ(output: string = ""): GitStatusEntry[] {
   const tokens = splitNul(output);
-  const entries = [];
+  const entries: GitStatusEntry[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
     if (token.length < 4) continue;
@@ -159,9 +236,9 @@ export function parseGitStatusPorcelainZ(output = "") {
   return entries;
 }
 
-export function parseGitDiffNameStatusZ(output = "") {
+export function parseGitDiffNameStatusZ(output: string = ""): GitDiffNameStatusEntry[] {
   const tokens = splitNul(output);
-  const entries = [];
+  const entries: GitDiffNameStatusEntry[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const status = tokens[index] || "";
     if (!status) continue;
@@ -178,13 +255,13 @@ export function parseGitDiffNameStatusZ(output = "") {
   return entries;
 }
 
-function isUntrackedFailClosedReleaseFile(entry, allowUntracked) {
+function isUntrackedFailClosedReleaseFile(entry: ReleaseChangeEntryBase, allowUntracked: boolean): boolean {
   return entry.kind === "untracked"
     && !allowUntracked
     && (isSourceOrTestFile(entry.path) || entry.domain === "ci-meta-package");
 }
 
-function riskForEntry(entry, { allowUntracked = false, allowUnknown = false } = Object()) {
+function riskForEntry(entry: ReleaseChangeEntryBase, { allowUntracked = false, allowUnknown = false }: RiskOptions = Object()): RiskLevel {
   if (entry.domain === "unknown" && !allowUnknown) return "critical";
   if (entry.kind === "deleted") return "critical";
   if (isUntrackedFailClosedReleaseFile(entry, allowUntracked)) return "critical";
@@ -195,8 +272,8 @@ function riskForEntry(entry, { allowUntracked = false, allowUnknown = false } = 
   return "medium";
 }
 
-function blockersForEntry(entry, { allowUntracked = false, allowUnknown = false } = Object()) {
-  const blockers = [];
+function blockersForEntry(entry: ReleaseChangeEntry, { allowUntracked = false, allowUnknown = false }: RiskOptions = Object()): ReleaseIssue[] {
+  const blockers: ReleaseIssue[] = [];
   if (entry.domain === "unknown" && !allowUnknown) {
     blockers.push({
       code: "UNKNOWN_CHANGE_DOMAIN",
@@ -229,8 +306,8 @@ function blockersForEntry(entry, { allowUntracked = false, allowUnknown = false 
   return blockers;
 }
 
-function emptyGroups() {
-  return Object.fromEntries(RELEASE_CHANGE_DOMAINS.map((domain) => [
+function emptyGroups(): ChangeGroups {
+  return Object.fromEntries(RELEASE_CHANGE_DOMAINS.map((domain): [string, ChangeGroup] => [
     domain,
     {
       domain,
@@ -246,7 +323,7 @@ function emptyGroups() {
   ]));
 }
 
-function errorManifest({ rootDir, command, error }) {
+function errorManifest({ rootDir, command, error }: ErrorManifestOptions) {
   const message = commandErrorMessage(error);
   const blocker = {
     code: "GIT_CHANGE_PROVENANCE_UNAVAILABLE",
@@ -283,7 +360,7 @@ export function buildReleaseCandidateChangeManifest({
   allow_untracked = false,
   allowUnknown = false,
   currentRoundFiles = null,
-} = Object()) {
+}: BuildChangeManifestOptions = Object()) {
   const effectiveAllowUntracked = allowUntracked === true || allow_untracked === true;
   const diffByPath = new Map(parseGitDiffNameStatusZ(diffNameStatusOutput).map((entry) => [entry.path, entry]));
   const currentRoundSet = Array.isArray(currentRoundFiles)
@@ -358,12 +435,12 @@ export function buildReleaseCandidateChangeManifest({
 
 export function readReleaseCandidateChangeManifest({
   rootDir = process.cwd(),
-  execFileSync = defaultExecFileSync,
+  execFileSync = gitExecFileSync,
   allowUntracked = false,
   allow_untracked = false,
   allowUnknown = false,
   currentRoundFiles = null,
-} = Object()) {
+}: ReadChangeManifestOptions = Object()) {
   const effectiveAllowUntracked = allowUntracked === true || allow_untracked === true;
   const resolvedRoot = resolve(rootDir);
   try {
