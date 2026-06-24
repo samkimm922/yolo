@@ -12,6 +12,7 @@ export type RunnerBatteryCase = {
   id: string;
   expect: RunnerExpectation;          // "done" → post-conditions must all pass
   description: string;
+  kind?: "post_conditions" | "strict_typecheck_error_count";
   // Files committed as the BASE state (before the "task" runs).
   baseFiles: Record<string, string>;
   // Files written AFTER base (the "task's" edits). Omit to leave base untouched.
@@ -422,5 +423,14 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
         { id: "POST-TSC", type: "no_new_type_errors", severity: "FAIL", params: { command: "node tsc.js" } },
       ],
     },
+  },
+  {
+    id: "strict_typecheck_error_count",
+    expect: "done",
+    description:
+      "The repo must enforce a strict TypeScript error-count ratchet so broad non-strict compilation cannot hide new strict-mode errors.",
+    kind: "strict_typecheck_error_count",
+    baseFiles: {},
+    task: {},
   },
 ];

@@ -91,7 +91,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && tsx scripts/copy-runtime-assets.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit && npm run strict-typecheck-error-count -- --check",
+    "strict-typecheck-error-count": "node --import tsx scripts/strict-typecheck-error-count.ts",
     "typecheck:sdk": "node --import tsx scripts/typecheck-sdk.ts",
     "runner": "npm run build --silent && node ./dist/runner.js",
     "pi": "npm run build --silent && node ./dist/bin/yolo-pi.js",

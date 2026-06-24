@@ -1,0 +1,5 @@
+{
+  "max_errors": 2494,
+  "command": "tsc -p tsconfig.json --noEmit --strict --pretty false",
+  "updated_at": "2026-06-24T00:39:44.000Z"
+}

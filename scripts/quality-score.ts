@@ -11,7 +11,7 @@
 // The battery is fixed so Q is comparable across commits. A code fix can only raise Q
 // (or hold it). Expanding the battery is a separate, deliberate step that may lower Q to
 // expose new territory.
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -140,6 +140,22 @@ function runAtomicityCase(testCase: AtomicityBatteryCase): CaseResult {
 }
 
 function runRunnerCase(testCase: RunnerBatteryCase): CaseResult {
+  if (testCase.kind === "strict_typecheck_error_count") {
+    const result = spawnSync("npm", ["run", "strict-typecheck-error-count", "--", "--check"], {
+      cwd: ROOT,
+      encoding: "utf8",
+    });
+    const detected = result.status === 0 ? "done" : "not_done";
+    const correct = detected === testCase.expect;
+    return {
+      id: testCase.id,
+      category: "runner_outcome_accuracy",
+      expect: testCase.expect,
+      actualExit: result.status ?? 1,
+      actualStatus: detected,
+      correct,
+    };
+  }
   const root = setupProject(testCase.baseFiles);
   const originalPath = process.env.PATH;
   const originalBuildTest = config.build?.test;
