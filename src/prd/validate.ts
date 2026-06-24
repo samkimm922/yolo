@@ -16,17 +16,81 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { ErrorObject } from 'ajv';
 import { readJsonFileBounded } from '../lib/bounded-read.js';
+import { asRecord, errorMessage, isRecord, type UnknownRecord } from "./condition-catalog.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 
+type JsonSchema = unknown;
+type AjvValidateFunction = {
+  (data: unknown): boolean;
+  errors?: ErrorObject[] | null;
+};
+type AjvInstance = {
+  compile(schema: JsonSchema): AjvValidateFunction;
+};
+type AjvRuntimeConstructor = new (options?: {
+  allErrors?: boolean;
+  strict?: boolean;
+  validateFormats?: boolean;
+}) => AjvInstance;
+
+function isAjvConstructor(value: unknown): value is AjvRuntimeConstructor {
+  return typeof value === "function";
+}
+
+type ValidateOptions = UnknownRecord & {
+  ajv?: AjvInstance;
+  schema?: JsonSchema;
+};
+
+type ValidationErrorDetail = {
+  path: string;
+  keyword: string;
+  message?: string;
+  params?: unknown;
+};
+
+type ValidationSummary = {
+  missing_required: number;
+  wrong_enum: number;
+  wrong_type: number;
+  pattern_fail: number;
+  unsafe_control_chars?: number;
+};
+
+type ValidatePrdResult = UnknownRecord & {
+  ok: boolean;
+  code?: string;
+  details?: ValidationErrorDetail[];
+  error?: string;
+  file?: string;
+  summary?: ValidationSummary;
+  warnings?: string[];
+};
+
+type ValidateAllResult = {
+  [key: string]: unknown;
+  passed: number;
+  failed: number;
+  results: ValidatePrdResult[];
+};
+
+type UnsafeControlCharError = ValidationErrorDetail & {
+  params: {
+    allowed_controls: string[];
+  };
+};
+
 // 动态加载 ajv
-let Ajv;
+let Ajv: AjvRuntimeConstructor | null;
 try {
   const ajvMod = await import('ajv');
-  Ajv = ajvMod.default;
+  const defaultExport: unknown = ajvMod.default;
+  Ajv = isAjvConstructor(defaultExport) ? defaultExport : null;
 } catch {
   if (isMain) console.error('[validate-prd] ajv 未安装，跳过验证');
   Ajv = null;
@@ -34,21 +98,21 @@ try {
 
 const SCHEMA_PATH = resolve(PACKAGE_ROOT, 'schemas', 'prd-v2.schema.json');
 
-export function loadSchema() {
+export function loadSchema(): JsonSchema | null {
   if (!existsSync(SCHEMA_PATH)) {
     console.error(`[validate-prd] Schema 文件不存在: ${SCHEMA_PATH}`);
     return null;
   }
   try {
-    return JSON.parse(readFileSync(SCHEMA_PATH, 'utf-8'));
+    return JSON.parse(readFileSync(SCHEMA_PATH, 'utf-8')) as JsonSchema;
   } catch (e) {
-    console.error(`[validate-prd] Schema 解析失败: ${e.message}`);
+    console.error(`[validate-prd] Schema 解析失败: ${errorMessage(e)}`);
     return null;
   }
 }
 
 // ── AJV 错误消息中文化 ────────────────────────────────────────────
-const ERROR_MESSAGES_ZH = {
+const ERROR_MESSAGES_ZH: Record<string, string> = {
   "must be equal to constant": "值必须等于",
   "must match pattern": "格式不符合规则",
   "must have required property": "缺少必填字段",
@@ -64,7 +128,7 @@ const ERROR_MESSAGES_ZH = {
   "must NOT be longer than": "长度不能超过",
 };
 
-export function translateAjvError(err) {
+export function translateAjvError(err: ErrorObject | ValidationErrorDetail) {
   let zh = err.message || "";
   for (const [en, cn] of Object.entries(ERROR_MESSAGES_ZH)) {
     if (zh.includes(en)) {
@@ -72,32 +136,32 @@ export function translateAjvError(err) {
       break;
     }
   }
-  const path = err.instancePath || "";
+  const path = "instancePath" in err ? err.instancePath || "" : err.path || "";
   const params = err.params ? JSON.stringify(err.params) : "";
   return `字段 ${path || "(根)"}: ${zh} ${params}`;
 }
 
-export function validateFile(prdPath, schema, ajv) {
+export function validateFile(prdPath: string, schema: JsonSchema, ajv: AjvInstance): ValidatePrdResult {
   if (!existsSync(prdPath)) {
     return { ok: false, error: `文件不存在: ${prdPath}` };
   }
 
   let prd;
   try {
-    prd = readJsonFileBounded(prdPath, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
+    prd = readJsonFileBounded<unknown>(prdPath, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   } catch (e) {
-    return { ok: false, error: `JSON 解析失败: ${e.message}` };
+    return { ok: false, error: `JSON 解析失败: ${errorMessage(e)}` };
   }
 
   return validatePrdDocument(prd, schema, ajv, { file: prdPath });
 }
 
-export function validatePrdDocument(prd, schema, ajv, options = Object()) {
+export function validatePrdDocument(prd: unknown, schema: JsonSchema, ajv: AjvInstance, options: UnknownRecord = {}): ValidatePrdResult {
   const validate = ajv.compile(schema);
   const valid = validate(prd);
 
   if (!valid) {
-    const errors = validate.errors.map(e => ({
+    const errors: ValidationErrorDetail[] = (validate.errors || []).map((e: ErrorObject) => ({
       path: e.instancePath || '(root)',
       keyword: e.keyword,
       message: e.message,
@@ -140,17 +204,25 @@ export function validatePrdDocument(prd, schema, ajv, options = Object()) {
   }
 
   // 额外语义检查（Schema 覆盖不到的逻辑）
-  const warnings = [];
+  const warnings: string[] = [];
 
   // 检查 condition.type 是否有对应 EVALUATORS 实现
   // 从 schema 动态读取 condition type 枚举
-  let knownEvaluatorTypes = [];
+  let knownEvaluatorTypes: string[] = [];
   try {
     const schemaRaw = readFileSync(SCHEMA_PATH, 'utf8');
-    const schemaObj = JSON.parse(schemaRaw);
-    knownEvaluatorTypes = schemaObj['x-vocabulary']?.conditionType
-      || schemaObj.properties?.tasks?.items?.properties?.pre_conditions?.items?.properties?.type?.enum
-      || [];
+    const schemaObj = asRecord(JSON.parse(schemaRaw) as unknown);
+    const vocabulary = asRecord(schemaObj["x-vocabulary"]);
+    const properties = asRecord(schemaObj.properties);
+    const tasks = asRecord(properties.tasks);
+    const items = asRecord(tasks.items);
+    const taskProperties = asRecord(items.properties);
+    const preConditions = asRecord(taskProperties.pre_conditions);
+    const preConditionItems = asRecord(preConditions.items);
+    const preConditionProperties = asRecord(preConditionItems.properties);
+    const conditionType = asRecord(preConditionProperties.type);
+    const types = vocabulary.conditionType || conditionType.enum || [];
+    knownEvaluatorTypes = Array.isArray(types) ? types.map(String) : [];
   } catch {
     // 硬编码 fallback（仅 schema 文件损坏时使用）
     knownEvaluatorTypes = [
@@ -165,19 +237,25 @@ export function validatePrdDocument(prd, schema, ajv, options = Object()) {
     ];
   }
 
-  for (const task of prd.tasks || []) {
+  const prdRecord = asRecord(prd);
+  const prdTasks = Array.isArray(prdRecord.tasks) ? prdRecord.tasks : [];
+  for (const taskValue of prdTasks) {
+    const task = asRecord(taskValue);
     // 检查 task ID 格式
-    if (task.id && !/^[A-Z]+-[A-Z0-9-]+/.test(task.id)) {
+    if (typeof task.id === "string" && !/^[A-Z]+-[A-Z0-9-]+/.test(task.id)) {
       warnings.push(`${task.id}: ID 格式不标准，建议 TYPE-SUBSYSTEM-NUMBER`);
     }
 
     // 检查条件类型
+    const preConditions = Array.isArray(task.pre_conditions) ? task.pre_conditions : [];
+    const postConditions = Array.isArray(task.post_conditions) ? task.post_conditions : [];
     const allConds = [
-      ...(task.pre_conditions || []),
-      ...(task.post_conditions || []),
+      ...preConditions,
+      ...postConditions,
     ];
-    for (const cond of allConds) {
-      if (cond.type && !knownEvaluatorTypes.includes(cond.type)) {
+    for (const condValue of allConds) {
+      const cond = asRecord(condValue);
+      if (typeof cond.type === "string" && !knownEvaluatorTypes.includes(cond.type)) {
         warnings.push(`${task.id}: 未知条件类型 "${cond.type}"，将静默通过`);
       }
     }
@@ -194,19 +272,24 @@ export function validatePrdDocument(prd, schema, ajv, options = Object()) {
 const UNSAFE_CONTROL_CHAR_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u;
 const MAX_CONTROL_CHAR_ERRORS = 25;
 
-function jsonPointerEscape(value) {
+function jsonPointerEscape(value: unknown): string {
   return String(value).replace(/~/g, "~0").replace(/\//g, "~1");
 }
 
-function jsonPointer(path) {
+function jsonPointer(path: string[]): string {
   return path.length > 0 ? `/${path.map(jsonPointerEscape).join("/")}` : "(root)";
 }
 
-function hasUnsafeControlChar(value) {
+function hasUnsafeControlChar(value: string): boolean {
   return UNSAFE_CONTROL_CHAR_PATTERN.test(value);
 }
 
-function collectUnsafeControlCharErrors(value, path = [], errors = [], seen = new WeakSet()) {
+function collectUnsafeControlCharErrors(
+  value: unknown,
+  path: string[] = [],
+  errors: UnsafeControlCharError[] = [],
+  seen = new WeakSet<object>(),
+): UnsafeControlCharError[] {
   if (errors.length >= MAX_CONTROL_CHAR_ERRORS || value == null) return errors;
   if (typeof value === "string") {
     if (hasUnsafeControlChar(value)) {
@@ -241,12 +324,12 @@ function collectUnsafeControlCharErrors(value, path = [], errors = [], seen = ne
   return errors;
 }
 
-export function checkAllPrds(schema, ajv) {
+export function checkAllPrds(schema: JsonSchema, ajv: AjvInstance): ValidatePrdResult[] {
   const dataDirs = [
     join(PACKAGE_ROOT, 'data', 'prd', 'current'),
     join(PACKAGE_ROOT, 'data', 'prd', 'archive'),
   ];
-  const prdFiles = [];
+  const prdFiles: string[] = [];
 
   for (const dataDir of dataDirs) {
     if (!existsSync(dataDir)) continue;
@@ -257,7 +340,7 @@ export function checkAllPrds(schema, ajv) {
     }
   }
 
-  const results = [];
+  const results: ValidatePrdResult[] = [];
   for (const f of prdFiles) {
     const result = validateFile(f, schema, ajv);
     results.push({ file: f.replace(PACKAGE_ROOT + '/', ''), ...result });
@@ -266,8 +349,9 @@ export function checkAllPrds(schema, ajv) {
   return results;
 }
 
-export function validatePrdPath(prdPath, options = Object()) {
-  if (!Ajv) {
+export function validatePrdPath(prdPath: string, options: ValidateOptions = {}): ValidatePrdResult {
+  const AjvCtor = Ajv;
+  if (!AjvCtor) {
     return {
       ok: false,
       skipped: false,
@@ -278,12 +362,13 @@ export function validatePrdPath(prdPath, options = Object()) {
   }
   const schema = options.schema || loadSchema();
   if (!schema) return { ok: false, error: "Schema 文件不存在或无法解析" };
-  const ajv = options.ajv || new Ajv({ allErrors: true, strict: false, validateFormats: false });
+  const ajv = options.ajv || new AjvCtor({ allErrors: true, strict: false, validateFormats: false });
   return validateFile(resolve(prdPath), schema, ajv);
 }
 
-export function validatePrdObject(prd, options = Object()) {
-  if (!Ajv) {
+export function validatePrdObject(prd: unknown, options: ValidateOptions = {}): ValidatePrdResult {
+  const AjvCtor = Ajv;
+  if (!AjvCtor) {
     return {
       ok: false,
       skipped: false,
@@ -294,12 +379,13 @@ export function validatePrdObject(prd, options = Object()) {
   }
   const schema = options.schema || loadSchema();
   if (!schema) return { ok: false, error: "Schema 文件不存在或无法解析" };
-  const ajv = options.ajv || new Ajv({ allErrors: true, strict: false, validateFormats: false });
+  const ajv = options.ajv || new AjvCtor({ allErrors: true, strict: false, validateFormats: false });
   return validatePrdDocument(prd, schema, ajv, options);
 }
 
-export function validateAllPrds(options = Object()) {
-  if (!Ajv) {
+export function validateAllPrds(options: ValidateOptions = {}): ValidateAllResult {
+  const AjvCtor = Ajv;
+  if (!AjvCtor) {
     return {
       passed: 0,
       failed: 1,
@@ -313,7 +399,7 @@ export function validateAllPrds(options = Object()) {
   }
   const schema = options.schema || loadSchema();
   if (!schema) return { passed: 0, failed: 1, results: [{ ok: false, error: "Schema 文件不存在或无法解析" }] };
-  const ajv = options.ajv || new Ajv({ allErrors: true, strict: false, validateFormats: false });
+  const ajv = options.ajv || new AjvCtor({ allErrors: true, strict: false, validateFormats: false });
   const results = checkAllPrds(schema, ajv);
   return {
     passed: results.filter((result) => result.ok).length,
@@ -322,7 +408,7 @@ export function validateAllPrds(options = Object()) {
   };
 }
 
-function printSingleResult(prdPath, result) {
+function printSingleResult(prdPath: string, result: ValidatePrdResult) {
   if (result.ok) {
     console.log(`[validate-prd] ✓ ${prdPath} 合规`);
   } else {

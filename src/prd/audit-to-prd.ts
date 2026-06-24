@@ -11,13 +11,119 @@ import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import { isBusinessFile } from "../runtime/execution/change-set.js";
 import { readJsonFileBounded } from "../lib/bounded-read.js";
+import {
+  asRecord,
+  errorMessage,
+  isRecord,
+  type ConditionParams,
+  type PrdCondition,
+  type PrdScope,
+  type PrdTask,
+  type UnknownRecord,
+} from "./condition-catalog.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 
-function extractArea(files) {
-  const areas = new Set();
+type KnownFindingSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+type FindingSeverity = string;
+type FindingKind = string;
+
+const SEVERITY_ORDER: Record<KnownFindingSeverity, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+function severityRank(severity: string | undefined): number {
+  return severity && Object.hasOwn(SEVERITY_ORDER, severity)
+    ? SEVERITY_ORDER[severity as KnownFindingSeverity]
+    : SEVERITY_ORDER.LOW;
+}
+
+type AuditFinding = UnknownRecord & {
+  id?: string;
+  kind?: FindingKind;
+  type?: string;
+  area?: string;
+  severity?: FindingSeverity;
+  files?: string[];
+  description: string;
+  suggestion?: string;
+  scope?: PrdScope;
+  pre_conditions?: PrdCondition[];
+  post_conditions?: PrdCondition[];
+};
+
+type AuditInput = UnknownRecord & {
+  findings?: AuditFinding[];
+};
+
+type AuditToPrdOptions = UnknownRecord & {
+  approvedDemand?: unknown;
+  approvedDemandContract?: unknown;
+  approved_demand?: unknown;
+  approved_demand_contract?: unknown;
+  cwd?: string;
+  demandContract?: unknown;
+  demand_contract?: unknown;
+  description?: string;
+  generated_by?: string;
+  id?: string;
+  output?: string;
+  project?: UnknownRecord;
+  source?: string;
+  title?: string;
+};
+
+type FindingGroups = {
+  mechanical: Map<string | undefined, AuditFinding[]>;
+  atomic_fix: Map<string, AuditFinding[]>;
+  atomic_feature: AuditFinding[];
+};
+
+type GeneratedDemandContractInput = {
+  tasks?: PrdTask[];
+  source?: string;
+};
+
+type DemandTargetFact = UnknownRecord & {
+  file: string;
+  status: string;
+  needs_verification?: boolean;
+};
+
+type DemandRecord = UnknownRecord & {
+  approval: UnknownRecord & {
+    approved: boolean;
+    effective_for_prd: boolean;
+    approval_source?: string;
+  };
+  project_facts: UnknownRecord & {
+    target_files: DemandTargetFact[];
+    assumptions?: unknown[];
+  };
+};
+
+type DemandContractResult = {
+  source: unknown;
+  demand_contract_required: true;
+  demand: DemandRecord;
+  execution_readiness: UnknownRecord;
+};
+
+type ConvertAuditToPrdFailure = {
+  ok: false;
+  error: string;
+  prd: null;
+  output: null;
+  counts: {
+    tasks: number;
+    mechanical: number;
+    atomic_fix: number;
+    atomic_feature: number;
+  };
+};
+
+function extractArea(files: readonly unknown[]): string {
+  const areas = new Set<string>();
   for (const file of files) {
     const match = String(file).match(/src\/(?:services|types|hooks|pages|components)\/([^/]+)/);
     if (match) areas.add(match[1].replace(/\.[^.]+$/, ""));
@@ -25,29 +131,30 @@ function extractArea(files) {
   return [...areas].sort().join("+") || "unknown";
 }
 
-function makeTaskId(prefix, index) {
+function makeTaskId(prefix: string, index: number): string {
   return `${prefix}-AUTO-${String(index).padStart(3, "0")}`;
 }
 
-function isBusinessCode(file, options = Object()) {
+function isBusinessCode(file: string, options: UnknownRecord = {}): boolean {
   return isBusinessFile(file, options);
 }
 
-function normalizeTargetPath(value) {
+function normalizeTargetPath(value: unknown): string {
   return String(value || "")
     .replace(/\\/g, "/")
     .replace(/^\.\//, "")
     .replace(/:\d+(?:-\d+)?$/, "");
 }
 
-function normalizeConditionList(conditions = [], prefix) {
+function normalizeConditionList(conditions: readonly unknown[] = [], prefix: string): PrdCondition[] {
   return conditions.map((condition, index) => {
     if (condition && typeof condition === "object" && !Array.isArray(condition)) {
+      const conditionRecord = condition as PrdCondition;
       return {
         severity: "FAIL",
-        ...condition,
-        id: condition.id || `${prefix}-${index + 1}`,
-        params: condition.params || {},
+        ...conditionRecord,
+        id: conditionRecord.id || `${prefix}-${index + 1}`,
+        params: (conditionRecord.params || {}) as ConditionParams,
       };
     }
 
@@ -61,7 +168,7 @@ function normalizeConditionList(conditions = [], prefix) {
   });
 }
 
-function collectConditionFiles(value, out = []) {
+function collectConditionFiles(value: unknown, out: string[] = []): string[] {
   if (!value) return out;
   if (typeof value === "string") {
     out.push(normalizeTargetPath(value));
@@ -72,15 +179,16 @@ function collectConditionFiles(value, out = []) {
     return out;
   }
   if (typeof value === "object") {
+    const record = asRecord(value);
     for (const key of ["file", "path", "target", "target_file", "file_path"]) {
-      if (value[key]) collectConditionFiles(value[key], out);
+      if (record[key]) collectConditionFiles(record[key], out);
     }
   }
   return out;
 }
 
-function targetCoverageFiles(conditions = []) {
-  const files = [];
+function targetCoverageFiles(conditions: readonly PrdCondition[] = []): Set<string> {
+  const files: string[] = [];
   for (const condition of conditions) {
     if (condition?.severity !== "FAIL" || condition.type === "acceptance_criteria") continue;
     const params = condition.params || {};
@@ -104,19 +212,19 @@ const BEHAVIOR_VERIFICATION_CONDITION_TYPES = new Set([
   "tests_pass",
 ]);
 
-function conditionVerifyCommand(condition) {
+function conditionVerifyCommand(condition: PrdCondition): string {
   const params = condition?.params || {};
   return String(condition?.verify_command || condition?.verifyCommand || params.verify_command || params.verifyCommand || "").trim();
 }
 
-function hasBehaviorVerificationCondition(conditions = []) {
+function hasBehaviorVerificationCondition(conditions: readonly PrdCondition[] = []): boolean {
   return conditions.some((condition) =>
     condition?.severity === "FAIL" &&
-    (BEHAVIOR_VERIFICATION_CONDITION_TYPES.has(condition.type) || conditionVerifyCommand(condition))
+    (Boolean(condition.type && BEHAVIOR_VERIFICATION_CONDITION_TYPES.has(condition.type)) || Boolean(conditionVerifyCommand(condition)))
   );
 }
 
-function withTargetCoverageConditions(conditions, targetFiles, taskId, kind) {
+function withTargetCoverageConditions(conditions: PrdCondition[], targetFiles: readonly string[], taskId: string, kind: FindingKind): PrdCondition[] {
   const normalizedTargets = targetFiles.map(normalizeTargetPath).filter(Boolean);
   const covered = targetCoverageFiles(conditions);
   const next = [...conditions];
@@ -136,7 +244,7 @@ function withTargetCoverageConditions(conditions, targetFiles, taskId, kind) {
   return next;
 }
 
-function withBehaviorVerificationConditions(conditions, taskId) {
+function withBehaviorVerificationConditions(conditions: PrdCondition[], taskId: string): PrdCondition[] {
   if (hasBehaviorVerificationCondition(conditions)) return conditions;
   return [
     ...conditions,
@@ -160,17 +268,17 @@ function demandQualityReport(status = "pass") {
   };
 }
 
-function uniqueTaskTargetFiles(tasks = []) {
+function uniqueTaskTargetFiles(tasks: readonly PrdTask[] = []): string[] {
   return [...new Set(tasks.flatMap((task) =>
-    (task.scope?.targets || []).map((target) => target.file).filter(Boolean)
+    (task.scope?.targets || []).map((target) => target.file).filter((file): file is string => Boolean(file))
   ))];
 }
 
-function cloneJson(value) {
-  return value ? JSON.parse(JSON.stringify(value)) : value;
+function cloneJson<T>(value: T): T {
+  return value ? JSON.parse(JSON.stringify(value)) as T : value;
 }
 
-function explicitDemandContractOption(options = Object()) {
+function explicitDemandContractOption(options: AuditToPrdOptions): unknown {
   return options.approvedDemandContract
     || options.approved_demand_contract
     || options.demandContract
@@ -180,34 +288,38 @@ function explicitDemandContractOption(options = Object()) {
     || null;
 }
 
-function requireApprovedDemandContract(input, tasks = []) {
+function requireApprovedDemandContract(input: unknown, tasks: readonly PrdTask[] = []): DemandContractResult | null {
   if (!input) return null;
-  const contract = cloneJson(input);
-  const demand = contract.demand || null;
-  const readiness = contract.execution_readiness || null;
+  const contract = asRecord(cloneJson(input));
+  const demand = asRecord(contract.demand);
+  const readiness = asRecord(contract.execution_readiness);
+  const demandReadiness = asRecord(demand.execution_readiness);
   const qualityStatuses = [
-    demand?.quality_report?.status,
-    demand?.execution_readiness?.quality_report?.status,
-    demand?.execution_readiness?.quality_status,
-    readiness?.quality_report?.status,
-    readiness?.quality_status,
+    asRecord(demand.quality_report).status,
+    asRecord(demandReadiness.quality_report).status,
+    demandReadiness.quality_status,
+    asRecord(readiness.quality_report).status,
+    readiness.quality_status,
   ].filter(Boolean);
   const taskTargets = uniqueTaskTargetFiles(tasks);
+  const projectFacts = asRecord(demand.project_facts);
+  const targetFacts = Array.isArray(projectFacts.target_files) ? projectFacts.target_files.map(asRecord) : [];
   const verifiedTargets = new Set(
-    (demand?.project_facts?.target_files || [])
+    targetFacts
       .filter((fact) => fact?.status === "verified")
       .map((fact) => fact.file)
-      .filter(Boolean),
+      .filter((file): file is string => typeof file === "string" && Boolean(file)),
   );
   const missingVerifiedTargets = taskTargets.filter((file) => !verifiedTargets.has(file));
 
-  if (!demand?.id) {
+  if (!demand.id) {
     throw new Error("approved demand contract requires demand.id");
   }
-  if (demand?.approval?.approved !== true || demand?.approval?.effective_for_prd !== true) {
+  const approval = asRecord(demand.approval);
+  if (approval.approved !== true || approval.effective_for_prd !== true) {
     throw new Error("approved demand contract requires approval.approved=true and effective_for_prd=true");
   }
-  if (readiness?.level !== "L3" || readiness?.afk_ready !== true) {
+  if (readiness.level !== "L3" || readiness.afk_ready !== true) {
     throw new Error("approved demand contract requires execution_readiness level=L3 and afk_ready=true");
   }
   if (!qualityStatuses.length || qualityStatuses.some((status) => status !== "pass")) {
@@ -220,12 +332,12 @@ function requireApprovedDemandContract(input, tasks = []) {
   return {
     source: contract.source || "approved_demand",
     demand_contract_required: true,
-    demand,
+    demand: demand as DemandRecord,
     execution_readiness: readiness,
   };
 }
 
-function buildGeneratedDemandContract({ tasks = [], source = "audit" } = Object()) {
+function buildGeneratedDemandContract({ tasks = [], source = "audit" }: GeneratedDemandContractInput = {}): DemandContractResult {
   const targetFiles = uniqueTaskTargetFiles(tasks);
   const quality = demandQualityReport("blocked");
   return {
@@ -255,20 +367,28 @@ function buildGeneratedDemandContract({ tasks = [], source = "audit" } = Object(
   };
 }
 
-function groupFindings(findings) {
-  const groups = { mechanical: new Map(), atomic_fix: new Map(), atomic_feature: [] };
+function groupFindings(findings: readonly AuditFinding[]): FindingGroups {
+  const groups: FindingGroups = { mechanical: new Map(), atomic_fix: new Map(), atomic_feature: [] };
 
   for (const finding of findings) {
     const kind = finding.kind || "atomic_fix";
     if (kind === "mechanical") {
       const key = finding.type || finding.id;
-      if (!groups.mechanical.has(key)) groups.mechanical.set(key, []);
-      groups.mechanical.get(key).push(finding);
+      let group = groups.mechanical.get(key);
+      if (!group) {
+        group = [];
+        groups.mechanical.set(key, group);
+      }
+      group.push(finding);
     } else if (kind === "atomic_fix") {
       const area = finding.area || extractArea(finding.files || []);
       const key = `${finding.type || "fix"}:${area}`;
-      if (!groups.atomic_fix.has(key)) groups.atomic_fix.set(key, []);
-      groups.atomic_fix.get(key).push(finding);
+      let group = groups.atomic_fix.get(key);
+      if (!group) {
+        group = [];
+        groups.atomic_fix.set(key, group);
+      }
+      group.push(finding);
     } else {
       groups.atomic_feature.push(finding);
     }
@@ -277,12 +397,12 @@ function groupFindings(findings) {
   return groups;
 }
 
-function buildTask(kind, findingsList, index, options = Object()) {
+function buildTask(kind: FindingKind, findingsList: AuditFinding[], index: number, options: AuditToPrdOptions = {}): PrdTask {
   const id = makeTaskId(kind === "mechanical" ? "MECH" : kind === "atomic_fix" ? "FIX" : "FEAT", index);
   const allFiles = [...new Set(findingsList.flatMap((finding) => finding.files || []))];
-  const highestSev = findingsList.reduce((worst, finding) => {
-    const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-    return order[finding.severity] < order[worst] ? finding.severity : worst;
+  const highestSev = findingsList.reduce<string>((worst, finding) => {
+    const severity = finding.severity || "LOW";
+    return severityRank(severity) < severityRank(worst) ? severity : worst;
   }, "LOW");
 
   const first = findingsList[0];
@@ -293,7 +413,7 @@ function buildTask(kind, findingsList, index, options = Object()) {
   const targetFiles = allFiles.map(normalizeTargetPath);
   const allNonBusiness = targetFiles.length > 0 && targetFiles.every((file) => !isBusinessCode(file, options));
   const existingScope = findingsList.find((finding) => finding.scope && finding.scope.targets)?.scope;
-  const scope = existingScope
+  const scope: PrdScope = existingScope
     ? { ...existingScope }
     : { targets: targetFiles.map((file) => ({ file })) };
 
@@ -335,9 +455,9 @@ function buildTask(kind, findingsList, index, options = Object()) {
   };
 }
 
-export function buildPrdFromFindings(findings, options = Object()) {
+export function buildPrdFromFindings(findings: AuditFinding[], options: AuditToPrdOptions = {}) {
   const groups = groupFindings(findings);
-  const tasks = [];
+  const tasks: PrdTask[] = [];
   let taskIndex = 0;
 
   for (const [, group] of groups.mechanical) tasks.push(buildTask("mechanical", group, ++taskIndex, options));
@@ -347,7 +467,7 @@ export function buildPrdFromFindings(findings, options = Object()) {
   const needsContractReview = !explicitDemandContract;
   for (const task of tasks) task.status = needsContractReview ? "needs_contract_review" : "pending";
   const requirements = tasks.map((task) => ({
-    id: task.requirement_ids[0],
+    id: task.requirement_ids?.[0],
     text: task.description || task.title,
     demand_trace: {
       source: "structured_finding",
@@ -356,7 +476,7 @@ export function buildPrdFromFindings(findings, options = Object()) {
     },
   }));
   const designs = tasks.map((task) => ({
-    id: task.design_ids[0],
+    id: task.design_ids?.[0],
     text: `Implement ${task.id} within declared scope and executable gates.`,
   }));
 
@@ -417,9 +537,16 @@ export function buildPrdFromFindings(findings, options = Object()) {
   };
 }
 
-export function convertAuditToPrd(input, options = Object()) {
+type BuildPrdResult = ReturnType<typeof buildPrdFromFindings>;
+type ConvertAuditToPrdSuccess = BuildPrdResult & {
+  ok: true;
+  output: string | null;
+  error?: undefined;
+};
+
+export function convertAuditToPrd(input: string | AuditInput, options: AuditToPrdOptions = {}): ConvertAuditToPrdSuccess | ConvertAuditToPrdFailure {
   const audit = typeof input === "string"
-    ? JSON.parse(readFileSync(resolve(input), "utf8"))
+    ? JSON.parse(readFileSync(resolve(input), "utf8")) as AuditInput
     : input;
   const findings = audit?.findings || [];
 
@@ -440,7 +567,7 @@ export function convertAuditToPrd(input, options = Object()) {
   } catch (error) {
     return {
       ok: false,
-      error: error.message,
+      error: errorMessage(error),
       prd: null,
       output: null,
       counts: { tasks: 0, mechanical: 0, atomic_fix: 0, atomic_feature: 0 },
@@ -455,8 +582,8 @@ export function convertAuditToPrd(input, options = Object()) {
   return { ok: true, ...built, output };
 }
 
-function scanExistingPrds(dirs) {
-  const files = [];
+function scanExistingPrds(dirs: readonly string[]) {
+  const files: Array<{ name: string; path: string }> = [];
   for (const dir of dirs) {
     if (!existsSync(dir)) continue;
     for (const file of readdirSync(dir)) {
@@ -477,7 +604,7 @@ function scanExistingPrds(dirs) {
 function findExistingExecutablePrd() {
   for (const existing of scanExistingPrds([PACKAGE_ROOT, join(PACKAGE_ROOT, "data")])) {
     try {
-      const prd = readJsonFileBounded(existing.path, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
+      const prd = readJsonFileBounded<PrdTask & { tasks?: PrdTask[] }>(existing.path, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
       if (prd.tasks && Array.isArray(prd.tasks) && prd.tasks.length > 0 && prd.tasks[0].status) {
         const pending = prd.tasks.filter((task) => task.status === "pending" || task.status === "running").length;
         return { ...existing, task_count: prd.tasks.length, pending };
@@ -487,12 +614,12 @@ function findExistingExecutablePrd() {
   return null;
 }
 
-function getOpt(args, name, fallback) {
+function getOpt(args: readonly string[], name: string, fallback: string): string {
   const found = args.find((arg) => arg.startsWith(`--${name}=`));
   return found ? found.split("=").slice(1).join("=") : fallback;
 }
 
-function printSummary(result) {
+function printSummary(result: ConvertAuditToPrdSuccess) {
   console.log(
     `Draft PRD 已导入: ${result.output}`,
     `\n  ${result.counts.tasks} 个 task`,

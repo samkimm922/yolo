@@ -1,3 +1,133 @@
+export type UnknownRecord = Record<string, unknown>;
+
+export interface ConditionParams extends UnknownRecord {
+  command?: string;
+  default?: string;
+  file?: unknown;
+  file_path?: unknown;
+  files?: unknown;
+  import_path?: string;
+  max?: unknown;
+  named?: unknown;
+  path?: unknown;
+  paths?: unknown;
+  patterns?: unknown;
+  target?: unknown;
+  target_file?: unknown;
+  targets?: unknown;
+  text?: string;
+  verify_command?: string;
+  verifyCommand?: string;
+}
+
+export interface PrdCondition extends UnknownRecord {
+  id?: string;
+  type?: string;
+  severity?: string;
+  params?: ConditionParams;
+  message?: string;
+  verify_command?: string;
+  verifyCommand?: string;
+  invert?: boolean;
+  file?: unknown;
+  path?: unknown;
+  target?: unknown;
+  target_file?: unknown;
+}
+
+export interface PrdTarget extends UnknownRecord {
+  file?: string;
+}
+
+export interface PrdScope extends UnknownRecord {
+  targets?: PrdTarget[];
+  expected_zero_business_code?: boolean;
+  forbidden_patterns?: unknown[];
+  max_files?: unknown;
+  max_lines_per_file?: unknown;
+}
+
+export interface PrdTask extends UnknownRecord {
+  id?: string;
+  title?: string;
+  description?: string;
+  type?: string;
+  task_kind?: string;
+  priority?: string | number;
+  status?: string;
+  requirement_ids?: string[];
+  design_ids?: string[];
+  depends_on?: string[];
+  scope?: PrdScope;
+  pre_conditions?: PrdCondition[];
+  post_conditions?: PrdCondition[];
+  acceptance_criteria?: string[];
+  evidence_files?: string[];
+}
+
+export interface PrdDocument extends UnknownRecord {
+  id?: string;
+  tasks?: PrdTask[];
+  execution_mode?: string;
+}
+
+export interface EvalResult extends UnknownRecord {
+  passed?: boolean;
+  status?: string;
+  severity?: string;
+  detail?: string;
+  error?: boolean;
+  blocked?: boolean;
+  indeterminate?: boolean;
+  not_run?: boolean;
+  warn?: boolean;
+  manual?: boolean;
+}
+
+export interface ConditionEvaluation extends EvalResult {
+  id?: string;
+  type?: string;
+  passed: boolean;
+  status?: string;
+  severity?: string;
+  detail: string;
+  invert?: boolean;
+  unknown?: boolean;
+}
+
+export interface ConditionEvaluationSummary {
+  allPass: boolean;
+  failConditions: ConditionEvaluation[];
+  warnConditions: ConditionEvaluation[];
+  nonPassConditions: ConditionEvaluation[];
+  results: ConditionEvaluation[];
+}
+
+export function isRecord(value: unknown): value is UnknownRecord {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+export function asRecord(value: unknown): UnknownRecord {
+  return isRecord(value) ? value : {};
+}
+
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+type ConditionCatalogBlocker = {
+  code: string;
+  source: string;
+  target: string;
+  missing: string[];
+};
+
+type ConditionCatalogInput = {
+  catalogTypes?: readonly string[];
+  schemaTypes?: readonly string[];
+  evaluatorTypes?: readonly string[];
+};
+
 export const CONDITION_TYPES = [
   "file_exists",
   "dir_exists",
@@ -55,15 +185,15 @@ export const TARGET_COVERAGE_CONDITION_TYPES = [
   "target_file_modified",
 ];
 
-export function supportedConditionTypes() {
+export function supportedConditionTypes(): string[] {
   return [...CONDITION_TYPES].sort();
 }
 
-function sorted(values = []) {
+function sorted(values: readonly string[] = []): string[] {
   return [...new Set(values)].sort();
 }
 
-function diff(left = [], right = []) {
+function diff(left: readonly string[] = [], right: readonly string[] = []): string[] {
   const rightSet = new Set(right);
   return sorted(left).filter((value) => !rightSet.has(value));
 }
@@ -72,12 +202,12 @@ export function inspectConditionCatalogSync({
   catalogTypes = CONDITION_TYPES,
   schemaTypes = [],
   evaluatorTypes = [],
-} = Object()) {
+}: ConditionCatalogInput = {}) {
   const catalog = sorted(catalogTypes);
   const schema = sorted(schemaTypes);
   const evaluators = sorted(evaluatorTypes);
-  const blockers = [];
-  const addDiff = (code, source, target, missing) => {
+  const blockers: ConditionCatalogBlocker[] = [];
+  const addDiff = (code: string, source: string, target: string, missing: string[]) => {
     if (missing.length > 0) blockers.push({ code, source, target, missing });
   };
 

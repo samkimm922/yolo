@@ -23,27 +23,75 @@ import { parseCommandToArgv } from "../lib/security/command-guard.js";
 import { execArgv, execCommand } from "../lib/security/safe-exec.js";
 import { resolveWithinRoot } from "../lib/security/path-guard.js";
 import { readJsonFileBounded } from "../lib/bounded-read.js";
+import type { EvalParams, EvalResult as EvaluatorResult, TaskScope } from "../lib/evaluators/types.js";
+import {
+  asRecord,
+  errorMessage,
+  isRecord,
+  type ConditionEvaluation,
+  type ConditionEvaluationSummary,
+  type PrdCondition,
+  type PrdDocument,
+  type PrdScope,
+  type PrdTask,
+  type UnknownRecord,
+} from "./condition-catalog.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
 let ROOT = PACKAGE_ROOT;
 
+type ContractOptions = UnknownRecord & {
+  changedFiles?: unknown;
+  changed_files?: unknown;
+  config?: unknown;
+  cwd?: string;
+  root?: string;
+};
+
+type ExecOptions = {
+  timeout?: number;
+};
+
+type ContractExecResult = {
+  ok: boolean;
+  out: string;
+  err: string;
+  commandNotFound: boolean;
+  exitCode: number | null;
+};
+
+type EvaluatorFn = (params: EvalParams, taskScope: TaskScope) => EvaluatorResult;
+
+type StaticImportInfo = {
+  count: number;
+  defaultLocal: string;
+  named: Set<string>;
+};
+
+type ContractCliArgs = Record<string, string | boolean | undefined> & {
+  json?: boolean;
+  phase?: string;
+  prd?: string;
+  task?: string;
+};
+
 /**
  * 允许 gate 在 worktree 中运行时覆盖项目根目录。
  * 调用 evaluatePostConditions / evaluatePreConditions 之前设置。
  */
-export function setContractRoot(newRoot) {
+export function setContractRoot(newRoot: string) {
   ROOT = resolve(newRoot);
 }
 
 // ── 工具函数 ────────────────────────────────────────────────────
 
-function scopedRoot(options = Object()) {
+function scopedRoot(options: ContractOptions = {}): string {
   return resolve(options.root || options.cwd || ROOT);
 }
 
-function createExec(root) {
-  return function exec(cmd, opts = Object()) {
+function createExec(root: string) {
+  return function exec(cmd: unknown, opts: ExecOptions = {}): ContractExecResult {
     const timeout = opts.timeout || 60000;
     // P12.I1: route through safe-exec — untrusted command strings are parsed
     // to argv and rejected if they contain unquoted shell metacharacters.
@@ -70,8 +118,9 @@ function createExec(root) {
   };
 }
 
-function normalizeRepoFilePath(file, root = ROOT) {
-  const raw = typeof file === "string" ? file : file?.file || file?.path || "";
+function normalizeRepoFilePath(file: unknown, root = ROOT): string {
+  const record = asRecord(file);
+  const raw = typeof file === "string" ? file : record.file || record.path || "";
   let normalized = String(raw ?? "").trim().replace(/\\/g, "/");
   if (!normalized) return "";
   const resolved = resolveWithinRoot(root, normalized);
@@ -81,7 +130,7 @@ function normalizeRepoFilePath(file, root = ROOT) {
   return normalized === "." ? "" : normalized;
 }
 
-function changedFilesFromOptions(options = Object(), root = ROOT) {
+function changedFilesFromOptions(options: ContractOptions = {}, root = ROOT): string[] | null {
   const candidates = [
     options.changedFiles,
     options.changed_files,
@@ -91,12 +140,12 @@ function changedFilesFromOptions(options = Object(), root = ROOT) {
   return [...new Set(files.map((file) => normalizeRepoFilePath(file, root)).filter(Boolean))];
 }
 
-function escapeRegExp(value) {
+function escapeRegExp(value: unknown): string {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function collectStaticImports(content, importPath) {
-  const info = { count: 0, defaultLocal: "", named: new Set() };
+function collectStaticImports(content: string, importPath: string): StaticImportInfo {
+  const info: StaticImportInfo = { count: 0, defaultLocal: "", named: new Set() };
   const source = escapeRegExp(importPath);
   const sideEffectImportRe = new RegExp(`\\bimport\\s*['"]${source}['"]`, "g");
   info.count += (content.match(sideEffectImportRe) || []).length;
@@ -123,7 +172,7 @@ function collectStaticImports(content, importPath) {
 
 // ── 条件类型调度表 ──────────────────────────────────────────────
 
-function createEvaluators(root, options = Object()) {
+function createEvaluators(root: string, options: ContractOptions = {}): Record<string, EvaluatorFn> {
   const exec = createExec(root);
   const evaluatorConfig = options.config;
   return {
@@ -159,7 +208,7 @@ function createEvaluators(root, options = Object()) {
             detail: `验收标准 verify_command 被拒绝: ${parsed.detail}`,
           };
         }
-        const ran = execArgv(parsed.argv, { cwd: root, timeout: 60000 });
+        const ran = execArgv(parsed.argv || [], { cwd: root, timeout: 60000 });
         if (ran.ok) {
           return {
             passed: true,
@@ -219,8 +268,8 @@ function createEvaluators(root, options = Object()) {
         modified = [...new Set(
           `${r.out}\n${untracked.out}`
             .split("\n")
-            .map((file) => normalizeRepoFilePath(file, root))
-            .filter(Boolean),
+          .map((file: string) => normalizeRepoFilePath(file, root))
+          .filter(Boolean),
         )];
       }
       // Git-diff-sourced paths demand exact match. Bare `endsWith(targetFile)`
@@ -235,8 +284,8 @@ function createEvaluators(root, options = Object()) {
     },
     required_imports_present: (params, ts) => {
       const files = params.files || params.file
-        ? [params.file || params.files].flat()
-        : ts?.targets?.map((t) => t.file) || [];
+        ? [params.file || params.files].flat().map((file) => String(file))
+        : ts?.targets?.map((t) => t.file).filter((file): file is string => Boolean(file)) || [];
       if (!files.length) {
         return {
           passed: false,
@@ -246,9 +295,9 @@ function createEvaluators(root, options = Object()) {
       }
       const importPath = params.import_path;
       if (!importPath) return { passed: false, detail: "缺少 import_path 参数" };
-      const missingFiles = [];
-      const checkedFiles = [];
-      const unsafeFiles = [];
+      const missingFiles: string[] = [];
+      const checkedFiles: string[] = [];
+      const unsafeFiles: Array<{ file: string; reason?: unknown; detail?: unknown }> = [];
       for (const f of files) {
         const guardResult = resolveWithinRoot(root, f);
         if (!guardResult.ok) {
@@ -256,6 +305,10 @@ function createEvaluators(root, options = Object()) {
           continue;
         }
         const absPath = guardResult.path;
+        if (typeof absPath !== "string") {
+          unsafeFiles.push({ file: f, reason: "missing_path", detail: "Resolved path unavailable" });
+          continue;
+        }
         if (!existsSync(absPath)) {
           missingFiles.push(f);
           continue;
@@ -301,7 +354,7 @@ export function supportedConditionTypes() {
   return catalogSupportedConditionTypes();
 }
 
-export function evaluatorConditionTypes(options = Object()) {
+export function evaluatorConditionTypes(options: ContractOptions = {}) {
   return Object.keys(createEvaluators(scopedRoot(options))).sort();
 }
 
@@ -312,8 +365,8 @@ export function evaluatorConditionTypes(options = Object()) {
 const NON_PASS_STATUSES = new Set(["fail", "warning", "not_run", "indeterminate", "blocked", "error"]);
 const INVERTIBLE_STATUSES = new Set(["pass", "fail"]);
 
-function normalizeEvaluatorStatus(result = Object()) {
-  if (result.status === "pass" || NON_PASS_STATUSES.has(result.status)) return result.status;
+function normalizeEvaluatorStatus(result: Partial<EvaluatorResult> = {}): string {
+  if (result.status === "pass" || (result.status && NON_PASS_STATUSES.has(result.status))) return result.status;
   if (result.error) return "error";
   if (result.blocked) return "blocked";
   if (result.indeterminate) return "indeterminate";
@@ -322,11 +375,11 @@ function normalizeEvaluatorStatus(result = Object()) {
   return result.passed ? "pass" : "fail";
 }
 
-function evaluateCondition(condition, taskScope, options = Object()) {
-  const { id, type, params = Object(), severity = "FAIL", invert = false } =
+function evaluateCondition(condition: PrdCondition, taskScope: PrdScope, options: ContractOptions = {}): ConditionEvaluation {
+  const { id, type, params = {}, severity = "FAIL", invert = false } =
     condition;
 
-  const fn = createEvaluators(scopedRoot(options), options)[condition.type];
+  const fn = createEvaluators(scopedRoot(options), options)[condition.type || ""];
   if (!fn) {
     return {
       id: condition.id || "UNKNOWN",
@@ -338,21 +391,21 @@ function evaluateCondition(condition, taskScope, options = Object()) {
   }
 
   try {
-    const result = fn(params, taskScope);
+    const result = fn(params as EvalParams, taskScope as TaskScope);
     let status = normalizeEvaluatorStatus(result);
     let passed = status === "pass";
     if (invert && INVERTIBLE_STATUSES.has(status)) {
       status = status === "pass" ? "fail" : "pass";
       passed = status === "pass";
     }
-    const { passed: _p, status: _status, ...rest } = result;
+    const { passed: _p, status: _status, detail, ...rest } = result;
     return {
       id,
       type,
       passed,
       status,
       severity,
-      detail: result.detail || "",
+      detail: detail || "",
       invert,
       ...rest,
     };
@@ -363,7 +416,7 @@ function evaluateCondition(condition, taskScope, options = Object()) {
       passed: false,
       status: "error",
       severity,
-      detail: `评估异常: ${e.message}`,
+      detail: `评估异常: ${errorMessage(e)}`,
       error: true,
     };
   }
@@ -373,7 +426,7 @@ function evaluateCondition(condition, taskScope, options = Object()) {
  * 评估一组条件
  * @returns {{ allPass, failConditions, warnConditions, results }}
  */
-function evaluateConditions(conditions, taskScope, options = Object()) {
+function evaluateConditions(conditions: PrdCondition[], taskScope: PrdScope, options: ContractOptions = {}): ConditionEvaluationSummary {
   const results = conditions.map((c) => evaluateCondition(c, taskScope, options));
   const nonPassConditions = results.filter((r) => r.status !== "pass" || r.passed !== true);
   const failConditions = results.filter(
@@ -400,9 +453,9 @@ function evaluateConditions(conditions, taskScope, options = Object()) {
 // also crashes on null elements. Treat malformed elements as absent — a
 // malformed PRD has nothing to evaluate there, and other gates already reject
 // PRDs with no executable FAIL conditions.
-function asConditions(value) {
+function asConditions(value: unknown): PrdCondition[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((item) => item && typeof item === "object" && !Array.isArray(item));
+  return value.filter(isRecord) as PrdCondition[];
 }
 
 // ── 主要 API ────────────────────────────────────────────────────
@@ -410,8 +463,8 @@ function asConditions(value) {
 /**
  * 从 PRD 文件加载任务
  */
-function loadTask(prdPath, taskId) {
-  const prd = readJsonFileBounded(resolve(prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
+function loadTask(prdPath: string, taskId: string): { task: PrdTask; prd: PrdDocument } {
+  const prd = readJsonFileBounded<PrdDocument>(resolve(prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   const task = (prd.tasks || []).find((t) => t.id === taskId);
   if (!task) throw new Error(`PRD 中未找到任务: ${taskId}`);
   return { task, prd };
@@ -420,27 +473,29 @@ function loadTask(prdPath, taskId) {
 /**
  * 评估 pre_conditions（修前验证）
  */
-export function evaluatePreConditions(task, prd, options = Object()) {
-  const conditions = asConditions(task?.pre_conditions);
+export function evaluatePreConditions(task: unknown, prd: unknown, options: ContractOptions = {}) {
+  const taskRecord = asRecord(task) as PrdTask;
+  const conditions = asConditions(taskRecord.pre_conditions);
   if (conditions.length === 0) {
     return { allPass: true, failConditions: [], warnConditions: [], nonPassConditions: [], results: [] };
   }
-  return evaluateConditions(conditions, task.scope, options);
+  return evaluateConditions(conditions, taskRecord.scope || {}, options);
 }
 
 /**
  * 评估 post_conditions（修后验证）
  * 自动追加 auto-conditions
  */
-export function evaluatePostConditions(task, prd, options = Object()) {
-  const explicitConditions = asConditions(task?.post_conditions);
-  const scope = task?.scope || {};
+export function evaluatePostConditions(task: unknown, prd: unknown, options: ContractOptions = {}) {
+  const taskRecord = asRecord(task) as PrdTask;
+  const explicitConditions = asConditions(taskRecord.post_conditions);
+  const scope: PrdScope = taskRecord.scope || {};
 
   // 自动追加 forbidden_patterns 检查（如果用户没显式添加）
   const hasForbiddenCheck = explicitConditions.some(
     (c) => c.type === "no_forbidden_patterns",
   );
-  const autoConditions = [];
+  const autoConditions: PrdCondition[] = [];
   if (
     !hasForbiddenCheck &&
     scope.forbidden_patterns &&
@@ -502,8 +557,15 @@ export function evaluatePostConditions(task, prd, options = Object()) {
 /**
  * 序列化为 gate 兼容格式（供 gate.js 使用）
  */
-export function toGateFormat(result) {
-  const gates = [];
+export function toGateFormat(result: ConditionEvaluationSummary) {
+  const gates: Array<{
+    name?: string;
+    passed: boolean;
+    status: string;
+    severity?: string;
+    detail: string;
+    type?: string;
+  }> = [];
   const allResults = result.results || [];
 
   for (const r of allResults) {
@@ -533,8 +595,8 @@ export function toGateFormat(result) {
 
 // ── CLI ──────────────────────────────────────────────────────────
 
-function parseArgs() {
-  const args = Object();
+function parseArgs(): ContractCliArgs {
+  const args: ContractCliArgs = {};
   for (const a of process.argv.slice(2)) {
     const m = a.match(/^--(\w[\w-]*)=(.*)$/);
     if (m) args[m[1]] = m[2];
@@ -560,7 +622,7 @@ export function runContractCli() {
 
   try {
     const { task, prd } = loadTask(prdPath, taskId);
-    let result;
+    let result: ConditionEvaluationSummary;
 
     if (phase === "pre") {
       result = evaluatePreConditions(task, prd);
@@ -590,7 +652,7 @@ export function runContractCli() {
 
     process.exit(result.allPass ? 0 : 1);
   } catch (e) {
-    console.error(`错误: ${e.message}`);
+    console.error(`错误: ${errorMessage(e)}`);
     process.exit(2);
   }
 }

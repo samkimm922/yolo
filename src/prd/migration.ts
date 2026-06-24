@@ -4,10 +4,71 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectPrdContract } from "../runtime/gates/prd-contract-doctor.js";
 import { readJsonFileBounded } from "../lib/bounded-read.js";
+import {
+  asRecord,
+  errorMessage,
+  isRecord,
+  type PrdCondition,
+  type PrdDocument,
+  type PrdTarget,
+  type PrdTask,
+  type UnknownRecord,
+} from "./condition-catalog.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+
+type MigrationOptions = UnknownRecord & {
+  apply?: boolean;
+  dryRun?: boolean;
+};
+
+type MigrationIssue = {
+  task_id: string | null;
+  code: string;
+  detail: string;
+  task_index?: number;
+  target_index?: number;
+};
+
+type TargetFileEntry = {
+  file: string;
+  targetIndex: number;
+};
+
+type MigrationTaskChange = {
+  task_id: string;
+  added_count: number;
+  missing_targets: string[];
+  added: PrdCondition[];
+};
+
+type MigrationResult = {
+  changed: boolean;
+  added_count: number;
+  blocked_count: number;
+  tasks_changed: MigrationTaskChange[];
+  issues: MigrationIssue[];
+  prd: PrdDocument;
+  dry_run?: boolean;
+};
+
+type MigrationFileResult = MigrationResult & {
+  file: string;
+  applied: boolean;
+  dry_run: boolean;
+};
+
+type PrintableMigrationResult = {
+  changed: boolean;
+  added_count: number;
+  blocked_count: number;
+  dry_run?: boolean;
+  file?: string;
+  tasks_changed: MigrationTaskChange[];
+  issues: MigrationIssue[];
+};
 
 const TARGET_COVERAGE_CONDITION_TYPES = new Set([
   "ast_callback_uses_param",
@@ -26,18 +87,18 @@ const TARGET_COVERAGE_CONDITION_TYPES = new Set([
   "target_file_modified",
 ]);
 
-function deepClone(value) {
-  return JSON.parse(JSON.stringify(value));
+function deepClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function normalizeTargetPath(value) {
+function normalizeTargetPath(value: unknown): string {
   return String(value || "")
     .replace(/\\/g, "/")
     .replace(/^\.\//, "")
     .replace(/:\d+(?:-\d+)?$/, "");
 }
 
-function collectConditionFiles(value, out = []) {
+function collectConditionFiles(value: unknown, out: string[] = []): string[] {
   if (!value) return out;
   if (typeof value === "string") {
     out.push(normalizeTargetPath(value));
@@ -49,15 +110,16 @@ function collectConditionFiles(value, out = []) {
   }
   if (typeof value === "object") {
     for (const key of ["file", "path", "target", "target_file", "file_path"]) {
-      if (value[key]) collectConditionFiles(value[key], out);
+      const record = asRecord(value);
+      if (record[key]) collectConditionFiles(record[key], out);
     }
   }
   return out;
 }
 
-function conditionCoverageFiles(condition, targets = []) {
+function conditionCoverageFiles(condition: PrdCondition, targets: PrdTarget[] = []): string[] {
   if (condition?.severity !== "FAIL") return [];
-  if (!TARGET_COVERAGE_CONDITION_TYPES.has(condition?.type)) return [];
+  if (!condition.type || !TARGET_COVERAGE_CONDITION_TYPES.has(condition.type)) return [];
 
   const params = condition.params || {};
   const files = [
@@ -81,19 +143,19 @@ function conditionCoverageFiles(condition, targets = []) {
   return files;
 }
 
-function targetCoverageFiles(conditions = [], targets = []) {
-  const files = new Set();
+function targetCoverageFiles(conditions: PrdCondition[] = [], targets: PrdTarget[] = []): Set<string> {
+  const files = new Set<string>();
   for (const condition of conditions) {
     for (const file of conditionCoverageFiles(condition, targets)) files.add(file);
   }
   return files;
 }
 
-function isFeatureTask(task) {
+function isFeatureTask(task: PrdTask): boolean {
   return task?.task_kind === "atomic_feature" || task?.type === "feature";
 }
 
-function makeUniqueConditionId(existingIds, base) {
+function makeUniqueConditionId(existingIds: Set<string>, base: string): string {
   if (!existingIds.has(base)) {
     existingIds.add(base);
     return base;
@@ -106,7 +168,7 @@ function makeUniqueConditionId(existingIds, base) {
   return id;
 }
 
-function addIssue(issues, task, code, detail, extra = Object()) {
+function addIssue(issues: MigrationIssue[], task: PrdTask | null | undefined, code: string, detail: string, extra: Partial<MigrationIssue> = {}) {
   issues.push({
     task_id: task?.id || null,
     code,
@@ -115,7 +177,7 @@ function addIssue(issues, task, code, detail, extra = Object()) {
   });
 }
 
-function buildTargetCoverageCondition(task, file, targetIndex, existingIds) {
+function buildTargetCoverageCondition(task: PrdTask, file: string, targetIndex: number, existingIds: Set<string>): PrdCondition {
   const feature = isFeatureTask(task);
   return {
     id: makeUniqueConditionId(existingIds, `POST-${task.id}-TARGET-${targetIndex + 1}`),
@@ -126,27 +188,29 @@ function buildTargetCoverageCondition(task, file, targetIndex, existingIds) {
   };
 }
 
-function quoteShellArg(value) {
+function quoteShellArg(value: unknown): string {
   const text = String(value || "");
   if (/^[A-Za-z0-9_./:@=-]+$/.test(text)) return text;
   return `'${text.replace(/'/g, "'\\''")}'`;
 }
 
-function summarizeContract(result) {
+function summarizeContract(result: unknown) {
   if (!result) return null;
+  const contract = asRecord(result);
+  const failures = Array.isArray(contract.failures) ? contract.failures : [];
   return {
-    status: result.status,
-    blocks_execution: result.blocks_execution,
-    failure_count: result.failure_count,
-    warning_count: result.warning_count,
-    failures: (result.failures || []).slice(0, 8),
+    status: contract.status,
+    blocks_execution: contract.blocks_execution,
+    failure_count: contract.failure_count,
+    warning_count: contract.warning_count,
+    failures: failures.slice(0, 8),
   };
 }
 
-export function migratePrdGates(inputPrd, options = Object()) {
+export function migratePrdGates(inputPrd: PrdDocument, options: MigrationOptions = {}): MigrationResult {
   const prd = deepClone(inputPrd || {});
-  const issues = [];
-  const tasksChanged = [];
+  const issues: MigrationIssue[] = [];
+  const tasksChanged: MigrationTaskChange[] = [];
   let addedCount = 0;
 
   const tasks = Array.isArray(prd.tasks) ? prd.tasks : [];
@@ -186,7 +250,7 @@ export function migratePrdGates(inputPrd, options = Object()) {
       continue;
     }
 
-    const targetFiles = [];
+    const targetFiles: TargetFileEntry[] = [];
     for (const [targetIndex, target] of targets.entries()) {
       const file = normalizeTargetPath(target?.file);
       if (!file) {
@@ -205,7 +269,7 @@ export function migratePrdGates(inputPrd, options = Object()) {
     const missing = targetFiles.filter(({ file }) => !covered.has(file));
     if (!missing.length) continue;
 
-    const existingIds = new Set(postConditions.map((condition) => condition?.id).filter(Boolean));
+    const existingIds = new Set(postConditions.flatMap((condition) => condition?.id ? [condition.id] : []));
     const added = missing.map(({ file, targetIndex }) => buildTargetCoverageCondition(task, file, targetIndex, existingIds));
 
     task.post_conditions = [...postConditions, ...added];
@@ -229,9 +293,10 @@ export function migratePrdGates(inputPrd, options = Object()) {
   };
 }
 
-export function createPrdMigrationAdvice(inputPrd, prdPath = "prd.json") {
+export function createPrdMigrationAdvice(inputPrd: PrdDocument, prdPath = "prd.json") {
   const migration = migratePrdGates(inputPrd, { dryRun: true });
-  const contractAfterMigration = migration.changed ? inspectPrdContract(migration.prd) : null;
+  const inspectedContract = migration.changed ? inspectPrdContract(migration.prd) : null;
+  const contractAfterMigration = isRecord(inspectedContract) ? inspectedContract : null;
   const dryRunCommand = `yolo-prd-migrate-gates ${quoteShellArg(prdPath)} --json`;
   const applyCommand = `yolo-prd-migrate-gates ${quoteShellArg(prdPath)} --apply`;
   const nextActions = [];
@@ -267,11 +332,11 @@ export function createPrdMigrationAdvice(inputPrd, prdPath = "prd.json") {
   };
 }
 
-export function migratePrdFile(path, options = Object()) {
+export function migratePrdFile(path: string, options: MigrationOptions = {}): MigrationFileResult {
   const resolved = resolve(process.cwd(), path);
   if (!existsSync(resolved)) throw new Error(`PRD not found: ${path}`);
 
-  const prd = readJsonFileBounded(resolved, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
+  const prd = readJsonFileBounded<PrdDocument>(resolved, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   const result = migratePrdGates(prd, { dryRun: !options.apply });
   const canApply = Boolean(options.apply) && result.blocked_count === 0;
 
@@ -287,7 +352,7 @@ export function migratePrdFile(path, options = Object()) {
   };
 }
 
-function collectPrdFiles(dir, files) {
+function collectPrdFiles(dir: string, files: string[]) {
   if (!existsSync(dir)) return;
   for (const file of readdirSync(dir)) {
     const path = resolve(dir, file);
@@ -302,7 +367,7 @@ function collectPrdFiles(dir, files) {
     }
     if (!file.endsWith(".json")) continue;
     try {
-      const data = readJsonFileBounded(path, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
+      const data = readJsonFileBounded<unknown>(path, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
       if (isPrdDocument(data)) files.push(path);
     } catch {
       // Non-JSON or transient files are not PRD migration candidates.
@@ -310,13 +375,13 @@ function collectPrdFiles(dir, files) {
   }
 }
 
-function isPrdDocument(data) {
-  if (!data || typeof data !== "object" || Array.isArray(data)) return false;
+function isPrdDocument(data: unknown): data is PrdDocument {
+  if (!isRecord(data)) return false;
   if (typeof data.id !== "string" || !Array.isArray(data.tasks)) return false;
-  return data.tasks.every((task) => task && typeof task === "object" && typeof task.id === "string");
+  return data.tasks.every((task) => isRecord(task) && typeof task.id === "string");
 }
 
-function defaultPrdDirs() {
+function defaultPrdDirs(): string[] {
   const cwd = resolve(process.cwd());
   const roots = [cwd];
   if (PACKAGE_ROOT !== cwd) roots.push(PACKAGE_ROOT);
@@ -327,8 +392,8 @@ function defaultPrdDirs() {
   ]);
 }
 
-export function findPrdFiles(dirs = defaultPrdDirs()) {
-  const files = [];
+export function findPrdFiles(dirs: string[] = defaultPrdDirs()) {
+  const files: string[] = [];
   for (const dir of dirs) {
     collectPrdFiles(dir, files);
   }
@@ -345,7 +410,7 @@ function usage() {
   ].join("\n");
 }
 
-function printResult(result) {
+function printResult(result: PrintableMigrationResult) {
   const mode = result.dry_run ? "dry-run" : "apply";
   console.log(`[prd-migrate-gates] ${mode} changed=${result.changed} added=${result.added_count} blocked=${result.blocked_count}`);
   if (result.file) console.log(`  file: ${result.file}`);
@@ -395,9 +460,9 @@ function main() {
     else printResult(result);
     process.exit(result.blocked_count > 0 && apply ? 1 : 0);
   } catch (error) {
-    const payload = { status: "error", error: error.message };
+    const payload = { status: "error", error: errorMessage(error) };
     if (json) console.error(JSON.stringify(payload, null, 2));
-    else console.error(`[prd-migrate-gates] ${error.message}`);
+    else console.error(`[prd-migrate-gates] ${errorMessage(error)}`);
     process.exit(2);
   }
 }
