@@ -176,9 +176,11 @@ function createEvaluators(root, options = Object()) {
       }
       // No executable verify command — mark as manual (blocked at delivery gate)
       return {
-        passed: true,
-        status: "pass",
-        detail: params?.text || "验收标准（需人工复核）",
+        passed: false,
+        status: "not_run",
+        detail: params?.text
+          ? `验收标准需人工复核，不能作为机器通过证据: ${params.text}`
+          : "验收标准需人工复核，不能作为机器通过证据",
         manual: true,
         warn: true,
       };

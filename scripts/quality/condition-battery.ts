@@ -71,6 +71,29 @@ const CONDITION_BATTERY: ConditionBatteryCase[] = [
       return report.results?.find((result) => result.id === "POST-TARGET") || {};
     },
   },
+  {
+    id: "acceptance_criteria_without_verify_command_blocks_direct_eval",
+    category: "condition_evaluator_robustness",
+    description: "A direct library consumer must not get allPass=true from manual-only acceptance_criteria.",
+    expect: "blocked",
+    run: (root) => {
+      const report = evaluatePostConditions({
+        id: "TASK-MANUAL-ACCEPTANCE",
+        title: "Ship manual-only acceptance",
+        scope: {
+          targets: [{ file: "src/manual.ts" }],
+          expected_zero_business_code: true,
+        },
+        post_conditions: [{
+          id: "POST-MANUAL",
+          type: "acceptance_criteria",
+          severity: "FAIL",
+          params: { text: "Product owner manually accepts the change." },
+        }],
+      }, {}, { root, cwd: root }) as { allPass?: boolean; results?: Array<{ id?: string; passed?: boolean }> };
+      return report.allPass ? { passed: true } : (report.results?.find((result) => result.id === "POST-MANUAL") || {});
+    },
+  },
 ];
 
 function statusFromResult(result: unknown) {
