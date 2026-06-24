@@ -4,18 +4,111 @@ import { runManualExternalReleaseGate } from "./manual-external-release.js";
 import { runPiExecutionDrillGate } from "./pi-execution-drill.js";
 import { runRealProjectDogfoodGate } from "./real-project-dogfood.js";
 import { runRuntimeBoundaryDecisionGate } from "./runtime-boundary-decision.js";
+import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const PUBLIC_BETA_EVIDENCE_SCHEMA_VERSION = "1.0";
 
-function check(code, passed, message, extra = Object()) {
+export type RealProjectDogfoodOptions = NonNullable<Parameters<typeof runRealProjectDogfoodGate>[0]>;
+
+export interface PublicBetaEvidencePlan extends ReleaseRecord {
+  yolo_root: string;
+  project_root: string;
+  release_scope: string;
+  require_manual_external_release_evidence: boolean;
+  require_runtime_stable_decision: boolean;
+  writes_workspace: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  executes_billable_provider: boolean;
+}
+
+export interface ReleaseComponentResult extends ReleaseRecord {
+  status?: string;
+  blockers?: ReleaseIssue[];
+  guarantees?: ReleaseRecord;
+}
+
+export interface PublicBetaEvidenceOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  projectRoot?: string;
+  project_root?: string;
+  releaseScope?: string;
+  release_scope?: string;
+  requireManualExternalReleaseEvidence?: boolean;
+  require_manual_external_release_evidence?: boolean;
+  requireRuntimeStableDecision?: boolean;
+  require_runtime_stable_decision?: boolean;
+  plan?: PublicBetaEvidencePlan;
+  agentIntegration?: ReleaseComponentResult;
+  agent_integration?: ReleaseComponentResult;
+  realProjectDogfood?: ReleaseComponentResult;
+  real_project_dogfood?: ReleaseComponentResult;
+  piExecutionDrill?: ReleaseComponentResult;
+  pi_execution_drill?: ReleaseComponentResult;
+  runtimeBoundaryDecision?: ReleaseComponentResult;
+  runtime_boundary_decision?: ReleaseComponentResult;
+  manualExternalRelease?: ReleaseComponentResult;
+  manual_external_release?: ReleaseComponentResult;
+  homeDir?: string;
+  home_dir?: string;
+  targets?: unknown;
+  scopes?: unknown;
+  scope?: string;
+  installScope?: string;
+  install_scope?: string;
+  planEvidence?: RealProjectDogfoodOptions["planEvidence"];
+  plan_evidence?: RealProjectDogfoodOptions["plan_evidence"];
+  checkEvidence?: RealProjectDogfoodOptions["checkEvidence"];
+  check_evidence?: RealProjectDogfoodOptions["check_evidence"];
+  reviewEvidence?: RealProjectDogfoodOptions["reviewEvidence"];
+  review_evidence?: RealProjectDogfoodOptions["review_evidence"];
+  dogfoodEvidence?: RealProjectDogfoodOptions["dogfoodEvidence"];
+  dogfood_evidence?: RealProjectDogfoodOptions["dogfood_evidence"];
+  executionEvidence?: ReleaseRecord;
+  execution_evidence?: ReleaseRecord;
+  authorization?: ReleaseRecord;
+  billableAuthorization?: ReleaseRecord;
+  billable_authorization?: ReleaseRecord;
+  targetExport?: string;
+  target_export?: string;
+  decisionRecord?: ReleaseRecord;
+  decision_record?: ReleaseRecord;
+  runtimeBoundaryCandidate?: ReleaseComponentResult;
+  runtime_boundary_candidate?: ReleaseComponentResult;
+  packageJson?: ReleaseRecord;
+  apiBoundary?: ReleaseRecord;
+  api_boundary?: ReleaseRecord;
+  runtimeApiFreeze?: ReleaseRecord;
+  runtime_api_freeze?: ReleaseRecord;
+  requestedOperations?: unknown;
+  requested_operations?: unknown;
+  operatorRunbook?: ReleaseComponentResult;
+  operator_runbook?: ReleaseComponentResult;
+  manualReleaseRecord?: ReleaseRecord;
+  manual_release_record?: ReleaseRecord;
+  credentialEvidence?: ReleaseRecord;
+  credential_evidence?: ReleaseRecord;
+  billableProviderEvidence?: ReleaseRecord;
+  billable_provider_evidence?: ReleaseRecord;
+  dogfoodPublicationEvidence?: ReleaseRecord;
+  dogfood_publication_evidence?: ReleaseRecord;
+  postReleaseAudit?: ReleaseComponentResult;
+  post_release_audit?: ReleaseComponentResult;
+  stableGraduation?: ReleaseComponentResult;
+  stable_graduation?: ReleaseComponentResult;
+}
+
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function isObject(value) {
+function isObject(value: unknown): value is ReleaseRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function noReleaseSideEffects(result = Object()) {
+function noReleaseSideEffects(result: ReleaseComponentResult = Object()): boolean {
   const guarantees = result.guarantees || {};
   return guarantees.published !== true
     && guarantees.credential_access !== true
@@ -24,15 +117,15 @@ function noReleaseSideEffects(result = Object()) {
     && guarantees.dogfood_report_published !== true;
 }
 
-function defaultRequireManualExternalRelease(releaseScope) {
+function defaultRequireManualExternalRelease(releaseScope: string): boolean {
   return releaseScope !== "public-beta";
 }
 
-function statusOf(component) {
+function statusOf(component: unknown): unknown {
   return isObject(component) ? component.status || "unknown" : "missing";
 }
 
-export function buildPublicBetaEvidencePlan(options = Object()) {
+export function buildPublicBetaEvidencePlan(options: PublicBetaEvidenceOptions = Object()): PublicBetaEvidencePlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const releaseScope = options.releaseScope || options.release_scope || "public-beta";
@@ -73,7 +166,7 @@ export function buildPublicBetaEvidencePlan(options = Object()) {
   };
 }
 
-export function runPublicBetaEvidenceGate(options = Object()) {
+export function runPublicBetaEvidenceGate(options: PublicBetaEvidenceOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const plan = options.plan || buildPublicBetaEvidencePlan({

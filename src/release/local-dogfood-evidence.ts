@@ -3,31 +3,80 @@ import { join, resolve } from "node:path";
 import { inspectFixtureRegistry } from "../fixtures/registry.js";
 import { inspectRunnerRuntimeApiFreeze } from "../runtime/run-lifecycle/runtime-api-freeze.js";
 import { runPublicBetaHardeningDrill } from "./hardening-drill.js";
+import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const LOCAL_DOGFOOD_EVIDENCE_SCHEMA_VERSION = "1.0";
 
-function readJson(filePath) {
+export interface LocalDogfoodPlan extends ReleaseRecord {
+  yolo_root: string;
+  writes_workspace: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  executes_billable_provider: boolean;
+  publishes_dogfood_report: boolean;
+  public_claim: boolean;
+}
+
+export interface ReleaseComponentResult extends ReleaseRecord {
+  status?: string;
+  fixture_count?: number;
+  guarantees?: ReleaseRecord;
+  implementation_ready?: boolean;
+  implementation_blockers?: ReleaseIssue[];
+  blockers?: ReleaseIssue[];
+}
+
+export interface LocalDogfoodOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  packageJson?: ReleaseRecord;
+  plan?: LocalDogfoodPlan;
+  hardeningDrill?: ReleaseComponentResult;
+  hardening_drill?: ReleaseComponentResult;
+  fixtureRegistry?: ReleaseComponentResult;
+  fixture_registry?: ReleaseComponentResult;
+  runtimeApiFreeze?: ReleaseComponentResult;
+  runtime_api_freeze?: ReleaseComponentResult;
+  apiBoundary?: ReleaseRecord;
+  api_boundary?: ReleaseRecord;
+  maxRunnerCoreLines?: number;
+  max_runner_core_lines?: number;
+  minFixtureCount?: number;
+  min_fixture_count?: number;
+  timeout_ms?: number;
+  keepWorkspace?: boolean;
+  commandExists?: (command: string) => boolean;
+  now?: unknown;
+  random?: unknown;
+  providerConfigs?: unknown;
+  runPublicBetaHardeningDrill?: (options: ReleaseRecord) => ReleaseComponentResult;
+  inspectFixtureRegistry?: (options: ReleaseRecord) => ReleaseComponentResult;
+  inspectRunnerRuntimeApiFreeze?: (options: ReleaseRecord) => ReleaseComponentResult;
+}
+
+function readJson(filePath: string): ReleaseRecord {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = Object()) {
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function hasNoReleaseSideEffects(hardeningDrill = Object()) {
+function hasNoReleaseSideEffects(hardeningDrill: ReleaseComponentResult = Object()): boolean {
   return hardeningDrill.guarantees?.published === false
     && hardeningDrill.guarantees?.credential_access === false
     && hardeningDrill.guarantees?.billable_provider_execution === false
     && hardeningDrill.guarantees?.provider_execution_allowed === false;
 }
 
-function runtimeImplementationReady(runtimeApiFreeze = Object()) {
+function runtimeImplementationReady(runtimeApiFreeze: ReleaseComponentResult = Object()): boolean {
   if (runtimeApiFreeze.implementation_ready === true) return true;
   const blockers = runtimeApiFreeze.blockers || [];
   return blockers.length > 0 && blockers.every((blocker) => blocker.code === "RUNTIME_API_BOUNDARY_STABLE");
 }
 
-export function buildLocalDogfoodEvidencePlan(options = Object()) {
+export function buildLocalDogfoodEvidencePlan(options: LocalDogfoodOptions = Object()): LocalDogfoodPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   return {
     schema_version: LOCAL_DOGFOOD_EVIDENCE_SCHEMA_VERSION,
@@ -49,7 +98,7 @@ export function buildLocalDogfoodEvidencePlan(options = Object()) {
   };
 }
 
-export function runLocalDogfoodEvidenceDrill(options = Object()) {
+export function runLocalDogfoodEvidenceDrill(options: LocalDogfoodOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const plan = options.plan || buildLocalDogfoodEvidencePlan({ yoloRoot });
@@ -95,7 +144,7 @@ export function runLocalDogfoodEvidenceDrill(options = Object()) {
     ),
     check(
       "LOCAL_DOGFOOD_FIXTURE_COVERAGE",
-      fixtureRegistry.status === "pass" && fixtureRegistry.fixture_count >= minFixtureCount,
+      fixtureRegistry.status === "pass" && (fixtureRegistry.fixture_count || 0) >= minFixtureCount,
       "fixture registry must pass with enough cross-project coverage",
       { fixture_count: fixtureRegistry.fixture_count || 0, min_fixture_count: minFixtureCount },
     ),

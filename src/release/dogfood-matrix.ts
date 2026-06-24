@@ -1,3 +1,5 @@
+import type { ReleaseIssue, ReleaseRecord } from "./readiness.js";
+
 export const DOGFOOD_MATRIX_SCHEMA_VERSION = "1.0";
 
 export const DOGFOOD_MATRIX_SCENARIO_IDS = [
@@ -33,7 +35,85 @@ const FORBIDDEN_EVIDENCE_FLAGS = [
   "template_download",
 ];
 
-function scenarioEvidencePaths(id) {
+export interface LifecycleCommand {
+  stage: string;
+  command: string;
+  check: string;
+}
+
+export interface DogfoodScenarioInput {
+  id: string;
+  label: string;
+  projectShape: ReleaseRecord;
+  fixtureCommand: string;
+  passConditions?: string[];
+  failConditions?: string[];
+  blockedConditions?: string[];
+}
+
+export interface DogfoodExpectedOutcome {
+  outcome: "pass" | "fail_closed";
+  pass_conditions: string[];
+  fail_conditions: string[];
+}
+
+export interface DogfoodScenario {
+  id: string;
+  label: string;
+  project_shape: ReleaseRecord;
+  required_lifecycle_commands: LifecycleCommand[];
+  required_checks: string[];
+  expected: DogfoodExpectedOutcome;
+  acceptance_evidence_paths: string[];
+  blocked_conditions: string[];
+}
+
+export interface DogfoodEvidence extends ReleaseRecord {
+  status?: string;
+  artifact_path?: unknown;
+  report_path?: unknown;
+  evidence_files?: unknown[];
+  evidence?: unknown[];
+  acceptance_evidence_paths?: unknown[];
+  warnings?: unknown[];
+  blockers?: unknown[];
+  blocked_reasons?: unknown[];
+  blocked_reason?: unknown;
+}
+
+export type DogfoodEvidenceByScenario = Record<string, DogfoodEvidence | string | undefined>;
+
+export interface DogfoodMatrixPlan extends ReleaseRecord {
+  matrix: string;
+  scenarios: DogfoodScenario[];
+  command_plan: LifecycleCommand[];
+}
+
+export interface DogfoodMatrixOptions extends ReleaseRecord {
+  projectRoot?: string;
+  project_root?: string;
+  yoloRoot?: string;
+  yolo_root?: string;
+  plan?: DogfoodMatrixPlan;
+  evidenceByScenario?: DogfoodEvidenceByScenario;
+  evidence_by_scenario?: DogfoodEvidenceByScenario;
+  scenarioEvidence?: DogfoodEvidenceByScenario;
+  scenario_evidence?: DogfoodEvidenceByScenario;
+  evidence?: DogfoodEvidenceByScenario;
+}
+
+export interface DogfoodScenarioReport {
+  scenario: string;
+  status: string;
+  expected_outcome: string;
+  missing_evidence: string[];
+  blocked_reasons: ReleaseIssue[];
+  warnings: string[];
+  command_plan: LifecycleCommand[];
+  evidence: DogfoodEvidence | string | null | undefined;
+}
+
+function scenarioEvidencePaths(id: string): string[] {
   return [
     `.yolo/state/reports/dogfood/matrix/${id}/plan.json`,
     `.yolo/state/reports/dogfood/matrix/${id}/check-report.json`,
@@ -41,7 +121,7 @@ function scenarioEvidencePaths(id) {
   ];
 }
 
-function passExpected({ id, label, projectShape, fixtureCommand, passConditions = [], blockedConditions = [] }) {
+function passExpected({ id, label, projectShape, fixtureCommand, passConditions = [], blockedConditions = [] }: DogfoodScenarioInput): DogfoodScenario {
   return {
     id,
     label,
@@ -79,7 +159,7 @@ function passExpected({ id, label, projectShape, fixtureCommand, passConditions 
   };
 }
 
-function failClosedExpected({ id, label, projectShape, fixtureCommand, failConditions, blockedConditions = [] }) {
+function failClosedExpected({ id, label, projectShape, fixtureCommand, failConditions = [], blockedConditions = [] }: DogfoodScenarioInput): DogfoodScenario {
   return {
     id,
     label,
@@ -111,7 +191,7 @@ function failClosedExpected({ id, label, projectShape, fixtureCommand, failCondi
   };
 }
 
-export const GENERIC_DOGFOOD_MATRIX = [
+export const GENERIC_DOGFOOD_MATRIX: DogfoodScenario[] = [
   passExpected({
     id: "node-basic",
     label: "Node basic",
@@ -222,21 +302,21 @@ export const GENERIC_DOGFOOD_MATRIX = [
   }),
 ];
 
-function asArray(value) {
+function asArray(value: unknown): unknown[] {
   if (Array.isArray(value)) return value.filter(Boolean);
   if (value == null || value === "") return [];
   return [value];
 }
 
-function unique(values = []) {
+function unique(values: unknown = []): string[] {
   return [...new Set(asArray(values).map(String).filter(Boolean))];
 }
 
-function isObject(value) {
+function isObject(value: unknown): value is ReleaseRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function normalizeEvidenceByScenario(options = Object()) {
+function normalizeEvidenceByScenario(options: DogfoodMatrixOptions = Object()): DogfoodEvidenceByScenario {
   return options.evidenceByScenario
     || options.evidence_by_scenario
     || options.scenarioEvidence
@@ -245,7 +325,7 @@ function normalizeEvidenceByScenario(options = Object()) {
     || {};
 }
 
-function evidencePaths(evidence = Object()) {
+function evidencePaths(evidence: DogfoodEvidence = Object()): string[] {
   return unique([
     evidence.artifact_path,
     evidence.report_path,
@@ -255,30 +335,31 @@ function evidencePaths(evidence = Object()) {
   ]);
 }
 
-function evidenceWarnings(evidence = Object()) {
+function evidenceWarnings(evidence: DogfoodEvidence = Object()): string[] {
   return unique([
     ...(evidence.warnings || []),
     ...(evidence.warning ? [evidence.warning] : []),
   ]);
 }
 
-function evidenceBlockers(evidence = Object()) {
+function evidenceBlockers(evidence: DogfoodEvidence = Object()): ReleaseIssue[] {
   return [
     ...(evidence.blockers || []),
     ...(evidence.blocked_reasons || []),
     ...(evidence.blocked_reason ? [evidence.blocked_reason] : []),
-  ].map((item) => {
+  ].map((item): ReleaseIssue | null => {
     if (typeof item === "string") return { code: "DOGFOOD_MATRIX_SCENARIO_BLOCKED", message: item };
-    return item;
-  }).filter(Boolean);
+    if (isObject(item)) return item as ReleaseIssue;
+    return null;
+  }).filter((item): item is ReleaseIssue => item !== null);
 }
 
-function includesEveryEvidencePath(actualPaths, requiredPaths) {
+function includesEveryEvidencePath(actualPaths: string[], requiredPaths: string[]): boolean {
   const actual = new Set(actualPaths);
   return requiredPaths.every((path) => actual.has(path));
 }
 
-function forbiddenSideEffectBlockers(evidence = Object()) {
+function forbiddenSideEffectBlockers(evidence: DogfoodEvidence = Object()): ReleaseIssue[] {
   return FORBIDDEN_EVIDENCE_FLAGS
     .filter((field) => evidence[field] === true)
     .map((field) => ({
@@ -288,7 +369,7 @@ function forbiddenSideEffectBlockers(evidence = Object()) {
     }));
 }
 
-function buildCommandPlan(scenario) {
+function buildCommandPlan(scenario: DogfoodScenario): LifecycleCommand[] {
   return scenario.required_lifecycle_commands.map((item) => ({
     scenario: scenario.id,
     stage: item.stage,
@@ -297,17 +378,18 @@ function buildCommandPlan(scenario) {
   }));
 }
 
-function scenarioReport(scenario, evidence) {
-  const paths = evidencePaths(evidence);
+function scenarioReport(scenario: DogfoodScenario, evidence: DogfoodEvidence | string | undefined): DogfoodScenarioReport {
+  const evidenceRecord = isObject(evidence) ? evidence : undefined;
+  const paths = evidencePaths(evidenceRecord);
   const missingEvidence = scenario.acceptance_evidence_paths.filter((path) => !paths.includes(path));
-  const blockers = evidenceBlockers(evidence);
-  const warnings = evidenceWarnings(evidence);
+  const blockers = evidenceBlockers(evidenceRecord);
+  const warnings = evidenceWarnings(evidenceRecord);
   const hasEvidence = isObject(evidence);
-  const status = String(evidence?.status || "");
+  const status = String(evidenceRecord?.status || "");
   const expectedFailClosed = scenario.expected.outcome === "fail_closed";
   const passedSmoothly = status === "pass";
   const failedClosed = ["blocked", "fail", "failed", "fail_closed"].includes(status);
-  const sideEffectBlockers = forbiddenSideEffectBlockers(evidence);
+  const sideEffectBlockers = forbiddenSideEffectBlockers(evidenceRecord);
 
   if (!hasEvidence) {
     return {
@@ -417,7 +499,7 @@ export function listDogfoodMatrixScenarios() {
   }));
 }
 
-export function buildDogfoodMatrixPlan(options = Object()) {
+export function buildDogfoodMatrixPlan(options: DogfoodMatrixOptions = Object()): DogfoodMatrixPlan {
   const scenarios = listDogfoodMatrixScenarios();
   return {
     schema_version: DOGFOOD_MATRIX_SCHEMA_VERSION,
@@ -443,7 +525,7 @@ export function buildDogfoodMatrixPlan(options = Object()) {
   };
 }
 
-function scenarioSetBlockers(scenarios = []) {
+function scenarioSetBlockers(scenarios: DogfoodScenario[] = []): ReleaseIssue[] {
   const ids = scenarios.map((scenario) => scenario.id).filter(Boolean);
   const uniqueIds = new Set(ids);
   const missing = DOGFOOD_MATRIX_SCENARIO_IDS.filter((id) => !uniqueIds.has(id));
@@ -461,7 +543,7 @@ function scenarioSetBlockers(scenarios = []) {
   }];
 }
 
-export function buildDogfoodMatrixReport(options = Object()) {
+export function buildDogfoodMatrixReport(options: DogfoodMatrixOptions = Object()) {
   const plan = options.plan || buildDogfoodMatrixPlan(options);
   const evidenceByScenario = normalizeEvidenceByScenario(options);
   const scenarios = plan.scenarios || listDogfoodMatrixScenarios();
@@ -496,7 +578,7 @@ export function buildDogfoodMatrixReport(options = Object()) {
   };
 }
 
-export function buildDogfoodMatrixEvidence(statusByScenario = Object()) {
+export function buildDogfoodMatrixEvidence(statusByScenario: Record<string, string | DogfoodEvidence | undefined> = Object()) {
   return Object.fromEntries(GENERIC_DOGFOOD_MATRIX.map((scenario) => {
     const configured = statusByScenario[scenario.id];
     const status = typeof configured === "string"

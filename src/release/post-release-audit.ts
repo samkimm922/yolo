@@ -2,32 +2,93 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { runPublicBetaHardeningDrill } from "./hardening-drill.js";
 import { runOperatorReleaseRunbookGate } from "./operator-runbook.js";
+import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const POST_RELEASE_AUDIT_SCHEMA_VERSION = "1.0";
 
 const DEFAULT_RELEASE_SCOPE = "public-beta";
 
-function readJson(filePath) {
+export interface PackageJsonLike extends ReleaseRecord {
+  name?: string;
+  version?: string;
+  private?: boolean;
+}
+
+export interface ComponentResult extends ReleaseRecord {
+  status?: string;
+  blockers?: ReleaseIssue[];
+  guarantees?: ReleaseRecord;
+  components?: {
+    package_install?: ComponentResult;
+  };
+}
+
+export interface PostReleaseChecks extends ReleaseRecord {
+  dogfood_audit?: ReleaseRecord | null;
+  package_install_smoke?: ComponentResult;
+  packageInstallSmoke?: ComponentResult;
+}
+
+export interface PostReleaseAuditPlan extends ReleaseRecord {
+  release_scope: string;
+  writes_workspace: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  executes_billable_provider: boolean;
+  publishes_dogfood_report: boolean;
+  requires_manual_external_release_record: boolean;
+  required_evidence: string[];
+}
+
+export interface PostReleaseAuditOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  packageJson?: PackageJsonLike;
+  plan?: PostReleaseAuditPlan;
+  releaseScope?: string;
+  release_scope?: string;
+  manualReleaseRecord?: ReleaseRecord | null;
+  manual_release_record?: ReleaseRecord | null;
+  operatorRunbook?: ComponentResult;
+  operator_runbook?: ComponentResult;
+  hardeningDrill?: ComponentResult;
+  hardening_drill?: ComponentResult;
+  postReleaseChecks?: PostReleaseChecks;
+  post_release_checks?: PostReleaseChecks;
+  dogfoodAudit?: ReleaseRecord | null;
+  dogfood_audit?: ReleaseRecord | null;
+  timeout_ms?: number;
+  keepWorkspace?: boolean;
+  commandExists?: (command: string) => boolean;
+  now?: unknown;
+  random?: unknown;
+  providerConfigs?: unknown;
+  runOperatorReleaseRunbookGate?: (options: ReleaseRecord) => ComponentResult;
+  runPublicBetaHardeningDrill?: (options: ReleaseRecord) => ComponentResult;
+}
+
+function readJson(filePath: string): ReleaseRecord {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = Object()) {
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function isObject(value) {
+function isObject(value: unknown): value is ReleaseRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function nonEmptyString(value) {
+function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function validTimestamp(value) {
+function validTimestamp(value: unknown): boolean {
   return nonEmptyString(value) && !Number.isNaN(Date.parse(value));
 }
 
-function evidencePresent(value) {
+function evidencePresent(value: unknown): boolean {
   if (!isObject(value)) {
     return false;
   }
@@ -38,7 +99,7 @@ function evidencePresent(value) {
     || (Array.isArray(value.evidence) && value.evidence.length > 0);
 }
 
-function dogfoodAuditApproved(audit = Object()) {
+function dogfoodAuditApproved(audit: unknown = Object()): boolean {
   const summary = isObject(audit) ? audit : {};
   return summary.status === "pass"
     && evidencePresent(summary)
@@ -47,20 +108,20 @@ function dogfoodAuditApproved(audit = Object()) {
     && nonEmptyString(summary.approver);
 }
 
-function packageInstallStatus(postReleaseChecks = Object(), hardeningDrill = Object()) {
+function packageInstallStatus(postReleaseChecks: PostReleaseChecks = Object(), hardeningDrill: ComponentResult = Object()): unknown {
   return postReleaseChecks.package_install_smoke?.status
     || postReleaseChecks.packageInstallSmoke?.status
     || hardeningDrill.components?.package_install?.status
     || null;
 }
 
-function hardeningNoReleaseSideEffects(hardeningDrill = Object()) {
+function hardeningNoReleaseSideEffects(hardeningDrill: ComponentResult = Object()): boolean {
   return hardeningDrill.guarantees?.published === false
     && hardeningDrill.guarantees?.credential_access === false
     && hardeningDrill.guarantees?.billable_provider_execution === false;
 }
 
-function manualReleaseExternalOnly(record = Object()) {
+function manualReleaseExternalOnly(record: ReleaseRecord = Object()): boolean {
   return record.executed_by_sdk !== true
     && record.published_by_sdk !== true
     && record.token_read_by_sdk !== true
@@ -68,7 +129,7 @@ function manualReleaseExternalOnly(record = Object()) {
     && record.dogfood_report_published_by_sdk !== true;
 }
 
-export function buildPostReleaseAuditPlan(options = Object()) {
+export function buildPostReleaseAuditPlan(options: PostReleaseAuditOptions = Object()): PostReleaseAuditPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   return {
     schema_version: POST_RELEASE_AUDIT_SCHEMA_VERSION,
@@ -98,9 +159,9 @@ export function buildPostReleaseAuditPlan(options = Object()) {
   };
 }
 
-export function runPostReleaseAuditGate(options = Object()) {
+export function runPostReleaseAuditGate(options: PostReleaseAuditOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
-  const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
+  const packageJson: PackageJsonLike = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const plan = options.plan || buildPostReleaseAuditPlan({
     yoloRoot,
     releaseScope: options.releaseScope || options.release_scope,

@@ -3,10 +3,29 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { appendLearningRecord, retrieveRelevantLearningRecords } from "../runtime/learning/center.js";
 import { generatePrompt } from "../cli/prompt.js";
+import type { ReleaseCheck, ReleaseRecord } from "./readiness.js";
 
 export const EXPERIENCE_PACK_AUDIT_SCHEMA_VERSION = "1.0";
 
-function check(code, passed, message, extra = Object()) {
+export interface ExperiencePackAuditPlan extends ReleaseRecord {
+  project_root: string;
+  state_root: string;
+  max_selected_records: number;
+}
+
+export interface ExperiencePackAuditOptions extends ReleaseRecord {
+  projectRoot?: string;
+  project_root?: string;
+  stateRoot?: string;
+  state_root?: string;
+  maxSelectedRecords?: number;
+  max_selected_records?: number;
+  maxPackChars?: number;
+  max_pack_chars?: number;
+  plan?: ExperiencePackAuditPlan;
+}
+
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
@@ -14,7 +33,7 @@ function plannedFixtureRoot() {
   return join(tmpdir(), `yolo-experience-pack-audit-${Date.now()}`);
 }
 
-function write(filePath, content) {
+function write(filePath: string, content: string): void {
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, content, "utf8");
 }
@@ -25,7 +44,7 @@ function experienceItemCount(prompt = "") {
   return (match[0].match(/^- learn_/gm) || []).length;
 }
 
-export function buildExperiencePackEffectivenessAuditPlan(options = Object()) {
+export function buildExperiencePackEffectivenessAuditPlan(options: ExperiencePackAuditOptions = Object()): ExperiencePackAuditPlan {
   const projectRoot = resolve(options.projectRoot || options.project_root || plannedFixtureRoot());
   const stateRoot = resolve(options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
   return {
@@ -50,7 +69,7 @@ export function buildExperiencePackEffectivenessAuditPlan(options = Object()) {
   };
 }
 
-function writeAuditFixture(projectRoot) {
+function writeAuditFixture(projectRoot: string): string {
   write(join(projectRoot, "src/services/category.ts"), [
     "export function categoryId(input: unknown) {",
     "  return input as unknown as string;",
@@ -83,7 +102,7 @@ function writeAuditFixture(projectRoot) {
   return prdPath;
 }
 
-function seedLearning(projectRoot, stateRoot) {
+function seedLearning(projectRoot: string, stateRoot: string) {
   const now = new Date("2026-05-25T00:00:00.000Z");
   const relevant = appendLearningRecord({
     type: "failure",
@@ -118,7 +137,7 @@ function seedLearning(projectRoot, stateRoot) {
   return { relevant, unrelated, noisy };
 }
 
-export function runExperiencePackEffectivenessAudit(options = Object()) {
+export function runExperiencePackEffectivenessAudit(options: ExperiencePackAuditOptions = Object()) {
   const plan = options.plan || buildExperiencePackEffectivenessAuditPlan(options);
   const projectRoot = resolve(plan.project_root);
   const stateRoot = resolve(plan.state_root);
@@ -129,7 +148,7 @@ export function runExperiencePackEffectivenessAudit(options = Object()) {
   const seeded = seedLearning(projectRoot, stateRoot);
 
   let prompt = "";
-  let promptError = null;
+  let promptError: unknown = null;
   try {
     prompt = generatePrompt({
       taskId: "FIX-EXP-AUDIT-001",
@@ -160,7 +179,7 @@ export function runExperiencePackEffectivenessAudit(options = Object()) {
   });
   const itemCount = experienceItemCount(prompt);
   const checks = [
-    check("EXPERIENCE_PACK_AUDIT_PROMPT_NON_BLOCKING", !promptError && prompt.length > 0, "prompt generation must not be blocked by learning retrieval", { error: promptError?.message || null }),
+    check("EXPERIENCE_PACK_AUDIT_PROMPT_NON_BLOCKING", !promptError && prompt.length > 0, "prompt generation must not be blocked by learning retrieval", { error: promptError instanceof Error ? promptError.message : promptError ? String(promptError) : null }),
     check("EXPERIENCE_PACK_AUDIT_RELEVANT_INCLUDED", /TS2352 category service failure/.test(prompt), "prompt must inject the relevant prior failure"),
     check("EXPERIENCE_PACK_AUDIT_UNRELATED_EXCLUDED", !/Unrelated eslint import cleanup/.test(prompt) && !/Unrelated file length split/.test(prompt), "prompt must not inject unrelated learning records"),
     check("EXPERIENCE_PACK_AUDIT_BOUNDED", retrieval.selected_count <= maxSelected && itemCount <= maxSelected, "experience pack must stay bounded", { selected_count: retrieval.selected_count, prompt_item_count: itemCount, max_selected: maxSelected }),

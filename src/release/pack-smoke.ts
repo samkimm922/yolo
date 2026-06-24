@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import type { ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const PACKAGE_INSTALL_SMOKE_SCHEMA_VERSION = "1.0";
 
@@ -67,11 +68,110 @@ export const DEFAULT_PACKAGE_SMOKE_REQUIRED_ENTRIES = [
   "dist/schemas/prd-v2.schema.json",
 ];
 
-function readJson(filePath) {
+export interface PackageJsonLike extends ReleaseRecord {
+  name?: string;
+  version?: string;
+  private?: boolean;
+  files?: string[];
+  exports?: Record<string, unknown>;
+  bin?: Record<string, unknown>;
+}
+
+export interface CommandResult extends ReleaseRecord {
+  command: string;
+  exit_code: number | null;
+  signal: NodeJS.Signals | string | null;
+  status: string;
+  started_at: string;
+  finished_at: string;
+  stdout: string;
+  stderr: string;
+  stdout_tail: string;
+  stderr_tail: string;
+}
+
+export interface PackFile {
+  path: string;
+}
+
+export interface PackInfo extends ReleaseRecord {
+  filename?: string;
+  size?: number;
+  unpackedSize?: number;
+  files?: PackFile[];
+}
+
+export interface PackageInstallSmokePlan extends ReleaseRecord {
+  yolo_root: string;
+  package_name: string | null;
+  package_version: string | null;
+  package_private: boolean;
+  package_files: string[];
+  import_specifiers: string[];
+  bin_names: string[];
+  required_entries: string[];
+  forbidden_prefixes: string[];
+  commands: string[];
+}
+
+export interface PackageSmokeOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  packageJson?: PackageJsonLike;
+  importSpecifiers?: string[];
+  requiredEntries?: string[];
+  forbiddenPrefixes?: string[];
+  timeout_ms?: number;
+  dryRun?: boolean;
+  dry_run?: boolean;
+  workspace?: string;
+  tmpRoot?: string;
+  keepWorkspace?: boolean;
+}
+
+export interface PackInspectOptions extends ReleaseRecord {
+  requiredEntries?: string[];
+  forbiddenPrefixes?: string[];
+}
+
+export interface PackInspection extends ReleaseRecord {
+  status: string;
+  blocks_release: boolean;
+  filename: string | null;
+  entry_count: number;
+  size: number;
+  unpacked_size: number;
+  required_entries: string[];
+  missing_entries: string[];
+  forbidden_prefixes: string[];
+  forbidden_entries: string[];
+  blockers: ReleaseIssue[];
+}
+
+export interface PackageInstallSmokeResult extends ReleaseRecord {
+  status: string;
+  summary: string;
+  exit_code: number;
+  dry_run: boolean;
+  plan: PackageInstallSmokePlan;
+  workspace?: string | null;
+  pack?: {
+    command?: CommandResult;
+    info?: PackInfo;
+    inspection?: PackInspection | null;
+    tarball?: string | null;
+  };
+  install?: CommandResult;
+  import_check?: CommandResult | null;
+  bin_checks?: CommandResult[];
+  next_actions: Array<string | undefined>;
+}
+
+function readJson(filePath: string): ReleaseRecord {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function runCommand(command, args, cwd, options = Object()) {
+function runCommand(command: string, args: string[], cwd: string, options: PackageSmokeOptions = Object()): CommandResult {
   const startedAt = new Date().toISOString();
   const result = spawnSync(command, args, {
     cwd,
@@ -93,25 +193,29 @@ function runCommand(command, args, cwd, options = Object()) {
   };
 }
 
-function parseNpmPackJson(stdout) {
+function isRecord(value: unknown): value is ReleaseRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseNpmPackJson(stdout: string): PackInfo {
   const parsed = JSON.parse(stdout || "[]");
   const pack = Array.isArray(parsed) ? parsed[0] : parsed;
-  if (!pack || typeof pack !== "object") {
+  if (!isRecord(pack)) {
     throw new Error("npm pack did not return package metadata");
   }
   return pack;
 }
 
-export function packageExportSpecifiers(packageJson = Object()) {
+export function packageExportSpecifiers(packageJson: PackageJsonLike = Object()): string[] {
   const packageName = packageJson.name || "yolo";
   return Object.keys(packageJson.exports || {})
     .sort()
     .map((name) => (name === "." ? packageName : `${packageName}/${name.replace(/^\.\//, "")}`));
 }
 
-export function buildPackageInstallSmokePlan(options = Object()) {
+export function buildPackageInstallSmokePlan(options: PackageSmokeOptions = Object()): PackageInstallSmokePlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
-  const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
+  const packageJson: PackageJsonLike = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const importSpecifiers = options.importSpecifiers || packageExportSpecifiers(packageJson);
   const binNames = Object.keys(packageJson.bin || {}).sort();
 
@@ -138,7 +242,7 @@ export function buildPackageInstallSmokePlan(options = Object()) {
   };
 }
 
-export function inspectPackedPackage(packInfo = Object(), options = Object()) {
+export function inspectPackedPackage(packInfo: PackInfo = Object(), options: PackInspectOptions = Object()): PackInspection {
   const paths = (packInfo.files || []).map((file) => file.path).sort();
   const requiredEntries = options.requiredEntries || DEFAULT_PACKAGE_SMOKE_REQUIRED_ENTRIES;
   const forbiddenPrefixes = options.forbiddenPrefixes || DEFAULT_PACKAGE_SMOKE_FORBIDDEN_PREFIXES;
@@ -146,7 +250,7 @@ export function inspectPackedPackage(packInfo = Object(), options = Object()) {
   const forbiddenEntries = paths.filter((entry) =>
     forbiddenPrefixes.some((prefix) => entry === prefix.replace(/\/$/, "") || entry.startsWith(prefix))
   );
-  const blockers = [];
+  const blockers: ReleaseIssue[] = [];
   if (missingEntries.length > 0) {
     blockers.push({
       code: "PACKAGE_PACK_MISSING_REQUIRED_ENTRY",
@@ -177,7 +281,7 @@ export function inspectPackedPackage(packInfo = Object(), options = Object()) {
   };
 }
 
-function writeConsumerPackageJson(consumerDir) {
+function writeConsumerPackageJson(consumerDir: string): void {
   writeFileSync(join(consumerDir, "package.json"), `${JSON.stringify({
     name: "yolo-package-install-smoke-consumer",
     version: "0.0.0",
@@ -187,7 +291,7 @@ function writeConsumerPackageJson(consumerDir) {
   }, null, 2)}\n`, "utf8");
 }
 
-function writeImportSmokeScript(filePath, plan) {
+function writeImportSmokeScript(filePath: string, plan: PackageInstallSmokePlan): void {
   const source = `import assert from "node:assert/strict";
 	import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 	import { createRequire } from "node:module";
@@ -401,7 +505,7 @@ console.log(JSON.stringify({
   writeFileSync(filePath, source, "utf8");
 }
 
-export function runPackageInstallSmoke(options = Object()) {
+export function runPackageInstallSmoke(options: PackageSmokeOptions = Object()): PackageInstallSmokeResult {
   const plan = buildPackageInstallSmokePlan(options);
   if (options.dryRun === true || options.dry_run === true) {
     return {
@@ -469,7 +573,7 @@ export function runPackageInstallSmoke(options = Object()) {
       : null;
 
     const binPath = join(consumerDir, "node_modules", ".bin", "yolo");
-    const binChecks = [];
+    const binChecks: CommandResult[] = [];
     if (install.exit_code === 0) {
       binChecks.push(runCommand(binPath, ["--help"], consumerDir, options));
     }
@@ -478,7 +582,7 @@ export function runPackageInstallSmoke(options = Object()) {
       install,
       importCheck,
       ...binChecks,
-    ].filter((item) => item && item.exit_code !== 0);
+    ].filter((item): item is CommandResult => item !== null && item.exit_code !== 0);
 
     return {
       status: failedChecks.length === 0 ? "pass" : "blocked",

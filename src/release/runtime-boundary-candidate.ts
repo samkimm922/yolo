@@ -1,31 +1,91 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { inspectRunnerRuntimeApiFreeze } from "../runtime/run-lifecycle/runtime-api-freeze.js";
+import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const RUNTIME_BOUNDARY_CANDIDATE_SCHEMA_VERSION = "1.0";
 
 const DEFAULT_RUNTIME_EXPORT = "./runtime";
 const DEFAULT_RUNTIME_TARGET = "./dist/src/runtime/runner-runtime.js";
 
-function readJson(filePath) {
+export interface PackageJsonLike extends ReleaseRecord {
+  name?: string;
+  version?: string;
+  private?: boolean;
+  exports?: Record<string, string>;
+}
+
+export interface ApiBoundaryEntry extends ReleaseRecord {
+  export?: string;
+  target?: string;
+  tier?: string;
+}
+
+export interface ApiBoundaryDocument extends ReleaseRecord {
+  package_exports?: ApiBoundaryEntry[];
+}
+
+export interface RuntimeApiFreezeReport extends ReleaseRecord {
+  status?: string;
+  implementation_ready?: boolean;
+  implementation_blockers?: ReleaseIssue[];
+  blockers?: ReleaseIssue[];
+}
+
+export interface RuntimeBoundaryCandidatePlan extends ReleaseRecord {
+  yolo_root: string;
+  target_export: string;
+  expected_target: string;
+  current_tier_expected: string;
+  proposed_tier: string;
+  public_api_change_required: boolean;
+  requires_human_approval: boolean;
+  applies_changes: boolean;
+  writes_workspace: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  executes_billable_provider: boolean;
+  publishes_dogfood_report: boolean;
+}
+
+export interface RuntimeBoundaryCandidateOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  packageJson?: PackageJsonLike;
+  apiBoundary?: ApiBoundaryDocument;
+  api_boundary?: ApiBoundaryDocument;
+  plan?: RuntimeBoundaryCandidatePlan;
+  targetExport?: string;
+  target_export?: string;
+  expectedTarget?: string;
+  expected_target?: string;
+  runtimeApiFreeze?: RuntimeApiFreezeReport;
+  runtime_api_freeze?: RuntimeApiFreezeReport;
+  inspectRunnerRuntimeApiFreeze?: (options: ReleaseRecord) => RuntimeApiFreezeReport;
+  maxRunnerCoreLines?: number;
+  max_runner_core_lines?: number;
+}
+
+function readJson(filePath: string): ReleaseRecord {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = Object()) {
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function boundaryEntry(apiBoundary, exportName) {
+function boundaryEntry(apiBoundary: ApiBoundaryDocument, exportName: string): ApiBoundaryEntry | null {
   return (apiBoundary.package_exports || []).find((entry) => entry.export === exportName) || null;
 }
 
-function implementationReady(runtimeApiFreeze = Object()) {
+function implementationReady(runtimeApiFreeze: RuntimeApiFreezeReport = Object()): boolean {
   if (runtimeApiFreeze.implementation_ready === true) return true;
   const blockers = runtimeApiFreeze.blockers || [];
   return blockers.length > 0 && blockers.every((blocker) => blocker.code === "RUNTIME_API_BOUNDARY_STABLE");
 }
 
-function implementationBlockerCodes(runtimeApiFreeze = Object()) {
+function implementationBlockerCodes(runtimeApiFreeze: RuntimeApiFreezeReport = Object()): string[] {
   if (Array.isArray(runtimeApiFreeze.implementation_blockers)) {
     return runtimeApiFreeze.implementation_blockers.map((blocker) => blocker.code);
   }
@@ -34,7 +94,7 @@ function implementationBlockerCodes(runtimeApiFreeze = Object()) {
     .map((blocker) => blocker.code);
 }
 
-export function buildRuntimeBoundaryCandidatePlan(options = Object()) {
+export function buildRuntimeBoundaryCandidatePlan(options: RuntimeBoundaryCandidateOptions = Object()): RuntimeBoundaryCandidatePlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const targetExport = options.targetExport || options.target_export || DEFAULT_RUNTIME_EXPORT;
   return {
@@ -69,16 +129,16 @@ export function buildRuntimeBoundaryCandidatePlan(options = Object()) {
   };
 }
 
-export function inspectRuntimeBoundaryCandidate(options = Object()) {
+export function inspectRuntimeBoundaryCandidate(options: RuntimeBoundaryCandidateOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
-  const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
-  const apiBoundary = options.apiBoundary || options.api_boundary || readJson(join(yoloRoot, "docs/public-sdk-api-boundary.json"));
+  const packageJson: PackageJsonLike = options.packageJson || readJson(join(yoloRoot, "package.json"));
+  const apiBoundary: ApiBoundaryDocument = options.apiBoundary || options.api_boundary || readJson(join(yoloRoot, "docs/public-sdk-api-boundary.json"));
   const plan = options.plan || buildRuntimeBoundaryCandidatePlan({
     yoloRoot,
     targetExport: options.targetExport || options.target_export,
     expectedTarget: options.expectedTarget || options.expected_target,
   });
-  const runtimeApiFreeze = options.runtimeApiFreeze || options.runtime_api_freeze || (options.inspectRunnerRuntimeApiFreeze || inspectRunnerRuntimeApiFreeze)({
+  const runtimeApiFreeze: RuntimeApiFreezeReport = options.runtimeApiFreeze || options.runtime_api_freeze || (options.inspectRunnerRuntimeApiFreeze || inspectRunnerRuntimeApiFreeze)({
     yoloRoot,
     packageJson,
     apiBoundary,

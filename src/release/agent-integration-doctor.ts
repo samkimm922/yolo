@@ -3,15 +3,137 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { buildAgentBridgeInstallPlan } from "../../tools/install-agent-bridge.js";
 import { listYoloCommandNames } from "../workflows/command-registry.js";
+import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const AGENT_INTEGRATION_DOCTOR_SCHEMA_VERSION = "1.0";
 const DEFAULT_HOST_DISCOVERY_FRESHNESS_MS = 30 * 60 * 1000;
 
-function check(code, passed, message, extra = Object()) {
+export interface AgentArtifact extends ReleaseRecord {
+  target?: string | null;
+  agent_target?: string;
+  scope?: string | null;
+  role?: string | null;
+  kind?: string | null;
+  command?: string | null;
+  path?: string;
+  relative_path?: string;
+}
+
+export interface AgentArtifactStatus extends ReleaseRecord {
+  target: string | null;
+  scope: string | null;
+  role: string;
+  command: string | null;
+  path: string;
+  relative_path: string;
+  exists: boolean;
+  size: number;
+  non_empty: boolean;
+}
+
+export interface AgentBridgePlan extends ReleaseRecord {
+  targets?: string[];
+  scopes?: string[];
+  files?: AgentArtifact[];
+  native_skill_files?: AgentArtifact[];
+  claude_slash_commands?: AgentArtifact[];
+  components?: {
+    host_discovery_evidence?: AgentHostDiscoveryEvidence | null;
+  };
+  host_discovery_evidence?: AgentHostDiscoveryEvidence | null;
+}
+
+export interface AgentHostDiscoveryEvidence extends ReleaseRecord {
+  targets?: unknown;
+  discovered_targets?: unknown;
+  target?: unknown;
+  status?: string;
+  discovery_status?: string;
+  discovered_at?: string;
+  generated_at?: string;
+  checked_at?: string;
+  created_at?: string;
+  discovery_run_id?: string;
+  host_session_id?: string;
+  session_id?: string;
+}
+
+export interface AgentIntegrationDoctorPlan extends ReleaseRecord {
+  yolo_root: string;
+  project_root: string;
+  home_dir: string;
+  targets: string[];
+  scopes: string[];
+  expected_artifacts: AgentArtifact[];
+  writes_workspace: boolean;
+  writes_user_home: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  executes_billable_provider: boolean;
+  host_discovery_evidence?: AgentHostDiscoveryEvidence | null;
+  components?: ReleaseRecord & {
+    bridge_install_plan?: AgentBridgePlan;
+    host_discovery_evidence?: AgentHostDiscoveryEvidence | null;
+  };
+}
+
+export interface AgentHostDiscoveryResult extends ReleaseRecord {
+  status: string;
+  fresh: boolean;
+  evidence: AgentHostDiscoveryEvidence | null;
+  checked_at: string;
+  freshness_ms: number;
+  blockers: ReleaseIssue[];
+}
+
+export interface AgentIntegrationDoctorResult extends ReleaseRecord {
+  status: string;
+  artifact_count: number;
+  artifacts_present: number;
+  host_discovery: AgentHostDiscoveryResult;
+  blockers: ReleaseCheck[];
+  guarantees: {
+    writes_workspace: boolean;
+    writes_user_home: boolean;
+    published: boolean;
+    credential_access: boolean;
+    provider_execution: boolean;
+    billable_provider_execution: boolean;
+    host_discovery_fresh: boolean;
+  };
+}
+
+export interface AgentIntegrationDoctorOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  projectRoot?: string;
+  homeDir?: string;
+  home_dir?: string;
+  targets?: unknown;
+  scopes?: unknown;
+  scope?: string;
+  installScope?: string;
+  install_scope?: string;
+  commands?: unknown;
+  installCommands?: unknown;
+  hostDiscoveryEvidence?: AgentHostDiscoveryEvidence | null;
+  host_discovery_evidence?: AgentHostDiscoveryEvidence | null;
+  hostDiscoveryFreshnessMs?: number;
+  host_discovery_freshness_ms?: number;
+  nowMs?: number;
+  now_ms?: number;
+  now?: () => number;
+  bridgePlan?: AgentBridgePlan;
+  bridge_plan?: AgentBridgePlan;
+  plan?: AgentIntegrationDoctorPlan;
+}
+
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function artifactStatus(file = Object()) {
+function artifactStatus(file: AgentArtifact = Object()): AgentArtifactStatus {
   const path = file.path || "";
   const exists = Boolean(path) && existsSync(path);
   const size = exists ? statSync(path).size : 0;
@@ -28,7 +150,7 @@ function artifactStatus(file = Object()) {
   };
 }
 
-function expectedArtifacts(bridgePlan = Object()) {
+function expectedArtifacts(bridgePlan: AgentBridgePlan = Object()): AgentArtifact[] {
   return [
     ...(bridgePlan.files || []),
     ...(bridgePlan.native_skill_files || []),
@@ -36,22 +158,25 @@ function expectedArtifacts(bridgePlan = Object()) {
   ];
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function asArray(value) {
+function asArray(value: unknown): unknown[] {
   if (Array.isArray(value)) return value.filter(Boolean);
   if (value == null || value === "") return [];
   return [value];
 }
 
-function timestampMs(value) {
+function timestampMs(value: unknown): number | null {
   const time = Date.parse(clean(value));
   return Number.isFinite(time) ? time : null;
 }
 
-function hostDiscoveryEvidence(options = Object(), plan = Object()) {
+function hostDiscoveryEvidence(
+  options: AgentIntegrationDoctorOptions = Object(),
+  plan: AgentIntegrationDoctorPlan | AgentBridgePlan = Object(),
+): AgentHostDiscoveryEvidence | null {
   return options.hostDiscoveryEvidence
     || options.host_discovery_evidence
     || plan.host_discovery_evidence
@@ -59,11 +184,11 @@ function hostDiscoveryEvidence(options = Object(), plan = Object()) {
     || null;
 }
 
-function inspectHostDiscoveryEvidence(options = Object(), plan = Object()) {
+function inspectHostDiscoveryEvidence(options: AgentIntegrationDoctorOptions = Object(), plan: AgentIntegrationDoctorPlan): AgentHostDiscoveryResult {
   const evidence = hostDiscoveryEvidence(options, plan);
   const nowMs = Number(options.nowMs || options.now_ms) || (typeof options.now === "function" ? options.now() : Date.now());
   const freshnessMs = Number(options.hostDiscoveryFreshnessMs || options.host_discovery_freshness_ms) || DEFAULT_HOST_DISCOVERY_FRESHNESS_MS;
-  const blockers = [];
+  const blockers: ReleaseIssue[] = [];
   if (!evidence || typeof evidence !== "object") {
     blockers.push({
       code: "AGENT_INTEGRATION_DOCTOR_HOST_DISCOVERY_MISSING",
@@ -131,11 +256,11 @@ function inspectHostDiscoveryEvidence(options = Object(), plan = Object()) {
   };
 }
 
-export function buildAgentIntegrationDoctorPlan(options = Object()) {
+export function buildAgentIntegrationDoctorPlan(options: AgentIntegrationDoctorOptions = Object()): AgentIntegrationDoctorPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || process.cwd());
   const homeDir = resolve(options.homeDir || options.home_dir || homedir());
-  const bridgePlan = options.bridgePlan || options.bridge_plan || buildAgentBridgeInstallPlan({
+  const bridgePlan: AgentBridgePlan = options.bridgePlan || options.bridge_plan || buildAgentBridgeInstallPlan({
     yoloRoot,
     projectRoot,
     homeDir,
@@ -189,11 +314,11 @@ export function buildAgentIntegrationDoctorPlan(options = Object()) {
   };
 }
 
-export function runAgentIntegrationDoctor(options = Object()) {
+export function runAgentIntegrationDoctor(options: AgentIntegrationDoctorOptions = Object()): AgentIntegrationDoctorResult {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || process.cwd());
   const homeDir = resolve(options.homeDir || options.home_dir || homedir());
-  const plan = options.plan || buildAgentIntegrationDoctorPlan({
+  const plan: AgentIntegrationDoctorPlan = options.plan || buildAgentIntegrationDoctorPlan({
     yoloRoot,
     projectRoot,
     homeDir,

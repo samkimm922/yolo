@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { runOperatorReleaseStateMutation } from "./operator-state.js";
+import type { ReleaseCheck, ReleaseRecord } from "./readiness.js";
 
 export const OPERATOR_RELEASE_RUNBOOK_SCHEMA_VERSION = "1.0";
 
@@ -14,53 +15,131 @@ export const OPERATOR_RELEASE_OPERATIONS = Object.freeze([
 const DEFAULT_RELEASE_SCOPE = "public-beta";
 const DEFAULT_REQUESTED_OPERATIONS = ["publish_public_beta", "public_dogfood_report"];
 
-function readJson(filePath) {
+export interface PackageJsonLike extends ReleaseRecord {
+  name?: string;
+  version?: string;
+  private?: boolean;
+}
+
+export interface ManualCommand extends ReleaseRecord {
+  id: string;
+  command: string;
+  execute: boolean;
+  requires_human: boolean;
+  requires_credentials: boolean;
+  requires_billable_provider: boolean;
+}
+
+export interface DecisionGateLike extends ReleaseRecord {
+  action_authorization?: Record<string, boolean>;
+  approved_actions?: string[];
+}
+
+export interface OperatorStateLike extends ReleaseRecord {
+  status?: string;
+  guarantees?: ReleaseRecord;
+  components?: {
+    decision_gate?: DecisionGateLike | null;
+  };
+  decision_gate?: DecisionGateLike | null;
+}
+
+export interface DogfoodReportLike extends ReleaseRecord {
+  status?: string;
+  report_path?: string;
+  artifact_path?: string;
+  evidence_files?: unknown[];
+  evidence?: unknown[];
+  privacy_reviewed?: boolean;
+  publication_approved?: boolean;
+  approver?: string;
+}
+
+export interface OperatorReleaseRunbookPlan extends ReleaseRecord {
+  release_scope: string;
+  requested_operations: string[];
+  writes_workspace: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  executes_billable_provider: boolean;
+  publishes_dogfood_report: boolean;
+  manual_commands: ManualCommand[];
+}
+
+export interface OperatorRunbookOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  packageJson?: PackageJsonLike;
+  releaseScope?: string;
+  release_scope?: string;
+  requestedOperations?: unknown;
+  requested_operations?: unknown;
+  dogfoodReport?: DogfoodReportLike | null;
+  dogfood_report?: DogfoodReportLike | null;
+  providerCommand?: string;
+  provider_command?: string;
+  plan?: OperatorReleaseRunbookPlan;
+  operatorState?: OperatorStateLike;
+  operator_state?: OperatorStateLike;
+  decisionGate?: DecisionGateLike | null;
+  decision_gate?: DecisionGateLike | null;
+  decision?: ReleaseRecord;
+  timeout_ms?: number;
+  commandExists?: (command: string) => boolean;
+  now?: unknown;
+  random?: unknown;
+  providerConfigs?: unknown;
+  runOperatorReleaseStateMutation?: (options: ReleaseRecord) => OperatorStateLike;
+}
+
+function readJson(filePath: string): ReleaseRecord {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function check(code, passed, message, extra = Object()) {
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function normalizeRequestedOperations(input) {
+function normalizeRequestedOperations(input: unknown): string[] {
   const source = Array.isArray(input) && input.length > 0 ? input : DEFAULT_REQUESTED_OPERATIONS;
   return [...new Set(source.map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
-function operationRequested(operations, operation) {
+function operationRequested(operations: string[], operation: string): boolean {
   return operations.includes(operation);
 }
 
-function actionAuthorized(decisionGate, action) {
+function actionAuthorized(decisionGate: DecisionGateLike | null | undefined, action: string): boolean {
   return decisionGate?.action_authorization?.[action] === true
     || (Array.isArray(decisionGate?.approved_actions) && decisionGate.approved_actions.includes(action));
 }
 
-function decisionGateFromOperatorState(operatorState = Object()) {
+function decisionGateFromOperatorState(operatorState: OperatorStateLike = Object()): DecisionGateLike | null {
   return operatorState.components?.decision_gate || operatorState.decision_gate || null;
 }
 
-function dogfoodReportEvidencePresent(report = Object()) {
-  const summary = report && typeof report === "object" ? report : {};
+function dogfoodReportEvidencePresent(report: unknown = Object()): boolean {
+  const summary: DogfoodReportLike = report && typeof report === "object" ? report as DogfoodReportLike : {};
   return Boolean(summary.report_path)
     || Boolean(summary.artifact_path)
     || (Array.isArray(summary.evidence_files) && summary.evidence_files.length > 0)
     || (Array.isArray(summary.evidence) && summary.evidence.length > 0);
 }
 
-function dogfoodReportApproved(report = Object()) {
-  const summary = report && typeof report === "object" ? report : {};
+function dogfoodReportApproved(report: unknown = Object()): boolean {
+  const summary: DogfoodReportLike = report && typeof report === "object" ? report as DogfoodReportLike : {};
   return summary.publication_approved === true
     && typeof summary.approver === "string"
     && summary.approver.trim().length > 0;
 }
 
-function buildManualCommands(operations, packageJson = Object(), options = Object()) {
+function buildManualCommands(operations: string[], packageJson: PackageJsonLike = Object(), options: OperatorRunbookOptions = Object()): ManualCommand[] {
   const packageName = packageJson.name || "package";
   const packageVersion = packageJson.version || "0.0.0";
   const providerCommand = options.providerCommand || options.provider_command || "<operator-provider-command>";
   const dogfoodReportPath = options.dogfoodReport?.report_path || options.dogfoodReport?.artifact_path || "<dogfood-report.md>";
-  const commands = [];
+  const commands: ManualCommand[] = [];
 
   if (operationRequested(operations, "publish_public_beta")) {
     commands.push({
@@ -109,10 +188,10 @@ function buildManualCommands(operations, packageJson = Object(), options = Objec
   return commands;
 }
 
-export function buildOperatorReleaseRunbookPlan(options = Object()) {
+export function buildOperatorReleaseRunbookPlan(options: OperatorRunbookOptions = Object()): OperatorReleaseRunbookPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const requestedOperations = normalizeRequestedOperations(options.requestedOperations || options.requested_operations);
-  const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
+  const packageJson: PackageJsonLike = options.packageJson || readJson(join(yoloRoot, "package.json"));
   return {
     schema_version: OPERATOR_RELEASE_RUNBOOK_SCHEMA_VERSION,
     schema: "yolo.release.operator_runbook_plan.v1",
@@ -136,9 +215,9 @@ export function buildOperatorReleaseRunbookPlan(options = Object()) {
   };
 }
 
-export function runOperatorReleaseRunbookGate(options = Object()) {
+export function runOperatorReleaseRunbookGate(options: OperatorRunbookOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
-  const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
+  const packageJson: PackageJsonLike = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const plan = options.plan || buildOperatorReleaseRunbookPlan({
     yoloRoot,
     releaseScope: options.releaseScope || options.release_scope,
@@ -150,7 +229,7 @@ export function runOperatorReleaseRunbookGate(options = Object()) {
   const requestedOperations = normalizeRequestedOperations(plan.requested_operations);
   const knownOperations = new Set(OPERATOR_RELEASE_OPERATIONS);
   const unknownOperations = requestedOperations.filter((operation) => !knownOperations.has(operation));
-  const operatorState = options.operatorState || options.operator_state || (options.runOperatorReleaseStateMutation || runOperatorReleaseStateMutation)({
+  const operatorState: OperatorStateLike = options.operatorState || options.operator_state || (options.runOperatorReleaseStateMutation || runOperatorReleaseStateMutation)({
     yoloRoot,
     decision: options.decision,
     requestedActions: ["remove_private", "publish_public_beta"],

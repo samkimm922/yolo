@@ -1,7 +1,9 @@
 import { spawnSync } from "node:child_process";
+import type { SpawnSyncReturns } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import type { ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const CLEAN_ENVIRONMENT_VERIFY_SCHEMA_VERSION = "1.0";
 const CLEAN_ENVIRONMENT_TEMP_PREFIX = "yolo-clean-env-";
@@ -16,7 +18,132 @@ const DEFAULT_COPY_EXCLUDES = [
   "tmp",
 ];
 
-function commandRecord(command, args, cwd, result, startedAt) {
+export interface PackageShape extends ReleaseRecord {
+  package_name: string;
+  package_version: unknown;
+  import_specifiers: string[];
+  bin_names: string[];
+}
+
+export interface PackageJsonLike extends ReleaseRecord {
+  name?: string;
+  version?: string;
+  exports?: Record<string, unknown>;
+  bin?: Record<string, unknown>;
+}
+
+export interface CleanEnvironmentWorkspace {
+  temp_root: string;
+  clean_worktree: string;
+  pack_destination: string;
+  consumer: string;
+  isolated_pack_destination: boolean;
+}
+
+export interface CleanEnvironmentSource extends ReleaseRecord {
+  mode: string;
+  repository_url?: string;
+  ref?: string | null;
+  source_root?: string;
+  excluded_paths?: string[];
+}
+
+export interface CleanEnvironmentStep extends ReleaseRecord {
+  id: string;
+  label: string;
+  command: string;
+  candidate_commands?: string[];
+}
+
+export interface CleanEnvironmentExecutionPolicy extends ReleaseRecord {
+  dry_run_has_no_side_effects: boolean;
+}
+
+export interface CleanEnvironmentPlan extends ReleaseRecord {
+  yolo_root: string;
+  source: CleanEnvironmentSource;
+  workspace: CleanEnvironmentWorkspace;
+  package: PackageShape;
+  steps: CleanEnvironmentStep[];
+  execution_policy: CleanEnvironmentExecutionPolicy;
+}
+
+export interface CommandResult extends ReleaseRecord {
+  command: string;
+  args: string[];
+  cwd: string;
+  exit_code: number | null;
+  signal: NodeJS.Signals | string | null;
+  status: string;
+  started_at: string;
+  finished_at: string;
+  stdout: string;
+  stderr: string;
+  stdout_tail: string;
+  stderr_tail: string;
+  exception?: boolean;
+}
+
+export interface CompletedStep extends ReleaseRecord {
+  id: string;
+  status: string;
+  command: CommandResult;
+  selected_command?: string;
+  tarball?: string;
+  parsed_stdout?: ReleaseRecord;
+}
+
+export interface CleanEnvironmentVerifyResult extends ReleaseRecord {
+  status: string;
+  blocks_release: boolean;
+  exit_code: number;
+  dry_run: boolean;
+  summary: string;
+  plan: CleanEnvironmentPlan;
+  workspace?: CleanEnvironmentWorkspace | null;
+  steps: ReleaseRecord[];
+  blockers: ReleaseIssue[];
+  tarball?: string;
+  next_actions: string[];
+}
+
+export interface CleanEnvironmentOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  packageJson?: PackageJsonLike;
+  repositoryUrl?: string;
+  repository_url?: string;
+  ref?: string;
+  copyExcludes?: string[];
+  copy_excludes?: string[];
+  tempRoot?: string;
+  temp_root?: string;
+  cleanWorktree?: string;
+  clean_worktree?: string;
+  packDestination?: string;
+  pack_destination?: string;
+  consumerDir?: string;
+  consumer_dir?: string;
+  hasNpmCiLock?: boolean;
+  installCommand?: string;
+  install_command?: string;
+  existsSync?: (path: string) => boolean;
+  timeout_ms?: number;
+  keepWorkspace?: boolean;
+  cleanup?: boolean;
+  tmpRoot?: string;
+  commandRunner?: (command: string, args: string[], cwd: string, options?: CleanEnvironmentOptions) => CommandResult;
+  prepareWorkspace?: (plan: CleanEnvironmentPlan, options?: CleanEnvironmentOptions) => CommandResult;
+  dryRun?: boolean;
+  dry_run?: boolean;
+  executor?: (plan: CleanEnvironmentPlan, options?: CleanEnvironmentOptions) => CleanEnvironmentVerifyResult;
+}
+
+export interface PackInfo extends ReleaseRecord {
+  filename: string;
+}
+
+function commandRecord(command: string, args: string[], cwd: string, result: SpawnSyncReturns<string>, startedAt: string): CommandResult {
   const stdout = String(result.stdout || "");
   const stderr = String(result.stderr || result.error?.message || "");
   return {
@@ -35,7 +162,7 @@ function commandRecord(command, args, cwd, result, startedAt) {
   };
 }
 
-function runCommand(command, args, cwd, options = Object()) {
+function runCommand(command: string, args: string[], cwd: string, options: CleanEnvironmentOptions = Object()): CommandResult {
   const startedAt = new Date().toISOString();
   try {
     const result = spawnSync(command, args, {
@@ -64,7 +191,7 @@ function runCommand(command, args, cwd, options = Object()) {
   }
 }
 
-function readPackageShape(packageJson = Object()) {
+function readPackageShape(packageJson: PackageJsonLike = Object()): PackageShape {
   const packageName = packageJson.name || "yolo";
   const exportsMap = packageJson.exports || {};
   return {
@@ -77,15 +204,15 @@ function readPackageShape(packageJson = Object()) {
   };
 }
 
-function readJson(filePath) {
+function readJson(filePath: string): ReleaseRecord {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function hasNpmCiLock(root, exists = existsSync) {
+function hasNpmCiLock(root: string, exists: typeof existsSync = existsSync): boolean {
   return exists(join(root, "package-lock.json")) || exists(join(root, "npm-shrinkwrap.json"));
 }
 
-function materializeWorkspace(plan, tempRoot) {
+function materializeWorkspace(plan: CleanEnvironmentPlan, tempRoot: string): CleanEnvironmentPlan {
   return {
     ...plan,
     workspace: {
@@ -98,11 +225,11 @@ function materializeWorkspace(plan, tempRoot) {
   };
 }
 
-function step(id, label, command, details = Object()) {
+function step(id: string, label: string, command: string, details: ReleaseRecord = Object()): CleanEnvironmentStep {
   return { id, label, command, ...details };
 }
 
-export function buildCleanEnvironmentVerifyPlan(options = Object()) {
+export function buildCleanEnvironmentVerifyPlan(options: CleanEnvironmentOptions = Object()): CleanEnvironmentPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageShape = readPackageShape(options.packageJson || readJson(join(yoloRoot, "package.json")));
   const useClone = Boolean(options.repositoryUrl || options.repository_url);
@@ -170,7 +297,7 @@ export function buildCleanEnvironmentVerifyPlan(options = Object()) {
   };
 }
 
-function blockResult(plan, completedSteps, blocker, keepWorkspace) {
+function blockResult(plan: CleanEnvironmentPlan, completedSteps: CompletedStep[], blocker: ReleaseIssue, keepWorkspace: boolean): CleanEnvironmentVerifyResult {
   return {
     status: "blocked",
     blocks_release: true,
@@ -185,7 +312,7 @@ function blockResult(plan, completedSteps, blocker, keepWorkspace) {
   };
 }
 
-function commandBlock(stepId, result) {
+function commandBlock(stepId: string, result: CommandResult | null): ReleaseIssue {
   const code = result?.exception
     ? "CLEAN_VERIFY_COMMAND_EXCEPTION"
     : "CLEAN_VERIFY_COMMAND_NONZERO_EXIT";
@@ -201,33 +328,37 @@ function commandBlock(stepId, result) {
   };
 }
 
-function parseNpmPackStdout(stdout) {
-  const parsed = JSON.parse(stdout || "[]");
-  const packInfo = Array.isArray(parsed) ? parsed[0] : parsed;
-  if (!packInfo || typeof packInfo !== "object" || typeof packInfo.filename !== "string" || packInfo.filename.length === 0) {
-    throw new Error("npm pack stdout did not include a package filename");
-  }
-  return packInfo;
+function isRecord(value: unknown): value is ReleaseRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function parseSmokeStdout(stdout) {
+function parseNpmPackStdout(stdout: string): PackInfo {
+  const parsed = JSON.parse(stdout || "[]");
+  const packInfo = Array.isArray(parsed) ? parsed[0] : parsed;
+  if (!isRecord(packInfo) || typeof packInfo.filename !== "string" || packInfo.filename.length === 0) {
+    throw new Error("npm pack stdout did not include a package filename");
+  }
+  return { ...packInfo, filename: packInfo.filename };
+}
+
+function parseSmokeStdout(stdout: string): ReleaseRecord {
   const parsed = JSON.parse(stdout || "{}");
-  if (!parsed || typeof parsed !== "object" || parsed.status !== "pass") {
+  if (!isRecord(parsed) || parsed.status !== "pass") {
     throw new Error("public entrypoint/bin smoke did not return status=pass");
   }
   return parsed;
 }
 
-function ensurePass(stepId, result) {
+function ensurePass(stepId: string, result: CommandResult | null): ReleaseIssue | null {
   if (!result || result.exit_code !== 0 || result.exception === true) {
     return commandBlock(stepId, result);
   }
   return null;
 }
 
-function cleanCopyFilter(sourceRoot, excludes) {
+function cleanCopyFilter(sourceRoot: string, excludes: string[]) {
   const excluded = new Set(excludes);
-  return (source) => {
+  return (source: string) => {
     const rel = relative(sourceRoot, source);
     if (!rel) {
       return true;
@@ -237,14 +368,14 @@ function cleanCopyFilter(sourceRoot, excludes) {
   };
 }
 
-function prepareCleanWorkspace(plan, options = Object()) {
-  const source = plan.source || {};
+function prepareCleanWorkspace(plan: CleanEnvironmentPlan, options: CleanEnvironmentOptions = Object()): CommandResult {
+  const source: Partial<CleanEnvironmentSource> = plan.source || Object();
   if (source.mode === "git_clone") {
     const args = ["clone"];
     if (source.ref) {
       args.push("--branch", source.ref);
     }
-    args.push(source.repository_url, plan.workspace.clean_worktree);
+    args.push(source.repository_url as string, plan.workspace.clean_worktree);
     return runCommand("git", args, plan.yolo_root, options);
   }
 
@@ -289,7 +420,7 @@ function prepareCleanWorkspace(plan, options = Object()) {
   }
 }
 
-function writeConsumerPackageJson(consumerDir) {
+function writeConsumerPackageJson(consumerDir: string): void {
   writeFileSync(join(consumerDir, "package.json"), `${JSON.stringify({
     name: "yolo-clean-environment-verify-consumer",
     version: "0.0.0",
@@ -298,7 +429,7 @@ function writeConsumerPackageJson(consumerDir) {
   }, null, 2)}\n`, "utf8");
 }
 
-function writePublicEntrypointBinSmoke(filePath, plan) {
+function writePublicEntrypointBinSmoke(filePath: string, plan: CleanEnvironmentPlan): void {
   const source = `import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -335,11 +466,11 @@ console.log(JSON.stringify({
   writeFileSync(filePath, source, "utf8");
 }
 
-function isManagedCleanEnvironmentTempRoot(tempRoot) {
+function isManagedCleanEnvironmentTempRoot(tempRoot: string): boolean {
   return basename(resolve(tempRoot)).startsWith(CLEAN_ENVIRONMENT_TEMP_PREFIX);
 }
 
-export function executeCleanEnvironmentVerifyPlan(plan, options = Object()) {
+export function executeCleanEnvironmentVerifyPlan(plan: CleanEnvironmentPlan, options: CleanEnvironmentOptions = Object()): CleanEnvironmentVerifyResult {
   const keepWorkspace = options.keepWorkspace === true;
   const cleanup = options.cleanup !== false;
   const explicitTempRoot = options.tempRoot || options.temp_root;
@@ -347,8 +478,8 @@ export function executeCleanEnvironmentVerifyPlan(plan, options = Object()) {
     ? null
     : mkdtempSync(join(resolve(options.tmpRoot || tmpdir()), CLEAN_ENVIRONMENT_TEMP_PREFIX));
   const tempRoot = explicitTempRoot || createdTempRoot;
-  const activePlan = materializeWorkspace(plan, resolve(tempRoot));
-  const completedSteps = [];
+  const activePlan = materializeWorkspace(plan, resolve(tempRoot as string));
+  const completedSteps: CompletedStep[] = [];
   const run = options.commandRunner || runCommand;
   const prepare = options.prepareWorkspace || prepareCleanWorkspace;
   const exists = options.existsSync || existsSync;
@@ -471,7 +602,7 @@ export function executeCleanEnvironmentVerifyPlan(plan, options = Object()) {
   }
 }
 
-export function runCleanEnvironmentVerify(options = Object()) {
+export function runCleanEnvironmentVerify(options: CleanEnvironmentOptions = Object()): CleanEnvironmentVerifyResult {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const packageJson = options.packageJson || readJson(join(yoloRoot, "package.json"));
   const plan = buildCleanEnvironmentVerifyPlan({

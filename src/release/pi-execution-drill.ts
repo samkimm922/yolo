@@ -1,26 +1,63 @@
 import { resolve } from "node:path";
+import type { ReleaseCheck, ReleaseRecord } from "./readiness.js";
 
 export const PI_EXECUTION_DRILL_SCHEMA_VERSION = "1.0";
 
 const CONTROLLED_PI_MODES = ["mock", "dry_run", "controlled_billable"];
 
-function check(code, passed, message, extra = Object()) {
+export interface PiExecutionDrillPlan extends ReleaseRecord {
+  mode: string;
+  writes_workspace: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  executes_billable_provider: boolean;
+}
+
+export interface PiExecutionEvidence extends ReleaseRecord {
+  mode?: string;
+  execution_mode?: string;
+  provider?: string;
+  status?: string;
+  pi_agent?: boolean;
+  agent?: string;
+  agent_preset?: string;
+  cost_acknowledged?: boolean;
+}
+
+export interface PiExecutionDrillOptions extends ReleaseRecord {
+  yoloRoot?: string;
+  cwd?: string;
+  projectRoot?: string;
+  project_root?: string;
+  mode?: string;
+  executionMode?: string;
+  execution_mode?: string;
+  plan?: PiExecutionDrillPlan;
+  executionEvidence?: PiExecutionEvidence | null;
+  execution_evidence?: PiExecutionEvidence | null;
+  authorization?: ReleaseRecord | null;
+  billableAuthorization?: ReleaseRecord | null;
+  billable_authorization?: ReleaseRecord | null;
+}
+
+function check(code: string, passed: boolean, message: string, extra: ReleaseRecord = Object()): ReleaseCheck {
   return { code, passed, message, ...extra };
 }
 
-function isObject(value) {
+function isObject(value: unknown): value is ReleaseRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function nonEmptyString(value) {
+function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function validTimestamp(value) {
+function validTimestamp(value: unknown): boolean {
   return nonEmptyString(value) && !Number.isNaN(Date.parse(value));
 }
 
-function evidencePresent(value = Object()) {
+function evidencePresent(value: ReleaseRecord = Object()): boolean {
   return Boolean(value.artifact_path)
     || Boolean(value.report_path)
     || Boolean(value.public_url)
@@ -28,13 +65,13 @@ function evidencePresent(value = Object()) {
     || (Array.isArray(value.evidence) && value.evidence.length > 0);
 }
 
-function noSdkExecutionClaim(value = Object()) {
+function noSdkExecutionClaim(value: ReleaseRecord = Object()): boolean {
   return value.executed_by_sdk !== true
     && value.provider_executed_by_sdk !== true
     && value.billable_provider_executed_by_sdk !== true;
 }
 
-function authorizationApproved(record = Object(), provider = "") {
+function authorizationApproved(record: unknown = Object(), provider = ""): boolean {
   const summary = isObject(record) ? record : {};
   return summary.approved === true
     && nonEmptyString(summary.operator || summary.approver)
@@ -45,7 +82,7 @@ function authorizationApproved(record = Object(), provider = "") {
     && (summary.max_budget_usd === undefined || Number(summary.max_budget_usd) >= 0);
 }
 
-export function buildPiExecutionDrillPlan(options = Object()) {
+export function buildPiExecutionDrillPlan(options: PiExecutionDrillOptions = Object()): PiExecutionDrillPlan {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const mode = options.mode || options.executionMode || options.execution_mode || "dry_run";
@@ -77,7 +114,7 @@ export function buildPiExecutionDrillPlan(options = Object()) {
   };
 }
 
-export function runPiExecutionDrillGate(options = Object()) {
+export function runPiExecutionDrillGate(options: PiExecutionDrillOptions = Object()) {
   const yoloRoot = resolve(options.yoloRoot || options.cwd || process.cwd());
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const plan = options.plan || buildPiExecutionDrillPlan({
