@@ -5,19 +5,118 @@ import { EVIDENCE_SCHEMA_VERSION } from "../runtime/evidence/schema.js";
 export const REVIEW_FINDING_SCHEMA = "yolo.review.finding.v1";
 export const REVIEW_OUTPUT_SCHEMA = "yolo.review.output.v1";
 
-const SEVERITIES = new Set(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "UNKNOWN"]);
-const FIX_TYPES = new Set(["AUTO_FIX", "CLAUDE_FIX", "INFO", "MANUAL_REVIEW", "UNKNOWN"]);
+const SEVERITY_VALUES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "UNKNOWN"] as const;
+const FIX_TYPE_VALUES = ["AUTO_FIX", "CLAUDE_FIX", "INFO", "MANUAL_REVIEW", "UNKNOWN"] as const;
+
+export type ReviewSeverity = (typeof SEVERITY_VALUES)[number];
+export type ReviewFixType = (typeof FIX_TYPE_VALUES)[number];
+
+export type ReviewLocation = {
+  file: string | null;
+  line: number | null;
+};
+
+export type ReviewFindingInput = {
+  [key: string]: unknown;
+  finding_id?: unknown;
+  id?: unknown;
+  scanner_id?: unknown;
+  rule_id?: unknown;
+  code?: unknown;
+  file?: unknown;
+  path?: unknown;
+  filename?: unknown;
+  location?: { [key: string]: unknown; file?: unknown; line?: unknown } | null;
+  files?: unknown[];
+  line?: unknown;
+  message?: unknown;
+  description?: unknown;
+  title?: unknown;
+  summary?: unknown;
+  suggested_fix?: unknown;
+  suggestion?: unknown;
+  recommendation?: unknown;
+  source?: unknown;
+  dimension?: unknown;
+  category?: unknown;
+  severity?: unknown;
+  fix_type?: unknown;
+  match?: unknown;
+  evidence_text?: unknown;
+  pattern?: unknown;
+  context?: unknown;
+  risk?: unknown;
+  must_fix_before_ship?: unknown;
+  evidence?: unknown;
+};
+
+export type NormalizeReviewOptions = {
+  [key: string]: unknown;
+  source?: unknown;
+  index?: number;
+  now?: string;
+};
+
+export type NormalizedReviewFinding = {
+  [key: string]: unknown;
+  schema_version: typeof EVIDENCE_SCHEMA_VERSION;
+  schema: typeof REVIEW_FINDING_SCHEMA;
+  finding_id: string;
+  source: string;
+  code: string;
+  scanner_id: string;
+  rule_id: string;
+  dimension: string;
+  severity: ReviewSeverity;
+  fix_type: ReviewFixType;
+  file: string | null;
+  line: number | null;
+  location: ReviewLocation;
+  files: string[];
+  message: string;
+  description: string;
+  match: string | null;
+  context: string | null;
+  suggested_fix: string | null;
+  recommendation: string | null;
+  risk: string | null;
+  must_fix_before_ship: boolean;
+  evidence?: unknown[];
+};
+
+export type ReviewFindingsSummary = {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  info: number;
+  unknown: number;
+  total: number;
+};
+
+export type ReviewOutput = {
+  schema_version: typeof EVIDENCE_SCHEMA_VERSION;
+  schema: typeof REVIEW_OUTPUT_SCHEMA;
+  generated_at: string;
+  source: string;
+  summary: ReviewFindingsSummary;
+  findings: NormalizedReviewFinding[];
+};
+
+const SEVERITIES = new Set<string>(SEVERITY_VALUES);
+const FIX_TYPES = new Set<string>(FIX_TYPE_VALUES);
+const SUMMARY_KEYS = new Set<string>(["critical", "high", "medium", "low", "info", "unknown"]);
 
 function nowIso() {
   return new Date().toISOString();
 }
 
-function cleanText(value) {
+function cleanText(value: unknown): string | null {
   const text = String(value ?? "").trim();
   return text.length > 0 ? text : null;
 }
 
-function cleanCode(value) {
+function cleanCode(value: unknown): string {
   return String(value || "review-finding")
     .trim()
     .replace(/[^A-Z0-9_.:-]+/gi, "-")
@@ -25,11 +124,11 @@ function cleanCode(value) {
     .slice(0, 80) || "review-finding";
 }
 
-function shortHash(value) {
+function shortHash(value: unknown): string {
   return createHash("sha1").update(String(value)).digest("hex").slice(0, 10).toUpperCase();
 }
 
-export function normalizeReviewPath(value) {
+export function normalizeReviewPath(value: unknown): string | null {
   const text = cleanText(value);
   if (!text) return null;
   return text
@@ -38,9 +137,11 @@ export function normalizeReviewPath(value) {
     .replace(/:\d+(?:-\d+)?$/, "");
 }
 
-function parseLocation(input = Object()) {
-  const rawFile = input.file || input.path || input.filename || input.location?.file || input.files?.[0] || null;
-  const rawText = typeof rawFile === "object" && rawFile !== null ? rawFile.file : rawFile;
+function parseLocation(input: ReviewFindingInput = Object()): ReviewLocation {
+  const location = input.location || Object();
+  const rawFile = input.file || input.path || input.filename || location.file || input.files?.[0] || null;
+  const rawFileSlot = fileSlot(rawFile);
+  const rawText = rawFileSlot ? rawFileSlot.file : rawFile;
   const match = String(rawText || "").match(/^(.+?):(\d+)(?:-\d+)?$/);
   const file = normalizeReviewPath(match ? match[1] : rawText);
   const line = Number(input.line ?? input.location?.line ?? (match ? match[2] : null));
@@ -50,42 +151,82 @@ function parseLocation(input = Object()) {
   };
 }
 
-function normalizeSeverity(value) {
+function normalizeSeverity(value: unknown): ReviewSeverity {
   const severity = String(value || "UNKNOWN").toUpperCase();
-  return SEVERITIES.has(severity) ? severity : "UNKNOWN";
+  switch (severity) {
+    case "CRITICAL":
+    case "HIGH":
+    case "MEDIUM":
+    case "LOW":
+    case "INFO":
+    case "UNKNOWN":
+      return severity;
+    default:
+      return "UNKNOWN";
+  }
 }
 
-function normalizeFixType(value) {
+function normalizeFixType(value: unknown): ReviewFixType {
   const fixType = String(value || "UNKNOWN").toUpperCase();
-  return FIX_TYPES.has(fixType) ? fixType : "UNKNOWN";
+  switch (fixType) {
+    case "AUTO_FIX":
+    case "CLAUDE_FIX":
+    case "INFO":
+    case "MANUAL_REVIEW":
+    case "UNKNOWN":
+      return fixType;
+    default:
+      return "UNKNOWN";
+  }
 }
 
-function unique(values = []) {
-  return [...new Set(values.filter(Boolean))];
+function unique(values: Array<string | null | undefined> = []): string[] {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))];
 }
 
-function collectFiles(input, primaryFile) {
+function fileSlot(value: unknown): { file?: unknown } | null {
+  return typeof value === "object" && value !== null ? value : null;
+}
+
+function collectFiles(input: ReviewFindingInput, primaryFile: string | null): string[] {
   const files = Array.isArray(input.files) ? input.files : [];
   return unique([
     primaryFile,
-    ...files.map((file) => normalizeReviewPath(typeof file === "object" && file !== null ? file.file : file)),
+    ...files.map((file) => normalizeReviewPath(fileSlot(file)?.file ?? file)),
   ]);
 }
 
-function buildFindingId({ input, code, file, line, message, index }) {
+function buildFindingId({
+  input,
+  code,
+  file,
+  line,
+  message,
+  index,
+}: {
+  input: ReviewFindingInput;
+  code: string;
+  file: string | null;
+  line: number | null;
+  message: string | null;
+  index?: number;
+}): string {
   const explicit = cleanText(input.finding_id || input.id);
   if (explicit) return explicit;
   const basis = `${code}|${file || ""}|${line || ""}|${message || ""}|${input.match || ""}|${index ?? ""}`;
   return `REV-${cleanCode(code).slice(0, 28).toUpperCase()}-${shortHash(basis)}`;
 }
 
-export function normalizeReviewFinding(input = Object(), options = Object()) {
+export function normalizeReviewFinding(
+  input: ReviewFindingInput = Object(),
+  options: NormalizeReviewOptions = Object(),
+): NormalizedReviewFinding {
   const location = parseLocation(input);
   const code = cleanCode(input.code || input.scanner_id || input.rule_id || input.id || input.finding_id);
-  const message = cleanText(input.message || input.description || input.title || input.summary || code);
+  const message = cleanText(input.message || input.description || input.title || input.summary || code) || code;
   const suggestedFix = cleanText(input.suggested_fix || input.suggestion || input.recommendation);
   const source = cleanText(input.source || options.source) || "review";
-  const finding = Object.assign(Object(), {
+  const finding: NormalizedReviewFinding = Object.assign(Object(), {
     schema_version: EVIDENCE_SCHEMA_VERSION,
     schema: REVIEW_FINDING_SCHEMA,
     finding_id: buildFindingId({
@@ -121,12 +262,19 @@ export function normalizeReviewFinding(input = Object(), options = Object()) {
   return finding;
 }
 
-export function normalizeReviewFindings(findings = [], options = Object()) {
+export function normalizeReviewFindings(
+  findings: ReviewFindingInput[] = [],
+  options: NormalizeReviewOptions = Object(),
+): NormalizedReviewFinding[] {
   return findings.map((finding, index) => normalizeReviewFinding(finding, { ...options, index }));
 }
 
-export function summarizeReviewFindings(findings = []) {
-  const summary = {
+function isSummaryKey(key: string): key is keyof Omit<ReviewFindingsSummary, "total"> {
+  return SUMMARY_KEYS.has(key);
+}
+
+export function summarizeReviewFindings(findings: NormalizedReviewFinding[] = []): ReviewFindingsSummary {
+  const summary: ReviewFindingsSummary = {
     critical: 0,
     high: 0,
     medium: 0,
@@ -137,7 +285,7 @@ export function summarizeReviewFindings(findings = []) {
   };
   for (const finding of findings) {
     const key = String(finding.severity || "UNKNOWN").toLowerCase();
-    if (Object.prototype.hasOwnProperty.call(summary, key)) {
+    if (isSummaryKey(key)) {
       summary[key] += 1;
     } else {
       summary.unknown += 1;
@@ -146,7 +294,10 @@ export function summarizeReviewFindings(findings = []) {
   return summary;
 }
 
-export function buildReviewOutput(findings = [], options = Object()) {
+export function buildReviewOutput(
+  findings: ReviewFindingInput[] = [],
+  options: NormalizeReviewOptions = Object(),
+): ReviewOutput {
   const normalizedFindings = normalizeReviewFindings(findings, options);
   return {
     schema_version: EVIDENCE_SCHEMA_VERSION,
@@ -158,8 +309,8 @@ export function buildReviewOutput(findings = [], options = Object()) {
   };
 }
 
-export function validateReviewFinding(finding = Object()) {
-  const errors = [];
+export function validateReviewFinding(finding: Partial<NormalizedReviewFinding> = Object()) {
+  const errors: string[] = [];
   if (finding.schema_version !== EVIDENCE_SCHEMA_VERSION) errors.push("schema_version must be 1.0");
   if (finding.schema !== REVIEW_FINDING_SCHEMA) errors.push(`schema must be ${REVIEW_FINDING_SCHEMA}`);
   if (!cleanText(finding.finding_id)) errors.push("finding_id is required");

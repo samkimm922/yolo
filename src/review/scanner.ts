@@ -8,21 +8,152 @@ import { extname, resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../lib/config.js";
 import { buildReviewOutput, normalizeReviewFindings } from "./findings.js";
+import type { NormalizedReviewFinding, ReviewFindingInput, ReviewFixType, ReviewSeverity } from "./findings.js";
 import { redact } from "../lib/security/redact.js";
 import { execCommand } from "../lib/security/safe-exec.js";
+import type { ExecCommandResult } from "../lib/security/safe-exec.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
 const REVIEW_SCANNER_VERSION = "review-scanner@1";
 
-function scannerSettings(options = Object()) {
-  const cfg = options.config || config;
-  const root = resolve(options.root || resolve(PACKAGE_ROOT, cfg.project.root));
-  const sourceRoots = options.source_roots || options.sourceRoots || cfg.project.source_roots || [cfg.project.src || "src"];
-  const sourceExtensions = new Set(options.source_extensions || options.sourceExtensions || cfg.project.source_extensions || [".ts", ".tsx", ".js", ".jsx"]);
-  const excludeDirs = new Set(options.exclude || cfg.project.exclude || ["node_modules", "dist", ".git"]);
+type ScannerProjectConfig = {
+  root?: string;
+  src?: string;
+  source_roots?: string[];
+  source_extensions?: string[];
+  framework?: string;
+  exclude?: string[];
+};
+
+type ScannerConfig = {
+  [key: string]: unknown;
+  project: ScannerProjectConfig;
+  build: {
+    type_check?: string;
+    lint?: string;
+  };
+  gate: {
+    max_lines_per_file?: number;
+    timeout?: {
+      type_check?: number;
+      lint?: number;
+    };
+  };
+};
+
+type ScannerOptions = {
+  [key: string]: unknown;
+  config?: ScannerConfig;
+  root?: string;
+  source_roots?: string[];
+  sourceRoots?: string[];
+  source_extensions?: Iterable<string>;
+  sourceExtensions?: Iterable<string>;
+  exclude?: Iterable<string>;
+  files?: string[];
+  scopeFiles?: string[];
+  scope_files?: string[];
+  framework?: string;
+  max_file_lines?: number;
+  maxFileLines?: number;
+  enforceFileLength?: boolean;
+  includeExternalChecks?: boolean;
+};
+
+type ScannerSettings = {
+  config: ScannerConfig;
+  root: string;
+  sourceRoots: string[];
+  sourceExtensions: Set<string>;
+  excludeDirs: Set<string>;
+  files: string[];
+  framework: string;
+  enableMiniprogramRules: boolean;
+  maxFileLines: number;
+  enforceFileLength: boolean;
+  includeExternalChecks: boolean;
+};
+
+type ScannerRule = {
+  id: string;
+  dimension: string;
+  severity: ReviewSeverity;
+  fix_type: ReviewFixType;
+  pattern: RegExp;
+  description: string;
+  platform?: "miniprogram";
+  extraCheck?: (line: string) => boolean;
+  exclude?: (file: string) => boolean;
+};
+
+type ScannerRawFinding = ReviewFindingInput & {
+  scanner_id: string;
+  dimension: string;
+  severity: ReviewSeverity;
+  file: string | null;
+  line: number;
+  fix_type: ReviewFixType;
+  match: string;
+  description: string;
+  context?: string;
+};
+
+type CoverageArtifact = {
+  scanner_version: string;
+  scanned_files: string[];
+  rules: string[];
+  expected_scope: string[];
+  coverage_status: "complete" | "incomplete";
+  missing_expected_files: string[];
+};
+
+export type ReviewScannerResult = {
+  schema_version: ReturnType<typeof buildReviewOutput>["schema_version"];
+  schema: ReturnType<typeof buildReviewOutput>["schema"];
+  timestamp: string;
+  generated_at: string;
+  source: string;
+  scanned_files: number;
+  coverage_artifact: CoverageArtifact;
+  total_findings: number;
+  by_dimension: Record<string, number>;
+  by_severity: Record<string, number>;
+  summary: ReturnType<typeof buildReviewOutput>["summary"];
+  findings: NormalizedReviewFinding[];
+};
+
+type EslintMessage = {
+  severity?: number;
+  fix?: unknown;
+  ruleId?: string | null;
+  line?: number;
+  message?: string;
+  source?: string;
+};
+
+type EslintResult = {
+  filePath?: string;
+  messages?: EslintMessage[];
+};
+
+function requiredConfigRoot(root: string | undefined): string {
+  if (typeof root === "string") return root;
+  throw new TypeError("config.project.root must be a string");
+}
+
+function errorOutput(error: unknown): { stdout?: unknown; stderr?: unknown } | null {
+  return typeof error === "object" && error !== null ? error : null;
+}
+
+function scannerSettings(options: ScannerOptions = Object()): ScannerSettings {
+  const cfg: ScannerConfig = options.config || config;
+  const root = resolve(options.root || resolve(PACKAGE_ROOT, requiredConfigRoot(cfg.project.root)));
+  const sourceRoots: string[] = options.source_roots || options.sourceRoots || cfg.project.source_roots || [cfg.project.src || "src"];
+  const sourceExtensions: Set<string> = new Set(options.source_extensions || options.sourceExtensions || cfg.project.source_extensions || [".ts", ".tsx", ".js", ".jsx"]);
+  const excludeDirs: Set<string> = new Set(options.exclude || cfg.project.exclude || ["node_modules", "dist", ".git"]);
   const framework = String(options.framework || cfg.project.framework || "generic").toLowerCase();
-  const files = (options.files || options.scopeFiles || options.scope_files || [])
+  const files: string[] = (options.files || options.scopeFiles || options.scope_files || [])
     .map((file) => String(file || "").trim())
     .filter(Boolean);
   const hasExplicitFileLengthPolicy = Object.prototype.hasOwnProperty.call(options, "enforceFileLength");
@@ -41,21 +172,21 @@ function scannerSettings(options = Object()) {
   };
 }
 
-function isSourceFile(file, settings) {
+function isSourceFile(file: string, settings: ScannerSettings): boolean {
   return settings.sourceRoots.some((root) => file === root || file.startsWith(`${root}/`));
 }
 
-function isTestFile(file) {
+function isTestFile(file: string): boolean {
   return file.includes("__tests__/") || file.includes(".test.") || file.includes(".spec.");
 }
 
-function isScannerDefinitionFile(file) {
+function isScannerDefinitionFile(file: string): boolean {
   return file === "src/review/scanner.ts" || file.endsWith("/src/review/scanner.ts");
 }
 
 // ── 扫描规则定义 ──────────────────────────────────────────────
 
-const RULES = [
+const RULES: ScannerRule[] = [
   // === 1. Code（代码质量）===
   {
     id: "R6-as-any",
@@ -201,23 +332,23 @@ const RULES = [
 
 // ── 文件遍历 ──────────────────────────────────────────────────
 
-function ruleEnabled(rule, settings) {
+function ruleEnabled(rule: ScannerRule, settings: ScannerSettings): boolean {
   if (rule.platform === "miniprogram") return settings.enableMiniprogramRules;
   return true;
 }
 
-function repoRelativePath(absPath, settings) {
+function repoRelativePath(absPath: string, settings: ScannerSettings): string {
   return absPath
     .replace(settings.root + "/", "")
     .replace(settings.root + "\\", "")
     .replace(/\\/g, "/");
 }
 
-function enabledRuleIds(settings) {
+function enabledRuleIds(settings: ScannerSettings): string[] {
   return RULES.filter((rule) => ruleEnabled(rule, settings)).map((rule) => rule.id);
 }
 
-function buildCoverageArtifact({ settings, files }) {
+function buildCoverageArtifact({ settings, files }: { settings: ScannerSettings; files: string[] }): CoverageArtifact {
   const scannedFiles = files.map((file) => repoRelativePath(file, settings)).sort();
   const expectedScope = settings.files.length > 0 ? settings.files : settings.sourceRoots;
   const missingExpectedFiles = settings.files.filter((file) => !scannedFiles.includes(file));
@@ -231,7 +362,7 @@ function buildCoverageArtifact({ settings, files }) {
   };
 }
 
-function typecheckToolUnavailableFinding(result, output) {
+function typecheckToolUnavailableFinding(result: ExecCommandResult, output: string): ScannerRawFinding {
   const reason = result.rejected
     ? `command rejected: ${result.reject_detail || result.reject_reason || "unsafe command"}`
     : result.command_not_found
@@ -252,8 +383,8 @@ function typecheckToolUnavailableFinding(result, output) {
   };
 }
 
-function getAllSourceFiles(dir, settings) {
-  const files = [];
+function getAllSourceFiles(dir: string, settings: ScannerSettings): string[] {
+  const files: string[] = [];
   try {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = join(dir, entry.name);
@@ -270,16 +401,16 @@ function getAllSourceFiles(dir, settings) {
 
 // ── 扫描单个文件 ──────────────────────────────────────────────
 
-export function scanFile(absPath, options = Object()) {
+export function scanFile(absPath: string, options: ScannerOptions = Object()): NormalizedReviewFinding[] {
   const settings = scannerSettings(options);
   const relPath = absPath.replace(settings.root + "/", "");
-  const findings = [];
+  const findings: ScannerRawFinding[] = [];
 
-  let content;
+  let content: string;
   try {
     content = readFileSync(absPath, "utf8");
   } catch {
-    return findings;
+    return [];
   }
 
   const lines = content.split("\n");
@@ -338,7 +469,7 @@ export function scanFile(absPath, options = Object()) {
   // ── 上下文检查（跨行模式）──────────────────────────
 
   // update-no-version: 检查 .doc().update( 前后 5 行是否有 version
-  const updateRule = RULES.find(r => r.id === "update-no-version");
+  const updateRule = RULES.find(r => r.id === "update-no-version")!;
   if (ruleEnabled(updateRule, settings) && !updateRule.exclude?.(relPath)) {
     for (let i = 0; i < lineCount; i++) {
       updateRule.pattern.lastIndex = 0;
@@ -363,7 +494,7 @@ export function scanFile(absPath, options = Object()) {
   }
 
   // while-no-cursor: 检查 while 循环体是否有游标推进（匹配花括号找到完整循环体）
-  const whileRule = RULES.find(r => r.id === "while-no-cursor");
+  const whileRule = RULES.find(r => r.id === "while-no-cursor")!;
   if (ruleEnabled(whileRule, settings) && !whileRule.exclude?.(relPath)) {
     for (let i = 0; i < lineCount; i++) {
       whileRule.pattern.lastIndex = 0;
@@ -375,7 +506,7 @@ export function scanFile(absPath, options = Object()) {
       let started = false;
       for (let j = i; j < Math.min(lineCount, i + 50); j++) {
         const line = lines[j];
-        let inString = null; // '"' | "'" | '`'  | null
+        let inString: string | null = null; // '"' | "'" | '`'  | null
         let inComment = false;
         for (let ci = 0; ci < line.length; ci++) {
           const ch = line[ci];
@@ -420,7 +551,7 @@ export function scanFile(absPath, options = Object()) {
   }
 
   // cloud-function-no-try: 检查 wx.cloud.callFunction 是否在 try 块内
-  const cloudRule = RULES.find(r => r.id === "cloud-function-no-try");
+  const cloudRule = RULES.find(r => r.id === "cloud-function-no-try")!;
   if (ruleEnabled(cloudRule, settings) && !cloudRule.exclude?.(relPath)) {
     for (let i = 0; i < lineCount; i++) {
       cloudRule.pattern.lastIndex = 0;
@@ -451,7 +582,7 @@ export function scanFile(absPath, options = Object()) {
   }
 
   // usedidshow-no-refetch: 检查 useDidShow 回调内是否有 refetch/invalidate 等刷新调用
-  const didShowRule = RULES.find(r => r.id === "usedidshow-no-refetch");
+  const didShowRule = RULES.find(r => r.id === "usedidshow-no-refetch")!;
   if (ruleEnabled(didShowRule, settings) && !didShowRule.exclude?.(relPath)) {
     for (let i = 0; i < lineCount; i++) {
       didShowRule.pattern.lastIndex = 0;
@@ -497,7 +628,7 @@ export function scanFile(absPath, options = Object()) {
 
 // ── 主入口 ────────────────────────────────────────────────────
 
-export function scanProject(options = Object()) {
+export function scanProject(options: ScannerOptions = Object()): ReviewScannerResult {
   const settings = scannerSettings(options);
   const files = settings.files.length > 0
     ? settings.files
@@ -507,7 +638,7 @@ export function scanProject(options = Object()) {
         .map((sourceRoot) => join(settings.root, sourceRoot))
         .filter((dir) => existsSync(dir))
         .flatMap((dir) => getAllSourceFiles(dir, settings));
-  const allFindings = [];
+  const allFindings: ReviewFindingInput[] = [];
 
   for (const file of files) {
     allFindings.push(...scanFile(file, settings));
@@ -516,13 +647,13 @@ export function scanProject(options = Object()) {
   // ── TSC 编译错误扫描 ──
   if (settings.includeExternalChecks && settings.config.build.type_check) {
     // P12.I1: route config-supplied type_check through safe-exec.
-    const tscResult = execCommand(settings.config.build.type_check, {
+    const tscResult: ExecCommandResult = execCommand(settings.config.build.type_check, {
       cwd: settings.root, timeout: settings.config.gate?.timeout?.type_check || 120000,
     });
     if (!tscResult.ok) {
       const tscOutput = `${tscResult.stdout || ""}${tscResult.stderr || ""}`;
-      const tscLines = tscOutput.split('\n').filter(l => /error TS\d+:/.test(l));
-      const seenFiles = new Set();
+      const tscLines = tscOutput.split('\n').filter((line) => /error TS\d+:/.test(line));
+      const seenFiles = new Set<string>();
       let parsedTypeErrors = 0;
       for (const line of tscLines) {
         const m = line.match(/^(.+?)\((\d+),\d+\):\s*error\s+(TS\d+):\s*(.+)$/);
@@ -559,7 +690,7 @@ export function scanProject(options = Object()) {
     // parseCommandToArgv handles the appended flag; shell metacharacters rejected.
     const eslintOut = lintCommand
       ? (() => {
-          const r = execCommand(`${lintCommand} --quiet`, {
+          const r: ExecCommandResult = execCommand(`${lintCommand} --quiet`, {
             cwd: settings.root, timeout: settings.config.gate?.timeout?.lint || 90000,
           });
           return r.rejected ? "" : `${r.stdout || ""}${r.stderr || ""}`;
@@ -567,7 +698,7 @@ export function scanProject(options = Object()) {
       : "";
     const jsonStart = eslintOut.indexOf('[');
     if (jsonStart >= 0) {
-      const results = JSON.parse(eslintOut.slice(jsonStart));
+      const results: EslintResult[] = JSON.parse(eslintOut.slice(jsonStart));
       for (const r of results) {
         const file = (r.filePath || '').replace(settings.root + '/', '').replace(settings.root + '\\', '');
         if (!isSourceFile(file, settings)) continue;
@@ -591,10 +722,11 @@ export function scanProject(options = Object()) {
   } catch (e) {
     // eslint 退出非 0 时输出在 stdout
     try {
-      const out = (e.stdout || '') + (e.stderr || '');
+      const output = errorOutput(e);
+      const out = String(output?.stdout || '') + String(output?.stderr || '');
       const jsonStart = out.indexOf('[');
       if (jsonStart >= 0) {
-        const results = JSON.parse(out.slice(jsonStart));
+        const results: EslintResult[] = JSON.parse(out.slice(jsonStart));
         for (const r of results) {
           const file = (r.filePath || '').replace(settings.root + '/', '').replace(settings.root + '\\', '');
           if (!isSourceFile(file, settings)) continue;
@@ -622,8 +754,8 @@ export function scanProject(options = Object()) {
   const normalizedFindings = reviewOutput.findings;
 
   // 统计
-  const byDimension = Object();
-  const bySeverity = Object();
+  const byDimension: Record<string, number> = Object();
+  const bySeverity: Record<string, number> = Object();
   const fileCount = files.length;
   const coverageArtifact = buildCoverageArtifact({ settings, files });
 
@@ -650,7 +782,7 @@ export function scanProject(options = Object()) {
 
 export function runReviewScannerCli() {
   const args = process.argv.slice(2);
-  const valueOf = (name) => {
+  const valueOf = (name: string): string | null => {
     const arg = args.find((item) => item === name || item.startsWith(`${name}=`));
     if (!arg) return null;
     if (arg.includes("=")) return arg.split("=").slice(1).join("=");

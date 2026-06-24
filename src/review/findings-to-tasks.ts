@@ -2,18 +2,81 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { normalizeReviewFinding } from "./findings.js";
+import type { NormalizedReviewFinding, ReviewFindingInput } from "./findings.js";
 import { severityToPriority } from "../lib/severity-priority.js";
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 
-function normalizePath(value) {
+type ExistingTask = {
+  id?: unknown;
+};
+
+type ReviewTaskCondition = {
+  id: string;
+  type: string;
+  severity: "FAIL";
+  params: Record<string, unknown>;
+  message: string;
+};
+
+type ReviewTaskTarget = {
+  file: string;
+};
+
+export type ReviewPrdTask = {
+  id: string;
+  title: string;
+  type: string;
+  priority: string;
+  status: "pending";
+  description: string;
+  depends_on: string[];
+  scope: {
+    targets: ReviewTaskTarget[];
+    max_files: number;
+    max_lines_per_file: number;
+  };
+  pre_conditions: ReviewTaskCondition[];
+  post_conditions: ReviewTaskCondition[];
+  acceptance_criteria: string[];
+  task_kind: "review_fix";
+  fix_type: "AUTO_FIX" | "CLAUDE_FIX";
+  fix_rule: string;
+  fix_findings: NormalizedReviewFinding[];
+  source_finding_ids: string[];
+  source_findings: NormalizedReviewFinding[];
+  dedupe_key: string;
+  must_fix_before_ship: boolean;
+  requirement_ids?: string[];
+  design_ids?: string[];
+};
+
+export type ReviewFindingsToPrdTasksOptions = {
+  [key: string]: unknown;
+  round?: number;
+  existingTasks?: ExistingTask[];
+};
+
+type ReviewConversionOmitted = Array<{
+    finding_id: string;
+    code: string;
+    detail: string;
+  }>;
+
+export type ReviewFindingsToPrdTasksResult = {
+  blocks_ship: boolean;
+  tasks: ReviewPrdTask[];
+  [key: string]: unknown;
+};
+
+function normalizePath(value: unknown): string {
   return String(value || "")
     .replace(/\\/g, "/")
     .replace(/^\.\//, "")
     .replace(/:\d+(?:-\d+)?$/, "");
 }
 
-function cleanId(value) {
+function cleanId(value: unknown): string {
   return String(value || "")
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "-")
@@ -21,7 +84,7 @@ function cleanId(value) {
     .slice(0, 36) || "REVIEW";
 }
 
-function findingId(finding, index) {
+function findingId(finding: ReviewFindingInput, index: number): string {
   return String(
     finding?.finding_id ||
     finding?.id ||
@@ -31,7 +94,7 @@ function findingId(finding, index) {
   );
 }
 
-function findingFiles(finding) {
+function findingFiles(finding: ReviewFindingInput): string[] {
   const files = [
     finding?.file,
     finding?.path,
@@ -42,7 +105,7 @@ function findingFiles(finding) {
   return [...new Set(files.map(normalizePath).filter(Boolean))];
 }
 
-function findingDescription(finding) {
+function findingDescription(finding: ReviewFindingInput): string {
   return String(
     finding?.description ||
     finding?.message ||
@@ -52,13 +115,18 @@ function findingDescription(finding) {
   );
 }
 
-function truncateText(value, max = 160) {
+function truncateText(value: unknown, max = 160): string {
   const text = String(value || "").trim();
   if (text.length <= max) return text;
   return text.slice(0, max);
 }
 
-function taskIdForFinding(finding, round, index, existingIds) {
+function taskIdForFinding(
+  finding: ReviewFindingInput,
+  round: number,
+  index: number,
+  existingIds: Set<unknown>,
+): string {
   const base = `FIX-R${round}-${String(index + 1).padStart(3, "0")}`;
   if (!existingIds.has(base)) {
     existingIds.add(base);
@@ -76,11 +144,11 @@ function taskIdForFinding(finding, round, index, existingIds) {
   return candidate;
 }
 
-function existingTaskIds(tasks = []) {
+function existingTaskIds(tasks: ExistingTask[] = []): Set<unknown> {
   return new Set(tasks.map((task) => task?.id).filter(Boolean));
 }
 
-function taskTypeForFinding(finding) {
+function taskTypeForFinding(finding: ReviewFindingInput): string {
   const dimension = String(finding?.dimension || finding?.category || "").toLowerCase();
   const scannerId = String(finding?.scanner_id || finding?.rule_id || "").toLowerCase();
   if (dimension.includes("security") || scannerId.includes("security") || scannerId.includes("xss")) return "security";
@@ -88,7 +156,7 @@ function taskTypeForFinding(finding) {
   return "bugfix";
 }
 
-function targetConditions(taskId, files) {
+function targetConditions(taskId: string, files: string[]): ReviewTaskCondition[] {
   return files.map((file, index) => ({
     id: `POST-${taskId}-TARGET-${index + 1}`,
     type: "target_file_modified",
@@ -98,7 +166,7 @@ function targetConditions(taskId, files) {
   }));
 }
 
-function typecheckCondition(taskId) {
+function typecheckCondition(taskId: string): ReviewTaskCondition {
   return {
     id: `POST-${taskId}-TYPECHECK`,
     type: "no_new_type_errors",
@@ -108,7 +176,12 @@ function typecheckCondition(taskId) {
   };
 }
 
-function absenceCondition(taskId, finding, files, sourceFindingId) {
+function absenceCondition(
+  taskId: string,
+  finding: ReviewFindingInput,
+  files: string[],
+  sourceFindingId: string,
+): ReviewTaskCondition[] {
   const match = truncateText(finding?.match || finding?.evidence_text || finding?.pattern);
   if (!match || !files.length) return [];
   return files.slice(0, 3).map((file, index) => ({
@@ -125,7 +198,7 @@ function absenceCondition(taskId, finding, files, sourceFindingId) {
   }));
 }
 
-function preConditions(taskId, finding, files) {
+function preConditions(taskId: string, finding: ReviewFindingInput, files: string[]): ReviewTaskCondition[] {
   const match = truncateText(finding?.match || finding?.evidence_text);
   if (!match || !files.length) return [];
   return [{
@@ -137,11 +210,14 @@ function preConditions(taskId, finding, files) {
   }];
 }
 
-export function reviewFindingsToPrdTasks(findings = [], options = Object()) {
-  const round = Number.isInteger(options.round) ? options.round : 1;
+export function reviewFindingsToPrdTasks(
+  findings: ReviewFindingInput[] = [],
+  options: ReviewFindingsToPrdTasksOptions = Object(),
+): ReviewFindingsToPrdTasksResult {
+  const round = typeof options.round === "number" && Number.isInteger(options.round) ? options.round : 1;
   const existingIds = existingTaskIds(options.existingTasks || []);
-  const tasks = [];
-  const skipped = [];
+  const tasks: ReviewPrdTask[] = [];
+  const skipped: ReviewConversionOmitted = [];
   let taskIndex = 0;
 
   for (const [index, rawFinding] of findings.entries()) {
@@ -167,7 +243,7 @@ export function reviewFindingsToPrdTasks(findings = [], options = Object()) {
       id: taskId,
       title: `[review] ${truncateText(description, 86)}`,
       type: taskTypeForFinding(finding),
-      priority: severityToPriority(finding?.severity),
+      priority: String(severityToPriority(finding?.severity)),
       status: "pending",
       description: [
         description,
