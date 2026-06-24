@@ -11,6 +11,11 @@ import {
 } from "./evidence-requirements.js";
 import { targetUserRoleItems } from "./interview.js";
 
+// Loose input/options/session records (N4 pattern): the demand router reads
+// deeply nested session/input data as `Record<string, unknown>`, narrowed at
+// each touch point, never widened to `any`.
+type Loose = Record<string, unknown>;
+
 export interface DemandTriageResult {
   schema_version: string;
   schema: string;
@@ -23,8 +28,13 @@ export interface DemandTriageResult {
 }
 
 export interface DemandQuestion {
+  id?: string;
   slot: string;
+  stage?: string;
+  category?: string;
   text: string;
+  plain_language_prompt?: string;
+  required_for?: string[];
 }
 
 export interface DemandBlocker {
@@ -206,26 +216,29 @@ export const DEMAND_EVIDENCE_AGENT_PROTOCOLS = {
   },
 };
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function asArray(value) {
-  if (value == null) return [];
-  return Array.isArray(value) ? value : [value];
+function asArray<T = unknown>(value: unknown): T[] {
+  if (value == null) return [] as T[];
+  return (Array.isArray(value) ? value : [value]) as T[];
 }
 
-function stringItems(value) {
+function stringItems(value: unknown): string[] {
   return asArray(value)
     .flatMap((item) => {
-      if (item && typeof item === "object") return [item.text, item.title, item.summary, item.value, item.claim].filter(Boolean);
+      if (item && typeof item === "object") {
+        const i = item as Loose;
+        return [i.text, i.title, i.summary, i.value, i.claim].filter(Boolean);
+      }
       return String(item ?? "").split(/\r?\n/);
     })
     .map(clean)
     .filter(Boolean);
 }
 
-function isNonMissingStatusItem(value) {
+function isNonMissingStatusItem(value: unknown): boolean {
   const text = clean(value).toLowerCase();
   if (!text) return true;
   if (/\b(but|except|however|unless)\b/.test(text)) return false;
@@ -235,15 +248,15 @@ function isNonMissingStatusItem(value) {
   return false;
 }
 
-function actionableMissingItems(value) {
+function actionableMissingItems(value: unknown): string[] {
   return stringItems(value).filter((item) => !isNonMissingStatusItem(item));
 }
 
-function hasItems(value) {
+function hasItems(value: unknown): boolean {
   return stringItems(value).length > 0;
 }
 
-function firstItems(...values) {
+function firstItems(...values: unknown[]): string[] {
   for (const value of values) {
     const items = stringItems(value);
     if (items.length > 0) return items;
@@ -251,7 +264,7 @@ function firstItems(...values) {
   return [];
 }
 
-function firstTargetUserItems(...values) {
+function firstTargetUserItems(...values: unknown[]): string[] {
   for (const value of values) {
     const items = targetUserRoleItems(value);
     if (items.length > 0) return items;
@@ -259,30 +272,30 @@ function firstTargetUserItems(...values) {
   return [];
 }
 
-function unique(value) {
+function unique(value: unknown): string[] {
   return [...new Set(asArray(value).map(clean).filter(Boolean))];
 }
 
-function stageForSlot(slot) {
+function stageForSlot(slot: string): string {
   if (["scope_in", "scope_out", "constraints", "acceptance_criteria", "risks"].includes(slot)) return "requirements";
   if (slot === "approval") return "approval";
   return "clarify";
 }
 
-function questionForSlot(slot) {
-  const prompt = DEMAND_PRD_SLOT_QUESTIONS[slot] || {};
+function questionForSlot(slot: string): DemandQuestion {
+  const prompt = (DEMAND_PRD_SLOT_QUESTIONS as Record<string, Loose>)[slot] || {};
   return {
     id: `ASK_${String(slot).toUpperCase()}`,
     slot,
     stage: stageForSlot(slot),
-    category: prompt.category || slot,
-    text: prompt.text || `请补充 ${slot}，以便继续判断 PRD 就绪状态。`,
-    plain_language_prompt: prompt.text || `请补充 ${slot}，以便继续判断 PRD 就绪状态。`,
+    category: clean(prompt.category) || slot,
+    text: clean(prompt.text) || `请补充 ${slot}，以便继续判断 PRD 就绪状态。`,
+    plain_language_prompt: clean(prompt.text) || `请补充 ${slot}，以便继续判断 PRD 就绪状态。`,
     required_for: ["prd_readiness"],
   };
 }
 
-function questionQueueFor(missingSlots = [], options = Object()) {
+function questionQueueFor(missingSlots: unknown[] = [], options: Loose = Object()) {
   const missing = new Set(asArray(missingSlots).map(clean).filter(Boolean));
   const nonApprovalSlots = DEMAND_REQUIRED_PRD_SLOTS
     .filter((slot) => slot !== "approval" && missing.has(slot));
@@ -293,7 +306,7 @@ function questionQueueFor(missingSlots = [], options = Object()) {
     .map((slot) => questionForSlot(slot));
 }
 
-function textFrom(...values) {
+function textFrom(...values: unknown[]): string {
   return values
     .flatMap((value) => {
       if (value && typeof value === "object") return Object.values(value);
@@ -304,9 +317,15 @@ function textFrom(...values) {
     .toLowerCase();
 }
 
-function demandTextItems(input = Object(), session = Object()) {
+function demandTextItems(input: Loose = Object(), session: Loose = Object()): unknown[] {
   const requirements = requirementItems(session, input);
-  const scenarios = asArray(session.scenario_matrix?.scenarios || session.scenarios);
+  const scenarioMatrixField = session.scenario_matrix as Loose | undefined;
+  const scenarios = asArray<Loose>(scenarioMatrixField?.scenarios || session.scenarios);
+  const project = session.project as Loose | undefined;
+  const vision = session.vision as Loose | undefined;
+  const sessionRequirements = session.requirements as Loose | undefined;
+  const reflection = session.reflection as Loose | undefined;
+  const discussion = session.discussion as Loose | undefined;
   return [
     input.objective,
     input.idea,
@@ -340,25 +359,25 @@ function demandTextItems(input = Object(), session = Object()) {
     session.risks,
     session.assumptions,
     session.open_questions,
-    session.project?.title,
-    session.vision?.statement,
-    session.vision?.idea,
-    session.vision?.problem,
-    session.vision?.target_users,
-    session.vision?.status_quo,
-    session.vision?.success_criteria,
-    session.requirements?.constraints,
-    session.requirements?.out_of_scope,
-    session.reflection?.assumptions,
-    session.reflection?.risks,
-    session.discussion?.open_questions,
-    session.discussion?.decisions,
+    project?.title,
+    vision?.statement,
+    vision?.idea,
+    vision?.problem,
+    vision?.target_users,
+    vision?.status_quo,
+    vision?.success_criteria,
+    sessionRequirements?.constraints,
+    sessionRequirements?.out_of_scope,
+    reflection?.assumptions,
+    reflection?.risks,
+    discussion?.open_questions,
+    discussion?.decisions,
     requirements.flatMap((requirement) => [
-      requirement.text,
-      requirement.title,
-      requirement.acceptance_criteria,
-      requirement.acceptance_scenarios,
-      requirement.scenarios,
+      (requirement as Loose).text,
+      (requirement as Loose).title,
+      (requirement as Loose).acceptance_criteria,
+      (requirement as Loose).acceptance_scenarios,
+      (requirement as Loose).scenarios,
     ]),
     scenarios.flatMap((scenario) => [
       scenario.current_behavior,
@@ -373,16 +392,17 @@ function demandTextItems(input = Object(), session = Object()) {
   ];
 }
 
-function resolveRoot(input = Object(), options = Object()) {
+function resolveRoot(input: Loose = Object(), options: Loose = Object()): string {
   return resolve(clean(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd) || process.cwd());
 }
 
-function resolvePath(root, path) {
+function resolvePath(root: string, path: unknown): string {
   if (!path) return "";
-  return isAbsolute(path) ? path : resolve(root, path);
+  const p = clean(path);
+  return p && isAbsolute(p) ? p : resolve(root, p);
 }
 
-function readJsonIfExists(path) {
+function readJsonIfExists(path: string): unknown {
   if (!path || !existsSync(path)) return null;
   try {
     return JSON.parse(readFileSync(path, "utf8"));
@@ -391,7 +411,7 @@ function readJsonIfExists(path) {
   }
 }
 
-function readDemandSessionFile(pathOrDir) {
+function readDemandSessionFile(pathOrDir: string) {
   const resolved = resolve(pathOrDir);
   const sessionPath = existsSync(resolved) && !resolved.endsWith(".json")
     ? join(resolved, "session.json")
@@ -405,7 +425,7 @@ function readDemandSessionFile(pathOrDir) {
     if (schemaError) return { ok: false, path: sessionPath, error: schemaError };
     return { ok: true, path: sessionPath, dir: dirname(sessionPath), session };
   } catch (error) {
-    return { ok: false, path: sessionPath, error: `Demand session JSON parse failed: ${error.message}` };
+    return { ok: false, path: sessionPath, error: `Demand session JSON parse failed: ${(error as Error).message}` };
   }
 }
 
@@ -413,33 +433,34 @@ function readDemandSessionFile(pathOrDir) {
 // schema_version can silently change downstream behavior. Reject anything that
 // is not the canonical yolo.demand.session.v1 / 1.0 shape so callers fail
 // closed at the read boundary instead of drifting further down the pipeline.
-export function demandSessionSchemaError(session, sessionPath = "") {
+export function demandSessionSchemaError(session: unknown, sessionPath: string = ""): string | null {
   if (!session || typeof session !== "object" || Array.isArray(session)) {
     return `Demand session ${sessionPath} must be a JSON object`;
   }
-  if (session.schema_version !== DEMAND_SESSION_SCHEMA_VERSION) {
-    return `Demand session ${sessionPath} has unsupported schema_version "${session.schema_version}"; expected "${DEMAND_SESSION_SCHEMA_VERSION}"`;
+  const s = session as Loose;
+  if (s.schema_version !== DEMAND_SESSION_SCHEMA_VERSION) {
+    return `Demand session ${sessionPath} has unsupported schema_version "${s.schema_version}"; expected "${DEMAND_SESSION_SCHEMA_VERSION}"`;
   }
-  if (session.schema !== DEMAND_SESSION_SCHEMA) {
-    return `Demand session ${sessionPath} has unsupported schema "${session.schema}"; expected "${DEMAND_SESSION_SCHEMA}"`;
+  if (s.schema !== DEMAND_SESSION_SCHEMA) {
+    return `Demand session ${sessionPath} has unsupported schema "${s.schema}"; expected "${DEMAND_SESSION_SCHEMA}"`;
   }
   return null;
 }
 
-function loadSession(input = Object(), options = Object()) {
-  if (input.session && typeof input.session === "object") return input.session;
+function loadSession(input: Loose = Object(), options: Loose = Object()): Loose | null {
+  if (input.session && typeof input.session === "object") return input.session as Loose;
   const projectRoot = resolveRoot(input, options);
   const demandPath = clean(input.demandPath || input.demand_path || input.sessionPath || input.session_path);
   if (demandPath) {
     const read = readDemandSessionFile(resolvePath(projectRoot, demandPath));
-    if (read.ok) return read.session;
+    if (read.ok) return read.session as Loose;
   }
-  const explicit = readJsonIfExists(resolvePath(projectRoot, clean(input.path || "")));
+  const explicit = readJsonIfExists(resolvePath(projectRoot, clean(input.path || ""))) as Loose | null;
   if (explicit?.schema === "yolo.demand.session.v1") return explicit;
   return null;
 }
 
-function buildStatusSession(input = Object(), options = Object()) {
+function buildStatusSession(input: Loose = Object(), options: Loose = Object()): Loose {
   const loaded = loadSession(input, options);
   if (loaded) return loaded;
   const objective = clean(input.objective || input.idea || input.requirement || input.text);
@@ -469,43 +490,50 @@ function buildStatusSession(input = Object(), options = Object()) {
   };
 }
 
-function targetFiles(session = Object(), input = Object()) {
+function targetFiles(session: Loose = Object(), input: Loose = Object()): string[] {
+  const project = session.project as Loose | undefined;
   return unique([
     ...asArray(input.target_files || input.targetFiles),
-    ...asArray(session.project?.target_files || session.target_files),
+    ...asArray(project?.target_files || session.target_files),
   ]);
 }
 
-function requirementItems(session = Object(), input = Object()) {
-  return asArray(session.requirements?.active || session.requirements || input.requirements);
+function requirementItems(session: Loose = Object(), input: Loose = Object()): Loose[] {
+  const sessionRequirements = session.requirements as Loose | undefined;
+  return asArray<Loose>(sessionRequirements?.active || session.requirements || input.requirements);
 }
 
-function acceptanceItems(session = Object(), input = Object()) {
+function acceptanceItems(session: Loose = Object(), input: Loose = Object()): string[] {
   const requirements = requirementItems(session, input);
+  const vision = session.vision as Loose | undefined;
+  const scenarioMatrixField = session.scenario_matrix as Loose | undefined;
+  const scenarios = scenarioMatrixField?.scenarios as Loose[] | undefined;
   return firstItems(
     input.acceptance_criteria,
     input.success_criteria,
     session.acceptance_criteria,
     session.success_criteria,
-    session.vision?.success_criteria,
-    requirements.flatMap((requirement) => asArray(requirement.acceptance_criteria || requirement.acceptance_scenarios || requirement.scenarios)),
-    session.scenario_matrix?.scenarios?.map((scenario) => scenario.proof || scenario.acceptance),
+    vision?.success_criteria,
+    requirements.flatMap((requirement) => asArray((requirement as Loose).acceptance_criteria || (requirement as Loose).acceptance_scenarios || (requirement as Loose).scenarios)),
+    scenarios?.map((scenario) => scenario.proof || scenario.acceptance),
   );
 }
 
-function assumptions(session = Object(), input = Object()) {
+function assumptions(session: Loose = Object(), input: Loose = Object()): string[] {
+  const reflection = session.reflection as Loose | undefined;
   return [
     ...stringItems(input.assumptions),
     ...stringItems(session.assumptions),
-    ...stringItems(session.reflection?.assumptions),
+    ...stringItems(reflection?.assumptions),
   ];
 }
 
-function evidenceItems(session = Object(), input = Object()) {
-  return firstItems(input.evidence, session.evidence, session.investigation?.evidence);
+function evidenceItems(session: Loose = Object(), input: Loose = Object()) {
+  const investigation = session.investigation as Loose | undefined;
+  return firstItems(input.evidence, session.evidence, investigation?.evidence);
 }
 
-function normalizeEvidenceRole(value) {
+function normalizeEvidenceRole(value: unknown): string {
   const role = clean(value).toLowerCase().replace(/_/g, "-");
   if (role === "crosschecker") return "cross-checker";
   if (role === "cross-checker") return "cross-checker";
@@ -513,7 +541,8 @@ function normalizeEvidenceRole(value) {
   return role;
 }
 
-function evidenceResultSources(session = Object(), input = Object()) {
+function evidenceResultSources(session: Loose = Object(), input: Loose = Object()): unknown[] {
+  const investigation = session.investigation as Loose | undefined;
   return [
     input.evidence_results,
     input.evidenceResults,
@@ -523,34 +552,37 @@ function evidenceResultSources(session = Object(), input = Object()) {
     session.evidenceResults,
     session.evidence_agent_results,
     session.evidenceAgentResults,
-    session.investigation?.evidence_results,
-    session.investigation?.evidenceResults,
-    session.investigation?.agent_results,
-    session.investigation?.agentResults,
-    session.investigation?.evidence_agents,
-    session.investigation?.evidenceAgents,
+    investigation?.evidence_results,
+    investigation?.evidenceResults,
+    investigation?.agent_results,
+    investigation?.agentResults,
+    investigation?.evidence_agents,
+    investigation?.evidenceAgents,
     input.evidence,
     session.evidence,
-    session.investigation?.evidence,
+    investigation?.evidence,
   ];
 }
 
-function evidenceResultItems(session = Object(), input = Object()) {
+function evidenceResultItems(session: Loose = Object(), input: Loose = Object()): Loose[] {
   return evidenceResultSources(session, input)
     .flatMap((value) => {
       if (value && typeof value === "object" && !Array.isArray(value)) {
-        return Object.entries(value).map(([key, item]) => (
-          item && typeof item === "object" ? { role: key, ...item } : item
+        return Object.entries(value as Loose).map(([key, item]) => (
+          item && typeof item === "object" ? { role: key, ...(item as Loose) } : item
         ));
       }
       return asArray(value);
     })
     .filter((item) => item && typeof item === "object")
-    .map((item) => ({
-      ...item,
-      role: normalizeEvidenceRole(item.role || item.agent || item.agent_role || item.agentRole || item.name),
-    }))
-    .filter((item) => item.role);
+    .map((item) => {
+      const i = item as Loose;
+      return {
+        ...i,
+        role: normalizeEvidenceRole(i.role || i.agent || i.agent_role || i.agentRole || i.name),
+      };
+    })
+    .filter((item) => (item as Loose).role);
 }
 
 function evidenceRecords(result = Object()) {
@@ -652,7 +684,7 @@ function resultPayloadPresent(result = Object()) {
     || result.verdict != null;
 }
 
-function evidenceResultComplete(result = Object()) {
+function evidenceResultComplete(result: Loose = Object()): boolean {
   const status = clean(result.status || result.state || result.completed_status).toLowerCase();
   const completed = result.completed === true
     || result.complete === true
@@ -660,20 +692,22 @@ function evidenceResultComplete(result = Object()) {
   return completed && resultEvidencePresent(result) && resultPayloadPresent(result);
 }
 
-function requiredEvidenceRoles(policy) {
+function requiredEvidenceRoles(policy: string): string[] {
   if (policy === "cross_check") return ["explorer", "cross-checker", "verifier"];
   if (policy === "single_agent") return ["explorer", "verifier"];
   return [];
 }
 
-function evidenceResultBlockingIssues(result = Object()) {
-  const issues = [];
+function evidenceResultBlockingIssues(result: Loose = Object()): DemandBlocker[] {
+  const issues: DemandBlocker[] = [];
   const role = normalizeEvidenceRole(result.role || result.agent || result.agent_role || result.agentRole || result.name);
-  const recommendation = clean(result.recommendation || result.result?.recommendation || result.output?.recommendation).toLowerCase();
-  const verdict = clean(result.verdict || result.result?.verdict || result.output?.verdict).toLowerCase();
-  const missing = actionableMissingItems(result.missing || result.result?.missing || result.output?.missing);
+  const resultField = result.result as Loose | undefined;
+  const outputField = result.output as Loose | undefined;
+  const recommendation = clean(result.recommendation || resultField?.recommendation || outputField?.recommendation).toLowerCase();
+  const verdict = clean(result.verdict || resultField?.verdict || outputField?.verdict).toLowerCase();
+  const missing = actionableMissingItems(result.missing || resultField?.missing || outputField?.missing);
   const status = clean(result.status || result.state || result.completed_status).toLowerCase();
-  const errorCode = clean(result.error_code || result.result?.error_code || result.output?.error_code);
+  const errorCode = clean(result.error_code || resultField?.error_code || outputField?.error_code);
   if (errorCode) {
     issues.push({
       code: errorCode,
@@ -698,7 +732,7 @@ function evidenceResultBlockingIssues(result = Object()) {
   return issues;
 }
 
-function projectEvidenceBlockingIssues(result = Object()) {
+function projectEvidenceBlockingIssues(result: Loose = Object()): DemandBlocker[] {
   const role = normalizeEvidenceRole(result.role || result.agent || result.agent_role || result.agentRole || result.name);
   const summary = evidenceScopeSummary(result);
   if (summary.records.length === 0 || summary.has_project) return [];
@@ -717,21 +751,21 @@ function projectEvidenceBlockingIssues(result = Object()) {
   }];
 }
 
-function activeBlockers(...sources) {
+function activeBlockers(...sources: unknown[]): DemandBlocker[] {
   return sources
-    .flatMap((source) => asArray(source))
+    .flatMap((source) => asArray<Loose>(source))
     .filter((item) => item && typeof item === "object")
     .filter((item) => item.cleared !== true && item.resolved !== true && !["cleared", "resolved", "dismissed"].includes(clean(item.status).toLowerCase()))
     .map((item) => ({
       ...item,
       code: clean(item.code || item.id || "EXISTING_BLOCKER"),
       message: clean(item.message || item.text || item.summary || item.reason || item.code || "Existing blocker is still active."),
-    }));
+    })) as DemandBlocker[];
 }
 
-function uniqueBlockers(blockers = []) {
-  const seen = new Set();
-  const result = [];
+function uniqueBlockers(blockers: DemandBlocker[] = []): DemandBlocker[] {
+  const seen = new Set<string>();
+  const result: DemandBlocker[] = [];
   for (const blocker of blockers) {
     const key = `${blocker.code}\u0000${blocker.message}`;
     if (seen.has(key)) continue;
@@ -768,51 +802,58 @@ function slotValues(session = Object(), input = Object()) {
   };
 }
 
-function unresolvedAssumptions(session = Object(), input = Object()) {
-  const raw = [
+function unresolvedAssumptions(session: Loose = Object(), input: Loose = Object()): string[] {
+  const reflection = session.reflection as Loose | undefined;
+  const raw: unknown[] = [
     ...asArray(input.assumptions),
     ...asArray(session.assumptions),
-    ...asArray(session.reflection?.assumptions),
+    ...asArray(reflection?.assumptions),
   ];
   return raw
     .filter((item) => {
-      if (item && typeof item === "object") return item.confirmed !== true && item.status !== "confirmed";
+      if (item && typeof item === "object") {
+        const i = item as Loose;
+        return i.confirmed !== true && i.status !== "confirmed";
+      }
       return clean(item).length > 0;
     })
     .map((item) => {
-      if (item && typeof item === "object") return clean(item.text || item.summary || item.value || item.claim);
+      if (item && typeof item === "object") {
+        const i = item as Loose;
+        return clean(i.text || i.summary || i.value || i.claim);
+      }
       return clean(item);
     })
     .filter(Boolean);
 }
 
-function hasGreenfieldSignal(text) {
-  return /\b(new|greenfield|from scratch|startup|mvp|idea|prototype)\b|新项目|从零|全新|想法|原型/.test(text);
+function hasGreenfieldSignal(text: unknown): boolean {
+  return /\b(new|greenfield|from scratch|startup|mvp|idea|prototype)\b|新项目|从零|全新|想法|原型/.test(clean(text));
 }
 
-function hasExistingSignal(text, files = [], input = Object()) {
+function hasExistingSignal(text: unknown, files: string[] = [], input: Loose = Object()): boolean {
   return files.length > 0
     || Boolean(clean(input.demandPath || input.demand_path || input.sessionPath || input.session_path))
-    || /\b(existing|current|legacy|brownfield|already|implemented|bug|fix|regression|refactor|production)\b|已有|现有|当前|线上|半成品|实现|修复|改造|回归/.test(text);
+    || /\b(existing|current|legacy|brownfield|already|implemented|bug|fix|regression|refactor|production)\b|已有|现有|当前|线上|半成品|实现|修复|改造|回归/.test(clean(text));
 }
 
-function hasHybridSignal(text) {
-  return /\b(add|new feature|extend|integrate|support)\b|新增|增加|接入|扩展|加一个|做一个/.test(text);
+function hasHybridSignal(text: unknown): boolean {
+  return /\b(add|new feature|extend|integrate|support)\b|新增|增加|接入|扩展|加一个|做一个/.test(clean(text));
 }
 
-function hasTechnicalRiskSignal(text) {
-  const copyOnlyEmptyState = /\bempty[- ]state copy\b|空状态文案/.test(text);
-  const nonStateTechnical = /\b(field|schema|api|auth|authorization|authentication|permission|role|data flow|dataflow|migration|database|db|table|column|model|endpoint|route|session|token|oauth|cache|queue|event)\b|字段|表结构|模式|接口|认证|鉴权|权限|角色|数据流|迁移|数据库|数据表|模型|端点|路由|令牌|缓存|队列/.test(text);
-  const stateTechnical = !copyOnlyEmptyState && (/\bstate\b|状态/.test(text));
+function hasTechnicalRiskSignal(text: unknown): boolean {
+  const copyOnlyEmptyState = /\bempty[- ]state copy\b|空状态文案/.test(clean(text));
+  const nonStateTechnical = /\b(field|schema|api|auth|authorization|authentication|permission|role|data flow|dataflow|migration|database|db|table|column|model|endpoint|route|session|token|oauth|cache|queue|event)\b|字段|表结构|模式|接口|认证|鉴权|权限|角色|数据流|迁移|数据库|数据表|模型|端点|路由|令牌|缓存|队列/.test(clean(text));
+  const stateTechnical = !copyOnlyEmptyState && (/\bstate\b|状态/.test(clean(text)));
   return nonStateTechnical || stateTechnical;
 }
 
-function hasHighCostSignal(text) {
-  return /\b(payment|billing|invoice|security|privacy|compliance|legal|medical|health|money|delete|loss|production|rollback|irreversible)\b|支付|账单|发票|安全|隐私|合规|法律|医疗|金额|删除|数据丢失|线上|不可逆|回滚/.test(text);
+function hasHighCostSignal(text: unknown): boolean {
+  return /\b(payment|billing|invoice|security|privacy|compliance|legal|medical|health|money|delete|loss|production|rollback|irreversible)\b|支付|账单|发票|安全|隐私|合规|法律|医疗|金额|删除|数据丢失|线上|不可逆|回滚/.test(clean(text));
 }
 
-function hasPrdIntent(text) {
-  return /\b(prd|requirements?|acceptance|ship|implement|execute|build now)\b|需求文档|验收|执行|实现|交付/.test(text);
+function hasPrdIntent(text: unknown): boolean {
+  return /\b(prd|requirements?|acceptance|ship|implement|execute|build now)\b|需求文档|验收|执行|实现|交付/.test(clean(text));
 }
 
 export function inspectDemandTriage(input = Object(), options = Object()): DemandTriageResult {
@@ -873,18 +914,20 @@ export function inspectDemandTriage(input = Object(), options = Object()): Deman
   };
 }
 
-export function inspectDemandPrdReadiness(input = Object(), options = Object()): DemandPrdReadinessResult {
-  const session = options.session || buildStatusSession(input, options);
-  const triage = options.triage || inspectDemandTriage(input, { ...options, session });
+export function inspectDemandPrdReadiness(input: Loose = Object(), options: Loose = Object()): DemandPrdReadinessResult {
+  const session = (options.session || buildStatusSession(input, options)) as Loose;
+  const triage = (options.triage || inspectDemandTriage(input, { ...options, session })) as DemandTriageResult;
   const slots = slotValues(session, input);
-  const missingSlots = DEMAND_REQUIRED_PRD_SLOTS.filter((slot) => !hasItems(slots[slot]));
-  const blockerList = Object.assign([], missingSlots.map((slot) => ({
+  const missingSlots = DEMAND_REQUIRED_PRD_SLOTS.filter((slot) => !hasItems((slots as Loose)[slot]));
+  const blockerList: DemandBlocker[] = Object.assign([], missingSlots.map((slot) => ({
     code: `MISSING_${slot.toUpperCase()}`,
     slot,
     message: `PRD readiness requires ${slot}.`,
   })));
-  blockerList.push(...activeBlockers(input.blockers, session.blockers, session.readiness?.blockers));
-  const openQuestions = asArray(session.discussion?.open_questions || session.open_questions || input.open_questions)
+  const sessionReadiness = session.readiness as Loose | undefined;
+  const discussion = session.discussion as Loose | undefined;
+  blockerList.push(...activeBlockers(input.blockers, session.blockers, sessionReadiness?.blockers));
+  const openQuestions = asArray<Loose>(discussion?.open_questions || session.open_questions || input.open_questions)
     .map((item) => typeof item === "string" ? { text: clean(item), blocking: true } : {
       ...item,
       text: clean(item.text || item.question || item.message),
@@ -906,7 +949,9 @@ export function inspectDemandPrdReadiness(input = Object(), options = Object()):
   }
   const agentResults = evidenceResultItems(session, input);
   const crossCheckRequested = agentResults.some((result) => {
-    const recommendation = clean(result.recommendation || result.result?.recommendation || result.output?.recommendation).toLowerCase();
+    const resultField = result.result as Loose | undefined;
+    const outputField = result.output as Loose | undefined;
+    const recommendation = clean(result.recommendation || resultField?.recommendation || outputField?.recommendation).toLowerCase();
     return recommendation === "cross_check";
   });
   const requiredRoles = crossCheckRequested
@@ -988,25 +1033,25 @@ export function buildDemandEvidenceTasks(triage = Object(), readiness = Object()
   return tasks;
 }
 
-export function inspectEvidenceAgreement(results = []) {
-  const items = asArray(results).filter(Boolean);
-  const conflicts = [];
-  const byClaim = new Map();
+export function inspectEvidenceAgreement(results: unknown[] = []) {
+  const items = asArray<Loose>(results).filter(Boolean);
+  const conflicts: DemandBlocker[] = [];
+  const byClaim = new Map<string, Loose[]>();
   for (const result of items) {
     const claim = clean(result.claim).toLowerCase();
     if (!claim) continue;
     if (!byClaim.has(claim)) byClaim.set(claim, []);
-    byClaim.get(claim).push(result);
+    byClaim.get(claim)!.push(result);
   }
   for (const [claim, claimResults] of byClaim) {
-    const recommendations = unique(claimResults.map((item) => item.recommendation));
+    const recommendations = unique(claimResults.map((item) => clean(item.recommendation)));
     if (recommendations.includes("block") || (recommendations.includes("proceed") && claimResults.some((item) => ["clarify", "cross_check"].includes(clean(item.recommendation))))) {
       conflicts.push({
         code: "EVIDENCE_AGENT_CONFLICT",
         claim,
         message: "Evidence agents disagree; keep the claim blocked until reconciled.",
         recommendations,
-      });
+      } as DemandBlocker);
     }
   }
   return {
@@ -1015,21 +1060,21 @@ export function inspectEvidenceAgreement(results = []) {
   };
 }
 
-function stageFrom(readiness = Object(), triage = Object()) {
+function stageFrom(readiness: DemandPrdReadinessResult = Object() as DemandPrdReadinessResult, triage: DemandTriageResult = Object() as DemandTriageResult): string {
   if (readiness.prd_intake_ready) return "prd_ready";
-  if (asArray(readiness.evidence_requirements).some((item) => item?.status === "pending")) return "evidence";
+  if (asArray<Loose>(readiness.evidence_requirements).some((item) => item?.status === "pending")) return "evidence";
   const missingSlots = asArray(readiness.missing_slots).map(clean).filter(Boolean);
   const nonApprovalMissing = missingSlots.filter((slot) => slot !== "approval");
   const firstMissing = DEMAND_REQUIRED_PRD_SLOTS.find((slot) => nonApprovalMissing.includes(slot));
   if (firstMissing) return stageForSlot(firstMissing);
-  if (triage.evidence_policy !== "none" && readiness.blockers?.some((blocker) => clean(blocker.code).startsWith("EVIDENCE"))) return "evidence";
+  if (triage.evidence_policy !== "none" && readiness.blockers.some((blocker) => clean(blocker.code).startsWith("EVIDENCE"))) return "evidence";
   if (missingSlots.includes("approval")) return "approval";
   return "discuss";
 }
 
-function nextActionsFor(stage, triage = Object(), readiness = Object(), evidenceTasks = [], nextQuestion = null) {
+function nextActionsFor(stage: string, triage: DemandTriageResult = Object() as DemandTriageResult, readiness: DemandPrdReadinessResult = Object() as DemandPrdReadinessResult, evidenceTasks: Loose[] = [], nextQuestion: DemandQuestion | null = null): string[] {
   const requirementActions = evidenceRequirementNextActions(readiness.evidence_requirements);
-  const actions = [];
+  const actions: string[] = [];
   actions.push(...requirementActions);
   if (readiness.prd_intake_ready) actions.push("Run yolo spec --demand <session.json|dir> after approved demand artifacts exist.");
   else if (nextQuestion?.text) {
@@ -1044,7 +1089,7 @@ function nextActionsFor(stage, triage = Object(), readiness = Object(), evidence
   return [...new Set(actions.filter(Boolean))];
 }
 
-function nextActionFor(stage, triage = Object(), readiness = Object(), evidenceTasks = [], nextQuestion = null) {
+function nextActionFor(stage: string, triage: DemandTriageResult = Object() as DemandTriageResult, readiness: DemandPrdReadinessResult = Object() as DemandPrdReadinessResult, evidenceTasks: Loose[] = [], nextQuestion: DemandQuestion | null = null): string {
   const actions = nextActionsFor(stage, triage, readiness, evidenceTasks, nextQuestion);
   if (actions.length > 0) return actions[0];
   if (readiness.prd_intake_ready) return "Run yolo spec --demand <session.json|dir> after approved demand artifacts exist.";
@@ -1056,15 +1101,15 @@ function nextActionFor(stage, triage = Object(), readiness = Object(), evidenceT
   return triage.route === "careful" ? "Discuss risks and evidence blockers before PRD." : "Continue fast demand clarification.";
 }
 
-export function buildDemandSessionState(input = Object(), options = Object()): DemandSessionStateResult {
+export function buildDemandSessionState(input: Loose = Object(), options: Loose = Object()): DemandSessionStateResult {
   const session = buildStatusSession(input, options);
   const triage = inspectDemandTriage(input, { ...options, session });
   const readiness = inspectDemandPrdReadiness(input, { ...options, session, triage });
   const evidenceTasks = buildDemandEvidenceTasks(triage, readiness);
   const stage = stageFrom(readiness, triage);
-  const questionQueue = asArray(readiness.question_queue);
-  const nextQuestion = readiness.next_question || questionQueue[0] || null;
-  const nextActions = nextActionsFor(stage, triage, readiness, evidenceTasks, nextQuestion);
+  const questionQueue = asArray<DemandQuestion>(readiness.question_queue);
+  const nextQuestion = (readiness.next_question || questionQueue[0] || null) as DemandQuestion | null;
+  const nextActions = nextActionsFor(stage, triage, readiness, evidenceTasks as Loose[], nextQuestion);
   const state = {
     schema_version: DEMAND_SESSION_STATE_SCHEMA_VERSION,
     schema: DEMAND_SESSION_STATE_SCHEMA,
@@ -1085,7 +1130,7 @@ export function buildDemandSessionState(input = Object(), options = Object()): D
     evidence_requirement_summary: readiness.evidence_requirement_summary,
     prd_intake_ready: readiness.prd_intake_ready,
     executable_prd_ready: readiness.executable_prd_ready,
-    next_action: nextActions[0] || nextActionFor(stage, triage, readiness, evidenceTasks, nextQuestion),
+    next_action: nextActions[0] || nextActionFor(stage, triage, readiness, evidenceTasks as Loose[], nextQuestion),
     next_actions: nextActions,
   };
   return {
