@@ -2,6 +2,7 @@
 // status strings and process exit codes disagree.
 
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -142,7 +143,7 @@ export const RELEASE_BATTERY: ReleaseBatteryCase[] = [
 ];
 
 export function runReleaseBattery(): ReleaseBatteryResult[] {
-  return RELEASE_BATTERY.map((testCase) => {
+  const gateResults = RELEASE_BATTERY.map((testCase) => {
     const dir = mkdtempSync(join(tmpdir(), "yolo-release-battery-"));
     try {
       const reports = passingReports(dir);
@@ -162,4 +163,21 @@ export function runReleaseBattery(): ReleaseBatteryResult[] {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+  const bloatGate = spawnSync(process.execPath, [
+    "--import",
+    "tsx",
+    "scripts/fix-bloat-report.ts",
+    "--gate",
+    "refs/heads/yolo-quality-missing-ref",
+  ], { cwd: process.cwd(), encoding: "utf8" });
+  const status = bloatGate.status === 0 ? "pass" : "blocked";
+  gateResults.push({
+    id: "bloat_gate_invalid_base_ref_exits_nonzero",
+    category: "release_gate_robustness",
+    expect: "blocked",
+    actualExit: bloatGate.status ?? 1,
+    actualStatus: status,
+    correct: status === "blocked",
+  });
+  return gateResults;
 }
