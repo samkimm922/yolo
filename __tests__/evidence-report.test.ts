@@ -789,7 +789,7 @@ describe("evidence run report", () => {
     }
   });
 
-  test("buildRunReport ignores null JSONL entries in ledger files", () => {
+  test("buildRunReport flags null JSONL entries in ledger integrity without crashing", () => {
     const stateDir = tempStateDir();
     try {
       appendRunEvent(stateDir, "run_start", { run_id: "RUN-NULL", prd: "data/prd.json", tasks: 1 }, { now: "2026-06-21T10:00:00.000Z" });
@@ -816,9 +816,12 @@ describe("evidence run report", () => {
 
       const report = buildRunReport({ stateDir, runId: "RUN-NULL" });
 
-      assert.equal(report.status, "success");
+      assert.equal(report.status, "error");
       assert.equal(report.ledger.run_events, 2);
       assert.equal(report.ledger.state_events, 1);
+      assert.equal(report.ledger.integrity.status, "fail");
+      assert.ok(report.ledger.integrity.run_chain.errors.some((error) => error.code === "LEDGER_RECORD_INVALID"));
+      assert.ok(report.ledger.integrity.state_chain.errors.some((error) => error.code === "LEDGER_RECORD_INVALID"));
       assert.deepEqual(report.tasks.completed, ["FIX-1"]);
     } finally {
       rmSync(stateDir, { recursive: true, force: true });
@@ -831,10 +834,8 @@ describe("evidence run report", () => {
       appendRunEvent(stateDir, "run_start", { run_id: "RUN-BAD", prd: "data/prd.json", tasks: 1 }, { now: "2026-06-21T10:00:00.000Z" });
 
       // Simulate a partial flush / SIGKILL mid-write: a truncated final line
-      // on each ledger. Before the fix, readJsonl threw SyntaxError on the
-      // truncated line and took down buildRunReport + every caller (runner
-      // finalize, acceptance, release). Now the malformed line is dropped
-      // and the remaining valid records still produce a coherent report.
+      // on each ledger. The malformed lines must not crash buildRunReport, but
+      // they must remain visible in ledger integrity instead of disappearing.
       const runsPath = join(stateDir, "runs.jsonl");
       const eventsPath = join(stateDir, "events.jsonl");
       writeFileSync(runsPath, `\n{"event":"run_end","run_id":"RUN-BAD","ts":"2026-06-21T10:00:0`, { flag: "a" });
@@ -846,6 +847,9 @@ describe("evidence run report", () => {
       assert.equal(report.run_id, "RUN-BAD");
       assert.equal(report.ledger.run_events, 1);
       assert.equal(report.prd, "data/prd.json");
+      assert.equal(report.ledger.integrity.status, "fail");
+      assert.ok(report.ledger.integrity.run_chain.errors.some((error) => error.code === "LEDGER_RECORD_INVALID"));
+      assert.ok(report.ledger.integrity.state_chain.errors.some((error) => error.code === "LEDGER_RECORD_INVALID"));
     } finally {
       rmSync(stateDir, { recursive: true, force: true });
     }

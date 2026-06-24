@@ -160,27 +160,32 @@ function readJsonlRecords(filePath, options = Object()) {
     }
     return [ledgerReadErrorRecord("LEDGER_READ_SIZE_LIMIT_EXCEEDED", message, details)];
   }
-  // Tolerate malformed/truncated JSONL lines (partial flush, SIGKILL mid-write,
-  // botched external edit). A dropped line breaks the ledger chain, which
-  // validateLedgerChain surfaces as LEDGER_PREV_HASH_MISMATCH — the corruption
-  // stays visible instead of crashing every caller (report.ts mirrors this
-  // defense; #70/#82 already hardened validateLedgerChain for null/non-object
-  // records, but the raw read path here still threw on unparseable lines).
+  // Keep malformed/truncated JSONL lines visible as integrity errors instead of
+  // throwing or silently dropping them. Dropping a bad middle line can preserve
+  // a valid-looking hash chain over the remaining records and produce a false
+  // green integrity result.
   return readFileSync(filePath, "utf8")
     .split("\n")
-    .filter((line) => line.trim().length > 0)
-    .flatMap((line) => {
+    .flatMap((line, index) => {
+      if (line.trim().length === 0) return [];
       try {
         return [JSON.parse(line)];
-      } catch {
-        return [];
+      } catch (error) {
+        return [ledgerReadErrorRecord("LEDGER_JSONL_MALFORMED_LINE", "Evidence ledger contains a malformed JSONL line.", {
+          ledger_path: filePath,
+          line_number: index + 1,
+          parse_error: error instanceof Error ? error.message : String(error),
+        })];
       }
     });
 }
 
 function previousRecordHash(filePath) {
   const records = readJsonlRecords(filePath, { throwOnReadError: true });
-  return records.at(-1)?.record_hash || null;
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    if (records[index]?.record_hash) return records[index].record_hash;
+  }
+  return null;
 }
 
 export function validateLedgerChain(records = [], options = Object()) {

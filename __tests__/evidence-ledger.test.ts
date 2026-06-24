@@ -323,7 +323,7 @@ describe("evidence ledger", () => {
     assert.equal(validateEvidenceArtifact(artifact).ok, true);
   });
 
-  test("readLedgerJsonl tolerates malformed/truncated JSONL lines", () => {
+  test("readLedgerJsonl preserves malformed/truncated JSONL lines as integrity errors", () => {
     const root = tempDir();
     try {
       const filePath = join(root, "state", "events.jsonl");
@@ -338,15 +338,22 @@ describe("evidence ledger", () => {
       const original = readFileSync(filePath, "utf8").trimEnd();
       writeFileSync(filePath, `${original}\n{truncated\nnot-valid-json\n`, "utf8");
 
-      // Reading must skip the bad lines without throwing and keep the good records.
+      // Reading must not throw, but malformed lines must stay visible in the
+      // record stream so integrity checks cannot turn falsely green.
       const records = readLedgerJsonl(filePath);
-      assert.deepEqual(records, [first, second]);
+      assert.equal(records.length, 4);
+      assert.deepEqual(records.slice(0, 2), [first, second]);
+      assert.deepEqual(records.slice(2).map((record) => record.code), [
+        "LEDGER_JSONL_MALFORMED_LINE",
+        "LEDGER_JSONL_MALFORMED_LINE",
+      ]);
+      assert.equal(validateLedgerChain(records).status, "fail");
 
       // Appending to a corrupted ledger must recover from the last good record
       // instead of crashing while computing prev_hash.
       const third = appendJsonlRecord(filePath, { event: "third" }, { now: "2026-05-24T15:00:02.000Z" });
       assert.equal(third.prev_hash, second.record_hash);
-      assert.equal(validateLedgerChain(readLedgerJsonl(filePath)).status, "pass");
+      assert.equal(validateLedgerChain(readLedgerJsonl(filePath)).status, "fail");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

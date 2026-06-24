@@ -1,11 +1,11 @@
 // Quality-score evidence battery: demand evidence must be event-specific and
 // tied to the current demand handoff, not merely any valid ledger record.
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { inspectDemandReadiness } from "../../src/demand/gate.js";
-import { appendJsonlRecord } from "../../src/runtime/evidence/ledger.js";
+import { appendJsonlRecord, readLedgerJsonl, validateLedgerChain } from "../../src/runtime/evidence/ledger.js";
 
 type EvidenceBatteryCase = {
   id: string;
@@ -71,7 +71,7 @@ export const EVIDENCE_BATTERY: EvidenceBatteryCase[] = [
 ];
 
 export function runEvidenceBattery(): EvidenceBatteryResult[] {
-  return EVIDENCE_BATTERY.map((testCase) => {
+  const demandResults = EVIDENCE_BATTERY.map((testCase) => {
     const stateDir = mkdtempSync(join(tmpdir(), "yolo-evidence-battery-"));
     try {
       testCase.seed(stateDir);
@@ -91,4 +91,25 @@ export function runEvidenceBattery(): EvidenceBatteryResult[] {
       rmSync(stateDir, { recursive: true, force: true });
     }
   });
+  const ledgerRoot = mkdtempSync(join(tmpdir(), "yolo-evidence-ledger-battery-"));
+  try {
+    const ledgerPath = join(ledgerRoot, "evidence", "ledger.jsonl");
+    appendJsonlRecord(ledgerPath, { event: "first", ledger: "state" });
+    writeFileSync(ledgerPath, "{malformed jsonl line\n", { flag: "a" });
+    appendJsonlRecord(ledgerPath, { event: "second", ledger: "state" });
+
+    const validation = validateLedgerChain(readLedgerJsonl(ledgerPath));
+    const status = validation.status === "fail" ? "blocked" : "pass";
+    demandResults.push({
+      id: "jsonl_malformed_line_blocks_integrity_pass",
+      category: "evidence_gate_robustness",
+      expect: "blocked",
+      actualExit: status === "pass" ? 0 : 1,
+      actualStatus: status,
+      correct: status === "blocked",
+    });
+  } finally {
+    rmSync(ledgerRoot, { recursive: true, force: true });
+  }
+  return demandResults;
 }
