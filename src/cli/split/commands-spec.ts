@@ -246,7 +246,7 @@ export async function runYoloPrdCli(argv = [], io = Object()) {
   return workflowExitCode(result);
 }
 
-export async function runYoloWorkflowPlanCli(workflow, argv = [], io = Object()) {
+export async function runYoloWorkflowPlanCli(workflow: string, argv: string[] = [], io: { stdout?: { write: (data: string) => void }; stderr?: { write: (data: string) => void } } = {}) {
   if (workflow === "brainstorm") return runYoloBrainstormCli(argv, io);
   if (workflow === "discover") return runYoloDiscoverCli(argv, io);
   if (workflow === "discuss") return runYoloDiscussCli(argv, io);

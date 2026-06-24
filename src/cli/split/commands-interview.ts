@@ -111,24 +111,31 @@ import {
   writeJsonFile,
 } from "./interview-helpers.js";
 
-export async function runYoloInterviewCli(argv = [], io = Object()) {
+type CliIo = {
+  stdout?: { write: (data: string) => void };
+  stderr?: { write: (data: string) => void };
+  cwd?: string;
+  logDir?: string;
+};
+
+export async function runYoloInterviewCli(argv: string[] = [], io: CliIo = {}) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloInterviewArgs(argv);
-  const command = input.command;
+  const command = typeof input.command === "string" ? input.command : "";
 
   if (options.help) {
     stdout.write(`${usage()}\n`);
     return 0;
   }
 
-  function emit(label, result, exitCode = 0) {
+  function emit(label: string, result: Record<string, unknown>, exitCode = 0) {
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else (result.status === "error" ? stderr : stdout).write(`${formatInterviewText(label, result)}\n`);
     return exitCode;
   }
 
-  function error(label, code, summary, exitCode = 2) {
+  function error(label: string | undefined, code: string, summary: string, exitCode = 2) {
     return emit(label || "unknown", {
       status: "error",
       code,
@@ -142,13 +149,14 @@ export async function runYoloInterviewCli(argv = [], io = Object()) {
   }
 
   try {
-    const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+    const projectRoot = resolve((input.cwd as string | undefined) || io.cwd || process.cwd());
     const stateRoot = join(projectRoot, ".yolo");
     const writeArtifacts = options.writeArtifacts !== false;
 
     if (command === "start") {
       const state = createInterviewState(input, projectRoot, stateRoot);
-      const artifacts = writeArtifacts ? [writeJsonFile(state.interview_path, state)] : [];
+      const interviewPath = state.interview_path || "";
+      const artifacts = writeArtifacts ? [writeJsonFile(interviewPath, state)] : [];
       return emit("start", interviewResult("start", state, {
         summary: writeArtifacts ? "Interview session started." : "Interview session preview generated.",
         artifacts,
@@ -169,10 +177,11 @@ export async function runYoloInterviewCli(argv = [], io = Object()) {
         questionId,
         answer: cleanCliText(input.answer),
       }));
-      const artifacts = writeArtifacts ? [
-        writeJsonFile(state.interview_path, state),
+      const interviewPath = state.interview_path || "";
+      const artifacts = (writeArtifacts ? [
+        writeJsonFile(interviewPath, state),
         writeInterviewAnswerLedger(state, question, cleanCliText(input.answer)),
-      ].filter(Boolean) : [];
+      ] : []).filter((p): p is string => typeof p === "string");
       return emit("answer", interviewResult("answer", state, {
         summary: writeArtifacts ? "Interview answer recorded." : "Interview answer preview generated.",
         artifacts,
@@ -205,16 +214,18 @@ export async function runYoloInterviewCli(argv = [], io = Object()) {
           answer: cleanCliText(input.confirm),
           confirmed_at: now,
         };
-        if (writeArtifacts) writeJsonFile(state.interview_path, state);
+        const interviewPath = state.interview_path || "";
+        if (writeArtifacts) writeJsonFile(interviewPath, state);
         return emit("playback", interviewResult("playback", state, {
           status: "success",
           code: "PLAYBACK_CONFIRMED",
           summary: "Understanding playback confirmed by user.",
-          artifacts: writeArtifacts ? [state.interview_path] : [],
+          artifacts: writeArtifacts ? [interviewPath] : [],
           outputs: [{ playback: state.playback }],
-          runtime_next_actions: [`Create demand artifacts: yolo interview to-demand --session ${state.interview_path}`],
+          runtime_next_actions: [`Create demand artifacts: yolo interview to-demand --session ${interviewPath}`],
         }));
       }
+      const confirmInterviewPath = state.interview_path || "";
       return emit("playback", interviewResult("playback", state, {
         status: "ready",
         code: "PLAYBACK_GENERATED",
@@ -222,7 +233,7 @@ export async function runYoloInterviewCli(argv = [], io = Object()) {
         artifacts: [],
         outputs: [{ playback: generated }],
         runtime_next_actions: [
-          `Confirm understanding: yolo interview playback --session ${state.interview_path} --confirm "<your confirmation>"`,
+          `Confirm understanding: yolo interview playback --session ${confirmInterviewPath} --confirm "<your confirmation>"`,
         ],
       }));
     }
@@ -273,13 +284,14 @@ export async function runYoloInterviewCli(argv = [], io = Object()) {
           artifacts: demandResult.artifacts || [],
         },
       });
-      const interviewArtifact = writeArtifacts ? writeJsonFile(state.interview_path, state) : null;
+      const interviewPath = state.interview_path || "";
+      const interviewArtifact = writeArtifacts ? writeJsonFile(interviewPath, state) : null;
       const decisionLedger = writeArtifacts ? writeInterviewDecisionLedger(state, demandResult) : null;
       const artifacts = [
         interviewArtifact,
         decisionLedger,
-        ...(demandResult.artifacts || []),
-      ].filter(Boolean);
+        ...((demandResult.artifacts as string[] | undefined) || []),
+      ].filter((p): p is string => typeof p === "string");
       const blocked = isBlockingWorkflowStatus(demandResult.status);
       const status = demandResult.status === "warning" ? "warning" : blocked ? "blocked" : "success";
       const code = demandResult.status === "warning"
@@ -313,7 +325,7 @@ export async function runYoloInterviewCli(argv = [], io = Object()) {
       status: "error",
       code: "INTERVIEW_FAILED",
       command: label,
-      summary: err.message,
+      summary: (err as Error).message,
       next_question: null,
       coverage: null,
       artifacts: [],

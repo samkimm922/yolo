@@ -104,8 +104,8 @@ export function parseYoloAutoArgs(argv = [], context = Object()) {
     startProgressServer: undefined,
     runReviewLoop: undefined,
   };
-  const positionals = [];
-  const unknownFlags = [];
+  const positionals: string[] = [];
+  const unknownFlags: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];

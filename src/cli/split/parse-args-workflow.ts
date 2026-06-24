@@ -12,12 +12,13 @@ import {
   throwUnknownFlags,
 } from "./parse-helpers.js";
 
-export function parseYoloInterviewArgs(argv = []) {
+export function parseYoloInterviewArgs(argv: string[] = []) {
   const command = argv[0] && !argv[0].startsWith("--") ? argv[0] : "";
-  const input = Object.assign(Object(), { command, ideaParts: [] });
+  const ideaParts: string[] = [];
+  const input: Record<string, unknown> = { command, ideaParts };
   const options = { json: false, help: false, writeArtifacts: true };
   const args = command ? argv.slice(1) : argv;
-  const unknownFlags = [];
+  const unknownFlags: string[] = [];
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -56,19 +57,20 @@ export function parseYoloInterviewArgs(argv = []) {
       input.confirm = read.value;
       i += read.consumed;
     } else if (!arg.startsWith("--") && command === "start") {
-      input.ideaParts.push(arg);
+      ideaParts.push(arg);
     } else if (arg.startsWith("--")) {
       unknownFlags.push(`--${arg.replace(/^--?/, "").split("=")[0]}`);
     }
   }
 
   throwUnknownFlags(unknownFlags);
-  input.idea = input.ideaParts.join(" ").trim();
+  input.idea = ideaParts.join(" ").trim();
   return { input, options };
 }
 
-export function parseYoloWorkflowArgs(argv = []) {
-  const input = Object.assign(Object(), { objectiveParts: [] });
+export function parseYoloWorkflowArgs(argv: string[] = []) {
+  const objectiveParts: string[] = [];
+  const input: Record<string, unknown> = { objectiveParts };
   const options = {
     json: false,
     help: false,
@@ -76,11 +78,11 @@ export function parseYoloWorkflowArgs(argv = []) {
     executeAgents: false,
     allowAgentDispatch: false,
   };
-  const unknownFlags = [];
+  const unknownFlags: string[] = [];
 
-  function pushList(key, value) {
+  function pushList(key: string, value: string) {
     if (!input[key]) input[key] = [];
-    input[key].push(value);
+    (input[key] as string[]).push(value);
   }
 
   for (let i = 0; i < argv.length; i++) {
@@ -243,13 +245,13 @@ export function parseYoloWorkflowArgs(argv = []) {
       i += read.consumed;
     } else if (!arg.startsWith("--")) {
       if (!input.prdPath && arg.endsWith(".json")) input.prdPath = arg;
-      else input.objectiveParts.push(arg);
+      else objectiveParts.push(arg);
     } else if (arg.startsWith("--")) {
       unknownFlags.push(`--${arg.replace(/^--?/, "").split("=")[0]}`);
     }
   }
 
   throwUnknownFlags(unknownFlags);
-  input.objective = input.objectiveParts.join(" ").trim();
+  input.objective = objectiveParts.join(" ").trim();
   return { input, options };
 }

@@ -76,7 +76,7 @@ const REVIEW_PROMPT = `你是一个高级代码审查员。审查整个项目的
 如果没有发现问题，输出空数组：[]`;
 
 // --- JSON 提取 ---
-function extractJsonArray(text) {
+function extractJsonArray(text: string) {
   if (!text || !text.trim()) return [];
   // 尝试直接解析
   try { const arr = JSON.parse(text); if (Array.isArray(arr)) return arr; } catch {}

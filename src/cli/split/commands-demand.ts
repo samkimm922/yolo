@@ -134,10 +134,10 @@ export async function runYoloBrainstormCli(argv = [], io = Object()) {
   return workflowExitCode(result);
 }
 
-async function runYoloDemandStageCli(stage, input = Object(), options = Object(), io = Object()) {
+async function runYoloDemandStageCli(stage: string, input: Record<string, unknown> = {}, options: Record<string, unknown> = {}, io: { stdout?: { write: (data: string) => void }; stderr?: { write: (data: string) => void }; cwd?: string } = {}) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
-  const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
+  const projectRoot = resolve((input.cwd as string | undefined) || io.cwd || process.cwd());
   const stateRoot = join(projectRoot, ".yolo");
   const stageLabel = normalizeDemandStage(stage);
 
@@ -169,7 +169,7 @@ async function runYoloDemandStageCli(stage, input = Object(), options = Object()
 
   if (stageLabel === "interview") {
     const interviewArgs = ["start"];
-    if (input.objective) interviewArgs.push(input.objective);
+    if (input.objective) interviewArgs.push(input.objective as string);
     if (input.cwd) interviewArgs.push(`--cwd=${input.cwd}`);
     if (options.json) interviewArgs.push("--json");
     if (options.writeLifecycle === false) interviewArgs.push("--no-write");
@@ -249,7 +249,7 @@ export async function runYoloDemandCli(argv = [], io = Object()) {
     return 0;
   }
 
-  const stage = normalizeDemandStage(input.stage);
+  const stage = normalizeDemandStage(input.stage as string);
   const profile = cleanCliText(input.profile).toLowerCase();
   const demandMode = cleanCliText(input.mode).toLowerCase();
   if (!stage && (
@@ -304,7 +304,7 @@ export async function runYoloDemandCli(argv = [], io = Object()) {
     objective: input.objective,
   });
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  else stdout.write(`${formatDemandStatusText(result)}\n`);
+  else stdout.write(`${formatDemandStatusText({ ...result })}\n`);
   return workflowExitCode(result);
 }
 

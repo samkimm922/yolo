@@ -45,32 +45,32 @@ export const KNOWN_YOLO_COMMAND_WORDS = new Set([
   "ui-evidence",
 ]);
 
-export function cleanCliText(value) {
+export function cleanCliText(value: unknown) {
   return String(value ?? "").trim();
 }
 
-export function stableJson(value) {
+export function stableJson(value: unknown) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-export function writeJsonFile(path, value) {
+export function writeJsonFile(path: string, value: unknown) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, stableJson(value), "utf8");
   return path;
 }
 
-export function appendJsonlFile(path, record) {
+export function appendJsonlFile(path: string, record: unknown) {
   mkdirSync(dirname(path), { recursive: true });
   appendFileSync(path, `${JSON.stringify(record)}\n`, "utf8");
   return path;
 }
 
-export function readJsonFile(path) {
-  return JSON.parse(readFileSync(path, "utf8"));
+export function readJsonFile<T = unknown>(path: string): T {
+  return JSON.parse(readFileSync(path, "utf8")) as T;
 }
 
-export function cloneJson(value) {
-  return JSON.parse(JSON.stringify(value));
+export function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 export function normalizeDemandStage(value = "") {
@@ -110,7 +110,7 @@ export function workflowExitCode(result = Object()) {
   return isBlockingWorkflowStatus(status) ? 1 : 1;
 }
 
-export function existingJsonPath(value, cwd = process.cwd()) {
+export function existingJsonPath(value: unknown, cwd = process.cwd()) {
   const text = String(value || "").trim();
   if (!text.endsWith(".json")) return "";
   const absolute = isAbsolute(text) ? text : resolve(cwd, text);

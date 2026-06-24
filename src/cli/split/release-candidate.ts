@@ -10,6 +10,20 @@ import { readReleaseCandidateChangeManifest } from "../../release/change-provena
 import { runCleanEnvironmentVerify } from "../../release/clean-environment-verify.js";
 import { cleanCliText } from "./shared.js";
 
+// Coerce a possibly-unknown CLI value into a string path suitable for resolve().
+function resolveInputPath(...candidates: unknown[]): string {
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.length > 0) return candidate;
+  }
+  return process.cwd();
+}
+
+// Coerce an unknown CLI value into a string[] | null for manifest currentRoundFiles.
+function asStringArrayOrNull(value: unknown): string[] | null {
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string");
+  return null;
+}
+
 export const RELEASE_CANDIDATE_RESULT_SCHEMA = "yolo.release_candidate_cli_result.v1";
 export const RELEASE_CANDIDATE_REQUIRED_GATES = [
   {
@@ -63,7 +77,7 @@ export function cloneReleaseCandidateGates() {
   return RELEASE_CANDIDATE_REQUIRED_GATES.map((gate) => ({ ...gate }));
 }
 
-export function normalizeReleaseCandidateStatus(status) {
+export function normalizeReleaseCandidateStatus(status: unknown) {
   const normalized = cleanCliText(status).toLowerCase();
   if (normalized === "pass" || normalized === "success") return "pass";
   if (["warning", "draft", "dry_run", "not_run", "indeterminate", "ready", "ready_for_operator"].includes(normalized)) return normalized;
@@ -71,14 +85,19 @@ export function normalizeReleaseCandidateStatus(status) {
   return "blocked";
 }
 
-export function releaseCandidateExitCode(result = Object()) {
+export function releaseCandidateExitCode(result: Record<string, unknown> = {}) {
   const status = normalizeReleaseCandidateStatus(result.status);
   if (status === "pass") return 0;
   if (["warning", "draft", "dry_run", "not_run", "indeterminate", "ready", "ready_for_operator"].includes(status)) return 2;
   return 1;
 }
 
-export function releaseCandidateBaseResult({ command, input = Object(), options = Object(), projectRoot }) {
+export function releaseCandidateBaseResult({ command, input = {}, options = {}, projectRoot }: {
+  command: string;
+  input?: Record<string, unknown>;
+  options?: Record<string, unknown>;
+  projectRoot: string;
+}) {
   return {
     schema: RELEASE_CANDIDATE_RESULT_SCHEMA,
     status: "blocked",
@@ -108,11 +127,12 @@ export function releaseCandidateBaseResult({ command, input = Object(), options 
   };
 }
 
-function releaseCandidateReport(report = Object()) {
+function releaseCandidateReport(report: Record<string, unknown> = {}) {
   const { status = "blocked", source, blockerCode, blockerMessage, blockers = [], warnings = [], approvals = [], ...extra } = report;
+  const blockerList = (Array.isArray(blockers) ? blockers : []) as Array<{ code?: string; message?: string }>;
   const normalizedBlockers = blockerCode
-    ? [{ code: blockerCode, message: blockerMessage || blockerCode }, ...blockers]
-    : blockers;
+    ? [{ code: blockerCode, message: blockerMessage || blockerCode }, ...blockerList]
+    : blockerList;
   return {
     status,
     provenance: { source, id: `${source}-local` },
@@ -123,12 +143,12 @@ function releaseCandidateReport(report = Object()) {
   };
 }
 
-export function buildDefaultReleaseCandidateReports(input = Object()) {
-  const yoloRoot = resolve(input.yoloRoot || input.yolo_root || input.projectRoot || process.cwd());
-  const projectRoot = resolve(input.projectRoot || yoloRoot);
+export function buildDefaultReleaseCandidateReports(input: Record<string, unknown> = {}) {
+  const yoloRoot = resolve(resolveInputPath(input.yoloRoot, input.yolo_root, input.projectRoot));
+  const projectRoot = resolve(resolveInputPath(input.projectRoot, yoloRoot));
 
   // verify: actually run npm run verify in the project root
-  let verifyReport;
+  let verifyReport: Record<string, unknown>;
   try {
     const startedAt = new Date().toISOString();
     execSync("npm run verify", {
@@ -143,16 +163,17 @@ export function buildDefaultReleaseCandidateReports(input = Object()) {
       commands: [{ command: "npm run verify", exit_code: 0, status: "pass", started_at: startedAt, finished_at: new Date().toISOString() }],
     });
   } catch (err) {
+    const error = err as { message?: string; status?: number };
     verifyReport = releaseCandidateReport({
       source: "verify",
       blockerCode: "RELEASE_VERIFY_FAILED",
-      blockerMessage: `npm run verify failed: ${err.message || err}`,
-      commands: [{ command: "npm run verify", exit_code: err.status || 1, status: "fail" }],
+      blockerMessage: `npm run verify failed: ${error.message || err}`,
+      commands: [{ command: "npm run verify", exit_code: error.status || 1, status: "fail" }],
     });
   }
 
   // prdPreflight: actually run PRD preflight
-  let prdPreflightReport;
+  let prdPreflightReport: Record<string, unknown>;
   try {
     const prdDirs = [resolve(projectRoot, "data/prd/current"), resolve(projectRoot, "data/prd/archive")];
     const preflight = preflightAllPrds({ dirs: prdDirs });
@@ -166,10 +187,11 @@ export function buildDefaultReleaseCandidateReports(input = Object()) {
       file_count: preflight.file_count,
     });
   } catch (err) {
+    const error = err as { message?: string };
     prdPreflightReport = releaseCandidateReport({
       source: "prd-preflight",
       blockerCode: "RELEASE_PRD_PREFLIGHT_FAILED",
-      blockerMessage: `PRD preflight failed: ${err.message || err}`,
+      blockerMessage: `PRD preflight failed: ${error.message || err}`,
     });
   }
 
@@ -179,7 +201,7 @@ export function buildDefaultReleaseCandidateReports(input = Object()) {
     rootDir: yoloRoot,
     allowUntracked: input.allowUntracked === true,
     allowUnknown: input.allowUnknown === true,
-    currentRoundFiles: input.currentRoundFiles || null,
+    currentRoundFiles: asStringArrayOrNull(input.currentRoundFiles),
   });
 
   return {
@@ -213,24 +235,25 @@ export function buildDefaultReleaseCandidateReports(input = Object()) {
   };
 }
 
-export async function runDefaultReleaseCandidateRunner(input = Object()) {
-  const yoloRoot = resolve(input.yoloRoot || input.yolo_root || input.projectRoot || process.cwd());
-  const projectRoot = resolve(input.projectRoot || yoloRoot);
-  const reports = input.reports || buildDefaultReleaseCandidateReports({
+export async function runDefaultReleaseCandidateRunner(input: Record<string, unknown> = {}) {
+  const yoloRoot = resolve(resolveInputPath(input.yoloRoot, input.yolo_root, input.projectRoot));
+  const projectRoot = resolve(resolveInputPath(input.projectRoot, yoloRoot));
+  const reports = (input.reports as Record<string, unknown> | undefined) || buildDefaultReleaseCandidateReports({
     yoloRoot,
     projectRoot,
     allowUntracked: input.allowUntracked,
     allowUnknown: input.allowUnknown,
     currentRoundFiles: input.currentRoundFiles,
   });
+  const mode = typeof input.mode === "string" && input.mode ? input.mode : "rc";
   const gate = runReleaseCandidateGate({
-    mode: input.mode || "rc",
+    mode,
     reports,
-    now: input.now,
+    now: input.now as string | undefined,
   });
-  const gateReports = gate.reports || {};
-  const gates = (input.requiredGates || cloneReleaseCandidateGates()).map((gateItem) => {
-    const reportName = RELEASE_CANDIDATE_REPORT_BY_GATE[gateItem.id];
+  const gateReports = (gate.reports || {}) as Record<string, { status?: string; blocker_count?: number; warning_count?: number }>;
+  const gates = ((input.requiredGates as Array<{ id: string; required?: boolean }> | undefined) || cloneReleaseCandidateGates()).map((gateItem) => {
+    const reportName = RELEASE_CANDIDATE_REPORT_BY_GATE[gateItem.id as keyof typeof RELEASE_CANDIDATE_REPORT_BY_GATE];
     const report = reportName ? gateReports[reportName] : null;
     return {
       ...gateItem,
@@ -244,8 +267,8 @@ export async function runDefaultReleaseCandidateRunner(input = Object()) {
     schema: RELEASE_CANDIDATE_RESULT_SCHEMA,
     status,
     code: status === "pass" ? "RELEASE_CANDIDATE_GATE_PASS" : "RELEASE_CANDIDATE_GATE_BLOCKED",
-    command: input.command || "release-candidate",
-    mode: input.mode || "rc",
+    command: typeof input.command === "string" && input.command ? input.command : "release-candidate",
+    mode,
     dry_run: input.dryRun === true,
     fail_closed: true,
     yolo_root: yoloRoot,
@@ -272,9 +295,9 @@ export async function runDefaultReleaseCandidateRunner(input = Object()) {
   };
 }
 
-export function normalizeReleaseCandidateResult(raw = Object(), context = Object()) {
-  const base = releaseCandidateBaseResult(context);
-  const merged = {
+export function normalizeReleaseCandidateResult(raw: Record<string, unknown> = {}, context: Record<string, unknown> = {}) {
+  const base = releaseCandidateBaseResult(context as { command: string; input?: Record<string, unknown>; options?: Record<string, unknown>; projectRoot: string });
+  const merged: Record<string, unknown> = {
     ...base,
     ...raw,
     schema: raw.schema || base.schema,
@@ -294,18 +317,21 @@ export function normalizeReleaseCandidateResult(raw = Object(), context = Object
   const consistencyBlockers = merged.status === "pass"
     ? releaseCandidateConsistencyBlockers(merged)
     : [];
+  const mergedBlockers = (Array.isArray(merged.blockers) ? merged.blockers : []) as Array<{ code?: string }>;
   if (consistencyBlockers.length > 0) {
     merged.status = "blocked";
     merged.code = "RELEASE_CANDIDATE_RESULT_INCONSISTENT";
-    merged.blockers = [
-      ...merged.blockers,
+    const dedupedBlockers = [
+      ...mergedBlockers,
       ...consistencyBlockers.filter((blocker) =>
-        !merged.blockers.some((existing) => existing.code === blocker.code)
+        !mergedBlockers.some((existing) => existing.code === blocker.code)
       ),
     ];
+    merged.blockers = dedupedBlockers;
+    const issueCodes = (Array.isArray(merged.issue_codes) ? merged.issue_codes : []) as string[];
     merged.issue_codes = [...new Set([
-      ...(Array.isArray(merged.issue_codes) ? merged.issue_codes : []),
-      ...merged.blockers.map((blocker) => blocker.code).filter(Boolean),
+      ...issueCodes,
+      ...dedupedBlockers.map((blocker) => blocker.code).filter((v): v is string => Boolean(v)),
     ])];
     merged.summary = "Release candidate runner returned an internally inconsistent pass result.";
     merged.next_actions = [
@@ -315,24 +341,24 @@ export function normalizeReleaseCandidateResult(raw = Object(), context = Object
   return merged;
 }
 
-export function releaseCandidateErrorResult(error, context = Object(), code = "RELEASE_CANDIDATE_GATE_ERROR") {
-  const base = releaseCandidateBaseResult(context);
+export function releaseCandidateErrorResult(error: unknown, context: Record<string, unknown> = {}, code = "RELEASE_CANDIDATE_GATE_ERROR") {
+  const base = releaseCandidateBaseResult(context as { command: string; input?: Record<string, unknown>; options?: Record<string, unknown>; projectRoot: string });
   return {
     ...base,
     status: "error",
     code,
     summary: "Generic release-candidate gate failed before producing a passable result.",
-    error: error?.message || String(error),
+    error: (error as { message?: string } | null | undefined)?.message || String(error),
     blockers: [{
       code,
-      message: error?.message || String(error),
+      message: (error as { message?: string } | null | undefined)?.message || String(error),
     }],
     next_actions: ["Inspect the RC gate runner error, fix the failing contract, then rerun yolo release-candidate --json."],
   };
 }
 
-function releaseCandidateConsistencyBlockers(result = Object()) {
-  const blockers = [];
+function releaseCandidateConsistencyBlockers(result: Record<string, unknown> = {}) {
+  const blockers: Array<Record<string, unknown>> = [];
   if (Array.isArray(result.blockers) && result.blockers.length > 0) {
     blockers.push({
       code: "RELEASE_CANDIDATE_BLOCKERS_PRESENT",
@@ -345,8 +371,8 @@ function releaseCandidateConsistencyBlockers(result = Object()) {
       message: "dry-run release candidate output cannot be promoted as passing release evidence",
     });
   }
-  const requiredGates = Array.isArray(result.gates)
-    ? result.gates.filter((gate) => gate.required !== false)
+  const requiredGates: Array<{ id?: string; status?: unknown; required?: boolean }> = Array.isArray(result.gates)
+    ? (result.gates as Array<{ id?: string; status?: unknown; required?: boolean }>).filter((gate) => gate.required !== false)
     : [];
   const nonPassingGate = requiredGates.find((gate) => normalizeReleaseCandidateStatus(gate.status) !== "pass");
   if (requiredGates.length === 0 || nonPassingGate) {
@@ -357,22 +383,25 @@ function releaseCandidateConsistencyBlockers(result = Object()) {
       gate_status: nonPassingGate?.status || null,
     });
   }
-  const gateResult = result.gate_result || result.gateResult;
-  if (!gateResult || typeof gateResult !== "object") {
+  const gateResultRaw = result.gate_result || result.gateResult;
+  if (!gateResultRaw || typeof gateResultRaw !== "object") {
     blockers.push({
       code: "RELEASE_CANDIDATE_GATE_RESULT_MISSING",
       message: "passing release candidate results must include the aggregate release candidate gate_result",
     });
-  } else if (
-    gateResult.schema !== "yolo.release.release_candidate_gate_result.v1"
-    || normalizeReleaseCandidateStatus(gateResult.status) !== "pass"
-    || (Array.isArray(gateResult.blockers) && gateResult.blockers.length > 0)
-  ) {
-    blockers.push({
-      code: "RELEASE_CANDIDATE_GATE_RESULT_NOT_PASSING",
-      message: "aggregate release candidate gate_result must be schema-valid, passing, and blocker-free",
-      gate_result_status: gateResult.status || null,
-    });
+  } else {
+    const gateResult = gateResultRaw as { schema?: string; status?: unknown; blockers?: unknown[] };
+    if (
+      gateResult.schema !== "yolo.release.release_candidate_gate_result.v1"
+      || normalizeReleaseCandidateStatus(gateResult.status) !== "pass"
+      || (Array.isArray(gateResult.blockers) && gateResult.blockers.length > 0)
+    ) {
+      blockers.push({
+        code: "RELEASE_CANDIDATE_GATE_RESULT_NOT_PASSING",
+        message: "aggregate release candidate gate_result must be schema-valid, passing, and blocker-free",
+        gate_result_status: gateResult.status || null,
+      });
+    }
   }
   return blockers;
 }
