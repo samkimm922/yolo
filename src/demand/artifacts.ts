@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { buildDemandArtifactGraph } from "./graph.js";
+import { buildDemandArtifactGraph, type DemandArtifactId } from "./graph.js";
 import { inspectDemandReadiness } from "./gate.js";
 import { buildUnderstandingPlayback } from "./understanding-playback.js";
 import { targetUserRoleItems } from "./interview.js";
@@ -16,35 +16,40 @@ export const DEMAND_SESSION_SCHEMA = "yolo.demand.session.v1";
 export const DEMAND_GROUNDING_SCHEMA_VERSION = "1.0";
 export const DEMAND_GROUNDING_SCHEMA = "yolo.demand.grounding.v1";
 
-function asArray(value) {
-  if (value == null) return [];
-  return Array.isArray(value) ? value : [value];
+// Loose input/session/options records (N4 pattern): the demand artifact
+// compiler reads deeply nested session/input data as `Record<string, unknown>`,
+// narrowed at each touch point, never widened to `any`.
+type Loose = Record<string, unknown>;
+
+function asArray<T = unknown>(value: unknown): T[] {
+  if (value == null) return [] as T[];
+  return (Array.isArray(value) ? value : [value]) as T[];
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function arrayOfStrings(value) {
+function arrayOfStrings(value: unknown): string[] {
   return asArray(value)
     .flatMap((item) => String(item ?? "").split(/\r?\n/))
     .map((item) => item.trim())
     .filter(Boolean);
 }
 
-function uniqueStrings(value) {
+function uniqueStrings(value: unknown): string[] {
   return [...new Set(arrayOfStrings(value))];
 }
 
-function isPlainObject(value) {
+function isPlainObject(value: unknown): boolean {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
 
-function nowIso(options = Object()) {
+function nowIso(options: Loose = Object()): string {
   return clean(options.now) || new Date().toISOString();
 }
 
-function slug(value, fallback = "DEMAND") {
+function slug(value: unknown, fallback: string = "DEMAND"): string {
   const text = clean(value)
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "-")
@@ -53,16 +58,16 @@ function slug(value, fallback = "DEMAND") {
   return text || fallback;
 }
 
-function idDate(now) {
+function idDate(now: unknown): string {
   return clean(now).slice(0, 10).replace(/-/g, "") || "00000000";
 }
 
-function demandId(input = Object(), now) {
+function demandId(input: Loose = Object(), now: unknown): string {
   return clean(input.id || input.demand_id || input.demandId)
     || `DEMAND-${idDate(now)}-${slug(input.title || input.idea || input.objective || input.requirement || "PROJECT")}`;
 }
 
-const LABELS = {
+const LABELS: Record<string, string[]> = {
   problem: ["Problem", "问题"],
   target_users: ["Target User", "Target Users", "User", "Users", "用户", "对象"],
   success_criteria: ["Success", "Success Criteria", "Acceptance", "验收", "成功标准"],
@@ -79,13 +84,13 @@ const LABELS = {
   visual_style: ["Visual style", "Style source", "UI style", "样式", "视觉样式", "样式来源"],
 };
 
-const ALL_LABELS = Object.values(LABELS).flat().sort((a, b) => b.length - a.length);
+const ALL_LABELS: string[] = Object.values(LABELS).flat().sort((a, b) => b.length - a.length);
 
-function labelPattern(labels) {
+function labelPattern(labels: string[]): string {
   return labels.map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
 }
 
-function extractLabel(text, labels) {
+function extractLabel(text: unknown, labels: string[]): string {
   const source = clean(text);
   if (!source) return "";
   const current = labelPattern(labels);
@@ -97,7 +102,7 @@ function extractLabel(text, labels) {
 const LIST_ITEM_PREFIX = /^(?:[-*•]\s+|\d{1,3}[.)、](?!\d)\s*|[（(]\d{1,3}[）)]\s*|[一二三四五六七八九十]{1,4}[.)、]\s*)/u;
 const INLINE_NUMBERED_ITEM = /\s+(?=(?:\d{1,3}[.)、](?!\d)\s*|[（(]\d{1,3}[）)]\s*|[一二三四五六七八九十]{1,4}[.)、]\s*))/u;
 
-function splitStructuredListItem(value) {
+function splitStructuredListItem(value: unknown): string[] {
   return clean(value)
     .split(INLINE_NUMBERED_ITEM)
     .flatMap((item) => item.split(/;\s+|\s+\|\s+/))
@@ -105,7 +110,7 @@ function splitStructuredListItem(value) {
     .filter(Boolean);
 }
 
-function splitList(value) {
+function splitList(value: unknown): string[] {
   return uniqueStrings(
     arrayOfStrings(value)
       .flatMap(splitStructuredListItem),
@@ -144,19 +149,19 @@ const SCOUT_EXTENSIONS = new Set([
   ".md",
 ]);
 
-function extname(path) {
+function extname(path: unknown): string {
   const match = String(path || "").match(/(\.[^.\/]+)$/);
   return match ? match[1].toLowerCase() : "";
 }
 
-function collectProjectFiles(projectRoot, options = Object()) {
+function collectProjectFiles(projectRoot: unknown, options: Loose = Object()): string[] {
   const root = resolve(clean(projectRoot) || process.cwd());
   const maxFiles = Number(options.maxFiles || 600);
   if (!existsSync(root)) return [];
-  const files = [];
-  function visit(dir) {
+  const files: string[] = [];
+  function visit(dir: string) {
     if (files.length >= maxFiles) return;
-    let entries = [];
+    let entries: import("node:fs").Dirent[] = [];
     try {
       entries = readdirSync(dir, { withFileTypes: true });
     } catch {
@@ -181,7 +186,7 @@ function collectProjectFiles(projectRoot, options = Object()) {
   return files.sort();
 }
 
-function tokens(value) {
+function tokens(value: unknown): string[] {
   return clean(value)
     .toLowerCase()
     .replace(/[^a-z0-9\u4e00-\u9fff]+/g, " ")
@@ -190,7 +195,7 @@ function tokens(value) {
     .filter((item) => item.length >= 2);
 }
 
-function surfaceKindFromFile(file) {
+function surfaceKindFromFile(file: unknown): string {
   const path = clean(file).toLowerCase();
   if (/(^|\/)(__tests__|tests?|specs?)\//.test(path) || /\.(test|spec)\./.test(path)) return "test";
   if (/(^|\/)(pages?|views?|screens?|components?|ui)\//.test(path)) return "ui";
@@ -201,7 +206,7 @@ function surfaceKindFromFile(file) {
   return "code";
 }
 
-function inferSurfaceKinds(text, files = []) {
+function inferSurfaceKinds(text: unknown, files: string[] = []): string[] {
   const source = clean(text).toLowerCase();
   const kinds = new Set(files.map(surfaceKindFromFile));
   if (/页面|列表|按钮|展示|显示|筛选|弹窗|ui|page|screen|component|button|display|show|render/.test(source)) kinds.add("ui");
@@ -213,8 +218,8 @@ function inferSurfaceKinds(text, files = []) {
   return [...kinds];
 }
 
-function surfaceLabel(kind) {
-  return {
+function surfaceLabel(kind: string): string {
+  return ({
     ui: "用户可见界面",
     api: "接口/服务入口",
     service: "业务规则/服务逻辑",
@@ -222,10 +227,10 @@ function surfaceLabel(kind) {
     test: "测试/验证",
     doc: "文档/说明",
     code: "代码实现",
-  }[kind] || "代码实现";
+  } as Record<string, string>)[kind] || "代码实现";
 }
 
-function scoreCandidateFile(file, tokenList, kind) {
+function scoreCandidateFile(file: string, tokenList: string[], kind: string): number {
   const lower = file.toLowerCase();
   let score = 0;
   if (surfaceKindFromFile(file) === kind) score += 6;
@@ -237,14 +242,14 @@ function scoreCandidateFile(file, tokenList, kind) {
   return score;
 }
 
-function inferTargetFiles({ projectRoot, text, explicitFiles = [], maxPerKind = 2 } = Object()) {
+function inferTargetFiles({ projectRoot, text, explicitFiles = [], maxPerKind = 2 } = Object() as { projectRoot?: unknown; text?: unknown; explicitFiles?: unknown[]; maxPerKind?: number }): string[] {
   const explicit = uniqueStrings(explicitFiles);
   if (explicit.length > 0) return explicit;
   const files = collectProjectFiles(projectRoot);
   if (files.length === 0) return [];
   const tokenList = tokens(text);
   const kinds = inferSurfaceKinds(text);
-  const selected = [];
+  const selected: string[] = [];
   for (const kind of kinds) {
     const ranked = files
       .map((file) => ({ file, score: scoreCandidateFile(file, tokenList, kind) }))
@@ -257,18 +262,18 @@ function inferTargetFiles({ projectRoot, text, explicitFiles = [], maxPerKind = 
   return [...new Set(selected)].slice(0, 8);
 }
 
-function resolveProjectFile(projectRoot, file) {
+function resolveProjectFile(projectRoot: unknown, file: unknown): string {
   const root = resolve(clean(projectRoot) || process.cwd());
   const path = clean(file);
   return isAbsolute(path) ? path : resolve(root, path);
 }
 
-function scopedProjectFile(projectRoot, file) {
+function scopedProjectFile(projectRoot: unknown, file: unknown) {
   const root = resolve(clean(projectRoot) || process.cwd());
   const declared = clean(file);
   const absolute = isAbsolute(declared) ? resolve(declared) : resolve(root, declared);
   const relativePath = relative(root, absolute);
-  const insideRoot = relativePath && !relativePath.startsWith("..") && !isAbsolute(relativePath);
+  const insideRoot = relativePath !== "" && !relativePath.startsWith("..") && !isAbsolute(relativePath);
   return {
     declared,
     absolute,
@@ -277,20 +282,29 @@ function scopedProjectFile(projectRoot, file) {
   };
 }
 
-function evidenceText(evidence = []) {
+function evidenceText(evidence: unknown[] = []): string {
   return uniqueStrings(evidence).join("\n");
 }
 
-function evidenceMentionsFile(evidence = [], file = "") {
+function evidenceMentionsFile(evidence: unknown[] = [], file: unknown = ""): boolean {
   const target = clean(file);
-  return target && evidenceText(evidence).includes(target);
+  return Boolean(target) && evidenceText(evidence).includes(target);
 }
 
-function targetFileFacts({ projectRoot, explicitFiles = [], inferredFiles = [], evidence = [], verifiedFiles = [] } = Object()) {
+interface TargetFileFact {
+  file: string;
+  declared_file?: string;
+  status: string;
+  source: string;
+  evidence: string[];
+  message: string;
+}
+
+function targetFileFacts({ projectRoot, explicitFiles = [], inferredFiles = [], evidence = [], verifiedFiles = [] } = Object() as { projectRoot?: unknown; explicitFiles?: unknown[]; inferredFiles?: unknown[]; evidence?: unknown[]; verifiedFiles?: unknown[] }): TargetFileFact[] {
   const verifiedSet = new Set(uniqueStrings(verifiedFiles));
   const explicit = uniqueStrings(explicitFiles);
   const inferred = uniqueStrings(inferredFiles).filter((file) => !explicit.includes(file));
-  const facts = [];
+  const facts: TargetFileFact[] = [];
   for (const file of explicit) {
     const scoped = scopedProjectFile(projectRoot, file);
     if (!scoped.insideRoot) {
@@ -333,23 +347,23 @@ function targetFileFacts({ projectRoot, explicitFiles = [], inferredFiles = [], 
   return facts;
 }
 
-function targetFilesFromFacts(facts = []) {
+function targetFilesFromFacts(facts: TargetFileFact[] = []): string[] {
   return facts
     .filter((fact) => ["verified", "needs_verification"].includes(fact.status))
     .map((fact) => fact.file);
 }
 
-function candidateFilesFromFacts(facts = []) {
+function candidateFilesFromFacts(facts: TargetFileFact[] = []): string[] {
   return facts
     .filter((fact) => fact.status === "candidate")
     .map((fact) => fact.file);
 }
 
-function cloneDemandObject(value) {
-  return JSON.parse(JSON.stringify(value || {}));
+function cloneDemandObject<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value || {})) as T;
 }
 
-function repoRelative(projectRoot, file) {
+function repoRelative(projectRoot: unknown, file: unknown): string {
   const root = resolve(clean(projectRoot) || process.cwd());
   const target = clean(file);
   if (!target || isAbsolute(target)) return "";
@@ -361,7 +375,7 @@ function repoRelative(projectRoot, file) {
 
 const GROUNDING_EXCLUDED_ROOTS = new Set([".git", ".yolo", "dist", "node_modules", "coverage", ".next", ".nuxt", "build"]);
 
-function safeRepoFile(projectRoot, file) {
+function safeRepoFile(projectRoot: unknown, file: unknown): string {
   const rel = repoRelative(projectRoot, file).replace(/^\.\/+/, "");
   if (!rel) return "";
   if (rel.split("/").some((part) => !part || part === "." || part === "..")) return "";
@@ -369,7 +383,7 @@ function safeRepoFile(projectRoot, file) {
   return rel;
 }
 
-function groundingAsciiSlug(value, fallback = "feature") {
+function groundingAsciiSlug(value: unknown, fallback: string = "feature"): string {
   const text = clean(value)
     .toLowerCase()
     .replace(/['"`]/g, "")
@@ -380,24 +394,31 @@ function groundingAsciiSlug(value, fallback = "feature") {
   return `${fallback}-${createHash("sha1").update(clean(value) || fallback).digest("hex").slice(0, 8)}`;
 }
 
-function demandText(session = Object()) {
-  const requirements = asArray(session.requirements?.active || session.requirements);
-  const scenarios = asArray(session.scenario_matrix?.scenarios || session.scenarios);
+function demandText(session: Loose = Object()): string {
+  const sessionRequirements = session.requirements as Loose | undefined;
+  const requirements = asArray<Loose>(sessionRequirements?.active || session.requirements);
+  const scenarioMatrixField = session.scenario_matrix as Loose | undefined;
+  const scenarios = asArray<Loose>(scenarioMatrixField?.scenarios || session.scenarios);
+  const project = session.project as Loose | undefined;
+  const vision = session.vision as Loose | undefined;
+  const prdIntake = session.prd_intake as Loose | undefined;
+  const context = session.context as Loose | undefined;
+  const discussion = session.discussion as Loose | undefined;
   return [
-    session.project?.title,
+    project?.title,
     session.title,
-    session.vision?.statement,
-    session.vision?.idea,
+    vision?.statement,
+    vision?.idea,
     session.objective,
     session.idea,
     session.problem,
-    session.prd_intake?.plain_language_problem,
-    session.prd_intake?.desired_outcomes,
-    session.prd_intake?.success_proof,
-    session.prd_intake?.boundaries,
-    session.requirements?.constraints,
-    session.requirements?.out_of_scope,
-    session.context?.summary,
+    prdIntake?.plain_language_problem,
+    prdIntake?.desired_outcomes,
+    prdIntake?.success_proof,
+    prdIntake?.boundaries,
+    sessionRequirements?.constraints,
+    sessionRequirements?.out_of_scope,
+    context?.summary,
     requirements.map((item) => [
       item.id,
       item.title,
@@ -414,13 +435,14 @@ function demandText(session = Object()) {
       item.trigger,
       item.touchpoint,
     ]),
-    asArray(session.question_trace).map((item) => [item.question, item.answer]),
-    asArray(session.discussion?.decisions).map((item) => item?.text || item),
+    asArray<Loose>(session.question_trace).map((item) => [item.question, item.answer]),
+    asArray<Loose>(discussion?.decisions).map((item) => item?.text || item),
   ].flat(Infinity).map(clean).filter(Boolean).join("\n");
 }
 
-function requirementRefs(session = Object()) {
-  return asArray(session.requirements?.active || session.requirements)
+function requirementRefs(session: Loose = Object()) {
+  const sessionRequirements = session.requirements as Loose | undefined;
+  return asArray<Loose>(sessionRequirements?.active || session.requirements)
     .map((item) => ({
       id: clean(item?.id),
       text: clean(item?.text || item?.title),
@@ -428,11 +450,11 @@ function requirementRefs(session = Object()) {
     .filter((item) => item.id || item.text);
 }
 
-function hasConfirmedRequirements(session = Object()) {
+function hasConfirmedRequirements(session: Loose = Object()): boolean {
   return requirementRefs(session).some((item) => item.text.length >= 10);
 }
 
-function commandNameFromText(text) {
+function commandNameFromText(text: unknown): string {
   const source = clean(text);
   const backticked = source.match(/`([a-z][a-z0-9-]{2,})`/i)?.[1];
   if (backticked) return groundingAsciiSlug(backticked, "app");
@@ -443,15 +465,17 @@ function commandNameFromText(text) {
   return "";
 }
 
-function projectNameSlug(session = Object(), text = "") {
+function projectNameSlug(session: Loose = Object(), text: unknown = ""): string {
   const commandName = commandNameFromText(text);
   if (commandName) return commandName;
-  const title = clean(session.project?.title || session.title || session.vision?.idea || session.objective || session.idea);
+  const project = session.project as Loose | undefined;
+  const vision = session.vision as Loose | undefined;
+  const title = clean(project?.title || session.title || vision?.idea || session.objective || session.idea);
   const firstClause = title.split(/[:：.;。]/)[0];
   return groundingAsciiSlug(firstClause, "feature");
 }
 
-function targetKind(text = "") {
+function targetKind(text: unknown = ""): string {
   const source = clean(text).toLowerCase();
   if (/\b(cli|command line|terminal|argv|commander|node\b|taskcli)\b|命令行|终端/.test(source)) return "cli";
   if (/\b(api|endpoint|route|server|controller)\b|接口|路由/.test(source)) return "api";
@@ -460,7 +484,7 @@ function targetKind(text = "") {
   return "code";
 }
 
-function defaultTargetForKind(kind, name) {
+function defaultTargetForKind(kind: string, name: string): string {
   if (kind === "cli") return `src/${name}.ts`;
   if (kind === "api") return `src/api/${name}.ts`;
   if (kind === "ui") return `src/components/${name}.tsx`;
@@ -468,11 +492,11 @@ function defaultTargetForKind(kind, name) {
   return `src/${name}.ts`;
 }
 
-function explicitGroundingTargets(input = Object()) {
+function explicitGroundingTargets(input: Loose = Object()): string[] {
   return uniqueStrings(input.target_files || input.targetFiles || input.targets || input.target || input.files || input.file);
 }
 
-export function inferGreenfieldTargetFiles(session = Object(), options = Object()) {
+export function inferGreenfieldTargetFiles(session: Loose = Object(), options: Loose = Object()) {
   const projectRoot = resolve(clean(options.projectRoot || options.project_root || options.cwd) || process.cwd());
   const text = demandText(session);
   const explicit = explicitGroundingTargets(options);
@@ -495,47 +519,51 @@ export function inferGreenfieldTargetFiles(session = Object(), options = Object(
   });
 }
 
-function executionScopeFiles(session = Object()) {
-  return uniqueStrings(session.project?.target_files || session.target_files);
+function executionScopeFiles(session: Loose = Object()): string[] {
+  const project = session.project as Loose | undefined;
+  return uniqueStrings(project?.target_files || session.target_files);
 }
 
-function candidateFiles(session = Object()) {
+function candidateFiles(session: Loose = Object()): string[] {
+  const project = session.project as Loose | undefined;
+  const projectFacts = session.project_facts as Loose | undefined;
   return uniqueStrings([
-    ...asArray(session.project?.candidate_target_files),
-    ...asArray(session.project_facts?.candidate_target_files),
-    ...asArray(session.project_facts?.target_files)
+    ...asArray(project?.candidate_target_files),
+    ...asArray(projectFacts?.candidate_target_files),
+    ...asArray<Loose>(projectFacts?.target_files)
       .filter((fact) => fact?.status === "candidate")
-      .map((fact) => fact.file || fact.path),
+      .map((fact) => clean(fact.file || fact.path)),
   ]);
 }
 
-function candidatePromotionBlockers(candidates = [], targets = []) {
+function candidatePromotionBlockers(candidates: string[] = [], targets: Loose[] = []): string[] {
   const candidateSet = new Set(candidates);
   return targets
-    .filter((target) => target?.exists === true && candidateSet.has(target.file))
-    .map((target) => target.file);
+    .filter((target) => target?.exists === true && candidateSet.has(clean(target.file)))
+    .map((target) => clean(target.file));
 }
 
-function plannedNewFileConflicts(projectRoot, targets = []) {
+function plannedNewFileConflicts(projectRoot: unknown, targets: Loose[] = []): string[] {
   return targets
-    .filter((target) => target?.status === "planned_new_file" && existsSync(resolve(projectRoot, target.file)))
-    .map((target) => target.file);
+    .filter((target) => target?.status === "planned_new_file" && existsSync(resolve(clean(projectRoot), clean(target.file))))
+    .map((target) => clean(target.file));
 }
 
-function shouldBlockCandidatePromotion(candidates = [], targets = [], explicit = [], projectRoot = process.cwd()) {
+function shouldBlockCandidatePromotion(candidates: string[] = [], targets: Loose[] = [], explicit: string[] = [], projectRoot: string = process.cwd()): boolean {
   if (explicit.length > 0) return false;
   if (plannedNewFileConflicts(projectRoot, targets).length > 0) return true;
   return candidates.length > 0 && candidatePromotionBlockers(candidates, targets).length > 0;
 }
 
-function existingTargetFacts(session = Object()) {
-  return asArray(session.project_facts?.target_files)
+function existingTargetFacts(session: Loose = Object()): string[] {
+  const projectFacts = session.project_facts as Loose | undefined;
+  return asArray<Loose>(projectFacts?.target_files)
     .filter((fact) => fact && typeof fact === "object")
     .map((fact) => clean(fact.file || fact.path))
     .filter(Boolean);
 }
 
-function filesForSurface(surface = Object(), files = []) {
+function filesForSurface(surface: Loose = Object(), files: string[] = []): string[] {
   const kind = clean(surface.kind).toLowerCase();
   const matching = files.filter((file) => {
     const fileKind = surfaceKindFromFile(file);
@@ -544,15 +572,16 @@ function filesForSurface(surface = Object(), files = []) {
   return matching.length ? matching : files;
 }
 
-function applyFilesToScenarios(session = Object(), files = []) {
-  const scenarios = asArray(session.scenario_matrix?.scenarios || session.scenarios);
+function applyFilesToScenarios(session: Loose = Object(), files: string[] = []): void {
+  const scenarioMatrixField = session.scenario_matrix as Loose | undefined;
+  const scenarios = asArray<Loose>(scenarioMatrixField?.scenarios || session.scenarios);
   if (scenarios.length === 0) return;
   for (const scenario of scenarios) {
-    const surfaces = asArray(scenario.surfaces);
+    const surfaces = asArray<Loose>(scenario.surfaces);
     if (surfaces.length === 0) {
       const kind = surfaceKindFromFile(files[0] || "");
       scenario.surfaces = [{
-        id: `${scenario.id || "SCN"}-SFC-001`,
+        id: `${clean(scenario.id) || "SCN"}-SFC-001`,
         kind,
         label: surfaceLabel(kind),
         user_visible: kind === "ui",
@@ -579,38 +608,41 @@ function applyFilesToScenarios(session = Object(), files = []) {
       surface.user_visible = groundedKind === "ui";
       if (groundedKind !== "ui") surface.visual_style_source = [];
       surface.allow_new_files = true;
+      const sessionBudget = (surface.session_budget as Loose) || {};
       surface.session_budget = {
-        ...(surface.session_budget || {}),
-        expected: surface.session_budget?.expected || "single_session",
+        ...sessionBudget,
+        expected: sessionBudget.expected || "single_session",
         max_files: Math.max(1, Math.min(2, scopedFiles.length || 1)),
-        max_lines_per_file: Number(surface.session_budget?.max_lines_per_file || 120),
+        max_lines_per_file: Number(sessionBudget.max_lines_per_file || 120),
       };
       surface.grounding_source = "demand_greenfield_execution_scope";
     }
   }
 }
 
-function groundingReason(session = Object(), file = "") {
+function groundingReason(session: Loose = Object(), file: unknown = ""): string {
   const refs = requirementRefs(session);
-  const primary = refs[0]?.text || clean(session.vision?.idea || session.objective || session.project?.title);
-  return `Plan ${file} as a new execution-scope file from approved demand requirement: ${primary}`;
+  const vision = session.vision as Loose | undefined;
+  const project = session.project as Loose | undefined;
+  const primary = refs[0]?.text || clean(vision?.idea || session.objective || project?.title);
+  return `Plan ${clean(file)} as a new execution-scope file from approved demand requirement: ${primary}`;
 }
 
-function plannedTargetFact(session = Object(), target = Object(), groundingId, generatedAt) {
+function plannedTargetFact(session: Loose = Object(), target: Loose = Object(), groundingId: unknown, generatedAt: unknown) {
   const refs = requirementRefs(session);
   return {
-    file: target.file,
-    status: target.status,
-    source: target.exists ? "project_read" : target.source,
+    file: clean(target.file),
+    status: clean(target.status),
+    source: target.exists ? "project_read" : clean(target.source),
     new_file: !target.exists,
     allow_new_files: !target.exists,
-    grounding_id: groundingId,
-    grounded_at: generatedAt,
+    grounding_id: clean(groundingId),
+    grounded_at: clean(generatedAt),
     requirement_ids: refs.map((item) => item.id).filter(Boolean),
     evidence: [
       target.exists
-        ? `${target.file} already exists in project root.`
-        : `${target.file} does not exist yet; it is planned as a new file from approved demand scope.`,
+        ? `${clean(target.file)} already exists in project root.`
+        : `${clean(target.file)} does not exist yet; it is planned as a new file from approved demand scope.`,
       groundingReason(session, target.file),
     ],
     message: target.exists
@@ -619,9 +651,9 @@ function plannedTargetFact(session = Object(), target = Object(), groundingId, g
   };
 }
 
-export function groundDemandExecutionScope(session = Object(), options = Object()) {
+export function groundDemandExecutionScope(session: Loose = Object(), options: Loose = Object()) {
   const storyNormalization = normalizeDemandStoryAtomicity(session);
-  session = storyNormalization.session;
+  session = storyNormalization.session as Loose;
   const projectRoot = resolve(clean(options.projectRoot || options.project_root || options.cwd) || process.cwd());
   const existingScope = executionScopeFiles(session);
   const explicit = explicitGroundingTargets(options);
@@ -677,7 +709,7 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
       reason: "candidate_files_require_explicit_confirmation",
       generated_at: generatedAt,
       candidate_target_files: blockers,
-      target_files: [],
+      target_files: [] as string[],
       next_actions: blockers.map((file) => `Confirm ${file} explicitly before promoting it into execution scope.`),
       story_normalization: storyNormalizationSummary(storyNormalization),
       session,
@@ -693,7 +725,7 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
       applied: false,
       reason: "unable_to_infer_execution_scope",
       generated_at: generatedAt,
-      target_files: [],
+      target_files: [] as string[],
       next_actions: ["Pass an explicit repo-relative target file, for example: yolo spec --demand <session.json|dir> --target src/<feature>.ts"],
       story_normalization: storyNormalizationSummary(storyNormalization),
       session,
@@ -701,26 +733,28 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
   }
 
   const grounded = cloneDemandObject(session);
+  const groundedProjectFacts = grounded.project_facts as Loose | undefined;
+  const groundedReflection = grounded.reflection as Loose | undefined;
   grounded.project = {
-    ...(grounded.project || {}),
-    target_files: groundedTargets.map((item) => item.file),
+    ...((grounded.project as Loose) || {}),
+    target_files: groundedTargets.map((item) => clean(item.file)),
     candidate_target_files: [],
   };
-  const priorFacts = asArray(grounded.project_facts?.target_files)
+  const priorFacts = asArray<Loose>(groundedProjectFacts?.target_files)
     .filter((fact) => fact && typeof fact === "object")
     .filter((fact) => clean(fact.status) !== "candidate")
-    .filter((fact) => !groundedTargets.some((target) => target.file === clean(fact.file || fact.path)));
+    .filter((fact) => !groundedTargets.some((target) => clean(target.file) === clean(fact.file || fact.path)));
   grounded.project_facts = {
-    ...(grounded.project_facts || {}),
-    schema: grounded.project_facts?.schema || "yolo.demand.project_facts.v1",
+    ...(groundedProjectFacts || {}),
+    schema: groundedProjectFacts?.schema || "yolo.demand.project_facts.v1",
     target_files: [
       ...priorFacts,
       ...groundedTargets.map((target) => plannedTargetFact(grounded, target, groundingId, generatedAt)),
     ],
     candidate_target_files: [],
-    assumptions: asArray(grounded.project_facts?.assumptions || grounded.reflection?.assumption_records),
+    assumptions: asArray(groundedProjectFacts?.assumptions || groundedReflection?.assumption_records),
     policy: {
-      ...(grounded.project_facts?.policy || {}),
+      ...((groundedProjectFacts?.policy as Loose) || {}),
       inferred_files_are_execution_scope: false,
       greenfield_new_files_are_execution_scope: true,
       unverified_project_facts_block_prd: true,
@@ -746,21 +780,21 @@ export function groundDemandExecutionScope(session = Object(), options = Object(
     source_text_hash: createHash("sha1").update(demandText(grounded)).digest("hex"),
     story_normalization: storyNormalizationSummary(storyNormalization) || null,
   };
-  grounded.project_facts.grounding = grounded.grounding;
+  (grounded.project_facts as Loose).grounding = grounded.grounding;
   const existingFactFiles = new Set(existingTargetFacts(grounded));
-  for (const target of groundedTargets) existingFactFiles.add(target.file);
-  applyFilesToScenarios(grounded, groundedTargets.map((item) => item.file));
+  for (const target of groundedTargets) existingFactFiles.add(clean(target.file));
+  applyFilesToScenarios(grounded, groundedTargets.map((item) => clean(item.file)));
 
   return {
-    ...grounded.grounding,
+    ...((grounded.grounding as Loose) || {}),
     reason: "greenfield_execution_scope_grounded",
-    directories: [...new Set(groundedTargets.map((item) => dirname(item.file)).filter(Boolean))],
+    directories: [...new Set(groundedTargets.map((item) => dirname(clean(item.file))).filter(Boolean))],
     fact_files: [...existingFactFiles],
     session: grounded,
   };
 }
 
-function projectFactIdentifiers(text = "") {
+function projectFactIdentifiers(text: unknown = ""): string[] {
   const source = clean(text);
   const camelOrSnake = source.match(/\b[A-Za-z_$][A-Za-z0-9_$]*(?:Threshold|Quantity|Qty|Units|Available|Stock|Floor|Replenishment)[A-Za-z0-9_$]*\b|[a-z]+_[a-z0-9_]*(?:threshold|quantity|qty|units|available|stock|floor|replenishment)[a-z0-9_]*/g) || [];
   const dotted = source.match(/\b[A-Za-z_$][A-Za-z0-9_$]*\[\]\.[A-Za-z_$][A-Za-z0-9_$]*|\b[A-Za-z_$][A-Za-z0-9_$]*\.[A-Za-z_$][A-Za-z0-9_$]*/g) || [];
@@ -768,7 +802,7 @@ function projectFactIdentifiers(text = "") {
   return uniqueStrings([...camelOrSnake, ...dotted.flatMap((item) => item.split(".")).filter((part) => !part.endsWith("[]")), ...simple]);
 }
 
-function assumptionRecords({ assumptions = [], evidence = [], targetFacts = [], projectRoot = "" } = Object()) {
+function assumptionRecords({ assumptions = [], evidence = [], targetFacts = [], projectRoot = "" } = Object() as { assumptions?: unknown[]; evidence?: unknown[]; targetFacts?: TargetFileFact[]; projectRoot?: unknown }) {
   const evidenceSource = evidenceText(evidence).toLowerCase();
   const targetText = targetFacts
     .filter((fact) => ["verified", "needs_verification"].includes(fact.status))
@@ -829,20 +863,20 @@ function assumptionRecords({ assumptions = [], evidence = [], targetFacts = [], 
 }
 
 function buildNonTechnicalIntake({
-  input = Object(),
+  input = Object() as Loose,
   objective = "",
   problem = "",
-  targetUsers = [],
-  statusQuo = [],
-  successCriteria = [],
-  constraints = [],
-  nonGoals = [],
-  evidence = [],
-  assumptions = [],
-  targetFiles = [],
-  candidateTargetFiles = [],
-  visualStyleSource = [],
-} = Object()) {
+  targetUsers = [] as string[],
+  statusQuo = [] as string[],
+  successCriteria = [] as string[],
+  constraints = [] as string[],
+  nonGoals = [] as string[],
+  evidence = [] as string[],
+  assumptions = [] as string[],
+  targetFiles = [] as string[],
+  candidateTargetFiles = [] as string[],
+  visualStyleSource = [] as string[],
+} = Object() as { input?: Loose; objective?: string; problem?: string; targetUsers?: string[]; statusQuo?: string[]; successCriteria?: string[]; constraints?: string[]; nonGoals?: string[]; evidence?: string[]; assumptions?: string[]; targetFiles?: string[]; candidateTargetFiles?: string[]; visualStyleSource?: string[] }) {
   const touchpoints = mergeField(input, "touchpoints", LABELS.touchpoint, objective);
   const triggers = mergeField(input, "triggers", LABELS.trigger, objective);
   const exceptions = mergeField(input, "exceptions", LABELS.exception, objective);
@@ -879,23 +913,24 @@ function buildNonTechnicalIntake({
   };
 }
 
-function readObjectField(source, keys = []) {
+function readObjectField(source: unknown, keys: string[] = []): unknown {
   if (!isPlainObject(source)) return undefined;
+  const s = source as Loose;
   for (const key of keys) {
-    if (source[key] != null) return source[key];
+    if (s[key] != null) return s[key];
   }
   return undefined;
 }
 
-function questionId(value, index) {
+function questionId(value: unknown, index: number): string {
   const id = clean(value)
     .replace(/[^A-Za-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return id || `Q${index + 1}`;
 }
 
-function questionTraceIds(value) {
-  return [...new Set(asArray(value)
+function questionTraceIds(value: unknown): string[] {
+  return [...new Set(asArray<Loose>(value)
     .map((item) => {
       if (isPlainObject(item)) return clean(item.id || item.question_id || item.questionId);
       return clean(item);
@@ -903,31 +938,32 @@ function questionTraceIds(value) {
     .filter(Boolean))];
 }
 
-function traceEntries(value) {
+function traceEntries(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   if (isPlainObject(value)) {
-    return Object.entries(value).map(([key, item]) => (
+    return Object.entries(value as Loose).map(([key, item]) => (
       isPlainObject(item)
-        ? Object.assign(Object(), { id: key }, item)
+        ? Object.assign(Object() as Loose, { id: key }, item as Loose)
         : { id: key, question: key, answer: item }
     ));
   }
   return clean(value) ? [value] : [];
 }
 
-function normalizeTraceItem(item, index, input = Object(), source = "interview") {
+function normalizeTraceItem(item: unknown, index: number, input: Loose = Object(), source: unknown = "interview") {
   const fallbackQuestion = asArray(input.questions || input.question)[index];
   if (isPlainObject(item)) {
-    const answerValue = item.answer ?? item.response ?? item.value ?? item.result ?? item.content;
+    const i = item as Loose;
+    const answerValue = i.answer ?? i.response ?? i.value ?? i.result ?? i.content;
     const answer = Array.isArray(answerValue) ? arrayOfStrings(answerValue).join("; ") : clean(answerValue);
-    const question = clean(item.question || item.prompt || item.label || item.text || fallbackQuestion);
-    const reason = clean(item.reason || item.why || item.intent);
+    const question = clean(i.question || i.prompt || i.label || i.text || fallbackQuestion);
+    const reason = clean(i.reason || i.why || i.intent);
     if (!question && !answer && !reason) return null;
     return {
-      id: questionId(item.id || item.question_id || item.questionId || item.key, index),
+      id: questionId(i.id || i.question_id || i.questionId || i.key, index),
       question,
       answer,
-      source: clean(item.source || source),
+      source: clean(i.source || source),
       ...(reason ? { reason } : {}),
     };
   }
@@ -942,9 +978,9 @@ function normalizeTraceItem(item, index, input = Object(), source = "interview")
   };
 }
 
-function normalizeInterviewContext(input = Object()) {
+function normalizeInterviewContext(input: Loose = Object()) {
   const interview = input.interview;
-  const interviewObject = isPlainObject(interview) ? interview : {};
+  const interviewObject = isPlainObject(interview) ? interview as Loose : {};
   const answers = input.interview_answers
     ?? input.interviewAnswers
     ?? readObjectField(interviewObject, ["interview_answers", "interviewAnswers", "answers", "responses"]);
@@ -994,9 +1030,9 @@ function normalizeInterviewContext(input = Object()) {
   };
 }
 
-function buildPrdIntake({ nontechnicalIntake = Object(), interviewContext = Object() } = Object()) {
+function buildPrdIntake({ nontechnicalIntake = Object() as Loose, interviewContext = Object() as Loose } = Object() as { nontechnicalIntake?: Loose; interviewContext?: Loose }) {
   const raw = interviewContext.prd_intake_source;
-  const rawObject = isPlainObject(raw) ? raw : {};
+  const rawObject = isPlainObject(raw) ? raw as Loose : {};
   const rawText = typeof raw === "string" ? clean(raw) : "";
   return {
     schema: "yolo.demand.prd_intake.v1",
@@ -1012,12 +1048,12 @@ function buildPrdIntake({ nontechnicalIntake = Object(), interviewContext = Obje
   };
 }
 
-function groupFilesBySurface(files = []) {
-  const groups = new Map();
+function groupFilesBySurface(files: unknown[] = []): Loose[] {
+  const groups = new Map<string, string[]>();
   for (const file of uniqueStrings(files)) {
     const kind = surfaceKindFromFile(file);
     if (!groups.has(kind)) groups.set(kind, []);
-    groups.get(kind).push(file);
+    groups.get(kind)!.push(file);
   }
   return [...groups.entries()].map(([kind, targetFiles], index) => ({
     id: `SFC-${String(index + 1).padStart(3, "0")}`,
@@ -1025,7 +1061,7 @@ function groupFilesBySurface(files = []) {
     label: surfaceLabel(kind),
     user_visible: kind === "ui",
     target_files: targetFiles,
-    readonly_files: [],
+    readonly_files: [] as string[],
     session_budget: {
       expected: "single_session",
       max_files: Math.max(1, Math.min(2, targetFiles.length || 1)),
@@ -1035,17 +1071,17 @@ function groupFilesBySurface(files = []) {
 }
 
 function buildScenarioMatrix({
-  input = Object(),
+  input = Object() as Loose,
   objective = "",
-  requirements = [],
-  targetUsers = [],
-  statusQuo = [],
-  constraints = [],
-  nonGoals = [],
-  targetFiles = [],
-  visualStyleSource = [],
-  questionTrace = [],
-} = Object()) {
+  requirements = [] as Loose[],
+  targetUsers = [] as string[],
+  statusQuo = [] as string[],
+  constraints = [] as string[],
+  nonGoals = [] as string[],
+  targetFiles = [] as string[],
+  visualStyleSource = [] as string[],
+  questionTrace = [] as unknown[],
+} = Object() as { input?: Loose; objective?: string; requirements?: Loose[]; targetUsers?: string[]; statusQuo?: string[]; constraints?: string[]; nonGoals?: string[]; targetFiles?: string[]; visualStyleSource?: string[]; questionTrace?: unknown[] }) {
   const touchpoints = mergeField(input, "touchpoints", LABELS.touchpoint, objective);
   const triggers = mergeField(input, "triggers", LABELS.trigger, objective);
   const exceptions = mergeField(input, "exceptions", LABELS.exception, objective);
@@ -1053,14 +1089,14 @@ function buildScenarioMatrix({
   const actor = targetUsers[0] || "target user";
   const sourceQuestionIds = questionTraceIds(questionTrace);
   const baseSurfaces = groupFilesBySurface(targetFiles);
-  const inferredKinds = inferSurfaceKinds(`${objective}\n${requirements.map((item) => item.text).join("\n")}`, targetFiles);
+  const inferredKinds = inferSurfaceKinds(`${objective}\n${requirements.map((item) => clean(item.text)).join("\n")}`, targetFiles);
   const fallbackSurfaces = inferredKinds.map((kind, index) => ({
     id: `SFC-${String(index + 1).padStart(3, "0")}`,
     kind,
     label: surfaceLabel(kind),
     user_visible: kind === "ui",
-    target_files: [],
-    readonly_files: [],
+    target_files: [] as string[],
+    readonly_files: [] as string[],
     session_budget: {
       expected: "single_session",
       max_files: 1,
@@ -1069,11 +1105,12 @@ function buildScenarioMatrix({
   }));
   const surfaces = baseSurfaces.length ? baseSurfaces : fallbackSurfaces;
   const scenarios = requirements.map((requirement, index) => {
-    const requirementScenarios = asArray(requirement.acceptance_scenarios || requirement.scenarios);
-    const firstScenario = requirementScenarios[0] || {};
-    const scenarioProof = requirement.story_atomicity?.split
-      ? requirement.text
-      : proof[index] || proof[0] || clean(firstScenario.then || firstScenario.text) || requirement.text;
+    const requirementScenarios = asArray<Loose>(requirement.acceptance_scenarios || requirement.scenarios);
+    const firstScenario: Loose = requirementScenarios[0] || {};
+    const storyAtomicity = requirement.story_atomicity as Loose | undefined;
+    const scenarioProof = storyAtomicity?.split
+      ? clean(requirement.text)
+      : proof[index] || proof[0] || clean(firstScenario.then || firstScenario.text) || clean(requirement.text);
     return {
       id: `SCN-${String(index + 1).padStart(3, "0")}`,
       requirement_id: requirement.id,
@@ -1081,14 +1118,14 @@ function buildScenarioMatrix({
       touchpoint: touchpoints[index] || touchpoints[0] || "primary user workflow",
       trigger: clean(firstScenario.when) || triggers[index] || triggers[0] || "the user reaches this scenario",
       current_behavior: statusQuo[index] || statusQuo[0] || "Captured in demand context.",
-      desired_behavior: requirement.text,
+      desired_behavior: clean(requirement.text),
       proof: scenarioProof,
       out_of_scope: nonGoals,
       constraints,
       exceptions,
       surfaces: surfaces.map((surface, surfaceIndex) => ({
         ...surface,
-        id: `SCN-${String(index + 1).padStart(3, "0")}-${surface.id || `SFC-${surfaceIndex + 1}`}`,
+        id: `SCN-${String(index + 1).padStart(3, "0")}-${clean(surface.id) || `SFC-${surfaceIndex + 1}`}`,
         proof: scenarioProof,
         visual_style_source: surface.user_visible ? visualStyleSource : [],
       })),
@@ -1105,13 +1142,13 @@ function buildScenarioMatrix({
   };
 }
 
-function mergeField(input, key, labels, text) {
-  const explicit = input[key] ?? input[key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())];
+function mergeField(input: Loose, key: string, labels: string[], text: unknown): string[] {
+  const explicit = input[key] ?? input[key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())];
   const extracted = extractLabel(text, labels);
   return splitList([...arrayOfStrings(explicit), extracted]);
 }
 
-function firstField(input, keys, text, labels) {
+function firstField(input: Loose, keys: string[], text: unknown, labels: string[]): string {
   for (const key of keys) {
     const value = clean(input[key]);
     if (value) return value;
@@ -1119,7 +1156,7 @@ function firstField(input, keys, text, labels) {
   return clean(extractLabel(text, labels));
 }
 
-function requirementRecord(text, index, input = Object()) {
+function requirementRecord(text: unknown, index: number, input: Loose = Object()) {
   const id = `REQ-${String(index + 1).padStart(3, "0")}`;
   const scenarioText = clean(input.acceptance_scenario || input.acceptanceScenario || text);
   const sourceQuestionIds = questionTraceIds(input.questionTrace || input.question_trace);
@@ -1143,24 +1180,25 @@ function requirementRecord(text, index, input = Object()) {
   };
 }
 
-function normalizeStoryText(value) {
+function normalizeStoryText(value: unknown): string {
   return clean(value)
     .replace(/\s+/g, " ")
     .replace(/^[,，;；\s]+|[,，;；\s]+$/g, "");
 }
 
-function splitRepeatedUserStories(text) {
-  const matches = [...clean(text).matchAll(/当用户/g)];
+function splitRepeatedUserStories(text: unknown): string[] {
+  const source = clean(text);
+  const matches = [...source.matchAll(/当用户/g)];
   if (matches.length <= 1) return [];
   const parts = matches.map((match, index) => {
     const start = match.index || 0;
-    const end = index + 1 < matches.length ? matches[index + 1].index : text.length;
-    return normalizeStoryText(text.slice(start, end));
+    const end = index + 1 < matches.length ? matches[index + 1].index! : source.length;
+    return normalizeStoryText(source.slice(start, end));
   }).filter((part) => part.length >= 8);
   return parts.length > 1 ? parts : [];
 }
 
-function storySlicesForRequirement(text) {
+function storySlicesForRequirement(text: unknown): string[] {
   const source = clean(text);
   const repeated = splitRepeatedUserStories(source);
   if (repeated.length > 1) return repeated.flatMap(storySlicesForRequirement);
@@ -1169,13 +1207,13 @@ function storySlicesForRequirement(text) {
   return [source].filter(Boolean);
 }
 
-function concreteStoryText(story) {
+function concreteStoryText(story: unknown): string {
   const text = normalizeStoryText(story);
   return text.length >= 10 ? text : `Requirement outcome: ${text}`;
 }
 
-function expandRequirementStories(requirements = []) {
-  const expanded = [];
+function expandRequirementStories(requirements: Loose[] = []): Loose[] {
+  const expanded: Loose[] = [];
   for (const requirement of requirements) {
     const stories = storySlicesForRequirement(requirement.text);
     if (stories.length <= 1) {
@@ -1184,7 +1222,7 @@ function expandRequirementStories(requirements = []) {
     }
     stories.forEach((story, storyIndex) => {
       const storyText = concreteStoryText(story);
-      const id = `${requirement.id}-S${String(storyIndex + 1).padStart(2, "0")}`;
+      const id = `${clean(requirement.id)}-S${String(storyIndex + 1).padStart(2, "0")}`;
       expanded.push({
         ...requirement,
         id,
@@ -1199,7 +1237,7 @@ function expandRequirementStories(requirements = []) {
           split: true,
           reason: "compound_user_story",
         },
-        acceptance_scenarios: asArray(requirement.acceptance_scenarios || requirement.scenarios).map((scenario, scenarioIndex) => ({
+        acceptance_scenarios: asArray<Loose>(requirement.acceptance_scenarios || requirement.scenarios).map((scenario, scenarioIndex) => ({
           ...scenario,
           id: `SCN-${String(expanded.length + 1).padStart(3, "0")}-${String(scenarioIndex + 1).padStart(2, "0")}`,
           then: storyText,
@@ -1211,7 +1249,7 @@ function expandRequirementStories(requirements = []) {
   return expanded;
 }
 
-function scenarioForRequirement(sourceScenarios = [], originalRequirements = [], requirement = Object(), index = 0) {
+function scenarioForRequirement(sourceScenarios: Loose[] = [], originalRequirements: Loose[] = [], requirement: Loose = Object() as Loose, index: number = 0): Loose {
   const sourceId = clean(requirement.source_requirement_id || requirement.id);
   const originalIndex = originalRequirements.findIndex((item) => clean(item.id) === sourceId);
   return sourceScenarios.find((scenario) => clean(scenario.requirement_id) === sourceId)
@@ -1219,16 +1257,17 @@ function scenarioForRequirement(sourceScenarios = [], originalRequirements = [],
     || {};
 }
 
-function atomicScenarioSurfaces(sourceScenario = Object(), scenarioId = "", proof = "", session = Object()) {
-  const sourceSurfaces = asArray(sourceScenario.surfaces);
-  const fallbackFiles = uniqueStrings(session.project?.target_files || session.target_files);
-  const surfaces = sourceSurfaces.length > 0
+function atomicScenarioSurfaces(sourceScenario: Loose = Object() as Loose, scenarioId: string = "", proof: string = "", session: Loose = Object()): Loose[] {
+  const sourceSurfaces = asArray<Loose>(sourceScenario.surfaces);
+  const project = session.project as Loose | undefined;
+  const fallbackFiles = uniqueStrings(project?.target_files || session.target_files);
+  const surfaces: Loose[] = sourceSurfaces.length > 0
     ? sourceSurfaces
     : fallbackFiles.length > 0
       ? [{
         kind: surfaceKindFromFile(fallbackFiles[0]),
         target_files: fallbackFiles,
-        readonly_files: [],
+        readonly_files: [] as string[],
         session_budget: {
           expected: "single_session",
           max_files: Math.max(1, Math.min(2, fallbackFiles.length || 1)),
@@ -1237,7 +1276,8 @@ function atomicScenarioSurfaces(sourceScenario = Object(), scenarioId = "", proo
       }]
       : [];
   return surfaces.map((surface, surfaceIndex) => {
-    const kind = clean(surface.kind) || surfaceKindFromFile(asArray(surface.target_files)[0] || "");
+    const surfaceTargetFiles = asArray(surface.target_files);
+    const kind = clean(surface.kind) || surfaceKindFromFile(clean(surfaceTargetFiles[0]) || "");
     return {
       ...surface,
       id: `${scenarioId}-SFC-${String(surfaceIndex + 1).padStart(3, "0")}`,
@@ -1248,21 +1288,21 @@ function atomicScenarioSurfaces(sourceScenario = Object(), scenarioId = "", proo
   });
 }
 
-function rebuildAtomicScenarioMatrix(session = Object(), originalRequirements = [], expandedRequirements = []) {
-  const matrix = session.scenario_matrix || {};
-  const sourceScenarios = asArray(matrix.scenarios || session.scenarios);
+function rebuildAtomicScenarioMatrix(session: Loose = Object(), originalRequirements: Loose[] = [], expandedRequirements: Loose[] = []) {
+  const matrix = (session.scenario_matrix as Loose) || {};
+  const sourceScenarios = asArray<Loose>(matrix.scenarios || session.scenarios);
   const scenarios = expandedRequirements.map((requirement, index) => {
     const sourceScenario = scenarioForRequirement(sourceScenarios, originalRequirements, requirement, index);
     const scenarioId = `SCN-${String(index + 1).padStart(3, "0")}`;
-    const proof = requirement.text;
+    const proof = clean(requirement.text);
     return {
       ...sourceScenario,
       id: scenarioId,
       requirement_id: requirement.id,
-      desired_behavior: requirement.text,
+      desired_behavior: clean(requirement.text),
       proof,
       surfaces: atomicScenarioSurfaces(sourceScenario, scenarioId, proof, session),
-      story_atomicity: requirement.story_atomicity || sourceScenario.story_atomicity || null,
+      story_atomicity: requirement.story_atomicity || (sourceScenario as Loose).story_atomicity || null,
     };
   });
   return {
@@ -1275,8 +1315,9 @@ function rebuildAtomicScenarioMatrix(session = Object(), originalRequirements = 
   };
 }
 
-function normalizeDemandStoryAtomicity(session = Object()) {
-  const originalRequirements = cloneDemandObject(asArray(session.requirements?.active || session.requirements));
+function normalizeDemandStoryAtomicity(session: Loose = Object()) {
+  const sessionRequirements = session.requirements as Loose | undefined;
+  const originalRequirements = cloneDemandObject(asArray<Loose>(sessionRequirements?.active || session.requirements));
   if (originalRequirements.length === 0) return { session, changed: false, split_count: 0 };
   const expandedRequirements = expandRequirementStories(originalRequirements);
   const changed = expandedRequirements.length !== originalRequirements.length
@@ -1287,7 +1328,7 @@ function normalizeDemandStoryAtomicity(session = Object()) {
     normalized.requirements = expandedRequirements;
   } else {
     normalized.requirements = {
-      ...(normalized.requirements || {}),
+      ...((normalized.requirements as Loose) || {}),
       active: expandedRequirements,
     };
   }
@@ -1306,23 +1347,23 @@ function normalizeDemandStoryAtomicity(session = Object()) {
   };
 }
 
-function storyNormalizationSummary(storyNormalization = Object()) {
+function storyNormalizationSummary(storyNormalization: Loose = Object()) {
   return storyNormalization.changed ? {
     status: "applied",
     split_count: storyNormalization.split_count,
   } : undefined;
 }
 
-function buildRounds(input = Object(), questionTrace = []) {
-  const rounds = asArray(input.rounds || input.discussion_rounds || input.questions || input.question).filter(Boolean);
+function buildRounds(input: Loose = Object(), questionTrace: unknown[] = []): Loose[] {
+  const rounds = asArray<Loose>(input.rounds || input.discussion_rounds || input.questions || input.question).filter(Boolean);
   if (rounds.length > 0) {
     return rounds.map((item, index) => {
-      if (typeof item === "object") return { id: item.id || `Q${index + 1}`, ...item };
+      if (typeof item === "object") return { id: clean(item.id) || `Q${index + 1}`, ...item };
       return { id: `Q${index + 1}`, question: clean(item), answer: clean(asArray(input.answers || input.answer)[index]) };
     });
   }
   if (asArray(questionTrace).length > 0) {
-    return asArray(questionTrace).map((item, index) => ({
+    return asArray<Loose>(questionTrace).map((item, index) => ({
       id: clean(item.id) || `Q${index + 1}`,
       question: clean(item.question || "Interview question"),
       answer: clean(item.answer || ""),
@@ -1337,20 +1378,20 @@ function buildRounds(input = Object(), questionTrace = []) {
   })) : [];
 }
 
-function hasImplementationDetailSignal(text = "") {
-  return /\b[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+\b/.test(text)
-    || /\b[A-Za-z_$][A-Za-z0-9_$]*(?:Threshold|Quantity|Qty|Stock|Badge)[A-Za-z0-9_$]*\b/.test(text)
-    || /(<=|>=|<|>|less than|greater than|at or below|at or above)/i.test(text);
+function hasImplementationDetailSignal(text: unknown = ""): boolean {
+  return /\b[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+\b/.test(clean(text))
+    || /\b[A-Za-z_$][A-Za-z0-9_$]*(?:Threshold|Quantity|Qty|Stock|Badge)[A-Za-z0-9_$]*\b/.test(clean(text))
+    || /(<=|>=|<|>|less than|greater than|at or below|at or above)/i.test(clean(text));
 }
 
-function shouldPreserveDottedIdentifier(source = "", match = "", offset = 0) {
+function shouldPreserveDottedIdentifier(source: string = "", match: string = "", offset: number = 0): boolean {
   const before = source[offset - 1] || "";
   const after = source[offset + match.length] || "";
   if (before === "/" || before === "\\" || after === "/" || after === "\\") return true;
   return /\.(?:[cm]?[jt]sx?|json|md|mdx|css|scss|sass|html|ya?ml|toml|txt)$/i.test(match);
 }
 
-function executionSafeDecisionText(text = "") {
+function executionSafeDecisionText(text: unknown = ""): string {
   const source = clean(text);
   if (!hasImplementationDetailSignal(source)) return source;
   return normalizeStoryText(source
@@ -1361,19 +1402,19 @@ function executionSafeDecisionText(text = "") {
     .replace(/\s*(?:<=|>=|<|>)\s*/g, " the approved comparison "));
 }
 
-function implementationDecisionEvidence(decisions = []) {
+function implementationDecisionEvidence(decisions: unknown[] = []): string[] {
   return uniqueStrings(decisions)
     .filter(hasImplementationDetailSignal)
-    .map((decision) => `Approved implementation detail from decision: ${decision}`);
+    .map((decision) => `Approved implementation detail from decision: ${clean(decision)}`);
 }
 
-function truthyConfirmation(value) {
+function truthyConfirmation(value: unknown): boolean {
   if (value === true) return true;
   const text = clean(value).toLowerCase();
   return ["true", "yes", "approved", "confirm", "confirmed", "ok", "确认", "批准", "同意"].includes(text);
 }
 
-function deferredScopeConfirmation(input = Object(), deferredItems = [], now = "") {
+function deferredScopeConfirmation(input: Loose = Object(), deferredItems: unknown[] = [], now: unknown = "") {
   const items = uniqueStrings(deferredItems);
   const raw = input.deferred_scope_confirmed
     ?? input.deferredScopeConfirmed
@@ -1403,21 +1444,29 @@ function deferredScopeConfirmation(input = Object(), deferredItems = [], now = "
   };
 }
 
-function completedArtifacts(session = Object()) {
-  const completed = [];
-  if (clean(session.vision?.statement || session.vision?.idea).length >= 10) completed.push("vision");
-  if (session.reflection?.assumptions?.length || session.reflection?.alternatives?.length || clean(session.reflection?.summary)) completed.push("reflection");
-  if (session.investigation?.evidence?.length || session.reflection?.assumptions?.length) completed.push("investigation");
-  if (session.discussion?.rounds?.length || session.discussion?.decisions?.length) completed.push("questioning_rounds");
+function completedArtifacts(session: Loose = Object()): DemandArtifactId[] {
+  const completed: DemandArtifactId[] = [];
+  const vision = session.vision as Loose | undefined;
+  const reflection = session.reflection as Loose | undefined;
+  const investigation = session.investigation as Loose | undefined;
+  const discussion = session.discussion as Loose | undefined;
+  const requirements = session.requirements as Loose | undefined;
+  const context = session.context as Loose | undefined;
+  const roadmap = session.roadmap as Loose | undefined;
+  const approval = session.approval as Loose | undefined;
+  if (clean(vision?.statement || vision?.idea).length >= 10) completed.push("vision");
+  if ((reflection?.assumptions as unknown[])?.length || (reflection?.alternatives as unknown[])?.length || clean(reflection?.summary)) completed.push("reflection");
+  if ((investigation?.evidence as unknown[])?.length || (reflection?.assumptions as unknown[])?.length) completed.push("investigation");
+  if ((discussion?.rounds as unknown[])?.length || (discussion?.decisions as unknown[])?.length) completed.push("questioning_rounds");
   if (session.readiness) completed.push("depth_verification");
-  if (session.requirements?.active?.length) completed.push("requirements_confirmation");
-  if (session.context?.summary || session.context?.domain_terms?.length) completed.push("context");
-  if (session.roadmap?.mvp?.length || session.roadmap?.phases?.length) completed.push("roadmap");
-  if (session.approval?.approved) completed.push("approval");
+  if ((requirements?.active as unknown[])?.length) completed.push("requirements_confirmation");
+  if (context?.summary || (context?.domain_terms as unknown[])?.length) completed.push("context");
+  if ((roadmap?.mvp as unknown[])?.length || (roadmap?.phases as unknown[])?.length) completed.push("roadmap");
+  if (approval?.approved) completed.push("approval");
   return completed;
 }
 
-export function buildDemandSession(input = Object(), options = Object()) {
+export function buildDemandSession(input: Loose = Object(), options: Loose = Object()): Loose {
   const now = nowIso(options);
   const objective = clean(input.objective || input.idea || input.requirement || input.text || input.title);
   const projectRoot = input.projectRoot || input.project_root || options.projectRoot || options.project_root;
@@ -1460,7 +1509,7 @@ export function buildDemandSession(input = Object(), options = Object()) {
     explicitFiles: explicitTargetFiles,
     inferredFiles: inferredTargetFiles,
     evidence: evidenceWithDecisionDetails,
-    verifiedFiles: input.verified_target_files || input.verifiedTargetFiles,
+    verifiedFiles: (input.verified_target_files || input.verifiedTargetFiles) as unknown[],
   });
   const targetFiles = targetFilesFromFacts(targetFileFactRecords);
   const candidateTargetFiles = candidateFilesFromFacts(targetFileFactRecords);
@@ -1622,9 +1671,10 @@ export function buildDemandSession(input = Object(), options = Object()) {
     phase: session.phase,
     projectRoot,
   });
-  session.approval.effective_for_prd = session.approval.approved === true && session.readiness.executable_prd_ready === true;
-  session.approval.blocked_by = session.approval.approved === true && !session.approval.effective_for_prd
-    ? asArray(session.readiness.blockers).map((blocker) => ({
+  const sessionApproval = session.approval as Loose;
+  sessionApproval.effective_for_prd = sessionApproval.approved === true && session.readiness.executable_prd_ready === true;
+  sessionApproval.blocked_by = sessionApproval.approved === true && !sessionApproval.effective_for_prd
+    ? asArray<Loose>(session.readiness.blockers).map((blocker) => ({
       code: blocker.code,
       message: blocker.message,
     }))
@@ -1633,180 +1683,191 @@ export function buildDemandSession(input = Object(), options = Object()) {
   return session;
 }
 
-function linesList(values, fallback = "- TBD") {
+function linesList(values: unknown, fallback: string = "- TBD"): string {
   const lines = arrayOfStrings(values);
   return lines.length ? lines.map((item) => `- ${item}`).join("\n") : fallback;
 }
 
-function scenarioLines(requirement) {
-  const scenarios = asArray(requirement.acceptance_scenarios || requirement.scenarios);
+function scenarioLines(requirement: Loose): string {
+  const scenarios = asArray<Loose>(requirement.acceptance_scenarios || requirement.scenarios);
   if (scenarios.length === 0) return "- TBD";
   return scenarios.map((scenario) => [
-    `#### Scenario: ${scenario.id || "Acceptance"}`,
+    `#### Scenario: ${clean(scenario.id) || "Acceptance"}`,
     `- **WHEN** ${clean(scenario.when || "the user exercises this requirement")}`,
     `- **THEN** ${clean(scenario.then || scenario.text || requirement.text)}`,
   ].join("\n")).join("\n\n");
 }
 
-export function demandMarkdownArtifacts(session = Object()) {
-  const reqs = asArray(session.requirements?.active);
-  const decisions = asArray(session.discussion?.decisions).map((item) => item.text || item);
-  const rounds = asArray(session.discussion?.rounds);
+export function demandMarkdownArtifacts(session: Loose = Object()) {
+  const sessionRequirements = session.requirements as Loose | undefined;
+  const discussion = session.discussion as Loose | undefined;
+  const reqs = asArray<Loose>(sessionRequirements?.active);
+  const decisions = asArray<Loose>(discussion?.decisions).map((item) => clean(item.text) || item);
+  const rounds = asArray<Loose>(discussion?.rounds);
+  const project = session.project as Loose | undefined;
+  const vision = session.vision as Loose | undefined;
+  const reflection = session.reflection as Loose | undefined;
+  const investigation = session.investigation as Loose | undefined;
+  const context = session.context as Loose | undefined;
+  const roadmap = session.roadmap as Loose | undefined;
   return {
     "VISION.md": [
-      `# ${session.project?.title || session.id} Vision`,
+      `# ${clean(project?.title) || clean(session.id)} Vision`,
       "",
       "## Vision",
-      session.vision?.statement || "TBD",
+      vision?.statement || "TBD",
       "",
       "## Problem",
-      session.vision?.problem || "TBD",
+      vision?.problem || "TBD",
       "",
       "## Target Users",
-      linesList(session.vision?.target_users),
+      linesList(vision?.target_users),
       "",
       "## Status Quo",
-      linesList(session.vision?.status_quo),
+      linesList(vision?.status_quo),
       "",
       "## Narrow Wedge",
-      session.vision?.narrow_wedge || "TBD",
+      vision?.narrow_wedge || "TBD",
     ].join("\n"),
     "REFLECTION.md": [
-      `# ${session.id} Reflection`,
+      `# ${clean(session.id)} Reflection`,
       "",
       "## Premise Challenge",
-      linesList(session.reflection?.premise_challenges),
+      linesList(reflection?.premise_challenges),
       "",
       "## Assumptions",
-      linesList(session.reflection?.assumptions),
+      linesList(reflection?.assumptions),
       "",
       "## Alternatives",
-      linesList(session.reflection?.alternatives),
+      linesList(reflection?.alternatives),
     ].join("\n"),
     "INVESTIGATION.md": [
-      `# ${session.id} Investigation`,
+      `# ${clean(session.id)} Investigation`,
       "",
       "## Evidence",
-      linesList(asArray(session.investigation?.evidence).map((item) => `${item.id}: ${item.text}`)),
+      linesList(asArray<Loose>(investigation?.evidence).map((item) => `${clean(item.id)}: ${clean(item.text)}`)),
       "",
       "## Assumptions / TBD",
-      linesList(asArray(session.investigation?.assumptions).map((item) => `${item.id} [${item.status || "unknown"}]: ${item.text}${asArray(item.contradicted_by).length ? ` (contradicted by: ${asArray(item.contradicted_by).join(", ")})` : ""}`)),
+      linesList(asArray<Loose>(investigation?.assumptions).map((item) => `${clean(item.id)} [${clean(item.status) || "unknown"}]: ${clean(item.text)}${asArray(item.contradicted_by).length ? ` (contradicted by: ${asArray(item.contradicted_by).join(", ")})` : ""}`)),
       "",
       "## Codebase Scouts",
-      linesList(asArray(session.investigation?.codebase_scouts).map((item) => `${item.file} [${item.status || "unknown"}] ${item.reason || ""}`)),
+      linesList(asArray<Loose>(investigation?.codebase_scouts).map((item) => `${clean(item.file)} [${clean(item.status) || "unknown"}] ${clean(item.reason) || ""}`)),
       "",
       "## Evidence Requirements",
-      linesList(asArray(session.evidence_requirements).map((item) => `${item.id} [${item.status}] ${item.kind}: ${item.topic} - ${item.reason}`)),
+      linesList(asArray<Loose>(session.evidence_requirements).map((item) => `${clean(item.id)} [${clean(item.status)}] ${clean(item.kind)}: ${clean(item.topic)} - ${clean(item.reason)}`)),
       "",
       "## Risks",
-      linesList(session.investigation?.risks),
+      linesList(investigation?.risks),
     ].join("\n"),
     "SCENARIO_MATRIX.md": [
-      `# ${session.id} Scenario Matrix`,
+      `# ${clean(session.id)} Scenario Matrix`,
       "",
       "This artifact translates non-technical answers into engineering-facing slices.",
       "",
       "## Scenarios",
-      asArray(session.scenario_matrix?.scenarios).length
-        ? asArray(session.scenario_matrix.scenarios).map((scenario) => [
-          `### ${scenario.id}: ${scenario.desired_behavior}`,
-          `- Actor: ${scenario.actor}`,
-          `- Touchpoint: ${scenario.touchpoint}`,
-          `- Trigger: ${scenario.trigger}`,
-          `- Current: ${scenario.current_behavior}`,
-          `- Desired: ${scenario.desired_behavior}`,
-          `- Proof: ${scenario.proof}`,
+      asArray<Loose>((session.scenario_matrix as Loose)?.scenarios).length
+        ? asArray<Loose>((session.scenario_matrix as Loose).scenarios).map((scenario) => [
+          `### ${clean(scenario.id)}: ${clean(scenario.desired_behavior)}`,
+          `- Actor: ${clean(scenario.actor)}`,
+          `- Touchpoint: ${clean(scenario.touchpoint)}`,
+          `- Trigger: ${clean(scenario.trigger)}`,
+          `- Current: ${clean(scenario.current_behavior)}`,
+          `- Desired: ${clean(scenario.desired_behavior)}`,
+          `- Proof: ${clean(scenario.proof)}`,
           `- Out of scope: ${arrayOfStrings(scenario.out_of_scope).join("; ") || "TBD"}`,
           "",
           "#### Surfaces",
-          asArray(scenario.surfaces).map((surface) => [
-            `- ${surface.id}: ${surface.label} (${surface.kind})`,
-            `  - targets: ${arrayOfStrings(surface.target_files).join(", ") || "TBD from code scout"}`,
-            `  - visual style: ${arrayOfStrings(surface.visual_style_source).join("; ") || "TBD"}`,
-            `  - budget: ${surface.session_budget?.expected || "single_session"}, max_files=${surface.session_budget?.max_files || 1}`,
-          ].join("\n")).join("\n"),
+          asArray<Loose>(scenario.surfaces).map((surface) => {
+            const sessionBudget = surface.session_budget as Loose | undefined;
+            return [
+              `- ${clean(surface.id)}: ${clean(surface.label)} (${clean(surface.kind)})`,
+              `  - targets: ${arrayOfStrings(surface.target_files).join(", ") || "TBD from code scout"}`,
+              `  - visual style: ${arrayOfStrings(surface.visual_style_source).join("; ") || "TBD"}`,
+              `  - budget: ${sessionBudget?.expected || "single_session"}, max_files=${sessionBudget?.max_files || 1}`,
+            ].join("\n");
+          }).join("\n"),
         ].join("\n")).join("\n\n")
         : "- TBD",
       "",
       "## Atomic Task Rule",
-      session.scenario_matrix?.atomic_task_rule || "TBD",
+      (session.scenario_matrix as Loose)?.atomic_task_rule || "TBD",
     ].join("\n"),
     "DISCUSSION-LOG.md": [
-      `# ${session.id} Discussion Log`,
+      `# ${clean(session.id)} Discussion Log`,
       "",
       "## Questioning Rounds",
       rounds.length ? rounds.map((round) => [
-        `### ${round.id}`,
-        `- Question: ${round.question || "TBD"}`,
-        `- Answer: ${round.answer || "TBD"}`,
+        `### ${clean(round.id)}`,
+        `- Question: ${clean(round.question) || "TBD"}`,
+        `- Answer: ${clean(round.answer) || "TBD"}`,
       ].join("\n")).join("\n\n") : "- TBD",
       "",
       "## Decisions",
       linesList(decisions),
       "",
       "## Open Questions",
-      linesList(asArray(session.discussion?.open_questions).map((item) => item.text || item)),
+      linesList(asArray<Loose>(discussion?.open_questions).map((item) => clean(item.text) || item)),
       "",
       "## Deferred",
-      linesList(session.discussion?.deferred),
+      linesList(discussion?.deferred),
     ].join("\n"),
     "REQUIREMENTS.md": [
-      `# ${session.id} Requirements`,
+      `# ${clean(session.id)} Requirements`,
       "",
       "## Requirements",
       reqs.length ? reqs.map((requirement) => [
-        `### Requirement: ${requirement.id}`,
-        `${requirement.text}`,
+        `### Requirement: ${clean(requirement.id)}`,
+        `${clean(requirement.text)}`,
         "",
         scenarioLines(requirement),
       ].join("\n")).join("\n\n") : "- TBD",
       "",
       "## Constraints",
-      linesList(session.requirements?.constraints),
+      linesList(sessionRequirements?.constraints),
       "",
       "## Out of Scope",
-      linesList(session.requirements?.out_of_scope),
+      linesList(sessionRequirements?.out_of_scope),
     ].join("\n"),
     "CONTEXT.md": [
-      `# ${session.id} Context`,
+      `# ${clean(session.id)} Context`,
       "",
       "## Summary",
-      session.context?.summary || "TBD",
+      context?.summary || "TBD",
       "",
       "## Domain Terms",
-      linesList(session.context?.domain_terms),
+      linesList(context?.domain_terms),
       "",
       "## Current State",
-      linesList(session.context?.current_state),
+      linesList(context?.current_state),
       "",
       "## Decisions",
       linesList(decisions),
       "",
       "## Constraints",
-      linesList(session.context?.constraints),
+      linesList(context?.constraints),
       "",
       "## Visual Style Source",
-      linesList(session.context?.visual_style_source),
+      linesList(context?.visual_style_source),
       "",
       "## Verified Target Files",
-      linesList(asArray(session.project_facts?.target_files).filter((item) => item.status === "verified").map((item) => item.file)),
+      linesList(asArray<Loose>((session.project_facts as Loose)?.target_files).filter((item) => clean(item.status) === "verified").map((item) => clean(item.file))),
       "",
       "## Candidate Target Files",
-      linesList(session.project_facts?.candidate_target_files),
+      linesList((session.project_facts as Loose)?.candidate_target_files),
     ].join("\n"),
     "ROADMAP.md": [
-      `# ${session.id} Roadmap`,
+      `# ${clean(session.id)} Roadmap`,
       "",
       "## MVP",
-      linesList(session.roadmap?.mvp),
+      linesList(roadmap?.mvp),
       "",
       "## Phases",
-      asArray(session.roadmap?.phases).length
-        ? asArray(session.roadmap.phases).map((phase) => `- ${phase.id}: ${phase.text}`).join("\n")
+      asArray<Loose>(roadmap?.phases).length
+        ? asArray<Loose>(roadmap?.phases).map((phase) => `- ${clean(phase.id)}: ${clean(phase.text)}`).join("\n")
         : "- TBD",
       "",
       "## Later",
-      linesList(session.roadmap?.later),
+      linesList(roadmap?.later),
     ].join("\n"),
   };
 }
