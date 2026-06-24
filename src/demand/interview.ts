@@ -876,10 +876,11 @@ function ledgerInfo({ id, demandId, projectRoot, stateRoot }: { id: string; dema
   };
 }
 
-export function inspectDemandInterviewCoverage(session: InterviewSession = Object() as InterviewSession) {
-  const questions = (session.questions as InterviewQuestion[]) || DEMAND_INTERVIEW_QUESTION_BANK;
+export function inspectDemandInterviewCoverage(session: InterviewSession | Record<string, unknown> = Object() as InterviewSession) {
+  const s = session as InterviewSession;
+  const questions = (s.questions as InterviewQuestion[]) || DEMAND_INTERVIEW_QUESTION_BANK;
   const answered = questions
-    .map((question) => ({ question, record: (session.answers || {})[question.id] }))
+    .map((question) => ({ question, record: (s.answers || {})[question.id || ""] }))
     .filter((item) => hasAnswer(item.record))
     .map(({ question, record }) => ({
       question_id: question.id,
@@ -894,9 +895,9 @@ export function inspectDemandInterviewCoverage(session: InterviewSession = Objec
   const hasFollowUps = followUpQuestions.length > 0;
   const discussFollowUps = followUpQuestions.filter((question) => DISCUSS_REQUIRED_SLOTS.includes(question.slot));
 
-  const missingDiscuss = missingSlots(session, DISCUSS_REQUIRED_SLOTS);
-  const missingPrd = missingSlots(session, PRD_REQUIRED_SLOTS);
-  const approval = approvalState(session);
+  const missingDiscuss = missingSlots(s, DISCUSS_REQUIRED_SLOTS);
+  const missingPrd = missingSlots(s, PRD_REQUIRED_SLOTS);
+  const approval = approvalState(s);
   const missingSlotsForQuestioning = [...new Set([
     ...missingDiscuss,
     ...missingPrd,

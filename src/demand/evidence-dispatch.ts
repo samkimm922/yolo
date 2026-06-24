@@ -11,6 +11,7 @@ import {
   demandSessionSchemaError,
   inspectDemandPrdReadiness,
 } from "./router.js";
+import type { DemandBlocker, DemandPrdReadinessResult, DemandSessionStateResult } from "./router.js";
 import { redactDeep } from "../lib/security/redact.js";
 import {
   evidenceRequirementBlockers,
@@ -21,51 +22,57 @@ export const DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION = "1.0";
 export const DEMAND_EVIDENCE_DISPATCH_SCHEMA = "yolo.demand.evidence_dispatch.v1";
 const VALID_EVIDENCE_SCOPES = new Set(["project", "external", "user", "unknown"]);
 
-function clean(value) {
+// Loose input/options/session records (N4 pattern): demand dispatch inputs are
+// assembled from user/agent data and read as `Record<string, unknown>`, narrowed
+// at each touch point, never widened to `any`.
+type Loose = Record<string, unknown>;
+
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function nowIso() {
+function nowIso(): string {
   return new Date().toISOString();
 }
 
-function safeId(value) {
+function safeId(value: unknown): string {
   return clean(value).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "demand-evidence";
 }
 
-function resolveRoot(value, fallback = process.cwd()) {
+function resolveRoot(value: unknown, fallback: string = process.cwd()): string {
   return resolve(clean(value) || fallback);
 }
 
-function resolvePath(root, path) {
+function resolvePath(root: string, path: unknown): string {
   if (!path) return "";
-  return isAbsolute(path) ? path : resolve(root, path);
+  const p = clean(path);
+  return p && isAbsolute(p) ? p : resolve(root, p);
 }
 
-function repoRelative(path, projectRoot) {
+function repoRelative(path: string, projectRoot: string): string {
   return relative(projectRoot, path).replace(/\\/g, "/");
 }
 
-function stableJson(value) {
+function stableJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function writeJson(path, value) {
+function writeJson(path: string, value: unknown): string {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, stableJson(value), "utf8");
   return path;
 }
 
-function isWithin(path, root) {
+function isWithin(path: string, root: string): boolean {
   const rel = relative(root, path);
-  return rel === "" || (rel && !rel.startsWith("..") && !isAbsolute(rel));
+  return rel === "" || (rel !== "" && !rel.startsWith("..") && !isAbsolute(rel));
 }
 
-function excludedDir(name) {
+function excludedDir(name: string): boolean {
   return [".git", "node_modules", "dist", "coverage", ".next", ".cache"].includes(name);
 }
 
-function gitFiles(projectRoot) {
+function gitFiles(projectRoot: string): string[] | null {
   const run = spawnSync("git", ["-C", projectRoot, "ls-files", "-co", "--exclude-standard", "-z"], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
@@ -74,8 +81,8 @@ function gitFiles(projectRoot) {
   return run.stdout.split("\0").filter(Boolean);
 }
 
-function walkFiles(root, dir = root, acc = []) {
-  let entries = [];
+function walkFiles(root: string, dir: string = root, acc: string[] = []): string[] {
+  let entries: import("node:fs").Dirent[] = [];
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch {
@@ -90,7 +97,7 @@ function walkFiles(root, dir = root, acc = []) {
   return acc;
 }
 
-function boundaryEntryDigest(path) {
+function boundaryEntryDigest(path: string): string | null {
   try {
     const stat = lstatSync(path);
     if (stat.isSymbolicLink()) return `symlink:${readlinkSync(path)}`;
@@ -101,11 +108,11 @@ function boundaryEntryDigest(path) {
   }
 }
 
-function buildBoundarySnapshot(projectRoot, allowedRoots = []) {
+function buildBoundarySnapshot(projectRoot: string, allowedRoots: string[] = []): Map<string, string> {
   const allowed = allowedRoots.map((path) => resolve(path));
   const git = gitFiles(projectRoot);
   const files = git ? [...new Set([...git, ...walkFiles(projectRoot)])] : walkFiles(projectRoot);
-  const snapshot = new Map();
+  const snapshot = new Map<string, string>();
   for (const file of files) {
     const absolute = resolve(projectRoot, file);
     if (allowed.some((root) => isWithin(absolute, root))) continue;
@@ -115,8 +122,13 @@ function buildBoundarySnapshot(projectRoot, allowedRoots = []) {
   return snapshot;
 }
 
-function diffBoundarySnapshots(before, after) {
-  const changes = [];
+interface BoundaryChange {
+  path: string;
+  change: "deleted" | "modified" | "added";
+}
+
+function diffBoundarySnapshots(before: Map<string, string>, after: Map<string, string>): BoundaryChange[] {
+  const changes: BoundaryChange[] = [];
   for (const [file, digest] of before.entries()) {
     if (!after.has(file)) changes.push({ path: file, change: "deleted" });
     else if (after.get(file) !== digest) changes.push({ path: file, change: "modified" });
@@ -127,17 +139,17 @@ function diffBoundarySnapshots(before, after) {
   return changes.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-function truncate(value, max = 12000) {
+function truncate(value: unknown, max: number = 12000): string {
   const text = String(value ?? "");
   return text.length > max ? `${text.slice(0, max)}\n[truncated ${text.length - max} chars]` : text;
 }
 
-function asArray(value) {
-  if (value == null) return [];
-  return Array.isArray(value) ? value : [value];
+function asArray<T = unknown>(value: unknown): T[] {
+  if (value == null) return [] as T[];
+  return (Array.isArray(value) ? value : [value]) as T[];
 }
 
-function isNonMissingStatusItem(value) {
+function isNonMissingStatusItem(value: unknown): boolean {
   const text = clean(value).toLowerCase();
   if (!text) return true;
   if (/\b(but|except|however|unless)\b/.test(text)) return false;
@@ -147,7 +159,7 @@ function isNonMissingStatusItem(value) {
   return false;
 }
 
-function sanitizeMissing(value) {
+function sanitizeMissing(value: unknown): string[] {
   return asArray(value)
     .flatMap((item) => String(item ?? "").split(/\r?\n/))
     .map(clean)
@@ -155,21 +167,31 @@ function sanitizeMissing(value) {
     .filter((item) => !isNonMissingStatusItem(item));
 }
 
-function evidenceScopeErrors(value) {
+function evidenceScopeErrors(value: unknown): string[] {
   return asArray(value).flatMap((record, index) => {
     if (!record || typeof record !== "object") return [`evidence[${index}] must be an object with scope.`];
-    const scope = clean(record.scope || record.evidence_scope || record.source_scope).toLowerCase();
+    const r = record as Loose;
+    const scope = clean(r.scope || r.evidence_scope || r.source_scope).toLowerCase();
     if (VALID_EVIDENCE_SCOPES.has(scope)) return [];
     return [`evidence[${index}] must declare scope as project, external, user, or unknown.`];
   });
 }
 
-function explicitDemandSessionPath(input = Object()) {
+function explicitDemandSessionPath(input: Loose = Object()): string {
   const legacyDemandPath = typeof input.demand === "string" ? input.demand : "";
   return clean(input.demandPath || input.demand_path || input.sessionPath || input.session_path || legacyDemandPath);
 }
 
-function readExplicitDemandSession(input = Object(), projectRoot) {
+interface DemandSessionRead {
+  explicit: boolean;
+  ok: boolean;
+  code?: string;
+  path?: string;
+  message?: string;
+  session?: unknown;
+}
+
+function readExplicitDemandSession(input: Loose = Object(), projectRoot: string): DemandSessionRead {
   const path = explicitDemandSessionPath(input);
   if (!path) return { explicit: false, ok: true, session: null };
   const demandPath = resolvePath(projectRoot, path);
@@ -202,12 +224,12 @@ function readExplicitDemandSession(input = Object(), projectRoot) {
       ok: false,
       code: "DEMAND_SESSION_JSON_INVALID",
       path: sessionPath,
-      message: `Demand session JSON parse failed: ${error.message}`,
+      message: `Demand session JSON parse failed: ${(error as Error).message}`,
     };
   }
 }
 
-function readDemandSession(input = Object(), projectRoot) {
+function readDemandSession(input: Loose = Object(), projectRoot: string): unknown {
   if (input.session && typeof input.session === "object") return input.session;
   const explicit = readExplicitDemandSession(input, projectRoot);
   if (explicit.explicit) return explicit.ok ? explicit.session : null;
@@ -223,7 +245,7 @@ function readDemandSession(input = Object(), projectRoot) {
   }
 }
 
-function invalidDemandSessionDispatchResult(read, input = Object(), options = Object(), projectRoot, stateRoot, execute) {
+function invalidDemandSessionDispatchResult(read: DemandSessionRead, input: Loose = Object(), options: Loose = Object(), projectRoot: string, stateRoot: string, execute: boolean): Loose {
   return {
     schema_version: DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION,
     schema: DEMAND_EVIDENCE_DISPATCH_SCHEMA,
@@ -244,50 +266,56 @@ function invalidDemandSessionDispatchResult(read, input = Object(), options = Ob
       agent_tool_profile: agentToolProfile(input, options),
     },
     demand_status: null,
-    actions: [],
+    actions: [] as unknown[],
     blockers: [{
       code: read.code || "DEMAND_SESSION_INVALID",
       message: read.message || "Explicit demand session source is invalid.",
       path: read.path || null,
       human_needed: true,
     }],
-    agent_results: [],
-    provider_runs: [],
-    artifacts: [],
+    agent_results: [] as unknown[],
+    provider_runs: [] as unknown[],
+    artifacts: [] as string[],
   };
 }
 
-function dispatchIdFor(input = Object(), status = Object()) {
+function dispatchIdFor(input: Loose = Object(), status: Loose = Object()): string {
   const explicit = clean(input.dispatchId || input.dispatch_id);
   if (explicit) return safeId(explicit);
-  const session = status?.state?.session_id || status?.demand_id || input.id || input.demandId || input.demand_id || "dispatch";
+  const session = clean((status.state as Loose)?.session_id) || clean(status.demand_id) || clean(input.id) || clean(input.demandId) || clean(input.demand_id) || "dispatch";
   const stamp = new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 17);
   const suffix = Math.random().toString(36).slice(2, 8);
   return safeId(`${session}-${stamp}-${suffix}`);
 }
 
-function outputDirFor(input = Object(), options = Object(), projectRoot, stateRoot, status) {
+function outputDirFor(input: Loose = Object(), options: Loose = Object(), projectRoot: string, stateRoot: string, status: Loose): string {
   const explicit = input.outputDir || input.output_dir || options.outputDir || options.output_dir;
   if (explicit) return resolvePath(projectRoot, explicit);
   return join(stateRoot, "demand", "evidence", dispatchIdFor(input, status));
 }
 
-function agentToolProfile(input = Object(), options = Object()) {
+function agentToolProfile(input: Loose = Object(), options: Loose = Object()): string {
   return clean(options.agentToolProfile || options.agent_tool_profile || options.toolProfile || options.tool_profile || input.agentToolProfile || input.agent_tool_profile || input.toolProfile || input.tool_profile || "boundary").toLowerCase();
 }
 
-function safeClaudePermissionMode(value) {
+function safeClaudePermissionMode(value: unknown): string {
   const mode = clean(value || "acceptEdits");
   return ["bypasspermissions", "dangerously-skip-permissions"].includes(mode.toLowerCase()) ? "acceptEdits" : mode;
 }
 
-function safeRepoRelativePath(value) {
+function safeRepoRelativePath(value: unknown): string {
   const path = clean(value).replace(/\\/g, "/").replace(/^\/+/, "");
   if (!path || path === "." || path === ".." || path.startsWith("../") || path.includes("/../")) return "";
   return path;
 }
 
-function boundaryMutationProbe(input = Object(), options = Object()) {
+export interface BoundaryMutationProbe {
+  enabled: boolean;
+  path: string;
+  content: string;
+}
+
+function boundaryMutationProbe(input: Loose = Object(), options: Loose = Object()): BoundaryMutationProbe | null {
   const path = safeRepoRelativePath(
     options.boundaryMutationProbe
     || options.boundary_mutation_probe
@@ -307,14 +335,14 @@ function boundaryMutationProbe(input = Object(), options = Object()) {
   };
 }
 
-function actionForTask(task, index, outputDir, projectRoot) {
-  const role = task.role || `agent-${index + 1}`;
+function actionForTask(task: Loose, index: number, outputDir: string, projectRoot: string) {
+  const role = clean(task.role) || `agent-${index + 1}`;
   const outputPath = join(outputDir, `${safeId(role)}.json`);
   return {
     id: `demand.evidence.${safeId(role)}`,
     role,
     status: "pending",
-    reason: task.reason || "",
+    reason: clean(task.reason) || "",
     protocol: task.protocol || {},
     prompt_ref: `${role}.prompt`,
     output_path: outputPath,
@@ -322,11 +350,11 @@ function actionForTask(task, index, outputDir, projectRoot) {
   };
 }
 
-export function buildDemandEvidenceDispatchPlan(input = Object(), options = Object()) {
+export function buildDemandEvidenceDispatchPlan(input: Loose = Object(), options: Loose = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const toolProfile = agentToolProfile(input, options);
-  const status = options.status || buildDemandSessionState({
+  const status: Loose = ((options.status as Loose) || buildDemandSessionState({
     ...input,
     projectRoot,
     stateRoot,
@@ -334,10 +362,10 @@ export function buildDemandEvidenceDispatchPlan(input = Object(), options = Obje
     ...options,
     projectRoot,
     stateRoot,
-  });
+  })) as Loose;
   const mutationProbe = boundaryMutationProbe(input, options);
   const outputDir = outputDirFor(input, options, projectRoot, stateRoot, status);
-  const tasks = status.state?.evidence_tasks || [];
+  const tasks = (status.state as Loose)?.evidence_tasks as Loose[] || [];
   const actions = tasks.map((task, index) => actionForTask(task, index, outputDir, projectRoot));
 
   return {
@@ -375,15 +403,16 @@ export function buildDemandEvidenceDispatchPlan(input = Object(), options = Obje
   };
 }
 
-function renderJsonBlock(value) {
+function renderJsonBlock(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-export function buildDemandEvidenceAgentPrompt({ action = Object(), plan = Object(), previousResults = [] } = Object()) {
-  const protocol = action.protocol || {};
-  const status = plan.demand_status || {};
-  const toolProfile = clean(plan.execution_policy?.agent_tool_profile || "boundary");
-  const mutationProbe = plan.boundary_mutation_probe;
+export function buildDemandEvidenceAgentPrompt({ action = Object(), plan = Object(), previousResults = [] } = Object() as { action?: Loose; plan?: Loose; previousResults?: unknown[] }): string {
+  const protocol = (action.protocol as Loose) || {};
+  const status = (plan.demand_status as Loose) || {};
+  const executionPolicy = (plan.execution_policy as Loose) || {};
+  const toolProfile = clean(executionPolicy.agent_tool_profile || "boundary");
+  const mutationProbe = plan.boundary_mutation_probe as BoundaryMutationProbe | undefined;
   const renderedProtocol = mutationProbe?.enabled
     ? {
       ...protocol,
@@ -466,7 +495,13 @@ export function buildDemandEvidenceAgentPrompt({ action = Object(), plan = Objec
   ].join("\n");
 }
 
-function parseJsonCandidate(candidate) {
+interface JsonCandidateResult {
+  parsed: unknown;
+  repaired: boolean;
+  error: string;
+}
+
+function parseJsonCandidate(candidate: string): JsonCandidateResult {
   try {
     return { parsed: JSON.parse(candidate), repaired: false, error: "" };
   } catch (error) {
@@ -481,11 +516,11 @@ function parseJsonCandidate(candidate) {
         return { parsed: JSON.parse(repaired), repaired: true, error: "" };
       } catch {}
     }
-    return { parsed: null, repaired: false, error: error.message };
+    return { parsed: null, repaired: false, error: (error as Error).message };
   }
 }
 
-function extractJsonObject(text = "") {
+function extractJsonObject(text: string = ""): JsonCandidateResult {
   const trimmed = clean(text);
   if (!trimmed) return { parsed: null, repaired: false, error: "empty provider output" };
   const direct = parseJsonCandidate(trimmed);
@@ -507,8 +542,9 @@ function extractJsonObject(text = "") {
   return { parsed: null, repaired: false, error: errors.find(Boolean) || "no JSON object found in provider output" };
 }
 
-function normalizeAgentResult({ action = Object(), providerRun = Object(), parsed = null, parseError = "" } = Object()) {
-  if (!providerRun.success || !parsed || typeof parsed !== "object") {
+function normalizeAgentResult({ action = Object(), providerRun = Object(), parsed = null, parseError = "" } = Object() as { action?: Loose; providerRun?: Loose; parsed?: unknown; parseError?: string }): Loose {
+  const run = providerRun as Loose;
+  if (!run.success || !parsed || typeof parsed !== "object") {
     const errorCode = !parsed ? "EVIDENCE_AGENT_INVALID_JSON" : "EVIDENCE_AGENT_PROVIDER_FAILED";
     return {
       schema_version: DEMAND_EVIDENCE_RESULT_SCHEMA_VERSION,
@@ -516,7 +552,7 @@ function normalizeAgentResult({ action = Object(), providerRun = Object(), parse
       role: action.role,
       status: "failed",
       completed: false,
-      claim: action.reason || `Demand evidence ${action.role}`,
+      claim: clean(action.reason) || `Demand evidence ${clean(action.role)}`,
       confidence: "low",
       evidence: [],
       assumptions: [],
@@ -528,21 +564,22 @@ function normalizeAgentResult({ action = Object(), providerRun = Object(), parse
       result: {
         verdict: "blocked",
         error_code: errorCode,
-        provider: providerRun.provider || null,
-        exit_code: providerRun.exitCode ?? null,
-        timed_out: providerRun.timedOut === true,
-        raw_output_excerpt: truncate(providerRun.stderr || providerRun.stdout || "No agent output.", 2000),
+        provider: run.provider || null,
+        exit_code: run.exitCode ?? null,
+        timed_out: run.timedOut === true,
+        raw_output_excerpt: truncate(run.stderr || run.stdout || "No agent output.", 2000),
       },
     };
   }
 
-  const normalized = {
-    schema_version: parsed.schema_version || DEMAND_EVIDENCE_RESULT_SCHEMA_VERSION,
-    schema: parsed.schema || DEMAND_EVIDENCE_RESULT_SCHEMA,
-    ...parsed,
-    role: parsed.role || action.role,
-    status: parsed.status || "completed",
-    completed: parsed.completed !== false,
+  const parsedRecord = parsed as Loose;
+  const normalized: Loose = {
+    schema_version: parsedRecord.schema_version || DEMAND_EVIDENCE_RESULT_SCHEMA_VERSION,
+    schema: parsedRecord.schema || DEMAND_EVIDENCE_RESULT_SCHEMA,
+    ...parsedRecord,
+    role: parsedRecord.role || action.role,
+    status: parsedRecord.status || "completed",
+    completed: parsedRecord.completed !== false,
   };
   normalized.missing = sanitizeMissing(normalized.missing);
   const scopeErrors = evidenceScopeErrors(normalized.evidence);
@@ -550,9 +587,9 @@ function normalizeAgentResult({ action = Object(), providerRun = Object(), parse
     normalized.status = "blocked";
     normalized.completed = true;
     normalized.recommendation = "block";
-    normalized.missing = [...normalized.missing, ...scopeErrors];
+    normalized.missing = [...(normalized.missing as string[]), ...scopeErrors];
     normalized.result = {
-      ...(normalized.result || {}),
+      ...(normalized.result as Loose || {}),
       verdict: "blocked",
       error_code: "EVIDENCE_SCOPE_REQUIRED",
     };
@@ -560,10 +597,10 @@ function normalizeAgentResult({ action = Object(), providerRun = Object(), parse
   return normalized;
 }
 
-function executionConfig(input = Object(), options = Object()) {
-  const loaded = options.config || input.config || loadConfig(options.configPath ? { path: options.configPath } : false);
-  const ai = {
-    ...(loaded.ai || {}),
+function executionConfig(input: Loose = Object(), options: Loose = Object()): Loose {
+  const loaded = (options.config || input.config || loadConfig(options.configPath ? { path: options.configPath as string } : false)) as Loose;
+  const ai: Loose = {
+    ...((loaded.ai as Loose) || {}),
   };
   const mutationProbe = boundaryMutationProbe(input, options);
   const provider = clean(options.provider || input.provider || input.executor || ai.provider || ai.executor || "");
@@ -614,7 +651,7 @@ function executionConfig(input = Object(), options = Object()) {
   };
 }
 
-export async function runDemandEvidenceDispatchRuntime(input = Object(), options = Object()) {
+export async function runDemandEvidenceDispatchRuntime(input: Loose = Object(), options: Loose = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const execute = input.executeAgents === true
@@ -642,59 +679,61 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
     stateRoot,
   });
 
-  const result = Object.assign(Object(), {
+  const result: Loose = Object.assign(Object() as Loose, {
     ...plan,
     mode: execute ? "execute" : "dry_run",
-    status: plan.actions.length === 0 ? "pass" : execute ? "blocked" : "dry_run",
-    code: plan.actions.length === 0
+    status: (plan as Loose).actions && ((plan as Loose).actions as unknown[]).length === 0 ? "pass" : execute ? "blocked" : "dry_run",
+    code: (plan as Loose).actions && ((plan as Loose).actions as unknown[]).length === 0
       ? "DEMAND_EVIDENCE_NOT_REQUIRED"
       : execute
         ? "DEMAND_EVIDENCE_AGENT_DISPATCH_NOT_ALLOWED"
         : "DEMAND_EVIDENCE_DISPATCH_DRY_RUN",
-    summary: plan.actions.length === 0
-      ? plan.summary
+    summary: (plan as Loose).actions && ((plan as Loose).actions as unknown[]).length === 0
+      ? (plan as Loose).summary
       : execute
         ? "Demand evidence agent execution requires explicit authorization."
         : "Demand evidence agents planned without execution.",
-    agent_results: [],
-    provider_runs: [],
-    artifacts: [],
+    agent_results: [] as unknown[],
+    provider_runs: [] as unknown[],
+    artifacts: [] as string[],
   });
 
-  if (plan.actions.length === 0 || !execute) return result;
+  const planActions = ((plan as Loose).actions as Loose[]) || [];
+  if (planActions.length === 0 || !execute) return result;
   if (!allow) return result;
 
-  const spawnProviderPrompt = options.spawnProviderPrompt || defaultSpawnProviderPrompt;
+  const spawnProviderPrompt = (options.spawnProviderPrompt as ((prompt: string, opts: Record<string, unknown>) => Promise<Loose>) | undefined) || defaultSpawnProviderPrompt;
   const config = executionConfig(input, options);
-  const timeout = Number(input.timeout_ms || input.timeoutMs || options.timeout_ms || options.timeoutMs || config.ai?.timeout_ms || 480000);
-  mkdirSync(plan.output_dir, { recursive: true });
-  const boundaryBefore = buildBoundarySnapshot(plan.project_root, [plan.output_dir]);
+  const configAi = (config as Loose).ai as Loose | undefined;
+  const timeout = Number(input.timeout_ms || input.timeoutMs || options.timeout_ms || options.timeoutMs || configAi?.timeout_ms || 480000);
+  mkdirSync((plan as Loose).output_dir as string, { recursive: true });
+  const boundaryBefore = buildBoundarySnapshot((plan as Loose).project_root as string, [(plan as Loose).output_dir as string]);
 
-  const previousResults = [];
-  for (const action of plan.actions) {
+  const previousResults: unknown[] = [];
+  for (const action of planActions) {
     const prompt = buildDemandEvidenceAgentPrompt({ action, plan, previousResults });
-    let providerRun;
+    let providerRun: Loose;
     try {
       providerRun = await spawnProviderPrompt(prompt, {
         timeout,
-        cwd: plan.project_root,
-        rootDir: plan.project_root,
-        runtimeDir: plan.output_dir,
+        cwd: (plan as Loose).project_root,
+        rootDir: (plan as Loose).project_root,
+        runtimeDir: (plan as Loose).output_dir,
         config,
-        detectModelProvider: () => clean(config.ai?.provider || config.ai?.executor || input.provider || options.provider || "claude"),
-      });
+        detectModelProvider: () => clean(configAi?.provider || configAi?.executor || input.provider || options.provider || "claude"),
+      }) as Loose;
     } catch (error) {
       providerRun = {
         success: false,
-        provider: clean(config.ai?.provider || config.ai?.executor || input.provider || options.provider || "unknown"),
+        provider: clean(configAi?.provider || configAi?.executor || input.provider || options.provider || "unknown"),
         command: null,
         exitCode: null,
         stdout: "",
-        stderr: error.message,
+        stderr: (error as Error).message,
         timedOut: false,
       };
     }
-    const parsedOutput = extractJsonObject(providerRun.stdout);
+    const parsedOutput = extractJsonObject(clean(providerRun.stdout));
     const agentResult = normalizeAgentResult({
       action,
       providerRun,
@@ -702,7 +741,7 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
       parseError: parsedOutput.error,
     });
     previousResults.push(agentResult);
-    result.provider_runs.push({
+    (result.provider_runs as Loose[]).push({
       role: action.role,
       provider: providerRun.provider || null,
       command: providerRun.command || null,
@@ -715,27 +754,27 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
       stdout: redactDeep(truncate(providerRun.stdout, 2000)),
       stderr: redactDeep(truncate(providerRun.stderr, 2000)),
     });
-    result.agent_results.push(agentResult);
-    if (writeArtifact) result.artifacts.push(writeJson(action.output_path, agentResult));
+    (result.agent_results as Loose[]).push(agentResult as Loose);
+    if (writeArtifact) (result.artifacts as string[]).push(writeJson(action.output_path as string, agentResult));
   }
-  const boundaryAfter = buildBoundarySnapshot(plan.project_root, [plan.output_dir]);
+  const boundaryAfter = buildBoundarySnapshot((plan as Loose).project_root as string, [(plan as Loose).output_dir as string]);
   const boundaryChanges = diffBoundarySnapshots(boundaryBefore, boundaryAfter);
   result.boundary = {
     project_mutation: boundaryChanges.length > 0 ? "violated" : "clean",
-    allowed_write_roots: [repoRelative(plan.output_dir, plan.project_root)],
+    allowed_write_roots: [repoRelative((plan as Loose).output_dir as string, (plan as Loose).project_root as string)],
     changes: boundaryChanges,
   };
 
-  const session = readDemandSession(input, plan.project_root) || plan.demand_status?.session || undefined;
+  const session = readDemandSession(input, (plan as Loose).project_root as string) || ((plan as Loose).demand_status as Loose | undefined)?.session || undefined;
   const readiness = inspectDemandPrdReadiness({
     ...input,
     evidence_results: result.agent_results,
   }, {
     ...options,
     session,
-    projectRoot: plan.project_root,
-    stateRoot: plan.state_root,
-    triage: plan.demand_status?.triage,
+    projectRoot: (plan as Loose).project_root,
+    stateRoot: (plan as Loose).state_root,
+    triage: ((plan as Loose).demand_status as Loose | undefined)?.triage,
   });
   const boundaryBlockers = boundaryChanges.map((change) => ({
     code: "BOUNDARY_PROJECT_MUTATION",
@@ -744,15 +783,18 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
     change: change.change,
   }));
   const requirementBlockers = evidenceRequirementBlockers(readiness.evidence_requirements);
-  const readinessBlockerKeys = new Set(asArray(readiness.blockers).map((blocker) => `${blocker.code}\u0000${blocker.evidence_requirement_id || blocker.id || ""}\u0000${blocker.topic || ""}`));
+  const readinessBlockerKeys = new Set(readiness.blockers.map((blocker) => {
+    const b = blocker as DemandBlocker & Loose;
+    return `${blocker.code}\u0000${b.evidence_requirement_id || b.id || ""}\u0000${b.topic || ""}`;
+  }));
   const dispatchRequirementBlockers = requirementBlockers.filter((blocker) =>
     !readinessBlockerKeys.has(`${blocker.code}\u0000${blocker.evidence_requirement_id || blocker.id || ""}\u0000${blocker.topic || ""}`)
   );
   const runtimeBlockers = [...boundaryBlockers, ...dispatchRequirementBlockers];
-  const finalReadiness = runtimeBlockers.length > 0
+  const finalReadiness: DemandPrdReadinessResult = runtimeBlockers.length > 0
     ? {
       ...readiness,
-      blockers: [...readiness.blockers, ...runtimeBlockers],
+      blockers: [...readiness.blockers, ...(runtimeBlockers as DemandBlocker[])],
       prd_intake_ready: false,
       executable_prd_ready: false,
       prd_ready: false,
@@ -765,10 +807,10 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
     ? "Demand evidence agents completed and PRD intake readiness passed."
     : "Demand evidence agents completed, but readiness still has blockers.";
   result.demand_status_after_dispatch = {
-    ...plan.demand_status,
+    ...((plan as Loose).demand_status as Loose),
     readiness: finalReadiness,
     state: {
-      ...(plan.demand_status?.state || {}),
+      ...(((plan as Loose).demand_status as Loose | undefined)?.state as Loose || {}),
       blockers: finalReadiness.blockers,
       assumptions: finalReadiness.assumptions,
       missing_slots: finalReadiness.missing_slots,
@@ -778,6 +820,6 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
       executable_prd_ready: finalReadiness.executable_prd_ready,
     },
   };
-  if (writeArtifact) result.artifacts.push(writeJson(join(plan.output_dir, "dispatch.json"), result));
+  if (writeArtifact) (result.artifacts as string[]).push(writeJson(join((plan as Loose).output_dir as string, "dispatch.json"), result));
   return result;
 }
