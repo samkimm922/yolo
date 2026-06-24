@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { evalCodeNotContains } from "../../src/lib/evaluators/code-check.js";
 import { evalFileLinesMax } from "../../src/lib/evaluators/file-check.js";
+import { evaluatePostConditions } from "../../src/prd/contract.js";
 
 type ConditionBatteryCase = {
   id: string;
@@ -46,6 +47,29 @@ const CONDITION_BATTERY: ConditionBatteryCase[] = [
       { targets: [{ file: "src/missing.ts" }] },
       root,
     ),
+  },
+  {
+    id: "target_file_modified_path_escape_blocks",
+    category: "condition_evaluator_robustness",
+    description: "target_file_modified must block repo-escaping target paths even when changedFiles echoes the same escape.",
+    expect: "blocked",
+    run: (root) => {
+      const report = evaluatePostConditions({
+        id: "TASK-PATH-ESCAPE",
+        scope: { targets: [{ file: "../sibling/src/feature.ts" }] },
+        post_conditions: [{
+          id: "POST-TARGET",
+          type: "target_file_modified",
+          severity: "FAIL",
+          params: { file: "../sibling/src/feature.ts" },
+        }],
+      }, {}, {
+        root,
+        cwd: root,
+        changedFiles: ["../sibling/src/feature.ts"],
+      }) as { results?: Array<{ id?: string; passed?: boolean }> };
+      return report.results?.find((result) => result.id === "POST-TARGET") || {};
+    },
   },
 ];
 

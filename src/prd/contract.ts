@@ -5,7 +5,7 @@
 //   评估 post_conditions: node contract.js --task=<id> --prd=<path> --phase=post [--baseline-dir=<dir>]
 
 import { readFileSync, existsSync } from "node:fs";
-import { resolve, dirname, isAbsolute, relative, normalize } from "node:path";
+import { resolve, dirname, relative, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { supportedConditionTypes as catalogSupportedConditionTypes } from "./condition-catalog.js";
 import {
@@ -73,12 +73,9 @@ function normalizeRepoFilePath(file, root = ROOT) {
   const raw = typeof file === "string" ? file : file?.file || file?.path || "";
   let normalized = String(raw ?? "").trim().replace(/\\/g, "/");
   if (!normalized) return "";
-  if (isAbsolute(normalized)) {
-    const relativePath = relative(root, normalized).replace(/\\/g, "/");
-    if (relativePath && relativePath !== "." && !relativePath.startsWith("../") && relativePath !== "..") {
-      normalized = relativePath;
-    }
-  }
+  const resolved = resolveWithinRoot(root, normalized);
+  if (!resolved.ok || !resolved.path) return "";
+  normalized = relative(resolve(root), resolved.path).replace(/\\/g, "/");
   normalized = normalize(normalized).replace(/\\/g, "/").replace(/^\.\/+/, "");
   return normalized === "." ? "" : normalized;
 }

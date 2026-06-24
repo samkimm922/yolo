@@ -331,6 +331,17 @@ describe("target_file_modified changed file source", () => {
     assert.equal(targetResult(result).found, 1);
   });
 
+  test("blocks repo-escaping target paths even when changedFiles echoes the escape", () => {
+    const result = evaluateTargetFileModified({
+      target: "../sibling/src/feature.ts",
+      changedFiles: ["../sibling/src/feature.ts"],
+    });
+
+    assert.equal(result.allPass, false);
+    assert.equal(targetResult(result).passed, false);
+    assert.equal(targetResult(result).status, "not_run");
+  });
+
   test("matches runner-provided changedFiles by target suffix", () => {
     const result = evaluateTargetFileModified({
       changedFiles: [`packages/web/${calendarTarget}`],
