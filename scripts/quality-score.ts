@@ -36,6 +36,7 @@ import { runConditionBattery } from "./quality/condition-battery.js";
 import { runReviewBattery } from "./quality/review-battery.js";
 import { runRedactBattery } from "./quality/redact-battery.js";
 import { runBoundedReadBattery } from "./quality/bounded-read-battery.js";
+import { runWorktreeBattery } from "./quality/worktree-battery.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(ROOT, "scripts", "quality", "quality-baseline.json");
@@ -218,6 +219,7 @@ async function computeQuality() {
     ...runReviewBattery(),
     ...runRedactBattery(),
     ...runBoundedReadBattery(),
+    ...runWorktreeBattery(),
   ];
   const total = results.length;
   const correct = results.filter((r) => r.correct).length;

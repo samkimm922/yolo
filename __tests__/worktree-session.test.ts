@@ -2,7 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import {
   cleanupTaskWorktree,
   createTaskWorktree,
@@ -696,5 +696,39 @@ describe("worktree execution session helpers", () => {
       },
     ]);
     assert.deepEqual(removed, ["/wt/FIX-FS"]);
+  });
+
+  test("cleanupTaskWorktree rejects scoped paths that escape the project root", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-worktree-escape-"));
+    try {
+      const repo = join(root, "repo");
+      const wt = join(root, "worktrees", "task");
+      mkdirSync(repo, { recursive: true });
+      mkdirSync(wt, { recursive: true });
+      const escapeTarget = `../../${root.split("/").pop()}-outside.txt`;
+      const srcOutsideWt = resolve(wt, escapeTarget);
+      const dstOutsideRepo = resolve(repo, escapeTarget);
+      rmSync(dstOutsideRepo, { force: true });
+      mkdirSync(resolve(srcOutsideWt, ".."), { recursive: true });
+      writeFileSync(srcOutsideWt, "ESCAPE_FROM_WORKTREE", "utf8");
+
+      assert.throws(
+        () => cleanupTaskWorktree({
+          wtPath: wt,
+          wtBranch: "yolo-G1",
+          rootDir: repo,
+          mergeToMain: true,
+          allowedScope: { targets: [{ file: escapeTarget }] },
+          execSync: () => { throw new Error("not a worktree"); },
+          execFileSync: () => "",
+          log: () => {},
+        }),
+        /worktree merge unsafe file path/,
+      );
+      assert.equal(existsSync(dstOutsideRepo), false);
+      rmSync(dstOutsideRepo, { force: true });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

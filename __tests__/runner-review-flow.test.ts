@@ -568,7 +568,7 @@ describe("runner review fix execution flow", () => {
     assert.match(worktreeSessionSource, /function\s+isFileAllowedByScope/);
     assert.match(worktreeSessionSource, /scope\.allow_new_files !== true/);
     assert.match(worktreeSessionSource, /`\$\{dirname\(target\)\}\/`/);
-    assert.match(worktreeSessionSource, /!isFileAllowedByScope\(filePath,\s*allowedScope\)/);
+    assert.match(worktreeSessionSource, /!isFileAllowedByScope\(safeFilePath,\s*allowedScope\)/);
   });
 
   test("recovery wiring: retry completion synced back after postconditions pass", () => {
