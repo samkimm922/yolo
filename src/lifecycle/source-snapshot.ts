@@ -19,17 +19,38 @@ import { resolveLifecycleStateRoot, lifecycleDir } from "./state.js";
 export const SOURCE_SNAPSHOT_FILE = "source-snapshot.json";
 export const SOURCE_SNAPSHOT_SCHEMA = "yolo.lifecycle.source_snapshot.v1";
 
+export type SnapshotOptions = Record<string, unknown>;
+
+export interface WorktreeSignature {
+  method: string;
+  git_head: string | null;
+  signature: string;
+}
+
+export interface SourceSnapshotPayload extends WorktreeSignature {
+  schema_version: string;
+  schema: string;
+  captured_at: string;
+  project_root: string;
+}
+
+export interface SourceSnapshotRecord extends Record<string, unknown> {
+  method?: string;
+  signature?: string;
+  captured_at?: string;
+}
+
 const EXCLUDED_DIRS = new Set([
   ".git", "node_modules", "dist", "build", "coverage",
   ".next", ".cache", ".turbo", ".parcel-cache", "out",
   ".yolo", ".claude", ".codex", ".agents",
 ]);
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function gitHead(projectRoot) {
+function gitHead(projectRoot: string): string | null {
   const run = spawnSync("git", ["-C", projectRoot, "rev-parse", "HEAD"], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
@@ -39,7 +60,7 @@ function gitHead(projectRoot) {
   return clean(run.stdout);
 }
 
-function gitStatusPorcelain(projectRoot) {
+function gitStatusPorcelain(projectRoot: string): string | null {
   const run = spawnSync("git", ["-C", projectRoot, "status", "--porcelain"], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
@@ -62,7 +83,7 @@ function gitStatusPorcelain(projectRoot) {
     .join("\n");
 }
 
-function isGitProject(projectRoot) {
+function isGitProject(projectRoot: string): boolean {
   const run = spawnSync("git", ["-C", projectRoot, "rev-parse", "--is-inside-work-tree"], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
@@ -71,8 +92,8 @@ function isGitProject(projectRoot) {
   return run.status === 0 && clean(run.stdout) === "true";
 }
 
-function walkSourceFiles(root, dir = root, acc = []) {
-  let entries = [];
+function walkSourceFiles(root: string, dir: string = root, acc: string[] = []): string[] {
+  let entries: import("node:fs").Dirent[] = [];
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch {
@@ -87,7 +108,7 @@ function walkSourceFiles(root, dir = root, acc = []) {
   return acc;
 }
 
-function fileDigest(path) {
+function fileDigest(path: string): string {
   try {
     const content = readFileSync(path);
     return createHash("sha256").update(content).digest("hex");
@@ -96,7 +117,7 @@ function fileDigest(path) {
   }
 }
 
-function nonGitSignature(projectRoot) {
+function nonGitSignature(projectRoot: string): string {
   const files = walkSourceFiles(projectRoot);
   files.sort();
   const hash = createHash("sha256");
@@ -109,7 +130,7 @@ function nonGitSignature(projectRoot) {
   return hash.digest("hex");
 }
 
-export function computeWorktreeSignature(projectRoot) {
+export function computeWorktreeSignature(projectRoot: string): WorktreeSignature {
   const root = resolve(projectRoot);
   if (isGitProject(root)) {
     const porcelain = gitStatusPorcelain(root);
@@ -128,16 +149,16 @@ export function computeWorktreeSignature(projectRoot) {
   };
 }
 
-export function sourceSnapshotPath(options = Object()) {
+export function sourceSnapshotPath(options: SnapshotOptions = Object()): string {
   return join(lifecycleDir(options), SOURCE_SNAPSHOT_FILE);
 }
 
-export function writeSourceSnapshot(options = Object()) {
-  const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
+export function writeSourceSnapshot(options: SnapshotOptions = Object()): { path: string; payload: SourceSnapshotPayload } {
+  const projectRoot = resolve(String(options.projectRoot || options.project_root || options.cwd || process.cwd()));
   const stateRoot = resolveLifecycleStateRoot({ ...options, projectRoot });
   const path = sourceSnapshotPath({ projectRoot, stateRoot });
   const signature = computeWorktreeSignature(projectRoot);
-  const payload = {
+  const payload: SourceSnapshotPayload = {
     schema_version: "1.0",
     schema: SOURCE_SNAPSHOT_SCHEMA,
     captured_at: clean(options.now) || new Date().toISOString(),
@@ -149,7 +170,7 @@ export function writeSourceSnapshot(options = Object()) {
   return { path, payload };
 }
 
-export function readSourceSnapshot(options = Object()) {
+export function readSourceSnapshot(options: SnapshotOptions = Object()): SourceSnapshotRecord | null {
   const path = sourceSnapshotPath(options);
   if (!existsSync(path)) return null;
   try {
@@ -166,8 +187,8 @@ export interface WorktreeDriftResult {
 
 // Compares the current worktree signature to the stored snapshot.
 // Drift = signatures differ (method-agnostic: any working-tree change).
-export function inspectWorktreeDrift(options = Object()): WorktreeDriftResult {
-  const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
+export function inspectWorktreeDrift(options: SnapshotOptions = Object()): WorktreeDriftResult {
+  const projectRoot = resolve(String(options.projectRoot || options.project_root || options.cwd || process.cwd()));
   const snapshot = readSourceSnapshot({ ...options, projectRoot });
   if (!snapshot) {
     return { has_drift: false, reason: "no_snapshot" };

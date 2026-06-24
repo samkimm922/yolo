@@ -2,7 +2,62 @@ export const LIFECYCLE_SCHEMA_VERSION = "1.0";
 export const LIFECYCLE_STATE_SCHEMA = "yolo.lifecycle.state.v1";
 export const LIFECYCLE_ARTIFACT_SCHEMA = "yolo.lifecycle.artifact.v1";
 
-export const LIFECYCLE_STAGES = [
+export type LifecycleRecord = Record<string, unknown>;
+
+export interface LifecycleStage {
+  id: string;
+  sequence: number;
+  label: string;
+  purpose: string;
+  default_artifact: string;
+  entry_commands: string[];
+  writes_code: boolean;
+}
+
+export interface LifecycleArtifactOptions extends LifecycleRecord {
+  now?: unknown;
+  projectName?: unknown;
+  project_name?: unknown;
+  status?: unknown;
+}
+
+export interface LifecycleSnapshotOptions extends LifecycleRecord {
+  now?: unknown;
+  projectName?: unknown;
+  project_name?: unknown;
+  currentStage?: unknown;
+  current_stage?: unknown;
+}
+
+export interface LifecycleStateStageEntry extends LifecycleRecord {
+  id?: string;
+  status?: string;
+  sequence?: unknown;
+  label?: unknown;
+  artifact?: unknown;
+  writes_code?: unknown;
+}
+
+export interface LifecycleState extends LifecycleRecord {
+  schema?: unknown;
+  current_stage?: unknown;
+  stages?: LifecycleStateStageEntry[];
+}
+
+export interface LifecycleValidationError {
+  code: string;
+  message: string;
+  [key: string]: unknown;
+}
+
+export interface LifecycleValidationResult {
+  status: "invalid" | "warning" | "pass";
+  valid: boolean;
+  errors: LifecycleValidationError[];
+  warnings: LifecycleValidationError[];
+}
+
+export const LIFECYCLE_STAGES: readonly LifecycleStage[] = [
   {
     id: "idea",
     sequence: 1,
@@ -104,23 +159,23 @@ export const LIFECYCLE_STAGES = [
   },
 ];
 
-function clone(value) {
+function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-export function listLifecycleStages() {
+export function listLifecycleStages(): LifecycleStage[] {
   return LIFECYCLE_STAGES.map(clone);
 }
 
-export function lifecycleStageIds() {
+export function lifecycleStageIds(): string[] {
   return LIFECYCLE_STAGES.map((stage) => stage.id);
 }
 
-export function getLifecycleStage(id = "idea") {
+export function getLifecycleStage(id: unknown = "idea"): LifecycleStage {
   const stageId = clean(id);
   const stage = LIFECYCLE_STAGES.find((item) => item.id === stageId);
   if (!stage) {
@@ -129,16 +184,41 @@ export function getLifecycleStage(id = "idea") {
   return clone(stage);
 }
 
-export function lifecycleStageForCommand(commandName = "") {
+export function lifecycleStageForCommand(commandName: unknown = ""): LifecycleStage | null {
   const command = clean(commandName).replace(/^\//, "");
   const stage = LIFECYCLE_STAGES.find((item) => item.entry_commands.includes(command));
   return stage ? clone(stage) : null;
 }
 
-export function createLifecycleArtifact(stageInput, options = Object()) {
+export interface LifecycleArtifact {
+  schema_version: string;
+  schema: string;
+  project: { name: string };
+  stage: {
+    id: string;
+    sequence: number;
+    label: string;
+    writes_code: boolean;
+  };
+  status: string;
+  created_at: string;
+  updated_at: string;
+  inputs: unknown[];
+  outputs: unknown[];
+  decisions: unknown[];
+  evidence: unknown[];
+  blockers: unknown[];
+  next_actions: unknown[];
+}
+
+export function createLifecycleArtifact(stageInput: string | LifecycleStage, options: LifecycleArtifactOptions = Object()): LifecycleArtifact {
   const stage = typeof stageInput === "string" ? getLifecycleStage(stageInput) : getLifecycleStage(stageInput.id);
   const now = clean(options.now) || new Date().toISOString();
   const projectName = clean(options.projectName || options.project_name) || "project";
+  // Preserve original `options.status || "pending"` semantics verbatim; callers
+  // pass a string status (see buildLifecycleStageReport), and the fallback keeps
+  // any truthy value as-is rather than re-normalizing through clean().
+  const status = (options.status || "pending") as string;
   return {
     schema_version: LIFECYCLE_SCHEMA_VERSION,
     schema: LIFECYCLE_ARTIFACT_SCHEMA,
@@ -151,7 +231,7 @@ export function createLifecycleArtifact(stageInput, options = Object()) {
       label: stage.label,
       writes_code: stage.writes_code,
     },
-    status: options.status || "pending",
+    status,
     created_at: now,
     updated_at: now,
     inputs: [],
@@ -163,7 +243,24 @@ export function createLifecycleArtifact(stageInput, options = Object()) {
   };
 }
 
-export function createLifecycleStateSnapshot(options = Object()) {
+export interface LifecycleStateSnapshot {
+  schema_version: string;
+  schema: string;
+  project: { name: string };
+  current_stage: string;
+  created_at: string;
+  updated_at: string;
+  stages: Array<{
+    id: string;
+    sequence: number;
+    label: string;
+    status: string;
+    artifact: string;
+    writes_code: boolean;
+  }>;
+}
+
+export function createLifecycleStateSnapshot(options: LifecycleSnapshotOptions = Object()): LifecycleStateSnapshot {
   const now = clean(options.now) || new Date().toISOString();
   const projectName = clean(options.projectName || options.project_name) || "project";
   const currentStage = clean(options.currentStage || options.current_stage) || "idea";
@@ -188,34 +285,34 @@ export function createLifecycleStateSnapshot(options = Object()) {
   };
 }
 
-export function validateLifecycleState(state = Object()) {
+export function validateLifecycleState(state: unknown = Object()): LifecycleValidationResult {
   // A status.json containing valid JSON `null` (e.g., from a botched external
   // write, partial flush, or git merge) reaches here as null and would crash on
   // `state.schema` below. The default `= Object()` only covers undefined, so
   // guard null explicitly. Other non-object primitives (number/string/array/
   // boolean) already fail safe because property access returns undefined.
-  if (state === null) state = Object();
-  const errors = [];
-  const warnings = [];
+  const record = (state === null ? Object() : state) as LifecycleState;
+  const errors: LifecycleValidationError[] = [];
+  const warnings: LifecycleValidationError[] = [];
 
-  if (state.schema !== LIFECYCLE_STATE_SCHEMA) {
+  if (record.schema !== LIFECYCLE_STATE_SCHEMA) {
     errors.push({
       code: "LIFECYCLE_STATE_SCHEMA_MISMATCH",
       expected: LIFECYCLE_STATE_SCHEMA,
-      actual: state.schema || null,
+      actual: record.schema || null,
       message: "lifecycle state schema is not supported",
     });
   }
 
   const expectedIds = lifecycleStageIds();
-  const stages = Array.isArray(state.stages) ? state.stages : [];
+  const stages: LifecycleStateStageEntry[] = Array.isArray(record.stages) ? record.stages : [];
   if (stages.length === 0) {
     errors.push({ code: "LIFECYCLE_STAGES_EMPTY", message: "lifecycle state must include stages" });
   }
 
-  const actualIds = stages.map((stage) => stage?.id);
+  const actualIds: Array<string | undefined> = stages.map((stage) => stage?.id);
   const missing = expectedIds.filter((id) => !actualIds.includes(id));
-  const unknown = actualIds.filter((id) => !expectedIds.includes(id));
+  const unknown = actualIds.filter((id) => id != null && !expectedIds.includes(id));
   if (missing.length > 0) {
     errors.push({ code: "LIFECYCLE_STAGE_MISSING", stages: missing, message: "lifecycle state is missing required stages" });
   }
@@ -223,7 +320,7 @@ export function validateLifecycleState(state = Object()) {
     errors.push({ code: "LIFECYCLE_STAGE_UNKNOWN", stages: unknown, message: "lifecycle state contains unknown stages" });
   }
 
-  const currentStage = clean(state.current_stage);
+  const currentStage = clean(record.current_stage);
   if (!expectedIds.includes(currentStage)) {
     errors.push({
       code: "LIFECYCLE_CURRENT_STAGE_INVALID",
@@ -232,7 +329,7 @@ export function validateLifecycleState(state = Object()) {
     });
   }
 
-  const activeStages = stages.filter((stage) => stage?.status === "active").map((stage) => stage?.id);
+  const activeStages: Array<string | undefined> = stages.filter((stage) => stage?.status === "active").map((stage) => stage?.id);
   if (activeStages.length !== 1) {
     warnings.push({
       code: "LIFECYCLE_ACTIVE_STAGE_COUNT",
