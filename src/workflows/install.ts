@@ -25,6 +25,119 @@ const DEFAULT_TARGET_DIRS = {
   codex: ".codex/skills",
 };
 
+/** Resolved target install directory metadata. */
+type SkillTargetInfo = {
+  target: string;
+  relative_dir: string;
+  absolute_dir: string;
+};
+
+/** Entrypoints describing how an installed skill is invoked. */
+type SkillEntrypoints = {
+  sdk?: string | null;
+  cli?: string | null;
+  skill?: string | null;
+};
+
+/** A materialized workflow skill descriptor (the shape produced by the registry). */
+type WorkflowSkillDescriptor = {
+  schema_version?: string;
+  schema?: string;
+  id?: string;
+  name?: string;
+  workflow?: string;
+  agent?: string;
+  surface?: string | null;
+  stability?: string | null;
+  visibility?: string | null;
+  alias_for?: string | null;
+  purpose?: string;
+  trigger?: string[];
+  inputs?: string[];
+  outputs?: string[];
+  sdk_namespaces?: string[];
+  phases?: string[];
+  verification?: string[];
+  entrypoints?: SkillEntrypoints;
+};
+
+/**
+ * A fully materialized workflow skill descriptor, as produced by
+ * `workflowToSkillDescriptor`. Install/Markdown/trigger-index helpers consume
+ * this shape, where every field is populated.
+ */
+type MaterializedSkillDescriptor = {
+  schema_version: string;
+  schema: string;
+  id: string;
+  name: string;
+  workflow: string;
+  agent: string;
+  surface: string | null;
+  stability: string | null;
+  visibility: string | null;
+  alias_for: string | null;
+  purpose: string;
+  trigger: string[];
+  inputs: string[];
+  outputs: string[];
+  sdk_namespaces: string[];
+  phases: string[];
+  verification: string[];
+  entrypoints: { sdk: string; cli: string; skill: string };
+};
+
+/** A validation finding produced by `validateWorkflowSkillDescriptor`. */
+type SkillValidationFinding = {
+  code: string;
+  field?: string;
+  expected?: string;
+  actual?: unknown;
+  message: string;
+  [key: string]: unknown;
+};
+
+/** A trigger-routing row inside the trigger index. */
+type SkillTriggerRow = {
+  trigger: string;
+  skill_id: string;
+  workflow: string;
+  agent: string;
+  descriptor_path: string;
+  markdown_path: string;
+  entrypoints: SkillEntrypoints;
+  surface: string;
+  stability: string;
+  visibility: string;
+  alias_for: string | null;
+};
+
+/** The full trigger index artifact. */
+type SkillTriggerIndex = {
+  schema_version: string;
+  schema: string;
+  target: string;
+  target_dir: string;
+  convention: string;
+  triggers: SkillTriggerRow[];
+};
+
+/** A planned install file entry. */
+type SkillInstallFile = {
+  path: string;
+  role: string;
+  descriptor_id: string | null;
+  content: string;
+};
+
+/** A smoke check result. */
+type SkillSmokeCheck = {
+  code: string;
+  passed: boolean;
+  message: string;
+  [key: string]: unknown;
+};
+
 export const DEFAULT_WORKFLOW_SKILL_TARGET_SMOKE_TARGETS = ["yolo", "agents", "claude", "codex"];
 export const DEFAULT_WORKFLOW_SKILL_TARGET_SMOKE_FORBIDDEN_PACKAGE_DIRS = [
   "state",
@@ -36,40 +149,46 @@ export const DEFAULT_WORKFLOW_SKILL_TARGET_SMOKE_FORBIDDEN_PACKAGE_DIRS = [
   ".codex",
 ];
 
-function cleanString(value) {
+function cleanString(value: unknown) {
   return String(value ?? "").trim();
 }
 
-function stableJson(value) {
+/** Safely extract a human-readable message from an unknown caught value. */
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function stableJson(value: unknown) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function readJsonFile(filePath) {
+function readJsonFile(filePath: string) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function asArray(value) {
+function asArray(value: unknown) {
   if (Array.isArray(value)) return value;
   if (value == null || value === "") return [];
   return [value];
 }
 
-function unique(values) {
+function unique(values: string[]) {
   return [...new Set(values)];
 }
 
-function normalizedTargetList(value) {
+function normalizedTargetList(value: unknown) {
   const targets = asArray(value).length > 0 ? asArray(value) : DEFAULT_WORKFLOW_SKILL_TARGET_SMOKE_TARGETS;
   return unique(targets.map((target) => cleanString(target).toLowerCase()).filter(Boolean));
 }
 
-function projectPath(projectRoot, path) {
+function projectPath(projectRoot: string, path: string) {
   const absolute = isAbsolute(path) ? path : join(projectRoot, path);
   const rel = relative(projectRoot, absolute);
   return rel && !rel.startsWith("..") && !isAbsolute(rel) ? rel.replaceAll("\\", "/") : absolute;
 }
 
-function resolveTargetDir(projectRoot, options = Object()) {
+function resolveTargetDir(projectRoot: string, options = Object()) {
   if (options.targetDir) {
     const absolute = isAbsolute(options.targetDir) ? options.targetDir : join(projectRoot, options.targetDir);
     return {
@@ -80,7 +199,7 @@ function resolveTargetDir(projectRoot, options = Object()) {
   }
 
   const target = cleanString(options.target || "yolo").toLowerCase();
-  const relativeDir = DEFAULT_TARGET_DIRS[target];
+  const relativeDir = (DEFAULT_TARGET_DIRS as Record<string, string>)[target];
   if (!relativeDir) {
     throw new Error(`Unknown workflow skill install target "${target}". Available targets: ${Object.keys(DEFAULT_TARGET_DIRS).join(", ")}`);
   }
@@ -92,18 +211,18 @@ function resolveTargetDir(projectRoot, options = Object()) {
   };
 }
 
-function defaultAgentForTarget(target, agent) {
+function defaultAgentForTarget(target: string, agent: unknown) {
   const explicit = cleanString(agent);
   if (explicit) return explicit;
   if (target === "claude" || target === "codex") return target;
   return "generic";
 }
 
-function skillFolderName(id) {
+function skillFolderName(id: unknown) {
   return cleanString(id).toLowerCase().replace(/[^a-z0-9_.-]/g, "-");
 }
 
-function yamlString(value) {
+function yamlString(value: unknown) {
   return JSON.stringify(cleanString(value));
 }
 
@@ -111,7 +230,7 @@ function skillMarkdownFilename(options = Object()) {
   return cleanString(options.skillMarkdownFile || options.skill_markdown_file || "SKILL.md") || "SKILL.md";
 }
 
-function expectedSkillPaths(targetDir, descriptors, markdownFile = "SKILL.md") {
+function expectedSkillPaths(targetDir: string, descriptors: MaterializedSkillDescriptor[], markdownFile = "SKILL.md") {
   const paths = [
     `${targetDir}/${WORKFLOW_SKILL_AGENT_RULES_FILE}`,
     `${targetDir}/${WORKFLOW_SKILL_TRIGGER_INDEX_FILE}`,
@@ -124,21 +243,27 @@ function expectedSkillPaths(targetDir, descriptors, markdownFile = "SKILL.md") {
   return paths;
 }
 
-function requiredString(errors, descriptor, field) {
+function requiredString(errors: SkillValidationFinding[], descriptor: WorkflowSkillDescriptor, field: keyof WorkflowSkillDescriptor & string) {
   if (!cleanString(descriptor[field])) {
     errors.push({ code: "SKILL_FIELD_MISSING", field, message: `${field} is required` });
   }
 }
 
-function requiredArray(errors, descriptor, field) {
+function requiredArray(errors: SkillValidationFinding[], descriptor: WorkflowSkillDescriptor, field: keyof WorkflowSkillDescriptor & string) {
   if (!Array.isArray(descriptor[field]) || descriptor[field].length === 0) {
     errors.push({ code: "SKILL_ARRAY_EMPTY", field, message: `${field} must be a non-empty array` });
   }
 }
 
-export function validateWorkflowSkillDescriptor(descriptor = Object()) {
-  const errors = [];
-  const warnings = [];
+export function validateWorkflowSkillDescriptor(descriptor = Object()): {
+  status: string;
+  valid: boolean;
+  descriptor_id: string | null;
+  errors: SkillValidationFinding[];
+  warnings: SkillValidationFinding[];
+} {
+  const errors: SkillValidationFinding[] = [];
+  const warnings: SkillValidationFinding[] = [];
 
   requiredString(errors, descriptor, "id");
   requiredString(errors, descriptor, "name");
@@ -177,7 +302,7 @@ export function validateWorkflowSkillDescriptor(descriptor = Object()) {
     });
   }
 
-  if (Array.isArray(descriptor.verification) && descriptor.verification.some((item) => cleanString(item) === "")) {
+  if (Array.isArray(descriptor.verification) && descriptor.verification.some((item: string) => cleanString(item) === "")) {
     warnings.push({
       code: "SKILL_EMPTY_VERIFICATION_ITEM",
       field: "verification",
@@ -194,7 +319,7 @@ export function validateWorkflowSkillDescriptor(descriptor = Object()) {
   };
 }
 
-function renderSkillMarkdown(descriptor) {
+function renderSkillMarkdown(descriptor: MaterializedSkillDescriptor) {
   // Demand / interview workflows use the full PM protocol prompt
   if (descriptor.workflow === "demand" || descriptor.workflow === "interview") {
     return renderPMProtocolMarkdown(descriptor);
@@ -222,23 +347,23 @@ function renderSkillMarkdown(descriptor) {
     "",
     "## Triggers",
     "",
-    ...descriptor.trigger.map((item) => `- ${item}`),
+    ...descriptor.trigger.map((item: string) => `- ${item}`),
     "",
     "## Inputs",
     "",
-    ...descriptor.inputs.map((item) => `- ${item}`),
+    ...descriptor.inputs.map((item: string) => `- ${item}`),
     "",
     "## Outputs",
     "",
-    ...descriptor.outputs.map((item) => `- ${item}`),
+    ...descriptor.outputs.map((item: string) => `- ${item}`),
     "",
     "## Phases",
     "",
-    ...descriptor.phases.map((item) => `- ${item}`),
+    ...descriptor.phases.map((item: string) => `- ${item}`),
     "",
     "## Verification",
     "",
-    ...descriptor.verification.map((item) => `- ${item}`),
+    ...descriptor.verification.map((item: string) => `- ${item}`),
     "",
     "## Entrypoints",
     "",
@@ -259,8 +384,8 @@ function renderSkillMarkdown(descriptor) {
   return lines.join("\n");
 }
 
-function buildWorkflowSkillTriggerIndex(targetInfo, descriptors, markdownFile = "SKILL.md") {
-  const triggers = [];
+function buildWorkflowSkillTriggerIndex(targetInfo: SkillTargetInfo, descriptors: MaterializedSkillDescriptor[], markdownFile = "SKILL.md"): SkillTriggerIndex {
+  const triggers: SkillTriggerRow[] = [];
   for (const descriptor of descriptors) {
     for (const trigger of descriptor.trigger || []) {
       triggers.push({
@@ -297,7 +422,7 @@ function buildWorkflowSkillTriggerIndex(targetInfo, descriptors, markdownFile = 
   };
 }
 
-function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex, markdownFile = "SKILL.md") {
+function renderTargetRulesMarkdown(targetInfo: SkillTargetInfo, descriptors: MaterializedSkillDescriptor[], triggerIndex: SkillTriggerIndex, markdownFile = "SKILL.md") {
   const triggerLines = triggerIndex.triggers.length > 0
     ? triggerIndex.triggers.map((item) =>
       `- ${item.trigger} -> ${item.skill_id} (${item.entrypoints.cli})`
@@ -351,7 +476,7 @@ function renderTargetRulesMarkdown(targetInfo, descriptors, triggerIndex, markdo
   return lines.join("\n");
 }
 
-function descriptorsForInstall(options = Object()) {
+function descriptorsForInstall(options = Object()): MaterializedSkillDescriptor[] {
   const workflowIds = asArray(options.workflow || options.workflows);
   const selectedIds = workflowIds.length > 0 ? workflowIds : listWorkflows().map((workflow) => workflow.id);
   const agent = defaultAgentForTarget(options.target, options.agent);
@@ -449,12 +574,12 @@ export function buildWorkflowSkillInstallPlan(options = Object()) {
 }
 
 export function inspectWorkflowSkillInstallPlan(plan = Object()) {
-  const descriptorResults = (plan.descriptors || []).map(validateWorkflowSkillDescriptor);
-  const errors = descriptorResults.flatMap((result) => result.errors.map((error) => ({
+  const descriptorResults: Array<{ status: string; valid: boolean; descriptor_id: string | null; errors: SkillValidationFinding[]; warnings: SkillValidationFinding[] }> = (plan.descriptors || []).map((descriptor: WorkflowSkillDescriptor) => validateWorkflowSkillDescriptor(descriptor));
+  const errors: SkillValidationFinding[] = descriptorResults.flatMap((result) => result.errors.map((error) => ({
     descriptor_id: result.descriptor_id,
     ...error,
   })));
-  const warnings = descriptorResults.flatMap((result) => result.warnings.map((warning) => ({
+  const warnings: SkillValidationFinding[] = descriptorResults.flatMap((result) => result.warnings.map((warning) => ({
     descriptor_id: result.descriptor_id,
     ...warning,
   })));
@@ -463,18 +588,18 @@ export function inspectWorkflowSkillInstallPlan(plan = Object()) {
     errors.push({ code: "SKILL_INSTALL_FILES_EMPTY", message: "install plan must include files" });
   }
 
-  const paths = (plan.files || []).map((file) => file.path);
+  const paths = (plan.files || []).map((file: SkillInstallFile) => file.path);
   for (const path of paths) {
     if (!cleanString(path)) {
       errors.push({ code: "SKILL_INSTALL_PATH_EMPTY", message: "install file path is required" });
     }
   }
-  const duplicate = paths.find((path, index) => paths.indexOf(path) !== index);
+  const duplicate = paths.find((path: string, index: number) => paths.indexOf(path) !== index);
   if (duplicate) {
     errors.push({ code: "SKILL_INSTALL_DUPLICATE_PATH", path: duplicate, message: "install plan contains duplicate file paths" });
   }
 
-  const roles = new Set((plan.files || []).map((file) => file.role));
+  const roles = new Set((plan.files || []).map((file: SkillInstallFile) => file.role));
   if (!roles.has("agent_rules")) {
     errors.push({ code: "SKILL_INSTALL_AGENT_RULES_MISSING", message: "install plan must include target agent rules" });
   }
@@ -482,15 +607,15 @@ export function inspectWorkflowSkillInstallPlan(plan = Object()) {
     errors.push({ code: "SKILL_INSTALL_TRIGGER_INDEX_MISSING", message: "install plan must include target trigger index" });
   }
 
-  const rulesFile = (plan.files || []).find((file) => file.role === "agent_rules");
+  const rulesFile = (plan.files || []).find((file: SkillInstallFile) => file.role === "agent_rules");
   if (rulesFile && !String(rulesFile.content || "").includes("Fail closed")) {
     errors.push({ code: "SKILL_INSTALL_AGENT_RULES_INCOMPLETE", message: "agent rules must include fail-closed gate policy" });
   }
 
-  const triggerFile = (plan.files || []).find((file) => file.role === "trigger_index");
+  const triggerFile = (plan.files || []).find((file: SkillInstallFile) => file.role === "trigger_index");
   if (triggerFile) {
     try {
-      const triggerIndex = JSON.parse(triggerFile.content);
+      const triggerIndex = JSON.parse(triggerFile.content) as { schema?: string; target?: string; triggers?: Array<{ trigger?: string; skill_id?: string }> };
       if (triggerIndex.schema !== WORKFLOW_SKILL_TRIGGER_INDEX_SCHEMA) {
         errors.push({
           code: "SKILL_INSTALL_TRIGGER_INDEX_SCHEMA",
@@ -510,7 +635,7 @@ export function inspectWorkflowSkillInstallPlan(plan = Object()) {
 
       const triggerRows = Array.isArray(triggerIndex.triggers) ? triggerIndex.triggers : [];
       for (const descriptor of plan.descriptors || []) {
-        for (const trigger of descriptor.trigger || []) {
+        for (const trigger of (descriptor.trigger || [])) {
           const listed = triggerRows.some((item) => item.trigger === trigger && item.skill_id === descriptor.id);
           if (!listed) {
             errors.push({
@@ -526,7 +651,7 @@ export function inspectWorkflowSkillInstallPlan(plan = Object()) {
       errors.push({
         code: "SKILL_INSTALL_TRIGGER_INDEX_PARSE",
         message: "trigger index must be valid JSON",
-        error: error?.message || String(error),
+        error: errorMessage(error),
       });
     }
   }
@@ -659,7 +784,7 @@ export function buildWorkflowSkillTargetSmokePlan(options = Object()) {
   };
 }
 
-function check(passed, code, message, extra = Object()) {
+function check(passed: unknown, code: string, message: string, extra = Object()): SkillSmokeCheck {
   return {
     code,
     passed: Boolean(passed),
@@ -732,7 +857,7 @@ export function runWorkflowSkillTargetSmoke(options = Object()) {
           { target: targetPlan.target, actual: index.target },
         ));
         checks.push(check(
-          targetPlan.descriptor_ids.every((id) => index.skills?.some((skill) => skill.id === id)),
+          targetPlan.descriptor_ids.every((id) => index.skills?.some((skill: { id?: string }) => skill.id === id)),
           "WORKFLOW_SKILL_TARGET_INDEX_SKILLS",
           "skill index must list every installed descriptor",
           { target: targetPlan.target, descriptor_ids: targetPlan.descriptor_ids },
@@ -740,7 +865,7 @@ export function runWorkflowSkillTargetSmoke(options = Object()) {
       } catch (error) {
         checks.push(check(false, "WORKFLOW_SKILL_TARGET_INDEX_PARSE", "skill index must be valid JSON", {
           target: targetPlan.target,
-          error: error?.message || String(error),
+          error: errorMessage(error),
         }));
       }
     }
@@ -763,7 +888,7 @@ export function runWorkflowSkillTargetSmoke(options = Object()) {
           { target: targetPlan.target, expected: targetPlan.target, actual: triggerIndex.target },
         ));
         checks.push(check(
-          targetPlan.descriptor_ids.every((id) => triggerRows.some((item) => item.skill_id === id)),
+          targetPlan.descriptor_ids.every((id) => triggerRows.some((item: { skill_id?: string }) => item.skill_id === id)),
           "WORKFLOW_SKILL_TARGET_TRIGGER_INDEX_SKILLS",
           "trigger index must route every installed descriptor",
           { target: targetPlan.target, descriptor_ids: targetPlan.descriptor_ids },
@@ -771,7 +896,7 @@ export function runWorkflowSkillTargetSmoke(options = Object()) {
       } catch (error) {
         checks.push(check(false, "WORKFLOW_SKILL_TARGET_TRIGGER_INDEX_PARSE", "trigger index must be valid JSON", {
           target: targetPlan.target,
-          error: error?.message || String(error),
+          error: errorMessage(error),
         }));
       }
     }
@@ -809,7 +934,7 @@ export function runWorkflowSkillTargetSmoke(options = Object()) {
         checks.push(check(false, "WORKFLOW_SKILL_TARGET_DESCRIPTOR_PARSE", "installed skill descriptor must be valid JSON", {
           target: targetPlan.target,
           descriptor_id: descriptorId,
-          error: error?.message || String(error),
+          error: errorMessage(error),
         }));
       }
     }
