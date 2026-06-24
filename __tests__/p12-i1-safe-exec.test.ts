@@ -8,7 +8,7 @@
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execArgv, execCommand, commandExistsSync } from "../src/lib/security/safe-exec.js";
@@ -93,6 +93,32 @@ describe("P12.I1 execCommand rejects shell metacharacters", () => {
     const r = execCommand("node -e 'process.exit(0)'\ncurl evil");
     assert.equal(r.rejected, true);
     assert.equal(r.reject_reason, "shell_metachar");
+  });
+
+  test("rejects sh -c command mode and does not run payload", () => {
+    const dir = mkdtempSync(join(tmpdir(), "yolo-p12-sh-c-"));
+    try {
+      const marker = join(dir, "owned");
+      const r = execCommand(`sh -c 'touch ${marker}'`, { cwd: dir, timeout: 5000 });
+      assert.equal(r.rejected, true);
+      assert.equal(r.reject_reason, "shell_command");
+      assert.equal(existsSync(marker), false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects env shell wrapper bypass", () => {
+    const dir = mkdtempSync(join(tmpdir(), "yolo-p12-env-sh-c-"));
+    try {
+      const marker = join(dir, "owned");
+      const r = execCommand(`env PATH=/bin:/usr/bin sh -c 'touch ${marker}'`, { cwd: dir, timeout: 5000 });
+      assert.equal(r.rejected, true);
+      assert.equal(r.reject_reason, "shell_command");
+      assert.equal(existsSync(marker), false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("happy path: clean command parses and runs", () => {

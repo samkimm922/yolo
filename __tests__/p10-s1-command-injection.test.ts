@@ -5,7 +5,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { parseCommandToArgv } from "../src/lib/security/command-guard.js";
@@ -61,6 +61,18 @@ describe("P10.S1 parseCommandToArgv", () => {
     if (!r.ok) assert.equal(r.reason, "shell_metachar");
   });
 
+  test("rejects sh -c command mode even when payload is quoted", () => {
+    const r = parseCommandToArgv("sh -c 'touch owned'");
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.reason, "shell_command");
+  });
+
+  test("rejects env shell wrapper bypass", () => {
+    const r = parseCommandToArgv("env NODE_ENV=test sh -c 'touch owned'");
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.reason, "shell_command");
+  });
+
   test("rejects redirect < outside quotes", () => {
     const r = parseCommandToArgv("npm test < /etc/passwd");
     assert.equal(r.ok, false);
@@ -89,7 +101,7 @@ describe("P10.S1 parseCommandToArgv", () => {
     for (const command of ["sh -c 'echo unsafe'", "bash -lc 'echo unsafe'", "zsh -c 'echo unsafe'"]) {
       const r = parseCommandToArgv(command);
       assert.equal(r.ok, false, command);
-      if (!r.ok) assert.equal(r.reason, "shell_interpreter");
+      if (!r.ok) assert.equal(r.reason, "shell_command");
     }
   });
 });
@@ -227,6 +239,17 @@ describe("P10.S1 runtime-check evalTestsPass injection rejection", () => {
     }, {}, tmpRoot);
     assert.equal(result.passed, false);
     assert.ok(result.detail.includes("rejected"));
+  });
+
+  test("rejects sh -c in params.command and does not run payload", () => {
+    const marker = join(tmpRoot, "p10-sh-c-owned");
+    const result = mod.evalTestsPass({
+      command: "sh -c 'touch p10-sh-c-owned'",
+      timeout_ms: 5000,
+    }, {}, tmpRoot);
+    assert.equal(result.passed, false);
+    assert.ok(result.detail.includes("rejected"));
+    assert.equal(existsSync(marker), false);
   });
 });
 
