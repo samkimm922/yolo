@@ -7,16 +7,64 @@ import { isSafePathComponent } from "../../lib/security/path-guard.js";
 
 export { evidenceArtifactDigest } from "./ledger.js";
 
-export function normalizeRepoPath(filePath, projectRoot) {
+type EvidencePayload = Record<string, unknown>;
+const fingerprintGateFailures = gateFailureFingerprint as (failures: FailureLike[]) => string;
+
+interface EvidenceWriteOptions {
+  yoloRoot: string;
+  projectRoot?: string;
+}
+
+interface TaskLike extends EvidencePayload {
+  id?: unknown;
+}
+
+interface SplitAppliedInput {
+  parentTask: TaskLike;
+  doctor: EvidencePayload;
+  childIds: unknown[];
+  children: unknown[];
+  now?: string;
+}
+
+interface FailureLike extends EvidencePayload {
+  id?: unknown;
+  type?: unknown;
+  severity?: unknown;
+  detail?: unknown;
+  task_id?: unknown;
+  suggestion?: unknown;
+  condition_id?: unknown;
+}
+
+interface ContractSuspectInput {
+  task: TaskLike;
+  prdPath: string;
+  failures: FailureLike[];
+  history: unknown[];
+  gateExitCode: unknown;
+  projectRoot?: string;
+  now?: string;
+}
+
+interface PrdContractDoctorInput {
+  prd?: EvidencePayload;
+  prdPath: string;
+  result: EvidencePayload;
+  projectRoot?: string;
+  now?: string;
+}
+
+export function normalizeRepoPath(filePath: unknown, projectRoot?: string): string {
   const rootPrefix = projectRoot ? `${projectRoot}/` : "";
   return String(filePath || "").replace(rootPrefix, "").replace(/^\.\//, "");
 }
 
-export function stripYoloPrefix(filePath) {
+export function stripYoloPrefix(filePath: unknown): string {
   return String(filePath || "").replace(/^scripts\/yolo\//, "");
 }
 
-export function taskEvidenceDir(taskId, { yoloRoot }) {
+export function taskEvidenceDir(taskId: unknown, { yoloRoot }: { yoloRoot: string }): string {
   const id = String(taskId || "");
   if (!isSafePathComponent(id)) {
     throw new Error(`taskEvidenceDir rejected unsafe taskId: ${taskId}`);
@@ -26,7 +74,7 @@ export function taskEvidenceDir(taskId, { yoloRoot }) {
   return dir;
 }
 
-function safeEvidenceFileStem(value, fallback = "prd") {
+function safeEvidenceFileStem(value: unknown, fallback = "prd"): string {
   const stem = String(value || "")
     .trim()
     .replace(/[^A-Za-z0-9_-]+/g, "-")
@@ -35,11 +83,11 @@ function safeEvidenceFileStem(value, fallback = "prd") {
   return isSafePathComponent(stem) ? stem : fallback;
 }
 
-export function writeJsonEvidence(filePath, evidence) {
+export function writeJsonEvidence(filePath: string, evidence: unknown): string {
   return writeJsonArtifact(filePath, evidence);
 }
 
-export function writeTaskEvidence(taskId, fileName, evidence, { yoloRoot, projectRoot }) {
+export function writeTaskEvidence(taskId: unknown, fileName: string, evidence: unknown, { yoloRoot, projectRoot }: EvidenceWriteOptions) {
   const evidenceFile = join(taskEvidenceDir(taskId, { yoloRoot }), fileName);
   writeJsonEvidence(evidenceFile, evidence);
   return {
@@ -49,7 +97,7 @@ export function writeTaskEvidence(taskId, fileName, evidence, { yoloRoot, projec
   };
 }
 
-export function buildSplitAppliedEvidence({ parentTask, doctor, childIds, children, now = new Date().toISOString() }) {
+export function buildSplitAppliedEvidence({ parentTask, doctor, childIds, children, now = new Date().toISOString() }: SplitAppliedInput) {
   return buildEvidenceArtifact("task.split_applied", {
     task_id: parentTask.id,
     status: "split_applied",
@@ -60,7 +108,7 @@ export function buildSplitAppliedEvidence({ parentTask, doctor, childIds, childr
   }, { now, source: "runner" });
 }
 
-export function writeSplitAppliedEvidence(input, options) {
+export function writeSplitAppliedEvidence(input: SplitAppliedInput, options: EvidenceWriteOptions) {
   const evidence = buildSplitAppliedEvidence(input);
   return writeTaskEvidence(input.parentTask.id, "split-applied.json", evidence, options);
 }
@@ -73,7 +121,7 @@ export function buildContractSuspectEvidence({
   gateExitCode,
   projectRoot,
   now = new Date().toISOString(),
-}) {
+}: ContractSuspectInput) {
   const contractQuality = inspectPrdContract({
     version: "2.0",
     id: "PRD-CONTRACT-SUSPECT-TASK",
@@ -85,7 +133,7 @@ export function buildContractSuspectEvidence({
     status: "needs_contract_review",
     reason: "same_contract_condition_failed_repeatedly",
     gate_exit_code: gateExitCode,
-    fingerprint: gateFailureFingerprint(failures),
+    fingerprint: fingerprintGateFailures(failures),
     failed_conditions: failures.map((failure) => ({
       id: failure.id || null,
       type: failure.type || null,
@@ -94,7 +142,7 @@ export function buildContractSuspectEvidence({
     })),
     history: history.slice(-5),
     contract_quality: contractQuality,
-    suggested_contract_patches: (contractQuality.failures || [])
+    suggested_contract_patches: (Array.isArray(contractQuality.failures) ? contractQuality.failures as FailureLike[] : [])
       .filter((failure) => failure.task_id === task.id && failure.suggestion)
       .map((failure) => ({
         failed_condition_id: failure.condition_id || null,
@@ -105,7 +153,7 @@ export function buildContractSuspectEvidence({
   }, { now, source: "runner" });
 }
 
-export function writeContractSuspectEvidence(input, options) {
+export function writeContractSuspectEvidence(input: ContractSuspectInput, options: EvidenceWriteOptions) {
   const evidence = buildContractSuspectEvidence({ ...input, projectRoot: options.projectRoot });
   return writeTaskEvidence(input.task.id, "contract-suspect.json", evidence, options);
 }
@@ -116,14 +164,14 @@ export function buildPrdContractDoctorEvidence({
   result,
   projectRoot,
   now = new Date().toISOString(),
-}) {
+}: PrdContractDoctorInput) {
   return buildEvidenceArtifact("prd.contract_doctor", {
     prd: stripYoloPrefix(normalizeRepoPath(prdPath, projectRoot)),
     ...result,
   }, { now, source: "runner" });
 }
 
-export function writePrdContractDoctorEvidence(input, { stateDir, projectRoot }) {
+export function writePrdContractDoctorEvidence(input: PrdContractDoctorInput, { stateDir, projectRoot }: { stateDir: string; projectRoot?: string }) {
   const evidence = buildPrdContractDoctorEvidence({ ...input, projectRoot });
   const prdId = safeEvidenceFileStem(input.prd?.id);
   const evidenceFile = join(stateDir, "evidence", "prd-contract-doctor", `${prdId}-${Date.now()}.json`);

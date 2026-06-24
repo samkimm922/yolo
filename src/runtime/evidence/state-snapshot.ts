@@ -6,12 +6,16 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "../../..");
 
-function argValue(argv, prefix) {
+interface StateSnapshotCliIo {
+  stdout?: Pick<NodeJS.WriteStream, "write">;
+}
+
+function argValue(argv: string[], prefix: string): string | null {
   const arg = argv.find((item) => item.startsWith(prefix));
   return arg ? arg.slice(prefix.length) : null;
 }
 
-function readJsonIfExists(file) {
+function readJsonIfExists(file: string): unknown {
   if (!existsSync(file)) return null;
   try {
     return JSON.parse(readFileSync(file, "utf8"));
@@ -20,7 +24,7 @@ function readJsonIfExists(file) {
   }
 }
 
-export function writeStateSnapshot({ argv = [], now = new Date() } = Object()) {
+export function writeStateSnapshot({ argv = [], now = new Date() }: { argv?: string[]; now?: Date } = Object()) {
   const stateRootArg = argValue(argv, "--state-root=") || argValue(argv, "--yolo-root=");
   const stateDirArg = argValue(argv, "--state-dir=");
   const stateDir = stateDirArg
@@ -41,7 +45,7 @@ export function writeStateSnapshot({ argv = [], now = new Date() } = Object()) {
   return { status: "ok", file: resolve(latestFile), snapshot };
 }
 
-export function runStateSnapshotCli(argv = process.argv.slice(2), io = Object()) {
+export function runStateSnapshotCli(argv: string[] = process.argv.slice(2), io: StateSnapshotCliIo = Object()) {
   const stdout = io.stdout || process.stdout;
   const result = writeStateSnapshot({ argv });
   if (argv.includes("--json")) {
