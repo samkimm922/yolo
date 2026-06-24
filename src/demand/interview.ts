@@ -3,7 +3,157 @@ import { isAbsolute, join, resolve } from "node:path";
 export const DEMAND_INTERVIEW_SCHEMA_VERSION = "1.0";
 export const DEMAND_INTERVIEW_SCHEMA = "yolo.demand.interview.v1";
 
-export const DEMAND_INTERVIEW_QUESTION_BANK = [
+// Closed set of interview slots — the question bank and every slot-keyed lookup
+// table (SLOT_FOLLOW_UPS / SLOT_QUALITY_RULES) key off these. Typing them as a
+// literal union (not `string`) keeps the lookups compile-checked while staying
+// zero-runtime-cost.
+export type InterviewSlot =
+  | "target_users"
+  | "status_quo"
+  | "pain_points"
+  | "desired_outcome"
+  | "success_criteria"
+  | "success_proof"
+  | "scope_boundaries"
+  | "exceptions"
+  | "mvp_priority"
+  | "execution_approval";
+
+// Loose input/options records (the N4 pattern): interview inputs are assembled
+// from user/agent data and read as `Record<string, unknown>`, narrowed at each
+// touch point, never widened to `any`.
+type Loose = Record<string, unknown>;
+
+export interface InterviewQuestionAccepts {
+  free_text?: boolean;
+  boolean?: boolean;
+  examples?: string[];
+}
+
+// A "next question" may be a bank question OR a synthesized follow-up question
+// (which carries extra follow_up_* fields). All fields optional and NO index
+// signature: this stays structurally compatible with the CLI's own
+// all-optional InterviewQuestion (which also has no index signature) at the
+// boundary (N7 alignment: adding an index signature here would make the CLI's
+// type fail to assign into this one). `accepts`/`required_for` are present so
+// spreading a bank question into a follow-up result type-checks.
+export interface InterviewNextQuestion {
+  id?: string;
+  question_id?: string;
+  slot?: string;
+  category?: string;
+  plain_language_prompt?: string;
+  text?: string;
+  why_it_matters?: string;
+  accepts?: InterviewQuestionAccepts;
+  required_for?: string[];
+  follow_up?: boolean;
+  follow_up_id?: string;
+  follow_up_code?: string;
+  follow_up_reason?: string | null;
+  follow_up_severity?: string;
+  original_prompt?: string;
+}
+
+// All fields optional so this is structurally compatible with the CLI's own
+// InterviewQuestion (all-optional) — the demand interview functions accept
+// either shape at the boundary (N7 alignment: demand types must not require the
+// CLI's record to match a stricter shape). No index signature: the CLI's
+// InterviewQuestion has none, and adding one here would make *it* fail to
+// assign into this type.
+export interface InterviewQuestion {
+  id?: string;
+  slot?: InterviewSlot | string;
+  category?: string;
+  plain_language_prompt?: string;
+  why_it_matters?: string;
+  accepts?: InterviewQuestionAccepts;
+  required_for?: string[];
+}
+
+export interface FollowUpQuestion {
+  id?: string;
+  question_id?: string;
+  slot?: InterviewSlot | string;
+  category?: string;
+  severity?: string;
+  code?: string;
+  reason?: string | null;
+  plain_language_prompt?: string;
+  text?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
+export interface AnswerQuality {
+  score: number;
+  level: "missing" | "sufficient" | "needs_follow_up";
+  reasons: string[];
+  follow_up_questions: FollowUpQuestion[];
+}
+
+export interface NormalizedAnswer {
+  approved?: boolean;
+  text?: string;
+  items?: string[];
+  [key: string]: unknown;
+}
+
+// Answer records are user/agent-produced and read loosely here; they are typed
+// as a record with the consumed fields plus an index signature for passthrough
+// fields (the established N4 pattern).
+export interface AnswerRecord {
+  question_id?: string;
+  slot?: InterviewSlot | string;
+  category?: string;
+  answer?: unknown;
+  normalized?: NormalizedAnswer;
+  quality?: AnswerQuality & { score?: unknown; level?: unknown; reasons?: unknown; follow_up_questions?: unknown };
+  answer_quality?: AnswerQuality & { score?: unknown; level?: unknown; reasons?: unknown; follow_up_questions?: unknown };
+  answered_at?: string | null;
+  [key: string]: unknown;
+}
+
+// The interview session is assembled by createDemandInterviewSession and then
+// mutated in place by refreshSession/answerDemandInterviewQuestion (fields are
+// assigned onto it), so the index signature preserves that mutability without
+// `any`. `coverage` is a large structured object built by
+// inspectDemandInterviewCoverage; it is carried opaquely here.
+//
+// Note on the public boundary: answerDemandInterviewQuestion and
+// demandInterviewToDemandInput are also called by the CLI (src/cli/split),
+// which passes/accepts its own InterviewState (an opaque `[key: string]:
+// unknown` record). Those two entry points therefore accept/return the wider
+// `Record<string, unknown>` shape and narrow to InterviewSession internally, so
+// demand's precise InterviewSession never has to agree structurally with the
+// CLI's type (the N7 cli↔prd alignment pitfall).
+export interface InterviewSession {
+  schema_version?: string;
+  schema?: string;
+  id?: string;
+  demand_id?: string;
+  generated_at?: string;
+  updated_at?: string;
+  source?: string;
+  title?: string;
+  objective?: string;
+  projectRoot?: string;
+  project_root?: string;
+  stateRoot?: string;
+  state_root?: string;
+  questions?: InterviewQuestion[];
+  answers?: Record<string, AnswerRecord>;
+  ledgers?: Record<string, unknown>;
+  coverage?: Record<string, unknown>;
+  readiness?: Record<string, unknown>;
+  follow_up_questions?: FollowUpQuestion[];
+  follow_up_plan?: Record<string, unknown>;
+  next_question?: InterviewNextQuestion | null;
+  playback?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
+export const DEMAND_INTERVIEW_QUESTION_BANK: InterviewQuestion[] = [
   {
     id: "target_users",
     slot: "target_users",
@@ -170,26 +320,27 @@ const PRD_REQUIRED_SLOTS = [
   "mvp_priority",
 ];
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function asArray(value) {
-  if (value == null) return [];
-  return Array.isArray(value) ? value : [value];
+function asArray<T = unknown>(value: unknown): T[] {
+  if (value == null) return [] as T[];
+  return (Array.isArray(value) ? value : [value]) as T[];
 }
 
-function textFromValue(value) {
+function textFromValue(value: unknown): string {
   if (value == null) return "";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (Array.isArray(value)) return value.map(textFromValue).filter(Boolean).join("\n");
   if (typeof value === "object") {
-    return clean(value.text || value.answer || value.value || value.note || value.details || value.summary);
+    const record = value as Record<string, unknown>;
+    return clean(record.text || record.answer || record.value || record.note || record.details || record.summary);
   }
   return clean(value);
 }
 
-function arrayOfStrings(value) {
+function arrayOfStrings(value: unknown): string[] {
   return asArray(value)
     .flatMap((item) => textFromValue(item).split(/\r?\n/))
     .map((item) => item.trim())
@@ -199,7 +350,7 @@ function arrayOfStrings(value) {
 const LIST_ITEM_PREFIX = /^(?:[-*•]\s+|\d{1,3}[.)、](?!\d)\s*|[（(]\d{1,3}[）)]\s*|[一二三四五六七八九十]{1,4}[.)、]\s*)/u;
 const INLINE_NUMBERED_ITEM = /\s+(?=(?:\d{1,3}[.)、](?!\d)\s*|[（(]\d{1,3}[）)]\s*|[一二三四五六七八九十]{1,4}[.)、]\s*))/u;
 
-function splitStructuredListItem(value) {
+function splitStructuredListItem(value: unknown): string[] {
   return clean(value)
     .split(INLINE_NUMBERED_ITEM)
     .flatMap((item) => item.split(/;\s+|\s+\|\s+/))
@@ -207,7 +358,7 @@ function splitStructuredListItem(value) {
     .filter(Boolean);
 }
 
-function splitList(value) {
+function splitList(value: unknown): string[] {
   return [...new Set(
     arrayOfStrings(value)
       .flatMap(splitStructuredListItem),
@@ -218,31 +369,31 @@ const COMMAND_VERB_START = /^(?:add|list|create|update|delete|remove|edit|run|fi
 const CLI_COMMAND_START = /^\s*(?:[$>]\s*)?(?:[a-z][\w-]*(?:cli|cmd)|npm|pnpm|yarn|node|tsx|ts-node|python|pip|taskcli)(?:\s|$)/i;
 const CODE_STYLE_SIGNAL = /--[\w-]+|(?:^|\s)(?:\.{0,2}\/|src\/|app\/|lib\/|packages\/|__tests__\/)|`[^`]+`/i;
 
-export function isCommandOrCodeLikeTargetUser(value) {
+export function isCommandOrCodeLikeTargetUser(value: unknown): boolean {
   const text = clean(value);
   if (!text) return false;
   if (CLI_COMMAND_START.test(text) || CODE_STYLE_SIGNAL.test(text)) return true;
   return COMMAND_VERB_START.test(text);
 }
 
-export function targetUserRoleItems(value) {
+export function targetUserRoleItems(value: unknown): string[] {
   return splitList(value).filter((item) => !isCommandOrCodeLikeTargetUser(item));
 }
 
-export function hasTargetUserRole(value) {
+export function hasTargetUserRole(value: unknown): boolean {
   return targetUserRoleItems(value).length > 0;
 }
 
-function wordTokens(text) {
+function wordTokens(text: unknown): string[] {
   return clean(text).match(/[A-Za-z0-9]+|[\u4e00-\u9fff]/g) || [];
 }
 
-function hasPattern(text, patterns = []) {
-  return patterns.some((pattern) => pattern.test(text));
+function hasPattern(text: unknown, patterns: RegExp[] = []): boolean {
+  return patterns.some((pattern) => pattern.test(clean(text)));
 }
 
-function compactReasons(reasons = []) {
-  return [...new Set(reasons.filter(Boolean))];
+function compactReasons(reasons: unknown[] = []): string[] {
+  return [...new Set(reasons.filter((reason): reason is string => typeof reason === "string" && Boolean(reason)))];
 }
 
 const VAGUE_PATTERNS = [
@@ -290,7 +441,7 @@ const TECHNICAL_TERMS = [
   "算法",
 ];
 
-function technicalOnly(text) {
+function technicalOnly(text: unknown): boolean {
   const cleanText = clean(text).toLowerCase();
   if (!cleanText) return false;
   const chunks = cleanText.split(/[^a-z0-9\u4e00-\u9fff]+/).filter(Boolean);
@@ -303,7 +454,7 @@ function technicalOnly(text) {
   return technicalHits > 0 && technicalHits / Math.max(chunks.length, technicalHits) >= 0.5 && !hasBusinessSignal;
 }
 
-const SLOT_FOLLOW_UPS = {
+const SLOT_FOLLOW_UPS: Record<InterviewSlot, Record<string, string>> = {
   target_users: {
     missing_detail: "请补充具体业务角色、他们多久遇到一次这个场景，以及他们负责处理什么结果。",
     technical_only: "先不用写技术组件，请换成真实使用或负责的人：是什么角色、在什么频率下用、要负责什么。",
@@ -357,7 +508,7 @@ const SLOT_FOLLOW_UPS = {
   },
 };
 
-const SLOT_QUALITY_RULES = {
+const SLOT_QUALITY_RULES: Partial<Record<InterviewSlot, { detail: RegExp[] }>> = {
   target_users: {
     detail: [
       /manager|customer|support|sales|ops|operator|user|store|admin|owner|analyst|店长|客服|主管|运营|销售|财务|法务|用户|客户|门店|仓库|负责人|审核/,
@@ -413,17 +564,17 @@ const SLOT_QUALITY_RULES = {
   },
 };
 
-function hasSlotDetail(slot, text) {
-  const rules = SLOT_QUALITY_RULES[slot]?.detail || [];
+function hasSlotDetail(slot: string, text: string): boolean {
+  const rules = SLOT_QUALITY_RULES[slot as InterviewSlot]?.detail || [];
   return rules.length === 0 || rules.some((pattern) => pattern.test(text));
 }
 
-function followUpFor(slot, reason) {
-  const slotPrompts = SLOT_FOLLOW_UPS[slot] || {};
+function followUpFor(slot: string, reason: string): string {
+  const slotPrompts = SLOT_FOLLOW_UPS[slot as InterviewSlot] || {};
   return slotPrompts[reason] || slotPrompts.missing_detail || "请补充一个更具体、可被业务现场确认的回答。";
 }
 
-function answerQualityFor(question, answer) {
+function answerQualityFor(question: InterviewQuestion, answer: unknown): AnswerQuality {
   const text = textFromValue(answer);
   const normalized = clean(text);
   const lower = normalized.toLowerCase();
@@ -455,13 +606,14 @@ function answerQualityFor(question, answer) {
     missingDetail || approvalMissing ? "missing_detail" : null,
   ]);
 
-  const penalty = reasons.reduce((total, reason) => total + ({
+  const PENALTY_BY_REASON: Record<string, number> = {
     too_short: 30,
     vague: 20,
     technical_only: 35,
     missing_detail: 25,
     not_role: 45,
-  }[reason] || 0), 0);
+  };
+  const penalty = reasons.reduce((total, reason) => total + (PENALTY_BY_REASON[reason] || 0), 0);
   const score = Math.max(0, Math.min(100, 100 - penalty));
   const followUpReason = commandOrFeatureAsRole ? "not_role" : techOnly ? "technical_only" : vague ? "vague" : missingDetail || approvalMissing || tooShort ? "missing_detail" : null;
   const needsFollowUp = score < 75 || Boolean(followUpReason);
@@ -484,11 +636,11 @@ function answerQualityFor(question, answer) {
   };
 }
 
-function nowIso(options = Object()) {
+function nowIso(options: Loose = Object()): string {
   return clean(options.now) || new Date().toISOString();
 }
 
-function slug(value, fallback = "DEMAND") {
+function slug(value: unknown, fallback: string = "DEMAND"): string {
   const text = clean(value)
     .toUpperCase()
     .replace(/[^A-Z0-9\u4e00-\u9fff]+/g, "-")
@@ -497,49 +649,50 @@ function slug(value, fallback = "DEMAND") {
   return text || fallback;
 }
 
-function idDate(now) {
+function idDate(now: unknown): string {
   return clean(now).slice(0, 10).replace(/-/g, "") || "00000000";
 }
 
-function makeId(prefix, input = Object(), now) {
+function makeId(prefix: string, input: Loose = Object(), now: unknown): string {
   return clean(input.id || input.interview_id || input.interviewId)
     || `${prefix}-${idDate(now)}-${slug(input.title || input.idea || input.objective || "PROJECT")}`;
 }
 
-function makeDemandId(input = Object(), now) {
+function makeDemandId(input: Loose = Object(), now: unknown): string {
   return clean(input.demand_id || input.demandId)
     || `DEMAND-${idDate(now)}-${slug(input.title || input.idea || input.objective || "PROJECT")}`;
 }
 
-function resolveRoot(value, fallback = process.cwd()) {
+function resolveRoot(value: unknown, fallback: string = process.cwd()): string {
   return resolve(clean(value) || fallback);
 }
 
-function stateRootFor(input = Object(), options = Object()) {
+function stateRootFor(input: Loose = Object(), options: Loose = Object()): string {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const explicit = input.stateRoot || input.state_root || options.stateRoot || options.state_root;
-  return explicit ? (isAbsolute(explicit) ? explicit : resolve(projectRoot, explicit)) : join(projectRoot, ".yolo");
+  return explicit ? (isAbsolute(explicit as string) ? (explicit as string) : resolve(projectRoot, explicit as string)) : join(projectRoot, ".yolo");
 }
 
-function questionById(questionId, questions = DEMAND_INTERVIEW_QUESTION_BANK) {
+function questionById(questionId: string, questions: InterviewQuestion[] = DEMAND_INTERVIEW_QUESTION_BANK): InterviewQuestion | undefined {
   return questions.find((question) => question.id === questionId);
 }
 
-function questionBySlot(slot, questions = DEMAND_INTERVIEW_QUESTION_BANK) {
+function questionBySlot(slot: string, questions: InterviewQuestion[] = DEMAND_INTERVIEW_QUESTION_BANK): InterviewQuestion | undefined {
   return questions.find((question) => question.slot === slot);
 }
 
-function answerRecordForSlot(session = Object(), slot) {
-  const question = questionBySlot(slot, session.questions || DEMAND_INTERVIEW_QUESTION_BANK);
-  return question ? session.answers?.[question.id] : null;
+function answerRecordForSlot(session: InterviewSession = Object() as InterviewSession, slot: string): AnswerRecord | null {
+  const question = questionBySlot(slot, (session.questions as InterviewQuestion[]) || DEMAND_INTERVIEW_QUESTION_BANK);
+  return question ? ((session.answers || {})[question.id] ?? null) : null;
 }
 
-function parseApproval(value) {
+function parseApproval(value: unknown): boolean {
   if (value === true) return true;
   if (value === false) return false;
   if (value && typeof value === "object") {
-    if (value.approved === true || value.approve === true) return true;
-    if (value.approved === false || value.approve === false) return false;
+    const record = value as Record<string, unknown>;
+    if (record.approved === true || record.approve === true) return true;
+    if (record.approved === false || record.approve === false) return false;
   }
   const text = textFromValue(value).toLowerCase();
   if (!text) return false;
@@ -547,18 +700,18 @@ function parseApproval(value) {
   return /(批准|同意|确认|可以|进入\s*prd|approve|approved|yes|true|confirm|confirmed)/i.test(text);
 }
 
-function hasAnswer(record) {
+function hasAnswer(record: AnswerRecord | null | undefined): boolean {
   if (!record) return false;
   if (record.slot === "execution_approval") {
     return typeof record.answer === "boolean" || textFromValue(record.answer).length > 0;
   }
-  if (Array.isArray(record.normalized?.items)) return record.normalized.items.length > 0;
+  if (Array.isArray(record.normalized?.items)) return (record.normalized!.items as unknown[]).length > 0;
   if (Array.isArray(record.answer)) return splitList(record.answer).length > 0;
-  if (record.answer && typeof record.answer === "object") return textFromValue(record.answer).length > 0 || Object.keys(record.answer).length > 0;
+  if (record.answer && typeof record.answer === "object") return textFromValue(record.answer).length > 0 || Object.keys(record.answer as object).length > 0;
   return textFromValue(record.answer).length > 0;
 }
 
-function normalizeAnswer(question, answer) {
+function normalizeAnswer(question: InterviewQuestion, answer: unknown): NormalizedAnswer {
   if (question.slot === "execution_approval") {
     return {
       approved: parseApproval(answer),
@@ -571,35 +724,35 @@ function normalizeAnswer(question, answer) {
   };
 }
 
-function decorateQuestions(questions = DEMAND_INTERVIEW_QUESTION_BANK, answers = Object()) {
+function decorateQuestions(questions: InterviewQuestion[] = DEMAND_INTERVIEW_QUESTION_BANK, answers: Record<string, AnswerRecord> = Object()): InterviewQuestion[] {
   return questions.map((question) => ({
     ...question,
     answered: hasAnswer(answers[question.id]),
   }));
 }
 
-function missingSlots(session = Object(), slots = []) {
+function missingSlots(session: InterviewSession = Object() as InterviewSession, slots: string[] = []): string[] {
   return slots.filter((slot) => !hasAnswer(answerRecordForSlot(session, slot)));
 }
 
-function qualityForAnsweredRecord(question, record) {
+function qualityForAnsweredRecord(question: InterviewQuestion | null | undefined, record: AnswerRecord | null | undefined): AnswerQuality | null {
   if (!question || !hasAnswer(record)) return null;
-  const stored = record.quality || record.answer_quality;
+  const stored = (record.quality || record.answer_quality) as AnswerQuality & { score?: unknown; level?: unknown; reasons?: unknown; follow_up_questions?: unknown } | undefined;
   if (stored && typeof stored === "object" && Number.isFinite(Number(stored.score))) {
     return {
       score: Number(stored.score),
-      level: clean(stored.level || (Number(stored.score) >= 75 ? "sufficient" : "needs_follow_up")),
-      reasons: compactReasons(stored.reasons || []),
-      follow_up_questions: asArray(stored.follow_up_questions).filter(Boolean),
+      level: (clean(stored.level || (Number(stored.score) >= 75 ? "sufficient" : "needs_follow_up")) as AnswerQuality["level"]),
+      reasons: compactReasons(asArray(stored.reasons)),
+      follow_up_questions: asArray<FollowUpQuestion>(stored.follow_up_questions).filter(Boolean),
     };
   }
-  return answerQualityFor(question, record.answer);
+  return answerQualityFor(question, record!.answer);
 }
 
-function answeredQualityItems(session = Object(), questions = DEMAND_INTERVIEW_QUESTION_BANK) {
+function answeredQualityItems(session: InterviewSession = Object() as InterviewSession, questions: InterviewQuestion[] = DEMAND_INTERVIEW_QUESTION_BANK) {
   return questions
     .map((question) => {
-      const record = session.answers?.[question.id];
+      const record = (session.answers || {})[question.id];
       const quality = qualityForAnsweredRecord(question, record);
       if (!quality) return null;
       return {
@@ -612,11 +765,11 @@ function answeredQualityItems(session = Object(), questions = DEMAND_INTERVIEW_Q
         follow_up_questions: quality.follow_up_questions,
       };
     })
-    .filter(Boolean);
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
 }
 
-function followUpPlanForQuality(items = []) {
-  const followUpQuestions = items.flatMap((item) => item.follow_up_questions || []);
+function followUpPlanForQuality(items: ReturnType<typeof answeredQualityItems> = []) {
+  const followUpQuestions: FollowUpQuestion[] = items.flatMap((item) => (item.follow_up_questions as FollowUpQuestion[]) || []);
   const bySlot = followUpQuestions.map((question) => ({
     slot: question.slot,
     question_id: question.question_id,
@@ -635,13 +788,13 @@ function followUpPlanForQuality(items = []) {
   };
 }
 
-function qualitySummary(items = []) {
+function qualitySummary(items: ReturnType<typeof answeredQualityItems> = []) {
   if (items.length === 0) {
     return {
       score: 0,
       level: "missing",
-      checked_slots: [],
-      low_quality_slots: [],
+      checked_slots: [] as string[],
+      low_quality_slots: [] as string[],
     };
   }
   const score = Math.round(items.reduce((total, item) => total + Number(item.score || 0), 0) / items.length);
@@ -654,7 +807,7 @@ function qualitySummary(items = []) {
   };
 }
 
-function approvalState(session = Object()) {
+function approvalState(session: InterviewSession = Object() as InterviewSession) {
   const record = answerRecordForSlot(session, "execution_approval");
   return {
     answered: hasAnswer(record),
@@ -664,9 +817,9 @@ function approvalState(session = Object()) {
   };
 }
 
-function nextQuestionFromFollowUp(followUp, questions = DEMAND_INTERVIEW_QUESTION_BANK) {
+function nextQuestionFromFollowUp(followUp: FollowUpQuestion | null | undefined, questions: InterviewQuestion[] = DEMAND_INTERVIEW_QUESTION_BANK): InterviewNextQuestion | null {
   if (!followUp) return null;
-  const original = questionById(followUp.question_id, questions) || questionBySlot(followUp.slot, questions);
+  const original = questionById(clean(followUp.question_id), questions) || questionBySlot(clean(followUp.slot), questions);
   const prompt = clean(followUp.plain_language_prompt || followUp.text || followUp.message || original?.plain_language_prompt);
   const questionId = clean(followUp.question_id || original?.id || followUp.slot);
   return {
@@ -687,15 +840,16 @@ function nextQuestionFromFollowUp(followUp, questions = DEMAND_INTERVIEW_QUESTIO
   };
 }
 
-export function selectDemandInterviewNextQuestion(session = Object(), coverage = inspectDemandInterviewCoverage(session)) {
-  const questions = session.questions || DEMAND_INTERVIEW_QUESTION_BANK;
-  const followUp = (coverage.follow_up_questions || [])[0];
+export function selectDemandInterviewNextQuestion(session: InterviewSession | Record<string, unknown> = Object() as InterviewSession, coverage: Record<string, unknown> = inspectDemandInterviewCoverage(session as InterviewSession)): InterviewNextQuestion | null {
+  const questions = (session.questions as InterviewQuestion[]) || DEMAND_INTERVIEW_QUESTION_BANK;
+  const followUp = ((coverage.follow_up_questions as FollowUpQuestion[]) || [])[0];
   if (followUp) return nextQuestionFromFollowUp(followUp, questions);
-  const missing = new Set(coverage.missing.map((item) => item.question_id));
-  return questions.find((question) => missing.has(question.id)) || null;
+  const missing = new Set((coverage.missing as Array<{ question_id?: string }>).map((item) => item.question_id));
+  const found = questions.find((question) => missing.has(question.id || ""));
+  return found ? found : null;
 }
 
-function ledgerInfo({ id, demandId, projectRoot, stateRoot }) {
+function ledgerInfo({ id, demandId, projectRoot, stateRoot }: { id: string; demandId: string; projectRoot: string; stateRoot: string }) {
   const interviewDir = join(stateRoot, "demand", "interviews", id);
   const demandDir = join(stateRoot, "demand", demandId);
   return {
@@ -722,16 +876,16 @@ function ledgerInfo({ id, demandId, projectRoot, stateRoot }) {
   };
 }
 
-export function inspectDemandInterviewCoverage(session = Object()) {
-  const questions = session.questions || DEMAND_INTERVIEW_QUESTION_BANK;
+export function inspectDemandInterviewCoverage(session: InterviewSession = Object() as InterviewSession) {
+  const questions = (session.questions as InterviewQuestion[]) || DEMAND_INTERVIEW_QUESTION_BANK;
   const answered = questions
-    .map((question) => ({ question, record: session.answers?.[question.id] }))
+    .map((question) => ({ question, record: (session.answers || {})[question.id] }))
     .filter((item) => hasAnswer(item.record))
     .map(({ question, record }) => ({
       question_id: question.id,
       slot: question.slot,
       category: question.category,
-      answered_at: record.answered_at || null,
+      answered_at: record!.answered_at || null,
     }));
   const answerQuality = answeredQualityItems(session, questions);
   const quality = qualitySummary(answerQuality);
@@ -821,24 +975,26 @@ export function inspectDemandInterviewCoverage(session = Object()) {
   };
 }
 
-function refreshSession(session) {
-  session.questions = decorateQuestions(session.questions || DEMAND_INTERVIEW_QUESTION_BANK, session.answers || {});
+function refreshSession(session: InterviewSession): InterviewSession {
+  session.questions = decorateQuestions((session.questions as InterviewQuestion[]) || DEMAND_INTERVIEW_QUESTION_BANK, session.answers || {});
   session.coverage = inspectDemandInterviewCoverage(session);
-  session.readiness = session.coverage.readiness;
-  session.follow_up_questions = session.coverage.follow_up_questions;
-  session.follow_up_plan = session.coverage.follow_up_plan;
-  session.next_question = selectDemandInterviewNextQuestion(session, session.coverage);
+  const coverage = session.coverage as Record<string, unknown>;
+  const readiness = coverage.readiness;
+  session.readiness = readiness && typeof readiness === "object" ? readiness as Record<string, unknown> : undefined;
+  session.follow_up_questions = coverage.follow_up_questions as FollowUpQuestion[];
+  session.follow_up_plan = coverage.follow_up_plan as Record<string, unknown>;
+  session.next_question = selectDemandInterviewNextQuestion(session, coverage);
   return session;
 }
 
-export function createDemandInterviewSession(input = Object(), options = Object()) {
+export function createDemandInterviewSession(input: Loose = Object(), options: Loose = Object()): InterviewSession {
   const now = nowIso(options);
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const objective = clean(input.objective || input.idea || input.title);
   const id = makeId("DINT", input, now);
   const demandId = makeDemandId(input, now);
-  const session = {
+  const session: InterviewSession = {
     schema_version: DEMAND_INTERVIEW_SCHEMA_VERSION,
     schema: DEMAND_INTERVIEW_SCHEMA,
     id,
@@ -859,14 +1015,15 @@ export function createDemandInterviewSession(input = Object(), options = Object(
   return refreshSession(session);
 }
 
-export function answerDemandInterviewQuestion(session, { questionId, answer, now } = Object()) {
-  const question = questionById(questionId, session?.questions || DEMAND_INTERVIEW_QUESTION_BANK);
+export function answerDemandInterviewQuestion(session: InterviewSession | Record<string, unknown>, { questionId, answer, now } = Object() as { questionId?: string; answer?: unknown; now?: string }): InterviewSession {
+  const typedSession = session as InterviewSession;
+  const question = questionById(clean(questionId), (typedSession?.questions as InterviewQuestion[]) || DEMAND_INTERVIEW_QUESTION_BANK);
   if (!question) {
     throw new Error(`Unknown demand interview question: ${questionId}`);
   }
   const answeredAt = clean(now) || new Date().toISOString();
-  session.answers = {
-    ...(session.answers || {}),
+  typedSession.answers = {
+    ...(typedSession.answers || {}),
     [question.id]: {
       question_id: question.id,
       slot: question.slot,
@@ -877,25 +1034,25 @@ export function answerDemandInterviewQuestion(session, { questionId, answer, now
       answered_at: answeredAt,
     },
   };
-  session.updated_at = answeredAt;
-  return refreshSession(session);
+  typedSession.updated_at = answeredAt;
+  return refreshSession(typedSession);
 }
 
-function itemsForSlot(session, slot) {
+function itemsForSlot(session: InterviewSession, slot: string): string[] {
   const record = answerRecordForSlot(session, slot);
   if (!record) return [];
-  if (Array.isArray(record.normalized?.items)) return record.normalized.items;
+  if (Array.isArray(record.normalized?.items)) return record.normalized!.items as string[];
   return splitList(record.answer);
 }
 
-function textForSlot(session, slot) {
+function textForSlot(session: InterviewSession, slot: string): string {
   const record = answerRecordForSlot(session, slot);
-  return record?.normalized?.text || textFromValue(record?.answer);
+  return (record?.normalized?.text as string) || textFromValue(record?.answer);
 }
 
-function answeredQuestionRounds(session = Object()) {
+function answeredQuestionRounds(session: InterviewSession = Object() as InterviewSession) {
   const answers = session.answers || {};
-  return (session.questions || DEMAND_INTERVIEW_QUESTION_BANK)
+  return (session.questions as InterviewQuestion[] || DEMAND_INTERVIEW_QUESTION_BANK)
     .filter((question) => hasAnswer(answers[question.id]))
     .map((question) => ({
       id: question.id,
@@ -906,9 +1063,9 @@ function answeredQuestionRounds(session = Object()) {
     }));
 }
 
-function decisionLines(session = Object()) {
-  const lines = [];
-  const categories = [
+function decisionLines(session: InterviewSession = Object() as InterviewSession): string[] {
+  const lines: string[] = [];
+  const categories: Array<[string, string]> = [
     ["target_users", "用户/角色"],
     ["desired_outcome", "目标结果"],
     ["success_criteria", "成功标准"],
@@ -924,32 +1081,33 @@ function decisionLines(session = Object()) {
   return lines;
 }
 
-export function demandInterviewToDemandInput(session = Object()) {
-  const coverage = inspectDemandInterviewCoverage(session);
-  const followUpPrompts = (coverage.follow_up_questions || [])
+export function demandInterviewToDemandInput(session: InterviewSession | Record<string, unknown> = Object() as InterviewSession) {
+  const s = session as InterviewSession;
+  const coverage = inspectDemandInterviewCoverage(s);
+  const followUpPrompts = ((coverage.follow_up_questions as FollowUpQuestion[]) || [])
     .map((item) => item.plain_language_prompt)
     .filter(Boolean);
-  const targetUsers = itemsForSlot(session, "target_users");
-  const statusQuo = itemsForSlot(session, "status_quo");
-  const painPoints = itemsForSlot(session, "pain_points");
-  const desiredOutcomes = itemsForSlot(session, "desired_outcome");
-  const successCriteria = itemsForSlot(session, "success_criteria");
-  const successProof = itemsForSlot(session, "success_proof");
-  const scopeBoundaries = itemsForSlot(session, "scope_boundaries");
-  const exceptions = itemsForSlot(session, "exceptions");
-  const roadmap = itemsForSlot(session, "mvp_priority");
-  const approval = approvalState(session);
-  const objective = clean(session.objective || session.title || desiredOutcomes[0] || painPoints[0]);
+  const targetUsers = itemsForSlot(s, "target_users");
+  const statusQuo = itemsForSlot(s, "status_quo");
+  const painPoints = itemsForSlot(s, "pain_points");
+  const desiredOutcomes = itemsForSlot(s, "desired_outcome");
+  const successCriteria = itemsForSlot(s, "success_criteria");
+  const successProof = itemsForSlot(s, "success_proof");
+  const scopeBoundaries = itemsForSlot(s, "scope_boundaries");
+  const exceptions = itemsForSlot(s, "exceptions");
+  const roadmap = itemsForSlot(s, "mvp_priority");
+  const approval = approvalState(s);
+  const objective = clean(s.objective || s.title || desiredOutcomes[0] || painPoints[0]);
 
   return {
-    demand_id: clean(session.demand_id) || makeDemandId({ title: session.title || objective }, session.generated_at),
-    title: clean(session.title || objective || "Demand interview"),
+    demand_id: clean(s.demand_id) || makeDemandId({ title: s.title || objective }, s.generated_at),
+    title: clean(s.title || objective || "Demand interview"),
     objective,
     idea: objective,
-    projectRoot: session.projectRoot || session.project_root,
-    project_root: session.projectRoot || session.project_root,
-    stateRoot: session.stateRoot || session.state_root,
-    state_root: session.stateRoot || session.state_root,
+    projectRoot: s.projectRoot || s.project_root,
+    project_root: s.projectRoot || s.project_root,
+    stateRoot: s.stateRoot || s.state_root,
+    state_root: s.stateRoot || s.state_root,
     phase: "discuss",
     source: "yolo-demand-interview",
     mode: "interview",
@@ -962,9 +1120,9 @@ export function demandInterviewToDemandInput(session = Object()) {
     constraints: scopeBoundaries,
     exceptions,
     roadmap,
-    decisions: decisionLines(session),
-    questions: answeredQuestionRounds(session),
-    answers: answeredQuestionRounds(session).map((round) => round.answer),
+    decisions: decisionLines(s),
+    questions: answeredQuestionRounds(s),
+    answers: answeredQuestionRounds(s).map((round) => round.answer),
     approve: approval.approved === true,
     approved_by: "user",
     approved_at: approval.approved ? approval.answered_at : null,
@@ -980,9 +1138,9 @@ export function demandInterviewToDemandInput(session = Object()) {
         ...coverage.missing.map((item) => item.plain_language_prompt).filter(Boolean),
       ])],
     interview: {
-      id: session.id,
-      schema: session.schema,
-      schema_version: session.schema_version,
+      id: s.id,
+      schema: s.schema,
+      schema_version: s.schema_version,
       coverage: {
         ready_for_discuss: coverage.ready_for_discuss,
         ready_for_prd_intake: coverage.ready_for_prd_intake,
@@ -995,7 +1153,7 @@ export function demandInterviewToDemandInput(session = Object()) {
         warnings: coverage.readiness.warnings,
       },
     },
-    ledgers: session.ledgers,
-    playback: session.playback || null,
+    ledgers: s.ledgers,
+    playback: s.playback || null,
   };
 }

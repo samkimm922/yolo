@@ -1,21 +1,65 @@
 export const STORY_ATOMICITY_SCHEMA_VERSION = "1.0";
 export const STORY_ATOMICITY_SCHEMA = "yolo.story_atomicity.v1";
 
-function asArray(value) {
-  if (value == null) return [];
-  return Array.isArray(value) ? value : [value];
+// Items inspected by the atomicity checks are loosely-structured demand/PRD
+// records (requirements, scenarios, tasks). Read as records with the consumed
+// `kind`/`id`/`text`/`handoff` fields plus an index signature (N4 pattern).
+type Loose = Record<string, unknown>;
+
+interface StoryItem {
+  kind?: string;
+  id?: unknown;
+  text?: string;
+  handoff?: Loose;
+  [key: string]: unknown;
 }
 
-function clean(value) {
+interface StorySignature {
+  id: string;
+  label: string;
+}
+
+interface SplitSuggestion {
+  id: string;
+  title: string;
+  goal: string;
+}
+
+// Findings come in two shapes: a "blocked" multi-story finding (carries
+// split_suggestions) and a "warn" capability-noun finding (carries
+// capability_nouns). The consumers below read either field; this interface
+// carries both as optional so the union access stays faithful without `any`.
+interface StoryAtomicityFinding {
+  code: string;
+  severity: string;
+  kind: string;
+  item_id: string | null;
+  task_id: string | null;
+  requirement_id: string | null;
+  scenario_id: string | null;
+  message: string;
+  text_excerpt: string;
+  story_count: number;
+  story_signatures: StorySignature[];
+  split_suggestions?: SplitSuggestion[];
+  capability_nouns?: string[];
+}
+
+function asArray<T = unknown>(value: unknown): T[] {
+  if (value == null) return [] as T[];
+  return (Array.isArray(value) ? value : [value]) as T[];
+}
+
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function compact(values) {
+function compact(values: unknown[]): string[] {
   return values.flat(Infinity).map(clean).filter(Boolean);
 }
 
-function compactUnique(values) {
-  const seen = new Set();
+function compactUnique(values: unknown[]): string[] {
+  const seen = new Set<string>();
   return compact(values).filter((value) => {
     const key = value.toLowerCase();
     if (seen.has(key)) return false;
@@ -24,11 +68,11 @@ function compactUnique(values) {
   });
 }
 
-function escapeRegex(value) {
+function escapeRegex(value: unknown): string {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function termSource(term) {
+function termSource(term: unknown): string {
   if (term instanceof RegExp) return term.source;
   const value = String(term);
   const escaped = escapeRegex(value);
@@ -37,17 +81,17 @@ function termSource(term) {
     : escaped;
 }
 
-function termsPattern(terms) {
+function termsPattern(terms: unknown[]): string {
   return `(?:${terms.map(termSource).join("|")})`;
 }
 
-function hasAny(text, terms) {
+function hasAny(text: unknown, terms: unknown[]): boolean {
   const pattern = new RegExp(termsPattern(terms), "i");
-  return pattern.test(text);
+  return pattern.test(clean(text));
 }
 
-function uniqueSignatures(signatures) {
-  const seen = new Set();
+function uniqueSignatures(signatures: StorySignature[]): StorySignature[] {
+  const seen = new Set<string>();
   return signatures.filter((signature) => {
     if (seen.has(signature.id)) return false;
     seen.add(signature.id);
@@ -214,7 +258,7 @@ const GERUND_ROOT_MAP = new Map([
   ["receiving", "receive"],
 ]);
 
-function deliverableVerbRoot(verb) {
+function deliverableVerbRoot(verb: unknown): string {
   const key = String(verb).toLowerCase();
   return GERUND_ROOT_MAP.get(key)
     || key.replace(/(s|es)$/i, "").replace(/^(创建|新建|新增|添加|增加)$/, "create");
@@ -265,8 +309,8 @@ const DELIVERABLE_CAPABILITY_TERMS = [
   "备份", "恢复", "backup", "restore",
 ];
 
-function distinctDeliverableActions(text) {
-  const found = new Set();
+function distinctDeliverableActions(text: string): Set<string> {
+  const found = new Set<string>();
   for (const verb of DELIVERABLE_VERB_TERMS) {
     if (new RegExp(termSource(verb), "i").test(text)) {
       // 归并英文时态变体到词根，避免 create/creates 计成两个
@@ -291,10 +335,10 @@ function distinctDeliverableActions(text) {
 
 // P2.17: 单动词 + 能力名词（支付/权限/登录等系统级名词）→ investigate_then_patch 而非直通。
 // 这些名词代表通常跨 UI+service+DB 的完整能力，仅一个动词但暗含多层改动。
-function detectSingleVerbCapabilityNouns(text) {
+function detectSingleVerbCapabilityNouns(text: string): string[] {
   // 先收集能力名词，用于在动词计数中排除充当两者的词（如"配置"既是动词又是能力名词）
   const capabilityNounSet = new Set(DELIVERABLE_CAPABILITY_TERMS.map((noun) => String(noun).toLowerCase()));
-  const verbRoots = new Set();
+  const verbRoots = new Set<string>();
   for (const verb of DELIVERABLE_VERB_TERMS) {
     // 跳过同时出现在能力名词列表中的动词（如"配置"在中文既是动词 configure 也是名词 configuration）
     if (capabilityNounSet.has(String(verb).toLowerCase())) continue;
@@ -311,7 +355,7 @@ function detectSingleVerbCapabilityNouns(text) {
       }
     }
   }
-  const nouns = [];
+  const nouns: string[] = [];
   for (const noun of DELIVERABLE_CAPABILITY_TERMS) {
     if (new RegExp(termSource(noun), "i").test(text)) {
       nouns.push(noun.toLowerCase());
@@ -322,14 +366,14 @@ function detectSingleVerbCapabilityNouns(text) {
 
 // 两个可交付动作由并列连词在邻近范围连接 → 多 story 信号（避免全局共现误报）。
 // 基础动词、能力名词以及成对出现的动作 gerund 都参与配对。
-function hasDeliverablePair(text) {
+function hasDeliverablePair(text: string): boolean {
   const baseTerms = [...DELIVERABLE_VERB_TERMS, ...DELIVERABLE_CAPABILITY_TERMS];
   const window = `[\\s\\S]{0,${GENERIC_PAIR_DISTANCE}}`;
   const combinedPattern = `(?:${termsPattern(baseTerms)}|${termsPattern(DELIVERABLE_GERUND_TERMS)})`;
   return new RegExp(`${combinedPattern}${window}${GENERIC_STRICT_CONNECTOR}${window}${combinedPattern}`, "i").test(text);
 }
 
-function crossesAllLayers(text) {
+function crossesAllLayers(text: string): boolean {
   const ui = hasAny(text, GENERIC_LAYER_UI_TERMS);
   const api = hasAny(text, GENERIC_LAYER_API_TERMS);
   const db = hasAny(text, GENERIC_LAYER_DB_TERMS);
@@ -342,7 +386,7 @@ const STRUCTURAL_SURFACE_LABELS = [
   "用户可见界面", "接口/服务入口", "业务规则/服务逻辑", "数据/持久化", "测试/验证", "文档/说明", "代码实现",
 ];
 
-function stripStructuralLabels(text) {
+function stripStructuralLabels(text: string): string {
   let cleaned = text;
   for (const label of STRUCTURAL_SURFACE_LABELS) {
     cleaned = cleaned.split(label).join(" ");
@@ -350,15 +394,15 @@ function stripStructuralLabels(text) {
   return cleaned;
 }
 
-function normalizeStorySlice(value) {
+function normalizeStorySlice(value: unknown): string {
   return clean(value)
     .replace(/\s+/g, " ")
     .replace(/^[,，、+/\s]+|[,，、+/\s]+$/g, "");
 }
 
-function uniqueStorySlices(values) {
-  const seen = new Set();
-  const slices = [];
+function uniqueStorySlices(values: unknown[]): string[] {
+  const seen = new Set<string>();
+  const slices: string[] = [];
   for (const value of values.map(normalizeStorySlice).filter((item) => item.length >= 3)) {
     const key = value.toLowerCase();
     if (seen.has(key)) continue;
@@ -368,7 +412,7 @@ function uniqueStorySlices(values) {
   return slices;
 }
 
-function expandEnableDisableEnumeration(clause) {
+function expandEnableDisableEnumeration(clause: unknown): string[] {
   const source = normalizeStorySlice(clause);
   const verb = "(?:enable|enables|enabled|enabling|disable|disables|disabled|disabling)";
   const match = source.match(new RegExp(`^([\\s\\S]*?\\b)(${verb})\\s+(?:or|或者|或)\\s+(${verb})\\s+([\\s\\S]+)$`, "iu"));
@@ -380,29 +424,29 @@ function expandEnableDisableEnumeration(clause) {
   ]);
 }
 
-function splitRepeatedStoryOpeners(text) {
+function splitRepeatedStoryOpeners(text: string): string[] {
   const matches = [...clean(text).matchAll(/当用户/g)];
   if (matches.length <= 1) return [];
   return matches.map((match, index) => {
     const start = match.index || 0;
-    const end = index + 1 < matches.length ? matches[index + 1].index : text.length;
+    const end = index + 1 < matches.length ? matches[index + 1].index! : text.length;
     return normalizeStorySlice(text.slice(start, end));
   }).filter((item) => item.length >= 6);
 }
 
-function actionToken(value) {
+function actionToken(value: unknown): string {
   const text = normalizeStorySlice(value);
   const ascii = text.match(/[A-Za-z][A-Za-z0-9_-]*/);
   if (!ascii) return "";
   return ascii[0].toLowerCase();
 }
 
-function containsOnlySupportActions(values) {
+function containsOnlySupportActions(values: unknown[]): boolean {
   const tokens = values.map(actionToken).filter(Boolean);
   return tokens.length > 0 && tokens.every((token) => SUPPORT_ONLY_ACTIONS.has(token));
 }
 
-function expandCompactEnumeration(clause) {
+function expandCompactEnumeration(clause: unknown): string[] {
   const source = normalizeStorySlice(clause);
   const match = [...source.matchAll(COMPACT_ENUM_PATTERN)][0];
   if (!match) return [];
@@ -422,39 +466,39 @@ function expandCompactEnumeration(clause) {
   return uniqueStorySlices(items.map((item) => `${before}${item}${after}`));
 }
 
-function splitFirstItemPrefix(value) {
+function splitFirstItemPrefix(value: unknown): { prefix: string; item: string } {
   const source = normalizeStorySlice(value);
   const ascii = source.match(/^(.*\s)([A-Za-z][A-Za-z0-9_-]*)$/);
   if (ascii) return { prefix: ascii[1], item: ascii[2] };
   return { prefix: "", item: source };
 }
 
-function splitLastItemSuffix(value) {
+function splitLastItemSuffix(value: unknown): { item: string; suffix: string } {
   const source = normalizeStorySlice(value);
   const shared = source.match(SHARED_SUFFIX_PATTERN);
   if (shared) return { item: normalizeStorySlice(shared[1]), suffix: `${shared[2]} ${shared[3]}` };
   return { item: source, suffix: "" };
 }
 
-function splitLeadingCommandSuffix(value) {
+function splitLeadingCommandSuffix(value: unknown): { item: string; suffix: string } {
   const source = normalizeStorySlice(value);
   const match = source.match(LEADING_ASCII_COMMAND_PATTERN);
   if (!match) return { item: source, suffix: "" };
   return { item: match[1], suffix: normalizeStorySlice(match[2] || "") };
 }
 
-function hasDeliverableIntent(value) {
+function hasDeliverableIntent(value: unknown): boolean {
   return hasAny(value, DELIVERABLE_VERB_TERMS) || hasAny(value, DELIVERABLE_CAPABILITY_TERMS);
 }
 
-function hasSentenceStoryIntent(value) {
+function hasSentenceStoryIntent(value: unknown): boolean {
   const source = clean(value);
   if (hasDeliverableIntent(source)) return true;
   const enablingVerb = /\b(?:allows?|supports?|enables?|lets?|can)\b/i.test(source);
   return enablingVerb && hasAny(source, DELIVERABLE_GERUND_TERMS);
 }
 
-function splitHardStoryClauses(text) {
+function splitHardStoryClauses(text: unknown): string[] {
   const source = normalizeStorySlice(text);
   const hardClauses = source.split(HARD_STORY_BOUNDARY).map(normalizeStorySlice).filter(Boolean);
   if (hardClauses.length > 1) return hardClauses;
@@ -467,7 +511,7 @@ function splitHardStoryClauses(text) {
     : hardClauses;
 }
 
-function expandCommandCueEnumeration(rawItems) {
+function expandCommandCueEnumeration(rawItems: string[]): string[] {
   const first = splitFirstItemPrefix(rawItems[0]);
   if (!ENUMERATION_CUE_TAIL_PATTERN.test(first.prefix)) return [];
   const lastShared = splitLastItemSuffix(rawItems[rawItems.length - 1]);
@@ -480,7 +524,7 @@ function expandCommandCueEnumeration(rawItems) {
   return uniqueStorySlices(items.map((item) => `${first.prefix}${item}${suffix}`));
 }
 
-function expandPhraseEnumeration(clause) {
+function expandPhraseEnumeration(clause: unknown): string[] {
   const source = normalizeStorySlice(clause);
   if (!PHRASE_ENUM_MARKER.test(source)) return [];
   if (/^当[\s\S]+?时\s*[，,]/u.test(source) || /^when\b[\s\S]+,\s*(?:then\b)?/iu.test(source)) return [];
@@ -505,7 +549,7 @@ function expandPhraseEnumeration(clause) {
   return uniqueStorySlices(expanded);
 }
 
-function expandWhenClauseEnumeration(clause) {
+function expandWhenClauseEnumeration(clause: unknown): string[] {
   const source = normalizeStorySlice(clause);
   const match = source.match(WHEN_CLAUSE_PREFIX_PATTERN);
   if (!match) return [];
@@ -517,7 +561,7 @@ function expandWhenClauseEnumeration(clause) {
   return uniqueStorySlices(slices.map((slice) => `${prefix}${slice}`));
 }
 
-export function splitGenericStorySlices(text) {
+export function splitGenericStorySlices(text: unknown): string[] {
   const source = normalizeStorySlice(text);
   if (!source) return [];
   const repeated = splitRepeatedStoryOpeners(source);
@@ -535,7 +579,7 @@ export function splitGenericStorySlices(text) {
   return [source];
 }
 
-function genericStructureSignatures(text) {
+function genericStructureSignatures(text: string): StorySignature[] {
   const slices = splitGenericStorySlices(text);
   if (slices.length < 2) return [];
   return slices.map((slice, index) => ({
@@ -544,11 +588,11 @@ function genericStructureSignatures(text) {
   }));
 }
 
-function detectGenericStories(rawText) {
+function detectGenericStories(rawText: string): StorySignature[] {
   const text = stripStructuralLabels(rawText);
   const structural = genericStructureSignatures(text);
   if (structural.length >= 2) return structural;
-  const stories = [];
+  const stories: StorySignature[] = [];
   if (hasDeliverablePair(text)) {
     const verbs = [...distinctDeliverableActions(text)];
     if (verbs.length >= 2) {
@@ -566,7 +610,7 @@ function detectGenericStories(rawText) {
   return stories;
 }
 
-function splitSuggestions(signatures, item) {
+function splitSuggestions(signatures: StorySignature[], item: StoryItem): SplitSuggestion[] {
   return signatures.map((signature, index) => ({
     id: `${item.id || item.kind || "story"}-S${index + 1}`,
     title: `Split story: ${signature.label}`,
@@ -574,12 +618,12 @@ function splitSuggestions(signatures, item) {
   }));
 }
 
-function textExcerpt(text) {
+function textExcerpt(text: unknown): string {
   const oneLine = clean(text).replace(/\s+/g, " ");
   return oneLine.length > 240 ? `${oneLine.slice(0, 237)}...` : oneLine;
 }
 
-export function inspectStoryAtomicityText(text, item = Object()) {
+export function inspectStoryAtomicityText(text: unknown, item: StoryItem = Object() as StoryItem) {
   const normalized = clean(text).toLowerCase();
   let signatures = uniqueSignatures(detectGenericStories(normalized));
   // P2.17: 单动词 + 能力名词（支付/权限/登录等系统级名词）→ warn，建议 investigate_then_patch
@@ -641,21 +685,21 @@ export function inspectStoryAtomicityText(text, item = Object()) {
   };
 }
 
-export function inspectStoryAtomicityItems(items = [], options = Object()) {
-  const findings = [];
-  const inspected = [];
-  for (const item of asArray(items)) {
+export function inspectStoryAtomicityItems(items: unknown[] = [], options: { extra?: Record<string, unknown> } = Object()) {
+  const findings: StoryAtomicityFinding[] = [];
+  const inspected: Array<{ kind: string; id: string | null; status: string; story_count: number; story_signatures: StorySignature[] }> = [];
+  for (const item of asArray<StoryItem>(items)) {
     const text = clean(item?.text);
     if (!text) continue;
     const result = inspectStoryAtomicityText(text, item);
     inspected.push({
-      kind: item.kind || "story",
-      id: item.id || null,
+      kind: (item.kind as string) || "story",
+      id: (item.id as string) || null,
       status: result.status,
       story_count: result.story_count,
       story_signatures: result.story_signatures,
     });
-    if (result.finding) findings.push(result.finding);
+    if (result.finding) findings.push(result.finding as StoryAtomicityFinding);
   }
 
   const errorFindings = findings.filter((finding) => finding.severity !== "warn");
@@ -709,7 +753,7 @@ export function inspectStoryAtomicityItems(items = [], options = Object()) {
   };
 }
 
-function scenarioText(scenario = Object()) {
+function scenarioText(scenario: Loose = Object()): string {
   return compactUnique([
     scenario.title,
     scenario.text,
@@ -719,7 +763,7 @@ function scenarioText(scenario = Object()) {
   ]).join("\n");
 }
 
-function requirementText(requirement = Object()) {
+function requirementText(requirement: Loose = Object()): string {
   return compactUnique([
     requirement.title,
     requirement.text,
@@ -730,8 +774,8 @@ function requirementText(requirement = Object()) {
   ]).join("\n");
 }
 
-function taskText(task = Object()) {
-  const handoff = task.handoff || {};
+function taskText(task: Loose = Object()): string {
+  const handoff = (task.handoff as Loose) || {};
   return compactUnique([
     task.description,
     task.goal,
@@ -740,20 +784,22 @@ function taskText(task = Object()) {
   ]).join("\n");
 }
 
-export function collectStoryAtomicityItemsFromDemand(session = Object(), options = Object()) {
+export function collectStoryAtomicityItemsFromDemand(session: Loose = Object(), options: Loose = Object()): StoryItem[] {
+  const sessionRequirements = session.requirements as Loose | undefined;
+  const sessionScenarioMatrix = session.scenario_matrix as Loose | undefined;
   const requirements = options.includeRequirements === false
     ? []
-    : asArray(session.requirements?.active || session.requirements).map((requirement, index) => ({
+    : asArray<Loose>(sessionRequirements?.active || session.requirements).map((requirement, index) => ({
       kind: "requirement",
       id: requirement?.id || `REQ-${index + 1}`,
       text: requirementText(requirement),
     }));
-  const scenarios = asArray(session.scenario_matrix?.scenarios || session.scenarios).map((scenario, index) => ({
+  const scenarios = asArray<Loose>(sessionScenarioMatrix?.scenarios || session.scenarios).map((scenario, index) => ({
     kind: "scenario",
     id: scenario?.id || `SCN-${index + 1}`,
     text: scenarioText(scenario),
   }));
-  const tasks = asArray(options.tasks || session.tasks).map((task, index) => ({
+  const tasks = asArray<Loose>(options.tasks || session.tasks).map((task, index) => ({
     kind: "task",
     id: task?.id || `TASK-${index + 1}`,
     text: taskText(task),
@@ -761,23 +807,25 @@ export function collectStoryAtomicityItemsFromDemand(session = Object(), options
   return [...requirements, ...scenarios, ...tasks];
 }
 
-export function collectStoryAtomicityItemsFromPrd(prd = Object()) {
-  const requirements = asArray(prd.requirements).map((requirement, index) => ({
+export function collectStoryAtomicityItemsFromPrd(prd: Loose = Object()): StoryItem[] {
+  const requirements = asArray<Loose>(prd.requirements).map((requirement, index) => ({
     kind: "requirement",
     id: requirement?.id || `REQ-${index + 1}`,
     text: requirementText(requirement),
   }));
+  const prdScenarioMatrix = prd.scenario_matrix as Loose | undefined;
+  const prdDemandScenarioMatrix = (prd.demand as Loose | undefined)?.scenario_matrix as Loose | undefined;
   const scenarioSources = [
-    prd.scenario_matrix?.scenarios,
-    prd.demand?.scenario_matrix?.scenarios,
+    prdScenarioMatrix?.scenarios,
+    prdDemandScenarioMatrix?.scenarios,
     prd.scenarios,
   ];
-  const scenarios = scenarioSources.flatMap((source) => asArray(source)).map((scenario, index) => ({
+  const scenarios = scenarioSources.flatMap((source) => asArray<Loose>(source)).map((scenario, index) => ({
     kind: "scenario",
     id: scenario?.id || `SCN-${index + 1}`,
     text: scenarioText(scenario),
   }));
-  const tasks = asArray(prd.tasks).map((task, index) => ({
+  const tasks = asArray<Loose>(prd.tasks).map((task, index) => ({
     kind: "task",
     id: task?.id || `TASK-${index + 1}`,
     text: taskText(task),
@@ -785,13 +833,13 @@ export function collectStoryAtomicityItemsFromPrd(prd = Object()) {
   return [...requirements, ...scenarios, ...tasks];
 }
 
-export function inspectStoryAtomicityFromDemand(session = Object(), options = Object()) {
+export function inspectStoryAtomicityFromDemand(session: Loose = Object(), options: Loose = Object()) {
   return inspectStoryAtomicityItems(collectStoryAtomicityItemsFromDemand(session, options), {
     extra: { source: "demand" },
   });
 }
 
-export function inspectStoryAtomicityFromPrd(prd = Object()) {
+export function inspectStoryAtomicityFromPrd(prd: Loose = Object()) {
   return inspectStoryAtomicityItems(collectStoryAtomicityItemsFromPrd(prd), {
     extra: { source: "prd" },
   });

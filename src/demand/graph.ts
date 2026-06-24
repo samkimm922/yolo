@@ -1,7 +1,44 @@
 export const DEMAND_GRAPH_SCHEMA_VERSION = "1.0";
 export const DEMAND_GRAPH_SCHEMA = "yolo.demand.artifact_graph.v1";
 
-export const DEMAND_ARTIFACTS = [
+// Artifact ids are a closed set — the demand pipeline only ever produces these
+// artifacts, in this dependency order. `completed`/`ready`/`blocked` collections
+// key off these ids, so typing them as a literal union (not `string`) lets the
+// graph functions reject stray ids at compile time while staying zero-runtime-cost.
+export type DemandArtifactId =
+  | "vision"
+  | "reflection"
+  | "investigation"
+  | "questioning_rounds"
+  | "depth_verification"
+  | "requirements_confirmation"
+  | "context"
+  | "roadmap"
+  | "approval";
+
+export interface DemandArtifact {
+  id: DemandArtifactId;
+  generates: string;
+  description: string;
+  requires: DemandArtifactId[];
+}
+
+export interface DemandArtifactNode extends DemandArtifact {
+  status: "done" | "ready" | "blocked";
+  missing_dependencies: DemandArtifactId[];
+}
+
+export interface DemandArtifactGraph {
+  schema_version: string;
+  schema: string;
+  build_order: DemandArtifactId[];
+  completed: DemandArtifactId[];
+  ready: DemandArtifactId[];
+  blocked: Record<string, DemandArtifactId[]>;
+  artifacts: DemandArtifactNode[];
+}
+
+export const DEMAND_ARTIFACTS: DemandArtifact[] = [
   {
     id: "vision",
     generates: "VISION.md",
@@ -58,14 +95,14 @@ export const DEMAND_ARTIFACTS = [
   },
 ];
 
-function artifactMap(artifacts = DEMAND_ARTIFACTS) {
-  return new Map(artifacts.map((artifact) => [artifact.id, artifact]));
+function artifactMap(artifacts: DemandArtifact[] = DEMAND_ARTIFACTS) {
+  return new Map<DemandArtifactId, DemandArtifact>(artifacts.map((artifact) => [artifact.id, artifact]));
 }
 
-export function demandBuildOrder(artifacts = DEMAND_ARTIFACTS) {
+export function demandBuildOrder(artifacts: DemandArtifact[] = DEMAND_ARTIFACTS) {
   const byId = artifactMap(artifacts);
-  const inDegree = new Map();
-  const dependents = new Map();
+  const inDegree = new Map<DemandArtifactId, number>();
+  const dependents = new Map<DemandArtifactId, DemandArtifactId[]>();
   for (const artifact of artifacts) {
     inDegree.set(artifact.id, artifact.requires.length);
     dependents.set(artifact.id, []);
@@ -73,7 +110,7 @@ export function demandBuildOrder(artifacts = DEMAND_ARTIFACTS) {
   for (const artifact of artifacts) {
     for (const required of artifact.requires) {
       if (!byId.has(required)) continue;
-      dependents.get(required).push(artifact.id);
+      dependents.get(required)!.push(artifact.id);
     }
   }
 
@@ -81,12 +118,12 @@ export function demandBuildOrder(artifacts = DEMAND_ARTIFACTS) {
     .filter(([, degree]) => degree === 0)
     .map(([id]) => id)
     .sort();
-  const order = [];
+  const order: DemandArtifactId[] = [];
   while (queue.length > 0) {
-    const current = queue.shift();
+    const current = queue.shift()!;
     order.push(current);
     for (const dependent of dependents.get(current) || []) {
-      const degree = inDegree.get(dependent) - 1;
+      const degree = inDegree.get(dependent)! - 1;
       inDegree.set(dependent, degree);
       if (degree === 0) queue.push(dependent);
     }
@@ -95,17 +132,17 @@ export function demandBuildOrder(artifacts = DEMAND_ARTIFACTS) {
   return order;
 }
 
-export function demandReadyArtifacts(completed = [], artifacts = DEMAND_ARTIFACTS) {
-  const done = completed instanceof Set ? completed : new Set(completed);
+export function demandReadyArtifacts(completed: Iterable<DemandArtifactId> = [], artifacts: DemandArtifact[] = DEMAND_ARTIFACTS) {
+  const done = completed instanceof Set ? (completed as Set<DemandArtifactId>) : new Set(completed);
   return artifacts
     .filter((artifact) => !done.has(artifact.id) && artifact.requires.every((id) => done.has(id)))
     .map((artifact) => artifact.id)
     .sort();
 }
 
-export function demandBlockedArtifacts(completed = [], artifacts = DEMAND_ARTIFACTS) {
-  const done = completed instanceof Set ? completed : new Set(completed);
-  const blocked = Object();
+export function demandBlockedArtifacts(completed: Iterable<DemandArtifactId> = [], artifacts: DemandArtifact[] = DEMAND_ARTIFACTS) {
+  const done = completed instanceof Set ? (completed as Set<DemandArtifactId>) : new Set(completed);
+  const blocked: Record<string, DemandArtifactId[]> = {};
   for (const artifact of artifacts) {
     if (done.has(artifact.id)) continue;
     const missing = artifact.requires.filter((id) => !done.has(id));
@@ -114,9 +151,9 @@ export function demandBlockedArtifacts(completed = [], artifacts = DEMAND_ARTIFA
   return blocked;
 }
 
-export function buildDemandArtifactGraph(completed = []) {
-  const done = completed instanceof Set ? completed : new Set(completed);
-  const artifacts = DEMAND_ARTIFACTS.map((artifact) => {
+export function buildDemandArtifactGraph(completed: Iterable<DemandArtifactId> = []): DemandArtifactGraph {
+  const done = completed instanceof Set ? (completed as Set<DemandArtifactId>) : new Set(completed);
+  const artifacts: DemandArtifactNode[] = DEMAND_ARTIFACTS.map((artifact) => {
     const missing = artifact.requires.filter((id) => !done.has(id));
     return {
       ...artifact,
