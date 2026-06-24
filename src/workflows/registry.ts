@@ -3,7 +3,30 @@ import { DEFAULT_YOLO_PUBLIC_COMMAND_NAMES } from "./command-registry.js";
 export const WORKFLOW_SKILL_DESCRIPTOR_SCHEMA_VERSION = "1.0";
 export const WORKFLOW_SKILL_DESCRIPTOR_SCHEMA = "yolo.workflow.skill_descriptor.v1";
 
-const WORKFLOW_IDS_BY_PUBLIC_COMMAND = {
+/** Entrypoints describing how a workflow is invoked from SDK, CLI, and skills. */
+type WorkflowEntrypoints = {
+  sdk: string;
+  cli: string;
+  skill: string;
+};
+
+/** The static definition of a single YOLO workflow. */
+type WorkflowDescriptor = {
+  id: string;
+  label: string;
+  purpose: string;
+  preset: string;
+  sub_modes?: string[];
+  triggers: string[];
+  inputs: string[];
+  outputs: string[];
+  sdk_namespaces: string[];
+  phases: string[];
+  verification: string[];
+  entrypoints: WorkflowEntrypoints;
+};
+
+const WORKFLOW_IDS_BY_PUBLIC_COMMAND: Record<string, string[]> = {
   demand: ["demand"],
   auto: ["prd", "plan", "pi", "fix", "check", "review"],
   ship: ["accept", "ship", "eval"],
@@ -16,11 +39,11 @@ export const STABLE_WORKFLOW_COMMAND_SURFACES = Object.fromEntries(
 
 const WORKFLOW_SURFACE_BY_ID = Object.fromEntries(
   Object.entries(STABLE_WORKFLOW_COMMAND_SURFACES).flatMap(([surface, ids]) =>
-    ids.map((id) => [id, surface])
+    ids.map((id: string) => [id, surface])
   )
 );
 
-const WORKFLOW_ALIAS_FOR = {
+const WORKFLOW_ALIAS_FOR: Record<string, string> = {
   brainstorm: "demand",
   interview: "demand",
   discover: "demand",
@@ -28,7 +51,7 @@ const WORKFLOW_ALIAS_FOR = {
   learn: "ship",
 };
 
-const WORKFLOWS = {
+const WORKFLOWS: Record<string, WorkflowDescriptor> = {
   demand: {
     id: "demand",
     label: "Demand router workflow",
@@ -304,11 +327,11 @@ const WORKFLOWS = {
   },
 };
 
-function clone(value) {
+function clone(value: WorkflowDescriptor): WorkflowDescriptor {
   return JSON.parse(JSON.stringify(value));
 }
 
-function workflowSurfaceMetadata(id) {
+function workflowSurfaceMetadata(id: string) {
   const surface = WORKFLOW_SURFACE_BY_ID[id] || null;
   if (surface) {
     return {
@@ -326,7 +349,7 @@ function workflowSurfaceMetadata(id) {
   };
 }
 
-function cloneWorkflow(workflow) {
+function cloneWorkflow(workflow: WorkflowDescriptor) {
   return {
     ...clone(workflow),
     ...workflowSurfaceMetadata(workflow.id),
@@ -366,7 +389,7 @@ export function createWorkflowPlan(input = Object()) {
     alias_for: workflow.alias_for,
     sdk_namespaces: workflow.sdk_namespaces,
     entrypoints: workflow.entrypoints,
-    steps: workflow.phases.map((phase, index) => ({
+    steps: workflow.phases.map((phase: string, index: number) => ({
       id: `${workflow.id}.${index + 1}.${phase}`,
       phase,
       status: "pending",
@@ -375,7 +398,7 @@ export function createWorkflowPlan(input = Object()) {
   };
 }
 
-export function workflowToSkillDescriptor(workflowInput, options = Object()) {
+export function workflowToSkillDescriptor(workflowInput: string | WorkflowDescriptor, options = Object()) {
   const workflow = typeof workflowInput === "string" ? getWorkflow(workflowInput) : getWorkflow(workflowInput.id);
   const agent = options.agent || "generic";
   return {

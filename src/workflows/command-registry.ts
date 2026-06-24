@@ -1,5 +1,34 @@
 import { lifecycleStageIds } from "../lifecycle/schema.js";
 
+/**
+ * User-facing fields provided for each YOLO command definition. The
+ * stable/compat/internal helpers below add the `surface`, `stability`, and
+ * `visibility` discriminator fields, so callers do not provide those here.
+ */
+type YoloCommandInput = {
+  name: string;
+  lifecycle_stage: string;
+  workflow: string;
+  description: string;
+  argumentHint: string;
+  objective: string;
+  mode: string;
+  aliases: string[];
+  writes_code: boolean;
+  requires_confirmation: boolean;
+  safety: string;
+  usage: string;
+  alias_for?: string;
+  deprecation_target?: string;
+};
+
+/** A fully materialized YOLO command, including its surface metadata. */
+export type YoloCommand = YoloCommandInput & {
+  surface: "stable" | "compat" | "internal";
+  stability: "stable" | "compat" | "internal";
+  visibility: "default" | "hidden";
+};
+
 export const YOLO_COMMAND_REGISTRY_SCHEMA_VERSION = "1.1";
 export const YOLO_COMMAND_REGISTRY_SCHEMA = "yolo.workflow.command_registry.v1";
 export const YOLO_COMMAND_SURFACE_BUDGET = 4;
@@ -11,7 +40,7 @@ export const DEFAULT_YOLO_PUBLIC_COMMAND_NAMES = [
   "status",
 ];
 
-function stableCommand(command) {
+function stableCommand(command: YoloCommandInput): YoloCommand {
   return {
     surface: "stable",
     stability: "stable",
@@ -20,7 +49,7 @@ function stableCommand(command) {
   };
 }
 
-function compatibilityCommand(command) {
+function compatibilityCommand(command: YoloCommandInput): YoloCommand {
   return {
     surface: "compat",
     stability: "compat",
@@ -29,7 +58,7 @@ function compatibilityCommand(command) {
   };
 }
 
-function internalCommand(command) {
+function internalCommand(command: YoloCommandInput): YoloCommand {
   return {
     surface: "internal",
     stability: "internal",
@@ -358,11 +387,11 @@ export const DEFAULT_YOLO_BRIDGE_WORKFLOW_IDS = [
   "doctor",
 ];
 
-function clone(value) {
+function clone(value: YoloCommand): YoloCommand {
   return JSON.parse(JSON.stringify(value));
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
@@ -373,9 +402,9 @@ function normalizeCommandName(name = "") {
     .toLowerCase();
 }
 
-function commandMatches(command, normalizedName) {
+function commandMatches(command: YoloCommand, normalizedName: string) {
   if (normalizeCommandName(command.name) === normalizedName) return true;
-  return (command.aliases || []).some((alias) => normalizeCommandName(alias) === normalizedName);
+  return (command.aliases || []).some((alias: string) => normalizeCommandName(alias) === normalizedName);
 }
 
 export function listYoloCommands(options = Object()) {
@@ -421,7 +450,7 @@ export function getYoloCommand(name = "status") {
   return clone(command);
 }
 
-export function renderYoloCommandUsage(commandInput) {
+export function renderYoloCommandUsage(commandInput: string | { name: string }) {
   const command = typeof commandInput === "string" ? getYoloCommand(commandInput) : getYoloCommand(commandInput.name);
   return command.usage;
 }
