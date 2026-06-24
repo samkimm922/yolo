@@ -1,7 +1,7 @@
 // Quality-score evidence battery: demand evidence must be event-specific and
 // tied to the current demand handoff, not merely any valid ledger record.
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { inspectDemandReadiness } from "../../src/demand/gate.js";
@@ -111,5 +111,17 @@ export function runEvidenceBattery(): EvidenceBatteryResult[] {
   } finally {
     rmSync(ledgerRoot, { recursive: true, force: true });
   }
+  const ledgerSource = readFileSync("src/runtime/evidence/ledger.ts", "utf8");
+  const hasOwnerNonce = /LEDGER_LOCK_OWNER_PREFIX/.test(ledgerSource) && /ownerToken/.test(ledgerSource);
+  const recursivelyRemovesSharedLock = /rmSync\(lockPath,\s*\{\s*recursive:\s*true,\s*force:\s*true\s*\}\)/.test(ledgerSource);
+  const status = hasOwnerNonce && !recursivelyRemovesSharedLock ? "blocked" : "pass";
+  demandResults.push({
+    id: "ledger_stale_lock_owner_token_required",
+    category: "evidence_gate_robustness",
+    expect: "blocked",
+    actualExit: status === "pass" ? 0 : 1,
+    actualStatus: status,
+    correct: status === "blocked",
+  });
   return demandResults;
 }

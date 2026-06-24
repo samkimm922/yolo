@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -251,6 +251,31 @@ describe("evidence ledger", () => {
       for (const [index, record] of records.entries()) {
         assert.equal(record.prev_hash, index === 0 ? null : records[index - 1].record_hash);
       }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("appendJsonlRecord refuses ambiguous stale locks instead of force-removing possible fresh owners", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+      const lockPath = `${filePath}.lock`;
+      mkdirSync(lockPath, { recursive: true });
+      writeFileSync(join(lockPath, "owner.stale.json"), "{}");
+      writeFileSync(join(lockPath, "owner.fresh.json"), "{}");
+      const old = new Date(Date.now() - 10_000);
+      utimesSync(lockPath, old, old);
+
+      assert.throws(
+        () => appendJsonlRecord(filePath, { event: "next" }, {
+          lockTimeoutMs: 25,
+          lockRetryMs: 1,
+          lockStaleMs: 1,
+        }),
+        (error) => Boolean(error && typeof error === "object" && (error as { code?: string }).code === "LEDGER_APPEND_LOCK_TIMEOUT"),
+      );
+      assert.equal(existsSync(join(lockPath, "owner.fresh.json")), true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

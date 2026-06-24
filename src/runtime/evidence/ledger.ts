@@ -1,4 +1,16 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  rmdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import {
   buildLedgerRecord,
@@ -20,6 +32,8 @@ const DEFAULT_LEDGER_LOCK_TIMEOUT_MS = 30_000;
 const DEFAULT_LEDGER_LOCK_STALE_MS = 120_000;
 const DEFAULT_LEDGER_LOCK_RETRY_MS = 10;
 const DEFAULT_LEDGER_READ_MAX_BYTES = 8 * 1024 * 1024;
+const LEDGER_LOCK_OWNER_PREFIX = "owner.";
+const LEDGER_LOCK_OWNER_SUFFIX = ".json";
 const LOCK_WAIT_BUFFER = new Int32Array(new SharedArrayBuffer(4));
 
 function asPositiveNumber(value, fallback) {
@@ -27,13 +41,17 @@ function asPositiveNumber(value, fallback) {
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
-function ledgerAppendError(code, message, details = Object(), cause = undefined) {
+function ledgerAppendError(code: string, message: string, details: Record<string, unknown> = Object(), cause: unknown = undefined) {
   const error = new Error(message);
   return Object.assign(error, {
     code,
     ...details,
     ...(cause ? { cause } : {}),
   });
+}
+
+function fsErrorCode(error: unknown): string {
+  return error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code || "") : "";
 }
 
 function ledgerReadMaxBytes(options = Object()) {
@@ -63,26 +81,45 @@ function sleepSync(ms) {
   Atomics.wait(LOCK_WAIT_BUFFER, 0, 0, Math.max(1, ms));
 }
 
-function ledgerLockPath(filePath) {
+function ledgerLockPath(filePath: string) {
   return `${filePath}.lock`;
 }
 
-function readLockAgeMs(lockPath, nowMs) {
+function ledgerLockOwnerPath(lockPath: string, ownerToken: string) {
+  return join(lockPath, `${LEDGER_LOCK_OWNER_PREFIX}${ownerToken}${LEDGER_LOCK_OWNER_SUFFIX}`);
+}
+
+function ledgerLockOwnerFiles(lockPath: string): string[] {
   try {
-    return nowMs - statSync(lockPath).mtimeMs;
+    return readdirSync(lockPath)
+      .filter((entry) => entry.startsWith(LEDGER_LOCK_OWNER_PREFIX) && entry.endsWith(LEDGER_LOCK_OWNER_SUFFIX));
   } catch (error) {
-    if (error?.code === "ENOENT") return null;
+    if (fsErrorCode(error) === "ENOENT") return [];
     throw error;
   }
 }
 
-function removeStaleLedgerLock(lockPath, filePath, staleMs, nowMs) {
+function readLockAgeMs(lockPath: string, nowMs: number): number | null {
+  try {
+    return nowMs - statSync(lockPath).mtimeMs;
+  } catch (error) {
+    if (fsErrorCode(error) === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function removeStaleLedgerLock(lockPath: string, filePath: string, staleMs: number, nowMs: number): boolean {
   const lockAgeMs = readLockAgeMs(lockPath, nowMs);
   if (lockAgeMs === null || lockAgeMs < staleMs) return false;
+  const ownerFiles = ledgerLockOwnerFiles(lockPath);
+  if (ownerFiles.length !== 1) return false;
+  const ownerPath = join(lockPath, ownerFiles[0]);
   try {
-    rmSync(lockPath, { recursive: true, force: true });
+    unlinkSync(ownerPath);
+    rmdirSync(lockPath);
     return true;
   } catch (error) {
+    if (["ENOENT", "ENOTEMPTY", "EEXIST"].includes(fsErrorCode(error))) return false;
     throw ledgerAppendError("LEDGER_APPEND_LOCK_STALE_CLEANUP_FAILED", "Failed to clean stale evidence ledger append lock.", {
       ledger_path: filePath,
       lock_path: lockPath,
@@ -92,7 +129,7 @@ function removeStaleLedgerLock(lockPath, filePath, staleMs, nowMs) {
   }
 }
 
-function acquireLedgerAppendLock(filePath, options = Object()) {
+function acquireLedgerAppendLock(filePath: string, options: Record<string, any> = Object()): () => void {
   const timeoutMs = asPositiveNumber(options.lockTimeoutMs ?? options.lock_timeout_ms, DEFAULT_LEDGER_LOCK_TIMEOUT_MS);
   const staleMs = asPositiveNumber(options.lockStaleMs ?? options.lock_stale_ms, DEFAULT_LEDGER_LOCK_STALE_MS);
   const retryMs = asPositiveNumber(options.lockRetryMs ?? options.lock_retry_ms, DEFAULT_LEDGER_LOCK_RETRY_MS);
@@ -105,14 +142,22 @@ function acquireLedgerAppendLock(filePath, options = Object()) {
   while (Date.now() <= deadline) {
     attempts += 1;
     try {
+      const ownerToken = randomUUID();
       mkdirSync(lockPath);
+      writeFileSync(ledgerLockOwnerPath(lockPath, ownerToken), JSON.stringify({
+        owner_token: ownerToken,
+        pid: process.pid,
+        created_at: new Date().toISOString(),
+      }), { encoding: "utf8", flag: "wx", mode: 0o600 });
       let released = false;
       return () => {
         if (released) return;
         released = true;
         try {
-          rmSync(lockPath, { recursive: true, force: true });
+          unlinkSync(ledgerLockOwnerPath(lockPath, ownerToken));
+          rmdirSync(lockPath);
         } catch (error) {
+          if (["ENOENT", "ENOTEMPTY", "EEXIST"].includes(fsErrorCode(error))) return;
           throw ledgerAppendError("LEDGER_APPEND_LOCK_RELEASE_FAILED", "Failed to release evidence ledger append lock.", {
             ledger_path: filePath,
             lock_path: lockPath,
@@ -120,8 +165,9 @@ function acquireLedgerAppendLock(filePath, options = Object()) {
         }
       };
     } catch (error) {
-      if (error?.code !== "EEXIST") {
-        if (error?.code?.startsWith?.("LEDGER_APPEND_")) throw error;
+      const code = fsErrorCode(error);
+      if (code !== "EEXIST") {
+        if (code.startsWith("LEDGER_APPEND_")) throw error;
         throw ledgerAppendError("LEDGER_APPEND_LOCK_ACQUIRE_FAILED", "Failed to acquire evidence ledger append lock.", {
           ledger_path: filePath,
           lock_path: lockPath,
@@ -188,7 +234,7 @@ function previousRecordHash(filePath) {
   return null;
 }
 
-export function validateLedgerChain(records = [], options = Object()) {
+export function validateLedgerChain(records: any[] = [], options: Record<string, any> = Object()) {
   const errors = [];
   const allowExternalHead = options.allowExternalHead === true || options.allow_external_head === true;
   let previousHash = allowExternalHead && records[0]?.prev_hash ? records[0].prev_hash : null;
