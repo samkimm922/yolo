@@ -30,11 +30,9 @@ import { redactDeep } from "../../lib/security/redact.js";
 
 const DEFAULT_LEDGER_LOCK_TIMEOUT_MS = 30_000;
 const DEFAULT_LEDGER_LOCK_STALE_MS = 120_000;
-const DEFAULT_LEDGER_LOCK_RETRY_MS = 10;
 const DEFAULT_LEDGER_READ_MAX_BYTES = 8 * 1024 * 1024;
 const LEDGER_LOCK_OWNER_PREFIX = "owner.";
 const LEDGER_LOCK_OWNER_SUFFIX = ".json";
-const LOCK_WAIT_BUFFER = new Int32Array(new SharedArrayBuffer(4));
 
 function asPositiveNumber(value, fallback) {
   const number = Number(value);
@@ -75,10 +73,6 @@ function ledgerReadError(code, message, details = Object(), cause = undefined) {
     ...details,
     ...(cause ? { cause } : {}),
   });
-}
-
-function sleepSync(ms) {
-  Atomics.wait(LOCK_WAIT_BUFFER, 0, 0, Math.max(1, ms));
 }
 
 function ledgerLockPath(filePath: string) {
@@ -132,7 +126,6 @@ function removeStaleLedgerLock(lockPath: string, filePath: string, staleMs: numb
 function acquireLedgerAppendLock(filePath: string, options: Record<string, any> = Object()): () => void {
   const timeoutMs = asPositiveNumber(options.lockTimeoutMs ?? options.lock_timeout_ms, DEFAULT_LEDGER_LOCK_TIMEOUT_MS);
   const staleMs = asPositiveNumber(options.lockStaleMs ?? options.lock_stale_ms, DEFAULT_LEDGER_LOCK_STALE_MS);
-  const retryMs = asPositiveNumber(options.lockRetryMs ?? options.lock_retry_ms, DEFAULT_LEDGER_LOCK_RETRY_MS);
   const lockPath = ledgerLockPath(filePath);
   const deadline = Date.now() + timeoutMs;
   let attempts = 0;
@@ -174,9 +167,14 @@ function acquireLedgerAppendLock(filePath: string, options: Record<string, any> 
         }, error);
       }
 
-      removeStaleLedgerLock(lockPath, filePath, staleMs, Date.now());
-      if (Date.now() > deadline) break;
-      sleepSync(retryMs);
+      if (removeStaleLedgerLock(lockPath, filePath, staleMs, Date.now())) continue;
+      throw ledgerAppendError("LEDGER_APPEND_LOCK_BUSY", "Evidence ledger append lock is held; refusing to block the event loop.", {
+        ledger_path: filePath,
+        lock_path: lockPath,
+        timeout_ms: timeoutMs,
+        stale_ms: staleMs,
+        attempts,
+      });
     }
   }
 

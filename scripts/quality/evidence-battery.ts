@@ -1,7 +1,7 @@
 // Quality-score evidence battery: demand evidence must be event-specific and
 // tied to the current demand handoff, not merely any valid ledger record.
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { inspectDemandReadiness } from "../../src/demand/gate.js";
@@ -123,5 +123,38 @@ export function runEvidenceBattery(): EvidenceBatteryResult[] {
     actualStatus: status,
     correct: status === "blocked",
   });
+  const lockRoot = mkdtempSync(join(tmpdir(), "yolo-ledger-lock-battery-"));
+  try {
+    const ledgerPath = join(lockRoot, "events.jsonl");
+    mkdirSync(`${ledgerPath}.lock`, { recursive: true });
+    const startMs = Date.now();
+    let errorCode = "";
+    try {
+      appendJsonlRecord(ledgerPath, { event: "busy", ledger: "state" }, {
+        lockTimeoutMs: 120,
+        lockRetryMs: 120,
+        lockStaleMs: 60_000,
+      });
+    } catch (error) {
+      errorCode = error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code || "")
+        : "";
+    }
+    const elapsedMs = Date.now() - startMs;
+    const hasBlockingWaitPrimitive = /SharedArrayBuffer/.test(ledgerSource) || /Atomics\.wait/.test(ledgerSource);
+    const lockStatus = !hasBlockingWaitPrimitive && errorCode === "LEDGER_APPEND_LOCK_BUSY" && elapsedMs < 80
+      ? "blocked"
+      : "pass";
+    demandResults.push({
+      id: "ledger_lock_contention_fails_fast_without_event_loop_wait",
+      category: "evidence_gate_robustness",
+      expect: "blocked",
+      actualExit: lockStatus === "pass" ? 0 : 1,
+      actualStatus: lockStatus,
+      correct: lockStatus === "blocked",
+    });
+  } finally {
+    rmSync(lockRoot, { recursive: true, force: true });
+  }
   return demandResults;
 }

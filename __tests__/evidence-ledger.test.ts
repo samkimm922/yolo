@@ -38,12 +38,24 @@ function readJsonl(filePath) {
 function runConcurrentAppendWorker(filePath, worker) {
   const childCode = `
     import { appendJsonlRecord } from "./src/runtime/evidence/ledger.js";
-    appendJsonlRecord(process.env.LEDGER_PATH, {
-      event: "concurrent.append",
-      worker: Number(process.env.WORKER),
-      ledger: "state",
-      source: "test"
-    }, { lockTimeoutMs: 60000 });
+    const deadline = Date.now() + 60000;
+    let appended = false;
+    while (Date.now() <= deadline) {
+      try {
+        appendJsonlRecord(process.env.LEDGER_PATH, {
+          event: "concurrent.append",
+          worker: Number(process.env.WORKER),
+          ledger: "state",
+          source: "test"
+        }, { lockTimeoutMs: 1000 });
+        appended = true;
+        break;
+      } catch (error) {
+        if (!error || typeof error !== "object" || error.code !== "LEDGER_APPEND_LOCK_BUSY") throw error;
+        await new Promise((resolve) => setTimeout(resolve, 2 + Math.floor(Math.random() * 8)));
+      }
+    }
+    if (!appended) throw new Error("timed out waiting for ledger append lock");
   `;
   return new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, ["--import", "tsx", "-e", childCode], {
@@ -273,7 +285,7 @@ describe("evidence ledger", () => {
           lockRetryMs: 1,
           lockStaleMs: 1,
         }),
-        (error) => Boolean(error && typeof error === "object" && (error as { code?: string }).code === "LEDGER_APPEND_LOCK_TIMEOUT"),
+        (error) => Boolean(error && typeof error === "object" && (error as { code?: string }).code === "LEDGER_APPEND_LOCK_BUSY"),
       );
       assert.equal(existsSync(join(lockPath, "owner.fresh.json")), true);
     } finally {
