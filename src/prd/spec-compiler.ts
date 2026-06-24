@@ -6,24 +6,41 @@ import {
   inspectSpecLifecyclePackage,
   specLifecycleToPrd,
 } from "../spec/lifecycle.js";
+import { asRecord, type UnknownRecord } from "./condition-catalog.js";
 
 export const PRD_SPEC_COMPILER_SCHEMA_VERSION = "1.0";
 export const PRD_SPEC_COMPILER_SCHEMA = "yolo.prd.spec_compiler.v1";
 
-function asArray(value) {
+type SpecCompilerOptions = UnknownRecord & {
+  designId?: string;
+  designTitle?: string;
+  generated_at?: string;
+  id?: string;
+  prdId?: string;
+  prdTitle?: string;
+  requirementId?: string;
+  title?: string;
+};
+
+type SpecCompilerRefs = {
+  requirement_ids?: string[];
+  design_ids?: string[];
+};
+
+function asArray(value: unknown): unknown[] {
   if (value == null) return [];
   return Array.isArray(value) ? value : [value];
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function uniqueStrings(values) {
+function uniqueStrings(values: unknown): string[] {
   return [...new Set(asArray(values).map((value) => clean(value)).filter(Boolean))];
 }
 
-function normalizeTask(input = Object(), index = 1, refs = Object()) {
+function normalizeTask(input: UnknownRecord = {}, index = 1, refs: SpecCompilerRefs = {}) {
   return buildTaskArtifact({
     id: input.id || `TASK-${String(index).padStart(3, "0")}`,
     title: input.title || input.name || `Task ${index}`,
@@ -42,9 +59,9 @@ function normalizeTask(input = Object(), index = 1, refs = Object()) {
   }, { index });
 }
 
-export function compileDiscoveryPlanToSpec(input = Object(), options = Object()) {
-  const discovery = input.discovery || input.discoveryBrief || input.discovery_brief || {};
-  const plan = input.plan || {};
+export function compileDiscoveryPlanToSpec(input: UnknownRecord = {}, options: SpecCompilerOptions = {}) {
+  const discovery = asRecord(input.discovery || input.discoveryBrief || input.discovery_brief);
+  const plan = asRecord(input.plan);
   const tasksInput = asArray(input.tasks || plan.tasks);
   const requirementText = clean(discovery.idea || discovery.requirement || input.requirement || plan.requirement);
   const blockers = [];
@@ -84,7 +101,7 @@ export function compileDiscoveryPlanToSpec(input = Object(), options = Object())
   });
 
   const tasks = tasksInput.map((task, index) =>
-    normalizeTask(task, index + 1, {
+    normalizeTask(asRecord(task), index + 1, {
       requirement_ids: [requirement.id],
       design_ids: [design.id],
     })

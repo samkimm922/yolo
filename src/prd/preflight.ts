@@ -6,32 +6,152 @@ import { inspectPrdContract } from "../runtime/gates/prd-contract-doctor.js";
 import { createPrdMigrationAdvice, findPrdFiles } from "./migration.js";
 import { inspectSpecGovernanceGate, specGovernancePolicy } from "../runtime/gates/spec-governance-gate.js";
 import { validatePrdObject, validatePrdPath } from "./validate.js";
+import { asRecord, errorMessage, isRecord, type PrdDocument, type PrdTask, type UnknownRecord } from "./condition-catalog.js";
 
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+
+type PreflightOptions = UnknownRecord & {
+  checkAll?: boolean;
+  dirs?: string[];
+  executionMode?: string;
+  execution_mode?: string;
+  file?: string;
+  json?: boolean;
+  mode?: string;
+  prdPath?: string;
+  prd_path?: string;
+  projectRoot?: string;
+  project_root?: string;
+  requireDemandContract?: boolean;
+  require_demand_contract?: boolean;
+  schemaOptions?: UnknownRecord;
+  specGovernance?: UnknownRecord;
+  strictExecution?: boolean;
+  strictWarnings?: boolean;
+  strict_execution?: boolean;
+};
+
+type ReadPrdResult = {
+  ok: boolean;
+  file: string;
+  prd?: unknown;
+  error?: string;
+};
+
+type NormalizedWarning = {
+  source: string;
+  code: string;
+  detail: string;
+  message: string;
+  task_id?: unknown;
+  condition_id?: unknown;
+  condition_type?: unknown;
+  severity?: unknown;
+  human_needed?: unknown;
+};
+
+type BlockedReason = {
+  source: string;
+  code: string;
+  detail: string;
+  message?: string;
+  summary?: unknown;
+  task_id?: unknown;
+  condition_id?: unknown;
+  warning_source?: unknown;
+  human_needed?: boolean;
+};
+
+type TaskStats = {
+  total: number;
+  pending: number;
+  running: number;
+  completed: number;
+  failed: number;
+  blocked: number;
+  by_status: Record<string, number>;
+  [statusKey: string]: number | Record<string, number>;
+};
+
+type RunnerReadiness = {
+  can_execute: boolean;
+  reason: string;
+  execution_mode: unknown;
+  tasks: TaskStats;
+  next_actions: string[];
+};
+
+type WarningCarrier = UnknownRecord & {
+  warnings?: unknown[];
+};
+
+type PreflightResult = UnknownRecord & {
+  status: string;
+  ok: boolean;
+  generated_at: string;
+  file: string;
+  schema: WarningCarrier;
+  contract: WarningCarrier | null;
+  spec_governance: WarningCarrier | null;
+  migration: UnknownRecord | null;
+  runner_readiness: RunnerReadiness;
+  blocked_count: number;
+  warning_count: number;
+  advisory_warning_count: number;
+  blocking_warning_count: number;
+  warnings: NormalizedWarning[];
+  advisory_warnings: NormalizedWarning[];
+  blocking_warnings: NormalizedWarning[];
+  blocked_reasons: BlockedReason[];
+};
+
+type PreflightAllResult = {
+  status: string;
+  code?: string;
+  generated_at: string;
+  file_count: number;
+  pass_count: number;
+  warning_count: number;
+  blocked_count: number;
+  advisory_warning_count: number;
+  blocking_warning_count: number;
+  blocked_reasons?: BlockedReason[];
+  results: PreflightResult[];
+};
+
+type ReadinessInput = {
+  read: ReadPrdResult;
+  schema: unknown;
+  contract: unknown;
+  migration: unknown;
+  specGovernance: unknown;
+  blockedReasons: BlockedReason[];
+  blockingWarnings?: NormalizedWarning[];
+};
 
 
 function nowIso() {
   return new Date().toISOString();
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function asArray(value) {
+function asArray(value: unknown): unknown[] {
   if (Array.isArray(value)) return value.filter(Boolean);
   if (value == null || value === "") return [];
   return [value];
 }
 
-function preflightMode(options = Object()) {
+function preflightMode(options: PreflightOptions = {}): string {
   return clean(options.mode || options.executionMode || options.execution_mode || "verify").toLowerCase();
 }
 
 
 
-function schemaWarningCode(warning) {
+function schemaWarningCode(warning: unknown): string {
   const text = clean(warning);
   if (/ajv/i.test(text)) return "PRD_SCHEMA_VALIDATOR_SKIPPED";
   if (/未知条件类型/.test(text)) return "PRD_SCHEMA_UNKNOWN_CONDITION_TYPE";
@@ -40,7 +160,7 @@ function schemaWarningCode(warning) {
   return "PRD_SCHEMA_WARNING";
 }
 
-function normalizeWarning(source, warning) {
+function normalizeWarning(source: string, warning: unknown): NormalizedWarning {
   if (typeof warning === "string") {
     return {
       source,
@@ -49,28 +169,35 @@ function normalizeWarning(source, warning) {
       message: warning,
     };
   }
-  return {
-    source,
-    code: warning?.code || `${source.toUpperCase()}_WARNING`,
-    detail: warning?.detail || warning?.message || "PRD preflight warning.",
-    message: warning?.message || warning?.detail || "PRD preflight warning.",
-    task_id: warning?.task_id || null,
-    condition_id: warning?.condition_id || null,
-    condition_type: warning?.condition_type || null,
-    severity: warning?.severity || "WARN",
-    human_needed: warning?.human_needed || undefined,
-  };
+  const warningRecord = asRecord(warning);
+  {
+    const warning = warningRecord;
+    return {
+      source,
+      code: clean(warning.code || `${source.toUpperCase()}_WARNING`),
+      detail: clean(warning.detail || warning.message || "PRD preflight warning."),
+      message: clean(warning.message || warning.detail || "PRD preflight warning."),
+      task_id: warning.task_id || null,
+      condition_id: warning.condition_id || null,
+      condition_type: warning.condition_type || null,
+      severity: warning.severity || "WARN",
+      human_needed: warning.human_needed || undefined,
+    };
+  }
 }
 
-function collectWarnings({ schema, contract, specGovernance }) {
+function collectWarnings({ schema, contract, specGovernance }: { schema: unknown; contract: unknown; specGovernance: unknown }): NormalizedWarning[] {
+  const schemaRecord = asRecord(schema);
+  const contractRecord = asRecord(contract);
+  const specGovernanceRecord = asRecord(specGovernance);
   return [
-    ...asArray(schema?.warnings).map((warning) => normalizeWarning("schema", warning)),
-    ...asArray(contract?.warnings).map((warning) => normalizeWarning("contract", warning)),
-    ...asArray(specGovernance?.warnings).map((warning) => normalizeWarning("spec", warning)),
+    ...asArray(schemaRecord.warnings).map((warning) => normalizeWarning("schema", warning)),
+    ...asArray(contractRecord.warnings).map((warning) => normalizeWarning("contract", warning)),
+    ...asArray(specGovernanceRecord.warnings).map((entry) => normalizeWarning("spec", entry)),
   ];
 }
 
-function warningBlockedReason(warning) {
+function warningBlockedReason(warning: NormalizedWarning): BlockedReason {
   return {
     source: "warning_policy",
     code: warning.code || "PRD_PREFLIGHT_WARNING",
@@ -83,7 +210,7 @@ function warningBlockedReason(warning) {
   };
 }
 
-function readPrd(path) {
+function readPrd(path: string): ReadPrdResult {
   const resolved = resolve(process.cwd(), path);
   if (!existsSync(resolved)) {
     return { ok: false, file: resolved, error: `PRD not found: ${path}` };
@@ -92,16 +219,17 @@ function readPrd(path) {
     return {
       ok: true,
       file: resolved,
-      prd: JSON.parse(readFileSync(resolved, "utf8")),
+      prd: JSON.parse(readFileSync(resolved, "utf8")) as unknown,
     };
   } catch (error) {
-    return { ok: false, file: resolved, error: `PRD JSON parse failed: ${error.message}` };
+    return { ok: false, file: resolved, error: `PRD JSON parse failed: ${errorMessage(error)}` };
   }
 }
 
-function taskStats(prd) {
-  const tasks = Array.isArray(prd?.tasks) ? prd.tasks : [];
-  const byStatus = Object();
+function taskStats(prd: unknown): TaskStats {
+  const prdRecord = asRecord(prd);
+  const tasks = Array.isArray(prdRecord.tasks) ? prdRecord.tasks as PrdTask[] : [];
+  const byStatus: Record<string, number> = {};
   for (const task of tasks) {
     const status = task?.status || "unknown";
     byStatus[status] = (byStatus[status] || 0) + 1;
@@ -118,82 +246,97 @@ function taskStats(prd) {
   };
 }
 
-function schemaBlockedReason(schema) {
-  if (schema?.ok) return null;
+function schemaBlockedReason(schema: unknown): BlockedReason | null {
+  const schemaRecord = asRecord(schema);
+  if (schemaRecord.ok) return null;
   return {
     source: "schema",
     code: "PRD_SCHEMA_FAILED",
-    detail: schema?.error || "PRD schema validation failed",
-    summary: schema?.summary || null,
+    detail: clean(schemaRecord.error || "PRD schema validation failed"),
+    summary: schemaRecord.summary || null,
   };
 }
 
-function contractBlockedReasons(contract) {
-  if (!contract?.blocks_execution) return [];
-  return (contract.failures || []).map((failure) => ({
+function contractBlockedReasons(contract: unknown): BlockedReason[] {
+  const contractRecord = asRecord(contract);
+  if (!contractRecord.blocks_execution) return [];
+  return asArray(contractRecord.failures).map((failure) => {
+    const failureRecord = asRecord(failure);
+    return {
     source: "contract",
-    code: failure.code || "PRD_CONTRACT_FAILURE",
-    detail: failure.detail,
-    task_id: failure.task_id || null,
-    condition_id: failure.condition_id || null,
-  }));
+      code: clean(failureRecord.code || "PRD_CONTRACT_FAILURE"),
+      detail: clean(failureRecord.detail),
+      task_id: failureRecord.task_id || null,
+      condition_id: failureRecord.condition_id || null,
+    };
+  });
 }
 
-function specBlockedReasons(specGovernance) {
-  if (!specGovernance?.blocks_execution) return [];
-  return (specGovernance.blockers || []).map((blocker) => ({
+function specBlockedReasons(specGovernance: unknown): BlockedReason[] {
+  const specRecord = asRecord(specGovernance);
+  if (!specRecord.blocks_execution) return [];
+  return asArray(specRecord.blockers).map((blocker) => {
+    const blockerRecord = asRecord(blocker);
+    return {
     source: "spec",
-    code: blocker.code || "SPEC_GOVERNANCE_FAILURE",
-    detail: blocker.message,
-    task_id: blocker.task_id || null,
-  }));
+      code: clean(blockerRecord.code || "SPEC_GOVERNANCE_FAILURE"),
+      detail: clean(blockerRecord.message),
+      task_id: blockerRecord.task_id || null,
+    };
+  });
 }
 
-function nextActions({ read, schema, contract, migration, specGovernance, blockingWarnings = [] }) {
-  const actions = [];
+function nextActions({ read, schema, contract, migration, specGovernance, blockingWarnings = [] }: Omit<ReadinessInput, "blockedReasons">) {
+  const actions: string[] = [];
+  const schemaRecord = asRecord(schema);
+  const contractRecord = asRecord(contract);
+  const migrationRecord = asRecord(migration);
+  const specGovernanceRecord = asRecord(specGovernance);
   if (!read.ok) {
     actions.push("Fix the PRD file path or JSON syntax before running YOLO.");
     return actions;
   }
-  if (!schema?.ok) {
+  if (!schemaRecord.ok) {
     actions.push("Fix PRD schema errors before running YOLO.");
   }
-  if (contract?.blocks_execution) {
-    if (migration?.next_actions?.length) actions.push(...migration.next_actions);
+  if (contractRecord.blocks_execution) {
+    if (Array.isArray(migrationRecord.next_actions) && migrationRecord.next_actions.length) actions.push(...migrationRecord.next_actions.map(String));
     else actions.push("Fix PRD contract failures before running YOLO.");
   }
-  if (specGovernance?.blocks_execution) {
+  if (specGovernanceRecord.blocks_execution) {
     actions.push("Add requirement_ids, design_ids, and terminal evidence trace before running YOLO.");
   }
   if (blockingWarnings.length > 0) {
     actions.push("Resolve or explicitly approve blocking PRD warnings before running YOLO.");
   }
-  if (schema?.ok && !contract?.blocks_execution && !specGovernance?.blocks_execution && blockingWarnings.length === 0) {
+  if (schemaRecord.ok && !contractRecord.blocks_execution && !specGovernanceRecord.blocks_execution && blockingWarnings.length === 0) {
     actions.push("PRD preflight passed; runner can start.");
   }
   return [...new Set(actions)];
 }
 
-function buildRunnerReadiness({ read, schema, contract, migration, specGovernance, blockedReasons, blockingWarnings = [] }) {
+function buildRunnerReadiness({ read, schema, contract, migration, specGovernance, blockedReasons, blockingWarnings = [] }: ReadinessInput): RunnerReadiness {
   const stats = read.ok ? taskStats(read.prd) : taskStats(null);
   const canExecute = blockedReasons.length === 0;
+  const prdRecord = asRecord(read.prd);
   return {
     can_execute: canExecute,
     reason: canExecute ? "ready" : "blocked",
-    execution_mode: read.ok ? read.prd?.execution_mode || "default" : null,
+    execution_mode: read.ok ? prdRecord.execution_mode || "default" : null,
     tasks: stats,
     next_actions: nextActions({ read, schema, contract, migration, specGovernance, blockingWarnings }),
   };
 }
 
-export function defaultSpecGovernancePolicy(options = Object()) {
+export function defaultSpecGovernancePolicy(options: PreflightOptions = {}) {
   return specGovernancePolicy(options);
 }
 
-function inspectPreflightReadiness(read, schema, options = Object()) {
-  let contract = null;
-  let migration = null;
-  let specGovernance = null;
+function inspectPreflightReadiness(read: ReadPrdResult, schema: unknown, options: PreflightOptions = {}): PreflightResult {
+  const schemaRecord = asRecord(schema);
+  let contract: UnknownRecord | null = null;
+  let migration: UnknownRecord | null = null;
+  let specGovernance: UnknownRecord | null = null;
 
   // The PRD JSON parsed (read.ok), but contract/migration/spec evaluation
   // assume read.prd is a plain object. A valid-JSON but non-object value
@@ -207,35 +350,38 @@ function inspectPreflightReadiness(read, schema, options = Object()) {
   if (prdIsPlainObject) {
     const requireDemandContract = options.requireDemandContract ?? options.require_demand_contract ?? true;
     const strictExecution = options.strictExecution ?? options.strict_execution ?? true;
-    contract = inspectPrdContract(read.prd, {
+    const inspectedContract = inspectPrdContract(read.prd as PrdDocument, {
       mode: options.mode || options.executionMode || options.execution_mode || "verify",
       strictExecution,
       requireDemandContract,
       projectRoot: options.projectRoot || options.project_root || dirname(read.file),
     });
-    migration = createPrdMigrationAdvice(read.prd, read.file);
-    specGovernance = inspectSpecGovernanceGate({
-      prd: read.prd,
+    contract = isRecord(inspectedContract) ? inspectedContract : null;
+    const migrationAdvice = createPrdMigrationAdvice(read.prd as PrdDocument, read.file);
+    migration = isRecord(migrationAdvice) ? migrationAdvice : null;
+    const specInspection = asRecord(inspectSpecGovernanceGate({
+      prd: read.prd as PrdDocument,
       policyOptions: options.specGovernance || {},
-    }).result;
+    }));
+    specGovernance = isRecord(specInspection.result) ? specInspection.result : null;
   }
 
-  const warnings = collectWarnings({ schema, contract, specGovernance });
+  const warnings = collectWarnings({ schema: schemaRecord, contract, specGovernance });
   const blockedReasons = [
-    schemaBlockedReason(schema),
+    schemaBlockedReason(schemaRecord),
     ...contractBlockedReasons(contract),
     ...specBlockedReasons(specGovernance),
     ...warnings.map(warningBlockedReason),
-  ].filter(Boolean);
+  ].filter((reason): reason is BlockedReason => Boolean(reason));
   const warningCount = warnings.length;
-  const runnerReadiness = buildRunnerReadiness({ read, schema, contract, migration, specGovernance, blockedReasons, blockingWarnings: warnings });
+  const runnerReadiness = buildRunnerReadiness({ read, schema: schemaRecord, contract, migration, specGovernance, blockedReasons, blockingWarnings: warnings });
 
   return {
     status: blockedReasons.length > 0 ? "blocked" : warningCount > 0 ? "warning" : "pass",
     ok: runnerReadiness.can_execute,
     generated_at: nowIso(),
     file: read.file,
-    schema,
+    schema: schemaRecord,
     contract,
     spec_governance: specGovernance,
     migration,
@@ -257,7 +403,7 @@ function inspectPreflightReadiness(read, schema, options = Object()) {
   };
 }
 
-export function preflightPrdDocument(prd, options = Object()) {
+export function preflightPrdDocument(prd: PrdDocument, options: PreflightOptions = {}) {
   const file = options.file || options.prdPath || options.prd_path || "<memory>";
   const read = {
     ok: true,
@@ -268,13 +414,13 @@ export function preflightPrdDocument(prd, options = Object()) {
   return inspectPreflightReadiness(read, schema, options);
 }
 
-export function preflightPrd(prdPath, options = Object()) {
+export function preflightPrd(prdPath: string, options: PreflightOptions = {}) {
   const read = readPrd(prdPath);
   const schema = validatePrdPath(prdPath, options.schemaOptions || {});
   return inspectPreflightReadiness(read, schema, options);
 }
 
-export function preflightAllPrds(options = Object()) {
+export function preflightAllPrds(options: PreflightOptions = {}): PreflightAllResult {
   const files = findPrdFiles(options.dirs);
   const results = files.map((file) => preflightPrd(file, options));
   if (files.length === 0) {
@@ -319,9 +465,12 @@ function usage() {
   ].join("\n");
 }
 
-function printSingle(result) {
+function printSingle(result: PreflightResult) {
+  const schema = asRecord(result.schema);
+  const contract = asRecord(result.contract);
+  const specGovernance = asRecord(result.spec_governance);
   console.log(`[prd-preflight] ${result.status} file=${result.file}`);
-  console.log(`  schema=${result.schema?.ok ? "pass" : "fail"} contract=${result.contract?.status || "unknown"} spec=${result.spec_governance?.status || "unknown"} can_execute=${result.runner_readiness.can_execute}`);
+  console.log(`  schema=${schema.ok ? "pass" : "fail"} contract=${contract.status || "unknown"} spec=${specGovernance.status || "unknown"} can_execute=${result.runner_readiness.can_execute}`);
   if (result.runner_readiness.tasks.total > 0) {
     const tasks = result.runner_readiness.tasks;
     console.log(`  tasks total=${tasks.total} pending=${tasks.pending} completed=${tasks.completed} blocked=${tasks.blocked} failed=${tasks.failed}`);
@@ -337,7 +486,7 @@ function printSingle(result) {
   }
 }
 
-function printAll(result) {
+function printAll(result: PreflightAllResult) {
   console.log(`[prd-preflight] ${result.status} files=${result.file_count} pass=${result.pass_count} warning=${result.warning_count} blocked=${result.blocked_count}`);
   for (const reason of (result.blocked_reasons || []).slice(0, 3)) {
     console.log(`  blocked ${reason.source}:${reason.code}: ${reason.detail}`);
@@ -350,8 +499,8 @@ function printAll(result) {
   }
 }
 
-function parseCliArgs(argv = process.argv.slice(2)) {
-  const options = Object.assign(Object(), { mode: "verify" });
+function parseCliArgs(argv: string[] = process.argv.slice(2)): { options: PreflightOptions; fileArg: string } {
+  const options: PreflightOptions = { mode: "verify" };
   let fileArg = "";
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -406,9 +555,9 @@ function main() {
     else printSingle(result);
     process.exit(result.status === "pass" ? 0 : result.status === "warning" ? 2 : 1);
   } catch (error) {
-    const payload = { status: "error", error: error.message };
+    const payload = { status: "error", error: errorMessage(error) };
     if (json) console.error(JSON.stringify(payload, null, 2));
-    else console.error(`[prd-preflight] ${error.message}`);
+    else console.error(`[prd-preflight] ${errorMessage(error)}`);
     process.exit(1);
   }
 }
