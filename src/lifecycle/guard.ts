@@ -3,6 +3,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { LIFECYCLE_STAGES, getLifecycleStage, lifecycleStageForCommand, validateLifecycleState } from "./schema.js";
 import { lifecycleArtifactPath, lifecycleStatusPath, resolveLifecycleStateRoot } from "./state.js";
 import { inspectWorktreeDrift } from "./source-snapshot.js";
+import { isStructuredManualAcceptanceEvidence } from "./manual-acceptance.js";
 
 export const LIFECYCLE_GUARD_SCHEMA_VERSION = "1.0";
 export const LIFECYCLE_GUARD_SCHEMA = "yolo.lifecycle.guard.v1";
@@ -244,7 +245,7 @@ function hasManualAcceptanceCriteria(report = Object()) {
 
   const evidence = reportEvidenceEntries(report);
   const manualEvidence = evidence.filter(
-    (e) => e && e.type === "manual_acceptance" && e.task_id && e.condition_id,
+    (e) => isStructuredManualAcceptanceEvidence(e),
   );
 
   const unresolved = allManual.filter((criterion) => {
