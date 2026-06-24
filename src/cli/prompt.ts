@@ -29,14 +29,84 @@ const DEFAULT_ROOT = resolve(YOLO_ROOT, "..", "..");
 const DEFAULT_PROMPT_MAX_LINES_PER_FILE = 150;
 let ROOT = DEFAULT_ROOT;
 
+// Prompt-local structural types for untrusted PRD/task JSON. The PRD is read
+// from disk and is untrusted; these describe only the fields the prompt needs,
+// so the rest stays untyped via the indexed access fallback. Narrowing is done
+// inline at use sites rather than via `any`.
+type PromptCondition = {
+  id?: unknown;
+  severity?: unknown;
+  message?: unknown;
+  type?: unknown;
+  params?: Record<string, unknown> | null;
+};
+
+type PromptTarget = { file?: string };
+
+type PromptScope = {
+  targets?: PromptTarget[];
+  max_files?: number;
+  max_lines_per_file?: unknown;
+  allow_new_files?: unknown;
+  allow_delete_files?: unknown;
+  readonly_files?: string[];
+  forbidden_patterns?: Array<{ pattern?: string; severity?: string; description?: string }>;
+};
+
+type PromptFinding = { scanner_id?: string; rule_id?: string };
+
+type PromptTask = {
+  id?: string;
+  title?: string;
+  description?: string;
+  scope?: PromptScope;
+  pre_conditions?: PromptCondition[];
+  post_conditions?: PromptCondition[];
+  acceptance_criteria?: Array<string | { description?: string; message?: string }>;
+  source_findings?: PromptFinding[];
+  fix_findings?: PromptFinding[];
+};
+
+type PromptPrd = { tasks?: PromptTask[] };
+
+type PromptInput = {
+  taskId?: string | null;
+  prdPath?: string | null;
+  isFix?: boolean;
+  fix?: boolean;
+  includeTscContext?: boolean;
+  learningsText?: string | null;
+  attempt?: string;
+  sessionId?: string | null;
+  session_id?: string | null;
+  gate?: string | null;
+  cwd?: string | null;
+  projectRoot?: string;
+  stateRoot?: string | null;
+  state_root?: string | null;
+  configPath?: string | null;
+  config_path?: string;
+  config?: { gate?: { max_lines_per_file?: unknown } };
+  noExperiencePack?: boolean;
+  experienceLimit?: string | number | null;
+  experience_limit?: string | number | null;
+};
+
+type PromptIo = {
+  stdout?: { write: (data: string) => void };
+  stderr?: { write: (data: string) => void };
+};
+
+type PromptConfig = { gate?: { max_lines_per_file?: unknown } };
+
 // --- CLI 参数解析 ---
-function getArg(argv, prefix) {
+function getArg(argv: string[], prefix: string): string | null {
   const arg = argv.find((item) => item.startsWith(prefix));
   if (!arg) return null;
   return arg.slice(prefix.length) || null;
 }
 
-export function parsePromptArgs(argv = process.argv.slice(2), env = process.env) {
+export function parsePromptArgs(argv = process.argv.slice(2), env: NodeJS.ProcessEnv = process.env) {
   return {
     taskId: getArg(argv, "--task="),
     prdPath: getArg(argv, "--prd="),
@@ -54,19 +124,19 @@ export function parsePromptArgs(argv = process.argv.slice(2), env = process.env)
   };
 }
 
-function positiveInteger(value) {
+function positiveInteger(value: unknown): number | null {
   const number = Number(value);
   return Number.isInteger(number) && number > 0 ? number : null;
 }
 
-function loadPromptConfig(input = Object(), stateRoot = null) {
+function loadPromptConfig(input: PromptInput = {}, stateRoot: string | null = null) {
   if (input.config) return input.config;
   const explicitPath = input.configPath || input.config_path;
   const candidates = [
     explicitPath ? resolve(explicitPath) : null,
     stateRoot ? join(resolve(stateRoot), "config.json") : null,
     ROOT ? join(ROOT, ".yolo", "config.json") : null,
-  ].filter(Boolean);
+  ].filter((c): c is string => c !== null);
   const configPath = candidates.find((path) => existsSync(path));
   try {
     return configPath
@@ -77,30 +147,32 @@ function loadPromptConfig(input = Object(), stateRoot = null) {
   }
 }
 
-function resolveMaxLinesPerFile(scope = Object(), config = Object()) {
+function resolveMaxLinesPerFile(scope: PromptScope = {}, config: PromptConfig = {}) {
   return positiveInteger(scope.max_lines_per_file)
     || positiveInteger(config.gate?.max_lines_per_file)
     || DEFAULT_PROMPT_MAX_LINES_PER_FILE;
 }
 
-function normalizeCondition(c) {
+function normalizeCondition(c: PromptCondition | string): PromptCondition {
   if (typeof c === "string") {
     return { id: "AUTO", severity: "FAIL", message: c, type: "acceptance_criteria" };
   }
   return c;
 }
 
-export function findPromptTask(prd, taskId) {
+export function findPromptTask(prd: PromptPrd, taskId: string): PromptTask | null {
   return (prd.tasks || []).find((t) => t.id === taskId)
     // splitTask 子任务回退：AUDIT-004-F1-A → AUDIT-004-F1, AUDIT-002-F1-P1 → AUDIT-002-F1
     || (() => {
       const parentId = taskId.replace(/(-[A-Z]-\d+)$/, '').replace(/(-[A-Z])$/, '').replace(/(-P\d+)$/, '');
-      return parentId !== taskId ? (prd.tasks || []).find((t) => t.id === parentId) : null;
+      return parentId !== taskId ? (prd.tasks || []).find((t) => t.id === parentId) || null : null;
     })();
 }
 
 // ── 解析 gate JSON 日志获取失败条件（narrower 重试）──────────────
-function loadFailedConditions(taskId) {
+type GateLogEntry = { passed?: unknown; name?: string; severity?: string; detail?: string };
+
+function loadFailedConditions(taskId: string) {
   const logDir = join(YOLO_ROOT, "state", "runtime");
   if (!existsSync(logDir)) return null;
   try {
@@ -109,7 +181,7 @@ function loadFailedConditions(taskId) {
       .sort();
     if (!files.length) return null;
     const latest = files[files.length - 1];
-    const data = JSON.parse(readFileSync(join(logDir, latest), "utf8"));
+    const data = JSON.parse(readFileSync(join(logDir, latest), "utf8")) as { gates?: GateLogEntry[] };
     const failed = (data.gates || []).filter((g) => !g.passed);
     const passed = (data.gates || []).filter((g) => g.passed);
     return { failed, passed };
@@ -119,7 +191,7 @@ function loadFailedConditions(taskId) {
 }
 
 // ── Workflow 指令加载 ──────────────────────────────────────────────
-function loadWorkflow(type) {
+function loadWorkflow(type: string) {
   const workflowPath = join(YOLO_ROOT, "workflows", `${type}.md`);
   try {
     return readFileSync(workflowPath, "utf8");
@@ -144,19 +216,19 @@ const PROJECT_CONSTRAINTS = [
 
 // ── 文件上下文收集（同 v4，保持不变）─────────────────────────────
 
-function parseImports(filePath) {
+function parseImports(filePath: string) {
   if (!existsSync(filePath)) return [];
   const content = readFileSync(filePath, "utf-8");
-  const imports = [];
+  const imports: Array<{ path: string; raw: string }> = [];
   const re = /import\b[^'"]*?from\s*['"]([^'"]+)['"]/g;
-  let m;
+  let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
     imports.push({ path: m[1], raw: m[0] });
   }
   return imports;
 }
 
-function resolveImportPath(importPath, fromFile) {
+function resolveImportPath(importPath: string, fromFile: string) {
   if (!importPath.startsWith(".")) return null;
   const fromDir = dirname(fromFile);
   const candidates = [
@@ -172,7 +244,7 @@ function resolveImportPath(importPath, fromFile) {
   return null;
 }
 
-function readFileSafe(filePath, maxLines = 300) {
+function readFileSafe(filePath: string, maxLines = 300) {
   if (!existsSync(filePath)) return null;
   try {
     const content = readFileSync(filePath, "utf-8");
@@ -188,7 +260,7 @@ function readFileSafe(filePath, maxLines = 300) {
   }
 }
 
-function gatherContext(targetFile, maxLinesPerFile = DEFAULT_PROMPT_MAX_LINES_PER_FILE) {
+function gatherContext(targetFile: string | undefined, maxLinesPerFile: unknown = DEFAULT_PROMPT_MAX_LINES_PER_FILE) {
   const sections = [];
   const maxLines = positiveInteger(maxLinesPerFile) || DEFAULT_PROMPT_MAX_LINES_PER_FILE;
   if (!targetFile || !existsSync(resolve(ROOT, targetFile))) {
@@ -248,7 +320,7 @@ function gatherContext(targetFile, maxLinesPerFile = DEFAULT_PROMPT_MAX_LINES_PE
   return sections.join("\n\n");
 }
 
-function gatherReadonlyContext(files = []) {
+function gatherReadonlyContext(files: string[] = []) {
   const sections = [];
   for (const file of files) {
     const absPath = resolve(ROOT, file);
@@ -260,7 +332,7 @@ function gatherReadonlyContext(files = []) {
   return sections.length ? `## 📚 只读参考文件\n\n${sections.join("\n\n")}` : "";
 }
 
-function isR9TestSplitTask(task, targets) {
+function isR9TestSplitTask(task: PromptTask, targets: PromptTarget[]) {
   const text = `${task.title || ""}\n${task.description || ""}`;
   const ids = (task.source_findings || task.fix_findings || []).map(f => f.scanner_id || f.rule_id);
   const targetFiles = (targets || []).map(t => t.file || "").filter(Boolean);
@@ -269,7 +341,7 @@ function isR9TestSplitTask(task, targets) {
     targetFiles.every(file => file.includes("/__tests__/") || /\.(test|spec)\.[tj]sx?$/.test(file));
 }
 
-function renderR9TestSplitContract(task, targets, scope) {
+function renderR9TestSplitContract(task: PromptTask, targets: PromptTarget[], scope: PromptScope) {
   const target = targets[0]?.file || "目标测试文件";
   const maxFiles = scope.max_files || 5;
   const maxLines = positiveInteger(scope.max_lines_per_file) || DEFAULT_PROMPT_MAX_LINES_PER_FILE;
@@ -299,19 +371,19 @@ function renderR9TestSplitContract(task, targets, scope) {
   ].join("\n");
 }
 
-function countBraceDelta(line) {
+function countBraceDelta(line: string) {
   const stripped = line
     .replace(/(['"`])(?:\\.|(?!\1).)*\1/g, "")
     .replace(/\/\/.*$/, "");
   return (stripped.match(/\{/g) || []).length - (stripped.match(/\}/g) || []).length;
 }
 
-function blockName(line) {
+function blockName(line: string) {
   const m = line.match(/\b(?:describe|it|test)\s*\(\s*['"`]([^'"`]+)['"`]/);
   return m ? m[1] : line.trim().slice(0, 80);
 }
 
-function collectTestBlocks(lines, desiredDepth) {
+function collectTestBlocks(lines: string[], desiredDepth: number) {
   const blocks = [];
   let depth = 0;
   for (let i = 0; i < lines.length; i++) {
@@ -339,7 +411,7 @@ function collectTestBlocks(lines, desiredDepth) {
   return blocks;
 }
 
-function renderR9StaticSplitPlan(target, scope) {
+function renderR9StaticSplitPlan(target: string, scope: PromptScope) {
   const absPath = resolve(ROOT, target);
   if (!existsSync(absPath)) return "静态拆分计划: 目标文件不存在，跳过。";
   const lines = readFileSync(absPath, "utf8").split("\n");
@@ -373,7 +445,7 @@ function renderR9StaticSplitPlan(target, scope) {
   ].join("\n");
 }
 
-function formatCondition(c) {
+function formatCondition(c: PromptCondition) {
   const bits = [`- **${c.id}** [${c.severity}]: ${c.message || c.type}`];
   const params = c.params || {};
   const paramLines = [];
@@ -389,7 +461,7 @@ function formatCondition(c) {
 
 // ── 组装 prompt ──────────────────────────────────────────────────
 
-export function generatePrompt(input = Object()) {
+export function generatePrompt(input: PromptInput = {}) {
   const taskId = input.taskId;
   const prdPath = input.prdPath;
   const isFix = input.isFix === true || input.fix === true;
@@ -406,11 +478,11 @@ export function generatePrompt(input = Object()) {
     throw new Error("用法: prompt.js --task=<id> --prd=<path> [--fix] [--learnings=<text>] [--attempt=N]");
   }
 
-  let prd;
+  let prd: PromptPrd;
   try {
-    prd = readJsonFileBounded(resolve(prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
+    prd = readJsonFileBounded<PromptPrd>(resolve(prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   } catch (error) {
-    throw new Error(`无法加载 PRD 文件: ${prdPath}\n${error.message}`);
+    throw new Error(`无法加载 PRD 文件: ${prdPath}\n${(error as Error).message}`);
   }
 
   const task = findPromptTask(prd, taskId);
@@ -619,10 +691,11 @@ parts.push(
 );
 
 // 验收标准
+const acceptanceCriteria = task.acceptance_criteria || [];
 parts.push(
   "## ✅ 验收标准",
-  (task.acceptance_criteria || []).length > 0
-    ? [`<untrusted-user-data>`, task.acceptance_criteria.map((a) => typeof a === "string" ? `- ${a}` : `- ${a.description || a.message || ""}`).join("\n"), `</untrusted-user-data>`].join("\n")
+  acceptanceCriteria.length > 0
+    ? [`<untrusted-user-data>`, acceptanceCriteria.map((a) => typeof a === "string" ? `- ${a}` : `- ${a.description || a.message || ""}`).join("\n"), `</untrusted-user-data>`].join("\n")
     : "按描述执行，通过 tsc + eslint + vitest",
   "",
 );
@@ -647,7 +720,7 @@ parts.push(
 );
 
 // ── 完成条件 ──────────────────────────────────────────────────────
-const scopedTargetFiles = targets.map(t => t.file).filter(Boolean);
+const scopedTargetFiles = targets.map(t => t.file).filter((f): f is string => Boolean(f));
 
 parts.push(
   "## 完成条件",
@@ -670,7 +743,8 @@ if (includeTscContext && tscTargetFiles.length > 0) {
     });
     // tsc 无错误 → 不注入
   } catch (e) {
-    const output = (e.stdout || '') + (e.stderr || '');
+    const err = e as { stdout?: string; stderr?: string };
+    const output = (err.stdout || '') + (err.stderr || '');
     const relevantErrors = output.split('\n').filter(l => {
       if (!/error TS\d+:/.test(l)) return false;
       return tscTargetFiles.some(tf => l.includes(tf.replace(/^\.\//, '')));
@@ -694,7 +768,7 @@ if (learningsText && !gateResult) {
   return parts.join("\n");
 }
 
-export function runPromptCli(argv = process.argv.slice(2), io = Object()) {
+export function runPromptCli(argv = process.argv.slice(2), io: PromptIo = {}) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   try {
@@ -702,7 +776,7 @@ export function runPromptCli(argv = process.argv.slice(2), io = Object()) {
     stdout.write(`${output}\n`);
     return 0;
   } catch (error) {
-    stderr.write(`${error.message}\n`);
+    stderr.write(`${(error as Error).message}\n`);
     return 1;
   }
 }

@@ -10,19 +10,31 @@ export function usage() {
   ].join("\n");
 }
 
-function publicResult(result) {
+type MigrateResult = {
+  prd?: unknown;
+  dry_run?: boolean;
+  changed?: boolean;
+  added_count?: number;
+  blocked_count?: number;
+  file?: string;
+  tasks_changed?: Array<{ task_id?: string; added_count?: number; missing_targets?: string[] }>;
+  issues?: Array<{ code?: string; task_id?: string; detail?: string }>;
+  [key: string]: unknown;
+};
+
+function publicResult(result: MigrateResult) {
   const { prd, ...rest } = result;
   return rest;
 }
 
-function formatResult(result) {
+function formatResult(result: MigrateResult) {
   const mode = result.dry_run ? "dry-run" : "apply";
   const lines = [`[prd-migrate-gates] ${mode} changed=${result.changed} added=${result.added_count} blocked=${result.blocked_count}`];
   if (result.file) lines.push(`  file: ${result.file}`);
-  for (const task of result.tasks_changed) {
-    lines.push(`  ${task.task_id}: +${task.added_count} gates (${task.missing_targets.join(", ")})`);
+  for (const task of result.tasks_changed || []) {
+    lines.push(`  ${task.task_id}: +${task.added_count} gates (${(task.missing_targets || []).join(", ")})`);
   }
-  for (const issue of result.issues) {
+  for (const issue of result.issues || []) {
     lines.push(`  blocked ${issue.code}${issue.task_id ? ` task=${issue.task_id}` : ""}: ${issue.detail}`);
   }
   return lines.join("\n");
@@ -71,8 +83,9 @@ export function runPrdMigrateGatesCli(argv = process.argv.slice(2), io = Object(
     stdout.write(json ? `${JSON.stringify(payload, null, 2)}\n` : `${formatResult(result)}\n`);
     return result.blocked_count > 0 ? 1 : 0;
   } catch (error) {
-    const payload = { status: "error", error: error.message };
-    stderr.write(json ? `${JSON.stringify(payload, null, 2)}\n` : `[prd-migrate-gates] ${error.message}\n`);
+    const message = (error as Error).message;
+    const payload = { status: "error", error: message };
+    stderr.write(json ? `${JSON.stringify(payload, null, 2)}\n` : `[prd-migrate-gates] ${message}\n`);
     return 2;
   }
 }

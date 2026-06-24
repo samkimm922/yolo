@@ -1,7 +1,20 @@
 // CLI argument-parsing helpers shared across yolo subcommand parsers.
 // Extracted from src/cli/yolo.ts as a pure structural refactor (no behavior change).
 
-export function cliParseError(name) {
+type CliIo = {
+  stdout?: { write: (data: string) => void };
+  stderr?: { write: (data: string) => void };
+};
+
+type CliParseErrorShape = Error & {
+  name: string;
+  code?: string;
+  flag?: string | null;
+  unknown_flags?: string[];
+  exit_code?: number;
+};
+
+export function cliParseError(name: string) {
   return Object.assign(new Error(`${name} requires a value.`), {
     name: "YoloCliParseError",
     code: "CLI_PARSE_ERROR",
@@ -17,7 +30,7 @@ export function cliParseError(name) {
 // fall through to a misleading "missing PRD path" / "missing requirement"
 // error and send the user (especially a non-technical one) down the wrong path.
 // Each entry is expected to already be the normalized bare flag (e.g. `--foo`).
-export function throwUnknownFlags(unknownFlags) {
+export function throwUnknownFlags(unknownFlags: string[]) {
   if (!unknownFlags.length) return;
   const unique = Array.from(new Set(unknownFlags));
   throw Object.assign(new Error(`Unknown flag: ${unique.join(", ")}.`), {
@@ -29,11 +42,12 @@ export function throwUnknownFlags(unknownFlags) {
   });
 }
 
-export function isCliParseError(error) {
-  return error?.name === "YoloCliParseError" || error?.code === "CLI_PARSE_ERROR" || error?.code === "CLI_UNKNOWN_FLAG";
+export function isCliParseError(error: unknown): error is CliParseErrorShape {
+  const err = error as { name?: string; code?: string } | null | undefined;
+  return err?.name === "YoloCliParseError" || err?.code === "CLI_PARSE_ERROR" || err?.code === "CLI_UNKNOWN_FLAG";
 }
 
-export function cliParseErrorResult(error, command = "yolo") {
+export function cliParseErrorResult(error: CliParseErrorShape, command = "yolo") {
   const isUnknownFlag = error?.code === "CLI_UNKNOWN_FLAG";
   const unknownFlags = Array.from(new Set(error.unknown_flags || (error.flag ? [error.flag] : [])));
   return {
@@ -53,7 +67,7 @@ export function cliParseErrorResult(error, command = "yolo") {
   };
 }
 
-export function emitCliParseError(error, argv = [], io = Object(), command = "yolo") {
+export function emitCliParseError(error: CliParseErrorShape, argv: string[] = [], io: CliIo = {}, command = "yolo") {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const result = cliParseErrorResult(error, command);
@@ -62,7 +76,7 @@ export function emitCliParseError(error, argv = [], io = Object(), command = "yo
   return result.exit_code;
 }
 
-export function readArgValue(argv, index, name) {
+export function readArgValue(argv: string[], index: number, name: string) {
   const arg = argv[index];
   if (arg.includes("=")) {
     const value = arg.split("=").slice(1).join("=");
@@ -74,7 +88,7 @@ export function readArgValue(argv, index, name) {
   return { value: next, consumed: 1 };
 }
 
-export function readOptionalBooleanArgValue(argv, index, name) {
+export function readOptionalBooleanArgValue(argv: string[], index: number, name: string) {
   const arg = argv[index];
   if (arg.includes("=")) {
     const value = arg.split("=").slice(1).join("=");

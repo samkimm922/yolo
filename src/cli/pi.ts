@@ -12,7 +12,7 @@ export function parsePiArgs(argv = process.argv.slice(2)) {
   const options = Object();
   let json = false;
 
-  const readValue = (index, prefix) => {
+  const readValue = (index: number, prefix: string) => {
     const arg = argv[index];
     if (arg.includes("=")) return { value: arg.slice(prefix.length + 1), consumed: 0 };
     return { value: argv[index + 1], consumed: 1 };
@@ -83,11 +83,12 @@ export function parsePiArgs(argv = process.argv.slice(2)) {
   return { input, options, json };
 }
 
-export function formatPiText(result) {
+export function formatPiText(result: Record<string, unknown>) {
   const lines = [`[pi-agent] ${result.status}: ${result.summary}`];
-  if (result.plan?.actions?.length) {
-    lines.push(`actions: ${result.plan.actions.length}`);
-    for (const action of result.plan.actions) {
+  const plan = result.plan as { actions?: Array<{ kind?: string; command?: string; args?: string[]; runtime?: string; params?: Record<string, unknown>; id?: string; phase?: string; summary?: string }> } | undefined;
+  if (plan?.actions?.length) {
+    lines.push(`actions: ${plan.actions.length}`);
+    for (const action of plan.actions) {
       const detail = action.kind === "command"
         ? ` - ${[action.command, ...(action.args || [])].join(" ")}`
         : action.kind === "runtime"
@@ -96,9 +97,10 @@ export function formatPiText(result) {
       lines.push(`  - ${action.id} [${action.phase}] ${action.summary}${detail}`);
     }
   }
-  if (result.next_actions?.length) {
+  const nextActions = result.next_actions as string[] | undefined;
+  if (nextActions?.length) {
     lines.push("next:");
-    for (const next of result.next_actions) lines.push(`  - ${next}`);
+    for (const next of nextActions) lines.push(`  - ${next}`);
   }
   return lines.join("\n");
 }

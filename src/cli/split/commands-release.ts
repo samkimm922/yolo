@@ -136,7 +136,7 @@ export async function runYoloReleaseCandidateCli(argv = [], io = Object()) {
     yoloRoot,
   };
 
-  function emit(result) {
+  function emit(result: Record<string, unknown>) {
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     else (result.status === "pass" ? stdout : stderr).write(`${formatReleaseCandidateText(result)}\n`);
     return releaseCandidateExitCode(result);

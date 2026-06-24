@@ -6,7 +6,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { prdSearchDirs } from "../../core/paths.js";
 import { cleanCliText, defaultYoloRoot } from "./shared.js";
 
-function readJsonMaybe(file) {
+function readJsonMaybe(file: string): unknown {
   try {
     return JSON.parse(readFileSync(file, "utf8"));
   } catch {
@@ -14,14 +14,15 @@ function readJsonMaybe(file) {
   }
 }
 
-function isRunnablePrdJson(value = Object()) {
-  return Array.isArray(value?.tasks) &&
-    value.tasks.length > 0 &&
-    Boolean(value.tasks[0]?.id) &&
-    Boolean(value.tasks[0]?.priority);
+function isRunnablePrdJson(value: unknown = {}): boolean {
+  if (!value || typeof value !== "object") return false;
+  const record = value as { tasks?: unknown };
+  if (!Array.isArray(record.tasks) || record.tasks.length === 0) return false;
+  const first = record.tasks[0] as { id?: unknown; priority?: unknown } | undefined;
+  return Boolean(first?.id) && Boolean(first?.priority);
 }
 
-function addCliPrdCandidate(files, file) {
+function addCliPrdCandidate(files: Array<{ path: string; mtime: number }>, file: string) {
   try {
     if (!existsSync(file)) return;
     const stat = statSync(file);
@@ -32,7 +33,7 @@ function addCliPrdCandidate(files, file) {
   }
 }
 
-function addJsonPrdCandidatesFromDir(files, dir) {
+function addJsonPrdCandidatesFromDir(files: Array<{ path: string; mtime: number }>, dir: string) {
   if (!existsSync(dir)) return;
   for (const file of readdirSync(dir)) {
     if (!file.endsWith(".json") || file === "package.json" || file === "tsconfig.json" || file.startsWith("retry-")) {
@@ -42,7 +43,7 @@ function addJsonPrdCandidatesFromDir(files, dir) {
   }
 }
 
-function addDemandPrdCandidates(files, demandDir) {
+function addDemandPrdCandidates(files: Array<{ path: string; mtime: number }>, demandDir: string) {
   if (!existsSync(demandDir)) return;
   for (const name of readdirSync(demandDir)) {
     const dir = join(demandDir, name);
@@ -54,22 +55,22 @@ function addDemandPrdCandidates(files, demandDir) {
   }
 }
 
-function lifecyclePrdCandidates(report = Object()) {
-  const nested = report.report || {};
+function lifecyclePrdCandidates(report: Record<string, unknown> = {}): string[] {
+  const nested = (report.report || {}) as Record<string, unknown>;
   const artifacts = [
     ...(Array.isArray(report.artifacts) ? report.artifacts : []),
     ...(Array.isArray(nested.artifacts) ? nested.artifacts : []),
-  ];
+  ].filter((a): a is string => typeof a === "string");
   return [
     report.prd_path,
     report.prdPath,
     nested.prd_path,
     nested.prdPath,
     ...artifacts,
-  ].filter(Boolean);
+  ].filter((v): v is string => Boolean(v));
 }
 
-function existingCliPrdCandidate(projectRoot, value) {
+function existingCliPrdCandidate(projectRoot: string, value: unknown): string {
   const raw = cleanCliText(value);
   if (!raw || !raw.endsWith(".json")) return "";
   const file = isAbsolute(raw) ? resolve(raw) : resolve(projectRoot, raw);
@@ -77,9 +78,9 @@ function existingCliPrdCandidate(projectRoot, value) {
   return isRunnablePrdJson(readJsonMaybe(file)) ? file : "";
 }
 
-export function findLatestPrd(yoloRoot = defaultYoloRoot) {
+export function findLatestPrd(yoloRoot: string = defaultYoloRoot): string | null {
   try {
-    const files = [];
+    const files: Array<{ path: string; mtime: number }> = [];
     addDemandPrdCandidates(files, join(yoloRoot, "demand"));
     for (const dir of prdSearchDirs(yoloRoot)) {
       addJsonPrdCandidatesFromDir(files, dir);
@@ -95,9 +96,13 @@ export function findLatestPrd(yoloRoot = defaultYoloRoot) {
   return null;
 }
 
-export function inferDefaultCliPrdPath(input = Object(), options = Object()) {
-  const projectRoot = resolve(input.projectRoot || input.project_root || options.projectRoot || options.project_root || input.cwd || options.cwd || process.cwd());
-  const stateRoot = resolve(input.stateRoot || input.state_root || options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
+export function inferDefaultCliPrdPath(input: Record<string, unknown> = {}, options: Record<string, unknown> = {}): string {
+  const rootFromArgs = [input.projectRoot, input.project_root, options.projectRoot, options.project_root, input.cwd, options.cwd]
+    .find((v): v is string => typeof v === "string");
+  const projectRoot = resolve(rootFromArgs || process.cwd());
+  const stateFromArgs = [input.stateRoot, input.state_root, options.stateRoot, options.state_root]
+    .find((v): v is string => typeof v === "string");
+  const stateRoot = resolve(stateFromArgs || join(projectRoot, ".yolo"));
   const latest = findLatestPrd(stateRoot);
   if (latest) return latest;
 
@@ -105,7 +110,7 @@ export function inferDefaultCliPrdPath(input = Object(), options = Object()) {
     const report = readJsonMaybe(join(stateRoot, "lifecycle", name));
     if (!report) continue;
     if (isRunnablePrdJson(report)) return join(stateRoot, "lifecycle", name);
-    for (const candidate of lifecyclePrdCandidates(report)) {
+    for (const candidate of lifecyclePrdCandidates(report as Record<string, unknown>)) {
       const file = existingCliPrdCandidate(projectRoot, candidate);
       if (file) return file;
     }

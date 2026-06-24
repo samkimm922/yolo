@@ -138,7 +138,7 @@ export function parseYoloMemoryArgs(argv = []) {
       options.pruneGeneratedArchives = false;
     } else if (arg.startsWith("--max-")) {
       const read = readArgValue(argv, i, arg.split("=")[0]);
-      const key = arg.replace(/^--/, "").split("=")[0].replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+      const key = arg.replace(/^--/, "").split("=")[0].replace(/-([a-z])/g, (_match: string, letter: string) => letter.toUpperCase());
       options[key] = Number(read.value);
       i += read.consumed;
     } else if (arg === "--cwd" || arg.startsWith("--cwd=")) {

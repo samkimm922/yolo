@@ -17,7 +17,7 @@ import {
   writeJsonFile,
 } from "./shared.js";
 
-export function slugForPath(value, fallback = "interview") {
+export function slugForPath(value: unknown, fallback = "interview") {
   const slug = cleanCliText(value)
     .toLowerCase()
     .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
@@ -26,17 +26,17 @@ export function slugForPath(value, fallback = "interview") {
   return slug || fallback;
 }
 
-export function demandIdFromInterview(id) {
+export function demandIdFromInterview(id: unknown) {
   const cleanId = cleanCliText(id);
   if (/^DEMAND-/i.test(cleanId)) return cleanId;
   return `DEMAND-${slugForPath(cleanId, "interview").toUpperCase()}`;
 }
 
-export function defaultInterviewPath(stateRoot, id) {
+export function defaultInterviewPath(stateRoot: string, id: string) {
   return join(stateRoot, "demand-interviews", id, "interview.json");
 }
 
-export function resolveInterviewPath(pathOrDir, cwd = process.cwd()) {
+export function resolveInterviewPath(pathOrDir: unknown, cwd = process.cwd()) {
   const resolved = resolve(cwd, cleanCliText(pathOrDir));
   if (existsSync(resolved)) {
     try {
@@ -48,7 +48,44 @@ export function resolveInterviewPath(pathOrDir, cwd = process.cwd()) {
   return resolved.endsWith(".json") ? resolved : join(resolved, "interview.json");
 }
 
-export function decorateInterviewState(state = Object()) {
+type InterviewQuestion = {
+  id?: string;
+  question_id?: string;
+  slot?: string;
+  text?: string;
+  plain_language_prompt?: string;
+  category?: string;
+  why_it_matters?: string;
+  follow_up?: boolean;
+  follow_up_id?: string;
+  follow_up_code?: string;
+  follow_up_reason?: string;
+  original_prompt?: string;
+};
+
+type InterviewCoverage = {
+  ready_for_prd_intake?: boolean;
+  readiness?: { blockers?: Array<{ slot?: string; code?: string }>; readiness_level?: string; [key: string]: unknown };
+  answered?: unknown;
+  missing?: Array<{ question_id?: string; id?: string; slot?: string; text?: string; plain_language_prompt?: string; category?: string }>;
+  [key: string]: unknown;
+};
+
+type InterviewState = {
+  questions?: InterviewQuestion[];
+  stateRoot?: string;
+  state_root?: string;
+  id?: string;
+  demand_id?: string;
+  interview_path?: string;
+  next_question?: InterviewQuestion | null;
+  playback?: { confirmed?: boolean; [key: string]: unknown };
+  coverage?: { approval?: { approved?: boolean } } & InterviewCoverage;
+  answers?: unknown;
+  [key: string]: unknown;
+};
+
+export function decorateInterviewState(state: InterviewState = {}): InterviewState {
   const questions = Array.isArray(state.questions) ? state.questions : [];
   const coverage = inspectDemandInterviewCoverage({ ...state, questions });
   const next = selectDemandInterviewNextQuestion({ ...state, questions }, coverage);
@@ -74,7 +111,7 @@ export function decorateInterviewState(state = Object()) {
   };
 }
 
-export function createInterviewState(input = Object(), projectRoot, stateRoot) {
+export function createInterviewState(input: { id?: string; title?: string; idea?: string } = {}, projectRoot: string, stateRoot: string) {
   const session = createDemandInterviewSession({
     projectRoot,
     stateRoot,
@@ -90,21 +127,29 @@ export function createInterviewState(input = Object(), projectRoot, stateRoot) {
   });
 }
 
-export function readInterviewState(pathOrDir, cwd = process.cwd()) {
+type ReadInterviewResult = {
+  ok: boolean;
+  path: string;
+  error?: string;
+  dir?: string;
+  state?: InterviewState;
+};
+
+export function readInterviewState(pathOrDir: unknown, cwd = process.cwd()): ReadInterviewResult {
   const path = resolveInterviewPath(pathOrDir, cwd);
   if (!existsSync(path)) {
     return { ok: false, path, error: `Interview session not found: ${path}` };
   }
   try {
-    const state = decorateInterviewState({ ...readJsonFile(path), interview_path: path });
+    const state = decorateInterviewState({ ...(readJsonFile<Record<string, unknown>>(path)), interview_path: path });
     return { ok: true, path, dir: dirname(path), state };
   } catch (error) {
-    return { ok: false, path, error: `Interview session JSON parse failed: ${error.message}` };
+    return { ok: false, path, error: `Interview session JSON parse failed: ${(error as Error).message}` };
   }
 }
 
-export function resolveInterviewQuestionId(state = Object(), value) {
-  const questions = state.questions || [];
+export function resolveInterviewQuestionId(state: InterviewState = {}, value: unknown) {
+  const questions: InterviewQuestion[] = state.questions || [];
   const clean = cleanCliText(value);
   if (/^\d+$/.test(clean)) return questions[Number(clean) - 1]?.id || clean;
   const qMatch = clean.toUpperCase().match(/^Q0*(\d+)$/);
@@ -114,7 +159,7 @@ export function resolveInterviewQuestionId(state = Object(), value) {
     || clean;
 }
 
-export function coverageCounts(coverage = Object(), state = Object()) {
+export function coverageCounts(coverage: InterviewCoverage = {}, state: InterviewState = {}) {
   const answered = Array.isArray(coverage.answered) ? coverage.answered.length : Number(coverage.answered || 0);
   const missing = Array.isArray(coverage.missing) ? coverage.missing.length : 0;
   const total = Array.isArray(state.questions) && state.questions.length
@@ -127,7 +172,7 @@ export function coverageCounts(coverage = Object(), state = Object()) {
   };
 }
 
-export function coverageForCli(coverage = Object(), state = Object()) {
+export function coverageForCli(coverage: InterviewCoverage = {}, state: InterviewState = {}) {
   const counts = coverageCounts(coverage, state);
   return {
     ...coverage,
@@ -145,7 +190,7 @@ export function coverageForCli(coverage = Object(), state = Object()) {
   };
 }
 
-export function writeInterviewAnswerLedger(state = Object(), question = Object(), answer = "") {
+export function writeInterviewAnswerLedger(state: InterviewState = {}, question: InterviewQuestion = {}, answer = "") {
   const stateRoot = state.stateRoot || state.state_root;
   if (!stateRoot) return null;
   return appendJsonlFile(join(stateRoot, "state", "questions.jsonl"), {
@@ -162,7 +207,7 @@ export function writeInterviewAnswerLedger(state = Object(), question = Object()
   });
 }
 
-export function writeInterviewDecisionLedger(state = Object(), demandResult = Object()) {
+export function writeInterviewDecisionLedger(state: InterviewState = {}, demandResult: { demand_id?: string; demand_dir?: string; readiness?: { readiness_level?: string } } = {}) {
   const stateRoot = state.stateRoot || state.state_root;
   if (!stateRoot) return null;
   return appendJsonlFile(join(stateRoot, "state", "decisions.jsonl"), {
@@ -177,9 +222,9 @@ export function writeInterviewDecisionLedger(state = Object(), demandResult = Ob
   });
 }
 
-export function interviewNextActions(state = Object(), extra = Object()) {
+export function interviewNextActions(state: ReturnType<typeof decorateInterviewState> = decorateInterviewState({}), extra: { demand_dir?: string; demand_path?: string; runtime_next_actions?: string[] } = {}) {
   const path = state.interview_path;
-  const actions = [];
+  const actions: string[] = [];
   if (state.next_question) {
     actions.push(`Answer ${state.next_question.id}: yolo interview answer --session ${path} --question ${state.next_question.id} --answer "<answer>"`);
     actions.push(`Check progress: yolo interview status --session ${path}`);
@@ -201,7 +246,7 @@ export function interviewNextActions(state = Object(), extra = Object()) {
   return actions;
 }
 
-export function interviewResult(command, state = Object(), extra = Object()) {
+export function interviewResult(command: string, state: InterviewState = {}, extra: Record<string, unknown> = {}) {
   const decorated = decorateInterviewState(state);
   const result = Object.assign(Object(), {
     status: extra.status || "success",
@@ -219,8 +264,8 @@ export function interviewResult(command, state = Object(), extra = Object()) {
     demand_path: extra.demand_path,
     demand_result: extra.demand_result,
   });
-  result.next_actions = extra.next_actions || interviewNextActions(decorated, extra);
-  result.next_action = extra.next_action || result.next_actions?.[0] || null;
+  result.next_actions = extra.next_actions || interviewNextActions(decorated, extra as { demand_dir?: string; demand_path?: string; runtime_next_actions?: string[] });
+  result.next_action = extra.next_action || (result.next_actions as string[])?.[0] || null;
   if (extra.blockers) result.blockers = extra.blockers;
   return result;
 }

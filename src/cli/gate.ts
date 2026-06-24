@@ -21,19 +21,37 @@ const C = "\x1b[36m";
 const B = "\x1b[1m";
 const X = "\x1b[0m";
 
-function argValue(args, name) {
+function argValue(args: string[], name: string): string | null {
   const arg = args.find((item) => item.startsWith(`${name}=`));
   return arg ? arg.split("=").slice(1).join("=") : null;
 }
 
-function loadTask(prdPath, taskId) {
+// Gate-local structural types for untrusted PRD JSON. Only the fields used by
+// the gate are described; everything else passes through readJsonFileBounded.
+type GateCondition = { id?: string; severity?: string; [key: string]: unknown };
+
+type GateTask = {
+  id?: string;
+  post_conditions?: GateCondition[];
+  [key: string]: unknown;
+};
+
+type GatePrd = { tasks?: GateTask[]; [key: string]: unknown };
+
+type GateIo = {
+  stdout?: { write: (data: string) => void };
+  stderr?: { write: (data: string) => void };
+  logDir?: string;
+};
+
+function loadTask(prdPath: string | null, taskId: string): { prd: GatePrd | null; task: GateTask | null } {
   if (!prdPath || !existsSync(prdPath)) return { prd: null, task: null };
-  const prd = readJsonFileBounded(prdPath, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
+  const prd = readJsonFileBounded<GatePrd>(prdPath, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   const task = (prd.tasks || []).find((item) => item.id === taskId) || null;
   return { prd, task };
 }
 
-function resolveGateConfig({ argv, contractRoot, stateRoot } = Object()) {
+function resolveGateConfig({ argv, contractRoot, stateRoot }: { argv: string[]; contractRoot: string; stateRoot: string | null } = {} as { argv: string[]; contractRoot: string; stateRoot: string | null }) {
   const explicitConfigPath = argValue(argv, "--config") || argValue(argv, "--config-path");
   if (explicitConfigPath) {
     return loadConfig({ path: explicitConfigPath, forceReload: true });
@@ -42,13 +60,13 @@ function resolveGateConfig({ argv, contractRoot, stateRoot } = Object()) {
   const candidates = [
     stateRoot ? join(resolve(stateRoot), "config.json") : null,
     contractRoot ? join(resolve(contractRoot), ".yolo", "config.json") : null,
-  ].filter(Boolean);
+  ].filter((c): c is string => c !== null);
   const configPath = candidates.find((path) => existsSync(path));
   if (configPath) return loadConfig({ path: configPath, forceReload: true });
   return loadConfig(true);
 }
 
-function applyWarnEscalation(task, { stateRoot } = Object()) {
+function applyWarnEscalation(task: GateTask, { stateRoot }: { stateRoot?: string | null } = {}) {
   try {
     const args = [learnCli, "--escalate"];
     if (stateRoot) args.push(`--state-root=${stateRoot}`);
@@ -58,13 +76,14 @@ function applyWarnEscalation(task, { stateRoot } = Object()) {
       timeout: 5000,
       stdio: ["pipe", "pipe", "pipe"],
     });
-    const escalated = JSON.parse(escalateResult.trim());
+    const escalated: unknown = JSON.parse(escalateResult.trim());
     if (!Array.isArray(escalated) || escalated.length === 0) return [];
 
-    const escalatedNames = new Set(escalated.map((entry) => entry.name));
-    const changed = [];
+    const escalatedEntries = escalated as Array<{ name?: string }>;
+    const escalatedNames = new Set(escalatedEntries.map((entry) => entry.name).filter((n): n is string => Boolean(n)));
+    const changed: string[] = [];
     for (const condition of task.post_conditions || []) {
-      if (condition.severity === "WARN" && escalatedNames.has(condition.id)) {
+      if (condition.severity === "WARN" && condition.id !== undefined && escalatedNames.has(condition.id)) {
         condition.severity = "FAIL";
         changed.push(condition.id);
       }
@@ -75,7 +94,18 @@ function applyWarnEscalation(task, { stateRoot } = Object()) {
   }
 }
 
-function writeGateLog({ logDir = defaultLogDir, taskId, gateFormat, durationMs }) {
+function writeGateLog({ logDir = defaultLogDir, taskId, gateFormat, durationMs }: {
+  logDir?: string;
+  taskId: string;
+  gateFormat: {
+    allPass: boolean;
+    failHigh: boolean;
+    gates: Array<{ passed: boolean; name: string; detail: string }>;
+    failConditions: unknown;
+    warnConditions: unknown;
+  };
+  durationMs: number;
+}) {
   if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
   const logFile = join(logDir, `gate-${taskId}-${Date.now()}.json`);
   writeFileSync(
@@ -97,7 +127,7 @@ function writeGateLog({ logDir = defaultLogDir, taskId, gateFormat, durationMs }
   return logFile;
 }
 
-export function runGateCli(argv = process.argv.slice(2), io = Object()) {
+export function runGateCli(argv = process.argv.slice(2), io: GateIo = {}) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const taskId = argValue(argv, "--task") || "unknown";
@@ -111,12 +141,12 @@ export function runGateCli(argv = process.argv.slice(2), io = Object()) {
 
   stdout.write(`\n${C}${B}═══ YOLO Gate (Contract) ═══${X}  Task: ${taskId}  Mode: ${mode}\n\n`);
 
-  let prd;
-  let task;
+  let prd: GatePrd | null;
+  let task: GateTask | null;
   try {
     ({ prd, task } = loadTask(prdPath, taskId));
   } catch (error) {
-    stderr.write(`${R}PRD 解析失败: ${error.message}${X}\n`);
+    stderr.write(`${R}PRD 解析失败: ${(error as Error).message}${X}\n`);
     return 1;
   }
 
