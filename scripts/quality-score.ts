@@ -41,6 +41,7 @@ import { runHookBattery } from "./quality/hook-battery.js";
 import { runLifecycleBattery } from "./quality/lifecycle-battery.js";
 import { runRelayBattery } from "./quality/relay-battery.js";
 import { runProgressBattery } from "./quality/progress-battery.js";
+import { runGateBattery } from "./quality/gate-battery.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(ROOT, "scripts", "quality", "quality-baseline.json");
@@ -228,6 +229,7 @@ async function computeQuality() {
     ...runLifecycleBattery(),
     ...runRelayBattery(),
     ...runProgressBattery(),
+    ...runGateBattery(),
   ];
   const total = results.length;
   const correct = results.filter((r) => r.correct).length;

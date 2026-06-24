@@ -1,5 +1,8 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import {
   buildProviderCapabilityBits,
   buildProviderParityMatrix,
@@ -8,6 +11,15 @@ import {
 } from "../src/runtime/adapters/provider-capability-bits.js";
 import { inspectProviderCapabilityGate } from "../src/runtime/gates/provider-capability-gate.js";
 import { inspectPreExecutionGates } from "../src/runtime/gates/pre-execution-gates.js";
+
+function makePreExecutionPaths() {
+  const projectRoot = mkdtempSync(join(tmpdir(), "yolo-provider-capability-"));
+  return {
+    projectRoot,
+    stateDir: join(projectRoot, "state"),
+    prdPath: join(projectRoot, "prd.json"),
+  };
+}
 
 describe("provider capability bits and parity matrix", () => {
   test("buildProviderCapabilityBits returns known capabilities for claude, codex, custom", () => {
@@ -158,30 +170,40 @@ function strictPrd(overrides = {}) {
 
 describe("pre-execution gates with provider capability", () => {
   test("blocks at capability stage when required capabilities are missing", () => {
-    const result = inspectPreExecutionGates({
-      prd: strictPrd({ required_capabilities: ["supports_vision"] }),
-      prdPath: "/fake/prd.json",
-      stateDir: "/fake/state",
-      projectRoot: "/fake/project",
-      config: { ai: { executor: "codex" } },
-    });
-    assert.equal(result.status, "blocked");
-    assert.equal(result.stage, "capability");
-    assert.equal(result.code, "PROVIDER_CAPABILITY_BLOCKED");
-    assert.ok(result.capability.blockers.some((b) => b.code === "PROVIDER_CAPABILITY_MISSING"));
+    const paths = makePreExecutionPaths();
+    try {
+      const result = inspectPreExecutionGates({
+        prd: strictPrd({ required_capabilities: ["supports_vision"] }),
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+        config: { ai: { executor: "codex" } },
+      });
+      assert.equal(result.status, "blocked");
+      assert.equal(result.stage, "capability");
+      assert.equal(result.code, "PROVIDER_CAPABILITY_BLOCKED");
+      assert.ok(result.capability.blockers.some((b) => b.code === "PROVIDER_CAPABILITY_MISSING"));
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
   });
 
   test("passes all gates when capabilities are satisfied", () => {
-    const result = inspectPreExecutionGates({
-      prd: strictPrd({ required_capabilities: ["supports_tools"] }),
-      prdPath: "/fake/prd.json",
-      stateDir: "/fake/state",
-      projectRoot: "/fake/project",
-      config: { ai: { executor: "claude" } },
-    });
-    assert.equal(result.status, "pass");
-    assert.equal(result.stage, "ready");
-    assert.equal(result.code, "PRE_EXECUTION_GATES_PASS");
-    assert.equal(result.capability.status, "pass");
+    const paths = makePreExecutionPaths();
+    try {
+      const result = inspectPreExecutionGates({
+        prd: strictPrd({ required_capabilities: ["supports_tools"] }),
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+        config: { ai: { executor: "claude" } },
+      });
+      assert.equal(result.status, "pass");
+      assert.equal(result.stage, "ready");
+      assert.equal(result.code, "PRE_EXECUTION_GATES_PASS");
+      assert.equal(result.capability.status, "pass");
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
   });
 });

@@ -33,8 +33,12 @@ export function inspectPrdContractDoctorGate({ prd, prdPath, stateDir, projectRo
     requireDemandContract: true,
     projectRoot,
   });
+  /** @type {string | null} */
   let evidenceFile = null;
+  /** @type {string | null} */
   let evidencePath = null;
+  /** @type {any} */
+  let evidenceError = null;
   try {
     const evidenceResult = writePrdContractDoctorEvidence({ prd, prdPath, result: doctor }, {
       stateDir,
@@ -42,9 +46,35 @@ export function inspectPrdContractDoctorGate({ prd, prdPath, stateDir, projectRo
     });
     evidenceFile = evidenceResult.evidence_file;
     evidencePath = evidenceResult.evidence_path;
-  } catch {
+  } catch (error) {
+    evidenceError = error;
     evidenceFile = null;
     evidencePath = null;
+  }
+
+  if (evidenceError) {
+    const migration = doctor.blocks_execution ? createPrdMigrationAdvice(prd, ref) : null;
+    const message = evidenceError?.message || String(evidenceError);
+    return {
+      status: "blocked",
+      code: "PRD_CONTRACT_EVIDENCE_WRITE_FAILED",
+      exit_code: 1,
+      message: "PRD contract doctor evidence write failed",
+      doctor,
+      migration,
+      evidence_file: null,
+      evidence_path: null,
+      evidence_error: {
+        message,
+        code: evidenceError?.code || null,
+      },
+      messages: [
+        `[prd-contract-doctor] BLOCKED evidence write failed: ${message}`,
+        ...(doctor.blocks_execution && migration
+          ? formatPrdContractDoctorGateMessages({ doctor, migration, evidenceFile: null })
+          : []),
+      ],
+    };
   }
 
   if (doctor.blocks_execution) {

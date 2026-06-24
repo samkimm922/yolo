@@ -1,5 +1,8 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { inspectPreExecutionGates } from "../src/runtime/gates/pre-execution-gates.js";
 import { planControlledParallelWaves } from "../src/runtime/parallel/wave-planner.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
@@ -58,24 +61,29 @@ function strictPrd(overrides = {}) {
 describe("soak scaffold — deterministic repeated execution", () => {
   test("pre-execution gates produce identical results across 20 iterations", () => {
     const prd = strictPrd();
+    const projectRoot = mkdtempSync(join(tmpdir(), "yolo-soak-pre-execution-"));
     const results = [];
-    for (let i = 0; i < 20; i += 1) {
-      results.push(inspectPreExecutionGates({
-        prd,
-        prdPath: "/fake/prd.json",
-        stateDir: "/fake/state",
-        projectRoot: "/fake/project",
-        config: { ai: { executor: "claude" } },
-      }));
-    }
+    try {
+      for (let i = 0; i < 20; i += 1) {
+        results.push(inspectPreExecutionGates({
+          prd,
+          prdPath: join(projectRoot, "prd.json"),
+          stateDir: join(projectRoot, "state"),
+          projectRoot,
+          config: { ai: { executor: "claude" } },
+        }));
+      }
 
-    const first = results[0];
-    assert.equal(first.status, "pass");
-    assert.equal(first.stage, "ready");
-    for (let i = 1; i < results.length; i += 1) {
-      assert.equal(results[i].status, first.status);
-      assert.equal(results[i].stage, first.stage);
-      assert.equal(results[i].code, first.code);
+      const first = results[0];
+      assert.equal(first.status, "pass");
+      assert.equal(first.stage, "ready");
+      for (let i = 1; i < results.length; i += 1) {
+        assert.equal(results[i].status, first.status);
+        assert.equal(results[i].stage, first.stage);
+        assert.equal(results[i].code, first.code);
+      }
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
     }
   });
 
