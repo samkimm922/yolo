@@ -10,6 +10,7 @@ import {
   getLifecycleStage,
   LIFECYCLE_STAGES,
   validateLifecycleState,
+  type LifecycleStateSnapshot,
 } from "./schema.js";
 import {
   lifecycleArtifactPath,
@@ -23,23 +24,92 @@ import { isStructuredManualAcceptanceEvidence } from "./manual-acceptance.js";
 export const LIFECYCLE_PROGRESS_SCHEMA_VERSION = "1.0";
 export const LIFECYCLE_STAGE_REPORT_SCHEMA = "yolo.lifecycle.stage_report.v1";
 
-function stableJson(value) {
+export type ProgressRecord = Record<string, unknown>;
+
+export interface ProgressOptions extends ProgressRecord {
+  projectName?: unknown;
+  project_name?: unknown;
+  now?: unknown;
+  stateRoot?: unknown;
+  state_root?: unknown;
+  stateDir?: unknown;
+  state_dir?: unknown;
+  stageStatus?: unknown;
+  stage_status?: unknown;
+  source?: unknown;
+  skipSequenceCheck?: unknown;
+  skip_sequence_check?: unknown;
+  writeSessionMemory?: unknown;
+  write_session_memory?: unknown;
+  learnFailures?: unknown;
+  input?: ProgressRecord;
+}
+
+export interface StageReportEntry extends ProgressRecord {
+  status?: string;
+  verdict?: string;
+  outcome?: string;
+  report?: ProgressRecord;
+  blockers?: unknown[];
+  blocked_reasons?: unknown[];
+  issues?: unknown[];
+  checks?: unknown[];
+  evidence?: unknown[];
+  artifacts?: unknown[];
+  manual_criteria?: unknown[];
+  inputs?: unknown[];
+  outputs?: unknown[];
+  decisions?: unknown[];
+  next_actions?: unknown[];
+  report_json?: unknown;
+  report_markdown?: unknown;
+  summary?: unknown;
+  code?: unknown;
+}
+
+export interface ManualCriterion extends ProgressRecord {
+  task_id?: unknown;
+  task_code?: unknown;
+  taskId?: unknown;
+  condition_id?: unknown;
+  conditionId?: unknown;
+  level?: unknown;
+  status?: unknown;
+}
+
+export interface ReportBlocker {
+  code: string;
+  message: string;
+  source: string | null;
+  task_id: string | null;
+}
+
+export interface StatusStageEntry extends ProgressRecord {
+  id?: string;
+  status?: string;
+  sequence?: unknown;
+  label?: unknown;
+  artifact?: unknown;
+  writes_code?: unknown;
+}
+
+function stableJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function clone(value) {
+function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
-function normalizedReportStatus(report = Object()) {
+function normalizedReportStatus(report: StageReportEntry = Object()): string {
   return clean(report.status || report.verdict || report.outcome).toLowerCase().replace(/[\s-]+/g, "_");
 }
 
-function statusForReport(report = Object()) {
+function statusForReport(report: StageReportEntry = Object()): string {
   const status = normalizedReportStatus(report);
   if (["pass", "passed", "success", "succeeded", "completed", "done"].includes(status)) return "completed";
   if (["warning", "warn"].includes(status)) return "warning";
@@ -47,27 +117,27 @@ function statusForReport(report = Object()) {
   return "active";
 }
 
-function shouldRefreshSourceSnapshot(stageId, stageStatus) {
+function shouldRefreshSourceSnapshot(stageId: string, stageStatus: string): boolean {
   const stage = getLifecycleStage(stageId);
   return stage.writes_code === true && stageStatus === "completed";
 }
 
-function meaningfulEvidenceEntry(entry) {
+function meaningfulEvidenceEntry(entry: unknown): boolean {
   if (!entry) return false;
   if (typeof entry === "string") return Boolean(clean(entry));
   if (typeof entry !== "object") return true;
-  return Object.keys(entry).length > 0;
+  return Object.keys(entry as object).length > 0;
 }
 
-function reportEvidenceEntries(report = Object()) {
+function reportEvidenceEntries(report: StageReportEntry = Object()): ProgressRecord[] {
   return [
     ...(Array.isArray(report.evidence) ? report.evidence : []),
     ...(Array.isArray(report.report?.evidence) ? report.report.evidence : []),
-  ].filter(meaningfulEvidenceEntry);
+  ].filter(meaningfulEvidenceEntry) as ProgressRecord[];
 }
 
-function unresolvedManualCriteria(report = Object()) {
-  const manualCriteria = [
+function unresolvedManualCriteria(report: StageReportEntry = Object()): ManualCriterion[] {
+  const manualCriteria: unknown[] = [
     ...(Array.isArray(report.manual_criteria) ? report.manual_criteria : []),
     ...(Array.isArray(report.report?.manual_criteria) ? report.report.manual_criteria : []),
   ];
@@ -77,24 +147,32 @@ function unresolvedManualCriteria(report = Object()) {
     (entry) => isStructuredManualAcceptanceEvidence(entry),
   );
   return manualCriteria.filter((criterion) => {
-    const taskId = criterion?.task_id;
-    const conditionId = criterion?.condition_id;
+    if (!criterion || typeof criterion !== "object") return true;
+    const record = criterion as ManualCriterion;
+    const taskId = record.task_id;
+    const conditionId = record.condition_id;
     if (!taskId || !conditionId) return true;
-    return !manualEvidence.some((record) => record.task_id === taskId && record.condition_id === conditionId);
-  });
+    return !manualEvidence.some(
+      (evidence) => (evidence as ManualCriterion).task_id === taskId
+        && (evidence as ManualCriterion).condition_id === conditionId,
+    );
+  }) as ManualCriterion[];
 }
 
-function assertDeliveryManualAcceptanceResolved(stageId, { stateRoot } = Object()) {
+function assertDeliveryManualAcceptanceResolved(stageId: string, { stateRoot } = Object()): void {
   if (stageId !== "delivery") return;
   const acceptancePath = lifecycleArtifactPath("acceptance", { stateRoot });
   if (!existsSync(acceptancePath)) return;
-  let acceptanceReport = null;
+  let parsed: StageReportEntry;
   try {
-    acceptanceReport = JSON.parse(readFileSync(acceptancePath, "utf8"));
+    // JSON.parse returns `any`; downstream accesses tolerate malformed shapes
+    // (see StageReportEntry optionals). Preserve the original trust-the-parse
+    // behavior rather than adding a new narrowing branch.
+    parsed = JSON.parse(readFileSync(acceptancePath, "utf8"));
   } catch {
     return;
   }
-  const unresolved = unresolvedManualCriteria(acceptanceReport);
+  const unresolved = unresolvedManualCriteria(parsed);
   if (unresolved.length === 0) return;
   throw new RuntimeInvariantViolation(
     "delivery_manual_acceptance_unresolved",
@@ -119,68 +197,85 @@ function assertDeliveryManualAcceptanceResolved(stageId, { stateRoot } = Object(
 // external producer writes malformed-but-valid JSON. `.filter((c) => c.status
 // === "blocked")` would then crash on `null.status`. Reject non-object entries
 // before reading `.status`, mirroring the asConditions/isBlockingIssue pattern.
-function isBlockingCheck(check) {
+function isBlockingCheck(check: unknown): boolean {
   if (!check || typeof check !== "object") return false;
-  return check.status === "blocked";
+  return (check as ManualCriterion).status === "blocked";
 }
 
-function reportBlockers(report = Object()) {
-  const raw = [
+export interface ReportBlockerRecord extends ProgressRecord {
+  code?: unknown;
+  id?: unknown;
+  name?: unknown;
+  message?: unknown;
+  detail?: unknown;
+  summary?: unknown;
+  reason?: unknown;
+  source?: unknown;
+  gate?: unknown;
+  stage?: unknown;
+  task_id?: unknown;
+  taskId?: unknown;
+}
+
+function reportBlockers(report: StageReportEntry = Object()): ReportBlocker[] {
+  const raw: unknown[] = [
     ...(Array.isArray(report.blockers) ? report.blockers : []),
     ...(Array.isArray(report.blocked_reasons) ? report.blocked_reasons : []),
     ...(Array.isArray(report.issues) ? report.issues.filter((issue) => isBlockingIssue(issue)) : []),
     ...(Array.isArray(report.checks) ? report.checks.filter((check) => isBlockingCheck(check)) : []),
   ];
   return raw
-    .map((item) => {
-      if (typeof item === "string") return { code: "BLOCKER", message: item };
+    .map((item): ReportBlocker | null => {
+      if (typeof item === "string") return { code: "BLOCKER", message: item, source: null, task_id: null };
       if (!item || typeof item !== "object") return null;
+      const record = item as ReportBlockerRecord;
       return {
-        code: item.code || item.id || item.name || "BLOCKER",
-        message: item.message || item.detail || item.summary || item.reason || "",
-        source: item.source || item.gate || item.stage || null,
-        task_id: item.task_id || item.taskId || null,
+        code: String(record.code || record.id || record.name || "BLOCKER"),
+        message: String(record.message || record.detail || record.summary || record.reason || ""),
+        source: record.source != null ? String(record.source) : (record.gate != null ? String(record.gate) : (record.stage != null ? String(record.stage) : null)),
+        task_id: record.task_id != null ? String(record.task_id) : (record.taskId != null ? String(record.taskId) : null),
       };
     })
-    .filter(Boolean);
+    .filter((item): item is ReportBlocker => item !== null);
 }
 
 // Acceptance reports classify issues by priority level rather than status.
 // P0 (hard failures) and P1 (release-blocking gaps) must surface as stage
 // blockers; P2/human_review stay as advisory issues and do not block the stage.
-function isBlockingIssue(issue) {
+function isBlockingIssue(issue: unknown): boolean {
   if (!issue || typeof issue !== "object") return false;
-  if (issue.status === "blocked") return true;
-  const level = clean(issue.level).toUpperCase();
+  const record = issue as ManualCriterion;
+  if (record.status === "blocked") return true;
+  const level = clean(record.level).toUpperCase();
   return level === "P0" || level === "P1";
 }
 
-function reportEvidence(report = Object()) {
+function reportEvidence(report: StageReportEntry = Object()): ProgressRecord[] {
   return [
     ...(Array.isArray(report.evidence) ? report.evidence : []),
     ...(Array.isArray(report.artifacts) ? report.artifacts.map((path) => ({ path })) : []),
     report.report_json ? { path: report.report_json, type: "report_json" } : null,
     report.report_markdown ? { path: report.report_markdown, type: "report_markdown" } : null,
-  ].filter(Boolean);
+  ].filter(Boolean) as ProgressRecord[];
 }
 
-function stateDirFor(options = Object()) {
-  if (options.stateDir || options.state_dir) return resolve(options.stateDir || options.state_dir);
+function stateDirFor(options: ProgressOptions = Object()): string {
+  if (options.stateDir || options.state_dir) return resolve(String(options.stateDir || options.state_dir));
   return join(resolveLifecycleStateRoot(options), "state");
 }
 
-function nextStageId(stageId) {
+function nextStageId(stageId: string): string {
   const index = LIFECYCLE_STAGES.findIndex((stage) => stage.id === stageId);
   if (index < 0) return stageId;
   return LIFECYCLE_STAGES[index + 1]?.id || stageId;
 }
 
-function loadOrCreateStatus(stageId, options = Object()) {
+function loadOrCreateStatus(stageId: string, options: ProgressOptions = Object()) {
   const projectName = clean(options.projectName || options.project_name) || "project";
   const statusPath = lifecycleStatusPath(options);
   if (existsSync(statusPath)) {
     try {
-      return JSON.parse(readFileSync(statusPath, "utf8"));
+      return JSON.parse(readFileSync(statusPath, "utf8")) as LifecycleStateSnapshot;
     } catch {
       return createLifecycleStateSnapshot({ projectName, currentStage: stageId, now: options.now });
     }
@@ -188,7 +283,7 @@ function loadOrCreateStatus(stageId, options = Object()) {
   return createLifecycleStateSnapshot({ projectName, currentStage: stageId, now: options.now });
 }
 
-function updateStatusForStage(stageId, stageStatus, options = Object()) {
+function updateStatusForStage(stageId: string, stageStatus: string, options: ProgressOptions = Object()) {
   const now = clean(options.now) || new Date().toISOString();
   const status = loadOrCreateStatus(stageId, { ...options, now });
   const activeStage = stageStatus === "completed" ? nextStageId(stageId) : stageId;
@@ -202,7 +297,7 @@ function updateStatusForStage(stageId, stageStatus, options = Object()) {
     // chaining pattern used in validateLifecycleState (schema.ts).
     const existing = (Array.isArray(status.stages) ? status.stages : []).find(
       (item) => item?.id === stage.id,
-    ) || {};
+    ) || { status: "" as string };
     let nextStatus = existing.status || "pending";
     if (stage.id === stageId) nextStatus = stageStatus;
     else if (stage.id === activeStage) nextStatus = "active";
@@ -224,10 +319,11 @@ function updateStatusForStage(stageId, stageStatus, options = Object()) {
   return { path, state: status, validation };
 }
 
-export function buildLifecycleStageReport(stageId, report = Object(), options = Object()) {
+export function buildLifecycleStageReport(stageId: string, report: StageReportEntry | object = Object(), options: ProgressOptions = Object()) {
+  const stageReport = report as StageReportEntry;
   const now = clean(options.now) || new Date().toISOString();
   const stage = getLifecycleStage(stageId);
-  const stageStatus = options.stageStatus || options.stage_status || statusForReport(report);
+  const stageStatus = clean(options.stageStatus || options.stage_status) || statusForReport(stageReport);
   const artifact = createLifecycleArtifact(stage, {
     projectName: options.projectName || options.project_name,
     now,
@@ -238,17 +334,18 @@ export function buildLifecycleStageReport(stageId, report = Object(), options = 
     schema: LIFECYCLE_STAGE_REPORT_SCHEMA,
     lifecycle_schema: artifact.schema,
     updated_at: now,
-    inputs: Array.isArray(report.inputs) ? report.inputs : [],
-    outputs: Array.isArray(report.outputs) ? report.outputs : [],
-    decisions: Array.isArray(report.decisions) ? report.decisions : [],
-    evidence: reportEvidence(report),
-    blockers: reportBlockers(report),
-    next_actions: Array.isArray(report.next_actions) ? report.next_actions : [],
-    report: clone(report),
+    inputs: Array.isArray(stageReport.inputs) ? stageReport.inputs : [],
+    outputs: Array.isArray(stageReport.outputs) ? stageReport.outputs : [],
+    decisions: Array.isArray(stageReport.decisions) ? stageReport.decisions : [],
+    evidence: reportEvidence(stageReport),
+    blockers: reportBlockers(stageReport),
+    next_actions: Array.isArray(stageReport.next_actions) ? stageReport.next_actions : [],
+    report: clone(stageReport),
   };
 }
 
-export function writeLifecycleStageReport(stageId, report = Object(), options = Object()) {
+export function writeLifecycleStageReport(stageId: string, report: StageReportEntry | object = Object(), options: ProgressOptions = Object()) {
+  const inputReport = report as StageReportEntry;
   const stateRoot = resolveLifecycleStateRoot(options);
   const now = clean(options.now) || new Date().toISOString();
 
@@ -259,10 +356,10 @@ export function writeLifecycleStageReport(stageId, report = Object(), options = 
     // Same null-entry guard as updateStatusForStage: status.stages may contain
     // null/non-object entries from a corrupted status.json. `.map((s) => [s.id,
     // s.status])` crashes on null; use optional chaining and drop undefined ids.
-    const stageStatusMap = new Map(
+    const stageStatusMap = new Map<string, string>(
       (Array.isArray(status.stages) ? status.stages : [])
-        .map((s) => [s?.id, s?.status])
-        .filter(([id]) => id),
+        .map((s): [string | undefined, string | undefined] => [s?.id, s?.status])
+        .filter((entry): entry is [string, string] => Boolean(entry[0])),
     );
     const incomplete = LIFECYCLE_STAGES.filter(
       (s) => s.sequence >= 5 && s.sequence < targetStage.sequence && stageStatusMap.get(s.id) !== "completed",
@@ -286,7 +383,7 @@ export function writeLifecycleStageReport(stageId, report = Object(), options = 
   mkdirSync(stateDir, { recursive: true });
   const event = appendStateEvent(stateDir, `lifecycle.${stageId}.report`, {
     stage: stageId,
-    status: report.status || stageStatus,
+    status: inputReport.status || stageStatus,
     artifact: artifactPath,
     blocker_count: stageReport.blockers.length,
   }, { source: options.source || "lifecycle-progress", now });
@@ -310,8 +407,8 @@ export function writeLifecycleStageReport(stageId, report = Object(), options = 
       argv: [
         "--type=lifecycle",
         `--source=${options.source || "lifecycle-progress"}`,
-        `--summary=${stageId}:${report.status || stageStatus}:${report.summary || report.code || ""}`,
-        `--refs=${[artifactPath, ...(Array.isArray(report.artifacts) ? report.artifacts : [])].filter(Boolean).join(",")}`,
+        `--summary=${stageId}:${inputReport.status || stageStatus}:${inputReport.summary || inputReport.code || ""}`,
+        `--refs=${[artifactPath, ...(Array.isArray(inputReport.artifacts) ? inputReport.artifacts : [])].filter(Boolean).join(",")}`,
         `--state-dir=${stateDir}`,
       ],
       now: new Date(now),
@@ -322,13 +419,13 @@ export function writeLifecycleStageReport(stageId, report = Object(), options = 
   if (
     options.learnFailures === true &&
     stageReport.blockers.length > 0 &&
-    ["blocked", "error", "failed", "fail"].includes(clean(report.status).toLowerCase())
+    ["blocked", "error", "failed", "fail"].includes(clean(inputReport.status).toLowerCase())
   ) {
     learning = appendLearningRecord({
       type: "failure",
       source: options.source || "lifecycle-progress",
       gate: stageId,
-      lesson: report.summary || stageReport.blockers[0]?.message || `${stageId} blocked`,
+      lesson: inputReport.summary || stageReport.blockers[0]?.message || `${stageId} blocked`,
       prevention: stageReport.next_actions[0] || "Fix the blocker before advancing the lifecycle.",
       evidence_refs: [artifactPath],
       tags: ["lifecycle", stageId],

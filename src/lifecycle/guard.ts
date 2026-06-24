@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { LIFECYCLE_STAGES, getLifecycleStage, lifecycleStageForCommand, validateLifecycleState } from "./schema.js";
+import { LIFECYCLE_STAGES, getLifecycleStage, lifecycleStageForCommand, validateLifecycleState, type LifecycleStage } from "./schema.js";
 import { lifecycleArtifactPath, lifecycleStatusPath, resolveLifecycleStateRoot } from "./state.js";
 import { inspectWorktreeDrift } from "./source-snapshot.js";
 import { isStructuredManualAcceptanceEvidence } from "./manual-acceptance.js";
@@ -32,35 +32,130 @@ const MAIN_NEXT_STAGES = [
   { stage: "learn", command: "yolo learn", description: "record bounded lessons" },
 ];
 
-function clean(value) {
+export type GuardRecord = Record<string, unknown>;
+
+export interface GuardInput extends GuardRecord {
+  command?: unknown;
+  projectRoot?: unknown;
+  project_root?: unknown;
+  cwd?: unknown;
+  prdPath?: unknown;
+  prd_path?: unknown;
+  prd?: unknown;
+  [key: string]: unknown;
+}
+
+export interface GuardOptions extends GuardRecord {
+  command?: unknown;
+  projectRoot?: unknown;
+  project_root?: unknown;
+  cwd?: unknown;
+  stateRoot?: unknown;
+  state_root?: unknown;
+  input?: GuardInput;
+  [key: string]: unknown;
+}
+
+export interface LifecycleStatusState extends GuardRecord {
+  current_stage?: unknown;
+  stages?: LifecycleStatusStageEntry[];
+}
+
+export interface LifecycleStatusStageEntry extends GuardRecord {
+  id?: string;
+  status?: string;
+  sequence?: unknown;
+  label?: unknown;
+  artifact?: unknown;
+  writes_code?: unknown;
+}
+
+export interface StageReport extends GuardRecord {
+  status?: unknown;
+  verdict?: unknown;
+  outcome?: unknown;
+  result?: GuardRecord;
+  report?: GuardRecord;
+  report_json?: unknown;
+  report_markdown?: unknown;
+  evidence?: unknown[];
+  artifacts?: unknown[];
+  outputs?: unknown[];
+  manual_criteria?: unknown[];
+  blockers?: unknown[];
+  blocked_reasons?: unknown[];
+  issues?: unknown[];
+  checks?: unknown[];
+  inputs?: unknown[];
+  decisions?: unknown[];
+  next_actions?: unknown[];
+  must_fix_before_ship?: unknown;
+  mustFixBeforeShip?: unknown;
+}
+
+export interface EvidenceEntry extends GuardRecord {
+  path?: unknown;
+  file?: unknown;
+  file_path?: unknown;
+  filePath?: unknown;
+  type?: unknown;
+  task_id?: unknown;
+  condition_id?: unknown;
+}
+
+export interface StageRequirement extends GuardRecord {
+  stage: string;
+  code: string;
+  message: string;
+  satisfiedBy?: string[];
+  defaultArtifacts?: string[];
+  requireLifecycleArtifact?: boolean;
+  mustBeCompleted?: boolean;
+  mustBeStrictCompleted?: boolean;
+  requireCurrentPrdCheck?: boolean;
+}
+
+export interface GuardBlocker {
+  code: string;
+  stage: string;
+  message: string;
+}
+
+export interface ReadLifecycleReportResult {
+  path: string;
+  report: StageReport | null;
+  error: Error | null;
+}
+
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function asCommand(value = "") {
+function asCommand(value: unknown = ""): string {
   const command = clean(value).replace(/^\//, "");
   return command || "yolo";
 }
 
-function normalizePath(projectRoot, value) {
+function normalizePath(projectRoot: string, value: unknown): string {
   const path = clean(value);
   if (!path) return "";
   return isAbsolute(path) ? path : resolve(projectRoot, path);
 }
 
-function readJsonFile(path) {
+function readJsonFile(path: string): GuardRecord {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-function readCurrentStage(statusPath) {
+function readCurrentStage(statusPath: string): string | null {
   if (!existsSync(statusPath)) return null;
   try {
-    return readJsonFile(statusPath).current_stage || null;
+    return (readJsonFile(statusPath).current_stage as string) || null;
   } catch {
     return null;
   }
 }
 
-function stageStatus(state = Object(), stageId = "") {
+function stageStatus(state: LifecycleStatusState = Object(), stageId = ""): string {
   // status.json may contain valid JSON with a null/non-object entry inside the
   // `stages` array, or `stages` may be a non-array value (botched external
   // write, partial flush, git merge). Without this guard, `stage.id` crashes
@@ -68,102 +163,106 @@ function stageStatus(state = Object(), stageId = "") {
   // taking down every guard call site that routes through stageReady/
   // stageCompleted. Mirrors the optional-chaining + Array.isArray pattern
   // used in validateLifecycleState (schema.ts).
-  const stages = Array.isArray(state?.stages) ? state.stages : [];
+  const stages: LifecycleStatusStageEntry[] = Array.isArray(state?.stages) ? state.stages : [];
   return stages.find((stage) => stage?.id === stageId)?.status || "pending";
 }
 
-function stageCompleted(state = Object(), stageId = "") {
+function stageCompleted(state: LifecycleStatusState = Object(), stageId = ""): boolean {
   return stageStatus(state, stageId) === "completed";
 }
 
-function stageReady(state = Object(), stageId = "") {
+function stageReady(state: LifecycleStatusState = Object(), stageId = ""): boolean {
   const status = stageStatus(state, stageId);
   return status === "completed" || (status === "warning" && WARNING_READY_STAGES.has(stageId));
 }
 
-function inputPathExists(projectRoot, input = Object(), keys = []) {
+function inputPathExists(projectRoot: string, input: GuardInput = Object(), keys: string[] = []): boolean {
   return keys.some((key) => {
     const path = normalizePath(projectRoot, input[key] || input[key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)]);
-    return path && existsSync(path);
+    return Boolean(path && existsSync(path));
   });
 }
 
-function existingDemandInputForPrd(command, projectRoot, input = Object()) {
+function existingDemandInputForPrd(command: string, projectRoot: string, input: GuardInput = Object()): boolean {
   return command === "yolo-prd" && inputPathExists(projectRoot, input, PRD_DEMAND_INPUTS);
 }
 
-function defaultArtifactExists(stateRoot, relativePath) {
+function defaultArtifactExists(stateRoot: string, relativePath: string): boolean {
   return existsSync(resolve(stateRoot, relativePath));
 }
 
-function lifecycleArtifactReady(stateRoot, stageId) {
+function lifecycleArtifactReady(stateRoot: string, stageId: string): boolean {
   const path = lifecycleArtifactPath(stageId, { stateRoot });
   if (!existsSync(path)) return false;
   try {
-    const artifact = readJsonFile(path);
+    const artifact = readJsonFile(path) as StageReport;
     if (reportHasStatus(artifact, BLOCKING_REPORT_STATUSES) || reportHasStatus(artifact, PENDING_REPORT_STATUSES)) return false;
-    return stageReady({ stages: [{ id: stageId, status: artifact.status }] }, stageId);
+    return stageReady({ stages: [{ id: stageId, status: clean(artifact.status) }] }, stageId);
   } catch {
     return false;
   }
 }
 
-function normalizeReportStatus(value) {
+function normalizeReportStatus(value: unknown): string {
   return clean(value).toLowerCase().replace(/\s+/g, "_");
 }
 
-function reportStatusValues(report = Object(), depth = 0) {
+function reportStatusValues(report: GuardRecord = Object(), depth = 0): string[] {
   if (!report || typeof report !== "object" || depth > 4) return [];
+  const result = report.result as GuardRecord | undefined;
+  const nested = report.report as GuardRecord | undefined;
   return [
     report.status,
     report.verdict,
     report.outcome,
-    report.result?.status,
-    ...reportStatusValues(report.report, depth + 1),
-    ...reportStatusValues(report.result?.report, depth + 1),
+    result?.status,
+    ...reportStatusValues(nested, depth + 1),
+    ...reportStatusValues(result?.report as GuardRecord, depth + 1),
   ].map(normalizeReportStatus).filter(Boolean);
 }
 
-function reportHasStatus(report, statuses) {
+function reportHasStatus(report: GuardRecord, statuses: Set<string>): boolean {
   return reportStatusValues(report).some((status) => statuses.has(status));
 }
 
-function reportStatusForMessage(report, statuses) {
+function reportStatusForMessage(report: GuardRecord, statuses: Set<string>): string {
   return reportStatusValues(report).find((status) => statuses.has(status))
     || reportStatusValues(report)[0]
     || "unknown";
 }
 
-function readLifecycleReport(stateRoot, stageId) {
+function readLifecycleReport(stateRoot: string, stageId: string): ReadLifecycleReportResult {
   const path = lifecycleArtifactPath(stageId, { stateRoot });
   if (!existsSync(path)) return { path, report: null, error: null };
   try {
-    return { path, report: readJsonFile(path), error: null };
+    return { path, report: readJsonFile(path) as StageReport, error: null };
   } catch (error) {
-    return { path, report: null, error };
+    return { path, report: null, error: error as Error };
   }
 }
 
-function demandPathFromStageReport(report = Object()) {
-  const candidates = [
-    report.report?.demand_path,
-    report.report?.demandPath,
-    report.report?.demand?.demand_path,
-    report.report?.demand?.demandPath,
-    report.report?.demand_dir,
-    report.report?.demandDir,
+function demandPathFromStageReport(report: GuardRecord = Object()): string {
+  const nested = report.report as GuardRecord | undefined;
+  const demand = nested?.demand as GuardRecord | undefined;
+  const candidates: unknown[] = [
+    nested?.demand_path,
+    nested?.demandPath,
+    demand?.demand_path,
+    demand?.demandPath,
+    nested?.demand_dir,
+    nested?.demandDir,
     report.demand_path,
     report.demandPath,
     report.demand_dir,
     report.demandDir,
-    ...(Array.isArray(report.report?.outputs) ? report.report.outputs : [])
-      .filter((output) => output?.type === "demand_json" && clean(output.path).endsWith("session.json"))
-      .map((output) => output.path),
+    ...(Array.isArray(nested?.outputs) ? nested.outputs : [])
+      .filter((output) => output?.type === "demand_json" && clean((output as EvidenceEntry).path).endsWith("session.json"))
+      .map((output) => (output as EvidenceEntry).path),
   ];
   return candidates.map(clean).find(Boolean) || "";
 }
 
-function demandPathForSpec(stateRoot) {
+function demandPathForSpec(stateRoot: string): string {
   for (const stage of ["roadmap", "discovery"]) {
     const read = readLifecycleReport(stateRoot, stage);
     if (!read.report) continue;
@@ -173,30 +272,36 @@ function demandPathForSpec(stateRoot) {
   return "";
 }
 
-function truthyFlag(value) {
+function truthyFlag(value: unknown): boolean {
   return value === true || normalizeReportStatus(value) === "true";
 }
 
-function hasMustFixBeforeShip(value, depth = 0) {
+function hasMustFixBeforeShip(value: unknown, depth = 0): boolean {
   if (!value || depth > 8) return false;
   if (Array.isArray(value)) return value.some((item) => hasMustFixBeforeShip(item, depth + 1));
   if (typeof value !== "object") return false;
-  if (truthyFlag(value.must_fix_before_ship) || truthyFlag(value.mustFixBeforeShip)) return true;
-  return Object.values(value).some((item) => hasMustFixBeforeShip(item, depth + 1));
+  const record = value as GuardRecord;
+  if (truthyFlag(record.must_fix_before_ship) || truthyFlag(record.mustFixBeforeShip)) return true;
+  return Object.values(record).some((item) => hasMustFixBeforeShip(item, depth + 1));
 }
 
-function meaningfulEvidenceEntry(entry) {
+function meaningfulEvidenceEntry(entry: unknown): boolean {
   if (!entry) return false;
   if (typeof entry === "string") return Boolean(clean(entry));
   if (typeof entry !== "object") return true;
-  return Object.keys(entry).length > 0;
+  return Object.keys(entry as object).length > 0;
 }
 
-function evidencePathExists(projectRoot, entry) {
+function evidencePathExists(projectRoot: string, entry: unknown): { exists: boolean; empty: boolean; path?: string } {
   if (!entry || typeof entry !== "object") return { exists: false, empty: true };
-  const rawPath = entry.path || entry.file || entry.file_path || entry.filePath;
+  const record = entry as EvidenceEntry;
+  const rawPath = record.path || record.file || record.file_path || record.filePath;
   if (!rawPath) return { exists: false, empty: true };
-  const absPath = isAbsolute(rawPath) ? rawPath : resolve(projectRoot, rawPath);
+  // Preserve original pass-through semantics: node:path throws on non-string
+  // truthy values (the historical behavior under implicit-any), so keep the
+  // raw runtime value rather than normalizing it through clean().
+  const rawPathStr = rawPath as string;
+  const absPath = isAbsolute(rawPathStr) ? rawPathStr : resolve(projectRoot, rawPathStr);
   if (!existsSync(absPath)) return { exists: false, empty: true, path: absPath };
   try {
     const stats = statSync(absPath);
@@ -206,8 +311,8 @@ function evidencePathExists(projectRoot, entry) {
   }
 }
 
-function validateEvidencePaths(projectRoot, report = Object(), stageId = "") {
-  const blockers = [];
+function validateEvidencePaths(projectRoot: string, report: GuardRecord = Object(), stageId = ""): GuardBlocker[] {
+  const blockers: GuardBlocker[] = [];
   const entries = reportEvidenceEntries(report);
   if (entries.length === 0) return blockers;
   for (const entry of entries) {
@@ -216,7 +321,7 @@ function validateEvidencePaths(projectRoot, report = Object(), stageId = "") {
       blockers.push(makeBlocker(
         `${stageId.toUpperCase()}_EVIDENCE_PATH_MISSING`,
         stageId,
-        `${stageId} evidence path does not exist: ${path || entry.path || entry.file || "unknown"}`,
+        `${stageId} evidence path does not exist: ${path || (entry as EvidenceEntry).path || (entry as EvidenceEntry).file || "unknown"}`,
       ));
     } else if (empty) {
       blockers.push(makeBlocker(
@@ -229,9 +334,10 @@ function validateEvidencePaths(projectRoot, report = Object(), stageId = "") {
   return blockers;
 }
 
-function hasManualAcceptanceCriteria(report = Object()) {
+function hasManualAcceptanceCriteria(report: GuardRecord = Object()): boolean {
+  const nestedReport = report.report as GuardRecord | undefined;
   const manualCriteria = Array.isArray(report.manual_criteria) ? report.manual_criteria : [];
-  const nested = Array.isArray(report.report?.manual_criteria) ? report.report.manual_criteria : [];
+  const nested = Array.isArray(nestedReport?.manual_criteria) ? nestedReport.manual_criteria : [];
   // acceptance-report.json is an external artifact that can be hand-edited,
   // partially flushed, or git-merged into a valid-JSON-but-malformed shape.
   // A null/number/string entry inside `manual_criteria` would crash
@@ -240,7 +346,7 @@ function hasManualAcceptanceCriteria(report = Object()) {
   // pattern used elsewhere in this module.
   const allManual = [...manualCriteria, ...nested].filter(
     (criterion) => criterion && typeof criterion === "object" && !Array.isArray(criterion),
-  );
+  ) as EvidenceEntry[];
   if (allManual.length === 0) return false;
 
   const evidence = reportEvidenceEntries(report);
@@ -253,41 +359,43 @@ function hasManualAcceptanceCriteria(report = Object()) {
     const conditionId = criterion.condition_id;
     if (!taskId || !conditionId) return true;
     return !manualEvidence.some(
-      (record) => record.task_id === taskId && record.condition_id === conditionId,
+      (record) => (record as EvidenceEntry).task_id === taskId && (record as EvidenceEntry).condition_id === conditionId,
     );
   });
 
   return unresolved.length > 0;
 }
 
-function reportEvidenceEntries(report = Object()) {
+function reportEvidenceEntries(report: GuardRecord = Object()): EvidenceEntry[] {
+  const nestedReport = report.report as GuardRecord | undefined;
   return [
     ...(Array.isArray(report.evidence) ? report.evidence : []),
-    ...(Array.isArray(report.report?.evidence) ? report.report.evidence : []),
-  ].filter(meaningfulEvidenceEntry);
+    ...(Array.isArray(nestedReport?.evidence) ? nestedReport.evidence : []),
+  ].filter(meaningfulEvidenceEntry) as EvidenceEntry[];
 }
 
-function samePath(projectRoot, left, right) {
+function samePath(projectRoot: string, left: unknown, right: unknown): boolean {
   const leftPath = normalizePath(projectRoot, left);
   const rightPath = normalizePath(projectRoot, right);
   return Boolean(leftPath && rightPath && leftPath === rightPath);
 }
 
-function checkedPrdMatchesInput(projectRoot, stateRoot, input = Object()) {
+function checkedPrdMatchesInput(projectRoot: string, stateRoot: string, input: GuardInput = Object()): boolean {
   const prdPath = normalizePath(projectRoot, input.prdPath || input.prd_path || input.prd);
   if (!prdPath) return false;
   const path = lifecycleArtifactPath("check", { stateRoot });
   if (!existsSync(path)) return false;
   try {
     const artifact = readJsonFile(path);
-    const checkedPrd = artifact.report?.prd_path || artifact.report?.prdPath || artifact.prd_path || artifact.prdPath;
+    const nestedReport = artifact.report as GuardRecord | undefined;
+    const checkedPrd = nestedReport?.prd_path || nestedReport?.prdPath || artifact.prd_path || artifact.prdPath;
     return samePath(projectRoot, checkedPrd, prdPath);
   } catch {
     return false;
   }
 }
 
-function lifecycleMissingResult({ command, projectRoot, stateRoot, statusPath }) {
+function lifecycleMissingResult({ command, projectRoot, stateRoot, statusPath }: { command: string; projectRoot: string; stateRoot: string; statusPath: string }) {
   return {
     schema_version: LIFECYCLE_GUARD_SCHEMA_VERSION,
     schema: LIFECYCLE_GUARD_SCHEMA,
@@ -313,12 +421,12 @@ function lifecycleMissingResult({ command, projectRoot, stateRoot, statusPath })
   };
 }
 
-function makeBlocker(code, stage, message) {
+function makeBlocker(code: string, stage: string, message: string): GuardBlocker {
   return { code, stage, message };
 }
 
-function deliveryHardGateBlockers(stateRoot, projectRoot) {
-  const blockers = [];
+function deliveryHardGateBlockers(stateRoot: string, projectRoot: string): GuardBlocker[] {
+  const blockers: GuardBlocker[] = [];
   const run = readLifecycleReport(stateRoot, "run");
   if (run.error) {
     blockers.push(makeBlocker("RUN_REPORT_UNREADABLE", "run", `Run report cannot be read: ${run.error.message}`));
@@ -384,7 +492,7 @@ function deliveryHardGateBlockers(stateRoot, projectRoot) {
   return blockers;
 }
 
-function requiredStagesFor(command, input = Object()) {
+function requiredStagesFor(command: string, input: GuardInput = Object()): StageRequirement[] {
   if (command === "yolo-plan") {
     return [{
       stage: "discovery",
@@ -470,7 +578,7 @@ function requiredStagesFor(command, input = Object()) {
   return [];
 }
 
-function requirementSatisfied(requirement, state, projectRoot, stateRoot, options = Object()) {
+function requirementSatisfied(requirement: StageRequirement, state: LifecycleStatusState, projectRoot: string, stateRoot: string, options: GuardOptions = Object()): boolean {
   const lifecycleReady = requirement.mustBeStrictCompleted
     ? stageCompleted(state, requirement.stage)
     : stageReady(state, requirement.stage);
@@ -484,8 +592,8 @@ function requirementSatisfied(requirement, state, projectRoot, stateRoot, option
   return (requirement.defaultArtifacts || []).some((path) => defaultArtifactExists(stateRoot, path));
 }
 
-export function nextLifecycleAction(options = Object()) {
-  const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
+export function nextLifecycleAction(options: GuardOptions = Object()) {
+  const projectRoot = resolve(String(options.projectRoot || options.project_root || options.cwd || process.cwd()));
   const stateRoot = resolveLifecycleStateRoot({ ...options, projectRoot });
   const statusPath = lifecycleStatusPath({ ...options, projectRoot, stateRoot });
   if (!existsSync(statusPath)) {
@@ -496,9 +604,9 @@ export function nextLifecycleAction(options = Object()) {
       reason: "lifecycle_not_initialized",
     };
   }
-  let state = null;
+  let state: LifecycleStatusState;
   try {
-    state = readJsonFile(statusPath);
+    state = readJsonFile(statusPath) as LifecycleStatusState;
   } catch {
     return {
       command: "yolo doctor",
@@ -581,18 +689,22 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
     return lifecycleMissingResult({ command, projectRoot, stateRoot, statusPath });
   }
 
-  let state;
+  let state: LifecycleStatusState;
   try {
-    state = readJsonFile(statusPath);
+    state = readJsonFile(statusPath) as LifecycleStatusState;
   } catch (error) {
+    // readFileSync throws NodeJS.ErrnoException (an Error subclass); .message is
+    // a string in practice. Narrow once to read it, preserving the original
+    // `error.message` rendering in the summary and blocker message.
+    const message = (error as Error).message;
     return {
       ...base,
       status: "blocked",
       code: "LIFECYCLE_STATUS_UNREADABLE",
-      summary: `YOLO lifecycle status cannot be read: ${error.message}`,
+      summary: `YOLO lifecycle status cannot be read: ${message}`,
       current_stage: null,
       missing_required_stages: ["setup"],
-      blockers: [makeBlocker("LIFECYCLE_STATUS_UNREADABLE", "setup", error.message)],
+      blockers: [makeBlocker("LIFECYCLE_STATUS_UNREADABLE", "setup", message)],
       warnings: [],
       allowed_commands: ["yolo doctor", "yolo init"],
       next_actions: ["Run `yolo doctor` to inspect lifecycle status."],
@@ -758,12 +870,16 @@ export function inspectLifecycleDrift(projectRoot: string): LifecycleDriftResult
 
   // Check artifact presence for declared completed stages and timestamp monotonicity.
   const orderedCompleted = LIFECYCLE_STAGES.filter((s) => completedStages.has(s.id));
-  let previousStage: { id: string; sequence: number } | null = null;
+  // previousStage is set on every iteration; previousTimestamp only when a
+  // stage has a parseable timestamp. They move together for the contradiction
+  // check (a prior timestamp implies a prior stage was recorded), so narrow
+  // previousStage inside the guarded branch rather than re-checking it.
+  let previousStage: LifecycleStage | null = null;
   let previousTimestamp: number | null = null;
   for (const stage of orderedCompleted) {
     const ts = parseTimestamp(readArtifactTimestamp(stateRoot, stage.id));
     // Tolerate small clock jitter between rapid successive writes; only flag meaningful contradictions.
-    if (previousTimestamp != null && ts != null && previousTimestamp - ts > 1000) {
+    if (previousTimestamp != null && ts != null && previousTimestamp - ts > 1000 && previousStage) {
       drift_records.push({
         stage: stage.id,
         code: "TIMESTAMP_CONTRADICTION",

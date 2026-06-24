@@ -44,7 +44,7 @@ const INVENTORY = [
   ["src/lib/evaluators/quality-check.ts", { WARN: 1, warning: 3, "best-effort": 0, skip: 0 }],
   ["src/lifecycle/guard.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 0 }],
   ["src/lifecycle/progress.ts", { WARN: 0, warning: 2, "best-effort": 0, skip: 1 }],
-  ["src/lifecycle/schema.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 0 }],
+  ["src/lifecycle/schema.ts", { WARN: 0, warning: 2, "best-effort": 0, skip: 0 }],
   ["src/lifecycle/state.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 3 }],
   ["src/packs/manifest.ts", { WARN: 0, warning: 2, "best-effort": 0, skip: 0 }],
   ["src/packs/resolver.ts", { WARN: 0, warning: 7, "best-effort": 0, skip: 0 }],

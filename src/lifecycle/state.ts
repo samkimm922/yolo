@@ -11,43 +11,59 @@ import {
 export const LIFECYCLE_DIR_NAME = "lifecycle";
 export const LIFECYCLE_STATUS_FILE = "status.json";
 
-function stableJson(value) {
+export type LifecycleOptions = Record<string, unknown>;
+
+function stableJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function projectRelative(projectRoot, absolutePath) {
+function projectRelative(projectRoot: string, absolutePath: string): string {
   const rel = relative(projectRoot, absolutePath);
   return rel && !rel.startsWith("..") && !isAbsolute(rel) ? rel.replaceAll("\\", "/") : absolutePath;
 }
 
-export function resolveLifecycleStateRoot(options = Object()) {
-  if (options.stateRoot || options.state_root) return resolve(options.stateRoot || options.state_root);
-  const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
+export function resolveLifecycleStateRoot(options: LifecycleOptions = Object()): string {
+  if (options.stateRoot || options.state_root) return resolve(String(options.stateRoot || options.state_root));
+  const projectRoot = resolve(String(options.projectRoot || options.project_root || options.cwd || process.cwd()));
   return join(projectRoot, ".yolo");
 }
 
-export function lifecycleDir(options = Object()) {
+export function lifecycleDir(options: LifecycleOptions = Object()): string {
   return join(resolveLifecycleStateRoot(options), LIFECYCLE_DIR_NAME);
 }
 
-export function lifecycleArtifactPath(stageId, options = Object()) {
+export function lifecycleArtifactPath(stageId: string, options: LifecycleOptions = Object()): string {
   const stage = getLifecycleStage(stageId);
   return join(lifecycleDir(options), stage.default_artifact);
 }
 
-export function lifecycleStatusPath(options = Object()) {
+export function lifecycleStatusPath(options: LifecycleOptions = Object()): string {
   return join(lifecycleDir(options), LIFECYCLE_STATUS_FILE);
 }
 
-export function buildLifecycleStateFiles(options = Object()) {
+export interface LifecycleStateFile {
+  path: string;
+  role: string;
+  stage: string | null;
+  content: string;
+}
+
+export interface LifecycleStateFilesResult {
+  directory: string;
+  files: LifecycleStateFile[];
+  status: ReturnType<typeof createLifecycleStateSnapshot>;
+  validation: ReturnType<typeof validateLifecycleState>;
+}
+
+export function buildLifecycleStateFiles(options: LifecycleOptions = Object()): LifecycleStateFilesResult {
   const projectName = clean(options.projectName || options.project_name) || "project";
   const now = clean(options.now) || new Date().toISOString();
   const status = createLifecycleStateSnapshot({ projectName, now });
-  const files = [
+  const files: LifecycleStateFile[] = [
     {
       path: `.yolo/${LIFECYCLE_DIR_NAME}/${LIFECYCLE_STATUS_FILE}`,
       role: "lifecycle-state",
@@ -70,7 +86,13 @@ export function buildLifecycleStateFiles(options = Object()) {
   };
 }
 
-export function readLifecycleState(options = Object()) {
+export interface ReadLifecycleStateResult {
+  path: string;
+  state: unknown;
+  validation: ReturnType<typeof validateLifecycleState>;
+}
+
+export function readLifecycleState(options: LifecycleOptions = Object()): ReadLifecycleStateResult {
   const path = lifecycleStatusPath(options);
   const state = JSON.parse(readFileSync(path, "utf8"));
   return {
@@ -80,16 +102,16 @@ export function readLifecycleState(options = Object()) {
   };
 }
 
-export function initLifecycleState(options = Object()) {
-  const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
+export function initLifecycleState(options: LifecycleOptions = Object()) {
+  const projectRoot = resolve(String(options.projectRoot || options.project_root || options.cwd || process.cwd()));
   const stateRoot = resolveLifecycleStateRoot({ ...options, projectRoot });
   const force = options.force === true;
   const dryRun = options.dryRun === true || options.dry_run === true;
   const plan = buildLifecycleStateFiles(options);
-  const createdDirs = [];
-  const created = [];
-  const overwritten = [];
-  const skipped = [];
+  const createdDirs: string[] = [];
+  const created: string[] = [];
+  const overwritten: string[] = [];
+  const skipped: string[] = [];
 
   const absoluteDir = join(projectRoot, plan.directory);
   if (!existsSync(absoluteDir)) {
