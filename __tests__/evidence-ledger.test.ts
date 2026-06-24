@@ -203,6 +203,38 @@ describe("evidence ledger", () => {
     }
   });
 
+  test("readLedgerJsonl fails closed on oversized ledgers without full read", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+      mkdirSync(dirname(filePath), { recursive: true });
+      writeFileSync(filePath, `${JSON.stringify({ event: "oversized", payload: "x".repeat(2048) })}\n`, "utf8");
+
+      const records = readLedgerJsonl(filePath, { maxBytes: 1024 });
+      assert.equal(records.length, 1);
+      assert.equal((records[0] as { code?: string }).code, "LEDGER_READ_SIZE_LIMIT_EXCEEDED");
+      assert.equal(validateLedgerChain(records).status, "fail");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("appendJsonlRecord refuses previous hash reads from oversized ledgers", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+      mkdirSync(dirname(filePath), { recursive: true });
+      writeFileSync(filePath, `${JSON.stringify({ event: "oversized", payload: "x".repeat(9 * 1024 * 1024) })}\n`, "utf8");
+
+      assert.throws(
+        () => appendJsonlRecord(filePath, { event: "next" }),
+        (error) => Boolean(error && typeof error === "object" && (error as { code?: string }).code === "LEDGER_READ_SIZE_LIMIT_EXCEEDED")
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("appendJsonlRecord preserves the hash chain across concurrent processes", async () => {
     const root = tempDir();
     try {

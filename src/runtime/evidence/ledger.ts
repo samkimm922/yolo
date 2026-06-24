@@ -19,6 +19,7 @@ import { redactDeep } from "../../lib/security/redact.js";
 const DEFAULT_LEDGER_LOCK_TIMEOUT_MS = 30_000;
 const DEFAULT_LEDGER_LOCK_STALE_MS = 120_000;
 const DEFAULT_LEDGER_LOCK_RETRY_MS = 10;
+const DEFAULT_LEDGER_READ_MAX_BYTES = 8 * 1024 * 1024;
 const LOCK_WAIT_BUFFER = new Int32Array(new SharedArrayBuffer(4));
 
 function asPositiveNumber(value, fallback) {
@@ -27,6 +28,29 @@ function asPositiveNumber(value, fallback) {
 }
 
 function ledgerAppendError(code, message, details = Object(), cause = undefined) {
+  const error = new Error(message);
+  return Object.assign(error, {
+    code,
+    ...details,
+    ...(cause ? { cause } : {}),
+  });
+}
+
+function ledgerReadMaxBytes(options = Object()) {
+  return asPositiveNumber(options.maxBytes ?? options.max_bytes, DEFAULT_LEDGER_READ_MAX_BYTES);
+}
+
+function ledgerReadErrorRecord(code, message, details = Object()) {
+  return {
+    ledger_read_error: true,
+    status: "fail",
+    code,
+    message,
+    ...details,
+  };
+}
+
+function ledgerReadError(code, message, details = Object(), cause = undefined) {
   const error = new Error(message);
   return Object.assign(error, {
     code,
@@ -119,8 +143,23 @@ function acquireLedgerAppendLock(filePath, options = Object()) {
   });
 }
 
-function readJsonlRecords(filePath) {
+function readJsonlRecords(filePath, options = Object()) {
   if (!existsSync(filePath)) return [];
+  const maxBytes = ledgerReadMaxBytes(options);
+  const sizeBytes = statSync(filePath).size;
+  if (sizeBytes > maxBytes) {
+    const details = {
+      ledger_path: filePath,
+      size_bytes: sizeBytes,
+      max_bytes: maxBytes,
+      truncated: true,
+    };
+    const message = `Evidence ledger exceeds bounded read limit (${sizeBytes} > ${maxBytes} bytes).`;
+    if (options.throwOnReadError || options.throw_on_read_error) {
+      throw ledgerReadError("LEDGER_READ_SIZE_LIMIT_EXCEEDED", message, details);
+    }
+    return [ledgerReadErrorRecord("LEDGER_READ_SIZE_LIMIT_EXCEEDED", message, details)];
+  }
   // Tolerate malformed/truncated JSONL lines (partial flush, SIGKILL mid-write,
   // botched external edit). A dropped line breaks the ledger chain, which
   // validateLedgerChain surfaces as LEDGER_PREV_HASH_MISMATCH — the corruption
@@ -140,7 +179,7 @@ function readJsonlRecords(filePath) {
 }
 
 function previousRecordHash(filePath) {
-  const records = readJsonlRecords(filePath);
+  const records = readJsonlRecords(filePath, { throwOnReadError: true });
   return records.at(-1)?.record_hash || null;
 }
 
@@ -183,8 +222,8 @@ export function validateLedgerChain(records = [], options = Object()) {
   };
 }
 
-export function readLedgerJsonl(filePath) {
-  return readJsonlRecords(filePath);
+export function readLedgerJsonl(filePath, options = Object()) {
+  return readJsonlRecords(filePath, options);
 }
 
 function withLedgerAppendLock(filePath, options, append) {
@@ -195,7 +234,7 @@ function withLedgerAppendLock(filePath, options, append) {
     return append();
   } catch (error) {
     appendError = error;
-    if (error?.code?.startsWith?.("LEDGER_APPEND_")) throw error;
+    if (error?.code?.startsWith?.("LEDGER_APPEND_") || error?.code?.startsWith?.("LEDGER_READ_")) throw error;
     throw ledgerAppendError("LEDGER_APPEND_FAILED", "Failed to append evidence ledger record.", {
       ledger_path: filePath,
     }, error);
