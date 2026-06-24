@@ -462,6 +462,58 @@ test("progress server requires active run for review log access (P12.Z3)", async
   }
 });
 
+test("progress json redacts review summary errors", async () => {
+  const nonce = `sec-review-summary-${process.pid}-${Date.now()}`;
+  const secret = "sk-REVIEWLOGSUMMARY1234567890abcd";
+  const stateDir = join(REPO_ROOT, "state");
+  const taskLogsDir = join(stateDir, "runtime", "task-logs");
+  const currentRunFile = join(stateDir, "runtime", "current-run.json");
+  const runnerPidFile = join(stateDir, "runner.pid");
+  const reviewLogFile = join(taskLogsDir, "_review.jsonl");
+  const prdFile = join(stateDir, `${nonce}.json`);
+  const restoreReview = restoreFileLater(reviewLogFile);
+  const restoreCurrentRun = restoreFileLater(currentRunFile);
+  const restorePid = restoreFileLater(runnerPidFile);
+  const restorePrd = restoreFileLater(prdFile);
+
+  mkdirSync(taskLogsDir, { recursive: true });
+  writeFileSync(prdFile, JSON.stringify({
+    title: "review summary redact regression",
+    tasks: [{ id: "SEC-REVIEW-SUMMARY", priority: "P0", description: "trigger review summary" }],
+  }), "utf8");
+  writeFileSync(reviewLogFile, `${JSON.stringify({
+    type: "error",
+    round: 1,
+    error: `review failed with ${secret}`,
+  })}\n`, "utf8");
+  writeFileSync(currentRunFile, JSON.stringify({
+    run_id: `test-${nonce}`,
+    prd: `state/${nonce}.json`,
+    started_at: new Date().toISOString(),
+  }), "utf8");
+  writeFileSync(runnerPidFile, String(process.pid), "utf8");
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const addr = server.address();
+    const port = typeof addr === "string" ? 0 : (addr as { port: number }).port;
+    const response = await fetch(`http://127.0.0.1:${port}/progress.json`);
+    const text = await response.text();
+    const body = JSON.parse(text);
+
+    assert.equal(response.status, 200);
+    assert.equal(text.includes(secret), false);
+    assert.equal(body.review.latestStatus, "error");
+    assert.match(body.review.latestError, /\[REDACTED/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    restorePrd();
+    restoreReview();
+    restorePid();
+    restoreCurrentRun();
+  }
+});
+
 test("P10.S7: SSE connection limit blocks excess clients (CWE-770)", async () => {
   _setSseMaxOverrideForTest(2);
   await new Promise<void>((resolve) => server.listen(0, PROGRESS_SERVER_HOST, resolve));
