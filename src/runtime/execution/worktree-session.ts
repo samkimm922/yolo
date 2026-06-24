@@ -15,7 +15,7 @@ import {
 import { createHash } from "node:crypto";
 import { delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
-import { isSafePathComponent } from "../../lib/security/path-guard.js";
+import { isSafePathComponent, resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { safeExecFileSync as defaultExecFileSync, safeExecSync as defaultExecSync } from "../../lib/security/safe-exec.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 import {
@@ -48,6 +48,29 @@ export function isFileAllowedByScope(filePath, scopeOrTargets = []) {
 
 export function isBusinessLikeFile(filePath, options = Object()) {
   return isBusinessFile(filePath, options);
+}
+
+function safeMergeRelativePath(filePath) {
+  const normalized = String(filePath ?? "").replace(/\\/g, "/");
+  if (!normalized || isAbsolute(normalized) || normalized.includes("\0")) return null;
+  if (normalized.split("/").includes("..")) return null;
+  return normalized;
+}
+
+function resolveMergeFilePaths({ wtPath, rootDir, filePath }) {
+  const relativePath = safeMergeRelativePath(filePath);
+  if (!relativePath) {
+    throw new Error(`worktree merge unsafe file path: ${filePath || ""}`);
+  }
+  const src = resolveWithinRoot(wtPath, relativePath);
+  if (!src.ok) {
+    throw new Error(`worktree merge source escapes worktree: ${src.detail || relativePath}`);
+  }
+  const dst = resolveWithinRoot(rootDir, relativePath);
+  if (!dst.ok) {
+    throw new Error(`worktree merge target escapes project root: ${dst.detail || relativePath}`);
+  }
+  return { filePath: relativePath, srcPath: src.path, dstPath: dst.path };
 }
 
 export function parseGitStatusEntries(output = "") {
@@ -524,18 +547,28 @@ function collectAllowedFilesystemPaths({
   const seen = new Set();
   const files = [];
   const addFile = (filePath) => {
-    if (!filePath || seen.has(filePath)) return;
-    const absolute = join(wtPath, filePath);
+    const safePath = safeMergeRelativePath(filePath);
+    if (!safePath) throw new Error(`worktree merge unsafe file path: ${filePath || ""}`);
+    if (seen.has(safePath)) return;
+    const resolved = resolveWithinRoot(wtPath, safePath);
+    if (!resolved.ok) throw new Error(`worktree merge source escapes worktree: ${resolved.detail || safePath}`);
+    const absolute = resolved.path;
     try {
       if (statSync(absolute).isDirectory()) return;
     } catch {
       return;
     }
-    seen.add(filePath);
-    files.push(filePath);
+    seen.add(safePath);
+    files.push(safePath);
   };
   const walk = (relativeDir) => {
-    const absoluteDir = join(wtPath, relativeDir);
+    const safeDir = safeMergeRelativePath(relativeDir === "." ? "" : relativeDir);
+    if (relativeDir && relativeDir !== "." && !safeDir) {
+      throw new Error(`worktree merge unsafe directory path: ${relativeDir}`);
+    }
+    const resolvedDir = resolveWithinRoot(wtPath, safeDir || ".");
+    if (!resolvedDir.ok) throw new Error(`worktree merge source escapes worktree: ${resolvedDir.detail || relativeDir}`);
+    const absoluteDir = resolvedDir.path;
     let entries = [];
     try {
       entries = readdirSync(absoluteDir, { withFileTypes: true });
@@ -553,15 +586,19 @@ function collectAllowedFilesystemPaths({
   for (const target of allowedTargets || []) {
     const targetPath = typeof target === "string" ? target : target?.file;
     if (!targetPath) continue;
-    if (existsSync(join(wtPath, targetPath))) {
-      addFile(targetPath);
+    const safeTarget = safeMergeRelativePath(targetPath);
+    if (!safeTarget) throw new Error(`worktree merge unsafe file path: ${targetPath}`);
+    const targetResolved = resolveWithinRoot(wtPath, safeTarget);
+    if (!targetResolved.ok) throw new Error(`worktree merge source escapes worktree: ${targetResolved.detail || safeTarget}`);
+    if (existsSync(targetResolved.path)) {
+      addFile(safeTarget);
       if (allowNewFiles) {
-        const dir = dirname(targetPath);
+        const dir = dirname(safeTarget);
         if (dir && dir !== ".") walk(dir);
       }
       continue;
     }
-    if (allowNewFiles) walk(dirname(targetPath));
+    if (allowNewFiles) walk(dirname(safeTarget));
   }
   return files;
 }
@@ -849,37 +886,39 @@ export function cleanupTaskWorktree({
       let outOfScopeSkippedCount = 0;
 
       for (const filePath of allFilePaths) {
+        const resolved = resolveMergeFilePaths({ wtPath, rootDir, filePath });
+        const safeFilePath = resolved.filePath;
         if (deletedSet.has(filePath)) continue;
-        if (filePath.startsWith("node_modules") || filePath.startsWith(".git") || filePath.startsWith("dist")) continue;
-        if (skipPrefixes.some((prefix) => filePath.startsWith(prefix)) && !isFileAllowedByScope(filePath, allowedScope)) {
+        if (safeFilePath.startsWith("node_modules") || safeFilePath.startsWith(".git") || safeFilePath.startsWith("dist")) continue;
+        if (skipPrefixes.some((prefix) => safeFilePath.startsWith(prefix)) && !isFileAllowedByScope(safeFilePath, allowedScope)) {
           filteredCount++;
           continue;
         }
-        if (isBusinessLikeFile(filePath, { config }) && !isFileAllowedByScope(filePath, allowedScope)) {
+        if (isBusinessLikeFile(safeFilePath, { config }) && !isFileAllowedByScope(safeFilePath, allowedScope)) {
           outOfScopeSkippedCount++;
-          outOfScopeSkipped.push(filePath);
-          log("BLOCK", `跳过越界文件: ${filePath}`);
+          outOfScopeSkipped.push(safeFilePath);
+          log("BLOCK", `跳过越界文件: ${safeFilePath}`);
           continue;
         }
 
-        const srcPath = join(wtPath, filePath);
-        const dstPath = join(rootDir, filePath);
+        const srcPath = resolved.srcPath;
+        const dstPath = resolved.dstPath;
         try { if (statSync(srcPath).isDirectory()) continue; } catch { continue; }
 
         if (existsSync(dstPath)) {
           const backupDir = join(rootDir, ".yolo-backup");
           if (!existsSync(backupDir)) mkdirSync(backupDir, { recursive: true });
-          const safeName = filePath.replace(/\//g, "_");
+          const safeName = safeFilePath.replace(/\//g, "_");
           const backupPath = join(backupDir, safeName.replace(/(\.\w+)$/, `_${Date.now()}$1`));
           copyFileSync(dstPath, backupPath);
-          log("BACKUP", `备份: ${filePath} -> .yolo-backup/`);
+          log("BACKUP", `备份: ${safeFilePath} -> .yolo-backup/`);
         }
 
         const dstDir = dirname(dstPath);
         if (!existsSync(dstDir)) mkdirSync(dstDir, { recursive: true });
         copyFileSync(srcPath, dstPath);
-        copiedFiles.push(filePath);
-        log("MERGE", `合并: ${filePath}`);
+        copiedFiles.push(safeFilePath);
+        log("MERGE", `合并: ${safeFilePath}`);
       }
 
       const skippedParts = [];

@@ -305,8 +305,8 @@ export async function runReviewLoop({
       }
       lastRoundFindings = findings;
 
-      const coverageState = inspectReviewScannerCoverage(scanResult, findings);
-      if (!findings.length && coverageState.blocks_execution) {
+      const coverageState = inspectReviewScannerCoverage(scanResult, findings, { expectedFiles: reviewScopeFiles });
+      if (coverageState.blocks_execution) {
         logProgress("REVIEW", "BLOCKED", coverageState.message);
         logReviewError("Scanner coverage 不完整", coverageState.message, reviewLogMeta({
           round,
@@ -327,7 +327,7 @@ export async function runReviewLoop({
             phase: coverageState.reason === "scanner_coverage_incomplete"
               ? "REVIEW_SCANNER_COVERAGE_INCOMPLETE"
               : "REVIEW_SCANNER_COVERAGE_MISSING",
-            missing_fields: coverageState.missing_fields || [],
+            missing_fields: coverageState["missing_fields"] || [],
             blockers: coverageState.blockers,
           },
         });

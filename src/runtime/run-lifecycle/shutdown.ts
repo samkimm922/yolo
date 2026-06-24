@@ -1,4 +1,5 @@
 import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
+import { killActiveProviderProcesses as defaultKillActiveProviderProcesses } from "../execution/provider-adapter.js";
 
 const GIT_CLEANUP_EXEC_OPTIONS = { timeout: 15000, maxBuffer: 1024 * 1024 };
 
@@ -137,6 +138,7 @@ export function createGracefulShutdownHandler({
   archiveCurrentRunFile,
   cleanupRuntimeStateFiles,
   execFileSync = defaultExecFileSync,
+  killActiveProviderProcesses = defaultKillActiveProviderProcesses,
   log = console.log,
   exit = process.exit,
 } = Object()) {
@@ -154,6 +156,7 @@ export function createGracefulShutdownHandler({
       writeProgressSnapshot,
     });
     archiveCurrentRunFile({ currentRunFile: state.currentRunFile(), stateDir: state.stateDir(), interrupted: true });
+    killActiveProviderProcesses({ log });
     cleanupActiveGitSession({
       ...state.activeGitSession(),
       rootDir: state.rootDir(),

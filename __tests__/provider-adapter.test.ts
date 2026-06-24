@@ -10,6 +10,7 @@ import { PassThrough } from "node:stream";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import {
+  activeProviderProcessCount,
   buildProviderInvocation,
   classifyProviderFailure,
   DEFAULT_CLAUDE_PERMISSION_MODE,
@@ -136,6 +137,30 @@ describe("provider execution adapter", () => {
     assert.equal(capturedArgs[modeIndex + 1], DEFAULT_CLAUDE_PERMISSION_MODE);
     assert.notEqual(capturedArgs[modeIndex + 1], "default");
     assert.equal(run.success, true);
+  });
+
+  test("spawnProviderPrompt tracks active provider children until close", async () => {
+    let child: EventEmitter & { pid: number; stdin: PassThrough; stdout: PassThrough; stderr: PassThrough } | null = null;
+    const runPromise = spawnProviderPrompt("prompt", spawnOptions({
+      spawnImpl: () => {
+        child = Object.assign(new EventEmitter(), {
+          pid: 4343,
+          stdin: new PassThrough(),
+          stdout: new PassThrough(),
+          stderr: new PassThrough(),
+        });
+        return child;
+      },
+    }));
+
+    assert.equal(activeProviderProcessCount(), 1);
+    assert.ok(child);
+    child.stdout.write("done\n");
+    child.emit("close", 0, null);
+    const run = await runPromise;
+
+    assert.equal(run.success, true);
+    assert.equal(activeProviderProcessCount(), 0);
   });
 
   test("default claude settings resolve to the YOLO package root instead of the target project", () => {

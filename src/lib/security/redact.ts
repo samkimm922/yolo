@@ -12,6 +12,16 @@ const REDACTION_PATTERNS: ReadonlyArray<{ readonly pattern: RegExp; readonly lab
   { pattern: /aws_secret_access_key\s*[=:]\s*['"]?[A-Za-z0-9/+=]{40}['"]?/gi, label: "aws_secret_access_key=[REDACTED]" },
   // GitHub tokens (classic + fine-grained)
   { pattern: /gh[pousr]_[A-Za-z0-9]{36,}/g, label: "[REDACTED:gh-token]" },
+  // Slack bot/user/app/restricted tokens
+  { pattern: /xox[baprs]-[A-Za-z0-9-]{10,}/g, label: "[REDACTED:slack-token]" },
+  // Google API keys
+  { pattern: /AIza[0-9A-Za-z_-]{20,}/g, label: "[REDACTED:google-api-key]" },
+  // Stripe live secret/restricted keys
+  { pattern: /[sr]k_live_[A-Za-z0-9]{16,}/g, label: "[REDACTED:stripe-live-key]" },
+  // JWT-shaped bearer material, including raw tokens without the Bearer prefix
+  { pattern: /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, label: "[REDACTED:jwt]" },
+  // Bare high-entropy hex tokens and private digests
+  { pattern: /\b[A-Fa-f0-9]{40,64}\b/g, label: "[REDACTED:hex-token]" },
   // Generic key=value assignments for common secret names
   { pattern: /(?:api[_-]?key|secret|password|token|access[_-]?token|private[_-]?key)\s*[=:]\s*['"]?[A-Za-z0-9_\-\.\/+=]{8,}['"]?/gi, label: "[REDACTED:credential]" },
   // Private key blocks

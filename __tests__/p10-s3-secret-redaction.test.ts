@@ -34,6 +34,22 @@ describe("P10.S3 redact", () => {
     assert.ok(!out.includes("ghp_1234567890abcdefghijklmnopqrstuvwxyz"));
   });
 
+  test("masks Slack, Google, Stripe, JWT, and bare hex tokens", () => {
+    const secrets = [
+      "xox" + "b-123456789012-123456789012-abcdefghijklmnopqrstuvwxyz",
+      "AI" + "zaSyD1234567890abcdefghijklmnopqrstuvwx",
+      "sk" + "_live_1234567890abcdefghijklmnop",
+      "rk" + "_live_1234567890abcdefghijklmnop",
+      "ey" + "JhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    ];
+    for (const secret of secrets) {
+      const out = redact(`secret ${secret}`);
+      assert.ok(!out.includes(secret), `${secret} must be masked`);
+      assert.ok(out.includes("[REDACTED"));
+    }
+  });
+
   test("masks generic credential assignments", () => {
     const out = redact('api_key: "mysecret123abc"');
     assert.ok(!out.includes("mysecret123abc"));
@@ -61,6 +77,12 @@ describe("P10.S3 redact", () => {
     assert.ok(!out.stdout.includes("sk-test1234567890abcd"));
     assert.ok(!out.nested.token.includes("xyz1234567890abc"));
     assert.equal(out.count, 42);
+  });
+
+  test("redactDeep masks nested provider stdout secrets", () => {
+    const secret = "xox" + "b-123456789012-123456789012-abcdefghijklmnopqrstuvwxyz";
+    const out = redactDeep({ providerRun: { stdout: { nested: `leaked ${secret}` } } });
+    assert.ok(!JSON.stringify(out).includes(secret));
   });
 });
 

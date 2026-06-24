@@ -45,8 +45,8 @@ function report(name, overrides = {}) {
   };
 }
 
-function commandEvidence(command) {
-  return { command, exit_code: 0, status: "pass", started_at: STARTED_AT, finished_at: FINISHED_AT };
+function commandEvidence(command, overrides = {}) {
+  return { command, exit_code: 0, status: "pass", started_at: STARTED_AT, finished_at: FINISHED_AT, ...overrides };
 }
 
 function scenarioReports() {
@@ -295,6 +295,36 @@ describe("release candidate gate aggregator", () => {
     assert.ok(result.issue_codes.includes("RC_GATE_REPORT_EXECUTION_EVIDENCE_MISSING"));
     assert.ok(result.issue_codes.includes("RC_GATE_REPORT_DRY_RUN"));
     assert.ok(result.issue_codes.includes("RC_GATE_DOGFOOD_MATRIX_INCOMPLETE"));
+  });
+
+  test("blocks command evidence when status fails but exit code is zero", () => {
+    const result = runReleaseCandidateGate({
+      mode: "rc",
+      now: NOW,
+      reports: passingReports({
+        verify: report("verify", {
+          provenance: { source: "verify", id: "verify-run-conflict" },
+          commands: [commandEvidence("npm run verify", { status: "failed", exit_code: 0 })],
+        }),
+      }),
+    });
+
+    assert.equal(result.status, "block");
+    assert.ok(result.issue_codes.includes("RC_GATE_REPORT_EXECUTION_EVIDENCE_MISSING"));
+  });
+
+  test("blocks clean environment steps whose command fails despite step pass status", () => {
+    const reports = passingReports();
+    reports.cleanEnvironment.steps[2] = {
+      ...reports.cleanEnvironment.steps[2],
+      status: "pass",
+      command: commandEvidence("npm run verify", { status: "failed", exit_code: 1 }),
+    };
+
+    const result = runReleaseCandidateGate({ mode: "rc", now: NOW, reports });
+
+    assert.equal(result.status, "block");
+    assert.ok(result.issue_codes.includes("RC_GATE_CLEAN_ENVIRONMENT_EVIDENCE_MISSING"));
   });
 
   test("negative: fake pass reports are blocked when artifacts are missing or digest-mismatched", () => {

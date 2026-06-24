@@ -11,13 +11,15 @@
 // The battery is fixed so Q is comparable across commits. A code fix can only raise Q
 // (or hold it). Expanding the battery is a separate, deliberate step that may lower Q to
 // expose new territory.
-import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { config } from "../src/lib/config.js";
 import { runYoloCheckCli } from "../src/runtime/gates/check-report.js";
 import { buildAcceptanceReport } from "../src/runtime/acceptance/report.js";
+import { verifyArtifactIntegrity } from "../src/runtime/evidence/artifact-integrity.js";
 import { inspectStoryAtomicityText } from "../src/demand/story-atomicity.js";
 import { evaluatePostConditions } from "../src/prd/contract.js";
 import { CHECK_BATTERY, type CheckBatteryCase } from "./quality/check-battery.js";
@@ -26,6 +28,20 @@ import { ATOMICITY_BATTERY, type AtomicityBatteryCase } from "./quality/atomicit
 import { RUNNER_BATTERY, type RunnerBatteryCase } from "./quality/runner-battery.js";
 import { runProviderBattery } from "./quality/provider-battery.js";
 import { runConfigBattery } from "./quality/config-battery.js";
+import { runParallelBattery } from "./quality/parallel-battery.js";
+import { runReleaseBattery } from "./quality/release-battery.js";
+import { runEvidenceBattery } from "./quality/evidence-battery.js";
+import { runShipBattery } from "./quality/ship-battery.js";
+import { runConditionBattery } from "./quality/condition-battery.js";
+import { runReviewBattery } from "./quality/review-battery.js";
+import { runRedactBattery } from "./quality/redact-battery.js";
+import { runBoundedReadBattery } from "./quality/bounded-read-battery.js";
+import { runWorktreeBattery } from "./quality/worktree-battery.js";
+import { runHookBattery } from "./quality/hook-battery.js";
+import { runLifecycleBattery } from "./quality/lifecycle-battery.js";
+import { runRelayBattery } from "./quality/relay-battery.js";
+import { runProgressBattery } from "./quality/progress-battery.js";
+import { runGateBattery } from "./quality/gate-battery.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(ROOT, "scripts", "quality", "quality-baseline.json");
@@ -61,6 +77,21 @@ function setupProject(files: Record<string, string> = {}): string {
 
 function runCheckCase(testCase: CheckBatteryCase): CaseResult {
   const root = setupProject(testCase.files);
+  if (testCase.kind === "artifact_integrity_escape") {
+    const outsideRoot = mkdtempSync(join(tmpdir(), "yolo-quality-outside-"));
+    try {
+      const outsidePath = join(outsideRoot, "secret.txt");
+      writeFileSync(outsidePath, "outside root\n", "utf8");
+      const report = verifyArtifactIntegrity([outsidePath], { rootDir: root }) as { status?: string; artifacts?: Array<Record<string, unknown>> };
+      const escaped = report.artifacts?.some((artifact) => artifact.issue === "path_escape");
+      const status = report.status === "fail" && escaped ? "blocked" : String(report.status || "unknown");
+      const correct = testCase.expect === "blocked" ? status === "blocked" : status === "pass";
+      return { id: testCase.id, category: testCase.category, expect: testCase.expect, actualExit: correct ? 0 : 1, actualStatus: status, correct };
+    } finally {
+      rmSync(outsideRoot, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
   try {
     const prdPath = join(root, "prd.json");
     writeFileSync(prdPath, JSON.stringify(testCase.prd, null, 2), "utf8");
@@ -115,7 +146,25 @@ function runAtomicityCase(testCase: AtomicityBatteryCase): CaseResult {
 }
 
 function runRunnerCase(testCase: RunnerBatteryCase): CaseResult {
+  if (testCase.kind === "strict_typecheck_error_count") {
+    const result = spawnSync("npm", ["run", "strict-typecheck-error-count", "--", "--check"], {
+      cwd: ROOT,
+      encoding: "utf8",
+    });
+    const detected = result.status === 0 ? "done" : "not_done";
+    const correct = detected === testCase.expect;
+    return {
+      id: testCase.id,
+      category: "runner_outcome_accuracy",
+      expect: testCase.expect,
+      actualExit: result.status ?? 1,
+      actualStatus: detected,
+      correct,
+    };
+  }
   const root = setupProject(testCase.baseFiles);
+  const originalPath = process.env.PATH;
+  const originalBuildTest = config.build?.test;
   try {
     for (const [rel, contents] of Object.entries(testCase.editFiles || {})) {
       const abs = join(root, rel);
@@ -126,17 +175,40 @@ function runRunnerCase(testCase: RunnerBatteryCase): CaseResult {
       const abs = join(root, rel);
       try { unlinkSync(abs); } catch { /* already absent */ }
     }
+    for (const rel of testCase.executableFiles || []) {
+      chmodSync(join(root, rel), 0o755);
+    }
+    if (testCase.envPathPrepend?.length) {
+      process.env.PATH = [
+        ...testCase.envPathPrepend.map((rel) => join(root, rel)),
+        originalPath || "",
+      ].filter(Boolean).join(delimiter);
+    }
+    if (Object.hasOwn(testCase, "buildTestCommand")) {
+      config.build ??= {};
+      config.build.test = testCase.buildTestCommand;
+    }
     const report = evaluatePostConditions(testCase.task, {}, { cwd: root, root }) as { allPass?: boolean };
     const detected = report.allPass ? "done" : "not_done";
     const correct = detected === testCase.expect;
     return { id: testCase.id, category: "runner_outcome_accuracy", expect: testCase.expect, actualExit: correct ? 0 : 1, actualStatus: detected, correct };
   } finally {
+    if (originalPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = originalPath;
+    }
+    if (Object.hasOwn(testCase, "buildTestCommand")) {
+      config.build ??= {};
+      config.build.test = originalBuildTest;
+    }
     rmSync(root, { recursive: true, force: true });
   }
 }
 
 async function computeQuality() {
   const providerResults = await runProviderBattery();
+  const shipResults = await runShipBattery();
   const results = [
     ...CHECK_BATTERY.map(runCheckCase),
     ...ACCEPTANCE_BATTERY.map(runAcceptanceCase),
@@ -144,6 +216,20 @@ async function computeQuality() {
     ...RUNNER_BATTERY.map(runRunnerCase),
     ...providerResults,
     ...runConfigBattery(),
+    ...runParallelBattery(),
+    ...runReleaseBattery(),
+    ...runEvidenceBattery(),
+    ...shipResults,
+    ...runConditionBattery(),
+    ...runReviewBattery(),
+    ...runRedactBattery(),
+    ...runBoundedReadBattery(),
+    ...runWorktreeBattery(),
+    ...runHookBattery(),
+    ...runLifecycleBattery(),
+    ...runRelayBattery(),
+    ...runProgressBattery(),
+    ...runGateBattery(),
   ];
   const total = results.length;
   const correct = results.filter((r) => r.correct).length;

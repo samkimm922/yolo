@@ -12,12 +12,19 @@ export type RunnerBatteryCase = {
   id: string;
   expect: RunnerExpectation;          // "done" → post-conditions must all pass
   description: string;
+  kind?: "post_conditions" | "strict_typecheck_error_count";
   // Files committed as the BASE state (before the "task" runs).
   baseFiles: Record<string, string>;
   // Files written AFTER base (the "task's" edits). Omit to leave base untouched.
   editFiles?: Record<string, string>;
   // Files removed AFTER base (the "task's" deletions). Omit to keep base files.
   deleteFiles?: string[];
+  // Files that should be executable for command-runner fixtures.
+  executableFiles?: string[];
+  // Relative directories to prepend to PATH while evaluating this case.
+  envPathPrepend?: string[];
+  // Override config.build.test while evaluating this case.
+  buildTestCommand?: string;
   // The task whose post_conditions are evaluated.
   task: unknown;
 };
@@ -87,6 +94,26 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
     ]),
   },
   {
+    id: "evalTestsPass_empty_output_fails",
+    expect: "not_done",
+    description:
+      "tests_pass with a successful vitest process but no JSON result is untrusted and must not mark the task done.",
+    baseFiles: {
+      "bin/pnpm": "#!/usr/bin/env node\nprocess.exit(0);\n",
+    },
+    executableFiles: ["bin/pnpm"],
+    envPathPrepend: ["bin"],
+    buildTestCommand: "",
+    task: {
+      id: "TASK-RUNNER-TESTS-EMPTY",
+      title: "Verify tests",
+      scope: { expected_zero_business_code: true },
+      post_conditions: [
+        { id: "POST-TESTS", type: "tests_pass", severity: "FAIL", params: {} },
+      ],
+    },
+  },
+  {
     id: "notdone-target-only-twin-file-changed",
     expect: "not_done",
     description:
@@ -96,10 +123,10 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
     task: targetModifiedTask(),
   },
   {
-    id: "done-code-not-contains-on-missing-file",
-    expect: "done",
+    id: "notdone-code-not-contains-missing-file",
+    expect: "not_done",
     description:
-      "Target file is absent (never existed in the project) -> code_not_contains is vacuously satisfied; runner must report done, not block on indeterminate.",
+      "Target file is absent without allow_missing/file_not_exists intent -> code_not_contains must block instead of passing vacuously.",
     baseFiles: {},
     editFiles: {},
     task: removedFileTask("src/legacy.ts", "FLAG"),
@@ -219,7 +246,7 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
         expected_zero_business_code: true,
       },
       post_conditions: [
-        { id: "POST-LINES", type: "file_lines_max", severity: "FAIL", params: { file: "src/legacy.ts", max: 150 } },
+        { id: "POST-LINES", type: "file_lines_max", severity: "FAIL", params: { file: "src/legacy.ts", max: 150, delete_intent: true } },
         { id: "POST-FILE-GONE", type: "file_not_exists", severity: "FAIL", params: { file: "src/legacy.ts" } },
       ],
     },
@@ -396,5 +423,14 @@ export const RUNNER_BATTERY: RunnerBatteryCase[] = [
         { id: "POST-TSC", type: "no_new_type_errors", severity: "FAIL", params: { command: "node tsc.js" } },
       ],
     },
+  },
+  {
+    id: "strict_typecheck_error_count",
+    expect: "done",
+    description:
+      "The repo must enforce a strict TypeScript error-count ratchet so broad non-strict compilation cannot hide new strict-mode errors.",
+    kind: "strict_typecheck_error_count",
+    baseFiles: {},
+    task: {},
   },
 ];

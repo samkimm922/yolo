@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { config as loadedConfig } from "../lib/config.js";
 import { resolveWithinRoot } from "../lib/security/path-guard.js";
+import { readJsonFileBounded } from "../lib/bounded-read.js";
 
 const TASK_TIMEOUT_MS_PER_LINE = 2500;
 const DEFAULT_TASK_TIMEOUT_FLOOR_SECONDS = 120;
@@ -33,7 +34,7 @@ export function withExecutionConfig(baseConfig, options = Object()) {
 }
 
 export function loadRunnerPrd(prdPath, { runnerError = createRunnerError } = Object()) {
-  const prd = JSON.parse(readFileSync(resolve(prdPath), "utf8"));
+  const prd = readJsonFileBounded(resolve(prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   if (!prd.version || prd.version !== "2.0") {
     const message = `[yolo-runner] PRD ${prdPath} 不是 v2 格式（version=${prd.version || "缺失"}）。请先用 convert.js --write 转换。`;
     throw runnerError(message, 1, { code: "INVALID_PRD_VERSION" });

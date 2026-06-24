@@ -81,7 +81,7 @@ describe("review-loop execution helpers", () => {
     const missing = inspectReviewScannerCoverage(JSON.stringify({ findings: [] }));
     assert.equal(missing.status, "blocked");
     assert.equal(missing.reason, "scanner_coverage_missing");
-    assert.ok(missing.missing_fields.includes("scanner_version"));
+    assert.ok(missing["missing_fields"].includes("scanner_version"));
 
     const complete = inspectReviewScannerCoverage(JSON.stringify({
       scanner_version: "test-review-scanner@1",
@@ -93,6 +93,21 @@ describe("review-loop execution helpers", () => {
     }));
     assert.equal(complete.status, "pass");
     assert.equal(complete.blocks_execution, false);
+  });
+
+  test("inspectReviewScannerCoverage checks scanner coverage against external scope", () => {
+    const result = inspectReviewScannerCoverage(JSON.stringify({
+      scanner_version: "test-review-scanner@1",
+      scanned_files: ["src/unrelated.ts"],
+      rules: ["R-test"],
+      expected_scope: ["src/changed.ts"],
+      coverage_status: "complete",
+      findings: [],
+    }), null, { expectedFiles: ["src/changed.ts"] });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.reason, "scanner_coverage_missing_changed_files");
+    assert.equal(result.blockers[0].code, "REVIEW_SCANNER_CHANGED_FILES_UNSCANNED");
   });
 
   test("scanProject emits complete coverage_artifact for clean scoped projects", () => {
@@ -113,6 +128,32 @@ describe("review-loop execution helpers", () => {
       assert.equal(result.coverage_artifact.coverage_status, "complete");
       assert.equal(coverage.status, "pass");
       assert.equal(coverage.blocks_execution, false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("scanProject blocks unavailable type_check tools instead of self-greenlighting", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-review-scan-missing-typecheck-"));
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src/app.ts"), "export const value = 1;\n", "utf8");
+
+      const result = scanProject({
+        root,
+        includeExternalChecks: true,
+        config: {
+          project: { source_roots: ["src"], src: "src", source_extensions: [".ts"], exclude: ["node_modules", "dist", ".git"] },
+          build: { type_check: "definitely_missing_typecheck_tool_zz --noEmit", lint: "" },
+          gate: { max_lines_per_file: 150, timeout: { type_check: 1000, lint: 1000 } },
+        },
+      });
+
+      assert.ok(
+        result.findings.some((finding) => finding.scanner_id === "typecheck-tool-unavailable"),
+        `expected TYPECHECK_TOOL_UNAVAILABLE finding: ${JSON.stringify(result.findings)}`,
+      );
+      assert.equal(result.total_findings > 0, true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -123,12 +123,23 @@ describe("files_modified_max scope filtering", () => {
 });
 
 describe("file_lines_max target existence", () => {
-  test("passes when an explicit target file is missing (vacuous truth)", () => {
+  test("fails closed when an explicit target file is missing", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-file-lines-"));
     try {
       const result = evalFileLinesMax({ file: "src/missing.ts", max: 150 }, {}, root);
+      assert.equal(result.passed, false);
+      assert.match(result.detail, /文件不存在/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("allows missing target only when delete_intent is explicit", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-file-lines-"));
+    try {
+      const result = evalFileLinesMax({ file: "src/missing.ts", max: 150, delete_intent: true }, {}, root);
       assert.equal(result.passed, true);
-      assert.match(result.detail, /未超限|不存在的文件/);
+      assert.match(result.detail, /未超限/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -318,6 +329,17 @@ describe("target_file_modified changed file source", () => {
     assert.equal(result.allPass, true);
     assert.equal(targetResult(result).passed, true);
     assert.equal(targetResult(result).found, 1);
+  });
+
+  test("blocks repo-escaping target paths even when changedFiles echoes the escape", () => {
+    const result = evaluateTargetFileModified({
+      target: "../sibling/src/feature.ts",
+      changedFiles: ["../sibling/src/feature.ts"],
+    });
+
+    assert.equal(result.allPass, false);
+    assert.equal(targetResult(result).passed, false);
+    assert.equal(targetResult(result).status, "not_run");
   });
 
   test("matches runner-provided changedFiles by target suffix", () => {

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -38,12 +38,24 @@ function readJsonl(filePath) {
 function runConcurrentAppendWorker(filePath, worker) {
   const childCode = `
     import { appendJsonlRecord } from "./src/runtime/evidence/ledger.js";
-    appendJsonlRecord(process.env.LEDGER_PATH, {
-      event: "concurrent.append",
-      worker: Number(process.env.WORKER),
-      ledger: "state",
-      source: "test"
-    }, { lockTimeoutMs: 60000 });
+    const deadline = Date.now() + 60000;
+    let appended = false;
+    while (Date.now() <= deadline) {
+      try {
+        appendJsonlRecord(process.env.LEDGER_PATH, {
+          event: "concurrent.append",
+          worker: Number(process.env.WORKER),
+          ledger: "state",
+          source: "test"
+        }, { lockTimeoutMs: 1000 });
+        appended = true;
+        break;
+      } catch (error) {
+        if (!error || typeof error !== "object" || error.code !== "LEDGER_APPEND_LOCK_BUSY") throw error;
+        await new Promise((resolve) => setTimeout(resolve, 2 + Math.floor(Math.random() * 8)));
+      }
+    }
+    if (!appended) throw new Error("timed out waiting for ledger append lock");
   `;
   return new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, ["--import", "tsx", "-e", childCode], {
@@ -203,6 +215,38 @@ describe("evidence ledger", () => {
     }
   });
 
+  test("readLedgerJsonl fails closed on oversized ledgers without full read", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+      mkdirSync(dirname(filePath), { recursive: true });
+      writeFileSync(filePath, `${JSON.stringify({ event: "oversized", payload: "x".repeat(2048) })}\n`, "utf8");
+
+      const records = readLedgerJsonl(filePath, { maxBytes: 1024 });
+      assert.equal(records.length, 1);
+      assert.equal((records[0] as { code?: string }).code, "LEDGER_READ_SIZE_LIMIT_EXCEEDED");
+      assert.equal(validateLedgerChain(records).status, "fail");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("appendJsonlRecord refuses previous hash reads from oversized ledgers", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+      mkdirSync(dirname(filePath), { recursive: true });
+      writeFileSync(filePath, `${JSON.stringify({ event: "oversized", payload: "x".repeat(9 * 1024 * 1024) })}\n`, "utf8");
+
+      assert.throws(
+        () => appendJsonlRecord(filePath, { event: "next" }),
+        (error) => Boolean(error && typeof error === "object" && (error as { code?: string }).code === "LEDGER_READ_SIZE_LIMIT_EXCEEDED")
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("appendJsonlRecord preserves the hash chain across concurrent processes", async () => {
     const root = tempDir();
     try {
@@ -219,6 +263,31 @@ describe("evidence ledger", () => {
       for (const [index, record] of records.entries()) {
         assert.equal(record.prev_hash, index === 0 ? null : records[index - 1].record_hash);
       }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("appendJsonlRecord refuses ambiguous stale locks instead of force-removing possible fresh owners", () => {
+    const root = tempDir();
+    try {
+      const filePath = join(root, "state", "events.jsonl");
+      const lockPath = `${filePath}.lock`;
+      mkdirSync(lockPath, { recursive: true });
+      writeFileSync(join(lockPath, "owner.stale.json"), "{}");
+      writeFileSync(join(lockPath, "owner.fresh.json"), "{}");
+      const old = new Date(Date.now() - 10_000);
+      utimesSync(lockPath, old, old);
+
+      assert.throws(
+        () => appendJsonlRecord(filePath, { event: "next" }, {
+          lockTimeoutMs: 25,
+          lockRetryMs: 1,
+          lockStaleMs: 1,
+        }),
+        (error) => Boolean(error && typeof error === "object" && (error as { code?: string }).code === "LEDGER_APPEND_LOCK_BUSY"),
+      );
+      assert.equal(existsSync(join(lockPath, "owner.fresh.json")), true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -291,7 +360,7 @@ describe("evidence ledger", () => {
     assert.equal(validateEvidenceArtifact(artifact).ok, true);
   });
 
-  test("readLedgerJsonl tolerates malformed/truncated JSONL lines", () => {
+  test("readLedgerJsonl preserves malformed/truncated JSONL lines as integrity errors", () => {
     const root = tempDir();
     try {
       const filePath = join(root, "state", "events.jsonl");
@@ -306,15 +375,22 @@ describe("evidence ledger", () => {
       const original = readFileSync(filePath, "utf8").trimEnd();
       writeFileSync(filePath, `${original}\n{truncated\nnot-valid-json\n`, "utf8");
 
-      // Reading must skip the bad lines without throwing and keep the good records.
+      // Reading must not throw, but malformed lines must stay visible in the
+      // record stream so integrity checks cannot turn falsely green.
       const records = readLedgerJsonl(filePath);
-      assert.deepEqual(records, [first, second]);
+      assert.equal(records.length, 4);
+      assert.deepEqual(records.slice(0, 2), [first, second]);
+      assert.deepEqual(records.slice(2).map((record) => record.code), [
+        "LEDGER_JSONL_MALFORMED_LINE",
+        "LEDGER_JSONL_MALFORMED_LINE",
+      ]);
+      assert.equal(validateLedgerChain(records).status, "fail");
 
       // Appending to a corrupted ledger must recover from the last good record
       // instead of crashing while computing prev_hash.
       const third = appendJsonlRecord(filePath, { event: "third" }, { now: "2026-05-24T15:00:02.000Z" });
       assert.equal(third.prev_hash, second.record_hash);
-      assert.equal(validateLedgerChain(readLedgerJsonl(filePath)).status, "pass");
+      assert.equal(validateLedgerChain(readLedgerJsonl(filePath)).status, "fail");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

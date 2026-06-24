@@ -273,7 +273,14 @@ function reportClaimsDryRun(report = Object()) {
 function commandPassed(record) {
   if (!isObject(record)) return false;
   const status = normalizeReportStatus(record.status);
-  return status === "pass" || record.exit_code === 0 || record.exitCode === 0;
+  const exitCode = record.exit_code ?? record.exitCode;
+  const hasExitCode = exitCode !== undefined && exitCode !== null;
+  const exitPassed = hasExitCode && Number(exitCode) === 0;
+  if (status && hasExitCode) {
+    return status === "pass" && exitPassed;
+  }
+  if (status) return status === "pass";
+  return exitPassed;
 }
 
 function collectCommandEvidence(report = Object()) {
@@ -299,7 +306,12 @@ function hasPassingCommandEvidence(report = Object()) {
 function stepPassed(stepRecord) {
   if (!isObject(stepRecord)) return false;
   const status = normalizeReportStatus(stepRecord.status);
-  return status === "pass" || commandPassed(stepRecord.command);
+  const hasCommand = isObject(stepRecord.command);
+  if (status && hasCommand) {
+    return status === "pass" && commandPassed(stepRecord.command);
+  }
+  if (status) return status === "pass";
+  return hasCommand && commandPassed(stepRecord.command);
 }
 
 function cleanEnvironmentEvidencePasses(report = Object()) {
@@ -448,10 +460,14 @@ function releaseCandidateArtifactIssues(reportName, report, options = Object()) 
       )],
     };
   }
-  const integrity = verifyArtifactIntegrity(paths, {
-    rootDir: options.artifactRoot || options.artifact_root || options.cwd || process.cwd(),
+  const explicitArtifactRoot = options.artifactRoot || options.artifact_root || options.cwd;
+  const integrityOptions: Record<string, unknown> = {
     expectedSha256ByPath: reportExpectedDigests(report),
-  });
+  };
+  if (explicitArtifactRoot) {
+    integrityOptions.rootDir = explicitArtifactRoot;
+  }
+  const integrity = verifyArtifactIntegrity(paths, integrityOptions);
   const issues = [
     ...integrity.missing.map((artifact) => issue(
       "RC_GATE_ARTIFACT_MISSING",

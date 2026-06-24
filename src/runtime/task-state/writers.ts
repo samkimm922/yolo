@@ -1,6 +1,7 @@
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync } from "node:fs";
 import { redactDeep } from "../../lib/security/redact.js";
 import { writeStateAtomic } from "../persist/atomic-state.js";
+import { readJsonFileBounded } from "../../lib/bounded-read.js";
 
 function clean(value) {
   return typeof value === "string" ? value.trim() : value;
@@ -68,8 +69,7 @@ export function appendTaskResult(resultsFile, record, options = Object()) {
 
 export function updatePrdTaskStatusFile(prdPath, taskId, update) {
   try {
-    const raw = readFileSync(prdPath, "utf8");
-    const prd = JSON.parse(raw);
+    const prd = readJsonFileBounded(prdPath, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
     // Guard: legacy/migrated PRDs may contain null/non-object entries inside `tasks`.
     // Without this, `.find((item) => item.id === taskId)` throws TypeError on null
     // entries, which is caught by the outer try/catch and silently reported as

@@ -222,16 +222,16 @@ const mutations: Mutation[] = [
   {
     id: "M08-demand-readiness-evidence-ledger",
     file: "src/demand/gate.ts",
-    line: 869,
+    line: 895,
     operator: "evidence predicate -> true",
     description: "Demand readiness must fail closed when the evidence ledger is missing.",
     original: [
-      "      hasLedgerEvidence(options.stateDir),",
-      "      prdMode || deepMode ? \"error\" : \"warning\",",
+      "      hasLedgerEvidence(options.stateDir, { phase, demandId: session.id || session.demand_id }),",
+      "      evidenceGroundingRequired ? \"error\" : \"warning\",",
     ].join("\n"),
     replacement: [
       "      true,",
-      "      prdMode || deepMode ? \"error\" : \"warning\",",
+      "      evidenceGroundingRequired ? \"error\" : \"warning\",",
     ].join("\n"),
     tests: [tests.demandLedgerReadiness],
     expectedDetection: "Missing ledger evidence must produce an EVIDENCE_GROUNDED readiness blocker.",
@@ -239,10 +239,10 @@ const mutations: Mutation[] = [
   {
     id: "M09-demand-quality-evidence-ledger",
     file: "src/demand/gate.ts",
-    line: 986,
+    line: 1012,
     operator: "evidence predicate -> true",
     description: "Demand quality must expose whether project facts are evidence-grounded.",
-    original: "const evidence_grounded = hasLedgerEvidence(options.stateDir);",
+    original: "const evidence_grounded = hasLedgerEvidence(options.stateDir, { phase, demandId: session.id || session.demand_id });",
     replacement: "const evidence_grounded = true;",
     tests: [tests.demandLedgerQuality],
     expectedDetection: "Quality dimensions must report missing/broken ledger evidence as not grounded.",

@@ -105,7 +105,7 @@ function canonicalizePath(filePath) {
     return resolve(normalized).replace(/\\/g, "/").toLowerCase();
   }
   let prefix = normalized;
-  const remaining = [];
+  const remaining: string[] = [];
   while (prefix) {
     try {
       const realPrefix = realpathSync(prefix).replace(/\\/g, "/");
@@ -198,7 +198,120 @@ function bashWritesToSource(command) {
   const teeMatch = trimmed.match(/\btee\s+(?:(?:-[a-zA-Z]+)\s+)*(\S+)/);
   if (teeMatch && isProjectSourceFile(teeMatch[1]) && !pathUnderExcludedDir(teeMatch[1])) return true;
 
+  if (interpreterEvalWritesToSource(trimmed)) return true;
+  if (fileCommandWritesToSource(trimmed)) return true;
+
   return false;
+}
+
+function shellWords(command: unknown): string[] {
+  const words: string[] = [];
+  let current = "";
+  let quote = "";
+  let escaped = false;
+  for (const char of String(command || "")) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = "";
+      else current += char;
+      continue;
+    }
+    if (char === "'" || char === "\"") {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current) {
+        words.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+  if (current) words.push(current);
+  return words;
+}
+
+function commandBaseName(token: unknown): string {
+  const cleaned = String(token || "").split("/").pop() || "";
+  return cleaned.toLowerCase();
+}
+
+function nonOptionOperands(tokens: string[]): string[] {
+  return tokens.filter((token) => token && !String(token).startsWith("-"));
+}
+
+function sourcePathFromToken(token: unknown): boolean {
+  const value = String(token || "").replace(/^['"]|['"]$/g, "");
+  if (!value || pathUnderExcludedDir(value)) return false;
+  return isProjectSourceFile(value);
+}
+
+function fileCommandWritesToSource(command: unknown): boolean {
+  const tokens = shellWords(command);
+  let index = 0;
+  while (index < tokens.length && /^[A-Z_][A-Z0-9_]*=/.test(tokens[index])) index += 1;
+  const executable = commandBaseName(tokens[index]);
+  const args = tokens.slice(index + 1);
+  if (!executable) return false;
+
+  if (executable === "cp") {
+    const operands = nonOptionOperands(args);
+    const target = operands[operands.length - 1];
+    return sourcePathFromToken(target);
+  }
+  if (executable === "mv") {
+    return nonOptionOperands(args).some(sourcePathFromToken);
+  }
+  if (executable === "touch" || executable === "rm") {
+    return nonOptionOperands(args).some(sourcePathFromToken);
+  }
+  return false;
+}
+
+function quotedStrings(text: unknown): string[] {
+  const values: string[] = [];
+  const pattern = /(['"])(.*?)\1/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(String(text || ""))) !== null) {
+    values.push(match[2]);
+  }
+  return values;
+}
+
+function commandMentionsSourcePath(text: unknown): boolean {
+  const candidates: string[] = [];
+  for (const value of [String(text || ""), ...quotedStrings(text)]) {
+    candidates.push(value);
+    candidates.push(...(value.match(/(?:\/|\.{0,2}\/)?(?:[\w.-]+\/)+[\w.-]+/g) || []));
+  }
+  return candidates.some(sourcePathFromToken);
+}
+
+function interpreterEvalWritesToSource(command: unknown): boolean {
+  const tokens = shellWords(command);
+  let index = 0;
+  while (index < tokens.length && /^[A-Z_][A-Z0-9_]*=/.test(tokens[index])) index += 1;
+  const executable = commandBaseName(tokens[index]);
+  const args = tokens.slice(index + 1);
+  const isEvalInterpreter = (
+    (["node", "nodejs", "bun", "deno"].includes(executable) && args.some((arg) => arg === "-e" || arg === "--eval"))
+    || (/^python(?:\d+(?:\.\d+)?)?$/.test(executable) && args.includes("-c"))
+  );
+  if (!isEvalInterpreter) return false;
+  if (!/\b(writeFileSync|appendFileSync|createWriteStream|rmSync|unlinkSync|mkdirSync|open|write_text|unlink|remove|rmtree)\b/.test(String(command || ""))) {
+    return false;
+  }
+  return commandMentionsSourcePath(command);
 }
 
 function isYoloCliInvocation(command) {
@@ -223,7 +336,7 @@ function isYoloScriptPath(token) {
   return /^yolo(\.js|\.mjs|\.cjs|\.ts|\.tsx)?$/.test(last);
 }
 
-function block(code, message, file = null) {
+function block(code, message, file: string | null = null) {
   console.error(JSON.stringify({ status: "blocked", code, message, file }));
   process.exit(2);
 }

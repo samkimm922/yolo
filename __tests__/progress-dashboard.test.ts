@@ -6,7 +6,16 @@ import { fileURLToPath } from "node:url";
 import { afterEach, test } from "node:test";
 import { readLifecycleDashboard } from "../src/runtime/progress/lifecycle-dashboard.js";
 import { startEmbeddedProgressServer } from "../src/runtime/progress/embedded-server.js";
-import { HTML, PROGRESS_SERVER_HOST, server, _setSseMaxOverrideForTest, getSseClientCount, resetSseClientsForTest, MAX_SSE_CLIENTS } from "../src/runtime/progress/server.js";
+import {
+  HTML,
+  PROGRESS_SERVER_HOST,
+  server,
+  _setSseIdleTimeoutOverrideForTest,
+  _setSseMaxOverrideForTest,
+  getSseClientCount,
+  resetSseClientsForTest,
+  MAX_SSE_CLIENTS,
+} from "../src/runtime/progress/server.js";
 
 const roots = [];
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -479,6 +488,24 @@ test("P10.S7: SSE connection limit blocks excess clients (CWE-770)", async () =>
   } finally {
     await new Promise((resolve) => server.close(resolve));
     _setSseMaxOverrideForTest(undefined);
+    resetSseClientsForTest();
+  }
+});
+
+test("G11: SSE idle timeout releases inactive clients", async () => {
+  _setSseIdleTimeoutOverrideForTest(50);
+  await new Promise<void>((resolve) => server.listen(0, PROGRESS_SERVER_HOST, resolve));
+  try {
+    const addr = server.address();
+    const port = typeof addr === "string" ? 0 : (addr as { port: number }).port;
+    const response = await fetch(`http://${PROGRESS_SERVER_HOST}:${port}/events`);
+    assert.equal(response.status, 200);
+    assert.equal(getSseClientCount(), 1);
+    await waitFor(() => getSseClientCount() === 0, "SSE idle timeout did not release the client slot");
+    try { await response.body?.cancel().catch(() => {}); } catch {}
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    _setSseIdleTimeoutOverrideForTest(undefined);
     resetSseClientsForTest();
   }
 });

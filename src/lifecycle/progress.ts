@@ -18,6 +18,7 @@ import {
 } from "./state.js";
 import { writeSourceSnapshot } from "./source-snapshot.js";
 import { redactDeep } from "../lib/security/redact.js";
+import { isStructuredManualAcceptanceEvidence } from "./manual-acceptance.js";
 
 export const LIFECYCLE_PROGRESS_SCHEMA_VERSION = "1.0";
 export const LIFECYCLE_STAGE_REPORT_SCHEMA = "yolo.lifecycle.stage_report.v1";
@@ -73,7 +74,7 @@ function unresolvedManualCriteria(report = Object()) {
   if (manualCriteria.length === 0) return [];
 
   const manualEvidence = reportEvidenceEntries(report).filter(
-    (entry) => entry && entry.type === "manual_acceptance" && entry.task_id && entry.condition_id,
+    (entry) => isStructuredManualAcceptanceEvidence(entry),
   );
   return manualCriteria.filter((criterion) => {
     const taskId = criterion?.task_id;

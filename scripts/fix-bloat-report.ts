@@ -9,13 +9,14 @@
 //   - source changed without a matching test
 //   - a single very long added function (a hint of copy-paste / wrong abstraction)
 //
-// It is advisory by design: it always exits 0 and never blocks a merge. A human reads
-// the flags and decides. (Switch to a hard gate only when moving to unattended merge.)
+// In advisory mode it exits 0 and never blocks a merge. A human reads the flags
+// and decides. In --gate mode, invalid git inputs and egregious bloat fail closed.
 import { execFileSync } from "node:child_process";
 
 const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const BASE = positional[0] || "origin/main";
 const HEAD = positional[1] || "HEAD";
+const HARD_GATE = process.argv.includes("--gate");
 
 // Returns the reason from a `[bloat-ack: <reason>]` marker in any commit message of the
 // PR range (BASE..HEAD), or null. Lets a human deliberately acknowledge a reviewed large
@@ -60,6 +61,24 @@ function git(args: string[]): string {
   }
 }
 
+function gateGit(args: string[], description: string): string {
+  try {
+    return execFileSync("git", args, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+  } catch (error) {
+    const stderr = String((error as { stderr?: string }).stderr || "").trim();
+    console.error(`[fix-bloat] GATE FAILED — cannot ${description}.`);
+    if (stderr) console.error(stderr);
+    process.exit(1);
+  }
+}
+
+function validateGateRange() {
+  if (!HARD_GATE) return;
+  gateGit(["rev-parse", "--verify", `${BASE}^{commit}`], `resolve base ref ${BASE}`);
+  gateGit(["rev-parse", "--verify", `${HEAD}^{commit}`], `resolve head ref ${HEAD}`);
+  gateGit(["merge-base", BASE, HEAD], `find merge-base for ${BASE} and ${HEAD}`);
+}
+
 type FileStat = { file: string; added: number; removed: number };
 
 function numstat(): FileStat[] {
@@ -99,6 +118,7 @@ function longestAddedFunction(): { file: string; lines: number } {
 }
 
 function main() {
+  validateGateRange();
   const base = git(["merge-base", BASE, HEAD]);
   const stats = numstat();
   if (stats.length === 0) {
@@ -139,7 +159,7 @@ function main() {
   // Hard gate (--gate): for UNATTENDED auto-merge, block only EGREGIOUS bloat (a clear
   // rewrite / sprawl / giant pasted function). Normal focused fixes pass. Subtle quality
   // (naming, abstraction) is NOT gated — that is the accepted trade-off of auto-merge.
-  if (process.argv.includes("--gate")) {
+  if (HARD_GATE) {
     const blocks: string[] = [];
     if (total > GATE.totalLines) blocks.push(`EGREGIOUS_DIFF: ${total} lines > ${GATE.totalLines}`);
     if (stats.length > GATE.files) blocks.push(`EGREGIOUS_FILES: ${stats.length} files > ${GATE.files}`);

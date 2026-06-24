@@ -44,9 +44,16 @@ export function evalTestsPass(params = Object(), _taskScope, ROOT) {
     const out = execFileSync("pnpm", ["exec", "vitest", "run", "--reporter", "json"], {
       cwd: ROOT, encoding: "utf8", timeout: 120000, stdio: ["pipe", "pipe", "pipe"],
     });
-    const s = out.indexOf("{"); const data = s >= 0 ? JSON.parse(out.slice(s)) : {};
+    const s = out.indexOf("{");
+    if (s < 0) {
+      return { passed: false, detail: "vitest 未输出 JSON 测试结果，无法确认测试通过", type: "tests_pass" };
+    }
+    const data = JSON.parse(out.slice(s));
+    if (!data || typeof data.numFailedTests !== "number") {
+      return { passed: false, detail: "vitest JSON 缺少 numFailedTests，测试结果不可信", type: "tests_pass" };
+    }
     if ((data.numFailedTests || 0) > 0) return { passed: false, detail: data.numFailedTests + " 个测试失败", found: data.numFailedTests };
-    return { passed: true, detail: "全部测试通过" };
+    return { passed: true, detail: "全部测试通过", type: "tests_pass" };
   } catch (e) {
     const s = (e.stdout || "") + (e.stderr || "");
     try {

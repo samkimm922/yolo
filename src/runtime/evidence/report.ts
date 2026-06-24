@@ -4,6 +4,7 @@ import {
   appendJsonlRecord,
   appendStateEvent,
   buildEvidenceArtifact,
+  readLedgerJsonl,
   validateLedgerChain,
   writeJsonArtifact,
 } from "./ledger.js";
@@ -12,11 +13,9 @@ import { normalizeReviewFinding } from "../../review/findings.js";
 
 function readJsonl(filePath) {
   if (!existsSync(filePath)) return [];
-  // Tolerate malformed/truncated JSONL lines (partial flush, SIGKILL mid-write,
-  // botched external edit). A dropped line breaks the ledger chain, which
-  // summarizeLedgerIntegrity surfaces as LEDGER_PREV_HASH_MISMATCH — the
-  // corruption stays visible in the report instead of crashing buildRunReport
-  // and every downstream caller (runner finalize, acceptance, release).
+  // Non-ledger JSONL files are auxiliary evidence logs. Keep callers alive on
+  // malformed/truncated lines while ledger files use readLedgerJsonl so chain
+  // integrity errors stay visible.
   return readFileSync(filePath, "utf8")
     .split("\n")
     .filter((line) => line.trim().length > 0)
@@ -28,6 +27,10 @@ function readJsonl(filePath) {
       }
     })
     .filter((record) => record !== null && typeof record === "object" && !Array.isArray(record));
+}
+
+function isLedgerEventRecord(record) {
+  return record !== null && typeof record === "object" && !Array.isArray(record) && typeof record.event === "string";
 }
 
 function walkJsonlFiles(dir, files = []) {
@@ -55,7 +58,7 @@ function archivedLedgerHashes(stateDir) {
   };
   if (!stateDir) return hashes;
   for (const file of walkJsonlFiles(join(stateDir, "archive", "jsonl"))) {
-    for (const record of readJsonl(file)) {
+    for (const record of readLedgerJsonl(file)) {
       const ledger = archiveLedgerName(file);
       const recordLedger = record?.ledger;
       if (ledger && (recordLedger === "run" || recordLedger === "state") && recordLedger !== ledger) {
@@ -394,11 +397,13 @@ export function buildRunReport({
 } = Object()) {
   if (!stateDir) throw new Error("buildRunReport requires stateDir");
 
-  const runs = readJsonl(join(stateDir, "runs.jsonl"));
-  const events = readJsonl(join(stateDir, "events.jsonl"));
-  const runEvents = runId ? runs.filter((entry) => entry.run_id === runId) : runs;
-  const stateEvents = runId ? events.filter((entry) => entry.run_id === runId) : events;
-  const legacyUnscopedStateEvents = runId ? events.filter((entry) => !entry.run_id) : [];
+  const runs = readLedgerJsonl(join(stateDir, "runs.jsonl"));
+  const events = readLedgerJsonl(join(stateDir, "events.jsonl"));
+  const runEventRecords = runs.filter(isLedgerEventRecord);
+  const stateEventRecords = events.filter(isLedgerEventRecord);
+  const runEvents = runId ? runEventRecords.filter((entry) => entry.run_id === runId) : runEventRecords;
+  const stateEvents = runId ? stateEventRecords.filter((entry) => entry.run_id === runId) : stateEventRecords;
+  const legacyUnscopedStateEvents = runId ? stateEventRecords.filter((entry) => !entry.run_id) : [];
   const allTaskLogEntries = readTaskLogs(taskLogsDir || join(stateDir, "runtime", "task-logs"));
   const taskLogScope = filterTaskLogsForRun(allTaskLogEntries, runId);
   const taskLogEntries = taskLogScope.current;

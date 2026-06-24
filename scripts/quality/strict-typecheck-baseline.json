@@ -1,0 +1,17 @@
+{
+  "max_errors": 2466,
+  "command": "tsc -p tsconfig.json --noEmit --strict --pretty false",
+  "updated_at": "2026-06-24T07:26:43.908Z",
+  "profiles": {
+    "strict": {
+      "max_errors": 2466,
+      "command": "tsc -p tsconfig.json --noEmit --strict --pretty false",
+      "updated_at": "2026-06-24T07:26:43.908Z"
+    },
+    "strict_no_implicit_any": {
+      "max_errors": 4824,
+      "command": "tsc -p tsconfig.json --noEmit --strict --noImplicitAny --pretty false",
+      "updated_at": "2026-06-24T07:26:43.908Z"
+    }
+  }
+}

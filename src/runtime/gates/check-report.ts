@@ -189,10 +189,33 @@ function severity(status) {
   return 0;
 }
 
-function aggregateStatus(checks = []) {
+const VALID_CHECK_STATUSES = new Set(["pass", "blocked"]);
+
+function isCheckWarningStatus(status) {
+  return status === "warning";
+}
+
+function isKnownCheckStatus(status) {
+  return VALID_CHECK_STATUSES.has(status) || isCheckWarningStatus(status);
+}
+
+function aggregateStatus(checks = Array()) {
   if (checks.some((check) => check.status === "blocked")) return "blocked";
-  if (checks.some((check) => check.status === "warning")) return "warning";
+  if (checks.some((check) => check.status === "error")) return "blocked";
+  if (checks.some((check) => !isKnownCheckStatus(check.status))) return "blocked";
+  if (checks.some((check) => isCheckWarningStatus(check.status))) return "warning";
   return "pass";
+}
+
+function checkStatusIntegrityBlockers(checks = Array()) {
+  return checks
+    .filter((check) => check.status === "error" || !isKnownCheckStatus(check.status))
+    .map((check) => ({
+      code: "UNKNOWN_CHECK_STATUS",
+      source: "check_status_integrity",
+      gate: check.name || "unknown_check",
+      message: `Check returned an unsupported status: ${String(check.status || "missing")}`,
+    }));
 }
 
 function checkExitCode(status) {
@@ -836,7 +859,10 @@ export function inspectYoloCheck(input = Object(), options = Object()) {
   ].map((check) => applyWarningPolicy(check, { failClosed: failClosedWarnings }))
     .sort((a, b) => severity(b.status) - severity(a.status));
   const status = aggregateStatus(checks);
-  const blockers = checks.flatMap((check) => asArray(check.blockers).map((blocker) => ({ ...blocker, gate: check.name })));
+  const blockers = [
+    ...checkStatusIntegrityBlockers(checks),
+    ...checks.flatMap((check) => asArray(check.blockers).map((blocker) => ({ ...blocker, gate: check.name }))),
+  ];
   const warnings = checks.flatMap((check) => asArray(check.warnings).map((warning) => ({ ...warning, gate: check.name })));
   const advisoryWarnings = checks.flatMap((check) => asArray(check.advisories).map((warning) => ({ ...warning, gate: check.name, advisory: true })));
   const blockingWarnings = blockers.filter((blocker) => blocker.warning_policy === "execution_blocking");

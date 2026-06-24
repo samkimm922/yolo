@@ -643,4 +643,32 @@ describe("run lifecycle startup helpers", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("loadResumeCompletedFromPrd rejects oversized PRD JSON before parsing", () => {
+    const root = tempDir();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeFileSync(prdPath, JSON.stringify({
+        tasks: [{
+          id: "DONE",
+          status: "completed",
+          padding: "x".repeat(9 * 1024 * 1024),
+        }],
+      }), "utf8");
+
+      assert.throws(
+        () => loadResumeCompletedFromPrd({
+          prdPath,
+          taskCountsAsCompleted: (task) => task.status === "completed",
+          consoleLog: () => {},
+        }),
+        (error) => {
+          assert.equal((error as { code?: string }).code, "PRD_JSON_SIZE_LIMIT_EXCEEDED");
+          return true;
+        },
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

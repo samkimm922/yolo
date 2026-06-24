@@ -65,12 +65,87 @@ function clean(value) {
   return String(value ?? "").trim();
 }
 
+function cleanPath(value) {
+  return clean(value).replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function cleanPathList(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => cleanPath(item)).filter(Boolean);
+}
+
 function coverageArtifact(parsed = Object()) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   return parsed.coverage_artifact || parsed.coverage || parsed.scan_coverage || parsed.review_coverage || parsed;
 }
 
-export function inspectReviewScannerCoverage(scanResult, findings = null) {
+function isCoverageObject(coverage) {
+  return coverage && typeof coverage === "object" && !Array.isArray(coverage);
+}
+
+function missingExpectedFiles(coverage) {
+  if (!isCoverageObject(coverage) || !Array.isArray(coverage.missing_expected_files)) return [];
+  return cleanPathList(coverage.missing_expected_files);
+}
+
+function incompleteCoverageBlock(coverage) {
+  if (!isCoverageObject(coverage)) return null;
+  const coverageStatus = clean(coverage.coverage_status).toLowerCase();
+  if (coverageStatus && !["complete", "pass", "covered"].includes(coverageStatus)) {
+    return {
+      status: "blocked",
+      blocks_execution: true,
+      reason: "scanner_coverage_incomplete",
+      message: `Scanner coverage is not complete: ${coverage.coverage_status}`,
+      coverage,
+      blockers: [{
+        code: "REVIEW_SCANNER_COVERAGE_INCOMPLETE",
+        message: "Review findings cannot pass when scanner coverage is incomplete.",
+        coverage_status: coverage.coverage_status,
+      }],
+    };
+  }
+  const missing = missingExpectedFiles(coverage);
+  if (missing.length > 0) {
+    return {
+      status: "blocked",
+      blocks_execution: true,
+      reason: "scanner_coverage_missing_expected_files",
+      message: `Scanner did not cover expected files: ${missing.join(", ")}`,
+      coverage,
+      missing_expected_files: missing,
+      blockers: [{
+        code: "REVIEW_SCANNER_COVERAGE_MISSING_EXPECTED_FILES",
+        message: "Review scanner coverage is missing expected files.",
+        missing_expected_files: missing,
+      }],
+    };
+  }
+  return null;
+}
+
+function changedFilesCoverageBlock(coverage, expectedFiles = []) {
+  const expected = cleanPathList(expectedFiles);
+  if (expected.length === 0) return null;
+  const scanned = new Set(isCoverageObject(coverage) ? cleanPathList(coverage.scanned_files) : []);
+  const missing = expected.filter((file) => !scanned.has(file));
+  if (missing.length === 0) return null;
+  return {
+    status: "blocked",
+    blocks_execution: true,
+    reason: "scanner_coverage_missing_changed_files",
+    message: `Scanner did not scan changed files: ${missing.join(", ")}`,
+    coverage: isCoverageObject(coverage) ? coverage : null,
+    missing_expected_files: missing,
+    blockers: [{
+      code: "REVIEW_SCANNER_CHANGED_FILES_UNSCANNED",
+      message: "Review scanner coverage does not include the external changed-file scope.",
+      missing_expected_files: missing,
+    }],
+  };
+}
+
+export function inspectReviewScannerCoverage(scanResult, findings = null, options = Object()) {
   let parsed;
   try {
     parsed = JSON.parse(scanResult);
@@ -103,19 +178,22 @@ export function inspectReviewScannerCoverage(scanResult, findings = null) {
     rawReviewFindings(parsed),
     { source: parsed?.source || "review-parser" },
   );
+  const coverage = coverageArtifact(parsed);
+  const coverageBlock = incompleteCoverageBlock(coverage)
+    || changedFilesCoverageBlock(coverage, options.expectedFiles || options.reviewScopeFiles || []);
   if (normalizedFindings.length > 0) {
+    if (coverageBlock) return coverageBlock;
     return {
       status: "pass",
       blocks_execution: false,
       reason: null,
-      coverage: coverageArtifact(parsed),
+      coverage,
       blockers: [],
     };
   }
 
-  const coverage = coverageArtifact(parsed);
   const missingFields = [];
-  if (!coverage || typeof coverage !== "object" || Array.isArray(coverage)) {
+  if (!isCoverageObject(coverage)) {
     missingFields.push("coverage_artifact");
   } else {
     if (!clean(coverage.scanner_version)) missingFields.push("scanner_version");
@@ -140,21 +218,7 @@ export function inspectReviewScannerCoverage(scanResult, findings = null) {
     };
   }
 
-  const coverageStatus = clean(coverage.coverage_status).toLowerCase();
-  if (!["complete", "pass", "covered"].includes(coverageStatus)) {
-    return {
-      status: "blocked",
-      blocks_execution: true,
-      reason: "scanner_coverage_incomplete",
-      message: `Scanner coverage is not complete: ${coverage.coverage_status}`,
-      coverage,
-      blockers: [{
-        code: "REVIEW_SCANNER_COVERAGE_INCOMPLETE",
-        message: "Empty review findings cannot pass when scanner coverage is incomplete.",
-        coverage_status: coverage.coverage_status,
-      }],
-    };
-  }
+  if (coverageBlock) return coverageBlock;
 
   return {
     status: "pass",

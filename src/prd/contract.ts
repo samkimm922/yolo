@@ -5,7 +5,7 @@
 //   评估 post_conditions: node contract.js --task=<id> --prd=<path> --phase=post [--baseline-dir=<dir>]
 
 import { readFileSync, existsSync } from "node:fs";
-import { resolve, dirname, isAbsolute, relative, normalize } from "node:path";
+import { resolve, dirname, relative, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { supportedConditionTypes as catalogSupportedConditionTypes } from "./condition-catalog.js";
 import {
@@ -22,6 +22,7 @@ import { evalTestsPass, evalBuildPass, evalBusinessCodeMin } from "../lib/evalua
 import { parseCommandToArgv } from "../lib/security/command-guard.js";
 import { execArgv, execCommand } from "../lib/security/safe-exec.js";
 import { resolveWithinRoot } from "../lib/security/path-guard.js";
+import { readJsonFileBounded } from "../lib/bounded-read.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -73,12 +74,9 @@ function normalizeRepoFilePath(file, root = ROOT) {
   const raw = typeof file === "string" ? file : file?.file || file?.path || "";
   let normalized = String(raw ?? "").trim().replace(/\\/g, "/");
   if (!normalized) return "";
-  if (isAbsolute(normalized)) {
-    const relativePath = relative(root, normalized).replace(/\\/g, "/");
-    if (relativePath && relativePath !== "." && !relativePath.startsWith("../") && relativePath !== "..") {
-      normalized = relativePath;
-    }
-  }
+  const resolved = resolveWithinRoot(root, normalized);
+  if (!resolved.ok || !resolved.path) return "";
+  normalized = relative(resolve(root), resolved.path).replace(/\\/g, "/");
   normalized = normalize(normalized).replace(/\\/g, "/").replace(/^\.\/+/, "");
   return normalized === "." ? "" : normalized;
 }
@@ -178,9 +176,11 @@ function createEvaluators(root, options = Object()) {
       }
       // No executable verify command — mark as manual (blocked at delivery gate)
       return {
-        passed: true,
-        status: "pass",
-        detail: params?.text || "验收标准（需人工复核）",
+        passed: false,
+        status: "not_run",
+        detail: params?.text
+          ? `验收标准需人工复核，不能作为机器通过证据: ${params.text}`
+          : "验收标准需人工复核，不能作为机器通过证据",
         manual: true,
         warn: true,
       };
@@ -411,7 +411,7 @@ function asConditions(value) {
  * 从 PRD 文件加载任务
  */
 function loadTask(prdPath, taskId) {
-  const prd = JSON.parse(readFileSync(resolve(prdPath), "utf8"));
+  const prd = readJsonFileBounded(resolve(prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   const task = (prd.tasks || []).find((t) => t.id === taskId);
   if (!task) throw new Error(`PRD 中未找到任务: ${taskId}`);
   return { task, prd };

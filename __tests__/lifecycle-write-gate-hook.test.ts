@@ -169,6 +169,35 @@ describe("pre-tool-lifecycle-gate hook", () => {
     }
   });
 
+  test("blocks Bash interpreter and file-command writes to source when check is blocked", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-gate-bash-writes-"));
+    try {
+      makeSourceTree(root);
+      writeFileSync(join(root, "README.md"), "fixture\n", "utf8");
+      writeStatus(root, checkStages("blocked"));
+
+      const commands = [
+        "node -e \"require('fs').writeFileSync('src/node.ts', 'x')\"",
+        "python3 -c \"open('src/python.py', 'w').write('x')\"",
+        "cp README.md src/copied.ts",
+        "mv README.md src/moved.ts",
+        "touch src/touched.ts",
+        "rm src/app.ts",
+      ];
+
+      for (const command of commands) {
+        const result = runHook(root, {
+          tool_name: "Bash",
+          tool_input: { command },
+        });
+        assert.equal(result.exitCode, 2, command);
+        assert.match(result.stderr, /LIFECYCLE_WRITE_NOT_AUTHORIZED/, command);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("allows Bash yolo CLI call even when check is blocked", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-gate-bash-yolo-"));
     try {

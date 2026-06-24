@@ -1,4 +1,16 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  rmdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import {
   buildLedgerRecord,
@@ -18,15 +30,16 @@ import { redactDeep } from "../../lib/security/redact.js";
 
 const DEFAULT_LEDGER_LOCK_TIMEOUT_MS = 30_000;
 const DEFAULT_LEDGER_LOCK_STALE_MS = 120_000;
-const DEFAULT_LEDGER_LOCK_RETRY_MS = 10;
-const LOCK_WAIT_BUFFER = new Int32Array(new SharedArrayBuffer(4));
+const DEFAULT_LEDGER_READ_MAX_BYTES = 8 * 1024 * 1024;
+const LEDGER_LOCK_OWNER_PREFIX = "owner.";
+const LEDGER_LOCK_OWNER_SUFFIX = ".json";
 
 function asPositiveNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
-function ledgerAppendError(code, message, details = Object(), cause = undefined) {
+function ledgerAppendError(code: string, message: string, details: Record<string, unknown> = Object(), cause: unknown = undefined) {
   const error = new Error(message);
   return Object.assign(error, {
     code,
@@ -35,30 +48,72 @@ function ledgerAppendError(code, message, details = Object(), cause = undefined)
   });
 }
 
-function sleepSync(ms) {
-  Atomics.wait(LOCK_WAIT_BUFFER, 0, 0, Math.max(1, ms));
+function fsErrorCode(error: unknown): string {
+  return error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code || "") : "";
 }
 
-function ledgerLockPath(filePath) {
+function ledgerReadMaxBytes(options = Object()) {
+  return asPositiveNumber(options.maxBytes ?? options.max_bytes, DEFAULT_LEDGER_READ_MAX_BYTES);
+}
+
+function ledgerReadErrorRecord(code, message, details = Object()) {
+  return {
+    ledger_read_error: true,
+    status: "fail",
+    code,
+    message,
+    ...details,
+  };
+}
+
+function ledgerReadError(code, message, details = Object(), cause = undefined) {
+  const error = new Error(message);
+  return Object.assign(error, {
+    code,
+    ...details,
+    ...(cause ? { cause } : {}),
+  });
+}
+
+function ledgerLockPath(filePath: string) {
   return `${filePath}.lock`;
 }
 
-function readLockAgeMs(lockPath, nowMs) {
+function ledgerLockOwnerPath(lockPath: string, ownerToken: string) {
+  return join(lockPath, `${LEDGER_LOCK_OWNER_PREFIX}${ownerToken}${LEDGER_LOCK_OWNER_SUFFIX}`);
+}
+
+function ledgerLockOwnerFiles(lockPath: string): string[] {
   try {
-    return nowMs - statSync(lockPath).mtimeMs;
+    return readdirSync(lockPath)
+      .filter((entry) => entry.startsWith(LEDGER_LOCK_OWNER_PREFIX) && entry.endsWith(LEDGER_LOCK_OWNER_SUFFIX));
   } catch (error) {
-    if (error?.code === "ENOENT") return null;
+    if (fsErrorCode(error) === "ENOENT") return [];
     throw error;
   }
 }
 
-function removeStaleLedgerLock(lockPath, filePath, staleMs, nowMs) {
+function readLockAgeMs(lockPath: string, nowMs: number): number | null {
+  try {
+    return nowMs - statSync(lockPath).mtimeMs;
+  } catch (error) {
+    if (fsErrorCode(error) === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function removeStaleLedgerLock(lockPath: string, filePath: string, staleMs: number, nowMs: number): boolean {
   const lockAgeMs = readLockAgeMs(lockPath, nowMs);
   if (lockAgeMs === null || lockAgeMs < staleMs) return false;
+  const ownerFiles = ledgerLockOwnerFiles(lockPath);
+  if (ownerFiles.length !== 1) return false;
+  const ownerPath = join(lockPath, ownerFiles[0]);
   try {
-    rmSync(lockPath, { recursive: true, force: true });
+    unlinkSync(ownerPath);
+    rmdirSync(lockPath);
     return true;
   } catch (error) {
+    if (["ENOENT", "ENOTEMPTY", "EEXIST"].includes(fsErrorCode(error))) return false;
     throw ledgerAppendError("LEDGER_APPEND_LOCK_STALE_CLEANUP_FAILED", "Failed to clean stale evidence ledger append lock.", {
       ledger_path: filePath,
       lock_path: lockPath,
@@ -68,10 +123,9 @@ function removeStaleLedgerLock(lockPath, filePath, staleMs, nowMs) {
   }
 }
 
-function acquireLedgerAppendLock(filePath, options = Object()) {
+function acquireLedgerAppendLock(filePath: string, options: Record<string, any> = Object()): () => void {
   const timeoutMs = asPositiveNumber(options.lockTimeoutMs ?? options.lock_timeout_ms, DEFAULT_LEDGER_LOCK_TIMEOUT_MS);
   const staleMs = asPositiveNumber(options.lockStaleMs ?? options.lock_stale_ms, DEFAULT_LEDGER_LOCK_STALE_MS);
-  const retryMs = asPositiveNumber(options.lockRetryMs ?? options.lock_retry_ms, DEFAULT_LEDGER_LOCK_RETRY_MS);
   const lockPath = ledgerLockPath(filePath);
   const deadline = Date.now() + timeoutMs;
   let attempts = 0;
@@ -81,14 +135,22 @@ function acquireLedgerAppendLock(filePath, options = Object()) {
   while (Date.now() <= deadline) {
     attempts += 1;
     try {
+      const ownerToken = randomUUID();
       mkdirSync(lockPath);
+      writeFileSync(ledgerLockOwnerPath(lockPath, ownerToken), JSON.stringify({
+        owner_token: ownerToken,
+        pid: process.pid,
+        created_at: new Date().toISOString(),
+      }), { encoding: "utf8", flag: "wx", mode: 0o600 });
       let released = false;
       return () => {
         if (released) return;
         released = true;
         try {
-          rmSync(lockPath, { recursive: true, force: true });
+          unlinkSync(ledgerLockOwnerPath(lockPath, ownerToken));
+          rmdirSync(lockPath);
         } catch (error) {
+          if (["ENOENT", "ENOTEMPTY", "EEXIST"].includes(fsErrorCode(error))) return;
           throw ledgerAppendError("LEDGER_APPEND_LOCK_RELEASE_FAILED", "Failed to release evidence ledger append lock.", {
             ledger_path: filePath,
             lock_path: lockPath,
@@ -96,17 +158,23 @@ function acquireLedgerAppendLock(filePath, options = Object()) {
         }
       };
     } catch (error) {
-      if (error?.code !== "EEXIST") {
-        if (error?.code?.startsWith?.("LEDGER_APPEND_")) throw error;
+      const code = fsErrorCode(error);
+      if (code !== "EEXIST") {
+        if (code.startsWith("LEDGER_APPEND_")) throw error;
         throw ledgerAppendError("LEDGER_APPEND_LOCK_ACQUIRE_FAILED", "Failed to acquire evidence ledger append lock.", {
           ledger_path: filePath,
           lock_path: lockPath,
         }, error);
       }
 
-      removeStaleLedgerLock(lockPath, filePath, staleMs, Date.now());
-      if (Date.now() > deadline) break;
-      sleepSync(retryMs);
+      if (removeStaleLedgerLock(lockPath, filePath, staleMs, Date.now())) continue;
+      throw ledgerAppendError("LEDGER_APPEND_LOCK_BUSY", "Evidence ledger append lock is held; refusing to block the event loop.", {
+        ledger_path: filePath,
+        lock_path: lockPath,
+        timeout_ms: timeoutMs,
+        stale_ms: staleMs,
+        attempts,
+      });
     }
   }
 
@@ -119,32 +187,52 @@ function acquireLedgerAppendLock(filePath, options = Object()) {
   });
 }
 
-function readJsonlRecords(filePath) {
+function readJsonlRecords(filePath, options = Object()) {
   if (!existsSync(filePath)) return [];
-  // Tolerate malformed/truncated JSONL lines (partial flush, SIGKILL mid-write,
-  // botched external edit). A dropped line breaks the ledger chain, which
-  // validateLedgerChain surfaces as LEDGER_PREV_HASH_MISMATCH — the corruption
-  // stays visible instead of crashing every caller (report.ts mirrors this
-  // defense; #70/#82 already hardened validateLedgerChain for null/non-object
-  // records, but the raw read path here still threw on unparseable lines).
+  const maxBytes = ledgerReadMaxBytes(options);
+  const sizeBytes = statSync(filePath).size;
+  if (sizeBytes > maxBytes) {
+    const details = {
+      ledger_path: filePath,
+      size_bytes: sizeBytes,
+      max_bytes: maxBytes,
+      truncated: true,
+    };
+    const message = `Evidence ledger exceeds bounded read limit (${sizeBytes} > ${maxBytes} bytes).`;
+    if (options.throwOnReadError || options.throw_on_read_error) {
+      throw ledgerReadError("LEDGER_READ_SIZE_LIMIT_EXCEEDED", message, details);
+    }
+    return [ledgerReadErrorRecord("LEDGER_READ_SIZE_LIMIT_EXCEEDED", message, details)];
+  }
+  // Keep malformed/truncated JSONL lines visible as integrity errors instead of
+  // throwing or silently dropping them. Dropping a bad middle line can preserve
+  // a valid-looking hash chain over the remaining records and produce a false
+  // green integrity result.
   return readFileSync(filePath, "utf8")
     .split("\n")
-    .filter((line) => line.trim().length > 0)
-    .flatMap((line) => {
+    .flatMap((line, index) => {
+      if (line.trim().length === 0) return [];
       try {
         return [JSON.parse(line)];
-      } catch {
-        return [];
+      } catch (error) {
+        return [ledgerReadErrorRecord("LEDGER_JSONL_MALFORMED_LINE", "Evidence ledger contains a malformed JSONL line.", {
+          ledger_path: filePath,
+          line_number: index + 1,
+          parse_error: error instanceof Error ? error.message : String(error),
+        })];
       }
     });
 }
 
 function previousRecordHash(filePath) {
-  const records = readJsonlRecords(filePath);
-  return records.at(-1)?.record_hash || null;
+  const records = readJsonlRecords(filePath, { throwOnReadError: true });
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    if (records[index]?.record_hash) return records[index].record_hash;
+  }
+  return null;
 }
 
-export function validateLedgerChain(records = [], options = Object()) {
+export function validateLedgerChain(records: any[] = [], options: Record<string, any> = Object()) {
   const errors = [];
   const allowExternalHead = options.allowExternalHead === true || options.allow_external_head === true;
   let previousHash = allowExternalHead && records[0]?.prev_hash ? records[0].prev_hash : null;
@@ -183,8 +271,8 @@ export function validateLedgerChain(records = [], options = Object()) {
   };
 }
 
-export function readLedgerJsonl(filePath) {
-  return readJsonlRecords(filePath);
+export function readLedgerJsonl(filePath, options = Object()) {
+  return readJsonlRecords(filePath, options);
 }
 
 function withLedgerAppendLock(filePath, options, append) {
@@ -195,7 +283,7 @@ function withLedgerAppendLock(filePath, options, append) {
     return append();
   } catch (error) {
     appendError = error;
-    if (error?.code?.startsWith?.("LEDGER_APPEND_")) throw error;
+    if (error?.code?.startsWith?.("LEDGER_APPEND_") || error?.code?.startsWith?.("LEDGER_READ_")) throw error;
     throw ledgerAppendError("LEDGER_APPEND_FAILED", "Failed to append evidence ledger record.", {
       ledger_path: filePath,
     }, error);

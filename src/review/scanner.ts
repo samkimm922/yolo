@@ -231,6 +231,27 @@ function buildCoverageArtifact({ settings, files }) {
   };
 }
 
+function typecheckToolUnavailableFinding(result, output) {
+  const reason = result.rejected
+    ? `command rejected: ${result.reject_detail || result.reject_reason || "unsafe command"}`
+    : result.command_not_found
+      ? "command not found"
+      : result.timed_out
+        ? "type_check timed out"
+        : `type_check exited ${result.exit_code ?? "unknown"} without parseable TypeScript errors`;
+  return {
+    scanner_id: "typecheck-tool-unavailable",
+    dimension: "code",
+    severity: "HIGH",
+    file: null,
+    line: 0,
+    fix_type: "MANUAL_REVIEW",
+    match: reason,
+    description: `Type check tool unavailable or unverifiable: ${reason}`,
+    context: redact(String(output || result.error || "").trim().slice(0, 120)),
+  };
+}
+
 function getAllSourceFiles(dir, settings) {
   const files = [];
   try {
@@ -502,6 +523,7 @@ export function scanProject(options = Object()) {
       const tscOutput = `${tscResult.stdout || ""}${tscResult.stderr || ""}`;
       const tscLines = tscOutput.split('\n').filter(l => /error TS\d+:/.test(l));
       const seenFiles = new Set();
+      let parsedTypeErrors = 0;
       for (const line of tscLines) {
         const m = line.match(/^(.+?)\((\d+),\d+\):\s*error\s+(TS\d+):\s*(.+)$/);
         if (!m) continue;
@@ -511,6 +533,7 @@ export function scanProject(options = Object()) {
         const dedupKey = `${file}:${code}`;
         if (seenFiles.has(dedupKey)) continue;
         seenFiles.add(dedupKey);
+        parsedTypeErrors += 1;
         allFindings.push({
           scanner_id: `tsc-${code.toLowerCase()}`,
           dimension: "code",
@@ -522,6 +545,9 @@ export function scanProject(options = Object()) {
           description: `TypeScript 编译错误 ${code}: ${message}`,
           context: line.trim().slice(0, 120),
         });
+      }
+      if (parsedTypeErrors === 0) {
+        allFindings.push(typecheckToolUnavailableFinding(tscResult, tscOutput));
       }
     }
   }

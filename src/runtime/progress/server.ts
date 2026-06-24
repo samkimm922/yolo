@@ -13,7 +13,7 @@ import http from "http";
 import { readLifecycleDashboard } from "./lifecycle-dashboard.js";
 import { CSS as DASHBOARD_CSS, renderProgressDashboard } from "./dashboard-template.js";
 import { isSafePathComponent, resolveWithinRoot } from "../../lib/security/path-guard.js";
-import { readJsonlTail, readJsonlSince, readTextTail } from "../../lib/bounded-read.js";
+import { readJsonFileBounded, readJsonlTail, readJsonlSince, readTextTail } from "../../lib/bounded-read.js";
 import { redactDeep } from "../../lib/security/redact.js";
 import { safeExecSync } from "../../lib/security/safe-exec.js";
 
@@ -57,8 +57,7 @@ function findLatestPrd() {
     files.sort((a, b) => b.mtime - a.mtime);
     for (const f of files) {
       try {
-        const raw = readFileSync(f.path, 'utf8');
-        const p = JSON.parse(raw);
+        const p = readJsonFileBounded(f.path, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
         if (Array.isArray(p.tasks) && p.tasks.length > 0 && p.tasks[0].id && p.tasks[0].priority) return f.path;
       } catch {}
     }
@@ -129,7 +128,7 @@ function readPrd() {
       // 读 PRD 元数据（标题等）
       const prdFile = etData.source || resolvePrdPath();
       let prdMeta = Object();
-      try { prdMeta = JSON.parse(readFileSync(prdFile, "utf8")); } catch (e) { console.warn('[progress-server] PRD 元数据解析失败:', e.message); }
+      try { prdMeta = readJsonFileBounded(prdFile, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" }); } catch (e) { console.warn('[progress-server] PRD 元数据解析失败:', e.message); }
       return { tasks, done: done + skipped, failed, total: tasks.length, prd: { ...prdMeta, tasks: (etData.tasks || []).map((t) => redactDeep(t)) } };
     } catch (e) { console.warn('[progress-server] PRD 解析失败:', e.message); }
   }
@@ -137,7 +136,7 @@ function readPrd() {
   const prdFile = resolvePrdPath();
   if (!existsSync(prdFile)) return null;
   try {
-    const prd = JSON.parse(readFileSync(prdFile, "utf8"));
+    const prd = readJsonFileBounded(prdFile, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
     const runnerActive = isRunnerActive();
     const tasks = (prd.tasks || []).map((t) => redactDeep({
       id: t.id,
@@ -369,11 +368,17 @@ const sseClients = new Set<any>();
 
 /** 最大 SSE 并发连接数（CWE-770 缓解） */
 export const MAX_SSE_CLIENTS = 128;
+/** 空闲 SSE 连接最大存活时间，避免半开连接长期占用槽位。 */
+export const SSE_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 /** 测试用 override，设为较小值以触发连接限制 */
 export let _testSseMaxOverride: number | undefined;
 export function _setSseMaxOverrideForTest(v: number | undefined) { _testSseMaxOverride = v; }
+export let _testSseIdleTimeoutOverride: number | undefined;
+export function _setSseIdleTimeoutOverrideForTest(v: number | undefined) { _testSseIdleTimeoutOverride = v; }
 export function getSseClientCount(): number { return sseClients.size; }
-export function resetSseClientsForTest() { sseClients.clear(); }
+export function resetSseClientsForTest() {
+  for (const client of [...sseClients]) closeSseClient(client);
+}
 let taskLogsWatcher = null;
 let currentRunWatcher = null;
 let reviewLogWatcher = null;
@@ -393,12 +398,44 @@ function unwatchFileTracked(filePath) {
   watchedFiles.delete(filePath);
 }
 
+function sseIdleTimeoutMs() {
+  return typeof _testSseIdleTimeoutOverride === "number"
+    ? _testSseIdleTimeoutOverride
+    : SSE_IDLE_TIMEOUT_MS;
+}
+
+function closeSseClient(clientState, options = Object()) {
+  if (!clientState || clientState._closed) return;
+  clientState._closed = true;
+  try { clearInterval(clientState._heartbeat); } catch {}
+  try { clearTimeout(clientState._idleTimeout); } catch {}
+  try { clientState.taskLogPositions?.clear?.(); } catch {}
+  sseClients.delete(clientState);
+  if (options.end !== false) {
+    try { clientState.res.end(); } catch {}
+  }
+}
+
+function refreshSseIdleTimeout(clientState) {
+  const timeoutMs = sseIdleTimeoutMs();
+  try { clearTimeout(clientState._idleTimeout); } catch {}
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return;
+  clientState._idleTimeout = setTimeout(() => {
+    closeSseClient(clientState);
+  }, timeoutMs);
+  clientState._idleTimeout.unref?.();
+}
+
 /** 向所有 SSE 客户端广播事件 */
 function sseBroadcast(event, data) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const client of sseClients) {
-    const state = Object.assign(Object(), client);
-    try { state.res.write(payload); } catch { /* 连接已断开 */ }
+    try {
+      client.res.write(payload);
+      refreshSseIdleTimeout(client);
+    } catch {
+      closeSseClient(client);
+    }
   }
 }
 
@@ -512,15 +549,14 @@ function handleSSEConnection(req, res) {
 
   // 心跳（每 30 秒）
   const heartbeat = setInterval(() => {
-    try { res.write(":heartbeat\n\n"); } catch { clearInterval(heartbeat); }
+    try { res.write(":heartbeat\n\n"); } catch { closeSseClient(clientState); }
   }, 30000);
   clientState._heartbeat = heartbeat;
+  refreshSseIdleTimeout(clientState);
 
   // 连接关闭时清理
   req.on("close", () => {
-    clearInterval(heartbeat);
-    sseClients.delete(clientState);
-    clientState.taskLogPositions.clear();
+    closeSseClient(clientState, { end: false });
   });
 }
 
@@ -545,7 +581,10 @@ function startFileWatchers() {
           if (entries.length > 0) {
             try {
               state.res.write(`event: task-log\ndata: ${JSON.stringify({ taskId, entries })}\n\n`);
-            } catch { /* 连接已断开 */ }
+              refreshSseIdleTimeout(client);
+            } catch {
+              closeSseClient(client);
+            }
           }
         }
       });
@@ -664,10 +703,7 @@ function closeProgressServerResources() {
     selfWatcher = null;
   }
   for (const client of [...sseClients]) {
-    try { clearInterval(client._heartbeat); } catch {}
-    try { client.res.end(); } catch {}
-    try { client.taskLogPositions?.clear?.(); } catch {}
-    sseClients.delete(client);
+    closeSseClient(client);
   }
 }
 

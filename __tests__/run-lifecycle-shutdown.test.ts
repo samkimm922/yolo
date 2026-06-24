@@ -9,6 +9,10 @@ import {
   saveRunnerProgressSnapshot,
   writeRunEndOnCrashEvent,
 } from "../src/runtime/run-lifecycle/shutdown.js";
+import {
+  activeProviderProcessCount,
+  registerActiveProviderProcess,
+} from "../src/runtime/execution/provider-adapter.js";
 
 function makeState() {
   return {
@@ -87,6 +91,41 @@ describe("run lifecycle shutdown helpers", () => {
     assert.equal(calls.some((call) => call[0] === "logRun" && call[2].exit_reason === "SIGTERM"), true);
     assert.equal(calls.some((call) => call[0] === "archive" && call[1].interrupted === true), true);
     assert.deepEqual(calls.at(-1), ["exit", 130]);
+  });
+
+  test("graceful shutdown kills active provider children before worktree cleanup", async () => {
+    const calls: string[] = [];
+    const unregister = registerActiveProviderProcess({
+      pid: 424242,
+      provider: "custom",
+      command: "node agent.js",
+      killTree: (pid) => calls.push(`kill:${pid}`),
+    });
+    try {
+      const shutdown = createGracefulShutdownHandler({
+        progress: { done: 0, failed: 0 },
+        runResultsTracker: { completed: new Set(), failed: [] },
+        state: makeState(),
+        startTimeMs: 0,
+        logRun: () => {},
+        writeProgressSnapshot: () => {},
+        archiveCurrentRunFile: () => {},
+        cleanupRuntimeStateFiles: () => {},
+        execFileSync: (bin) => {
+          if (bin === "git") calls.push("git-cleanup");
+        },
+        log: () => {},
+        exit: () => {},
+      });
+
+      await shutdown("SIGINT");
+
+      assert.equal(calls[0], "kill:424242");
+      assert.equal(calls.includes("git-cleanup"), true);
+      assert.equal(activeProviderProcessCount(), 0);
+    } finally {
+      unregister();
+    }
   });
 
   test("fatal error handler writes crash evidence and exits with failure", () => {

@@ -227,7 +227,10 @@ describe("lifecycle progress", () => {
           task_id: "FEAT-1",
           condition_id: "POST-MANUAL",
           accepted_by: "operator",
-          at: "2026-06-20T00:00:00.000Z",
+          accepted_at: "2026-06-20T00:00:00.000Z",
+          status: "accepted",
+          signature: "sig-test",
+          digest: "sha256:test",
         }],
         manual_criteria: [{
           task_id: "FEAT-1",
@@ -255,6 +258,55 @@ describe("lifecycle progress", () => {
 
       assert.equal(result.stage_status, "completed");
       assert.equal(existsSync(join(stateRoot, "lifecycle/delivery-report.json")), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("runtime invariant: delivery write rejects forged manual acceptance records", () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    try {
+      writeLifecycleStageReport("acceptance", {
+        status: "pass",
+        summary: "manual acceptance record is missing signature fields",
+        evidence: [{
+          type: "manual_acceptance",
+          task_id: "FEAT-1",
+          condition_id: "POST-MANUAL",
+          accepted_by: "operator",
+        }],
+        manual_criteria: [{
+          task_id: "FEAT-1",
+          condition_id: "POST-MANUAL",
+          text: "Product owner signs off.",
+        }],
+      }, {
+        projectRoot: root,
+        stateRoot,
+        source: "unit",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
+      });
+
+      assert.throws(
+        () => writeLifecycleStageReport("delivery", {
+          status: "success",
+          summary: "delivery should not write",
+        }, {
+          projectRoot: root,
+          stateRoot,
+          source: "unit",
+          writeSessionMemory: false,
+          skipSequenceCheck: true,
+        }),
+        (error) => {
+          const invariantError = error as any;
+          assert.equal(invariantError.code, "RUNTIME_INVARIANT_VIOLATED:delivery_manual_acceptance_unresolved");
+          return true;
+        },
+      );
+      assert.equal(existsSync(join(stateRoot, "lifecycle/delivery-report.json")), false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

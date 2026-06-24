@@ -1,8 +1,12 @@
+import { isSafePathComponent } from "../../lib/security/path-guard.js";
+
 export const CONTROLLED_PARALLEL_SCHEMA_VERSION = "1.0";
 export const CONTROLLED_PARALLEL_PLAN_SCHEMA = "yolo.runtime.controlled_parallel_plan.v1";
 export const CONTROLLED_PARALLEL_MERGE_GATE_SCHEMA = "yolo.runtime.parallel_merge_gate.v1";
 export const CONTROLLED_PARALLEL_EVIDENCE_SCHEMA = "yolo.runtime.parallel_evidence_merge.v1";
 export const CONTROLLED_PARALLEL_WAVE_START_GATE_SCHEMA = "yolo.runtime.parallel_wave_start_gate.v1";
+
+const SAFE_TASK_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -24,6 +28,33 @@ function normalizePath(value = "") {
 
 function taskId(task = Object()) {
   return clean(task.id || task.task_id);
+}
+
+function unsafeTaskIdBlocker(task = Object(), index = 0) {
+  const id = taskId(task);
+  if (!id) {
+    return {
+      code: "PARALLEL_UNSAFE_TASK_ID",
+      message: "Parallel task id must be a non-empty safe path component before deriving worktree paths or branch names.",
+      task_id: null,
+      task_index: index,
+      reason: "empty",
+    };
+  }
+  if (!isSafePathComponent(id) || !SAFE_TASK_ID_PATTERN.test(id)) {
+    return {
+      code: "PARALLEL_UNSAFE_TASK_ID",
+      message: "Parallel task id must be a non-empty safe path component before deriving worktree paths or branch names.",
+      task_id: id,
+      task_index: index,
+      reason: "unsafe_path_component",
+    };
+  }
+  return null;
+}
+
+function taskHasSafeId(task = Object(), index = 0) {
+  return unsafeTaskIdBlocker(task, index) === null;
 }
 
 function taskStatus(task = Object()) {
@@ -108,7 +139,9 @@ export function detectParallelConflicts(tasks = []) {
 }
 
 export function buildTaskDependencyGraph(input = Object()) {
-  const tasks = asArray(input.tasks || input.prd?.tasks).filter((task) => taskId(task));
+  const sourceTasks = asArray(input.tasks || input.prd?.tasks);
+  const idBlockers = sourceTasks.map(unsafeTaskIdBlocker).filter(Boolean);
+  const tasks = sourceTasks.filter(taskHasSafeId);
   const ids = new Set(tasks.map(taskId));
   const nodes = tasks.map((task) => {
     const dependencies = taskDependencies(task);
@@ -139,7 +172,7 @@ export function buildTaskDependencyGraph(input = Object()) {
     schema: "yolo.runtime.task_dependency_graph.v1",
     nodes,
     edges,
-    blockers: missing,
+    blockers: [...idBlockers, ...missing],
   };
 }
 
@@ -249,7 +282,7 @@ export function planControlledParallelWaves(input = Object(), options = Object()
   const projectRoot = clean(input.projectRoot || input.project_root || options.projectRoot || options.project_root || process.cwd());
   const worktreeRoot = normalizePath(input.worktreeRoot || input.worktree_root || options.worktreeRoot || options.worktree_root || `${projectRoot}/../.yolo-worktrees`);
   const graph = buildTaskDependencyGraph(input);
-  const tasks = asArray(input.tasks || input.prd?.tasks).filter((task) => taskId(task) && taskCanRun(task));
+  const tasks = asArray(input.tasks || input.prd?.tasks).filter((task, index) => taskHasSafeId(task, index) && taskCanRun(task));
   const taskById = new Map(tasks.map((task) => [taskId(task), task]));
   const completed = new Set(asArray(input.completedTaskIds || input.completed_task_ids));
   for (const node of graph.nodes) {
