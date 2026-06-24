@@ -13,6 +13,7 @@ import {
 } from "../gates/readiness-policy.js";
 import { runAdapterEvidenceCollector } from "../adapters/evidence-collector.js";
 import { verifyArtifactIntegrity } from "../evidence/artifact-integrity.js";
+import type { ArtifactIntegrityRecord } from "../evidence/artifact-integrity.js";
 import { isWithin } from "../../lib/security/path-guard.js";
 import { verifyApprovalSignature, approvalSignablePayload } from "../../lib/security/approval-signing.js";
 import { withRuntimeInvariantCode } from "../invariants.js";
@@ -20,16 +21,376 @@ import { withRuntimeInvariantCode } from "../invariants.js";
 export const ACCEPTANCE_REPORT_SCHEMA_VERSION = "1.0";
 export const ACCEPTANCE_REPORT_SCHEMA = "yolo.acceptance.report.v1";
 
+// ── Types ──────────────────────────────────────────────────────────────────
+// Acceptance data is loose JSON read from disk; record bases are
+// Record<string, unknown> and structured records carry the fields actually
+// consumed below. Inputs are typed as unknown and narrowed, never widened to
+// `any`.
+export type AcceptanceRecord = Record<string, unknown>;
+
+export interface AcceptanceIssue extends AcceptanceRecord {
+  level: string;
+  code: string;
+  message: string;
+  // Structured extra fields attached to specific issue codes (see pushIssue
+  // call sites); typed so consumers can inspect them without narrowing `unknown`.
+  task_id?: unknown;
+  finding_id?: unknown;
+  run_id?: unknown;
+  reasons?: string[];
+  status?: string;
+  status_entries?: StatusEntry[];
+  non_pass_statuses?: StatusEntry[];
+  dry_run_flags?: FlagEntry[];
+  failed?: number;
+  blocked?: number;
+  evidence_failures?: number;
+  gate_failures?: number;
+  review_issues?: number;
+  review_errors?: number;
+  fixture_failures?: number;
+  fixture_blocked?: number;
+  fixture_status?: string | null;
+  spec_blocked?: number;
+  ledger_integrity_errors?: number;
+  artifact_path?: string;
+  expected_sha256?: string | null;
+  actual_sha256?: string | null;
+}
+
+export interface IssueSummary {
+  p0: number;
+  p1: number;
+  p2: number;
+  human_review: number;
+  total: number;
+}
+
+export interface ManualCriterion extends AcceptanceRecord {
+  task_id: unknown;
+  condition_id: unknown;
+  text: string;
+}
+
+export interface JsonParseErrorReport extends AcceptanceRecord {
+  schema: "yolo.invalid_json.v1";
+  status: "error";
+  parse_error: {
+    code: "JSON_PARSE_FAILED";
+    path: string;
+    message: string;
+  };
+}
+
+export interface RunReport extends AcceptanceRecord {
+  report?: RunReport;
+  summary?: AcceptanceRecord;
+  run_id?: unknown;
+  runId?: unknown;
+  prd?: unknown;
+  prd_path?: unknown;
+  status?: unknown;
+  schema?: unknown;
+  stage?: unknown;
+  failed?: unknown;
+  blocked?: unknown;
+  gates?: AcceptanceRecord;
+  review?: AcceptanceRecord;
+  fixtures?: AcceptanceRecord;
+  spec_governance?: AcceptanceRecord;
+  ledger?: AcceptanceRecord;
+  evidence_integrity?: AcceptanceRecord;
+  parse_error?: { code?: string; path?: string; message?: string };
+}
+
+export interface ReviewReport extends AcceptanceRecord {
+  report?: ReviewReport;
+  findings?: unknown;
+  review?: AcceptanceRecord;
+  review_output?: AcceptanceRecord;
+  reviewOutput?: AcceptanceRecord;
+  prd_path?: unknown;
+  prd?: unknown;
+}
+
+export interface ReviewFinding extends AcceptanceRecord {
+  severity?: unknown;
+  must_fix_before_ship?: unknown;
+  finding_id?: unknown;
+  id?: unknown;
+  source_finding_id?: unknown;
+  status?: unknown;
+  state?: unknown;
+  resolution?: unknown;
+}
+
+export interface ReviewFixTask extends AcceptanceRecord {
+  id?: unknown;
+  task_kind?: unknown;
+  source_finding_ids?: unknown;
+  source_findings?: unknown;
+  fix_findings?: unknown;
+}
+
+export interface PrdTask extends AcceptanceRecord {
+  id?: unknown;
+  acceptance_criteria?: unknown;
+  post_conditions?: unknown;
+  task_kind?: unknown;
+  scope?: AcceptanceRecord;
+  files?: unknown;
+}
+
+export interface Prd extends AcceptanceRecord {
+  tasks?: unknown;
+}
+
+export interface PostCondition extends AcceptanceRecord {
+  type?: unknown;
+  id?: unknown;
+  text?: unknown;
+  detail?: unknown;
+  verify_command?: unknown;
+  params?: AcceptanceRecord;
+}
+
+export interface AdapterEvidence extends AcceptanceRecord {
+  status?: unknown;
+  code?: unknown;
+  adapter?: AcceptanceRecord;
+  required_platform?: unknown;
+  platform_coverage?: AcceptanceRecord;
+  ui_evidence?: UiEvidence;
+  collected_evidence?: unknown;
+  artifact_path?: unknown;
+}
+
+export interface UiEvidence extends AcceptanceRecord {
+  page_reachable?: unknown;
+  critical_path_passed?: unknown;
+  required_state_present?: unknown;
+  content_overlap?: unknown;
+  text_overflow?: unknown;
+  runtime_errors?: unknown;
+  screenshots?: unknown;
+  polish_notes?: unknown;
+  human_review_notes?: unknown;
+  visual_artifacts?: string[];
+}
+
+export interface ResolverResult extends AcceptanceRecord {
+  selected?: AcceptanceRecord;
+  blockers?: unknown;
+}
+
+export interface ApprovalArtifact extends AcceptanceRecord {
+  approved?: unknown;
+  status?: unknown;
+  approved_at?: unknown;
+  approvedAt?: unknown;
+  executed_at?: unknown;
+  executedAt?: unknown;
+  approver?: unknown;
+  approved_by?: unknown;
+  approvedBy?: unknown;
+  reviewer?: unknown;
+  warning_digest?: unknown;
+  warnings_digest?: unknown;
+  issue_digest?: unknown;
+  issues_digest?: unknown;
+  warning_count?: unknown;
+  warnings_count?: unknown;
+  issue_count?: unknown;
+  issues_count?: unknown;
+  prd_path?: unknown;
+  prdPath?: unknown;
+  mode?: unknown;
+  acceptance_mode?: unknown;
+  acceptanceMode?: unknown;
+  signature?: unknown;
+}
+
+export interface ApprovalWarningExpectation extends AcceptanceRecord {
+  prd_path?: unknown;
+  mode?: unknown;
+  warning_count?: number;
+  warning_digest?: unknown;
+}
+
+export interface ApprovalReadResult {
+  artifact_path: string;
+  artifact: unknown;
+  error: ApprovalInvalidReason | null;
+}
+
+export interface ApprovalInvalidReason extends AcceptanceRecord {
+  code: string;
+  message: string;
+}
+
+export interface ApprovalResult {
+  artifact_path: string;
+  artifact: unknown;
+  approved: boolean;
+  invalid_reasons: ApprovalInvalidReason[];
+  expected: ApprovalWarningExpectation;
+}
+
+export interface StatusEntry {
+  field: string;
+  status: string;
+}
+
+export interface FlagEntry {
+  field: string;
+  value: true;
+}
+
+export interface RunEvidencePayload {
+  run_id: string;
+  summary: AcceptanceRecord | null;
+  prd: string;
+}
+
+export interface AcceptanceInput extends AcceptanceRecord {
+  prd?: Prd;
+  prdPath?: unknown;
+  prd_path?: unknown;
+  mode?: unknown;
+  acceptanceMode?: unknown;
+  acceptance_mode?: unknown;
+  projectRoot?: unknown;
+  project_root?: unknown;
+  stateRoot?: unknown;
+  state_root?: unknown;
+  runReportPath?: unknown;
+  run_report_path?: unknown;
+  reviewReportPath?: unknown;
+  review_report_path?: unknown;
+  uiEvidencePath?: unknown;
+  ui_evidence_path?: unknown;
+  adapterEvidencePath?: unknown;
+  adapter_evidence_path?: unknown;
+  runReport?: unknown;
+  run_report?: unknown;
+  reviewReport?: unknown;
+  review_report?: unknown;
+  uiEvidence?: unknown;
+  ui_evidence?: unknown;
+  adapterEvidence?: unknown;
+  adapter_evidence?: unknown;
+  resolver?: ResolverResult;
+  approvalArtifact?: unknown;
+  approval_artifact?: unknown;
+  acceptanceApprovalArtifact?: unknown;
+  acceptance_approval_artifact?: unknown;
+  collectEvidence?: unknown;
+  collect_evidence?: unknown;
+  requiredPlatform?: unknown;
+  required_platform?: unknown;
+  platform?: unknown;
+  executeAdapter?: unknown;
+  execute_adapter?: unknown;
+  allowAdapterCommands?: unknown;
+  allow_adapter_commands?: unknown;
+  artifactDigests?: unknown;
+  artifact_digests?: unknown;
+  expectedArtifactDigests?: unknown;
+  expected_artifact_digests?: unknown;
+  writeLifecycle?: unknown;
+  write_lifecycle?: unknown;
+  learnFailures?: unknown;
+}
+
+export interface AcceptanceOptions extends AcceptanceRecord {
+  prdPath?: unknown;
+  prd_path?: unknown;
+  mode?: unknown;
+  acceptanceMode?: unknown;
+  acceptance_mode?: unknown;
+  projectRoot?: unknown;
+  project_root?: unknown;
+  stateRoot?: unknown;
+  state_root?: unknown;
+  runReportPath?: unknown;
+  run_report_path?: unknown;
+  reviewReportPath?: unknown;
+  review_report_path?: unknown;
+  uiEvidencePath?: unknown;
+  ui_evidence_path?: unknown;
+  adapterEvidencePath?: unknown;
+  adapter_evidence_path?: unknown;
+  approvalArtifact?: unknown;
+  approval_artifact?: unknown;
+  acceptanceApprovalArtifact?: unknown;
+  acceptance_approval_artifact?: unknown;
+  collectEvidence?: unknown;
+  collect_evidence?: unknown;
+  requiredPlatform?: unknown;
+  required_platform?: unknown;
+  platform?: unknown;
+  executeAdapter?: unknown;
+  execute_adapter?: unknown;
+  allowAdapterCommands?: unknown;
+  allow_adapter_commands?: unknown;
+  artifactDigests?: unknown;
+  artifact_digests?: unknown;
+  expectedArtifactDigests?: unknown;
+  expected_artifact_digests?: unknown;
+  writeLifecycle?: unknown;
+  write_lifecycle?: unknown;
+  learnFailures?: unknown;
+}
+
+export interface AcceptanceCliIo {
+  stdout?: { write: (data: string) => unknown } & AcceptanceRecord;
+  stderr?: { write: (data: string) => unknown } & AcceptanceRecord;
+  cwd?: string;
+}
+
+export interface WarningApproval extends AcceptanceRecord {
+  required?: boolean;
+  approved?: boolean;
+  artifact_path?: string;
+  expected?: ApprovalWarningExpectation;
+  invalid_reasons?: ApprovalInvalidReason[];
+}
+
+export interface AcceptanceReport extends AcceptanceRecord {
+  schema_version: string;
+  schema: string;
+  status: string;
+  code: string;
+  summary: string;
+  generated_at: string;
+  project_root: string;
+  state_root: string;
+  prd_path: string;
+  mode: string;
+  manual_criteria: ManualCriterion[];
+  issue_summary: IssueSummary;
+  issues: AcceptanceIssue[];
+  warning_approval: WarningApproval;
+  resolver: ResolverResult;
+  adapter_evidence: AdapterEvidence | null;
+  ui: { ui_task_count: number };
+  artifact_integrity: ArtifactIntegrityResult;
+  artifacts: string[];
+  next_actions: string[];
+  lifecycle_write?: AcceptanceRecord;
+}
+// ── /Types ─────────────────────────────────────────────────────────────────
+
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 const RELEASE_ACCEPTANCE_MODES = new Set(["ship", "release"]);
 
-function nowIso() {
+function nowIso(): string {
   return new Date().toISOString();
 }
 
-function readJsonMaybe(path) {
+function readJsonMaybe(path: unknown): AcceptanceRecord | JsonParseErrorReport | null {
   if (!path) return null;
-  const resolved = resolve(path);
+  const resolved = resolve(String(path));
   if (!existsSync(resolved)) return null;
   try {
     return JSON.parse(readFileSync(resolved, "utf8"));
@@ -40,30 +401,30 @@ function readJsonMaybe(path) {
       parse_error: {
         code: "JSON_PARSE_FAILED",
         path: resolved,
-        message: error?.message || "JSON parse failed.",
+        message: error instanceof Error ? error.message : String(error ?? "JSON parse failed."),
       },
     };
   }
 }
 
-function isLifecycleStageReport(report) {
+function isLifecycleStageReport(report: unknown): report is AcceptanceRecord {
   return Boolean(report && typeof report === "object" &&
-    (report.schema === "yolo.lifecycle.stage_report.v1" || (report.lifecycle_schema && report.report)));
+    ((report as AcceptanceRecord).schema === "yolo.lifecycle.stage_report.v1" || ((report as AcceptanceRecord).lifecycle_schema && (report as AcceptanceRecord).report)));
 }
 
-function latestStateRunReportPath(stateRoot) {
+function latestStateRunReportPath(stateRoot: string): string {
   const reportsRoot = join(stateRoot, "state", "reports");
   if (!existsSync(reportsRoot)) return "";
   try {
     const candidates = readdirSync(reportsRoot, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && entry.name.startsWith("run-"))
-      .map((entry) => {
+      .map((entry): { path: string; mtime: number } | null => {
         const reportPath = join(reportsRoot, entry.name, "run-report.json");
         if (!existsSync(reportPath)) return null;
         const stat = statSync(reportPath);
         return { path: reportPath, mtime: stat.mtimeMs };
       })
-      .filter(Boolean)
+      .filter((entry): entry is { path: string; mtime: number } => entry !== null)
       .sort((a, b) => (b.mtime - a.mtime) || b.path.localeCompare(a.path));
     return candidates[0]?.path || "";
   } catch {
@@ -71,9 +432,9 @@ function latestStateRunReportPath(stateRoot) {
   }
 }
 
-function defaultRunReportPath(stateRoot) {
+function defaultRunReportPath(stateRoot: string): string {
   const lifecyclePath = join(stateRoot, "lifecycle", "run-report.json");
-  let lifecycleReport = null;
+  let lifecycleReport: AcceptanceRecord | JsonParseErrorReport | null = null;
   try {
     lifecycleReport = readJsonMaybe(lifecyclePath);
   } catch {
@@ -83,23 +444,23 @@ function defaultRunReportPath(stateRoot) {
   return latestStateRunReportPath(stateRoot) || lifecyclePath;
 }
 
-function defaultAdapterEvidencePath({ stateRoot, resolver }) {
-  const adapterId = resolver?.selected?.acceptance_adapter?.id;
+function defaultAdapterEvidencePath({ stateRoot, resolver }: { stateRoot: string; resolver?: ResolverResult }): string {
+  const adapterId = asRecord(resolver?.selected?.acceptance_adapter)?.id;
   if (!adapterId || adapterId === "unknown/custom") return "";
   return join(stateRoot, "state", "evidence", "adapters", `${adapterId}-latest.json`);
 }
 
-function loadPrd(input = Object()) {
+function loadPrd(input: AcceptanceInput = Object()): Prd | AcceptanceRecord | JsonParseErrorReport | null {
   if (input.prd) return input.prd;
   return readJsonMaybe(input.prdPath || input.prd_path);
 }
 
-function acceptanceMode(input = Object(), options = Object()) {
+function acceptanceMode(input: AcceptanceInput = Object(), options: AcceptanceOptions = Object()): string {
   return clean(input.mode || input.acceptanceMode || input.acceptance_mode || options.mode || options.acceptanceMode || options.acceptance_mode || "accept").toLowerCase();
 }
 
-function approvalArtifactPath({ input = Object(), options = Object(), stateRoot }) {
-  return input.approvalArtifact ||
+function approvalArtifactPath({ input = Object(), options = Object(), stateRoot }: { input: AcceptanceInput; options: AcceptanceOptions; stateRoot: string }): string {
+  return String(input.approvalArtifact ||
     input.approval_artifact ||
     input.acceptanceApprovalArtifact ||
     input.acceptance_approval_artifact ||
@@ -107,14 +468,14 @@ function approvalArtifactPath({ input = Object(), options = Object(), stateRoot 
     options.approval_artifact ||
     options.acceptanceApprovalArtifact ||
     options.acceptance_approval_artifact ||
-    join(stateRoot, "lifecycle", "acceptance-approval.json");
+    join(stateRoot, "lifecycle", "acceptance-approval.json"));
 }
 
-function readApprovalArtifact(path, boundaryRoot) {
+function readApprovalArtifact(path: unknown, boundaryRoot: string): ApprovalReadResult {
   if (!path) {
     return { artifact_path: "", artifact: null, error: null };
   }
-  const resolved = resolve(path);
+  const resolved = resolve(String(path));
   if (boundaryRoot && !isWithin(resolved, boundaryRoot)) {
     return {
       artifact_path: "",
@@ -136,13 +497,13 @@ function readApprovalArtifact(path, boundaryRoot) {
       artifact: null,
       error: {
         code: "ACCEPTANCE_WARNING_APPROVAL_MALFORMED",
-        message: error?.message || "Approval artifact is not valid JSON.",
+        message: error instanceof Error ? error.message : String(error ?? "Approval artifact is not valid JSON."),
       },
     };
   }
 }
 
-function warningApprovalDigest({ prdPath, mode, warnings = [] } = Object()) {
+function warningApprovalDigest({ prdPath, mode, warnings = [] }: { prdPath: string; mode: string; warnings?: AcceptanceIssue[] } = Object()): string {
   const normalized = {
     prd_path: prdPath ? resolve(prdPath) : "",
     mode,
@@ -157,17 +518,17 @@ function warningApprovalDigest({ prdPath, mode, warnings = [] } = Object()) {
   return createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
 }
 
-function approvalValueMatches(value, expected) {
+function approvalValueMatches(value: unknown, expected: unknown): boolean {
   if (!expected) return true;
   return clean(value) === clean(expected);
 }
 
-function hasApprovalAuditFields(approval = Object()) {
+function hasApprovalAuditFields(approval: ApprovalArtifact = Object()): boolean {
   return Boolean(clean(approval.approved_at || approval.approvedAt || approval.executed_at || approval.executedAt)) &&
     Boolean(clean(approval.approver || approval.approved_by || approval.approvedBy || approval.reviewer));
 }
 
-function approvalWarningsMatch(approval = Object(), expected = Object()) {
+function approvalWarningsMatch(approval: ApprovalArtifact = Object(), expected: ApprovalWarningExpectation = Object()): boolean {
   const expectedCount = expected.warning_count || 0;
   const digest = approval.warning_digest || approval.warnings_digest || approval.issue_digest || approval.issues_digest;
   if (digest) return clean(digest) === clean(expected.warning_digest);
@@ -176,18 +537,32 @@ function approvalWarningsMatch(approval = Object(), expected = Object()) {
   return expectedCount === 0;
 }
 
-function approvalFromArtifact(path, expected = Object(), boundaryRoot) {
+function asRecord(value: unknown): AcceptanceRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as AcceptanceRecord : null;
+}
+
+// Generic, behaviorally-faithful counterpart to the (untyped) `asArray` helper
+// imported from readiness-policy. Same normalization — arrays are filtered for
+// truthy entries and scalars are wrapped into a single-element array — but
+// carries an element type so downstream member access is statically safe.
+function toArray<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value.filter(Boolean) as T[];
+  if (value == null || value === "") return [];
+  return [value] as T[];
+}
+
+function approvalFromArtifact(path: unknown, expected: ApprovalWarningExpectation = Object(), boundaryRoot: string): ApprovalResult {
   const read = readApprovalArtifact(path, boundaryRoot);
-  const artifact = read.artifact;
-  const payload = artifact?.report || artifact;
-  const approval = payload?.approval || payload?.acceptance_approval || payload;
+  const artifact = asRecord(read.artifact);
+  const payload = (artifact && asRecord(artifact.report)) || artifact;
+  const approval: ApprovalArtifact | null = (payload && (asRecord(payload.approval) || asRecord(payload.acceptance_approval))) || payload;
   const approved = approval?.approved === true || clean(approval?.status).toLowerCase() === "approved";
-  const reasons = [];
+  const reasons: ApprovalInvalidReason[] = [];
   if (read.error) reasons.push(read.error);
   if (artifact && !approved) {
     reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_NOT_APPROVED", message: "Approval artifact is present but not approved." });
   }
-  if (artifact && approved) {
+  if (artifact && approved && approval) {
     if (!hasApprovalAuditFields(approval)) {
       reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_AUDIT_FIELDS_MISSING", message: "Approval artifact must include approver and approved_at fields." });
     }
@@ -232,13 +607,13 @@ function approvalFromArtifact(path, expected = Object(), boundaryRoot) {
   };
 }
 
-function readArgValue(argv, index) {
+function readArgValue(argv: string[], index: number): { value: string | undefined; consumed: number } {
   const arg = argv[index];
   if (arg.includes("=")) return { value: arg.split("=").slice(1).join("="), consumed: 0 };
   return { value: argv[index + 1], consumed: 1 };
 }
 
-function pushIssue(issues, level, code, message, extra = Object()) {
+function pushIssue(issues: AcceptanceIssue[], level: string, code: string, message: string, extra: AcceptanceRecord = Object()): void {
   issues.push({
     level,
     code,
@@ -247,7 +622,7 @@ function pushIssue(issues, level, code, message, extra = Object()) {
   });
 }
 
-function summarizeIssues(issues = []) {
+function summarizeIssues(issues: AcceptanceIssue[] = []): IssueSummary {
   return {
     p0: issues.filter((issue) => issue.level === "P0").length,
     p1: issues.filter((issue) => issue.level === "P1").length,
@@ -260,7 +635,7 @@ function summarizeIssues(issues = []) {
 const RUN_REPORT_PASS_STATUSES = new Set(["pass", "success"]);
 const STATUS_FIELDS = new Set(["status", "verdict", "outcome"]);
 
-function collectReportStatuses(report, depth = 0, field = "", seen = new Set()) {
+function collectReportStatuses(report: unknown, depth = 0, field = "", seen: Set<unknown> = new Set()): StatusEntry[] {
   if (Array.isArray(report)) {
     return report.flatMap((item, index) =>
       collectReportStatuses(item, depth + 1, field ? `${field}.${index}` : String(index), seen),
@@ -268,14 +643,15 @@ function collectReportStatuses(report, depth = 0, field = "", seen = new Set()) 
   }
   if (!report || typeof report !== "object" || depth > 20 || seen.has(report)) return [];
   seen.add(report);
-  const statuses = [];
-  for (const [key, value] of Object.entries(report)) {
+  const record = report as AcceptanceRecord;
+  const statuses: StatusEntry[] = [];
+  for (const [key, value] of Object.entries(record)) {
     const nextField = field ? `${field}.${key}` : key;
     if (STATUS_FIELDS.has(key)) {
       const status = clean(value).toLowerCase();
       const wrapperStatus = key === "status" &&
         ["completed", "done"].includes(status) &&
-        Boolean(report.report || report.result || report.run_report || report.runReport);
+        Boolean(record.report || record.result || record.run_report || record.runReport);
       if (status && !wrapperStatus) statuses.push({ field: nextField, status });
     }
     if (value && typeof value === "object") {
@@ -285,7 +661,7 @@ function collectReportStatuses(report, depth = 0, field = "", seen = new Set()) 
   return statuses;
 }
 
-function collectReportFlags(report, flagNames = [], depth = 0, field = "", seen = new Set()) {
+function collectReportFlags(report: unknown, flagNames: string[] = [], depth = 0, field = "", seen: Set<unknown> = new Set()): FlagEntry[] {
   if (Array.isArray(report)) {
     return report.flatMap((item, index) =>
       collectReportFlags(item, flagNames, depth + 1, field ? `${field}.${index}` : String(index), seen),
@@ -293,8 +669,9 @@ function collectReportFlags(report, flagNames = [], depth = 0, field = "", seen 
   }
   if (!report || typeof report !== "object" || depth > 20 || seen.has(report)) return [];
   seen.add(report);
-  const flags = [];
-  for (const [key, value] of Object.entries(report)) {
+  const record = report as AcceptanceRecord;
+  const flags: FlagEntry[] = [];
+  for (const [key, value] of Object.entries(record)) {
     const nextField = field ? `${field}.${key}` : key;
     if (flagNames.includes(key) && value === true) flags.push({ field: nextField, value: true });
     if (value && typeof value === "object") {
@@ -304,8 +681,8 @@ function collectReportFlags(report, flagNames = [], depth = 0, field = "", seen 
   return flags;
 }
 
-function acceptanceCriteriaIssues(prd, issues) {
-  const tasks = asArray(prd?.tasks);
+function acceptanceCriteriaIssues(prd: Prd | null, issues: AcceptanceIssue[]): void {
+  const tasks: PrdTask[] = asArray(prd?.tasks);
   if (tasks.length === 0) {
     pushIssue(issues, "P1", "ACCEPTANCE_TASKS_MISSING", "Acceptance requires PRD tasks.");
   }
@@ -318,15 +695,15 @@ function acceptanceCriteriaIssues(prd, issues) {
   }
 }
 
-function hasVerifyCommand(condition) {
+function hasVerifyCommand(condition: PostCondition): boolean {
   return Boolean(clean(condition.verify_command) || clean(condition.params?.verify_command));
 }
 
-function collectManualCriteria(prd) {
-  const manualCriteria = [];
-  const tasks = asArray(prd?.tasks);
+function collectManualCriteria(prd: Prd | null): ManualCriterion[] {
+  const manualCriteria: ManualCriterion[] = [];
+  const tasks: PrdTask[] = asArray(prd?.tasks);
   for (const task of tasks) {
-    const conditions = asArray(task.post_conditions);
+    const conditions: PostCondition[] = asArray(task.post_conditions);
     for (const condition of conditions) {
       if (condition.type === "acceptance_criteria" && !hasVerifyCommand(condition)) {
         manualCriteria.push({
@@ -346,17 +723,18 @@ function collectManualCriteria(prd) {
 // is not.
 const RUN_SUMMARY_FIELDS = ["planned", "completed", "failed", "blocked", "skipped"];
 
-function isStructuredSummary(summary) {
+function isStructuredSummary(summary: unknown): summary is AcceptanceRecord {
   return Boolean(summary) && typeof summary === "object" && !Array.isArray(summary)
-    && RUN_SUMMARY_FIELDS.some((field) => Number.isFinite(Number(summary[field])));
+    && RUN_SUMMARY_FIELDS.some((field) => Number.isFinite(Number((summary as AcceptanceRecord)[field])));
 }
 
-function runEvidencePayload(runReport) {
-  const empty = { run_id: "", summary: null, prd: "" };
+function runEvidencePayload(runReport: unknown): RunEvidencePayload {
+  const empty: RunEvidencePayload = { run_id: "", summary: null, prd: "" };
   if (!runReport || typeof runReport !== "object") return empty;
-  const nested = runReport.report && typeof runReport.report === "object" ? runReport.report : null;
-  const topLevelSummary = (runReport.summary && typeof runReport.summary === "object" && !Array.isArray(runReport.summary))
-    ? runReport.summary
+  const report = runReport as RunReport;
+  const nested = report.report && typeof report.report === "object" ? report.report : null;
+  const topLevelSummary = (report.summary && typeof report.summary === "object" && !Array.isArray(report.summary))
+    ? report.summary
     : null;
   const nestedSummary = (nested && nested.summary && typeof nested.summary === "object" && !Array.isArray(nested.summary))
     ? nested.summary
@@ -364,28 +742,29 @@ function runEvidencePayload(runReport) {
   // A stage wrapper may carry a stage-level summary ({failed, blocked}) at the top
   // level; the verifiable structured run summary lives inside the nested .report.
   // Prefer the summary that actually carries structured run-report fields.
-  const summarySource = (topLevelSummary && isStructuredSummary(topLevelSummary))
+  const summarySource: AcceptanceRecord | null = (topLevelSummary && isStructuredSummary(topLevelSummary))
     ? topLevelSummary
     : (nestedSummary && isStructuredSummary(nestedSummary)
       ? nestedSummary
       : (topLevelSummary || nestedSummary));
   return {
-    run_id: clean(runReport.run_id || runReport.runId || (nested && (nested.run_id || nested.runId)) || ""),
+    run_id: clean(report.run_id || report.runId || (nested && (nested.run_id || nested.runId)) || ""),
     summary: summarySource,
-    prd: clean(runReport.prd || runReport.prd_path || (nested && (nested.prd || nested.prd_path)) || ""),
+    prd: clean(report.prd || report.prd_path || (nested && (nested.prd || nested.prd_path)) || ""),
   };
 }
 
-function runReportSufficiencyIssues(runReport, issues, { prdPath = "" } = Object()) {
+function runReportSufficiencyIssues(runReport: unknown, issues: AcceptanceIssue[], { prdPath = "" }: { prdPath?: string } = Object()): void {
   if (!runReport) return;
-  const payload = runEvidencePayload(runReport);
-  const reasons = [];
+  const report = runReport as RunReport;
+  const payload = runEvidencePayload(report);
+  const reasons: string[] = [];
   if (!payload.run_id) reasons.push("missing run_id");
   const hasStructuredSummary = isStructuredSummary(payload.summary);
   if (!hasStructuredSummary) reasons.push("missing structured summary (planned/completed/failed/blocked)");
   if (prdPath && !payload.prd) reasons.push("missing PRD lineage binding");
   if (reasons.length > 0) {
-    const extra = isLifecycleStageReport(runReport)
+    const extra = isLifecycleStageReport(report)
       ? withRuntimeInvariantCode({}, "acceptance_run_report_wrapper")
       : {};
     pushIssue(issues, "P1", "RUN_REPORT_INSUFFICIENT",
@@ -394,41 +773,42 @@ function runReportSufficiencyIssues(runReport, issues, { prdPath = "" } = Object
         ...extra,
         run_id: payload.run_id || null,
         reasons,
-        schema: clean(runReport.schema) || null,
-        stage: clean(runReport.stage) || null,
+        schema: clean(report.schema) || null,
+        stage: clean(report.stage) || null,
       });
   }
 }
 
-function runtimeEvidenceIssues(runReport, issues, { releaseMode = false, prdPath = "" } = Object()) {
+function runtimeEvidenceIssues(runReport: unknown, issues: AcceptanceIssue[], { releaseMode = false, prdPath = "" }: { releaseMode?: boolean; prdPath?: string } = Object()): void {
   if (!runReport) {
     pushIssue(issues, "P1", "RUN_REPORT_MISSING", "Acceptance requires run evidence or an explicit degraded/manual record.");
     return;
   }
-  if (runReport.parse_error?.code === "JSON_PARSE_FAILED") {
+  const report = runReport as RunReport;
+  if (report.parse_error?.code === "JSON_PARSE_FAILED") {
     pushIssue(issues, "P1", "RUN_REPORT_JSON_INVALID", "Run report JSON could not be parsed.", {
-      path: runReport.parse_error.path || null,
-      error: runReport.parse_error.message || "JSON parse failed.",
+      path: report.parse_error.path || null,
+      error: report.parse_error.message || "JSON parse failed.",
     });
     return;
   }
-  runReportSufficiencyIssues(runReport, issues, { prdPath });
-  const status = clean(runReport.status).toLowerCase();
-  const statusEntries = collectReportStatuses(runReport);
+  runReportSufficiencyIssues(report, issues, { prdPath });
+  const status = clean(report.status).toLowerCase();
+  const statusEntries = collectReportStatuses(report);
   const nonPassStatuses = statusEntries.filter((entry) => !RUN_REPORT_PASS_STATUSES.has(entry.status));
-  const dryRunFlags = collectReportFlags(runReport, ["dry_run", "dryRun"]);
-  const failed = Number(runReport.summary?.failed || asArray(runReport.failed).length || 0);
-  const blocked = Number(runReport.summary?.blocked || asArray(runReport.blocked).length || 0);
-  const evidenceFailures = Number(runReport.summary?.evidence_failures || 0);
-  const gateFailures = Number(runReport.gates?.failed_count || 0);
-  const reviewIssues = Number(runReport.review?.issue_count || 0);
-  const reviewErrors = Number(runReport.review?.error_count || 0);
-  const fixtureFailures = Number(runReport.fixtures?.fail_count || 0);
-  const fixtureBlocked = Number(runReport.fixtures?.blocked_count || 0);
-  const fixtureDegraded = Number(runReport.fixtures?.degraded_count || 0);
-  const fixtureStatus = clean(runReport.fixtures?.status).toLowerCase();
-  const specBlocked = Number(runReport.spec_governance?.blocked_count || 0);
-  const ledgerIntegrityErrors = Number(runReport.ledger?.integrity?.error_count || runReport.evidence_integrity?.error_count || 0);
+  const dryRunFlags = collectReportFlags(report, ["dry_run", "dryRun"]);
+  const failed = Number(report.summary?.failed || asArray(report.failed).length || 0);
+  const blocked = Number(report.summary?.blocked || asArray(report.blocked).length || 0);
+  const evidenceFailures = Number(report.summary?.evidence_failures || 0);
+  const gateFailures = Number(report.gates?.failed_count || 0);
+  const reviewIssues = Number(report.review?.issue_count || 0);
+  const reviewErrors = Number(report.review?.error_count || 0);
+  const fixtureFailures = Number(report.fixtures?.fail_count || 0);
+  const fixtureBlocked = Number(report.fixtures?.blocked_count || 0);
+  const fixtureDegraded = Number(report.fixtures?.degraded_count || 0);
+  const fixtureStatus = clean(report.fixtures?.status).toLowerCase();
+  const specBlocked = Number(report.spec_governance?.blocked_count || 0);
+  const ledgerIntegrityErrors = Number(asRecord(report.ledger?.integrity)?.error_count || report.evidence_integrity?.error_count || 0);
   if (
     statusEntries.length === 0 ||
     nonPassStatuses.length > 0 ||
@@ -470,7 +850,7 @@ function runtimeEvidenceIssues(runReport, issues, { releaseMode = false, prdPath
   }
 }
 
-function adapterEvidenceIssues(adapterEvidence, issues) {
+function adapterEvidenceIssues(adapterEvidence: AdapterEvidence | null, issues: AcceptanceIssue[]): void {
   if (!adapterEvidence) return;
   const status = clean(adapterEvidence.status).toLowerCase();
   if (!RUN_REPORT_PASS_STATUSES.has(status)) {
@@ -486,22 +866,32 @@ function adapterEvidenceIssues(adapterEvidence, issues) {
   }
 }
 
-function reviewFindingsFromReports(...reports) {
-  return reports.flatMap((report) => [
-    ...asArray(report?.findings),
-    ...asArray(report?.review?.findings),
-    ...asArray(report?.review?.issues),
-    ...asArray(report?.review_output?.findings),
-    ...asArray(report?.reviewOutput?.findings),
-    ...asArray(report?.report?.findings),
-    ...asArray(report?.report?.review?.findings),
-    ...asArray(report?.report?.review?.issues),
-    ...asArray(report?.report?.review_output?.findings),
-    ...asArray(report?.report?.reviewOutput?.findings),
-  ]);
+function reviewFindingsFromReports(...reports: unknown[]): ReviewFinding[] {
+  const findings: ReviewFinding[] = [];
+  for (const report of reports) {
+    const record = asRecord(report) as ReviewReport | null;
+    const review = (record && asRecord(record.review)) || null;
+    const reviewOutput = (record && asRecord(record.review_output)) || null;
+    const nested = (record && asRecord(record.report)) as ReviewReport | null;
+    const nestedReview = (nested && asRecord(nested.review)) || null;
+    const nestedReviewOutput = (nested && asRecord(nested.review_output)) || null;
+    findings.push(
+      ...toArray<ReviewFinding>(record?.findings),
+      ...toArray<ReviewFinding>(review?.findings),
+      ...toArray<ReviewFinding>(review?.issues),
+      ...toArray<ReviewFinding>(reviewOutput?.findings),
+      ...toArray<ReviewFinding>(record?.reviewOutput),
+      ...toArray<ReviewFinding>(nested?.findings),
+      ...toArray<ReviewFinding>(nestedReview?.findings),
+      ...toArray<ReviewFinding>(nestedReview?.issues),
+      ...toArray<ReviewFinding>(nestedReviewOutput?.findings),
+      ...toArray<ReviewFinding>(nested?.reviewOutput),
+    );
+  }
+  return findings;
 }
 
-function reviewIssues(reviewReport, runReport, issues) {
+function reviewIssues(reviewReport: unknown, runReport: unknown, issues: AcceptanceIssue[]): void {
   const findings = reviewFindingsFromReports(reviewReport, runReport);
   for (const finding of findings) {
     if (["CRITICAL", "HIGH"].includes(clean(finding.severity).toUpperCase()) || finding.must_fix_before_ship === true) {
@@ -513,19 +903,19 @@ function reviewIssues(reviewReport, runReport, issues) {
   }
 }
 
-function reviewFixTasks(prd) {
-  return asArray(prd?.tasks).filter((task) => task?.task_kind === "review_fix");
+function reviewFixTasks(prd: Prd | null): ReviewFixTask[] {
+  return toArray<ReviewFixTask>(prd?.tasks).filter((task) => task?.task_kind === "review_fix");
 }
 
-function taskSourceFindingIds(task = Object()) {
+function taskSourceFindingIds(task: ReviewFixTask = Object()): string[] {
   return [
-    ...asArray(task.source_finding_ids),
-    ...asArray(task.source_findings).map((finding) => finding?.finding_id || finding?.id),
-    ...asArray(task.fix_findings).map((finding) => finding?.finding_id || finding?.id),
+    ...toArray<string>(task.source_finding_ids),
+    ...toArray<ReviewFinding>(task.source_findings).map((finding) => finding?.finding_id || finding?.id),
+    ...toArray<ReviewFinding>(task.fix_findings).map((finding) => finding?.finding_id || finding?.id),
   ].map((value) => clean(value)).filter(Boolean);
 }
 
-function findingIdCandidates(finding = Object()) {
+function findingIdCandidates(finding: ReviewFinding = Object()): string[] {
   return [
     finding.finding_id,
     finding.id,
@@ -533,12 +923,12 @@ function findingIdCandidates(finding = Object()) {
   ].map((value) => clean(value)).filter(Boolean);
 }
 
-function findingIsClosed(finding = Object()) {
+function findingIsClosed(finding: ReviewFinding = Object()): boolean {
   const status = clean(finding.status || finding.state || finding.resolution).toLowerCase();
   return ["closed", "resolved", "fixed", "pass", "passed"].includes(status);
 }
 
-function reviewFixClosureIssues(prd, reviewReport, runReport, issues) {
+function reviewFixClosureIssues(prd: Prd | null, reviewReport: unknown, runReport: unknown, issues: AcceptanceIssue[]): void {
   const tasks = reviewFixTasks(prd);
   if (tasks.length === 0) return;
   if (!reviewReport) {
@@ -571,16 +961,16 @@ function reviewFixClosureIssues(prd, reviewReport, runReport, issues) {
   }
 }
 
-function normalizePathForCompare(value) {
+function normalizePathForCompare(value: unknown): string {
   return value ? resolve(String(value)) : "";
 }
 
-function explicitOption(input = Object(), options = Object(), ...keys) {
+function explicitOption(input: AcceptanceInput = Object(), options: AcceptanceOptions = Object(), ...keys: string[]): boolean {
   return keys.some((key) => input[key] !== undefined || options[key] !== undefined);
 }
 
-function expectedArtifactDigests(input = Object(), options = Object()) {
-  return input.artifactDigests ||
+function expectedArtifactDigests(input: AcceptanceInput = Object(), options: AcceptanceOptions = Object()): AcceptanceRecord {
+  return (input.artifactDigests ||
     input.artifact_digests ||
     input.expectedArtifactDigests ||
     input.expected_artifact_digests ||
@@ -588,10 +978,18 @@ function expectedArtifactDigests(input = Object(), options = Object()) {
     options.artifact_digests ||
     options.expectedArtifactDigests ||
     options.expected_artifact_digests ||
-    {};
+    {}) as AcceptanceRecord;
 }
 
-function pushArtifactIntegrityIssues(issues, integrity) {
+interface ArtifactIntegrityResult {
+  status?: string;
+  checked_count?: number;
+  artifacts: ArtifactIntegrityRecord[];
+  missing?: ArtifactIntegrityRecord[];
+  digest_mismatches?: ArtifactIntegrityRecord[];
+}
+
+function pushArtifactIntegrityIssues(issues: AcceptanceIssue[], integrity: ArtifactIntegrityResult): void {
   for (const artifact of integrity.missing || []) {
     pushIssue(issues, "P1", "ACCEPTANCE_ARTIFACT_MISSING", "Acceptance evidence artifact path does not exist on disk.", {
       artifact_path: artifact.absolute_path,
@@ -606,18 +1004,20 @@ function pushArtifactIntegrityIssues(issues, integrity) {
   }
 }
 
-function evidenceLineageIssues({ prdPath, runReport, reviewReport }, issues) {
+function evidenceLineageIssues({ prdPath, runReport, reviewReport }: { prdPath: string; runReport: unknown; reviewReport: unknown }, issues: AcceptanceIssue[]): void {
   const expectedPrd = normalizePathForCompare(prdPath);
   if (!expectedPrd) return;
-  const runPrd = normalizePathForCompare(runReport?.report?.prd || runReport?.prd || runReport?.prd_path);
-  const reviewPrd = normalizePathForCompare(reviewReport?.report?.prd_path || reviewReport?.prd_path || reviewReport?.prd);
-  if (runReport && runPrd && runPrd !== expectedPrd) {
+  const run = asRecord(runReport) as RunReport | null;
+  const review = asRecord(reviewReport) as ReviewReport | null;
+  const runPrd = normalizePathForCompare(run?.report?.prd || run?.prd || run?.prd_path);
+  const reviewPrd = normalizePathForCompare(review?.report?.prd_path || review?.prd_path || review?.prd);
+  if (run && runPrd && runPrd !== expectedPrd) {
     pushIssue(issues, "P1", "RUN_REPORT_PRD_MISMATCH", "Run evidence belongs to a different PRD.", {
       expected_prd: expectedPrd,
       actual_prd: runPrd,
     });
   }
-  if (reviewReport && reviewPrd && reviewPrd !== expectedPrd) {
+  if (review && reviewPrd && reviewPrd !== expectedPrd) {
     pushIssue(issues, "P1", "REVIEW_REPORT_PRD_MISMATCH", "Review evidence belongs to a different PRD.", {
       expected_prd: expectedPrd,
       actual_prd: reviewPrd,
@@ -625,22 +1025,23 @@ function evidenceLineageIssues({ prdPath, runReport, reviewReport }, issues) {
   }
 }
 
-function uiEvidenceIssues({ prd, uiEvidence, resolver }, issues) {
+function uiEvidenceIssues({ prd, uiEvidence, resolver }: { prd: Prd | null; uiEvidence: UiEvidence | null; resolver?: ResolverResult }, issues: AcceptanceIssue[]): { ui_task_count: number } {
   const tasks = uiTasks(prd, { resolver });
   if (tasks.length === 0) return { ui_task_count: 0 };
   if (!uiEvidence) {
     pushIssue(issues, "P1", "UI_EVIDENCE_MISSING", "UI tasks require screenshot/log/runtime evidence.");
     return { ui_task_count: tasks.length };
   }
-  if (resolver?.selected?.acceptance_adapter?.id === "unknown/custom") {
+  if (asRecord(resolver?.selected?.acceptance_adapter)?.id === "unknown/custom") {
     pushIssue(issues, "P1", "UI_ACCEPTANCE_ADAPTER_MISSING", "UI acceptance requires an acceptance adapter manifest.");
   }
   if (uiEvidence.page_reachable === false) pushIssue(issues, "P0", "UI_PAGE_UNREACHABLE", "Target page or surface is unreachable.");
   if (uiEvidence.critical_path_passed === false) pushIssue(issues, "P0", "UI_CRITICAL_PATH_FAILED", "Critical UI path failed.");
   if (uiEvidence.required_state_present === false) pushIssue(issues, "P0", "UI_REQUIRED_STATE_MISSING", "Required UI state is missing.");
   if (uiEvidence.content_overlap === true || uiEvidence.text_overflow === true) pushIssue(issues, "P0", "UI_LAYOUT_BLOCKER", "Main content overlaps or overflows.");
-  if (asArray(uiEvidence.runtime_errors).length > 0) {
-    pushIssue(issues, "P0", "UI_RUNTIME_ERRORS", "Runtime errors were reported by UI evidence.", { count: uiEvidence.runtime_errors.length });
+  const runtimeErrors = asArray(uiEvidence.runtime_errors);
+  if (runtimeErrors.length > 0) {
+    pushIssue(issues, "P0", "UI_RUNTIME_ERRORS", "Runtime errors were reported by UI evidence.", { count: runtimeErrors.length });
   }
   if (asArray(uiEvidence.screenshots).length === 0) pushIssue(issues, "P1", "UI_SCREENSHOT_MISSING", "UI acceptance requires at least one screenshot or equivalent visual artifact.");
   for (const note of asArray(uiEvidence.polish_notes)) {
@@ -652,21 +1053,21 @@ function uiEvidenceIssues({ prd, uiEvidence, resolver }, issues) {
   return { ui_task_count: tasks.length };
 }
 
-export function buildAcceptanceReport(input = Object(), options = Object()) {
-  const prdPath = input.prdPath || input.prd_path || options.prdPath || options.prd_path || "";
+export function buildAcceptanceReport(input: AcceptanceInput = Object(), options: AcceptanceOptions = Object()): AcceptanceReport {
+  const prdPath = String(input.prdPath || input.prd_path || options.prdPath || options.prd_path || "");
   const prd = loadPrd({ ...options, ...input });
-  const projectRoot = resolve(input.projectRoot || input.project_root || options.projectRoot || options.project_root || (prdPath ? dirname(resolve(prdPath)) : process.cwd()));
-  const stateRoot = resolve(input.stateRoot || input.state_root || options.stateRoot || options.state_root || `${projectRoot}/.yolo`);
+  const projectRoot = resolve(String(input.projectRoot || input.project_root || options.projectRoot || options.project_root || (prdPath ? dirname(resolve(prdPath)) : process.cwd())));
+  const stateRoot = resolve(String(input.stateRoot || input.state_root || options.stateRoot || options.state_root || `${projectRoot}/.yolo`));
   const mode = acceptanceMode(input, options);
-  const resolver = input.resolver || resolveProjectContext({
+  const resolver: ResolverResult = (input.resolver || resolveProjectContext({
     projectRoot,
     stateRoot,
     requiresAcceptanceAdapter: uiTasks(prd).length > 0,
-  });
-  const runReportPath = input.runReportPath || input.run_report_path || options.runReportPath || options.run_report_path || defaultRunReportPath(stateRoot);
-  const reviewReportPath = input.reviewReportPath || input.review_report_path || options.reviewReportPath || options.review_report_path || join(stateRoot, "lifecycle", "review-report.json");
-  const uiEvidencePath = input.uiEvidencePath || input.ui_evidence_path || options.uiEvidencePath || options.ui_evidence_path || "";
-  const adapterEvidencePath = input.adapterEvidencePath || input.adapter_evidence_path || options.adapterEvidencePath || options.adapter_evidence_path || defaultAdapterEvidencePath({ stateRoot, resolver });
+  })) as ResolverResult;
+  const runReportPath = String(input.runReportPath || input.run_report_path || options.runReportPath || options.run_report_path || defaultRunReportPath(stateRoot));
+  const reviewReportPath = String(input.reviewReportPath || input.review_report_path || options.reviewReportPath || options.review_report_path || join(stateRoot, "lifecycle", "review-report.json"));
+  const uiEvidencePath = String(input.uiEvidencePath || input.ui_evidence_path || options.uiEvidencePath || options.ui_evidence_path || "");
+  const adapterEvidencePath = String(input.adapterEvidencePath || input.adapter_evidence_path || options.adapterEvidencePath || options.adapter_evidence_path || defaultAdapterEvidencePath({ stateRoot, resolver }));
   const runReportFromInput = Boolean(input.runReport || input.run_report);
   const reviewReportFromInput = Boolean(input.reviewReport || input.review_report);
   const uiEvidenceFromInput = Boolean(input.uiEvidence || input.ui_evidence);
@@ -675,11 +1076,11 @@ export function buildAcceptanceReport(input = Object(), options = Object()) {
   const reviewReportPathExplicit = explicitOption(input, options, "reviewReportPath", "review_report_path");
   const uiEvidencePathExplicit = explicitOption(input, options, "uiEvidencePath", "ui_evidence_path");
   const adapterEvidencePathExplicit = explicitOption(input, options, "adapterEvidencePath", "adapter_evidence_path");
-  const runReport = input.runReport || input.run_report || readJsonMaybe(runReportPath);
-  const reviewReport = input.reviewReport || input.review_report || readJsonMaybe(reviewReportPath);
+  const runReport: unknown = input.runReport || input.run_report || readJsonMaybe(runReportPath);
+  const reviewReport: unknown = input.reviewReport || input.review_report || readJsonMaybe(reviewReportPath);
   const releaseMode = RELEASE_ACCEPTANCE_MODES.has(mode);
-  let uiEvidence = input.uiEvidence || input.ui_evidence || readJsonMaybe(uiEvidencePath);
-  const adapterEvidence = input.adapterEvidence || input.adapter_evidence || (
+  let uiEvidence: UiEvidence | null = (input.uiEvidence || input.ui_evidence || readJsonMaybe(uiEvidencePath)) as UiEvidence | null;
+  const adapterEvidence: AdapterEvidence | null = (input.adapterEvidence || input.adapter_evidence || (
     (input.collectEvidence || input.collect_evidence || options.collectEvidence || options.collect_evidence)
       ? runAdapterEvidenceCollector({
         projectRoot,
@@ -692,39 +1093,39 @@ export function buildAcceptanceReport(input = Object(), options = Object()) {
         allowAdapterCommands: input.allowAdapterCommands === true || input.allow_adapter_commands === true || options.allowAdapterCommands === true || options.allow_adapter_commands === true,
       })
       : readJsonMaybe(adapterEvidencePath)
-  );
+  )) as AdapterEvidence | null;
   if (!uiEvidence && adapterEvidence?.ui_evidence) {
-    uiEvidence = adapterEvidence.ui_evidence;
+    uiEvidence = adapterEvidence.ui_evidence as UiEvidence | null;
   }
   if (!uiEvidence && Array.isArray(adapterEvidence?.collected_evidence)) {
-    uiEvidence = adapterEvidence.collected_evidence.find((record) => record?.ui_evidence)?.ui_evidence || null;
+    uiEvidence = (adapterEvidence!.collected_evidence as AcceptanceRecord[]).find((record) => record?.ui_evidence)?.ui_evidence as UiEvidence | null || null;
   }
-  const issues = [];
+  const issues: AcceptanceIssue[] = [];
   const artifactPaths = [
     prdPath ? resolve(prdPath) : "",
     runReport && (!runReportFromInput || runReportPathExplicit) ? resolve(runReportPath) : "",
     reviewReport && (!reviewReportFromInput || reviewReportPathExplicit) ? resolve(reviewReportPath) : "",
     uiEvidence && uiEvidencePath && (!uiEvidenceFromInput || uiEvidencePathExplicit) ? resolve(uiEvidencePath) : "",
     adapterEvidence?.artifact_path || (adapterEvidence && adapterEvidencePath && (!adapterEvidenceFromInput || adapterEvidencePathExplicit) ? resolve(adapterEvidencePath) : ""),
-  ].filter(Boolean);
+  ].filter(Boolean) as string[];
   const artifactIntegrity = verifyArtifactIntegrity(artifactPaths, {
     rootDir: projectRoot,
     expectedSha256ByPath: expectedArtifactDigests(input, options),
-  });
+  }) as ArtifactIntegrityResult;
   pushArtifactIntegrityIssues(issues, artifactIntegrity);
   if (!prd) {
     pushIssue(issues, "P1", "PRD_MISSING", "Acceptance requires a PRD.");
   } else {
-    acceptanceCriteriaIssues(prd, issues);
+    acceptanceCriteriaIssues(prd as Prd, issues);
   }
   runtimeEvidenceIssues(runReport, issues, { releaseMode, prdPath });
   adapterEvidenceIssues(adapterEvidence, issues);
   evidenceLineageIssues({ prdPath, runReport, reviewReport }, issues);
   reviewIssues(reviewReport, runReport, issues);
-  if (prd) reviewFixClosureIssues(prd, reviewReport, runReport, issues);
-  const ui = prd ? uiEvidenceIssues({ prd, uiEvidence, resolver }, issues) : { ui_task_count: 0 };
-  for (const blocker of asArray(resolver.blockers)) {
-    pushIssue(issues, "P1", blocker.code || "RESOLVER_BLOCKED", blocker.message || "Resolver blocked acceptance.");
+  if (prd) reviewFixClosureIssues(prd as Prd, reviewReport, runReport, issues);
+  const ui = prd ? uiEvidenceIssues({ prd: prd as Prd, uiEvidence, resolver }, issues) : { ui_task_count: 0 };
+  for (const blocker of toArray<AcceptanceRecord>(resolver.blockers)) {
+    pushIssue(issues, "P1", clean(blocker.code) || "RESOLVER_BLOCKED", clean(blocker.message) || "Resolver blocked acceptance.");
   }
 
   let summary = summarizeIssues(issues);
@@ -776,7 +1177,7 @@ export function buildAcceptanceReport(input = Object(), options = Object()) {
     state_root: stateRoot,
     prd_path: prdPath ? resolve(prdPath) : "",
     mode,
-    manual_criteria: prd ? collectManualCriteria(prd) : [],
+    manual_criteria: prd ? collectManualCriteria(prd as Prd) : [],
     issue_summary: summary,
     issues,
     warning_approval: {
@@ -796,7 +1197,7 @@ export function buildAcceptanceReport(input = Object(), options = Object()) {
       : status === "warning"
         ? ["Review P2/human review notes before delivery."]
         : ["Continue to /yolo-ship."],
-  });
+  }) as AcceptanceReport;
   if (input.writeLifecycle || input.write_lifecycle || options.writeLifecycle || options.write_lifecycle) {
     report.lifecycle_write = writeLifecycleStageReport("acceptance", report, {
       projectRoot,
@@ -805,29 +1206,31 @@ export function buildAcceptanceReport(input = Object(), options = Object()) {
       learnFailures: options.learnFailures === true || input.learnFailures === true,
       skipSequenceCheck: true,
     });
-    report.artifacts.push(report.lifecycle_write.artifact_path);
+    report.artifacts.push(String(report.lifecycle_write.artifact_path));
   }
   return report;
 }
 
 export const inspectAcceptanceReport = buildAcceptanceReport;
 
-export function formatAcceptanceReportText(report = Object()) {
+export function formatAcceptanceReportText(report: AcceptanceRecord = Object()): string {
   const lines = [`[yolo accept] ${report.status}: ${report.summary}`];
-  if (report.issue_summary) {
-    lines.push(`issues: P0=${report.issue_summary.p0} P1=${report.issue_summary.p1} P2=${report.issue_summary.p2} human=${report.issue_summary.human_review}`);
+  const issueSummary = report.issue_summary as IssueSummary | undefined;
+  if (issueSummary) {
+    lines.push(`issues: P0=${issueSummary.p0} P1=${issueSummary.p1} P2=${issueSummary.p2} human=${issueSummary.human_review}`);
   }
-  for (const issue of asArray(report.issues).slice(0, 12)) {
+  for (const issue of toArray<AcceptanceIssue>(report.issues).slice(0, 12)) {
     lines.push(`- ${issue.level}:${issue.code}${issue.task_id ? ` task=${issue.task_id}` : ""} ${issue.message}`.trim());
   }
-  if (report.next_actions?.length) {
+  const nextActions = report.next_actions as string[] | undefined;
+  if (nextActions?.length) {
     lines.push("next:");
-    for (const action of report.next_actions) lines.push(`  - ${action}`);
+    for (const action of nextActions) lines.push(`  - ${action}`);
   }
   return lines.join("\n");
 }
 
-export function runYoloAcceptCli(argv = process.argv.slice(2), io = Object()) {
+export function runYoloAcceptCli(argv: string[] = process.argv.slice(2), io: AcceptanceCliIo = Object()): number {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const json = argv.includes("--json");
