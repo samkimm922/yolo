@@ -5,16 +5,34 @@ import { resolve, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { resolveWithinRoot } from "../security/path-guard.js";
 import { isBusinessFile } from "../../runtime/execution/change-set.js";
+import type { EvalParams, EvalResult, EvaluatorOptions, ExecFn, TaskScope } from "./types.js";
 
-export function evalFileExists(params, _taskScope, ROOT) {
+type LineViolation =
+  | { file: string; escape: true; detail?: string }
+  | { file: string; missing: true }
+  | { file: string; lines: number };
+
+type LegacyAllowedFile = {
+  file: string;
+  lines: number;
+  baselineLines: number;
+  delta: number;
+};
+
+function targetFilesFromScope(taskScope?: TaskScope): string[] {
+  return (taskScope?.targets || []).map((target) => target.file).filter((file): file is string => Boolean(file));
+}
+
+export function evalFileExists(params: EvalParams, _taskScope: TaskScope, ROOT: string): EvalResult {
   const file = params.file || params.path;
   if (!file) return { passed: false, detail: "缺少 file/path 参数" };
 
   const guardResult = resolveWithinRoot(ROOT, file);
+  const absPath = guardResult.path;
   if (!guardResult.ok) {
     return { passed: false, detail: `路径越界，拒绝访问: ${file}` };
   }
-  const absPath = guardResult.path;
+  if (!absPath) return { passed: false, detail: `路径越界，拒绝访问: ${file}` };
   const exists = existsSync(absPath) && !statSync(absPath).isDirectory();
 
   return {
@@ -24,15 +42,16 @@ export function evalFileExists(params, _taskScope, ROOT) {
   };
 }
 
-export function evalDirExists(params, _taskScope, ROOT) {
+export function evalDirExists(params: EvalParams, _taskScope: TaskScope, ROOT: string): EvalResult {
   const file = params.file || params.path;
   if (!file) return { passed: false, detail: "缺少 file/path 参数" };
 
   const guardResult = resolveWithinRoot(ROOT, file);
+  const absPath = guardResult.path;
   if (!guardResult.ok) {
     return { passed: false, detail: `路径越界，拒绝访问: ${file}` };
   }
-  const absPath = guardResult.path;
+  if (!absPath) return { passed: false, detail: `路径越界，拒绝访问: ${file}` };
   const exists = existsSync(absPath) && statSync(absPath).isDirectory();
 
   return {
@@ -42,7 +61,7 @@ export function evalDirExists(params, _taskScope, ROOT) {
   };
 }
 
-export function evalFileNotExists(params, taskScope, ROOT) {
+export function evalFileNotExists(params: EvalParams, taskScope: TaskScope, ROOT: string): EvalResult {
   const file = params.file || params.path;
   if (!file) return { passed: false, status: "not_run", detail: "缺少 file/path 参数" };
 
@@ -58,11 +77,11 @@ export function evalFileNotExists(params, taskScope, ROOT) {
   };
 }
 
-function splitGitFileList(output = "") {
+function splitGitFileList(output = ""): string[] {
   return String(output || "").split("\n").map((file) => file.trim()).filter(Boolean);
 }
 
-function countLines(content = "") {
+function countLines(content = ""): number {
   // Match `wc -l`: count newline characters. A file whose last line lacks a
   // trailing newline still counts that line. `String.prototype.split("\n")`
   // adds an extra empty segment after a trailing newline, so we subtract it.
@@ -70,7 +89,7 @@ function countLines(content = "") {
   return text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
 }
 
-function changedFilesFromOptions(options = Object(), taskScope = Object()) {
+function changedFilesFromOptions(options: EvaluatorOptions = {}, taskScope: TaskScope = {}): string[] | null {
   const candidates = [
     options.changedFiles,
     options.changed_files,
@@ -81,18 +100,18 @@ function changedFilesFromOptions(options = Object(), taskScope = Object()) {
   return Array.isArray(files) ? [...new Set(files.map(String).map((file) => file.trim()).filter(Boolean))] : null;
 }
 
-function isBusinessDiffFile(file, options = Object()) {
+function isBusinessDiffFile(file: string, options: EvaluatorOptions = {}): boolean {
   return isBusinessFile(file, options);
 }
 
-function isInTargetScope(file, targetFiles = []) {
+function isInTargetScope(file: string, targetFiles: string[] = []): boolean {
   if (targetFiles.length === 0) return true;
   return targetFiles.some((target) => file === target || file.startsWith(target.endsWith("/") ? target : `${target}/`));
 }
 
-export function evalFilesModifiedMax(params, taskScope, ROOT, exec, options = Object()) {
+export function evalFilesModifiedMax(params: EvalParams, taskScope: TaskScope, ROOT: string, exec: ExecFn, options: EvaluatorOptions = {}): EvalResult {
   const maxFiles = params.max ?? 5;
-  const targetFiles = (taskScope?.targets || []).map((t) => t.file).filter(Boolean);
+  const targetFiles = targetFilesFromScope(taskScope);
   const providedChangedFiles = changedFilesFromOptions(options, taskScope);
 
   let changedFiles = providedChangedFiles;
@@ -157,7 +176,7 @@ export function evalFilesModifiedMax(params, taskScope, ROOT, exec, options = Ob
   };
 }
 
-export function evalFileLinesMax(params, taskScope, ROOT) {
+export function evalFileLinesMax(params: EvalParams, taskScope: TaskScope, ROOT: string): EvalResult {
   const maxLines = params.max ?? 150;
   const legacyDeltaMax = params.legacy_delta_max ?? params.max_delta_on_legacy ?? 40;
   // Coerce targets/files to arrays: a hand-edited PRD can put a string (or
@@ -169,7 +188,7 @@ export function evalFileLinesMax(params, taskScope, ROOT) {
     (Array.isArray(params.targets) ? params.targets : null) ||
     (Array.isArray(params.files) ? params.files : null) ||
     (params.file ? [params.file] : null) ||
-    (taskScope?.targets || []).map((t) => t.file).filter(Boolean);
+    targetFilesFromScope(taskScope);
   if (!targets.length) {
     return {
       passed: false,
@@ -178,14 +197,16 @@ export function evalFileLinesMax(params, taskScope, ROOT) {
     };
   }
   const baselinePath = resolve(ROOT, ".yolo-worktree-baseline.json");
-  let baselineLineCounts = Object();
+  let baselineLineCounts: Record<string, number> = {};
   if (existsSync(baselinePath)) {
     try {
-      baselineLineCounts = JSON.parse(readFileSync(baselinePath, "utf8")).line_counts || {};
+      const parsed = JSON.parse(readFileSync(baselinePath, "utf8")) as { line_counts?: Record<string, number> };
+      baselineLineCounts = parsed.line_counts || {};
     } catch {}
   }
-  const readBaselineLines = (file) => {
-    if (Number.isFinite(baselineLineCounts[file])) return baselineLineCounts[file];
+  const readBaselineLines = (file: string): number | null => {
+    const baselineLines = baselineLineCounts[file];
+    if (Number.isFinite(baselineLines)) return baselineLines;
     try {
       const content = execFileSync("git", ["show", `HEAD:${file}`], {
         cwd: ROOT,
@@ -198,17 +219,21 @@ export function evalFileLinesMax(params, taskScope, ROOT) {
     }
   };
 
-  const violations = [];
-  const legacyAllowed = [];
+  const violations: LineViolation[] = [];
+  const legacyAllowed: LegacyAllowedFile[] = [];
   const deleteIntent = params.delete_intent === true || params.deleteIntent === true;
   for (const file of targets) {
     // P12.I2: route untrusted file through resolveWithinRoot咽喉.
     const guardResult = resolveWithinRoot(ROOT, file);
+    const absPath = guardResult.path;
     if (!guardResult.ok) {
       violations.push({ file, escape: true, detail: guardResult.detail });
       continue;
     }
-    const absPath = guardResult.path;
+    if (!absPath) {
+      violations.push({ file, escape: true, detail: guardResult.detail });
+      continue;
+    }
     if (!existsSync(absPath)) {
       if (!deleteIntent) {
         violations.push({ file, missing: true });
@@ -221,8 +246,8 @@ export function evalFileLinesMax(params, taskScope, ROOT) {
     const lines = countLines(content);
     if (lines > maxLines) {
       const baselineLines = readBaselineLines(file);
-      const delta = Number.isFinite(baselineLines) ? lines - baselineLines : null;
-      if (baselineLines > maxLines && delta <= legacyDeltaMax) {
+      const delta = baselineLines !== null && Number.isFinite(baselineLines) ? lines - baselineLines : null;
+      if (baselineLines !== null && baselineLines > maxLines && delta !== null && delta <= legacyDeltaMax) {
         legacyAllowed.push({ file, lines, baselineLines, delta });
         continue;
       }
@@ -235,8 +260,8 @@ export function evalFileLinesMax(params, taskScope, ROOT) {
       passed: false,
       detail: violations
         .map((v) => {
-          if (v.escape) return `${v.file}: 路径越界`;
-          if (v.missing) return `${v.file}: 文件不存在，无法验证行数`;
+          if ("escape" in v) return `${v.file}: 路径越界`;
+          if ("missing" in v) return `${v.file}: 文件不存在，无法验证行数`;
           return `${v.file}: ${v.lines} 行（限制 ${maxLines} 行）`;
         })
         .join("; "),
@@ -257,10 +282,10 @@ export function evalFileLinesMax(params, taskScope, ROOT) {
   return { passed: true, detail: "所有文件行数未超限" };
 }
 
-export function evalNoFileOverMaxLines(params, _taskScope, ROOT) {
+export function evalNoFileOverMaxLines(params: EvalParams, _taskScope: TaskScope, ROOT: string): EvalResult {
   const maxLines = params.max ?? 150;
-  const violations = [];
-  function scanDir(dir) {
+  const violations: Array<{ file: string; lines: number }> = [];
+  function scanDir(dir: string): void {
     try {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const full = join(dir, entry.name);

@@ -3,21 +3,22 @@
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { resolveWithinRoot } from "../security/path-guard.js";
 import { safeRegExp, validateRegexPattern } from "../security/regex-guard.js";
+import type { EvalParams, EvalResult, TaskScope } from "./types.js";
 
-function escapeRegExp(value) {
+function escapeRegExp(value: unknown): string {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function readExistingFile(ROOT, file) {
+function readExistingFile(ROOT: string, file: string | undefined): string | null {
   const guardResult = resolveWithinRoot(ROOT, file || "");
-  if (!file || !guardResult.ok || !existsSync(guardResult.path) || statSync(guardResult.path).isDirectory()) return null;
   const absPath = guardResult.path;
+  if (!file || !guardResult.ok || !absPath || !existsSync(absPath) || statSync(absPath).isDirectory()) return null;
   return readFileSync(absPath, "utf8");
 }
 
-function findMatchingBrace(content, openIndex) {
+function findMatchingBrace(content: string, openIndex: number): number {
   let depth = 0;
-  let stringQuote = null;
+  let stringQuote: string | null = null;
   let lineComment = false;
   let blockComment = false;
 
@@ -65,7 +66,7 @@ function findMatchingBrace(content, openIndex) {
   return -1;
 }
 
-function extractFunctionBody(content, functionName) {
+function extractFunctionBody(content: string, functionName: string | undefined): string | null {
   if (!functionName) return null;
   const name = escapeRegExp(functionName);
   const patterns = [
@@ -88,7 +89,7 @@ function extractFunctionBody(content, functionName) {
   return null;
 }
 
-export function evalCodeContains(params, taskScope, ROOT) {
+export function evalCodeContains(params: EvalParams, taskScope: TaskScope, ROOT: string): EvalResult {
   // 兼容 pattern/files（PRD 写法）和 text/file（旧写法）
   const text = params.text || params.pattern;
   // Coerce params.files to array: hand-edited PRDs sometimes put a string on
@@ -110,19 +111,19 @@ export function evalCodeContains(params, taskScope, ROOT) {
   }
 
   let allPassed = true;
-  const details = [];
+  const details: string[] = [];
   let totalMatches = 0;
   let filesChecked = 0;
-  const missingFiles = [];
+  const missingFiles: string[] = [];
 
   for (const file of targetFiles) {
     const guardResult = resolveWithinRoot(ROOT, file);
-    const isMissing = !guardResult.ok || !existsSync(guardResult.path) || statSync(guardResult.path).isDirectory();
+    const absPath = guardResult.path;
+    const isMissing = !guardResult.ok || !absPath || !existsSync(absPath) || statSync(absPath).isDirectory();
     let matches = 0;
     let lineInfo = "";
 
     if (!isMissing) {
-      const absPath = guardResult.path;
       const content = readFileSync(absPath, "utf8");
 
       let searchContent = content;
@@ -153,7 +154,7 @@ export function evalCodeContains(params, taskScope, ROOT) {
         }
         matches = (searchContent.match(re) || []).length;
       } else {
-        const normalizeWS = (s) => s.replace(/\s+/g, ' ');
+        const normalizeWS = (s: string) => s.replace(/\s+/g, ' ');
         const normContent = normalizeWS(searchContent);
         const normText = normalizeWS(text);
 
@@ -216,7 +217,7 @@ export function evalCodeContains(params, taskScope, ROOT) {
   };
 }
 
-export function evalFunctionContainsText(params, _taskScope, ROOT) {
+export function evalFunctionContainsText(params: EvalParams, _taskScope: TaskScope, ROOT: string): EvalResult {
   const file = params.file;
   const functionName = params.function || params.function_name || params.name;
   const text = params.text || params.pattern;
@@ -247,7 +248,7 @@ export function evalFunctionContainsText(params, _taskScope, ROOT) {
   };
 }
 
-export function evalFunctionContainsCall(params, taskScope, ROOT) {
+export function evalFunctionContainsCall(params: EvalParams, taskScope: TaskScope, ROOT: string): EvalResult {
   const callee = params.callee || params.call || params.text;
   if (!callee) return { passed: false, detail: "缺少 callee 参数" };
   return evalFunctionContainsText(
@@ -261,7 +262,7 @@ export function evalFunctionContainsCall(params, taskScope, ROOT) {
   );
 }
 
-export function evalAstCallbackUsesParam(params, _taskScope, ROOT) {
+export function evalAstCallbackUsesParam(params: EvalParams, _taskScope: TaskScope, ROOT: string): EvalResult {
   const file = params.file;
   const param = params.param || params.parameter;
   const callbackName = params.callback || params.function || params.function_name;
@@ -280,7 +281,7 @@ export function evalAstCallbackUsesParam(params, _taskScope, ROOT) {
   };
 }
 
-export function evalAstFindByProperty(params, _taskScope, ROOT) {
+export function evalAstFindByProperty(params: EvalParams, _taskScope: TaskScope, ROOT: string): EvalResult {
   const files = (Array.isArray(params.files) ? params.files : null) || (params.file ? [params.file] : []);
   const property = params.property || params.key;
   const value = params.value;
@@ -292,7 +293,7 @@ export function evalAstFindByProperty(params, _taskScope, ROOT) {
     ? new RegExp(`(?:\\b${propertyPattern}\\b\\s*[:=]\\s*['"]?${valuePattern}['"]?|\\.\\s*${propertyPattern}\\b[^\\n]*['"]?${valuePattern}['"]?)`, "m")
     : new RegExp(`(?:\\b${propertyPattern}\\b\\s*[:=]|\\.\\s*${propertyPattern}\\b)`, "m");
 
-  const checked = [];
+  const checked: string[] = [];
   for (const file of files) {
     const content = readExistingFile(ROOT, file);
     if (content === null) continue;
@@ -314,7 +315,7 @@ export function evalAstFindByProperty(params, _taskScope, ROOT) {
   };
 }
 
-export function evalCodeNotContains(params, taskScope, ROOT) {
+export function evalCodeNotContains(params: EvalParams, taskScope: TaskScope, ROOT: string): EvalResult {
   const text = params.text || params.pattern;
   const targetFiles = (Array.isArray(params.files) ? params.files : null) || (params.file ? [params.file] : []);
   if (!text) return { passed: false, detail: "缺少 text/pattern 参数" };
@@ -327,15 +328,16 @@ export function evalCodeNotContains(params, taskScope, ROOT) {
     };
   }
 
-  const missingFiles = [];
-  const escapedFiles = [];
+  const missingFiles: string[] = [];
+  const escapedFiles: string[] = [];
   const existingFiles = targetFiles.filter((file) => {
     const guardResult = resolveWithinRoot(ROOT, file);
+    const absPath = guardResult.path;
     if (!guardResult.ok) {
       escapedFiles.push(file);
       return false;
     }
-    if (!existsSync(guardResult.path) || statSync(guardResult.path).isDirectory()) {
+    if (!absPath || !existsSync(absPath) || statSync(absPath).isDirectory()) {
       missingFiles.push(file);
       return false;
     }
