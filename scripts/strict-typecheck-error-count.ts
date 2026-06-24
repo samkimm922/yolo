@@ -6,25 +6,42 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(ROOT, "scripts", "quality", "strict-typecheck-baseline.json");
-const COMMAND = "tsc -p tsconfig.json --noEmit --strict --pretty false";
+
+const PROFILES = [
+  {
+    id: "strict",
+    label: "strict",
+    args: ["-p", "tsconfig.json", "--noEmit", "--strict", "--pretty", "false"],
+  },
+  {
+    id: "strict_no_implicit_any",
+    label: "strict + noImplicitAny",
+    args: ["-p", "tsconfig.json", "--noEmit", "--strict", "--noImplicitAny", "--pretty", "false"],
+  },
+] as const;
 
 type Baseline = {
+  profiles?: Record<string, BaselineProfile>;
   max_errors: number;
   command: string;
   updated_at: string;
 };
 
-function countStrictErrors() {
+type BaselineProfile = {
+  max_errors: number;
+  command: string;
+  updated_at: string;
+};
+
+type Profile = (typeof PROFILES)[number];
+
+function commandFor(profile: Profile) {
+  return `tsc ${profile.args.join(" ")}`;
+}
+
+function countStrictErrors(profile: Profile) {
   const tscBin = join(ROOT, "node_modules", "typescript", "bin", "tsc");
-  const result = spawnSync(process.execPath, [
-    tscBin,
-    "-p",
-    "tsconfig.json",
-    "--noEmit",
-    "--strict",
-    "--pretty",
-    "false",
-  ], {
+  const result = spawnSync(process.execPath, [tscBin, ...profile.args], {
     cwd: ROOT,
     encoding: "utf8",
     maxBuffer: 128 * 1024 * 1024,
@@ -47,11 +64,33 @@ function readBaseline(): Baseline {
   return JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as Baseline;
 }
 
-function writeBaseline(errorCount: number) {
+function normalizeBaseline(baseline: Baseline): Record<string, BaselineProfile> {
+  const profiles = baseline.profiles || {};
+  if (!profiles.strict && Number.isFinite(baseline.max_errors)) {
+    profiles.strict = {
+      max_errors: baseline.max_errors,
+      command: baseline.command,
+      updated_at: baseline.updated_at,
+    };
+  }
+  return profiles;
+}
+
+function writeBaseline(results: Array<{ profile: Profile; errorCount: number }>) {
+  const updatedAt = new Date().toISOString();
+  const strict = results.find((result) => result.profile.id === "strict");
   const baseline: Baseline = {
-    max_errors: errorCount,
-    command: COMMAND,
-    updated_at: new Date().toISOString(),
+    max_errors: strict?.errorCount ?? 0,
+    command: strict ? commandFor(strict.profile) : commandFor(PROFILES[0]),
+    updated_at: updatedAt,
+    profiles: Object.fromEntries(results.map(({ profile, errorCount }) => [
+      profile.id,
+      {
+        max_errors: errorCount,
+        command: commandFor(profile),
+        updated_at: updatedAt,
+      },
+    ])),
   };
   mkdirSync(dirname(BASELINE_PATH), { recursive: true });
   writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`, "utf8");
@@ -60,35 +99,44 @@ function writeBaseline(errorCount: number) {
 function main() {
   const checkMode = process.argv.includes("--check");
   const updateBaseline = process.argv.includes("--update-baseline");
-  const { errorCount, exitCode } = countStrictErrors();
-  console.log(`[strict-typecheck] ${COMMAND}`);
-  console.log(`[strict-typecheck] current strict errors: ${errorCount}`);
+  const results = PROFILES.map((profile) => ({
+    profile,
+    ...countStrictErrors(profile),
+  }));
+
+  for (const { profile, errorCount } of results) {
+    console.log(`[strict-typecheck] ${profile.label}: ${commandFor(profile)}`);
+    console.log(`[strict-typecheck] current ${profile.id} errors: ${errorCount}`);
+  }
 
   if (updateBaseline) {
-    writeBaseline(errorCount);
+    writeBaseline(results);
     console.log(`[strict-typecheck] wrote baseline ${BASELINE_PATH}`);
     return;
   }
 
   if (!checkMode) {
-    if (exitCode === 0) console.log("[strict-typecheck] strict mode is clean.");
+    if (results.every((result) => result.exitCode === 0)) console.log("[strict-typecheck] strict modes are clean.");
     else console.log("[strict-typecheck] read-only (pass --check to enforce or --update-baseline to ratchet).");
     return;
   }
 
-  const baseline = readBaseline();
-  if (!Number.isFinite(baseline.max_errors) || baseline.max_errors < 0) {
-    throw new Error(`Invalid strict typecheck baseline at ${BASELINE_PATH}`);
+  const profiles = normalizeBaseline(readBaseline());
+  for (const { profile, errorCount } of results) {
+    const baseline = profiles[profile.id];
+    if (!baseline || !Number.isFinite(baseline.max_errors) || baseline.max_errors < 0) {
+      throw new Error(`Invalid ${profile.id} strict typecheck baseline at ${BASELINE_PATH}`);
+    }
+    console.log(`[strict-typecheck] ${profile.id} baseline max errors: ${baseline.max_errors}`);
+    if (errorCount > baseline.max_errors) {
+      console.error(`[strict-typecheck] REGRESSION (${profile.id}): ${errorCount} > baseline ${baseline.max_errors}`);
+      process.exit(1);
+    }
+    if (errorCount < baseline.max_errors) {
+      console.log(`[strict-typecheck] ${profile.id} ratchet can be lowered: ${errorCount} < ${baseline.max_errors}`);
+    }
   }
-  console.log(`[strict-typecheck] baseline max errors: ${baseline.max_errors}`);
-  if (errorCount > baseline.max_errors) {
-    console.error(`[strict-typecheck] REGRESSION: ${errorCount} > baseline ${baseline.max_errors}`);
-    process.exit(1);
-  }
-  if (errorCount < baseline.max_errors) {
-    console.log(`[strict-typecheck] ratchet can be lowered: ${errorCount} < ${baseline.max_errors}`);
-  }
-  console.log("[strict-typecheck] ratchet OK (strict errors did not increase).");
+  console.log("[strict-typecheck] ratchet OK (strict error counts did not increase).");
 }
 
 try {
