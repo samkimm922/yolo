@@ -1,4 +1,4 @@
-import { preflightAllPrds, preflightPrd } from "../prd/preflight.js";
+import { preflightAllPrds, preflightPrd, type PreflightAllResult, type PreflightResult } from "../prd/preflight.js";
 
 export function usage() {
   return [
@@ -10,29 +10,7 @@ export function usage() {
   ].join("\n");
 }
 
-type PreflightReason = { source?: string; code?: string; task_id?: string; detail?: string };
-
-type PreflightSingle = {
-  status?: string;
-  file?: string;
-  schema?: { ok?: boolean };
-  contract?: { status?: string };
-  spec_governance?: { status?: string };
-  runner_readiness?: { can_execute?: boolean; tasks?: { total?: number; pending?: number; completed?: number; blocked?: number; failed?: number }; next_actions?: string[] };
-  blocked_reasons?: PreflightReason[];
-};
-
-type PreflightAll = {
-  status?: string;
-  file_count?: number;
-  pass_count?: number;
-  warning_count?: number;
-  blocked_count?: number;
-  blocked_reasons?: PreflightReason[];
-  results?: Array<{ status?: string; file?: string; blocked_reasons?: PreflightReason[] }>;
-};
-
-function formatSingle(result: PreflightSingle) {
+function formatSingle(result: PreflightResult) {
   const lines = [`[prd-preflight] ${result.status} file=${result.file}`];
   lines.push(`  schema=${result.schema?.ok ? "pass" : "fail"} contract=${result.contract?.status || "unknown"} spec=${result.spec_governance?.status || "unknown"} can_execute=${result.runner_readiness?.can_execute}`);
   if ((result.runner_readiness?.tasks?.total || 0) > 0) {
@@ -48,7 +26,7 @@ function formatSingle(result: PreflightSingle) {
   return lines.join("\n");
 }
 
-function formatAll(result: PreflightAll) {
+function formatAll(result: PreflightAllResult) {
   const lines = [`[prd-preflight] ${result.status} files=${result.file_count} pass=${result.pass_count} warning=${result.warning_count} blocked=${result.blocked_count}`];
   for (const reason of (result.blocked_reasons || []).slice(0, 3)) {
     lines.push(`  blocked ${reason.source}:${reason.code}: ${reason.detail}`);

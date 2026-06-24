@@ -100,7 +100,7 @@ function writeGateLog({ logDir = defaultLogDir, taskId, gateFormat, durationMs }
   gateFormat: {
     allPass: boolean;
     failHigh: boolean;
-    gates: Array<{ passed: boolean; name: string; detail: string }>;
+    gates: Array<{ passed: boolean; name?: string; detail: string }>;
     failConditions: unknown;
     warnConditions: unknown;
   };

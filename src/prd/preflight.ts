@@ -86,7 +86,7 @@ type WarningCarrier = UnknownRecord & {
   warnings?: unknown[];
 };
 
-type PreflightResult = UnknownRecord & {
+export type PreflightResult = UnknownRecord & {
   status: string;
   ok: boolean;
   generated_at: string;
@@ -106,7 +106,7 @@ type PreflightResult = UnknownRecord & {
   blocked_reasons: BlockedReason[];
 };
 
-type PreflightAllResult = {
+export type PreflightAllResult = {
   status: string;
   code?: string;
   generated_at: string;
