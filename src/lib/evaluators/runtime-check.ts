@@ -8,8 +8,25 @@ import { isWithin } from "../security/path-guard.js";
 import { config } from "../config.js";
 import { execCommand } from "../security/safe-exec.js";
 import { businessFilePolicyDescription, isBusinessFile } from "../../runtime/execution/change-set.js";
+import type { EvalParams, EvalResult, EvaluatorOptions, ExecFn, TaskScope } from "./types.js";
 
-function runCommand(command, ROOT, timeout) {
+type CommandRunResult = {
+  ok: boolean;
+  out: string;
+  message: string;
+};
+
+function errorRecord(error: unknown): { stdout?: unknown; stderr?: unknown; message?: unknown } {
+  return typeof error === "object" && error !== null
+    ? error as { stdout?: unknown; stderr?: unknown; message?: unknown }
+    : {};
+}
+
+function targetFilesFromScope(taskScope: TaskScope): string[] {
+  return (taskScope.targets || []).map((target) => target.file).filter((file): file is string => Boolean(file));
+}
+
+function runCommand(command: string, ROOT: string, timeout: number): CommandRunResult {
   // P12.I1: route through safe-exec — untrusted command strings parsed to argv
   // and rejected if they contain shell metacharacters; spawn without shell.
   const result = execCommand(command, { cwd: ROOT, timeout });
@@ -27,7 +44,7 @@ function runCommand(command, ROOT, timeout) {
   };
 }
 
-export function evalTestsPass(params = Object(), _taskScope, ROOT) {
+export function evalTestsPass(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string): EvalResult {
   const command = params.command || config.build?.test || "";
   if (command) {
     const file = params.file || params.test_file;
@@ -55,7 +72,8 @@ export function evalTestsPass(params = Object(), _taskScope, ROOT) {
     if ((data.numFailedTests || 0) > 0) return { passed: false, detail: data.numFailedTests + " 个测试失败", found: data.numFailedTests };
     return { passed: true, detail: "全部测试通过", type: "tests_pass" };
   } catch (e) {
-    const s = (e.stdout || "") + (e.stderr || "");
+    const caught = errorRecord(e);
+    const s = String(caught.stdout || "") + String(caught.stderr || "");
     try {
       const start = s.indexOf("{");
       if (start >= 0) {
@@ -69,11 +87,11 @@ export function evalTestsPass(params = Object(), _taskScope, ROOT) {
         }
       }
     } catch {}
-    return { passed: false, detail: `vitest 执行异常：${(e.message || e.stderr || "").slice(0, 200)}`, type: "tests_pass" };
+    return { passed: false, detail: `vitest 执行异常：${String(caught.message || caught.stderr || "").slice(0, 200)}`, type: "tests_pass" };
   }
 }
 
-export function evalBuildPass(params = Object(), _taskScope, ROOT) {
+export function evalBuildPass(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string): EvalResult {
   const command = params.command || config.build?.build || "";
   if (command) {
     const result = runCommand(command, ROOT, params.timeout_ms || config.gate?.timeout?.build || 240000);
@@ -90,27 +108,28 @@ export function evalBuildPass(params = Object(), _taskScope, ROOT) {
     });
     return { passed: true, detail: "构建通过 (weapp)" };
   } catch (e) {
-    return { passed: false, detail: "构建失败: " + e.message.slice(0, 80) };
+    const caught = errorRecord(e);
+    return { passed: false, detail: "构建失败: " + String(caught.message || "").slice(0, 80) };
   }
 }
 
-function hashFile(path) {
+function hashFile(path: string): string {
   return createHash("sha256").update(readFileSync(path, "utf8")).digest("hex");
 }
 
-function changedFilesFromFilesystemBaseline(ROOT, taskScope = Object()) {
+function changedFilesFromFilesystemBaseline(ROOT: string, taskScope: TaskScope = {}): string[] {
   const baselinePath = resolve(ROOT, ".yolo-worktree-baseline.json");
   if (!existsSync(baselinePath)) return [];
-  let baseline = Object();
+  let baseline: { hashes?: Record<string, string> } = {};
   try {
-    baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
+    baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as { hashes?: Record<string, string> };
   } catch {
     return [];
   }
   const hashes = baseline.hashes || {};
-  const scopedTargets = (taskScope.targets || []).map((target) => target.file).filter(Boolean);
+  const scopedTargets = targetFilesFromScope(taskScope);
   const candidates = scopedTargets.length > 0 ? scopedTargets : Object.keys(hashes);
-  const changed = [];
+  const changed: string[] = [];
   for (const file of candidates) {
     const absolute = resolve(ROOT, file);
     if (!isWithin(absolute, ROOT) || !existsSync(absolute)) continue;
@@ -123,7 +142,7 @@ function changedFilesFromFilesystemBaseline(ROOT, taskScope = Object()) {
   return changed;
 }
 
-function changedFilesFromOptions(options = Object(), taskScope = Object()) {
+function changedFilesFromOptions(options: EvaluatorOptions = {}, taskScope: TaskScope = {}): string[] | null {
   const candidates = [
     options.changedFiles,
     options.changed_files,
@@ -134,7 +153,7 @@ function changedFilesFromOptions(options = Object(), taskScope = Object()) {
   return Array.isArray(files) ? [...new Set(files.map(String).map((file) => file.trim()).filter(Boolean))] : null;
 }
 
-export function evalBusinessCodeMin(params, taskScope, ROOT, exec, options = Object()) {
+export function evalBusinessCodeMin(params: EvalParams, taskScope: TaskScope, ROOT: string, exec: ExecFn, options: EvaluatorOptions = {}): EvalResult {
   if (taskScope?.expected_zero_business_code === true) {
     return { passed: true, detail: "task 声明 expected_zero_business_code,跳过" };
   }
@@ -142,7 +161,7 @@ export function evalBusinessCodeMin(params, taskScope, ROOT, exec, options = Obj
   const businessConfig = options.config || config;
   const providedChangedFiles = changedFilesFromOptions(options, taskScope);
 
-  const all = new Set();
+  const all = new Set<string>();
   if (providedChangedFiles) {
     providedChangedFiles.forEach((file) => all.add(file));
   } else {

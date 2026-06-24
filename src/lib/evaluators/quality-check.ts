@@ -6,12 +6,37 @@ import { isWithin } from "../security/path-guard.js";
 import { execCommand } from "../security/safe-exec.js";
 import { safeRegExp, validateRegexPattern } from "../security/regex-guard.js";
 import { config } from "../config.js";
+import type { EvalParams, EvalResult, ExecFn, ForbiddenPattern, TaskScope } from "./types.js";
 
-function configuredCommand(params = Object(), key) {
+type BuildCommandKey = "type_check" | "lint" | "dead_code";
+
+type ForbiddenPatternViolation = {
+  file: string;
+  pattern: string;
+  severity: string;
+  description: string;
+};
+
+type EslintIssue = {
+  filePath?: string;
+  messages?: Array<{
+    ruleId?: string;
+    severity?: number;
+    line?: number;
+  }>;
+};
+
+type KnipIssue = {
+  file: string;
+  exports?: Array<{ name: string }>;
+  types?: Array<{ name: string }>;
+};
+
+function configuredCommand(params: EvalParams = {}, key: BuildCommandKey): string {
   return params.command || config.build?.[key] || "";
 }
 
-function normalizeDiagnosticFilePath(filePath, ROOT) {
+function normalizeDiagnosticFilePath(filePath: unknown, ROOT: string): string {
   const raw = String(filePath || "").trim().replace(/^\.\//, "");
   if (!raw) return raw;
 
@@ -32,14 +57,38 @@ function normalizeDiagnosticFilePath(filePath, ROOT) {
   return raw.replace(/\\/g, "/");
 }
 
-function normalizeTypeErrorKey(key, ROOT) {
+function normalizeTypeErrorKey(key: unknown, ROOT: string): string {
   const raw = String(key || "");
   const match = raw.match(/^(.*):(\d+):(TS\d+)$/);
   if (!match) return raw;
   return `${normalizeDiagnosticFilePath(match[1], ROOT)}:${match[2]}:${match[3]}`;
 }
 
-export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
+function targetFilesFromScope(taskScope: TaskScope): string[] {
+  return (taskScope.targets || []).map((target) => target.file).filter((file): file is string => Boolean(file));
+}
+
+function patternValue(pattern: ForbiddenPattern): string {
+  return typeof pattern === "string" ? pattern : pattern.pattern;
+}
+
+function patternSeverity(pattern: ForbiddenPattern): string {
+  return typeof pattern === "string" ? "FAIL" : pattern.severity || "FAIL";
+}
+
+function patternDescription(pattern: ForbiddenPattern): string {
+  return typeof pattern === "string" ? "" : pattern.message || pattern.description || "";
+}
+
+function patternIsRegex(pattern: ForbiddenPattern): boolean {
+  return typeof pattern !== "string" && (pattern.is_regex || !!pattern.flags);
+}
+
+function patternFlags(pattern: ForbiddenPattern): string {
+  return typeof pattern === "string" ? "" : pattern.flags || "";
+}
+
+export function evalNoForbiddenPatterns(params: EvalParams, taskScope: TaskScope, ROOT: string, exec: ExecFn): EvalResult {
   const patterns = params.patterns || taskScope?.forbidden_patterns || [];
   if (patterns.length === 0) return { passed: true, detail: "无禁用模式" };
 
@@ -53,7 +102,7 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
     (Array.isArray(params.targets) ? params.targets : null) ||
     (Array.isArray(params.files) ? params.files : null) ||
     (params.file ? [params.file] : null) ||
-    (taskScope?.targets || []).map((t) => t.file).filter(Boolean);
+    targetFilesFromScope(taskScope);
 
   if (targets.length === 0 && scanScope === "diff") {
     const unstagedFiles = exec("git diff --name-only");
@@ -61,7 +110,7 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
     if (!unstagedFiles.ok && !stagedFiles.ok) {
       return { passed: false, status: "indeterminate", detail: "无法获取 diff，无法验证禁用模式", type: "no_forbidden_patterns" };
     }
-    const collect = (out) => String(out || "").split("\n").filter(
+    const collect = (out: string): string[] => String(out || "").split("\n").filter(
       (f) => f && /\.(ts|tsx|js|jsx)$/.test(f) && !f.includes("node_modules"),
     );
     targets = [...new Set([...collect(unstagedFiles.out), ...collect(stagedFiles.out)])];
@@ -82,7 +131,7 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
     return { passed: false, status: "not_run", detail: "无目标文件，无法验证禁用模式", type: "no_forbidden_patterns" };
   }
 
-  const violations = [];
+  const violations: ForbiddenPatternViolation[] = [];
   for (const file of targets) {
     const abs = resolve(ROOT, file);
     if (!isWithin(abs, ROOT) || !existsSync(abs)) continue;
@@ -112,10 +161,10 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
       .join("\n");
 
     for (const p of patterns) {
-      const pattern = p.pattern || p;
-      const isRegex = p.is_regex || !!p.flags;
-      const flags = p.flags || "";
-      const msg = p.message || p.description || "";
+      const pattern = patternValue(p);
+      const isRegex = patternIsRegex(p);
+      const flags = patternFlags(p);
+      const msg = patternDescription(p);
       let matched;
       if (isRegex) {
         const validation = validateRegexPattern(pattern);
@@ -144,7 +193,7 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
         violations.push({
           file,
           pattern,
-          severity: p.severity || "FAIL",
+          severity: patternSeverity(p),
           description: msg,
         });
       }
@@ -166,16 +215,16 @@ export function evalNoForbiddenPatterns(params, taskScope, ROOT, exec) {
   return { passed: true, detail: "安全扫描通过，无禁用模式", violations: [] };
 }
 
-export function evalNoNewTypeErrors(params = Object(), taskScope, ROOT, exec) {
+export function evalNoNewTypeErrors(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string, exec: ExecFn): EvalResult {
   const FATAL_CODES = new Set([
     "TS2304", "TS2305", "TS2307", "TS2322", "TS2345", "TS2554", "TS2741",
   ]);
 
   const baselinePath = join(ROOT, "scripts", "yolo", "state", "runtime", "tsc-baseline.json");
-  let baselineKeys = [];
+  let baselineKeys: string[] = [];
   if (existsSync(baselinePath)) {
     try {
-      const json = JSON.parse(readFileSync(baselinePath, "utf8"));
+      const json = JSON.parse(readFileSync(baselinePath, "utf8")) as { keys?: unknown[] };
       if (json && Array.isArray(json.keys)) baselineKeys = json.keys.map((key) => normalizeTypeErrorKey(key, ROOT));
     } catch {}
   }
@@ -190,13 +239,13 @@ export function evalNoNewTypeErrors(params = Object(), taskScope, ROOT, exec) {
   }
   const tscOut = tsc.ok ? tsc.out : (tsc.out || "") + (tsc.err || "");
 
-  const currentKeys = new Set();
+  const currentKeys = new Set<string>();
   for (const line of tscOut.split("\n")) {
     const m = line.match(/^(.+?)\((\d+),\d+\):\s+error\s+(TS\d+)/) ||
       line.match(/^(.+?):(\d+):\d+\s+-\s+error\s+(TS\d+)/);
     if (m) {
-      const normalizedFile = normalizeDiagnosticFilePath(m[1], ROOT);
-      currentKeys.add(`${normalizedFile}:${m[2]}:${m[3]}`);
+      const normalizedFile = normalizeDiagnosticFilePath(m[1] || "", ROOT);
+      currentKeys.add(`${normalizedFile}:${m[2] || ""}:${m[3] || ""}`);
     }
   }
 
@@ -216,12 +265,12 @@ export function evalNoNewTypeErrors(params = Object(), taskScope, ROOT, exec) {
   const newIssues = allNewIssues;
 
   const newFatalIssues = newIssues.filter((k) => {
-    const code = String(k).split(":").pop();
+    const code = String(k).split(":").pop() || "";
     return FATAL_CODES.has(code);
   });
 
   const otherNewIssues = newIssues.filter((k) => {
-    const code = String(k).split(":").pop();
+    const code = String(k).split(":").pop() || "";
     return !FATAL_CODES.has(code);
   });
 
@@ -249,7 +298,7 @@ export function evalNoNewTypeErrors(params = Object(), taskScope, ROOT, exec) {
   };
 }
 
-export function evalTypeErrorsContain(params = Object(), _taskScope, ROOT, exec) {
+export function evalTypeErrorsContain(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string, exec: ExecFn): EvalResult {
   const command = configuredCommand(params, "type_check");
   if (!command) return { passed: false, detail: "未配置 type_check 命令，无法验证 type_errors_contain", type: "type_errors_contain" };
 
@@ -288,13 +337,13 @@ export function evalTypeErrorsContain(params = Object(), _taskScope, ROOT, exec)
   };
 }
 
-export function evalNoNewLintErrors(params = Object(), _taskScope, ROOT, exec) {
+export function evalNoNewLintErrors(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string, exec: ExecFn): EvalResult {
   const baselinePath = join(ROOT, "scripts", "yolo", "state", "runtime", "eslint-baseline.json");
-  let baselineKeys = [];
+  let baselineKeys: string[] = [];
   if (existsSync(baselinePath)) {
     try {
-      const json = JSON.parse(readFileSync(baselinePath, "utf8"));
-      if (json && Array.isArray(json.keys)) baselineKeys = json.keys;
+      const json = JSON.parse(readFileSync(baselinePath, "utf8")) as { keys?: unknown[] };
+      if (json && Array.isArray(json.keys)) baselineKeys = json.keys.map(String);
     } catch {}
   }
 
@@ -306,11 +355,11 @@ export function evalNoNewLintErrors(params = Object(), _taskScope, ROOT, exec) {
   if (eslint.commandNotFound) {
     return { passed: false, detail: "eslint 或 pnpm 命令不可用，lint 检查无法执行", type: "no_new_lint_errors" };
   }
-  let issues = [];
+  let issues: EslintIssue[] = [];
   try {
     const jsonStart = eslint.out.indexOf("[");
     if (jsonStart >= 0) {
-      issues = JSON.parse(eslint.out.slice(jsonStart));
+      issues = JSON.parse(eslint.out.slice(jsonStart)) as EslintIssue[];
     } else {
       return { passed: false, detail: "eslint 输出格式异常：未找到 JSON 数组", type: "no_new_lint_errors" };
     }
@@ -318,7 +367,7 @@ export function evalNoNewLintErrors(params = Object(), _taskScope, ROOT, exec) {
     return { passed: false, detail: "eslint 输出无法解析为 JSON", type: "no_new_lint_errors" };
   }
 
-  const currentKeys = new Set();
+  const currentKeys = new Set<string>();
   for (const issue of issues) {
     const file = issue.filePath?.replace(ROOT + "/", "") || "";
     for (const msg of issue.messages || []) {
@@ -358,11 +407,14 @@ export function evalNoNewLintErrors(params = Object(), _taskScope, ROOT, exec) {
   };
 }
 
-export function evalNoNewDeadCode(params = Object(), _taskScope, ROOT) {
+export function evalNoNewDeadCode(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string): EvalResult {
   const baselinePath = join(ROOT, "scripts", "yolo", "state", "runtime", "knip-baseline.json");
-  let baselineKeys = [];
+  let baselineKeys: string[] = [];
   if (existsSync(baselinePath)) {
-    try { baselineKeys = JSON.parse(readFileSync(baselinePath, "utf8")).keys || []; }
+    try {
+      const parsed = JSON.parse(readFileSync(baselinePath, "utf8")) as { keys?: unknown[] };
+      baselineKeys = (parsed.keys || []).map(String);
+    }
     catch { /* baseline corrupt, ignore */ }
   }
   try {
@@ -380,8 +432,8 @@ export function evalNoNewDeadCode(params = Object(), _taskScope, ROOT) {
       throw new Error(knipResult.stderr || knipResult.error || `dead_code command exited ${knipResult.exit_code}`);
     }
     const knipOut = knipResult.stdout;
-    const knipData = JSON.parse(knipOut.trim());
-    const currentKeys = [];
+    const knipData = JSON.parse(knipOut.trim()) as { issues?: KnipIssue[] };
+    const currentKeys: string[] = [];
     const excludeDirs = ["node_modules", "dist", "__tests__"];
     for (const issue of knipData.issues || []) {
       if (excludeDirs.some((d) => issue.file.startsWith(d))) continue;
