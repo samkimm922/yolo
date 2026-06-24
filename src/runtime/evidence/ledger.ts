@@ -26,6 +26,7 @@ import {
   validateEvidenceArtifact,
   validateLedgerRecord,
 } from "./schema.js";
+import type { EvidenceLedgerRecord } from "./schema.js";
 import { redactDeep } from "../../lib/security/redact.js";
 
 const DEFAULT_LEDGER_LOCK_TIMEOUT_MS = 30_000;
@@ -34,7 +35,26 @@ const DEFAULT_LEDGER_READ_MAX_BYTES = 8 * 1024 * 1024;
 const LEDGER_LOCK_OWNER_PREFIX = "owner.";
 const LEDGER_LOCK_OWNER_SUFFIX = ".json";
 
-function asPositiveNumber(value, fallback) {
+interface LedgerRecord extends Record<string, unknown> {
+  code?: string;
+  message?: string;
+  prev_hash?: string | null;
+  record_hash?: string;
+  errors?: LedgerChainError[];
+}
+type LedgerOptions = Record<string, unknown>;
+
+interface LedgerChainError extends LedgerRecord {
+  index: number;
+  code: string;
+  message: string;
+}
+
+function isRecord(value: unknown): value is LedgerRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function asPositiveNumber(value: unknown, fallback: number): number {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
@@ -52,11 +72,11 @@ function fsErrorCode(error: unknown): string {
   return error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code || "") : "";
 }
 
-function ledgerReadMaxBytes(options = Object()) {
+function ledgerReadMaxBytes(options: LedgerOptions = Object()): number {
   return asPositiveNumber(options.maxBytes ?? options.max_bytes, DEFAULT_LEDGER_READ_MAX_BYTES);
 }
 
-function ledgerReadErrorRecord(code, message, details = Object()) {
+function ledgerReadErrorRecord(code: string, message: string, details: LedgerRecord = Object()): LedgerRecord {
   return {
     ledger_read_error: true,
     status: "fail",
@@ -66,7 +86,7 @@ function ledgerReadErrorRecord(code, message, details = Object()) {
   };
 }
 
-function ledgerReadError(code, message, details = Object(), cause = undefined) {
+function ledgerReadError(code: string, message: string, details: LedgerRecord = Object(), cause: unknown = undefined) {
   const error = new Error(message);
   return Object.assign(error, {
     code,
@@ -123,7 +143,7 @@ function removeStaleLedgerLock(lockPath: string, filePath: string, staleMs: numb
   }
 }
 
-function acquireLedgerAppendLock(filePath: string, options: Record<string, any> = Object()): () => void {
+function acquireLedgerAppendLock(filePath: string, options: LedgerOptions = Object()): () => void {
   const timeoutMs = asPositiveNumber(options.lockTimeoutMs ?? options.lock_timeout_ms, DEFAULT_LEDGER_LOCK_TIMEOUT_MS);
   const staleMs = asPositiveNumber(options.lockStaleMs ?? options.lock_stale_ms, DEFAULT_LEDGER_LOCK_STALE_MS);
   const lockPath = ledgerLockPath(filePath);
@@ -187,7 +207,7 @@ function acquireLedgerAppendLock(filePath: string, options: Record<string, any> 
   });
 }
 
-function readJsonlRecords(filePath, options = Object()) {
+function readJsonlRecords(filePath: string, options: LedgerOptions = Object()): unknown[] {
   if (!existsSync(filePath)) return [];
   const maxBytes = ledgerReadMaxBytes(options);
   const sizeBytes = statSync(filePath).size;
@@ -224,18 +244,19 @@ function readJsonlRecords(filePath, options = Object()) {
     });
 }
 
-function previousRecordHash(filePath) {
+function previousRecordHash(filePath: string): unknown {
   const records = readJsonlRecords(filePath, { throwOnReadError: true });
   for (let index = records.length - 1; index >= 0; index -= 1) {
-    if (records[index]?.record_hash) return records[index].record_hash;
+    const record = records[index];
+    if (isRecord(record) && record.record_hash) return record.record_hash;
   }
   return null;
 }
 
-export function validateLedgerChain(records: any[] = [], options: Record<string, any> = Object()) {
-  const errors = [];
+export function validateLedgerChain(records: unknown[] = [], options: LedgerOptions = Object()) {
+  const errors: LedgerChainError[] = [];
   const allowExternalHead = options.allowExternalHead === true || options.allow_external_head === true;
-  let previousHash = allowExternalHead && records[0]?.prev_hash ? records[0].prev_hash : null;
+  let previousHash = allowExternalHead && isRecord(records[0]) && records[0].prev_hash ? records[0].prev_hash : null;
   records.forEach((record, index) => {
     const validation = validateLedgerRecord(record);
     for (const error of validation.errors) {
@@ -247,7 +268,7 @@ export function validateLedgerChain(records: any[] = [], options: Record<string,
     // would crash on null/number/string. The chain is already broken; we just
     // need to report it without throwing. Mirror the boundary that readJsonl
     // (report.ts) and #70/#82 already defend.
-    if (record === null || typeof record !== "object" || Array.isArray(record)) {
+    if (!isRecord(record)) {
       previousHash = null;
       return;
     }
@@ -271,19 +292,20 @@ export function validateLedgerChain(records: any[] = [], options: Record<string,
   };
 }
 
-export function readLedgerJsonl(filePath, options = Object()) {
-  return readJsonlRecords(filePath, options);
+export function readLedgerJsonl(filePath: string, options: LedgerOptions = Object()): LedgerRecord[] {
+  return readJsonlRecords(filePath, options) as LedgerRecord[];
 }
 
-function withLedgerAppendLock(filePath, options, append) {
-  let release;
-  let appendError;
+function withLedgerAppendLock<T>(filePath: string, options: LedgerOptions, append: () => T): T {
+  let release: (() => void) | undefined;
+  let appendError: unknown;
   try {
     release = acquireLedgerAppendLock(filePath, options);
     return append();
   } catch (error) {
     appendError = error;
-    if (error?.code?.startsWith?.("LEDGER_APPEND_") || error?.code?.startsWith?.("LEDGER_READ_")) throw error;
+    const code = fsErrorCode(error);
+    if (code.startsWith("LEDGER_APPEND_") || code.startsWith("LEDGER_READ_")) throw error;
     throw ledgerAppendError("LEDGER_APPEND_FAILED", "Failed to append evidence ledger record.", {
       ledger_path: filePath,
     }, error);
@@ -298,7 +320,7 @@ function withLedgerAppendLock(filePath, options, append) {
   }
 }
 
-export function appendJsonlRecord(filePath, record, options = Object()) {
+export function appendJsonlRecord<TRecord extends LedgerRecord>(filePath: string, record: TRecord, options: LedgerOptions = Object()): EvidenceLedgerRecord & TRecord {
   return withLedgerAppendLock(filePath, options, () => {
     const now = options.now || new Date().toISOString();
     mkdirSync(dirname(filePath), { recursive: true });
@@ -324,27 +346,27 @@ export function appendJsonlRecord(filePath, record, options = Object()) {
   });
 }
 
-export function appendStateEvent(stateDir, event, data = Object(), options = Object()) {
+export function appendStateEvent<TData extends LedgerRecord>(stateDir: string, event: unknown, data: TData = Object() as TData, options: LedgerOptions = Object()) {
   return appendJsonlRecord(join(stateDir, "events.jsonl"), { ...data, event, ledger: "state" }, options);
 }
 
-export function appendRunEvent(stateDir, event, data = Object(), options = Object()) {
+export function appendRunEvent<TData extends LedgerRecord>(stateDir: string, event: unknown, data: TData = Object() as TData, options: LedgerOptions = Object()) {
   return appendJsonlRecord(join(stateDir, "runs.jsonl"), { ...data, event, ledger: "run" }, options);
 }
 
-export function writeJsonArtifact(filePath, payload) {
+export function writeJsonArtifact(filePath: string, payload: unknown): string {
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, JSON.stringify(payload, null, 2), { encoding: "utf8", mode: 0o600 });
   return filePath;
 }
 
-export function createEvidenceLedger({ stateDir }) {
+export function createEvidenceLedger({ stateDir }: { stateDir?: string }) {
   if (!stateDir) {
     throw new Error("createEvidenceLedger requires stateDir");
   }
   return {
-    appendStateEvent: (event, data = Object(), options = Object()) => appendStateEvent(stateDir, event, data, options),
-    appendRunEvent: (event, data = Object(), options = Object()) => appendRunEvent(stateDir, event, data, options),
+    appendStateEvent: (event: unknown, data: LedgerRecord = Object(), options: LedgerOptions = Object()) => appendStateEvent(stateDir, event, data, options),
+    appendRunEvent: (event: unknown, data: LedgerRecord = Object(), options: LedgerOptions = Object()) => appendRunEvent(stateDir, event, data, options),
     buildEvidenceArtifact,
     buildLedgerRecord,
     evidenceArtifactDigest,
@@ -355,7 +377,7 @@ export function createEvidenceLedger({ stateDir }) {
     validateEvidenceArtifact,
     validateLedgerChain,
     validateLedgerRecord,
-    writeJsonArtifact: (filePath, payload) => writeJsonArtifact(filePath, payload),
+    writeJsonArtifact: (filePath: string, payload: unknown) => writeJsonArtifact(filePath, payload),
   };
 }
 

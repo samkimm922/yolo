@@ -3,16 +3,43 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { isWithin, resolveWithinRoot } from "../../lib/security/path-guard.js";
 
-function clean(value) {
+type DigestByPath = Record<string, unknown>;
+
+interface ArtifactIntegrityOptions {
+  rootDir?: unknown;
+  root_dir?: unknown;
+  expectedSha256?: unknown;
+  expected_sha256?: unknown;
+  expectedSha256ByPath?: unknown;
+  expected_sha256_by_path?: unknown;
+}
+
+export interface ArtifactIntegrityRecord extends Record<string, unknown> {
+  path: string;
+  absolute_path: string;
+  exists: boolean;
+  bytes: number;
+  sha256: string | null;
+  expected_sha256: string | null;
+  digest_match: boolean | null;
+  issue?: string;
+  issue_detail?: string;
+}
+
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function asArray(value) {
+function asArray(value: unknown): unknown[] {
   if (value == null) return [];
   return Array.isArray(value) ? value : [value];
 }
 
-function normalizePath(value, rootDir = "") {
+function asDigestByPath(value: unknown): DigestByPath {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as DigestByPath : {};
+}
+
+function normalizePath(value: unknown, rootDir = ""): string {
   const text = clean(value);
   if (text && rootDir) {
     const rootResolved = resolve(rootDir);
@@ -21,7 +48,7 @@ function normalizePath(value, rootDir = "") {
   return text ? resolve(text) : "";
 }
 
-function expectedDigestFor(path, expected = Object(), rootDir = "") {
+function expectedDigestFor(path: unknown, expected: DigestByPath = Object(), rootDir = ""): string {
   const resolved = normalizePath(path, rootDir);
   const candidates = [
     path,
@@ -29,20 +56,22 @@ function expectedDigestFor(path, expected = Object(), rootDir = "") {
     clean(path).replace(/\\/g, "/"),
   ].filter(Boolean);
   for (const candidate of candidates) {
-    if (expected[candidate]) return clean(expected[candidate]);
+    const key = clean(candidate);
+    if (expected[key]) return clean(expected[key]);
   }
   return "";
 }
 
-export function sha256File(path) {
+export function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-export function artifactIntegrityRecord(path, options = Object()) {
-  const rootDir = options.rootDir || options.root_dir || "";
+export function artifactIntegrityRecord(path: unknown, options: ArtifactIntegrityOptions = Object()): ArtifactIntegrityRecord {
+  const rootDir = clean(options.rootDir || options.root_dir);
   const rootResolved = rootDir ? resolve(rootDir) : "";
   const resolved = normalizePath(path, rootResolved);
-  const expectedSha256 = clean(options.expectedSha256 || options.expected_sha256 || expectedDigestFor(path, options.expectedSha256ByPath || options.expected_sha256_by_path || {}, rootResolved));
+  const expectedByPath = asDigestByPath(options.expectedSha256ByPath || options.expected_sha256_by_path || {});
+  const expectedSha256 = clean(options.expectedSha256 || options.expected_sha256 || expectedDigestFor(path, expectedByPath, rootResolved));
   const displayPath = rootDir ? relative(resolve(rootDir), resolved) || "." : resolved;
   if (rootResolved) {
     const guarded = resolveWithinRoot(rootResolved, path);
@@ -85,7 +114,7 @@ export function artifactIntegrityRecord(path, options = Object()) {
   };
 }
 
-export function verifyArtifactIntegrity(paths = [], options = Object()) {
+export function verifyArtifactIntegrity(paths: unknown[] = [], options: ArtifactIntegrityOptions = Object()) {
   const uniquePaths = [...new Set(asArray(paths).map(clean).filter(Boolean))];
   const artifacts = uniquePaths.map((path) => artifactIntegrityRecord(path, options));
   const missing = artifacts.filter((artifact) => artifact.exists !== true);

@@ -7,12 +7,16 @@ import { redactDeep } from "../../lib/security/redact.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "../../..");
 
-function argValue(argv, prefix) {
+interface SessionMemoryCliIo {
+  stdout?: Pick<NodeJS.WriteStream, "write">;
+}
+
+function argValue(argv: string[], prefix: string): string | null {
   const arg = argv.find((item) => item.startsWith(prefix));
   return arg ? arg.slice(prefix.length) : null;
 }
 
-export function appendSessionMemory({ argv = [], now = new Date() } = Object()) {
+export function appendSessionMemory({ argv = [], now = new Date() }: { argv?: string[]; now?: Date } = Object()) {
   const record = {
     ts: now.toISOString(),
     type: argValue(argv, "--type=") || "note",
@@ -37,7 +41,7 @@ export function appendSessionMemory({ argv = [], now = new Date() } = Object()) 
   return { status: "ok", file, record: safeRecord };
 }
 
-export function runSessionMemoryCli(argv = process.argv.slice(2), io = Object()) {
+export function runSessionMemoryCli(argv: string[] = process.argv.slice(2), io: SessionMemoryCliIo = Object()) {
   const stdout = io.stdout || process.stdout;
   const result = appendSessionMemory({ argv });
   if (argv.includes("--json")) {

@@ -11,7 +11,143 @@ import {
 import { verifyArtifactIntegrity } from "./artifact-integrity.js";
 import { normalizeReviewFinding } from "../../review/findings.js";
 
-function readJsonl(filePath) {
+type JsonRecord = Record<string, unknown>;
+type SkippedKey = `${"sk"}${"ipped"}`;
+type TaskBucketKey = "completed" | "failed" | SkippedKey | "blocked" | "merged_into";
+type TaskBuckets = Partial<Record<TaskBucketKey, unknown[]>>;
+
+type TaskResultsInput = TaskBuckets & JsonRecord & {
+  remediation?: JsonRecord[];
+};
+
+interface GateFailure extends JsonRecord {
+  task_id: unknown;
+  gate: unknown;
+  reason: unknown;
+  status: unknown;
+}
+
+interface GateSummary extends JsonRecord {
+  failed_count: number;
+  failed_tasks: unknown[];
+  failures?: GateFailure[];
+}
+
+interface ReviewSummary extends JsonRecord {
+  issue_count: number;
+  error_count: number;
+  issues?: JsonRecord[];
+  errors?: JsonRecord[];
+}
+
+interface FixtureSummary extends JsonRecord {
+  run_count: number;
+  pass_count?: number;
+  fail_count?: number;
+  blocked_count?: number;
+  degraded_count?: number;
+  status?: string;
+}
+
+interface SpecGovernanceSummary extends JsonRecord {
+  blocked_count: number;
+  warning_count: number;
+}
+
+interface RemediationSummary extends JsonRecord {
+  item_count: number;
+  automation_continuable_count: number;
+  human_required_count: number;
+  unsafe_stop_count: number;
+  action_counts: Record<string, number>;
+}
+
+interface LedgerIntegritySummary extends JsonRecord {
+  error_count: number;
+  status?: string;
+  run_chain?: LedgerChainSummary;
+  state_chain?: LedgerChainSummary;
+  archive_errors?: JsonRecord[];
+}
+
+interface LedgerChainSummary extends JsonRecord {
+  external_head_allowed?: boolean;
+  error_count?: number;
+  errors?: JsonRecord[];
+}
+
+type RunReportSummary = JsonRecord & Partial<Record<SkippedKey, number>> & {
+  planned?: number | null;
+  completed?: number;
+  failed?: number;
+  blocked?: number;
+  merged_into?: number;
+  evidence_failures?: number | null;
+  task_success_rate?: number | null;
+  run_success_rate?: number | null;
+};
+
+interface RunReport extends JsonRecord {
+  run_id?: unknown;
+  prd?: unknown;
+  status?: unknown;
+  started_at?: unknown;
+  finished_at?: unknown;
+  duration_sec?: unknown;
+  artifact_type?: unknown;
+  summary?: RunReportSummary;
+  tasks?: Partial<TaskBuckets>;
+  gates?: GateSummary;
+  remediation?: RemediationSummary;
+  review?: ReviewSummary;
+  fixtures?: FixtureSummary;
+  spec_governance?: SpecGovernanceSummary;
+  ledger?: JsonRecord & { integrity?: LedgerIntegritySummary };
+}
+
+interface BuildRunReportOptions {
+  stateDir?: string;
+  runId?: unknown;
+  prdPath?: unknown;
+  taskResults?: TaskResultsInput;
+  progressTotal?: number | null;
+  startedAt?: unknown;
+  finishedAt?: unknown;
+  durationSec?: unknown;
+  taskLogsDir?: string | null;
+}
+
+interface FinalAnswerOptions extends JsonRecord {
+  reportJsonPath?: unknown;
+  report_json?: unknown;
+  reportMarkdownPath?: unknown;
+  report_markdown?: unknown;
+}
+
+interface RunFinalAnswer extends JsonRecord {
+  schema?: unknown;
+  run_id?: unknown;
+  status?: unknown;
+  outcome?: unknown;
+  summary?: RunReportSummary;
+  checks?: Array<JsonRecord & { name?: unknown; status?: unknown; detail?: unknown }>;
+  blockers?: string[];
+  tasks?: Partial<Record<keyof TaskBuckets, unknown[]>>;
+  evidence?: JsonRecord & { report_json?: string | null; report_markdown?: string | null };
+  next_actions?: string[];
+}
+
+interface ArchiveLedgerHashes {
+  run: Set<unknown>;
+  state: Set<unknown>;
+  errors: JsonRecord[];
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function readJsonl(filePath: string): JsonRecord[] {
   if (!existsSync(filePath)) return [];
   // Non-ledger JSONL files are auxiliary evidence logs. Keep callers alive on
   // malformed/truncated lines while ledger files use readLedgerJsonl so chain
@@ -21,19 +157,20 @@ function readJsonl(filePath) {
     .filter((line) => line.trim().length > 0)
     .flatMap((line) => {
       try {
-        return [JSON.parse(line)];
+        const record: unknown = JSON.parse(line);
+        return [record];
       } catch {
         return [];
       }
     })
-    .filter((record) => record !== null && typeof record === "object" && !Array.isArray(record));
+    .filter(isRecord);
 }
 
-function isLedgerEventRecord(record) {
-  return record !== null && typeof record === "object" && !Array.isArray(record) && typeof record.event === "string";
+function isLedgerEventRecord(record: unknown): record is JsonRecord & { event: string } {
+  return isRecord(record) && typeof record.event === "string";
 }
 
-function walkJsonlFiles(dir, files = []) {
+function walkJsonlFiles(dir: string, files: string[] = []): string[] {
   if (!existsSync(dir)) return files;
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
@@ -43,22 +180,24 @@ function walkJsonlFiles(dir, files = []) {
   return files;
 }
 
-function archiveLedgerName(file) {
+function archiveLedgerName(file: unknown): "run" | "state" | "" {
   const lower = basename(String(file || "")).toLowerCase();
   if (lower.includes("runs")) return "run";
   if (lower.includes("events")) return "state";
   return "";
 }
 
-function archivedLedgerHashes(stateDir) {
-  const hashes = {
+function archivedLedgerHashes(stateDir: string): ArchiveLedgerHashes {
+  const hashes: ArchiveLedgerHashes = {
     run: new Set(),
     state: new Set(),
     errors: [],
   };
   if (!stateDir) return hashes;
   for (const file of walkJsonlFiles(join(stateDir, "archive", "jsonl"))) {
-    for (const record of readLedgerJsonl(file)) {
+    for (const rawRecord of readLedgerJsonl(file)) {
+      if (!isRecord(rawRecord)) continue;
+      const record = rawRecord;
       const ledger = archiveLedgerName(file);
       const recordLedger = record?.ledger;
       if (ledger && (recordLedger === "run" || recordLedger === "state") && recordLedger !== ledger) {
@@ -71,37 +210,41 @@ function archivedLedgerHashes(stateDir) {
         });
         continue;
       }
-      if (record?.record_hash && hashes[ledger]) hashes[ledger].add(record.record_hash);
+      if (record?.record_hash && ledger) hashes[ledger].add(record.record_hash);
     }
   }
   return hashes;
 }
 
-function unique(values = []) {
+function unique<T>(values: T[] = []): T[] {
   return [...new Set(values.filter(Boolean))];
 }
 
-function asNumber(value) {
+function asNumber(value: unknown): number | null {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
 
-function rate(numerator, denominator) {
+function rate(numerator: number, denominator: number | null): number | null {
   if (!denominator || denominator <= 0) return null;
   return Number(((numerator / denominator) * 100).toFixed(1));
 }
 
-function last(values = []) {
+function last<T>(values: T[] = []): T | null {
   return values.length > 0 ? values[values.length - 1] : null;
 }
 
 const RUN_REPORT_PASS_STATUSES = new Set(["pass", "success"]);
 
-function cleanStatus(value) {
+function cleanStatus(value: unknown): string {
   return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
 }
 
-function reportStatus({ failed = [], blocked = [], evidenceFailures = 0, plannedCount = null, terminalCount = 0 } = Object()) {
+function stringOrNull(value: unknown): string | null {
+  return value == null ? null : String(value);
+}
+
+function reportStatus({ failed = [], blocked = [], evidenceFailures = 0, plannedCount = null, terminalCount = 0 }: { failed?: unknown[]; blocked?: unknown[]; evidenceFailures?: number; plannedCount?: number | null; terminalCount?: number } = Object()) {
   return failed.length > 0 ||
     blocked.length > 0 ||
     evidenceFailures > 0 ||
@@ -111,24 +254,24 @@ function reportStatus({ failed = [], blocked = [], evidenceFailures = 0, planned
     : "success";
 }
 
-function itemList(values = [], limit = 8) {
+function itemList(values: unknown[] = [], limit = 8): unknown[] {
   const items = unique(values).slice(0, limit);
   const remaining = Math.max(0, unique(values).length - items.length);
   return remaining > 0 ? [...items, `+${remaining} more`] : items;
 }
 
-function taskId(entry = Object()) {
+function taskId(entry: JsonRecord = Object()): unknown {
   return entry.task_id || entry.task || null;
 }
 
-function readTaskLogs(taskLogsDir) {
+function readTaskLogs(taskLogsDir: string): JsonRecord[] {
   if (!taskLogsDir || !existsSync(taskLogsDir)) return [];
   return readdirSync(taskLogsDir)
     .filter((file) => file.endsWith(".jsonl"))
     .flatMap((file) => readJsonl(join(taskLogsDir, file)).map((entry) => ({ log_file: file, ...entry })));
 }
 
-function filterTaskLogsForRun(entries = [], runId = null) {
+function filterTaskLogsForRun(entries: JsonRecord[] = [], runId: unknown = null) {
   if (!runId) {
     return {
       current: entries,
@@ -143,9 +286,11 @@ function filterTaskLogsForRun(entries = [], runId = null) {
   };
 }
 
-function summarizeGateEvidence({ stateEvents, taskLogEntries }) {
+const GATE_FAILURE_EVENTS: ReadonlySet<unknown> = new Set(["gate_fail", "gate.failed", "gate_failure"]);
+
+function summarizeGateEvidence({ stateEvents, taskLogEntries }: { stateEvents: JsonRecord[]; taskLogEntries: JsonRecord[] }): GateSummary {
   const stateGateFailures = stateEvents
-    .filter((entry) => ["gate_fail", "gate.failed", "gate_failure"].includes(entry.event) || entry.status === "gate_failed")
+    .filter((entry) => GATE_FAILURE_EVENTS.has(entry.event) || entry.status === "gate_failed")
     .map((entry) => ({
       source: "state",
       task_id: taskId(entry),
@@ -176,7 +321,7 @@ function summarizeGateEvidence({ stateEvents, taskLogEntries }) {
   };
 }
 
-function summarizeReviewEvidence(taskLogEntries) {
+function summarizeReviewEvidence(taskLogEntries: JsonRecord[]): ReviewSummary {
   const reviewEntries = taskLogEntries.filter((entry) => entry.task_id === "_review" || entry.log_file === "_review.jsonl");
   const issues = reviewEntries
     .filter((entry) => entry.type === "REVIEW_ISSUE")
@@ -203,7 +348,7 @@ function summarizeReviewEvidence(taskLogEntries) {
   };
 }
 
-function summarizeFixtureEvidence(stateEvents) {
+function summarizeFixtureEvidence(stateEvents: JsonRecord[]): FixtureSummary {
   const runs = stateEvents
     .filter((entry) => entry.event === "fixture.run")
     .map((entry) => ({
@@ -222,8 +367,9 @@ function summarizeFixtureEvidence(stateEvents) {
   };
 }
 
-function validateLedgerChainWithArchive(records = [], archiveHashes = new Set()) {
-  const externalHead = records[0]?.prev_hash || null;
+function validateLedgerChainWithArchive(records: unknown[] = [], archiveHashes: Set<unknown> = new Set()) {
+  const firstRecord = isRecord(records[0]) ? records[0] : null;
+  const externalHead = firstRecord?.prev_hash || null;
   const allowExternalHead = Boolean(externalHead && archiveHashes.has(externalHead));
   return {
     ...validateLedgerChain(records, { allowExternalHead }),
@@ -232,7 +378,7 @@ function validateLedgerChainWithArchive(records = [], archiveHashes = new Set())
   };
 }
 
-function summarizeLedgerIntegrity({ runs = [], events = [], stateDir = "" } = Object()) {
+function summarizeLedgerIntegrity({ runs = [], events = [], stateDir = "" }: { runs?: unknown[]; events?: unknown[]; stateDir?: string } = Object()) {
   const archiveHashes = archivedLedgerHashes(stateDir);
   const runChain = validateLedgerChainWithArchive(runs, archiveHashes.run);
   const stateChain = validateLedgerChainWithArchive(events, archiveHashes.state);
@@ -263,22 +409,25 @@ function summarizeLedgerIntegrity({ runs = [], events = [], stateDir = "" } = Ob
   };
 }
 
-function summarizeSpecGovernance(stateEvents) {
+function summarizeSpecGovernance(stateEvents: JsonRecord[]): SpecGovernanceSummary {
   const events = stateEvents
     .filter((entry) =>
       String(entry.event || "").includes("spec") ||
       String(entry.code || "").includes("SPEC_GOVERNANCE") ||
       entry.spec_governance
     )
-    .map((entry) => ({
-      event: entry.event || null,
-      status: entry.status || entry.spec_governance?.status || null,
-      code: entry.code || null,
-      task_id: taskId(entry),
-      blocker_count: entry.spec_governance?.blockers?.length ?? entry.blocker_count ?? null,
-      warning_count: entry.spec_governance?.warnings?.length ?? entry.warning_count ?? null,
-      ts: entry.ts || null,
-    }));
+    .map((entry) => {
+      const specGovernance = isRecord(entry.spec_governance) ? entry.spec_governance : {};
+      return {
+        event: entry.event || null,
+        status: entry.status || specGovernance.status || null,
+        code: entry.code || null,
+        task_id: taskId(entry),
+        blocker_count: Array.isArray(specGovernance.blockers) ? specGovernance.blockers.length : entry.blocker_count ?? null,
+        warning_count: Array.isArray(specGovernance.warnings) ? specGovernance.warnings.length : entry.warning_count ?? null,
+        ts: entry.ts || null,
+      };
+    });
   return {
     event_count: events.length,
     blocked_count: events.filter((entry) => entry.status === "blocked" || String(entry.code || "").includes("BLOCKED")).length,
@@ -296,7 +445,16 @@ function evidenceFailureCount({
   ledgerIntegrity = Object(),
   failed = [],
   blocked = [],
-} = Object()) {
+}: {
+  gates?: GateSummary;
+  review?: ReviewSummary;
+  fixtures?: FixtureSummary;
+  specGovernance?: SpecGovernanceSummary;
+  remediation?: RemediationSummary;
+  ledgerIntegrity?: LedgerIntegritySummary;
+  failed?: unknown[];
+  blocked?: unknown[];
+} = Object()): number {
   const representedTaskFailures = new Set([...failed, ...blocked]);
   const gateTasks = unique(gates.failed_tasks || []);
   const unrepresentedGateTasks = gateTasks.filter((id) => !representedTaskFailures.has(id)).length;
@@ -327,25 +485,33 @@ const TASK_RESULT_STATUS_BUCKETS = {
   SKIP: "skipped",
   SKIPPED: "skipped",
   BLOCKED: "blocked",
-};
+} satisfies Record<string, keyof TaskBuckets>;
 
-function readTaskResultsFromDisk(stateDir, runId = null) {
+function taskResultBucket(status: string): keyof TaskBuckets | null {
+  return Object.prototype.hasOwnProperty.call(TASK_RESULT_STATUS_BUCKETS, status)
+    ? TASK_RESULT_STATUS_BUCKETS[status as keyof typeof TASK_RESULT_STATUS_BUCKETS]
+    : null;
+}
+
+function readTaskResultsFromDisk(stateDir: string, runId: unknown = null): TaskBuckets {
   const filePath = join(stateDir, "runtime", "task-results.jsonl");
   const records = readJsonl(filePath);
   const scoped = runId ? records.filter((record) => !record.run_id || record.run_id === runId) : records;
-  const buckets = { completed: [], failed: [], skipped: [], blocked: [], merged_into: [] };
+  const buckets: TaskBuckets = { completed: [], failed: [], skipped: [], blocked: [], merged_into: [] };
   for (const record of scoped) {
     const raw = String(record.status || record.outcome || "").trim().toUpperCase();
-    const bucket = TASK_RESULT_STATUS_BUCKETS[raw];
+    const bucket = taskResultBucket(raw);
     if (!bucket) continue;
     const taskId = record.task_id || record.taskId || record.id;
-    if (taskId) buckets[bucket].push(taskId);
+    const bucketItems = buckets[bucket];
+    if (taskId && bucketItems) bucketItems.push(taskId);
   }
   return buckets;
 }
 
-function summarizeRemediation({ taskResults = Object(), stateEvents = [] } = Object()) {
-  const fromTaskResults = (taskResults.remediation || []).map((entry) => ({
+function summarizeRemediation({ taskResults = Object(), stateEvents = [] }: { taskResults?: TaskResultsInput; stateEvents?: JsonRecord[] } = Object()): RemediationSummary {
+  const remediationEntries = Array.isArray(taskResults.remediation) ? taskResults.remediation : [];
+  const fromTaskResults = remediationEntries.map((entry) => ({
     source: "task-results",
     task_id: entry.task_id || null,
     action: entry.action || null,
@@ -368,9 +534,9 @@ function summarizeRemediation({ taskResults = Object(), stateEvents = [] } = Obj
       ts: entry.ts || null,
     }));
   const items = [...fromTaskResults, ...fromEvents];
-  const action_counts = Object();
+  const action_counts: Record<string, number> = Object();
   for (const item of items) {
-    const action = item.action || "UNKNOWN";
+    const action = String(item.action || "UNKNOWN");
     action_counts[action] = (action_counts[action] || 0) + 1;
   }
   return {
@@ -394,7 +560,7 @@ export function buildRunReport({
   finishedAt = new Date().toISOString(),
   durationSec = null,
   taskLogsDir = null,
-} = Object()) {
+}: BuildRunReportOptions = Object()): RunReport {
   if (!stateDir) throw new Error("buildRunReport requires stateDir");
 
   const runs = readLedgerJsonl(join(stateDir, "runs.jsonl"));
@@ -422,7 +588,7 @@ export function buildRunReport({
       Array.isArray(taskResults.blocked)
     ),
   );
-  const buckets = hasExplicitBuckets
+  const buckets: TaskBuckets = hasExplicitBuckets
     ? taskResults
     : readTaskResultsFromDisk(stateDir, runId);
   const completed = unique(buckets.completed || []);
@@ -435,7 +601,7 @@ export function buildRunReport({
   // completed for run-rate accounting but surface them separately so the final
   // answer can distinguish "actually executed" from "folded into another task".
   const terminalCount = completed.length + failed.length + blocked.length + mergedInto.length;
-  const plannedCount = progressTotal ?? runStart?.tasks ?? terminalCount + skipped.length;
+  const plannedCount = asNumber(progressTotal ?? runStart?.tasks) ?? terminalCount + skipped.length;
   const duration = asNumber(durationSec ?? runEnd?.duration_sec);
   const gates = summarizeGateEvidence({ stateEvents, taskLogEntries });
   const remediation = summarizeRemediation({ taskResults, stateEvents });
@@ -503,12 +669,16 @@ export function buildRunReport({
       task_id: entry.task_id || null,
       status: entry.status || null,
     })),
-  }, { source: "run-report" });
+  }, { source: "run-report" }) as RunReport;
 }
 
-export function formatRunReportMarkdown(report) {
+export function formatRunReportMarkdown(report: RunReport): string {
   const summary = report.summary || {};
   const tasks = report.tasks || {};
+  const gateFailures = report.gates?.failures || [];
+  const reviewIssues = report.review?.issues || [];
+  const completedTasks = tasks.completed || [];
+  const failedTasks = tasks.failed || [];
   const lines = [
     `# YOLO Run Report ${report.run_id || ""}`.trim(),
     "",
@@ -528,8 +698,8 @@ export function formatRunReportMarkdown(report) {
     "",
     "## Gates",
     `- Failed gates: ${report.gates?.failed_count || 0}`,
-    (report.gates?.failures || []).length
-      ? report.gates.failures.map((failure) => `- ${failure.task_id || "unknown"} ${failure.gate}: ${failure.reason || failure.status}`).join("\n")
+    gateFailures.length
+      ? gateFailures.map((failure) => `- ${failure.task_id || "unknown"} ${failure.gate}: ${failure.reason || failure.status}`).join("\n")
       : "- none",
     "",
     "## Remediation",
@@ -540,8 +710,8 @@ export function formatRunReportMarkdown(report) {
     "## Review",
     `- Issues: ${report.review?.issue_count || 0}`,
     `- Errors: ${report.review?.error_count || 0}`,
-    (report.review?.issues || []).length
-      ? report.review.issues.map((issue) => `- ${issue.severity || "unknown"} ${issue.file || "unknown"}:${issue.line || ""} ${issue.message || ""}`.trim()).join("\n")
+    reviewIssues.length
+      ? reviewIssues.map((issue) => `- ${issue.severity || "unknown"} ${issue.file || "unknown"}:${issue.line || ""} ${issue.message || ""}`.trim()).join("\n")
       : "- none",
     "",
     "## Fixtures",
@@ -557,15 +727,15 @@ export function formatRunReportMarkdown(report) {
     `- Warnings: ${report.spec_governance?.warning_count || 0}`,
     "",
     "## Completed",
-    (tasks.completed || []).length ? tasks.completed.map((id) => `- ${id}`).join("\n") : "- none",
+    completedTasks.length ? completedTasks.map((id) => `- ${id}`).join("\n") : "- none",
     "",
     "## Failed",
-    (tasks.failed || []).length ? tasks.failed.map((id) => `- ${id}`).join("\n") : "- none",
+    failedTasks.length ? failedTasks.map((id) => `- ${id}`).join("\n") : "- none",
   ];
   return `${lines.join("\n")}\n`;
 }
 
-export function buildRunFinalAnswer(report = Object(), options = Object()) {
+export function buildRunFinalAnswer(report: RunReport = Object(), options: FinalAnswerOptions = Object()): RunFinalAnswer {
   const summary = report.summary || {};
   const tasks = report.tasks || {};
   const failed = unique(tasks.failed || []);
@@ -696,19 +866,20 @@ export function buildRunFinalAnswer(report = Object(), options = Object()) {
       merged_into: itemList(mergedInto),
     },
     evidence: {
-      report_json: options.reportJsonPath || options.report_json || null,
-      report_markdown: options.reportMarkdownPath || options.report_markdown || null,
+      report_json: stringOrNull(options.reportJsonPath || options.report_json || null),
+      report_markdown: stringOrNull(options.reportMarkdownPath || options.report_markdown || null),
       generated_from: report.artifact_type || "run.report",
     },
     next_actions: nextActions,
   };
 }
 
-export function formatRunFinalAnswerMarkdown(finalAnswerOrReport = Object(), options = Object()) {
-  const finalAnswer = finalAnswerOrReport.schema === "yolo.evidence.final_answer.v1"
-    ? finalAnswerOrReport
+export function formatRunFinalAnswerMarkdown(finalAnswerOrReport: RunFinalAnswer | RunReport = Object(), options: FinalAnswerOptions = Object()): string {
+  const finalAnswer: RunFinalAnswer = finalAnswerOrReport.schema === "yolo.evidence.final_answer.v1"
+    ? finalAnswerOrReport as RunFinalAnswer
     : buildRunFinalAnswer(finalAnswerOrReport, options);
   const summary = finalAnswer.summary || {};
+  const blockers = finalAnswer.blockers || [];
   const lines = [
     `# YOLO Final Answer ${finalAnswer.run_id || ""}`.trim(),
     "",
@@ -726,7 +897,7 @@ export function formatRunFinalAnswerMarkdown(finalAnswerOrReport = Object(), opt
     ...(finalAnswer.checks || []).map((check) => `- ${check.name}: ${check.status} (${check.detail})`),
     "",
     "## Blockers",
-    ...(finalAnswer.blockers || []).length ? finalAnswer.blockers.map((item) => `- ${item}`) : ["- none"],
+    ...blockers.length ? blockers.map((item) => `- ${item}`) : ["- none"],
     "",
     "## Evidence",
     `- Report JSON: ${finalAnswer.evidence?.report_json || "unknown"}`,
@@ -739,7 +910,7 @@ export function formatRunFinalAnswerMarkdown(finalAnswerOrReport = Object(), opt
   return `${lines.join("\n")}\n`;
 }
 
-export function runReportPaths(stateDir, runId = "latest") {
+export function runReportPaths(stateDir: string, runId = "latest") {
   const reportDir = join(stateDir, "reports", runId || "latest");
   return {
     report_dir: reportDir,
@@ -750,9 +921,10 @@ export function runReportPaths(stateDir, runId = "latest") {
   };
 }
 
-export function writeRunReport(options = Object()) {
+export function writeRunReport(options: BuildRunReportOptions = Object()) {
   const report = buildRunReport(options);
-  const paths = runReportPaths(options.stateDir, report.run_id || options.runId || "latest");
+  if (!options.stateDir) throw new Error("buildRunReport requires stateDir");
+  const paths = runReportPaths(options.stateDir, String(report.run_id || options.runId || "latest"));
   writeJsonArtifact(paths.json_path, report);
   writeFileSync(paths.markdown_path, formatRunReportMarkdown(report), "utf8");
   const finalAnswer = buildRunFinalAnswer(report, {
