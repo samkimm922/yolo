@@ -3,7 +3,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { resolveProjectContext } from "../../packs/resolver.js";
 import { asArray, selectedAcceptanceAdapter } from "../gates/readiness-policy.js";
 import { isWithin, resolveWithinRoot } from "../../lib/security/path-guard.js";
-import { redact } from "../../lib/security/redact.js";
+import { redactDeep } from "../../lib/security/redact.js";
 import { execCommand } from "../../lib/security/safe-exec.js";
 
 export const ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION = "1.0";
@@ -380,8 +380,8 @@ export function runAdapterEvidenceCollector(input = Object(), options = Object()
       error: executed.rejected
         ? `command rejected: ${executed.reject_detail}`
         : (executed.error || null),
-      stdout: redact(truncate(executed.stdout)),
-      stderr: redact(truncate(executed.stderr)),
+      stdout: redactDeep(truncate(executed.stdout)),
+      stderr: redactDeep(truncate(executed.stderr)),
       evidence_path: evidencePath || null,
       evidence_file: evidencePath ? repoRelative(evidencePath, plan.project_root) : null,
       evidence_found: evidencePath ? existsSync(evidencePath) : null,

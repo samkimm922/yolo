@@ -11,7 +11,7 @@ import {
   demandSessionSchemaError,
   inspectDemandPrdReadiness,
 } from "./router.js";
-import { redact } from "../lib/security/redact.js";
+import { redactDeep } from "../lib/security/redact.js";
 import {
   evidenceRequirementBlockers,
   evidenceRequirementSummary,
@@ -712,8 +712,8 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
       timed_out: providerRun.timedOut === true,
       json_repaired: parsedOutput.repaired === true,
       parse_error: parsedOutput.parsed ? "" : truncate(parsedOutput.error, 500),
-      stdout: redact(truncate(providerRun.stdout, 2000)),
-      stderr: redact(truncate(providerRun.stderr, 2000)),
+      stdout: redactDeep(truncate(providerRun.stdout, 2000)),
+      stderr: redactDeep(truncate(providerRun.stderr, 2000)),
     });
     result.agent_results.push(agentResult);
     if (writeArtifact) result.artifacts.push(writeJson(action.output_path, agentResult));
