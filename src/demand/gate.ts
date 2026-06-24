@@ -20,11 +20,50 @@ export const DEMAND_QUALITY_SCHEMA = "yolo.demand.quality.v1";
 const DEMAND_DISCUSS_EVENT = "demand.discuss";
 const DEMAND_APPROVED_EVENT = "demand.approved";
 
-function cleanLedgerValue(value) {
+// Loose session/options/task records (N4 pattern): the readiness/quality gate
+// reads deeply nested demand session data as `Record<string, unknown>`, narrowing
+// at each touch point, never widening to `any`. This is the fail-closed evidence
+// gate — logic is preserved verbatim; only types are added.
+type Loose = Record<string, unknown>;
+
+interface DemandCheck {
+  code: string;
+  passed: boolean;
+  severity: string;
+  message: string;
+  [key: string]: unknown;
+}
+
+interface DemandQualityCheck {
+  code: string;
+  passed: boolean;
+  points: number;
+  severity: string;
+  message: string;
+  [key: string]: unknown;
+}
+
+interface DemandQualityDimension {
+  code: string;
+  label: string;
+  weight: number;
+  critical: boolean;
+  status: string;
+  score: number;
+  earned_points: number;
+  possible_points: number;
+  block_threshold: number;
+  warning_threshold: number;
+  checks: DemandQualityCheck[];
+  failed_checks: DemandQualityCheck[];
+  evidence_grounded: boolean | undefined;
+}
+
+function cleanLedgerValue(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function demandEvidenceEventsForPhase(phase) {
+function demandEvidenceEventsForPhase(phase: unknown): Set<string> {
   const normalized = cleanLedgerValue(phase).toLowerCase();
   if (["prd", "prd_intake", "executable_prd", "approved", "approval"].includes(normalized)) {
     return new Set([DEMAND_APPROVED_EVENT]);
@@ -32,14 +71,15 @@ function demandEvidenceEventsForPhase(phase) {
   return new Set([DEMAND_DISCUSS_EVENT, DEMAND_APPROVED_EVENT]);
 }
 
-function ledgerRecordMatchesDemandEvidence(record, requiredEvents, demandId) {
+function ledgerRecordMatchesDemandEvidence(record: unknown, requiredEvents: Set<string>, demandId: string): boolean {
   if (!record || typeof record !== "object" || Array.isArray(record)) return false;
-  if (!requiredEvents.has(cleanLedgerValue(record.event))) return false;
+  const r = record as Loose;
+  if (!requiredEvents.has(cleanLedgerValue(r.event))) return false;
   if (!demandId) return true;
-  return cleanLedgerValue(record.demand_id || record.demandId) === demandId;
+  return cleanLedgerValue(r.demand_id || r.demandId) === demandId;
 }
 
-function hasLedgerEvidence(stateDir, context = Object()) {
+function hasLedgerEvidence(stateDir: string, context: Loose = Object()): boolean {
   if (!stateDir) return false;
   try {
     const ledgerPath = join(stateDir, "evidence", "ledger.jsonl");
@@ -56,75 +96,80 @@ function hasLedgerEvidence(stateDir, context = Object()) {
   }
 }
 
-function asArray(value) {
-  if (value == null) return [];
-  return Array.isArray(value) ? value : [value];
+function asArray<T = unknown>(value: unknown): T[] {
+  if (value == null) return [] as T[];
+  return (Array.isArray(value) ? value : [value]) as T[];
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function hasItems(value) {
+function hasItems(value: unknown): boolean {
   return asArray(value).map(clean).filter(Boolean).length > 0;
 }
 
-function hasTraceItems(value) {
+function hasTraceItems(value: unknown): boolean {
   return asArray(value).some((item) => {
     if (item && typeof item === "object") {
-      return clean(item.id || item.question || item.answer || item.text).length > 0;
+      const i = item as Loose;
+      return clean(i.id || i.question || i.answer || i.text).length > 0;
     }
     return clean(item).length > 0;
   });
 }
 
-function check(code, passed, severity, message, extra = Object()) {
+function check(code: string, passed: boolean, severity: string, message: string, extra: Loose = Object()): DemandCheck {
   return { code, passed: Boolean(passed), severity, message, ...extra };
 }
 
-function blockingOpenQuestions(session = Object()) {
-  return asArray(session.discussion?.open_questions || session.open_questions)
+function blockingOpenQuestions(session: Loose = Object()) {
+  const discussion = session.discussion as Loose | undefined;
+  return asArray<Loose>(discussion?.open_questions || session.open_questions)
     .map((item) => {
       if (typeof item === "string") return { text: clean(item), blocking: true };
-      return { ...item, text: clean(item.text || item.question || item.message), blocking: item.blocking !== false };
+      return { ...item, text: clean((item as Loose).text || (item as Loose).question || (item as Loose).message), blocking: (item as Loose).blocking !== false };
     })
     .filter((item) => item.text && item.blocking);
 }
 
-function requirementCount(session = Object()) {
-  return asArray(session.requirements?.active || session.requirements).length;
+function requirementCount(session: Loose = Object()): number {
+  const requirements = session.requirements as Loose | undefined;
+  return asArray(requirements?.active || session.requirements).length;
 }
 
-function requirementItems(session = Object()) {
-  return asArray(session.requirements?.active || session.requirements);
+function requirementItems(session: Loose = Object()): Loose[] {
+  const requirements = session.requirements as Loose | undefined;
+  return asArray<Loose>(requirements?.active || session.requirements);
 }
 
-function acceptanceScenarioCount(session = Object()) {
+function acceptanceScenarioCount(session: Loose = Object()): number {
   const requirements = requirementItems(session);
   return requirements.reduce((sum, requirement) => sum + asArray(requirement.acceptance_scenarios || requirement.scenarios).length, 0);
 }
 
-function scenarioMatrix(session = Object()) {
-  return asArray(session.scenario_matrix?.scenarios || session.scenarios);
+function scenarioMatrix(session: Loose = Object()): Loose[] {
+  const scenarioMatrixField = session.scenario_matrix as Loose | undefined;
+  return asArray<Loose>(scenarioMatrixField?.scenarios || session.scenarios);
 }
 
-function scenarioProofCount(session = Object()) {
+function scenarioProofCount(session: Loose = Object()): number {
   return scenarioMatrix(session).filter((scenario) => clean(scenario.proof || scenario.acceptance).length > 0).length;
 }
 
-function scenarioSurfaceCount(session = Object()) {
+function scenarioSurfaceCount(session: Loose = Object()): number {
   return scenarioMatrix(session).filter((scenario) => asArray(scenario.surfaces).length > 0).length;
 }
 
-function scenarioSurfaceTotal(session = Object()) {
+function scenarioSurfaceTotal(session: Loose = Object()): number {
   return scenarioMatrix(session).reduce((sum, scenario) => sum + asArray(scenario.surfaces).length, 0);
 }
 
-function surfaceBudgetFailures(session = Object()) {
-  const failures = [];
+function surfaceBudgetFailures(session: Loose = Object()) {
+  const failures: Loose[] = [];
   for (const scenario of scenarioMatrix(session)) {
-    for (const surface of asArray(scenario.surfaces)) {
-      const budget = surface?.session_budget;
+    for (const surface of asArray<Loose>(scenario.surfaces)) {
+      const budget = (surface?.session_budget as Loose) || undefined;
       const maxFiles = Number(budget?.max_files);
       if (!budget) {
         failures.push({
@@ -145,16 +190,20 @@ function surfaceBudgetFailures(session = Object()) {
   return failures;
 }
 
-function targetFileCount(session = Object()) {
-  return asArray(session.project?.target_files || session.target_files).length;
+function targetFileCount(session: Loose = Object()): number {
+  const project = session.project as Loose | undefined;
+  return asArray(project?.target_files || session.target_files).length;
 }
 
-function targetFiles(session = Object()) {
-  return asArray(session.project?.target_files || session.target_files).map(clean).filter(Boolean);
+function targetFiles(session: Loose = Object()): string[] {
+  const project = session.project as Loose | undefined;
+  return asArray(project?.target_files || session.target_files).map(clean).filter(Boolean);
 }
 
-function targetFileFactRecords(session = Object()) {
-  return asArray(session.project_facts?.target_files || session.project?.target_file_facts)
+function targetFileFactRecords(session: Loose = Object()) {
+  const projectFacts = session.project_facts as Loose | undefined;
+  const project = session.project as Loose | undefined;
+  return asArray<Loose>(projectFacts?.target_files || project?.target_file_facts)
     .map((fact) => {
       if (typeof fact === "string") return { file: clean(fact), status: "needs_verification", source: "legacy_string" };
       return {
@@ -167,7 +216,7 @@ function targetFileFactRecords(session = Object()) {
     .filter((fact) => fact.file);
 }
 
-function scopedProjectPath(projectRoot, file) {
+function scopedProjectPath(projectRoot: unknown, file: unknown): string | null {
   const root = resolve(clean(projectRoot) || process.cwd());
   const target = clean(file);
   if (!target) return null;
@@ -177,8 +226,11 @@ function scopedProjectPath(projectRoot, file) {
   return path;
 }
 
-function assumptionFactRecords(session = Object()) {
-  return asArray(session.project_facts?.assumptions || session.reflection?.assumption_records || session.investigation?.assumptions)
+function assumptionFactRecords(session: Loose = Object()) {
+  const projectFacts = session.project_facts as Loose | undefined;
+  const reflection = session.reflection as Loose | undefined;
+  const investigation = session.investigation as Loose | undefined;
+  return asArray<Loose>(projectFacts?.assumptions || reflection?.assumption_records || investigation?.assumptions)
     .map((fact) => {
       if (typeof fact === "string") return { text: clean(fact), status: "assumption" };
       return {
@@ -188,29 +240,37 @@ function assumptionFactRecords(session = Object()) {
         status: clean(fact?.status || "assumption"),
       };
     })
-    .filter((fact) => fact.text || fact.id);
+    .filter((fact) => fact.text || (fact as Loose).id);
 }
 
-function combinedDemandText(session = Object()) {
+function combinedDemandText(session: Loose = Object()): string {
   const requirements = requirementItems(session);
   const scenarios = scenarioMatrix(session);
+  const vision = session.vision as Loose | undefined;
+  const investigation = session.investigation as Loose | undefined;
+  const reflection = session.reflection as Loose | undefined;
+  const discussion = session.discussion as Loose | undefined;
+  const requirementsField = session.requirements as Loose | undefined;
+  const context = session.context as Loose | undefined;
+  const investigationEvidence = (investigation?.evidence as Loose | undefined);
+  const discussionDecisions = (discussion?.decisions as Loose | undefined);
   const values = [
-    session.vision?.statement,
-    session.vision?.idea,
+    vision?.statement,
+    vision?.idea,
     session.idea,
     session.objective,
-    session.vision?.status_quo,
+    vision?.status_quo,
     session.status_quo,
-    session.investigation?.evidence?.map?.((item) => item?.text || item),
+    investigationEvidence && typeof investigationEvidence.map === "function" ? investigationEvidence.map((item: unknown) => (item && typeof item === "object" ? clean((item as Loose).text) : item)) : undefined,
     session.evidence,
-    session.reflection?.assumptions,
+    reflection?.assumptions,
     session.assumptions,
-    session.discussion?.decisions?.map?.((item) => item?.text || item),
+    discussionDecisions && typeof discussionDecisions.map === "function" ? discussionDecisions.map((item: unknown) => (item && typeof item === "object" ? clean((item as Loose).text) : item)) : undefined,
     session.decisions,
-    session.requirements?.constraints,
+    requirementsField?.constraints,
     session.constraints,
-    session.context?.visual_style_source,
-    session.requirements?.out_of_scope,
+    context?.visual_style_source,
+    requirementsField?.out_of_scope,
     session.out_of_scope,
     requirements.map((requirement) => [
       requirement.title,
@@ -218,34 +278,41 @@ function combinedDemandText(session = Object()) {
       requirement.acceptance_scenarios,
       requirement.scenarios,
     ]),
-    scenarios.map((scenario) => [
-      scenario.current_behavior,
-      scenario.desired_behavior,
-      scenario.proof,
-      scenario.acceptance,
-      scenario.trigger,
-      scenario.visual_style_source,
-      scenario.surfaces?.map?.((surface) => [
-        surface.proof,
-        surface.verification_hint,
-        surface.label,
-        surface.visual_style_source,
-      ]),
-    ]),
+    scenarios.map((scenario) => {
+      const surfaces = scenario.surfaces;
+      return [
+        scenario.current_behavior,
+        scenario.desired_behavior,
+        scenario.proof,
+        scenario.acceptance,
+        scenario.trigger,
+        scenario.visual_style_source,
+        Array.isArray(surfaces) ? surfaces.map((surface: unknown) => {
+          const s = surface as Loose;
+          return [
+            s?.proof,
+            s?.verification_hint,
+            s?.label,
+            s?.visual_style_source,
+          ];
+        }) : undefined,
+      ];
+    }),
   ];
   return values.flat(Infinity).map(clean).filter(Boolean).join("\n");
 }
 
-function visualStyleSourceItems(session = Object()) {
+function visualStyleSourceItems(session: Loose = Object()): string[] {
   const scenarios = scenarioMatrix(session);
+  const context = session.context as Loose | undefined;
   return [
-    session.context?.visual_style_source,
+    context?.visual_style_source,
     session.visual_style,
     session.visual_style_source,
     scenarios.map((scenario) => [
       scenario.visual_style,
       scenario.visual_style_source,
-      asArray(scenario.surfaces).map((surface) => [
+      asArray<Loose>(scenario.surfaces).map((surface) => [
         surface?.visual_style,
         surface?.visual_style_source,
       ]),
@@ -253,7 +320,7 @@ function visualStyleSourceItems(session = Object()) {
   ].flat(Infinity).map(clean).filter(Boolean);
 }
 
-function conditionalStyleSourceIssue(session = Object()) {
+function conditionalStyleSourceIssue(session: Loose = Object()): string {
   const items = visualStyleSourceItems(session);
   for (const item of [...items, items.join("; ")]) {
     if (!item) continue;
@@ -266,10 +333,10 @@ function conditionalStyleSourceIssue(session = Object()) {
   return "";
 }
 
-function readProjectTargetText(session = Object(), options = Object()) {
+function readProjectTargetText(session: Loose = Object(), options: Loose = Object()): string {
   const projectRoot = clean(options.projectRoot || options.project_root || options.cwd);
   if (!projectRoot) return "";
-  const chunks = [];
+  const chunks: string[] = [];
   for (const file of targetFiles(session)) {
     const path = scopedProjectPath(projectRoot, file);
     if (!path) continue;
@@ -280,21 +347,21 @@ function readProjectTargetText(session = Object(), options = Object()) {
   return chunks.join("\n");
 }
 
-function hasUiTarget(session = Object()) {
+function hasUiTarget(session: Loose = Object()): boolean {
   return targetFiles(session).some((file) => /(^|\/)(pages?|views?|screens?|components?|ui)\//i.test(file) || /\.(tsx|jsx|vue|svelte)$/i.test(file));
 }
 
-function hasApiOrServiceTarget(session = Object()) {
+function hasApiOrServiceTarget(session: Loose = Object()): boolean {
   return targetFiles(session).some((file) => /(^|\/)(routes?|api|controllers?|server|services?|domain|lib)\//i.test(file));
 }
 
-function projectFactGrounding(session = Object(), options = Object()) {
+function projectFactGrounding(session: Loose = Object(), options: Loose = Object()): Loose[] {
   const projectRoot = clean(options.projectRoot || options.project_root || options.cwd);
   const text = combinedDemandText(session);
   const lower = text.toLowerCase();
   const projectText = readProjectTargetText(session, options);
   const projectLower = projectText.toLowerCase();
-  const issues = [];
+  const issues: Loose[] = [];
   const greenfield = isGreenfieldDemandSession({}, session, options);
   const stockOrThreshold = /\b(low[-_\s]?stock|threshold|replenishment|floor|stockout)\b/i.test(text);
   const concreteRule = /(<=|>=|<|>|less than|greater than|below|above|equal|equals|at or below|at or above|per sku|configurable)/i.test(text);
@@ -344,16 +411,17 @@ function projectFactGrounding(session = Object(), options = Object()) {
     }
   }
   for (const fact of assumptionFactRecords(session)) {
-    if (fact.status === "contradicted") {
+    const f = fact as Loose;
+    if (f.status === "contradicted") {
       issues.push({
         code: "QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED",
-        assumption_id: fact.id || null,
+        assumption_id: f.id || null,
         message: "Contradicted assumptions must not be promoted to executable PRD facts, even with user approval.",
       });
-    } else if (fact.status === "needs_verification" && !greenfield) {
+    } else if (f.status === "needs_verification" && !greenfield) {
       issues.push({
         code: "QUALITY_ASSUMPTION_VERIFIED",
-        assumption_id: fact.id || null,
+        assumption_id: f.id || null,
         message: "Project-field assumptions must be verified by evidence or target project files before executable PRD generation.",
       });
     }
@@ -389,7 +457,7 @@ function projectFactGrounding(session = Object(), options = Object()) {
     "QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED",
     "QUALITY_ASSUMPTION_VERIFIED",
     "QUALITY_FIELD_ASSUMPTION_VERIFIED",
-  ].includes(issue.code));
+  ].includes(clean(issue.code)));
   if (visualUi && !visualSpec) {
     issues.push({
       code: "QUALITY_UI_VISUAL_SPEC_CONCRETE",
@@ -421,11 +489,19 @@ function projectFactGrounding(session = Object(), options = Object()) {
   return issues;
 }
 
-function qualityCheck(code, passed, points, severity, message, extra = Object()) {
+function qualityCheck(code: string, passed: boolean, points: number, severity: string, message: string, extra: Loose = Object()): DemandQualityCheck {
   return { code, passed: Boolean(passed), points, severity, message, ...extra };
 }
 
-function qualityDimension({ code, label, weight = 20, critical = false, checks = [], blockBelow = 60, warnBelow = 85 }) {
+function qualityDimension({ code, label, weight = 20, critical = false, checks = [], blockBelow = 60, warnBelow = 85 }: {
+  code: string;
+  label: string;
+  weight?: number;
+  critical?: boolean;
+  checks?: DemandQualityCheck[];
+  blockBelow?: number;
+  warnBelow?: number;
+}): DemandQualityDimension {
   const possible = checks.reduce((sum, item) => sum + Number(item.points || 0), 0);
   const earned = checks.reduce((sum, item) => sum + (item.passed ? Number(item.points || 0) : 0), 0);
   const score = possible > 0 ? Math.round((earned / possible) * 100) : 0;
@@ -453,24 +529,26 @@ function qualityDimension({ code, label, weight = 20, critical = false, checks =
   };
 }
 
-function taskTargets(task = Object()) {
-  return asArray(task.scope?.targets).map((target) => clean(target?.file || target)).filter(Boolean);
+function taskTargets(task: Loose = Object()): string[] {
+  const scope = task.scope as Loose | undefined;
+  return asArray<Loose>(scope?.targets).map((target) => clean((target as Loose)?.file || target)).filter(Boolean);
 }
 
-function taskAcceptanceCriteria(task = Object()) {
-  return asArray(task.handoff?.acceptance_criteria || task.acceptance_criteria);
+function taskAcceptanceCriteria(task: Loose = Object()): Loose[] {
+  const handoff = task.handoff as Loose | undefined;
+  return asArray<Loose>(handoff?.acceptance_criteria || task.acceptance_criteria);
 }
 
-function taskHasAcceptanceCondition(task = Object()) {
-  return asArray(task.post_conditions).some((condition) => condition?.type === "acceptance_criteria" && clean(condition.message || condition.params?.text).length > 0);
+function taskHasAcceptanceCondition(task: Loose = Object()): boolean {
+  return asArray<Loose>(task.post_conditions).some((condition) => condition?.type === "acceptance_criteria" && clean(condition.message || (condition.params as Loose)?.text).length > 0);
 }
 
-function handoffPresent(task = Object()) {
-  return task.handoff && typeof task.handoff === "object";
+function handoffPresent(task: Loose = Object()): boolean {
+  return Boolean(task.handoff && typeof task.handoff === "object");
 }
 
-function handoffFieldsComplete(task = Object()) {
-  const handoff = task.handoff || {};
+function handoffFieldsComplete(task: Loose = Object()): boolean {
+  const handoff = (task.handoff as Loose) || {};
   return handoffPresent(task)
     && clean(handoff.plain_language_goal).length >= 10
     && clean(handoff.current_behavior).length > 0
@@ -481,15 +559,17 @@ function handoffFieldsComplete(task = Object()) {
     && taskTargets(task).length > 0;
 }
 
-function taskEvidenceChainComplete(task = Object()) {
-  const chain = task.handoff?.evidence_chain || {};
+function taskEvidenceChainComplete(task: Loose = Object()): boolean {
+  const handoff = task.handoff as Loose | undefined;
+  const chain = (handoff?.evidence_chain as Loose) || {};
   return clean(chain.demand_id).length > 0
     && clean(chain.scenario_id).length > 0
     && clean(chain.surface_id).length > 0;
 }
 
-function taskSessionPlanComplete(task = Object()) {
-  const session = task.handoff?.session || task.session_plan || {};
+function taskSessionPlanComplete(task: Loose = Object()): boolean {
+  const handoff = task.handoff as Loose | undefined;
+  const session = (handoff?.session as Loose) || (task.session_plan as Loose) || {};
   return clean(session.session_id).length > 0
     && clean(session.state_path).length > 0
     && clean(session.handoff_path).length > 0
@@ -499,25 +579,28 @@ function taskSessionPlanComplete(task = Object()) {
     && clean(session.resume_instructions).length > 0;
 }
 
-function scenarioHasProof(scenario = Object()) {
+function scenarioHasProof(scenario: Loose = Object()): boolean {
   return clean(scenario.proof || scenario.acceptance).length >= 10;
 }
 
 // ── Completeness matrix (P2.15b): deterministic gate rules ──
 
-function extractRoles(session = Object()) {
-  const raw = asArray(session.vision?.target_users || session.project?.target_users || session.target_users);
+function extractRoles(session: Loose = Object()): string[] {
+  const vision = session.vision as Loose | undefined;
+  const project = session.project as Loose | undefined;
+  const raw = asArray<Loose>(vision?.target_users || project?.target_users || session.target_users);
   const roleTexts = raw
     .map((entry) => {
       if (typeof entry === "string") return clean(entry);
-      return clean(entry.role || entry.name || entry.title || entry.label || entry.id);
+      const e = entry as Loose;
+      return clean(e.role || e.name || e.title || e.label || e.id);
     })
     .filter(Boolean);
   return targetUserRoleItems(roleTexts);
 }
 
-function roleScenarioCoverage(roles = [], scenarios = []) {
-  const uncovered = [];
+function roleScenarioCoverage(roles: string[] = [], scenarios: Loose[] = []) {
+  const uncovered: Loose[] = [];
   for (const role of roles) {
     const matchingScenarios = scenarios.filter(
       (scenario) => clean(scenario.actor).toLowerCase() === role.toLowerCase()
@@ -533,8 +616,8 @@ function roleScenarioCoverage(roles = [], scenarios = []) {
   };
 }
 
-function scenarioExceptionCoverage(scenarios = [], _session = Object()) {
-  const missing = [];
+function scenarioExceptionCoverage(scenarios: Loose[] = [], _session: Loose = Object()) {
+  const missing: Loose[] = [];
   for (const scenario of scenarios) {
     const exceptions = asArray(scenario.exceptions).map(clean).filter(Boolean);
     if (exceptions.length === 0) {
@@ -549,10 +632,10 @@ function scenarioExceptionCoverage(scenarios = [], _session = Object()) {
   };
 }
 
-function requirementAcceptanceEvidence(requirements = [], scenarios = []) {
-  const missing = [];
+function requirementAcceptanceEvidence(requirements: Loose[] = [], scenarios: Loose[] = []) {
+  const missing: Loose[] = [];
   for (const requirement of requirements) {
-    const acceptanceScenarios = asArray(requirement.acceptance_scenarios || requirement.scenarios);
+    const acceptanceScenarios = asArray<Loose>(requirement.acceptance_scenarios || requirement.scenarios);
     const hasDirectProof = acceptanceScenarios.some(
       (scenario) => clean(scenario.proof || scenario.acceptance || scenario.evidence).length > 0
     );
@@ -576,7 +659,7 @@ function requirementAcceptanceEvidence(requirements = [], scenarios = []) {
   };
 }
 
-function inspectCompletenessMatrix(session = Object()) {
+function inspectCompletenessMatrix(session: Loose = Object()) {
   const roles = extractRoles(session);
   const scenarios = scenarioMatrix(session);
   const requirements = requirementItems(session);
@@ -585,7 +668,7 @@ function inspectCompletenessMatrix(session = Object()) {
   const exceptionCoverage = scenarioExceptionCoverage(scenarios, session);
   const evidenceCoverage = requirementAcceptanceEvidence(requirements, scenarios);
 
-  const errors = [];
+  const errors: Loose[] = [];
   if (roleCoverage.roles_uncovered.length > 0) {
     for (const item of roleCoverage.roles_uncovered) {
       errors.push({
@@ -631,39 +714,47 @@ function inspectCompletenessMatrix(session = Object()) {
   };
 }
 
-function scenarioSurfaces(session = Object()) {
-  return scenarioMatrix(session).flatMap((scenario) => asArray(scenario.surfaces));
+function scenarioSurfaces(session: Loose = Object()): Loose[] {
+  return scenarioMatrix(session).flatMap((scenario) => asArray<Loose>(scenario.surfaces));
 }
 
-function allTasksHaveSourceQuestions(tasks = []) {
-  return tasks.length > 0 && tasks.every((task) => hasTraceItems(task.source_question_ids || task.handoff?.source_question_ids || task.trace?.source_question_ids));
+function allTasksHaveSourceQuestions(tasks: Loose[] = []): boolean {
+  return tasks.length > 0 && tasks.every((task) => {
+    const handoff = task.handoff as Loose | undefined;
+    const trace = task.trace as Loose | undefined;
+    return hasTraceItems(task.source_question_ids || handoff?.source_question_ids || trace?.source_question_ids);
+  });
 }
 
-function allScenariosOrTasksHaveSourceQuestions(session = Object(), tasks = []) {
+function allScenariosOrTasksHaveSourceQuestions(session: Loose = Object(), tasks: Loose[] = []): boolean {
   const scenarios = scenarioMatrix(session);
   if (tasks.length > 0) return allTasksHaveSourceQuestions(tasks);
   return scenarios.length > 0 && scenarios.every((scenario) => hasTraceItems(scenario.source_question_ids || scenario.question_trace));
 }
 
-function evidenceOrAssumptionPresent(session = Object()) {
-  return hasItems(session.investigation?.evidence)
+function evidenceOrAssumptionPresent(session: Loose = Object()): boolean {
+  const investigation = session.investigation as Loose | undefined;
+  const reflection = session.reflection as Loose | undefined;
+  return hasItems(investigation?.evidence)
     || hasItems(session.evidence)
-    || hasItems(session.reflection?.assumptions)
+    || hasItems(reflection?.assumptions)
     || hasItems(session.assumptions);
 }
 
-function completedQuestioning(session = Object()) {
+function completedQuestioning(session: Loose = Object()): boolean {
+  const discussion = session.discussion as Loose | undefined;
   return hasTraceItems(session.question_trace)
     || scenarioMatrix(session).some((scenario) => hasTraceItems(scenario.question_trace || scenario.source_question_ids))
-    || hasTraceItems(session.discussion?.rounds)
-    || hasTraceItems(session.discussion?.questions);
+    || hasTraceItems(discussion?.rounds)
+    || hasTraceItems(discussion?.questions);
 }
 
-function deferredScopeConfirmation(session = Object()) {
-  const deferred = asArray(session.discussion?.deferred || session.deferred_scope)
+function deferredScopeConfirmation(session: Loose = Object()) {
+  const discussion = session.discussion as Loose | undefined;
+  const deferred = asArray(discussion?.deferred || session.deferred_scope)
     .map(clean)
     .filter(Boolean);
-  const confirmation = session.discussion?.deferred_scope_confirmation || session.deferred_scope_confirmation || {};
+  const confirmation = (discussion?.deferred_scope_confirmation as Loose) || (session.deferred_scope_confirmation as Loose) || {};
   const required = deferred.length > 0 || confirmation.required === true;
   return {
     required,
@@ -673,14 +764,14 @@ function deferredScopeConfirmation(session = Object()) {
   };
 }
 
-function statusFromChecks(checks) {
+function statusFromChecks(checks: DemandCheck[]): string {
   if (checks.some((item) => item.severity === "error" && !item.passed)) return "blocked";
   if (checks.some((item) => item.severity === "warning" && !item.passed)) return "warning";
   return "pass";
 }
 
-function readinessLevel(checks, session = Object()) {
-  const passed = (code) => checks.find((item) => item.code === code)?.passed === true;
+function readinessLevel(checks: DemandCheck[], session: Loose = Object()): string {
+  const passed = (code: string) => checks.find((item) => item.code === code)?.passed === true;
   if (
     passed("USER_APPROVAL_PRESENT")
     && passed("EXECUTION_SCOPE_PRESENT")
@@ -700,7 +791,7 @@ function readinessLevel(checks, session = Object()) {
   return "L0";
 }
 
-const READINESS_FIELD_LABELS = {
+const READINESS_FIELD_LABELS: Record<string, string> = {
   VISION_PRESENT: "vision/problem",
   TARGET_USER_PRESENT: "target_users",
   STATUS_QUO_PRESENT: "status_quo",
@@ -726,15 +817,15 @@ const READINESS_FIELD_LABELS = {
   PROJECT_FACTS_GROUNDED: "project_facts",
 };
 
-function readinessIssueLabel(item = Object()) {
-  return clean(item.slot || item.field || READINESS_FIELD_LABELS[item.code] || item.code || item.message || "unknown");
+function readinessIssueLabel(item: Loose = Object()): string {
+  return clean(item.slot || item.field || READINESS_FIELD_LABELS[clean(item.code)] || item.code || item.message || "unknown");
 }
 
-function actionableReadinessNextActions(issues = [], phase = "discuss") {
-  const issueList = asArray(issues).filter(Boolean);
+function actionableReadinessNextActions(issues: unknown[] = [], phase: unknown = "discuss"): string[] {
+  const issueList = asArray<Loose>(issues).filter(Boolean);
   if (issueList.length === 0) return ["Demand artifacts are ready for executable PRD compilation."];
   const labels = [...new Set(issueList.map(readinessIssueLabel).filter(Boolean))];
-  const actions = [];
+  const actions: string[] = [];
   if (labels.length > 0) actions.push(`Missing demand fields/approvals: ${labels.join(", ")}.`);
   for (const item of issueList.slice(0, 8)) {
     const label = readinessIssueLabel(item);
@@ -748,10 +839,16 @@ function actionableReadinessNextActions(issues = [], phase = "discuss") {
   return [...new Set(actions.filter(Boolean))];
 }
 
-export function inspectDemandReadiness(session = Object(), options = Object()) {
+export function inspectDemandReadiness(session: Loose = Object(), options: Loose = Object()) {
   const phase = clean(options.phase || session.phase || "discuss");
-  const approval = session.approval || {};
-  const requirements = asArray(session.requirements?.active || session.requirements);
+  const approval = (session.approval as Loose) || {};
+  const vision = session.vision as Loose | undefined;
+  const project = session.project as Loose | undefined;
+  const reflection = session.reflection as Loose | undefined;
+  const requirementsField = session.requirements as Loose | undefined;
+  const roadmap = session.roadmap as Loose | undefined;
+  const playback = session.playback as Loose | undefined;
+  const requirements = asArray<Loose>(requirementsField?.active || session.requirements);
   const scenarios = scenarioMatrix(session);
   const surfaceBudgetIssues = surfaceBudgetFailures(session);
   const blockingQuestions = blockingOpenQuestions(session);
@@ -770,25 +867,25 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
   const checks = [
     check(
       "VISION_PRESENT",
-      clean(session.vision?.statement || session.vision?.idea || session.idea || session.objective).length >= 10,
+      clean(vision?.statement || vision?.idea || session.idea || session.objective).length >= 10,
       "error",
       "Vision must state the product direction or opportunity in enough detail.",
     ),
     check(
       "TARGET_USER_PRESENT",
-      hasTargetUserRole(session.vision?.target_users || session.project?.target_users || session.target_users),
+      hasTargetUserRole(vision?.target_users || project?.target_users || session.target_users),
       "error",
       "Target user must be explicit before PRD work.",
     ),
     check(
       "STATUS_QUO_PRESENT",
-      hasItems(session.vision?.status_quo || session.status_quo),
+      hasItems(vision?.status_quo || session.status_quo),
       deepMode ? "error" : "warning",
       "Status quo/current workaround must be captured.",
     ),
     check(
       "REFLECTION_PRESENT",
-      hasItems(session.reflection?.assumptions) || hasItems(session.reflection?.alternatives) || clean(session.reflection?.summary).length > 0,
+      hasItems(reflection?.assumptions) || hasItems(reflection?.alternatives) || clean(reflection?.summary).length > 0,
       deepMode ? "error" : "warning",
       "Reflection must challenge premises, assumptions, or alternatives.",
     ),
@@ -836,7 +933,7 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
     ),
     check(
       "STORY_ATOMICITY_PASSED",
-      storyAtomicity.status !== "blocked" && asArray(storyAtomicity.blockers).length === 0,
+      (storyAtomicity as Loose).status !== "blocked" && asArray((storyAtomicity as Loose).blockers).length === 0,
       prdMode ? "error" : "warn" + "ing",
       "Requirement and scenario narratives must each carry only one independent user story before executable PRD generation.",
       { story_atomicity: storyAtomicity },
@@ -860,7 +957,7 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
     ),
     check(
       "OUT_OF_SCOPE_PRESENT",
-      hasItems(session.requirements?.out_of_scope || session.out_of_scope || session.non_goals),
+      hasItems(requirementsField?.out_of_scope || session.out_of_scope || session.non_goals),
       deepMode ? "error" : "warning",
       "Out-of-scope boundaries must be explicit.",
     ),
@@ -873,7 +970,7 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
     ),
     check(
       "ROADMAP_PRESENT",
-      hasItems(session.roadmap?.mvp) || hasItems(session.roadmap?.phases),
+      hasItems(roadmap?.mvp) || hasItems(roadmap?.phases),
       deepMode ? "error" : "warning",
       "Roadmap must define MVP or phased delivery.",
     ),
@@ -886,13 +983,13 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
     ),
     check(
       "PLAYBACK_CONFIRMED",
-      session.playback?.confirmed === true,
+      playback?.confirmed === true,
       prdMode || deepMode ? "error" : "warning",
       "Understanding playback must be generated and confirmed by the user before PRD. Run playback confirmation in the interview before to-demand.",
     ),
     check(
       "EVIDENCE_GROUNDED",
-      hasLedgerEvidence(options.stateDir, { phase, demandId: session.id || session.demand_id }),
+      hasLedgerEvidence(options.stateDir as string, { phase, demandId: session.id || session.demand_id }),
       evidenceGroundingRequired ? "error" : "warning",
       "Demand evidence must be grounded in a validated evidence ledger before executable PRD compilation.",
     ),
@@ -954,16 +1051,20 @@ export function inspectDemandReadiness(session = Object(), options = Object()) {
   };
 }
 
-export function inspectDemandQuality(session = Object(), options = Object()) {
+export function inspectDemandQuality(session: Loose = Object(), options: Loose = Object()) {
   const phase = clean(options.phase || session.phase || "prd");
-  const readiness = options.readiness || session.readiness || null;
-  const tasks = asArray(options.tasks);
+  const readiness = ((options.readiness || session.readiness || null) as Loose | null);
+  const approval = (session.approval as Loose) || {};
+  const tasks = asArray<Loose>(options.tasks);
   const requireTasks = options.requireTasks === true || tasks.length > 0;
-  const atomicity = options.atomicity || null;
-  const storyAtomicity = options.storyAtomicity || options.story_atomicity || inspectStoryAtomicityFromDemand(session, {
+  const atomicity = (options.atomicity || null) as Loose | null;
+  const storyAtomicity = (options.storyAtomicity || options.story_atomicity || inspectStoryAtomicityFromDemand(session, {
     tasks,
     includeRequirements: false,
-  });
+  })) as Loose;
+  const vision = session.vision as Loose | undefined;
+  const project = session.project as Loose | undefined;
+  const requirementsField = session.requirements as Loose | undefined;
   const requirements = requirementItems(session);
   const scenarios = scenarioMatrix(session);
   const surfaces = scenarioSurfaces(session);
@@ -974,32 +1075,36 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
   const allScenariosHaveProof = scenarios.length > 0 && scenarios.every(scenarioHasProof);
   const allSurfacesHaveProof = scenarios.length > 0 && scenarios.every((scenario) => (
     asArray(scenario.surfaces).length > 0
-    && asArray(scenario.surfaces).every((surface) => clean(surface.proof || scenario.proof || scenario.acceptance).length >= 10)
+    && asArray<Loose>(scenario.surfaces).every((surface) => clean(surface.proof || scenario.proof || scenario.acceptance).length >= 10)
   ));
   const tasksExistWhenRequired = !requireTasks || tasks.length > 0;
   const allTasksSessionSized = !requireTasks || (tasks.length > 0 && tasks.every((task) => {
     const targets = taskTargets(task);
-    const maxFiles = Number(task.scope?.max_files || targets.length || 0);
+    const scope = task.scope as Loose | undefined;
+    const maxFiles = Number(scope?.max_files || targets.length || 0);
     return targets.length > 0 && targets.length <= 2 && Number.isFinite(maxFiles) && maxFiles >= 1 && maxFiles <= 2;
   }));
-  const allTasksHaveProof = !requireTasks || (tasks.length > 0 && tasks.every((task) => (
-    clean(task.handoff?.proof || task.proof).length >= 10
+  const allTasksHaveProof = !requireTasks || (tasks.length > 0 && tasks.every((task) => {
+    const handoff = task.handoff as Loose | undefined;
+    return clean(handoff?.proof || task.proof).length >= 10
     && taskAcceptanceCriteria(task).length > 0
-    && taskHasAcceptanceCondition(task)
-  )));
-  const allTasksHaveVerificationHints = !requireTasks || (tasks.length > 0 && tasks.every((task) => (
-    clean(task.verification_hint || task.handoff?.verification_hint).length >= 10
-  )));
-  const allTasksBounded = !requireTasks || (tasks.length > 0 && tasks.every((task) => (
-    taskTargets(task).length > 0
-    && task.scope?.allow_delete_files !== true
-    && Number(task.scope?.max_lines_per_file || 0) > 0
-  )));
+    && taskHasAcceptanceCondition(task);
+  }));
+  const allTasksHaveVerificationHints = !requireTasks || (tasks.length > 0 && tasks.every((task) => {
+    const handoff = task.handoff as Loose | undefined;
+    return clean(task.verification_hint || handoff?.verification_hint).length >= 10;
+  }));
+  const allTasksBounded = !requireTasks || (tasks.length > 0 && tasks.every((task) => {
+    const scope = task.scope as Loose | undefined;
+    return taskTargets(task).length > 0
+    && scope?.allow_delete_files !== true
+    && Number(scope?.max_lines_per_file || 0) > 0;
+  }));
   const allTaskHandoffsComplete = !requireTasks || (tasks.length > 0 && tasks.every(handoffFieldsComplete));
   const allTaskEvidenceChainsComplete = !requireTasks || (tasks.length > 0 && tasks.every(taskEvidenceChainComplete));
   const allTaskSessionPlansComplete = !requireTasks || (tasks.length > 0 && tasks.every(taskSessionPlanComplete));
   const allTasksCarryContext = !requireTasks || (tasks.length > 0 && tasks.every((task) => {
-    const handoff = task.handoff || {};
+    const handoff = (task.handoff as Loose) || {};
     return handoffFieldsComplete(task)
       && asArray(handoff.read_first).length > 0
       && asArray(handoff.key_interfaces).length > 0
@@ -1008,8 +1113,9 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
   const atomicityBlocked = atomicity?.status === "blocked" || asArray(atomicity?.blockers).length > 0;
   const storyAtomicityBlocked = storyAtomicity?.status === "blocked" || asArray(storyAtomicity?.blockers).length > 0;
   const factGroundingIssues = projectFactGrounding(session, options);
-  const hasFactIssue = (code) => factGroundingIssues.some((issue) => issue.code === code);
-  const evidence_grounded = hasLedgerEvidence(options.stateDir, { phase, demandId: session.id || session.demand_id });
+  const hasFactIssue = (code: string) => factGroundingIssues.some((issue) => issue.code === code);
+  const factMessage = (code: string, fallback: string) => clean(factGroundingIssues.find((issue) => issue.code === code)?.message) || fallback;
+  const evidence_grounded = hasLedgerEvidence(options.stateDir as string, { phase, demandId: session.id || session.demand_id });
 
   const dimensions = [
     qualityDimension({
@@ -1019,21 +1125,21 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
       checks: [
         qualityCheck(
           "QUALITY_VISION_CONCRETE",
-          clean(session.vision?.statement || session.vision?.idea || session.idea || session.objective).length >= 20,
+          clean(vision?.statement || vision?.idea || session.idea || session.objective).length >= 20,
           20,
           "error",
           "Vision must describe the product direction in concrete language.",
         ),
         qualityCheck(
           "QUALITY_TARGET_USER_SPECIFIC",
-          hasTargetUserRole(session.vision?.target_users || session.project?.target_users || session.target_users),
+          hasTargetUserRole(vision?.target_users || project?.target_users || session.target_users),
           15,
           "error",
           "Target users must be explicit.",
         ),
         qualityCheck(
           "QUALITY_STATUS_QUO_CAPTURED",
-          hasItems(session.vision?.status_quo || session.status_quo),
+          hasItems(vision?.status_quo || session.status_quo),
           15,
           "warning",
           "Current behavior or workaround should be captured.",
@@ -1048,8 +1154,8 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
         ),
         qualityCheck(
           "QUALITY_SCOPE_BOUNDARIES_PRESENT",
-          hasItems(session.requirements?.out_of_scope || session.out_of_scope || session.non_goals)
-            || hasItems(session.requirements?.constraints || session.constraints),
+          hasItems(requirementsField?.out_of_scope || session.out_of_scope || session.non_goals)
+            || hasItems(requirementsField?.constraints || session.constraints),
           15,
           "warning",
           "Constraints or out-of-scope boundaries should be explicit.",
@@ -1073,8 +1179,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
           !hasFactIssue("QUALITY_TARGET_FILE_WITHIN_PROJECT"),
           20,
           "error",
-          factGroundingIssues.find((issue) => issue.code === "QUALITY_TARGET_FILE_WITHIN_PROJECT")?.message
-            || "Execution-scope target files must stay inside the project root.",
+          factMessage("QUALITY_TARGET_FILE_WITHIN_PROJECT", "Execution-scope target files must stay inside the project root."),
           { issues: factGroundingIssues },
         ),
         qualityCheck(
@@ -1082,8 +1187,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
           !hasFactIssue("QUALITY_TARGET_FILE_VERIFIED"),
           20,
           "error",
-          factGroundingIssues.find((issue) => issue.code === "QUALITY_TARGET_FILE_VERIFIED")?.message
-            || "Execution-scope target files should be verified before PRD execution.",
+          factMessage("QUALITY_TARGET_FILE_VERIFIED", "Execution-scope target files should be verified before PRD execution."),
           { issues: factGroundingIssues },
         ),
         qualityCheck(
@@ -1091,8 +1195,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
           !hasFactIssue("QUALITY_TARGET_FILE_NOT_INFERRED"),
           15,
           "error",
-          factGroundingIssues.find((issue) => issue.code === "QUALITY_TARGET_FILE_NOT_INFERRED")?.message
-            || "Auto-scouted files should remain candidates until verified by evidence.",
+          factMessage("QUALITY_TARGET_FILE_NOT_INFERRED", "Auto-scouted files should remain candidates until verified by evidence."),
           { issues: factGroundingIssues },
         ),
         qualityCheck(
@@ -1100,8 +1203,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
           !hasFactIssue("QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED"),
           20,
           "error",
-          factGroundingIssues.find((issue) => issue.code === "QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED")?.message
-            || "Contradicted assumptions must block executable PRD generation.",
+          factMessage("QUALITY_CONTRADICTED_ASSUMPTION_BLOCKED", "Contradicted assumptions must block executable PRD generation."),
           { issues: factGroundingIssues },
         ),
         qualityCheck(
@@ -1109,8 +1211,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
           !hasFactIssue("QUALITY_ASSUMPTION_VERIFIED"),
           15,
           "error",
-          factGroundingIssues.find((issue) => issue.code === "QUALITY_ASSUMPTION_VERIFIED")?.message
-            || "Project-field assumptions should be verified by evidence or target files.",
+          factMessage("QUALITY_ASSUMPTION_VERIFIED", "Project-field assumptions should be verified by evidence or target files."),
           { issues: factGroundingIssues },
         ),
         qualityCheck(
@@ -1118,8 +1219,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
           !hasFactIssue("QUALITY_BUSINESS_RULE_CONCRETE"),
           30,
           "error",
-          factGroundingIssues.find((issue) => issue.code === "QUALITY_BUSINESS_RULE_CONCRETE")?.message
-            || "Business behavior should not require the execution agent to invent a rule.",
+          factMessage("QUALITY_BUSINESS_RULE_CONCRETE", "Business behavior should not require the execution agent to invent a rule."),
           { issues: factGroundingIssues },
         ),
         qualityCheck(
@@ -1127,8 +1227,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
           !hasFactIssue("QUALITY_FIELD_SOURCE_CONCRETE"),
           30,
           "error",
-          factGroundingIssues.find((issue) => issue.code === "QUALITY_FIELD_SOURCE_CONCRETE")?.message
-            || "Field-dependent behavior should cite concrete field/source names.",
+          factMessage("QUALITY_FIELD_SOURCE_CONCRETE", "Field-dependent behavior should cite concrete field/source names."),
           { issues: factGroundingIssues },
         ),
         qualityCheck(
@@ -1136,8 +1235,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
           !hasFactIssue("QUALITY_FIELD_ASSUMPTION_VERIFIED"),
           20,
           "error",
-          factGroundingIssues.find((issue) => issue.code === "QUALITY_FIELD_ASSUMPTION_VERIFIED")?.message
-            || "Field assumptions should not contradict target project files.",
+          factMessage("QUALITY_FIELD_ASSUMPTION_VERIFIED", "Field assumptions should not contradict target project files."),
           { issues: factGroundingIssues },
         ),
         qualityCheck(
@@ -1145,8 +1243,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
           !hasFactIssue("QUALITY_UI_VISUAL_SPEC_CONCRETE"),
           20,
           "error",
-          factGroundingIssues.find((issue) => issue.code === "QUALITY_UI_VISUAL_SPEC_CONCRETE")?.message
-            || "Visible UI behavior should include concrete visual/text/position/component specs.",
+          factMessage("QUALITY_UI_VISUAL_SPEC_CONCRETE", "Visible UI behavior should include concrete visual/text/position/component specs."),
           { issues: factGroundingIssues },
         ),
         qualityCheck(
@@ -1154,8 +1251,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
           !hasFactIssue("QUALITY_UI_STYLE_SOURCE_CONCRETE"),
           15,
           "error",
-          factGroundingIssues.find((issue) => issue.code === "QUALITY_UI_STYLE_SOURCE_CONCRETE")?.message
-            || "Visible UI behavior should state a style source or explicit styling.",
+          factMessage("QUALITY_UI_STYLE_SOURCE_CONCRETE", "Visible UI behavior should state a style source or explicit styling."),
           { issues: factGroundingIssues },
         ),
         qualityCheck(
@@ -1163,8 +1259,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
           !hasFactIssue("QUALITY_UI_STYLE_SOURCE_RESOLVED"),
           15,
           "error",
-          factGroundingIssues.find((issue) => issue.code === "QUALITY_UI_STYLE_SOURCE_RESOLVED")?.message
-            || "Conditional UI styling choices should be resolved before executable PRD generation.",
+          factMessage("QUALITY_UI_STYLE_SOURCE_RESOLVED", "Conditional UI styling choices should be resolved before executable PRD generation."),
           { issues: factGroundingIssues },
         ),
         qualityCheck(
@@ -1172,8 +1267,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
           !hasFactIssue("QUALITY_ERROR_CONTRACT_CONCRETE"),
           15,
           "error",
-          factGroundingIssues.find((issue) => issue.code === "QUALITY_ERROR_CONTRACT_CONCRETE")?.message
-            || "API/service error behavior should state an observable error shape, message, or code.",
+          factMessage("QUALITY_ERROR_CONTRACT_CONCRETE", "API/service error behavior should state an observable error shape, message, or code."),
           { issues: factGroundingIssues },
         ),
       ],
@@ -1283,7 +1377,7 @@ export function inspectDemandQuality(session = Object(), options = Object()) {
       checks: [
         qualityCheck(
           "QUALITY_APPROVAL_PRESENT",
-          session.approval?.approved === true,
+          approval.approved === true,
           20,
           "error",
           "Approved-demand PRD requires explicit user approval.",
