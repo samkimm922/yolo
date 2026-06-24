@@ -305,7 +305,7 @@ export async function runReviewLoop({
       }
       lastRoundFindings = findings;
 
-      const coverageState = inspectReviewScannerCoverage(scanResult, findings);
+      const coverageState = inspectReviewScannerCoverage(scanResult, findings, { expectedFiles: reviewScopeFiles });
       if (coverageState.blocks_execution) {
         logProgress("REVIEW", "BLOCKED", coverageState.message);
         logReviewError("Scanner coverage 不完整", coverageState.message, reviewLogMeta({

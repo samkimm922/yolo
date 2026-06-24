@@ -95,6 +95,21 @@ describe("review-loop execution helpers", () => {
     assert.equal(complete.blocks_execution, false);
   });
 
+  test("inspectReviewScannerCoverage checks scanner coverage against external scope", () => {
+    const result = inspectReviewScannerCoverage(JSON.stringify({
+      scanner_version: "test-review-scanner@1",
+      scanned_files: ["src/unrelated.ts"],
+      rules: ["R-test"],
+      expected_scope: ["src/changed.ts"],
+      coverage_status: "complete",
+      findings: [],
+    }), null, { expectedFiles: ["src/changed.ts"] });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.reason, "scanner_coverage_missing_changed_files");
+    assert.equal(result.blockers[0].code, "REVIEW_SCANNER_CHANGED_FILES_UNSCANNED");
+  });
+
   test("scanProject emits complete coverage_artifact for clean scoped projects", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-review-scan-clean-"));
     try {

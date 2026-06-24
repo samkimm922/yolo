@@ -65,6 +65,15 @@ function clean(value) {
   return String(value ?? "").trim();
 }
 
+function cleanPath(value) {
+  return clean(value).replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function cleanPathList(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => cleanPath(item)).filter(Boolean);
+}
+
 function coverageArtifact(parsed = Object()) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   return parsed.coverage_artifact || parsed.coverage || parsed.scan_coverage || parsed.review_coverage || parsed;
@@ -76,7 +85,7 @@ function isCoverageObject(coverage) {
 
 function missingExpectedFiles(coverage) {
   if (!isCoverageObject(coverage) || !Array.isArray(coverage.missing_expected_files)) return [];
-  return coverage.missing_expected_files.map((file) => clean(file)).filter(Boolean);
+  return cleanPathList(coverage.missing_expected_files);
 }
 
 function incompleteCoverageBlock(coverage) {
@@ -115,7 +124,28 @@ function incompleteCoverageBlock(coverage) {
   return null;
 }
 
-export function inspectReviewScannerCoverage(scanResult, findings = null) {
+function changedFilesCoverageBlock(coverage, expectedFiles = []) {
+  const expected = cleanPathList(expectedFiles);
+  if (expected.length === 0) return null;
+  const scanned = new Set(isCoverageObject(coverage) ? cleanPathList(coverage.scanned_files) : []);
+  const missing = expected.filter((file) => !scanned.has(file));
+  if (missing.length === 0) return null;
+  return {
+    status: "blocked",
+    blocks_execution: true,
+    reason: "scanner_coverage_missing_changed_files",
+    message: `Scanner did not scan changed files: ${missing.join(", ")}`,
+    coverage: isCoverageObject(coverage) ? coverage : null,
+    missing_expected_files: missing,
+    blockers: [{
+      code: "REVIEW_SCANNER_CHANGED_FILES_UNSCANNED",
+      message: "Review scanner coverage does not include the external changed-file scope.",
+      missing_expected_files: missing,
+    }],
+  };
+}
+
+export function inspectReviewScannerCoverage(scanResult, findings = null, options = Object()) {
   let parsed;
   try {
     parsed = JSON.parse(scanResult);
@@ -149,7 +179,8 @@ export function inspectReviewScannerCoverage(scanResult, findings = null) {
     { source: parsed?.source || "review-parser" },
   );
   const coverage = coverageArtifact(parsed);
-  const coverageBlock = incompleteCoverageBlock(coverage);
+  const coverageBlock = incompleteCoverageBlock(coverage)
+    || changedFilesCoverageBlock(coverage, options.expectedFiles || options.reviewScopeFiles || []);
   if (normalizedFindings.length > 0) {
     if (coverageBlock) return coverageBlock;
     return {

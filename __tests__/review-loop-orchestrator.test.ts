@@ -17,15 +17,21 @@ function emptyTaskResults() {
   };
 }
 
-function emptyCoveredScan() {
+function coveredScan(findings = [], scannedFiles = ["src/app.js"]) {
   return JSON.stringify({
-    scanner_version: "test-review-scanner@1",
-    scanned_files: ["src/app.js"],
-    rules: ["R-test"],
-    expected_scope: ["src/app.js"],
-    coverage_status: "complete",
-    findings: [],
+    coverage_artifact: {
+      scanner_version: "test-review-scanner@1",
+      scanned_files: scannedFiles,
+      rules: ["R-test"],
+      expected_scope: scannedFiles,
+      coverage_status: "complete",
+    },
+    findings,
   });
+}
+
+function emptyCoveredScan() {
+  return coveredScan();
 }
 
 test("runReviewLoop skips dry-run PRDs before scanner execution", async () => {
@@ -370,7 +376,7 @@ test("runReviewLoop reloads PRD before appending review tasks to preserve task s
       progress: { total: 1, done: 0, failed: 0 },
       maxReviewRounds: 1,
       maxReviewTasksPerRound: 5,
-      execFileSync: () => JSON.stringify([{
+      execFileSync: () => coveredScan([{
         scanner_id: "R6-as-any",
         severity: "MEDIUM",
         fix_type: "CLAUDE_FIX",
@@ -419,7 +425,7 @@ test("runReviewLoop fails closed when review fixes return only blocked tasks", a
       progress: { total: 1, done: 0, failed: 0 },
       maxReviewRounds: 1,
       maxReviewTasksPerRound: 5,
-      execFileSync: () => JSON.stringify([{
+      execFileSync: () => coveredScan([{
         scanner_id: "R-blocker",
         severity: "HIGH",
         fix_type: "CLAUDE_FIX",
@@ -489,7 +495,7 @@ test("runReviewLoop fallback classifier still writes canonical review_fix tasks 
       progress: { total: 1, done: 0, failed: 0 },
       maxReviewRounds: 1,
       maxReviewTasksPerRound: 5,
-      execFileSync: () => JSON.stringify({ findings: [finding] }),
+      execFileSync: () => coveredScan([finding]),
       mainLoop: async () => ({
         completed: [],
         failed: [],
@@ -640,7 +646,7 @@ test("runReviewLoop marks review task limit as human-needed without mutating PRD
       progress: { total: 1, done: 0, failed: 0 },
       maxReviewRounds: 1,
       maxReviewTasksPerRound: 2,
-      execFileSync: () => JSON.stringify(findings),
+      execFileSync: () => coveredScan(findings),
       mainLoop: async () => {
         throw new Error("mainLoop should not run when task limit blocks");
       },

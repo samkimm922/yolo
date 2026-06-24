@@ -9,6 +9,7 @@ type ReviewBatteryCase = {
   description: string;
   expect: "blocked";
   scanResult: string;
+  expectedFiles?: string[];
 };
 
 type ReviewBatteryResult = {
@@ -40,11 +41,32 @@ const REVIEW_BATTERY: ReviewBatteryCase[] = [
       },
     }),
   },
+  {
+    id: "scanner_cannot_self_greenlight_without_covering_changed_files",
+    category: "review_coverage_robustness",
+    description: "Scanner complete coverage claims must cover the external changed-file scope.",
+    expect: "blocked",
+    expectedFiles: ["src/changed.ts"],
+    scanResult: JSON.stringify({
+      findings: [],
+      coverage_artifact: {
+        scanner_version: "battery",
+        scanned_files: ["src/unrelated.ts"],
+        rules: ["unsafe"],
+        expected_scope: ["src/changed.ts"],
+        coverage_status: "complete",
+      },
+    }),
+  },
 ];
 
 export function runReviewBattery(): ReviewBatteryResult[] {
   return REVIEW_BATTERY.map((testCase) => {
-    const result = inspectReviewScannerCoverage(testCase.scanResult) as { blocks_execution?: boolean; status?: string };
+    const result = inspectReviewScannerCoverage(
+      testCase.scanResult,
+      null,
+      { expectedFiles: testCase.expectedFiles || [] },
+    ) as { blocks_execution?: boolean; status?: string };
     const status = result.blocks_execution ? "blocked" : String(result.status || "pass");
     const correct = status === testCase.expect;
     return {
