@@ -15,6 +15,7 @@ import { runDiscoveryRuntime } from "../discovery/runtime.js";
 import { inspectYoloCheck } from "./gates/check-report.js";
 import { inspectLifecycleGuard } from "../lifecycle/guard.js";
 import { isRuntimeInvariantViolation } from "./invariants.js";
+import { readJsonFileBounded } from "../lib/bounded-read.js";
 
 function ok(summary, extra = Object()) {
   return { status: "success", summary, artifacts: [], next_actions: [], ...extra };
@@ -205,7 +206,7 @@ function runPrdPreflightRuntime(params = Object()) {
 }
 
 function runContractGateRuntime(params = Object()) {
-  const prd = JSON.parse(readFileSync(resolve(params.prdPath), "utf8"));
+  const prd = readJsonFileBounded(resolve(params.prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   const result = inspectPrdContract(prd);
   if (result.blocks_execution) {
     const migration = createPrdMigrationAdvice(prd, params.prdPath);

@@ -6,11 +6,11 @@
  * 退出码: 0=通过/需要修复, 1=参数错误/文件不存在, 2=已跳过(无需处理)
  */
 
-import { readFileSync } from "node:fs";
 import { execArgv } from "../../lib/security/safe-exec.js";
 import { resolve } from "node:path";
 import { evaluatePreConditions, setContractRoot } from "../../prd/contract.js";
 import { getArg } from "../../lib/cli-utils.js";
+import { readJsonFileBounded } from "../../lib/bounded-read.js";
 
 const taskId = getArg("--task=");
 const prdPath = getArg("--prd=");
@@ -24,7 +24,7 @@ if (!taskId || !prdPath) {
 
 let prd;
 try {
-  prd = JSON.parse(readFileSync(resolve(prdPath), "utf-8"));
+  prd = readJsonFileBounded(resolve(prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
 } catch (e) {
   console.error(`无法加载 PRD 文件: ${prdPath}`);
   console.error(e.message);

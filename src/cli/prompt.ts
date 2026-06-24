@@ -21,6 +21,7 @@ import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 import { buildExperiencePackText } from "../runtime/learning/center.js";
 import { loadConfig } from "../lib/config.js";
+import { readJsonFileBounded } from "../lib/bounded-read.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "..", "..");
@@ -407,7 +408,7 @@ export function generatePrompt(input = Object()) {
 
   let prd;
   try {
-    prd = JSON.parse(readFileSync(resolve(prdPath), "utf-8"));
+    prd = readJsonFileBounded(resolve(prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   } catch (error) {
     throw new Error(`无法加载 PRD 文件: ${prdPath}\n${error.message}`);
   }

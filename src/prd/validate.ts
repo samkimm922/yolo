@@ -16,6 +16,7 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readJsonFileBounded } from '../lib/bounded-read.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -83,7 +84,7 @@ export function validateFile(prdPath, schema, ajv) {
 
   let prd;
   try {
-    prd = JSON.parse(readFileSync(prdPath, 'utf-8'));
+    prd = readJsonFileBounded(prdPath, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   } catch (e) {
     return { ok: false, error: `JSON 解析失败: ${e.message}` };
   }

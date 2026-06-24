@@ -13,7 +13,7 @@ import http from "http";
 import { readLifecycleDashboard } from "./lifecycle-dashboard.js";
 import { CSS as DASHBOARD_CSS, renderProgressDashboard } from "./dashboard-template.js";
 import { isSafePathComponent, resolveWithinRoot } from "../../lib/security/path-guard.js";
-import { readJsonlTail, readJsonlSince, readTextTail } from "../../lib/bounded-read.js";
+import { readJsonFileBounded, readJsonlTail, readJsonlSince, readTextTail } from "../../lib/bounded-read.js";
 import { redactDeep } from "../../lib/security/redact.js";
 import { safeExecSync } from "../../lib/security/safe-exec.js";
 
@@ -57,8 +57,7 @@ function findLatestPrd() {
     files.sort((a, b) => b.mtime - a.mtime);
     for (const f of files) {
       try {
-        const raw = readFileSync(f.path, 'utf8');
-        const p = JSON.parse(raw);
+        const p = readJsonFileBounded(f.path, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
         if (Array.isArray(p.tasks) && p.tasks.length > 0 && p.tasks[0].id && p.tasks[0].priority) return f.path;
       } catch {}
     }
@@ -129,7 +128,7 @@ function readPrd() {
       // 读 PRD 元数据（标题等）
       const prdFile = etData.source || resolvePrdPath();
       let prdMeta = Object();
-      try { prdMeta = JSON.parse(readFileSync(prdFile, "utf8")); } catch (e) { console.warn('[progress-server] PRD 元数据解析失败:', e.message); }
+      try { prdMeta = readJsonFileBounded(prdFile, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" }); } catch (e) { console.warn('[progress-server] PRD 元数据解析失败:', e.message); }
       return { tasks, done: done + skipped, failed, total: tasks.length, prd: { ...prdMeta, tasks: (etData.tasks || []).map((t) => redactDeep(t)) } };
     } catch (e) { console.warn('[progress-server] PRD 解析失败:', e.message); }
   }
@@ -137,7 +136,7 @@ function readPrd() {
   const prdFile = resolvePrdPath();
   if (!existsSync(prdFile)) return null;
   try {
-    const prd = JSON.parse(readFileSync(prdFile, "utf8"));
+    const prd = readJsonFileBounded(prdFile, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
     const runnerActive = isRunnerActive();
     const tasks = (prd.tasks || []).map((t) => redactDeep({
       id: t.id,

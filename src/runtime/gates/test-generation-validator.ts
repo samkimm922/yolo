@@ -2,6 +2,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { readJsonFileBounded } from "../../lib/bounded-read.js";
 
 const DEFAULT_MODE = "reuse_existing";
 const TEST_FILE_RE = /(^__tests__\/|^tests\/|\/__tests__\/|\.(test|spec)\.[cm]?[jt]sx?$)/i;
@@ -208,7 +209,7 @@ function parseArgs(argv) {
 }
 
 function loadTask(prdPath, taskId) {
-  const prd = JSON.parse(readFileSync(resolve(prdPath), "utf8"));
+  const prd = readJsonFileBounded(resolve(prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   const task = (prd.tasks || []).find((item) => item.id === taskId);
   if (!task) throw new Error(`PRD 中未找到 task: ${taskId}`);
   return task;

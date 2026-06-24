@@ -18,6 +18,8 @@
 //   * `readTextTail`        — read the last <= maxBytes of a UTF-8 text file,
 //                             re-aligned to a line boundary (used for
 //                             yolo-output.log).
+//   * `readJsonFileBounded` — read a small JSON file only after checking its
+//                             byte size (used for PRD/state-style documents).
 //
 // All reads open the file, seek to near the tail, and read only a bounded
 // window; they never materialize the full file into a single Buffer/string.
@@ -26,7 +28,7 @@
 // `totalBytes` metadata so callers can surface truncation without changing the
 // response shape.
 
-import { closeSync, existsSync, fstatSync, openSync, readSync, statSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 
 /** Common metadata returned by every bounded read. */
 export interface BoundedReadMeta {
@@ -69,9 +71,52 @@ export interface TextTailResult {
 
 const DEFAULT_MAX_BYTES = 256 * 1024; // 256 KiB tail window.
 const DEFAULT_MAX_ENTRIES = 2000; // cap parsed entries per call.
+export const DEFAULT_JSON_FILE_MAX_BYTES = 8 * 1024 * 1024;
+
+export type JsonFileSizeLimitError = Error & {
+  code: string;
+  file_path: string;
+  size_bytes: number;
+  max_bytes: number;
+};
+
+export function createJsonFileSizeLimitError(
+  filePath: string,
+  sizeBytes: number,
+  maxBytes: number,
+  code = "JSON_FILE_SIZE_LIMIT_EXCEEDED",
+): JsonFileSizeLimitError {
+  return Object.assign(new Error(`JSON file is too large to read safely: ${sizeBytes} bytes > ${maxBytes} bytes`), {
+    code,
+    file_path: filePath,
+    size_bytes: sizeBytes,
+    max_bytes: maxBytes,
+  });
+}
 
 function safeClose(fd: number) {
   try { closeSync(fd); } catch { /* already closed */ }
+}
+
+export function readJsonFileBounded<T = any>(
+  filePath: string,
+  {
+    maxBytes = DEFAULT_JSON_FILE_MAX_BYTES,
+    errorCode = "JSON_FILE_SIZE_LIMIT_EXCEEDED",
+    readFile = readFileSync,
+    statFile = statSync,
+  }: {
+    maxBytes?: number;
+    errorCode?: string;
+    readFile?: typeof readFileSync;
+    statFile?: typeof statSync;
+  } = {},
+): T {
+  const sizeBytes = statFile(filePath).size;
+  if (sizeBytes > maxBytes) {
+    throw createJsonFileSizeLimitError(filePath, sizeBytes, maxBytes, errorCode);
+  }
+  return JSON.parse(readFile(filePath, "utf8")) as T;
 }
 
 /**

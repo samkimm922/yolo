@@ -8,6 +8,7 @@ import {
   readdirSync as defaultReaddirSync,
   renameSync as defaultRenameSync,
   rmSync as defaultRmSync,
+  statSync as defaultStatSync,
   unlinkSync as defaultUnlinkSync,
   writeFileSync as defaultWriteFileSync,
   writeSync as defaultWriteSync,
@@ -23,6 +24,7 @@ import {
 import { trimJsonlWithArchive } from "../memory/retention.js";
 import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
+import { readJsonFileBounded } from "../../lib/bounded-read.js";
 
 export function createRunnerError(message, exitCode = 1, details = Object()) {
   const error = Object.assign(new Error(message), { exitCode }, details);
@@ -486,6 +488,7 @@ export function loadResumeCompletedFromPrd({
   taskCountsAsCompleted,
   existsSync = defaultExistsSync,
   readFileSync = defaultReadFileSync,
+  statSync = defaultStatSync,
   writeFileSync = defaultWriteFileSync,
   renameSync = defaultRenameSync,
   consoleLog = (...args) => console.log(...args),
@@ -497,7 +500,11 @@ export function loadResumeCompletedFromPrd({
   // PRD exists. A parse failure means the PRD is corrupt; fail closed (surface the
   // error) instead of silently returning an empty set, which would mark every prior
   // completion as undone and rerun the whole plan (A3 silent-failure family).
-  const prd = JSON.parse(readFileSync(prdPath, "utf8"));
+  const prd = readJsonFileBounded(prdPath, {
+    readFile: readFileSync,
+    statFile: statSync,
+    errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED",
+  });
   const resumeCompleted = new Set((prd.tasks || []).filter(taskCountsAsCompleted).map((task) => task.id));
   const staleRunning = (prd.tasks || []).filter((task) => task.status === "running");
   if (staleRunning.length > 0) {

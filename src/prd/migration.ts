@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectPrdContract } from "../runtime/gates/prd-contract-doctor.js";
+import { readJsonFileBounded } from "../lib/bounded-read.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -270,8 +271,7 @@ export function migratePrdFile(path, options = Object()) {
   const resolved = resolve(process.cwd(), path);
   if (!existsSync(resolved)) throw new Error(`PRD not found: ${path}`);
 
-  const original = readFileSync(resolved, "utf8");
-  const prd = JSON.parse(original);
+  const prd = readJsonFileBounded(resolved, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   const result = migratePrdGates(prd, { dryRun: !options.apply });
   const canApply = Boolean(options.apply) && result.blocked_count === 0;
 
@@ -302,7 +302,7 @@ function collectPrdFiles(dir, files) {
     }
     if (!file.endsWith(".json")) continue;
     try {
-      const data = JSON.parse(readFileSync(path, "utf8"));
+      const data = readJsonFileBounded(path, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
       if (isPrdDocument(data)) files.push(path);
     } catch {
       // Non-JSON or transient files are not PRD migration candidates.

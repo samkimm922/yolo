@@ -10,6 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import { isBusinessFile } from "../runtime/execution/change-set.js";
+import { readJsonFileBounded } from "../lib/bounded-read.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -476,7 +477,7 @@ function scanExistingPrds(dirs) {
 function findExistingExecutablePrd() {
   for (const existing of scanExistingPrds([PACKAGE_ROOT, join(PACKAGE_ROOT, "data")])) {
     try {
-      const prd = JSON.parse(readFileSync(existing.path, "utf8"));
+      const prd = readJsonFileBounded(existing.path, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
       if (prd.tasks && Array.isArray(prd.tasks) && prd.tasks.length > 0 && prd.tasks[0].status) {
         const pending = prd.tasks.filter((task) => task.status === "pending" || task.status === "running").length;
         return { ...existing, task_count: prd.tasks.length, pending };

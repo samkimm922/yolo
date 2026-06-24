@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluatePostConditions, toGateFormat } from "../prd/contract.js";
 import { loadConfig } from "../lib/config.js";
+import { readJsonFileBounded } from "../lib/bounded-read.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const yoloRoot = resolve(__dirname, "../..");
@@ -27,7 +28,7 @@ function argValue(args, name) {
 
 function loadTask(prdPath, taskId) {
   if (!prdPath || !existsSync(prdPath)) return { prd: null, task: null };
-  const prd = JSON.parse(readFileSync(prdPath, "utf-8"));
+  const prd = readJsonFileBounded(prdPath, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   const task = (prd.tasks || []).find((item) => item.id === taskId) || null;
   return { prd, task };
 }

@@ -22,6 +22,7 @@ import { evalTestsPass, evalBuildPass, evalBusinessCodeMin } from "../lib/evalua
 import { parseCommandToArgv } from "../lib/security/command-guard.js";
 import { execArgv, execCommand } from "../lib/security/safe-exec.js";
 import { resolveWithinRoot } from "../lib/security/path-guard.js";
+import { readJsonFileBounded } from "../lib/bounded-read.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -408,7 +409,7 @@ function asConditions(value) {
  * 从 PRD 文件加载任务
  */
 function loadTask(prdPath, taskId) {
-  const prd = JSON.parse(readFileSync(resolve(prdPath), "utf8"));
+  const prd = readJsonFileBounded(resolve(prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   const task = (prd.tasks || []).find((t) => t.id === taskId);
   if (!task) throw new Error(`PRD 中未找到任务: ${taskId}`);
   return { task, prd };

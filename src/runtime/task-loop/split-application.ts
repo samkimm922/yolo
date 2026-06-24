@@ -1,5 +1,6 @@
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { renameSync, writeFileSync } from "node:fs";
 import { writeSplitAppliedEvidence } from "../evidence/writers.js";
+import { readJsonFileBounded } from "../../lib/bounded-read.js";
 
 export function filterConditionsForFiles(conditions = [], files = []) {
   const fileSet = new Set(files.filter(Boolean));
@@ -74,8 +75,7 @@ export function applySplitSuggestionsToPrd({
 } = Object()) {
   const suggestions = Array.isArray(doctor?.split_suggestions) ? doctor.split_suggestions : [];
   if (!suggestions.length) return { applied: false, reason: "missing_split_suggestions", childIds: [] };
-  const raw = readFileSync(prdPath, "utf8");
-  const prd = JSON.parse(raw);
+  const prd = readJsonFileBounded(prdPath, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   const tasks = Array.isArray(prd.tasks) ? prd.tasks : [];
   const parentIndex = tasks.findIndex((task) => task.id === parentTask.id);
   if (parentIndex < 0) return { applied: false, reason: "parent_task_missing", childIds: [] };
