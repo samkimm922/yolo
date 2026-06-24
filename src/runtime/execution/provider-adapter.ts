@@ -37,6 +37,83 @@ const DEFAULT_PROVIDER_TIMEOUT_MS = 480000;
 const DEFAULT_PROVIDER_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
 const DEFAULT_PROVIDER_OUTPUT_KILL_MULTIPLIER = 5;
 
+type ProviderKillTree = (pid: number) => void;
+
+type ActiveProviderProcess = {
+  pid: number;
+  provider: string;
+  command: string | null;
+  killTree?: ProviderKillTree;
+};
+
+const activeProviderProcesses = new Map<number, ActiveProviderProcess>();
+
+export function registerActiveProviderProcess({
+  pid,
+  provider = "provider",
+  command = null,
+  killTree,
+}: {
+  pid?: number | null;
+  provider?: string;
+  command?: string | null;
+  killTree?: ProviderKillTree;
+} = {}): () => void {
+  if (!Number.isInteger(pid) || Number(pid) <= 0) return () => {};
+  const entry: ActiveProviderProcess = {
+    pid: Number(pid),
+    provider,
+    command,
+    killTree,
+  };
+  activeProviderProcesses.set(entry.pid, entry);
+  return () => {
+    const current = activeProviderProcesses.get(entry.pid);
+    if (current === entry) activeProviderProcesses.delete(entry.pid);
+  };
+}
+
+export function activeProviderProcessCount(): number {
+  return activeProviderProcesses.size;
+}
+
+export function killActiveProviderProcesses({
+  log = (..._args: unknown[]) => {},
+  signal = "SIGKILL",
+}: {
+  log?: (...args: unknown[]) => void;
+  signal?: NodeJS.Signals;
+} = {}): { attempted: number; killed: number } {
+  const entries = Array.from(activeProviderProcesses.values());
+  let killed = 0;
+  for (const entry of entries) {
+    let didKill = false;
+    try {
+      log(`  终止 provider 子进程: ${entry.pid}`);
+    } catch {}
+    try {
+      if (entry.killTree) {
+        entry.killTree(entry.pid);
+        didKill = true;
+      }
+    } catch {}
+    if (!didKill) {
+      try {
+        process.kill(-entry.pid, signal);
+        didKill = true;
+      } catch {
+        try {
+          process.kill(entry.pid, signal);
+          didKill = true;
+        } catch {}
+      }
+    }
+    if (didKill) killed += 1;
+    activeProviderProcesses.delete(entry.pid);
+  }
+  return { attempted: entries.length, killed };
+}
+
 // Bounded collector for a provider child's stdout or stderr. Accumulates bytes into a string
 // until maxBytes is reached, then stops appending (keeping the captured prefix) and records
 // how many bytes were dropped. This caps resident memory regardless of how much the child emits.
@@ -729,6 +806,12 @@ export function spawnProviderPrompt(prompt, {
       invocation.args,
       { cwd: workDir, stdio: ["pipe", "pipe", "pipe"] },
     );
+    const unregisterProviderProcess = registerActiveProviderProcess({
+      pid: child.pid,
+      provider,
+      command: invocation.command,
+      killTree,
+    });
     // Resolve per-stream caps from explicit options or config.ai. Both streams share the same
     // limit; a runaway either side should trip the cap. killBytes is the hard ceiling past
     // which we kill the child to stop the flood, reported as OUTPUT_LIMIT_EXCEEDED.
@@ -792,6 +875,7 @@ export function spawnProviderPrompt(prompt, {
           if (killTree) killTree(child.pid);
           setTimeout(() => {
             if (!done) {
+              unregisterProviderProcess();
               done = true;
               resolveRun(attachInvocationMetadata(buildProviderRunResult({
                 provider,
@@ -812,6 +896,7 @@ export function spawnProviderPrompt(prompt, {
     const finish = (success, stdout, stderr, terminal = Object()) => {
       if (timer) clearTimeout(timer);
       if (done) return;
+      unregisterProviderProcess();
       done = true;
       const endedAtMs = Date.now();
       let finalStdout = (stdout || "").trim();
