@@ -1,7 +1,11 @@
 // Quality-score review scanner battery: review coverage metadata must fail closed
 // even when the scanner reports findings.
 
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { inspectReviewScannerCoverage } from "../../src/runtime/review-loop/execution-helpers.js";
+import { scanProject } from "../../src/review/scanner.js";
 
 type ReviewBatteryCase = {
   id: string;
@@ -61,7 +65,7 @@ const REVIEW_BATTERY: ReviewBatteryCase[] = [
 ];
 
 export function runReviewBattery(): ReviewBatteryResult[] {
-  return REVIEW_BATTERY.map((testCase) => {
+  const coverageResults: ReviewBatteryResult[] = REVIEW_BATTERY.map((testCase) => {
     const result = inspectReviewScannerCoverage(
       testCase.scanResult,
       null,
@@ -78,4 +82,33 @@ export function runReviewBattery(): ReviewBatteryResult[] {
       correct,
     };
   });
+  const root = mkdtempSync(join(tmpdir(), "yolo-review-tool-battery-"));
+  try {
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "index.ts"), "export const clean = 1;\n", "utf8");
+    const result = scanProject({
+      root,
+      includeExternalChecks: true,
+      config: {
+        project: { source_roots: ["src"], src: "src", source_extensions: [".ts"], exclude: ["node_modules", "dist", ".git"] },
+        build: { type_check: "definitely_missing_typecheck_tool_zz --noEmit", lint: "" },
+        gate: { max_lines_per_file: 150, timeout: { type_check: 1000, lint: 1000 } },
+      },
+    }) as { findings?: Array<Record<string, unknown>> };
+    const hasToolUnavailableFinding = result.findings?.some(
+      (finding) => finding.scanner_id === "typecheck-tool-unavailable",
+    ) === true;
+    const status = hasToolUnavailableFinding ? "blocked" : "pass";
+    coverageResults.push({
+      id: "typecheck_tool_unavailable_blocks_review_greenlight",
+      category: "review_tool_robustness",
+      expect: "blocked",
+      actualExit: status === "blocked" ? 1 : 0,
+      actualStatus: status,
+      correct: status === "blocked",
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+  return coverageResults;
 }
