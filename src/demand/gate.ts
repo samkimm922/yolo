@@ -20,11 +20,11 @@ export const DEMAND_QUALITY_SCHEMA = "yolo.demand.quality.v1";
 const DEMAND_DISCUSS_EVENT = "demand.discuss";
 const DEMAND_APPROVED_EVENT = "demand.approved";
 
-function cleanLedgerValue(value) {
+function cleanLedgerValue(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function demandEvidenceEventsForPhase(phase) {
+function demandEvidenceEventsForPhase(phase: unknown): Set<string> {
   const normalized = cleanLedgerValue(phase).toLowerCase();
   if (["prd", "prd_intake", "executable_prd", "approved", "approval"].includes(normalized)) {
     return new Set([DEMAND_APPROVED_EVENT]);
@@ -32,14 +32,15 @@ function demandEvidenceEventsForPhase(phase) {
   return new Set([DEMAND_DISCUSS_EVENT, DEMAND_APPROVED_EVENT]);
 }
 
-function ledgerRecordMatchesDemandEvidence(record, requiredEvents, demandId) {
+function ledgerRecordMatchesDemandEvidence(record: unknown, requiredEvents: Set<string>, demandId: string): boolean {
   if (!record || typeof record !== "object" || Array.isArray(record)) return false;
-  if (!requiredEvents.has(cleanLedgerValue(record.event))) return false;
+  const rec = record as Record<string, unknown>;
+  if (!requiredEvents.has(cleanLedgerValue(rec.event))) return false;
   if (!demandId) return true;
-  return cleanLedgerValue(record.demand_id || record.demandId) === demandId;
+  return cleanLedgerValue(rec.demand_id || rec.demandId) === demandId;
 }
 
-function hasLedgerEvidence(stateDir, context = Object()) {
+function hasLedgerEvidence(stateDir: string, context: { phase?: unknown; demandId?: unknown; demand_id?: unknown } = Object()) {
   if (!stateDir) return false;
   try {
     const ledgerPath = join(stateDir, "evidence", "ledger.jsonl");
@@ -56,23 +57,24 @@ function hasLedgerEvidence(stateDir, context = Object()) {
   }
 }
 
-function asArray(value) {
+function asArray<T>(value: T | T[] | null | undefined): T[] {
   if (value == null) return [];
   return Array.isArray(value) ? value : [value];
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function hasItems(value) {
+function hasItems(value: unknown): boolean {
   return asArray(value).map(clean).filter(Boolean).length > 0;
 }
 
-function hasTraceItems(value) {
+function hasTraceItems(value: unknown): boolean {
   return asArray(value).some((item) => {
     if (item && typeof item === "object") {
-      return clean(item.id || item.question || item.answer || item.text).length > 0;
+      const rec = item as Record<string, unknown>;
+      return clean(rec.id || rec.question || rec.answer || rec.text).length > 0;
     }
     return clean(item).length > 0;
   });
@@ -167,7 +169,7 @@ function targetFileFactRecords(session = Object()) {
     .filter((fact) => fact.file);
 }
 
-function scopedProjectPath(projectRoot, file) {
+function scopedProjectPath(projectRoot: unknown, file: unknown): string | null {
   const root = resolve(clean(projectRoot) || process.cwd());
   const target = clean(file);
   if (!target) return null;
