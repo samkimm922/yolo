@@ -6,17 +6,61 @@ import {
   buildEvidenceRequirements,
   evidenceRequirementBlockers,
 } from "../demand/evidence-requirements.js";
+import type { DemandSession } from "../demand/graph.js";
 
-function asArray(value) {
+type LabelList = readonly string[];
+type DiscoveryRecord = Record<string, unknown>;
+
+export type DiscoveryInput = DiscoveryRecord | string;
+export type DiscoveryOptions = Record<string, unknown>;
+export type DiscoverySeverity = string;
+
+export interface DiscoveryCheck extends Record<string, unknown> {
+  code: string;
+  passed: boolean;
+  severity: DiscoverySeverity;
+  message: string;
+}
+
+export interface DiscoveryBrief extends Record<string, unknown> {
+  schema_version: string;
+  schema: string;
+  id: string;
+  idea: string;
+  problem: string;
+  target_users: string[];
+  success_criteria: string[];
+  constraints: string[];
+  non_goals: string[];
+  target_files: string[];
+  open_questions: string[];
+  risks: string[];
+  ready_for_prd: boolean;
+}
+
+export interface DiscoveryReadiness extends Record<string, unknown> {
+  schema_version: string;
+  schema: string;
+  status: string;
+  ready_for_plan: boolean;
+  ready_for_prd: boolean;
+  brief: DiscoveryBrief;
+  checks: DiscoveryCheck[];
+  blockers: DiscoveryCheck[];
+  warnings: DiscoveryCheck[];
+  next_actions: string[];
+}
+
+function asArray<T>(value: T | T[] | null | undefined): T[] {
   if (value == null) return [];
   return Array.isArray(value) ? value : [value];
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function uniqueStrings(values) {
+function uniqueStrings(values: unknown | unknown[] | null | undefined): string[] {
   return [...new Set(asArray(values).map((value) => clean(value)).filter(Boolean))];
 }
 
@@ -27,15 +71,15 @@ const LABELS = {
   constraints: ["Constraint", "Constraints", "限制", "约束"],
   non_goals: ["Non-goal", "Non-goals", "Out of scope", "不做", "非目标"],
   target_files: ["Target", "Targets", "Files", "Scope", "范围", "文件"],
-};
+} as const;
 
-const ALL_LABELS = Object.values(LABELS).flat().sort((a, b) => b.length - a.length);
+const ALL_LABELS: string[] = Object.values(LABELS).flat().sort((a, b) => b.length - a.length);
 
-function labelPattern(labels) {
+function labelPattern(labels: LabelList): string {
   return labels.map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
 }
 
-function extractLabel(text, labels) {
+function extractLabel(text: unknown, labels: LabelList): string {
   const source = clean(text);
   if (!source) return "";
   const current = labelPattern(labels);
@@ -47,7 +91,7 @@ function extractLabel(text, labels) {
 const LIST_ITEM_PREFIX = /^(?:[-*•]\s+|\d{1,3}[.)、](?!\d)\s*|[（(]\d{1,3}[）)]\s*|[一二三四五六七八九十]{1,4}[.)、]\s*)/u;
 const INLINE_NUMBERED_ITEM = /\s+(?=(?:\d{1,3}[.)、](?!\d)\s*|[（(]\d{1,3}[）)]\s*|[一二三四五六七八九十]{1,4}[.)、]\s*))/u;
 
-function splitStructuredListItem(value) {
+function splitStructuredListItem(value: unknown): string[] {
   return clean(value)
     .split(INLINE_NUMBERED_ITEM)
     .flatMap((item) => item.split(/;\s+|\s+\|\s+/))
@@ -55,41 +99,48 @@ function splitStructuredListItem(value) {
     .filter(Boolean);
 }
 
-function splitList(value) {
+function splitList(value: unknown | unknown[] | null | undefined): string[] {
   return uniqueStrings(asArray(value)
     .flatMap((item) => String(item ?? "").split(/\r?\n/))
     .flatMap(splitStructuredListItem));
 }
 
-function mergeLabeled(inputValue, idea, labels) {
+function mergeLabeled(inputValue: unknown | unknown[] | null | undefined, idea: unknown, labels: LabelList): string[] {
   return splitList([...asArray(inputValue), extractLabel(idea, labels)]);
 }
 
-function hasSignal(text, patterns) {
+function hasSignal(text: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
 
-function check(code, passed, severity, message, extra = Object()) {
+function check(
+  code: string,
+  passed: unknown,
+  severity: DiscoverySeverity,
+  message: string,
+  extra: Record<string, unknown> = Object(),
+): DiscoveryCheck {
   return { code, passed: Boolean(passed), severity, message, ...extra };
 }
 
-export function buildDiscoveryBrief(input = Object(), options = Object()) {
-  const idea = typeof input === "string" ? input : input.idea || input.requirement || input.text;
+export function buildDiscoveryBrief(input: DiscoveryInput = Object(), options: DiscoveryOptions = Object()): DiscoveryBrief {
+  const inputRecord: DiscoveryRecord = typeof input === "string" ? {} : input;
+  const idea = typeof input === "string" ? input : inputRecord.idea || inputRecord.requirement || inputRecord.text;
   const ideaText = clean(idea);
   return {
     schema_version: DISCOVERY_GATE_SCHEMA_VERSION,
     schema: DISCOVERY_BRIEF_SCHEMA,
-    id: clean(input.id || options.id || "DISCOVERY-001"),
+    id: clean(inputRecord.id || options.id || "DISCOVERY-001"),
     idea: ideaText,
-    problem: clean(input.problem || extractLabel(ideaText, LABELS.problem)),
-    target_users: mergeLabeled(input.target_users || input.users || input.audience, ideaText, LABELS.target_users),
-    success_criteria: mergeLabeled(input.success_criteria || input.acceptance_criteria, ideaText, LABELS.success_criteria),
-    constraints: mergeLabeled(input.constraints, ideaText, LABELS.constraints),
-    non_goals: mergeLabeled(input.non_goals || input.nonGoals, ideaText, LABELS.non_goals),
-    target_files: mergeLabeled(input.target_files || input.files, ideaText, LABELS.target_files),
-    open_questions: uniqueStrings(input.open_questions || input.questions),
-    risks: uniqueStrings(input.risks),
-    ready_for_prd: input.ready_for_prd === true || input.readyForPrd === true,
+    problem: clean(inputRecord.problem || extractLabel(ideaText, LABELS.problem)),
+    target_users: mergeLabeled(inputRecord.target_users || inputRecord.users || inputRecord.audience, ideaText, LABELS.target_users),
+    success_criteria: mergeLabeled(inputRecord.success_criteria || inputRecord.acceptance_criteria, ideaText, LABELS.success_criteria),
+    constraints: mergeLabeled(inputRecord.constraints, ideaText, LABELS.constraints),
+    non_goals: mergeLabeled(inputRecord.non_goals || inputRecord.nonGoals, ideaText, LABELS.non_goals),
+    target_files: mergeLabeled(inputRecord.target_files || inputRecord.files, ideaText, LABELS.target_files),
+    open_questions: uniqueStrings(inputRecord.open_questions || inputRecord.questions),
+    risks: uniqueStrings(inputRecord.risks),
+    ready_for_prd: inputRecord.ready_for_prd === true || inputRecord.readyForPrd === true,
   };
 }
 
@@ -98,19 +149,20 @@ export function buildDiscoveryBrief(input = Object(), options = Object()) {
 // ready_for_prd unless external-scoped evidence is present. Prevents the
 // discovery→PRD path from silently passing when a web tool was unavailable
 // or external research was never triggered.
-function externalEvidenceChecks(input = Object(), brief = Object()) {
+function externalEvidenceChecks(input: DiscoveryInput = Object(), brief: DiscoveryBrief = Object()): DiscoveryCheck[] {
+  const inputRecord: DiscoveryRecord = typeof input === "string" ? {} : input;
   const texts = [
     brief.idea,
     brief.problem,
     brief.success_criteria.join(" "),
     brief.constraints.join(" "),
   ];
-  const attempted = input.external_research_attempted === true
-    || input.externalResearchAttempted === true;
-  const requirements = buildEvidenceRequirements(input, {}, {
+  const attempted = inputRecord.external_research_attempted === true
+    || inputRecord.externalResearchAttempted === true;
+  const requirements = buildEvidenceRequirements(input as DemandSession, {}, {
     kinds: ["external"],
     texts,
-    evidence_records: [...asArray(input.evidence), ...asArray(input.research_results)],
+    evidence_records: [...asArray<unknown>(inputRecord.evidence), ...asArray<unknown>(inputRecord.research_results)],
     external_research_attempted: attempted,
   });
   const blockers = evidenceRequirementBlockers(requirements);
@@ -135,7 +187,7 @@ function externalEvidenceChecks(input = Object(), brief = Object()) {
   ));
 }
 
-export function inspectDiscoveryReadiness(input = Object(), options = Object()) {
+export function inspectDiscoveryReadiness(input: DiscoveryInput = Object(), options: DiscoveryOptions = Object()): DiscoveryReadiness {
   const brief = buildDiscoveryBrief(input, options);
   const text = [
     brief.idea,

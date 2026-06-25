@@ -1,5 +1,11 @@
 import { execSync } from "node:child_process";
 import { inspectDiscoveryReadiness } from "./gate.js";
+import type {
+  DiscoveryBrief,
+  DiscoveryCheck,
+  DiscoveryOptions,
+  DiscoveryReadiness,
+} from "./gate.js";
 import { detectExternalResearchSignal } from "../lib/research-signal.js";
 
 export const DISCOVERY_ARTIFACT_SCHEMA = "yolo.discovery.artifact.v1";
@@ -9,11 +15,226 @@ export const DISCOVERY_RESEARCH_DECISION_SCHEMA = "yolo.discovery.research_decis
 export const DISCOVERY_PLAN_SCHEMA = "yolo.discovery.plan.v1";
 export const DISCOVERY_PRD_SCHEMA = "yolo.discovery.prd_compiler.v1";
 
-function clean(value) {
+type DiscoveryRecord = Record<string, unknown>;
+type ProjectShape = "simple" | "complex";
+type ResearchDecision = string;
+type PlanStatus = string;
+
+interface DiscoveryMilestone extends DiscoveryRecord {
+  id: string;
+  title: string;
+  outcome: string;
+  requirement_ids: string[];
+}
+
+export interface DiscoveryProjectContext extends DiscoveryRecord {
+  schema: string;
+  id: unknown;
+  title: string;
+  vision: string;
+  problem: string;
+  target_users: string[];
+  core_value: string;
+  anti_goals: string[];
+  constraints: string[];
+  target_files: string[];
+  project_shape: ProjectShape;
+  milestone_sequence: DiscoveryMilestone[];
+}
+
+export interface DiscoveryRequirementRecord extends DiscoveryRecord {
+  id: string;
+  title: string;
+  text: string;
+  status: string;
+  source: string;
+  owner_milestone: string;
+  evidence: unknown[];
+}
+
+interface DiscoveryDeferredRequirement extends DiscoveryRecord {
+  id: string;
+  text: string;
+  reason: string;
+}
+
+interface RequirementStatusCounts {
+  active: number;
+  validated: number;
+  deferred: number;
+  out_of_scope: number;
+}
+
+interface DiscoveryRequirementsContractBase {
+  schema: string;
+  active: DiscoveryRequirementRecord[];
+  validated: DiscoveryRequirementRecord[];
+  deferred: DiscoveryDeferredRequirement[];
+  out_of_scope: DiscoveryDeferredRequirement[];
+}
+
+export interface DiscoveryRequirementsContract extends DiscoveryRequirementsContractBase, DiscoveryRecord {
+  status_counts: RequirementStatusCounts;
+}
+
+interface DiscoveryResearchDecision extends DiscoveryRecord {
+  schema: string;
+  decision: ResearchDecision;
+  decided_at: string;
+  rationale: string;
+  scouts: string[];
+}
+
+interface DiscoveryTraceability extends DiscoveryRecord {
+  project_id: unknown;
+  milestone_ids: string[];
+  requirement_to_milestone: Array<{
+    requirement_id: string;
+    milestone_id: string;
+    source: string;
+  }>;
+  target_files: string[];
+}
+
+export interface DiscoveryArtifact extends DiscoveryRecord {
+  schema: string;
+  schema_version: string;
+  id: unknown;
+  generated_at: string;
+  source: unknown;
+  status: DiscoveryReadiness["status"];
+  ready_for_plan: boolean;
+  ready_for_prd: boolean;
+  brief: DiscoveryBrief;
+  project: DiscoveryProjectContext;
+  requirements: DiscoveryRequirementsContract;
+  research_decision: DiscoveryResearchDecision;
+  readiness: DiscoveryReadiness;
+  open_questions: string[];
+  traceability: DiscoveryTraceability;
+  gates: {
+    discovery: DiscoveryReadiness["status"];
+    plan: "pass" | "blocked";
+    prd: string;
+  };
+}
+
+interface DiscoveryPlanStep extends DiscoveryRecord {
+  id: string;
+  sequence: number;
+  title: string;
+  requirement_id: string;
+  milestone_id: string;
+  target_files: string[];
+  verification: string;
+}
+
+export interface DiscoveryPlan extends DiscoveryRecord {
+  schema: string;
+  schema_version: string;
+  id: unknown;
+  generated_at: string;
+  status: PlanStatus;
+  discovery_id: unknown;
+  objective: string;
+  project?: DiscoveryProjectContext;
+  requirements: DiscoveryRequirementRecord[];
+  steps: DiscoveryPlanStep[];
+  blockers: DiscoveryCheck[];
+  warnings: DiscoveryCheck[];
+  open_questions: string[];
+  traceability?: DiscoveryTraceability;
+  next_actions: string[];
+}
+
+export interface DiscoveryPostCondition extends DiscoveryRecord {
+  id: string;
+  type: string;
+  severity: string;
+  params: DiscoveryRecord;
+  message: string;
+}
+
+export interface DiscoveryPrdTask extends DiscoveryRecord {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  source_finding_ids: string[];
+  depends_on: string[];
+  pre_conditions: DiscoveryPostCondition[];
+  post_conditions: DiscoveryPostCondition[];
+}
+
+export type DiscoverySimpleBlocker = {
+  code: string;
+  message: string;
+};
+
+export interface BlockedDiscoveryPrdCompileResult extends DiscoveryRecord {
+  schema: string;
+  schema_version: string;
+  status: "blocked";
+  summary: string;
+  blockers: Array<DiscoveryCheck | DiscoverySimpleBlocker>;
+  next_actions: string[];
+  prd?: undefined;
+  executable?: false;
+}
+
+export interface DiscoveryDraftApproval extends DiscoveryRecord {
+  approved: boolean;
+  effective_for_prd: boolean;
+  approval_source: string;
+}
+
+export interface DiscoveryDraftDemand extends DiscoveryRecord {
+  id: unknown;
+  source: string;
+  approval: DiscoveryDraftApproval;
+}
+
+export interface DiscoveryDraftPrd extends DiscoveryRecord {
+  id: unknown;
+  title: string;
+  demand: DiscoveryDraftDemand;
+  tasks: DiscoveryPrdTask[];
+}
+
+export interface DraftDiscoveryPrdCompileResult extends DiscoveryRecord {
+  schema: string;
+  schema_version: string;
+  status: "draft";
+  executable: false;
+  draft_reason: string;
+  prd: DiscoveryDraftPrd;
+  discovery_id: unknown;
+  traceability: DiscoveryRecord;
+  warnings: DiscoveryCheck[];
+  next_actions: string[];
+}
+
+export interface ReadyDiscoveryPrdCompileResult extends DiscoveryRecord {
+  schema: string;
+  schema_version: string;
+  status: "success";
+  executable: true;
+  prd: DiscoveryRecord;
+  blockers?: Array<DiscoveryCheck | DiscoverySimpleBlocker>;
+  warnings?: DiscoveryCheck[];
+  next_actions?: string[];
+}
+
+export type DiscoveryPrdCompileResult =
+  | BlockedDiscoveryPrdCompileResult
+  | DraftDiscoveryPrdCompileResult
+  | ReadyDiscoveryPrdCompileResult;
+
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function arrayOfStrings(value) {
+function arrayOfStrings(value: unknown | unknown[] | null | undefined): string[] {
   if (value == null) return [];
   const input = Array.isArray(value) ? value : [value];
   return input
@@ -22,11 +243,11 @@ function arrayOfStrings(value) {
     .filter(Boolean);
 }
 
-function uniqueStrings(values = []) {
+function uniqueStrings(values: unknown | unknown[] | null | undefined = []): string[] {
   return [...new Set(arrayOfStrings(values))];
 }
 
-function slug(value, fallback = "DISCOVERY") {
+function slug(value: unknown, fallback = "DISCOVERY"): string {
   const normalized = clean(value)
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "-")
@@ -35,23 +256,23 @@ function slug(value, fallback = "DISCOVERY") {
   return normalized || fallback;
 }
 
-function nowIso(options = Object()) {
+function nowIso(options: DiscoveryOptions = Object()): string {
   return clean(options.now) || new Date().toISOString();
 }
 
-function idDate(now) {
+function idDate(now: unknown): string {
   return clean(now).slice(0, 10).replace(/-/g, "") || "00000000";
 }
 
-function requirementId(index) {
+function requirementId(index: number): string {
   return `R${String(index + 1).padStart(3, "0")}`;
 }
 
-function projectId(brief, now) {
+function projectId(brief: Partial<DiscoveryBrief>, now: unknown): string {
   return `DISC-${idDate(now)}-${slug(brief.idea || brief.problem || "PROJECT")}`;
 }
 
-function detectProjectShape(brief = Object()) {
+function detectProjectShape(brief: Partial<DiscoveryBrief> = Object()): ProjectShape {
   const signals = [
     ...arrayOfStrings(brief.constraints),
     ...arrayOfStrings(brief.success_criteria),
@@ -78,14 +299,14 @@ function detectProjectShape(brief = Object()) {
   return "simple";
 }
 
-function requirementTitle(text, index) {
+function requirementTitle(text: unknown, index: number): string {
   const title = clean(text).replace(/\s+/g, " ").slice(0, 72);
   return title || `Requirement ${requirementId(index)}`;
 }
 
-function openQuestionForCheck(check = Object()) {
+function openQuestionForCheck(check: Partial<DiscoveryCheck> = Object()): unknown {
   const code = clean(check.code);
-  const prompts = {
+  const prompts: Record<string, string> = {
     DISCOVERY_IDEA_SPECIFIC: "What concrete outcome should this work deliver?",
     DISCOVERY_PROBLEM_PRESENT: "What user or project problem does this solve?",
     DISCOVERY_TARGET_USER_PRESENT: "Who is the specific target user or operator for this demand?",
@@ -97,7 +318,7 @@ function openQuestionForCheck(check = Object()) {
   return prompts[code] || check.message || check.summary || "";
 }
 
-function requirementStatusCounts(contract = Object()) {
+function requirementStatusCounts(contract: DiscoveryRequirementsContractBase): RequirementStatusCounts {
   return {
     active: contract.active.length,
     validated: contract.validated.length,
@@ -106,7 +327,7 @@ function requirementStatusCounts(contract = Object()) {
   };
 }
 
-function buildRequirementRecord(text, index, source = "success_criteria") {
+function buildRequirementRecord(text: string, index: number, source = "success_criteria"): DiscoveryRequirementRecord {
   const id = requirementId(index);
   return {
     id,
@@ -119,7 +340,7 @@ function buildRequirementRecord(text, index, source = "success_criteria") {
   };
 }
 
-function normalizeResearchDecision(input = Object(), readiness = Object()) {
+function normalizeResearchDecision(input: DiscoveryRecord = Object(), readiness: Partial<DiscoveryReadiness> = Object()): ResearchDecision {
   const raw = input.research_decision ?? input.researchDecision ?? input.research;
   if (raw === true) return "research";
   const value = clean(raw).toLowerCase();
@@ -135,11 +356,11 @@ function normalizeResearchDecision(input = Object(), readiness = Object()) {
   // and that block is exactly when the research decision must read "research"
   // so the user knows what to do next. Empty/short content already produces
   // no signal and falls through to "skip" naturally.
-  const brief = readiness.brief || {};
+  const brief: Partial<DiscoveryBrief> = readiness.brief || {};
   const signal = detectExternalResearchSignal(
-    input.idea || brief.idea,
-    input.problem || brief.problem,
-    input.objective,
+    (input.idea || brief.idea) as string,
+    (input.problem || brief.problem) as string,
+    input.objective as string,
     arrayOfStrings(brief.success_criteria).join(" "),
     arrayOfStrings(brief.constraints).join(" "),
     arrayOfStrings(input.success_criteria).join(" "),
@@ -148,10 +369,11 @@ function normalizeResearchDecision(input = Object(), readiness = Object()) {
   return signal.requires_external ? "research" : "skip";
 }
 
-function readBaseCommit(options = Object()) {
+function readBaseCommit(options: DiscoveryOptions = Object()): string {
   try {
+    const cwd = (options.projectRoot || options.project_root || process.cwd()) as string;
     return execSync("git rev-parse HEAD", {
-      cwd: options.projectRoot || options.project_root || process.cwd(),
+      cwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 3000,
@@ -161,17 +383,17 @@ function readBaseCommit(options = Object()) {
   }
 }
 
-function taskTitle(requirement) {
+function taskTitle(requirement: DiscoveryRequirementRecord): string {
   return clean(requirement.title).slice(0, 96) || `Implement ${requirement.id}`;
 }
 
-function targetFilesForPrd(discovery = Object()) {
+function targetFilesForPrd(discovery: Partial<DiscoveryArtifact> = Object()): string[] {
   const briefTargets = arrayOfStrings(discovery.brief?.target_files);
   const projectTargets = arrayOfStrings(discovery.project?.target_files);
   return uniqueStrings([...briefTargets, ...projectTargets]);
 }
 
-function acceptanceCondition(taskId, index, text) {
+function acceptanceCondition(taskId: string, index: number, text: unknown): DiscoveryPostCondition {
   return {
     id: `POST-${taskId}-ACCEPT-${index + 1}`,
     type: "acceptance_criteria",
@@ -181,7 +403,7 @@ function acceptanceCondition(taskId, index, text) {
   };
 }
 
-function modifiedFileCondition(taskId, index, file) {
+function modifiedFileCondition(taskId: string, index: number, file: string): DiscoveryPostCondition {
   return {
     id: `POST-${taskId}-TARGET-${index + 1}`,
     type: "target_file_modified",
@@ -191,7 +413,7 @@ function modifiedFileCondition(taskId, index, file) {
   };
 }
 
-function draftDemandQualityReport() {
+function draftDemandQualityReport(): DiscoveryRecord {
   return {
     schema_version: "1.0",
     schema: "yolo.demand.quality.v1",
@@ -201,7 +423,11 @@ function draftDemandQualityReport() {
   };
 }
 
-export function buildProjectContext(brief = Object(), input = Object(), options = Object()) {
+export function buildProjectContext(
+  brief: Partial<DiscoveryBrief> = Object(),
+  input: DiscoveryRecord = Object(),
+  options: DiscoveryOptions = Object(),
+): DiscoveryProjectContext {
   const now = nowIso(options);
   const idea = clean(brief.idea || input.idea || input.objective || input.requirement);
   const problem = clean(brief.problem || input.problem);
@@ -231,9 +457,12 @@ export function buildProjectContext(brief = Object(), input = Object(), options 
   };
 }
 
-export function buildRequirementsContract(brief = Object(), input = Object()) {
+export function buildRequirementsContract(
+  brief: Partial<DiscoveryBrief> = Object(),
+  input: DiscoveryRecord = Object(),
+): DiscoveryRequirementsContract {
   const successCriteria = uniqueStrings(brief.success_criteria || input.success_criteria || input.successCriteria);
-  const contract = {
+  const contract: DiscoveryRequirementsContractBase = {
     schema: DISCOVERY_REQUIREMENTS_SCHEMA,
     active: successCriteria.map((text, index) => buildRequirementRecord(text, index)),
     validated: [],
@@ -254,7 +483,11 @@ export function buildRequirementsContract(brief = Object(), input = Object()) {
   };
 }
 
-export function buildResearchDecision(input = Object(), readiness = Object(), options = Object()) {
+export function buildResearchDecision(
+  input: DiscoveryRecord = Object(),
+  readiness: Partial<DiscoveryReadiness> = Object(),
+  options: DiscoveryOptions = Object(),
+): DiscoveryResearchDecision {
   const decision = normalizeResearchDecision(input, readiness);
   return {
     schema: DISCOVERY_RESEARCH_DECISION_SCHEMA,
@@ -268,11 +501,13 @@ export function buildResearchDecision(input = Object(), readiness = Object(), op
   };
 }
 
-export function buildOpenQuestions(readiness = Object()) {
-  const brief = readiness.brief || {};
+export function buildOpenQuestions(readiness: Partial<DiscoveryReadiness> = Object()): string[] {
+  const brief: Partial<DiscoveryBrief> = readiness.brief || {};
+  const blockers = Array.isArray(readiness.blockers) ? readiness.blockers : [];
+  const warnings = Array.isArray(readiness.warnings) ? readiness.warnings : [];
   const generated = [
-    ...(Array.isArray(readiness.blockers) ? readiness.blockers : []),
-    ...(Array.isArray(readiness.warnings) ? readiness.warnings : []),
+    ...blockers,
+    ...warnings,
   ].map(openQuestionForCheck);
   return uniqueStrings([
     ...arrayOfStrings(brief.open_questions),
@@ -280,7 +515,10 @@ export function buildOpenQuestions(readiness = Object()) {
   ]);
 }
 
-export function buildTraceability(project = Object(), requirements = Object()) {
+export function buildTraceability(
+  project: Partial<DiscoveryProjectContext> = Object(),
+  requirements: Partial<DiscoveryRequirementsContract> = Object(),
+): DiscoveryTraceability {
   return {
     project_id: project.id,
     milestone_ids: arrayOfStrings(project.milestone_sequence?.map((item) => item.id)),
@@ -293,7 +531,7 @@ export function buildTraceability(project = Object(), requirements = Object()) {
   };
 }
 
-export function buildDiscoveryArtifact(input = Object(), options = Object()) {
+export function buildDiscoveryArtifact(input: DiscoveryRecord = Object(), options: DiscoveryOptions = Object()): DiscoveryArtifact {
   const now = nowIso(options);
   const readiness = inspectDiscoveryReadiness(input, options);
   const brief = readiness.brief;
@@ -326,10 +564,14 @@ export function buildDiscoveryArtifact(input = Object(), options = Object()) {
   };
 }
 
-export function buildDiscoveryPlan(discovery = Object(), input = Object(), options = Object()) {
+export function buildDiscoveryPlan(
+  discovery: Partial<DiscoveryArtifact> = Object(),
+  input: DiscoveryRecord = Object(),
+  options: DiscoveryOptions = Object(),
+): DiscoveryPlan {
   const requirements = discovery.requirements?.active || [];
   const blocked = discovery.ready_for_plan !== true;
-  const steps = blocked
+  const steps: DiscoveryPlanStep[] = blocked
     ? []
     : requirements.map((requirement, index) => ({
         id: `PLAN-${requirement.id}`,
@@ -362,37 +604,45 @@ export function buildDiscoveryPlan(discovery = Object(), input = Object(), optio
   };
 }
 
-export function buildPrdFromDiscovery(discovery = Object(), input = Object(), options = Object()) {
-  const requirements = discovery.requirements?.active || [];
-  const targetFiles = targetFilesForPrd(discovery);
-  const now = nowIso(options);
-  const blocked = discovery.ready_for_plan !== true || requirements.length === 0 || targetFiles.length === 0;
+export function buildPrdFromDiscovery(
+  discovery: object = Object(),
+  input: object = Object(),
+  options: object = Object(),
+): DiscoveryPrdCompileResult {
+  const discoveryRecord = discovery as Partial<DiscoveryArtifact>;
+  const inputRecord = input as DiscoveryRecord;
+  const optionsRecord = options as DiscoveryOptions;
+  const requirements = discoveryRecord.requirements?.active || [];
+  const targetFiles = targetFilesForPrd(discoveryRecord);
+  const now = nowIso(optionsRecord);
+  const blocked = discoveryRecord.ready_for_plan !== true || requirements.length === 0 || targetFiles.length === 0;
   if (blocked) {
+    const blockers = [
+      ...(discoveryRecord.readiness?.blockers || []),
+      requirements.length === 0 ? { code: "DISCOVERY_REQUIREMENTS_EMPTY", message: "No active requirements are available." } : null,
+      targetFiles.length === 0 ? { code: "DISCOVERY_TARGET_FILES_EMPTY", message: "No target files are available." } : null,
+    ].filter((item): item is DiscoveryCheck | DiscoverySimpleBlocker => Boolean(item));
     return {
       schema: DISCOVERY_PRD_SCHEMA,
       schema_version: "1.0",
       status: "blocked",
       summary: "Discovery is not ready for PRD compilation.",
-      blockers: [
-        ...(discovery.readiness?.blockers || []),
-        requirements.length === 0 ? { code: "DISCOVERY_REQUIREMENTS_EMPTY", message: "No active requirements are available." } : null,
-        targetFiles.length === 0 ? { code: "DISCOVERY_TARGET_FILES_EMPTY", message: "No target files are available." } : null,
-      ].filter(Boolean),
+      blockers,
       next_actions: ["Complete discovery with active requirements and target files before compiling a PRD."],
     };
   }
 
-  const title = clean(input.title || discovery.project?.title || discovery.brief?.idea || "Discovery PRD").slice(0, 120);
-  const prdId = input.prd_id || input.prdId || `PRD-${idDate(now)}-${slug(title)}`;
+  const title = clean(inputRecord.title || discoveryRecord.project?.title || discoveryRecord.brief?.idea || "Discovery PRD").slice(0, 120);
+  const prdId = inputRecord.prd_id || inputRecord.prdId || `PRD-${idDate(now)}-${slug(title)}`;
   const draftQuality = draftDemandQualityReport();
-  const tasks = requirements.map((requirement, index) => {
+  const tasks: DiscoveryPrdTask[] = requirements.map((requirement, index) => {
     const taskId = `DISC-${requirement.id}-${String(index + 1).padStart(3, "0")}`;
     return {
       id: taskId,
       title: taskTitle(requirement),
       description: requirement.text,
-      priority: input.priority || "P1",
-      type: input.task_type || input.taskType || "feature",
+      priority: inputRecord.priority || "P1",
+      type: inputRecord.task_type || inputRecord.taskType || "feature",
       status: "needs_contract_review",
       task_kind: "discovery_requirement",
       source_finding_ids: [requirement.id],
@@ -402,7 +652,7 @@ export function buildPrdFromDiscovery(discovery = Object(), input = Object(), op
         allow_new_files: true,
         allow_delete_files: false,
         max_files: Math.max(1, targetFiles.length),
-        max_lines_per_file: Number(input.max_lines_per_file || input.maxLinesPerFile || 200),
+        max_lines_per_file: Number(inputRecord.max_lines_per_file || inputRecord.maxLinesPerFile || 200),
       },
       pre_conditions: [],
       post_conditions: [
@@ -422,7 +672,7 @@ export function buildPrdFromDiscovery(discovery = Object(), input = Object(), op
     schema_version: "1.0",
     status: "draft",
     executable: false,
-    draft_reason: discovery.ready_for_prd === true
+    draft_reason: discoveryRecord.ready_for_prd === true
       ? "Discovery PRDs require approved demand and runner preflight before execution."
       : "Discovery readiness is not a clean PRD pass; this artifact is a non-executable draft.",
     prd: {
@@ -430,24 +680,24 @@ export function buildPrdFromDiscovery(discovery = Object(), input = Object(), op
       version: "2.0",
       id: prdId,
       title,
-      description: clean(input.description || `Compiled from discovery artifact ${discovery.id}.`),
+      description: clean(inputRecord.description || `Compiled from discovery artifact ${discoveryRecord.id}.`),
       project: {
-        name: clean(input.project_name || input.projectName || discovery.project?.title || "project"),
-        language: clean(input.language || "other"),
-        framework: clean(input.framework || "generic"),
-        package_manager: clean(input.package_manager || input.packageManager || "other"),
-        test_framework: clean(input.test_framework || input.testFramework || "unknown"),
-        lint_tool: clean(input.lint_tool || input.lintTool || "unknown"),
-        type_checker: clean(input.type_checker || input.typeChecker || "unknown"),
+        name: clean(inputRecord.project_name || inputRecord.projectName || discoveryRecord.project?.title || "project"),
+        language: clean(inputRecord.language || "other"),
+        framework: clean(inputRecord.framework || "generic"),
+        package_manager: clean(inputRecord.package_manager || inputRecord.packageManager || "other"),
+        test_framework: clean(inputRecord.test_framework || inputRecord.testFramework || "unknown"),
+        lint_tool: clean(inputRecord.lint_tool || inputRecord.lintTool || "unknown"),
+        type_checker: clean(inputRecord.type_checker || inputRecord.typeChecker || "unknown"),
       },
       generated_by: "yolo-review-agent",
       generated_at: now,
-      base_commit: readBaseCommit(options),
+      base_commit: readBaseCommit(optionsRecord),
       source: "discovery_draft",
       execution_mode: "draft",
       demand_contract_required: true,
       demand: {
-        id: discovery.id,
+        id: discoveryRecord.id,
         source: "discovery",
         approval: {
           approved: false,
@@ -481,14 +731,14 @@ export function buildPrdFromDiscovery(discovery = Object(), input = Object(), op
         overlap_detection: "file_only",
       },
     },
-    discovery_id: discovery.id,
+    discovery_id: discoveryRecord.id,
     traceability: {
-      discovery_id: discovery.id,
+      discovery_id: discoveryRecord.id,
       requirement_ids: requirements.map((requirement) => requirement.id),
       task_ids: tasks.map((task) => task.id),
       target_files: targetFiles,
     },
-    warnings: discovery.readiness?.warnings || [],
+    warnings: discoveryRecord.readiness?.warnings || [],
     next_actions: [
       "Convert this draft through approved demand before execution.",
       "Run runner preflight only after demand approval and demand contract are present.",

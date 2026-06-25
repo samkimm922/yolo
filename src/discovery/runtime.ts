@@ -5,13 +5,20 @@ import {
   buildDiscoveryPlan,
   buildPrdFromDiscovery,
 } from "./artifacts.js";
+import type { DiscoveryArtifact } from "./artifacts.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
+import type { ProgressOptions, StageReportEntry } from "../lifecycle/progress.js";
 
-function clean(value) {
+type ReadDiscoveryArtifactResult =
+  | { ok: true; path: string; discovery: DiscoveryArtifact }
+  | { ok: false; path: string; error: string };
+type DiscoveryRuntimeRecord = Record<string, unknown>;
+
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function arrayOfStrings(value) {
+function arrayOfStrings(value: unknown | unknown[] | null | undefined): string[] {
   if (value == null) return [];
   const input = Array.isArray(value) ? value : [value];
   return input
@@ -20,30 +27,31 @@ function arrayOfStrings(value) {
     .filter(Boolean);
 }
 
-function stableJson(value) {
+function stableJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function resolveRoot(value, fallback = process.cwd()) {
+function resolveRoot(value: unknown, fallback = process.cwd()): string {
   return resolve(clean(value) || fallback);
 }
 
-function resolveOutputPath(projectRoot, path) {
-  if (!path) return path;
-  return isAbsolute(path) ? path : resolve(projectRoot, path);
+function resolveOutputPath(projectRoot: string, path: unknown): string {
+  if (!path) return path as string;
+  const outputPath = path as string;
+  return isAbsolute(outputPath) ? outputPath : resolve(projectRoot, outputPath);
 }
 
-function readJson(path) {
-  return JSON.parse(readFileSync(path, "utf8"));
+function readJson<T>(path: string): T {
+  return JSON.parse(readFileSync(path, "utf8")) as T;
 }
 
-function writeJson(path, value) {
+function writeJson(path: string, value: unknown): string {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, stableJson(value), "utf8");
   return path;
 }
 
-function readTextFileIfPresent(projectRoot, path) {
+function readTextFileIfPresent(projectRoot: string, path: unknown): string {
   const file = clean(path);
   if (!file) return "";
   const resolved = resolveOutputPath(projectRoot, file);
@@ -51,7 +59,7 @@ function readTextFileIfPresent(projectRoot, path) {
   return readFileSync(resolved, "utf8").trim();
 }
 
-function normalizeDiscoveryInput(input = Object(), projectRoot) {
+function normalizeDiscoveryInput(input: DiscoveryRuntimeRecord = Object(), projectRoot: string): DiscoveryRuntimeRecord {
   const fileText = readTextFileIfPresent(projectRoot, input.requirementFile || input.requirement_file || input.inputFile || input.input_file);
   const objective = clean(input.objective || input.requirement || input.idea || input.text || fileText);
   return {
@@ -69,7 +77,11 @@ function normalizeDiscoveryInput(input = Object(), projectRoot) {
   };
 }
 
-function lifecycleFor(stageId, result, params = Object()) {
+function lifecycleFor(
+  stageId: string,
+  result: StageReportEntry | object,
+  params: ProgressOptions = Object(),
+): ReturnType<typeof writeLifecycleStageReport> | null {
   if (params.writeLifecycle === false || params.write_lifecycle === false) return null;
   return writeLifecycleStageReport(stageId, result, {
     projectRoot: params.projectRoot,
@@ -80,35 +92,35 @@ function lifecycleFor(stageId, result, params = Object()) {
   });
 }
 
-export function discoveryStateDir(stateRoot) {
+export function discoveryStateDir(stateRoot: unknown): string {
   return join(resolveRoot(stateRoot, join(process.cwd(), ".yolo")), "discovery");
 }
 
-export function defaultDiscoveryPath(stateRoot) {
+export function defaultDiscoveryPath(stateRoot: unknown): string {
   return join(discoveryStateDir(stateRoot), "discovery.json");
 }
 
-export function defaultDiscoveryPlanPath(stateRoot) {
+export function defaultDiscoveryPlanPath(stateRoot: unknown): string {
   return join(discoveryStateDir(stateRoot), "plan.json");
 }
 
-export function defaultDiscoveryPrdPath(stateRoot) {
+export function defaultDiscoveryPrdPath(stateRoot: unknown): string {
   return join(discoveryStateDir(stateRoot), "prd.json");
 }
 
-export function readDiscoveryArtifact(path) {
-  const resolved = resolve(path);
+export function readDiscoveryArtifact(path: unknown): ReadDiscoveryArtifactResult {
+  const resolved = resolve(path as string);
   if (!existsSync(resolved)) {
     return { ok: false, path: resolved, error: `Discovery artifact not found: ${resolved}` };
   }
   try {
-    return { ok: true, path: resolved, discovery: readJson(resolved) };
+    return { ok: true, path: resolved, discovery: readJson<DiscoveryArtifact>(resolved) };
   } catch (error) {
-    return { ok: false, path: resolved, error: `Discovery artifact JSON parse failed: ${error.message}` };
+    return { ok: false, path: resolved, error: `Discovery artifact JSON parse failed: ${(error as Error).message}` };
   }
 }
 
-export function runDiscoveryRuntime(input = Object(), options = Object()) {
+export function runDiscoveryRuntime(input: DiscoveryRuntimeRecord = Object(), options: DiscoveryRuntimeRecord = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const discoveryInput = normalizeDiscoveryInput(input, projectRoot);
@@ -118,7 +130,7 @@ export function runDiscoveryRuntime(input = Object(), options = Object()) {
   });
   const outputFile = resolveOutputPath(projectRoot, input.outputFile || input.output_file || options.outputFile || defaultDiscoveryPath(stateRoot));
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
-  const artifacts = [];
+  const artifacts: string[] = [];
   if (shouldWrite) artifacts.push(writeJson(outputFile, discovery));
 
   const result = {
@@ -148,12 +160,12 @@ export function runDiscoveryRuntime(input = Object(), options = Object()) {
   return { ...result, lifecycle };
 }
 
-export function runDiscoveryPlanRuntime(input = Object(), options = Object()) {
+export function runDiscoveryPlanRuntime(input: DiscoveryRuntimeRecord = Object(), options: DiscoveryRuntimeRecord = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const discoveryPath = resolveOutputPath(projectRoot, input.discoveryPath || input.discovery_path || input.discovery || defaultDiscoveryPath(stateRoot));
   const read = readDiscoveryArtifact(discoveryPath);
-  if (!read.ok) {
+  if (read.ok !== true) {
     return {
       status: "blocked",
       code: "DISCOVERY_ARTIFACT_MISSING",
@@ -169,7 +181,7 @@ export function runDiscoveryPlanRuntime(input = Object(), options = Object()) {
   const plan = buildDiscoveryPlan(read.discovery, input, { now: input.now || options.now });
   const outputFile = resolveOutputPath(projectRoot, input.outputFile || input.output_file || options.outputFile || defaultDiscoveryPlanPath(stateRoot));
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
-  const artifacts = [];
+  const artifacts: string[] = [];
   if (shouldWrite) artifacts.push(writeJson(outputFile, plan));
 
   const result = {
@@ -197,12 +209,12 @@ export function runDiscoveryPlanRuntime(input = Object(), options = Object()) {
   return { ...result, lifecycle };
 }
 
-export function runDiscoveryPrdRuntime(input = Object(), options = Object()) {
+export function runDiscoveryPrdRuntime(input: DiscoveryRuntimeRecord = Object(), options: DiscoveryRuntimeRecord = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const discoveryPath = resolveOutputPath(projectRoot, input.discoveryPath || input.discovery_path || input.discovery || defaultDiscoveryPath(stateRoot));
   const read = readDiscoveryArtifact(discoveryPath);
-  if (!read.ok) {
+  if (read.ok !== true) {
     return {
       status: "blocked",
       code: "DISCOVERY_ARTIFACT_MISSING",
@@ -221,9 +233,10 @@ export function runDiscoveryPrdRuntime(input = Object(), options = Object()) {
   });
   const outputFile = resolveOutputPath(projectRoot, input.outputFile || input.output_file || input.prdPath || input.prd_path || options.outputFile || defaultDiscoveryPrdPath(stateRoot));
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
-  const artifacts = [];
+  const artifacts: string[] = [];
   if (shouldWrite && compiled.prd) artifacts.push(writeJson(outputFile, compiled.prd));
-  const executable = compiled.status === "success" || compiled.executable === true;
+  const compiledExecutable = compiled.executable;
+  const executable = compiled.status === "success" || compiledExecutable === true;
 
   const result = {
     status: compiled.status,
