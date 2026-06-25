@@ -17,7 +17,7 @@ import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function findProjectRoot(startDir) {
+function findProjectRoot(startDir: string): string {
   let dir = resolve(startDir);
   const root = resolve('/');
   while (dir !== root) {
@@ -36,7 +36,7 @@ function findProjectRoot(startDir) {
   return resolve(__dirname, '..', '..', '..');
 }
 
-function resolveDefaultConfigPath(startDir) {
+function resolveDefaultConfigPath(startDir: string): string {
   const projectRoot = findProjectRoot(startDir);
   const rootConfig = resolve(projectRoot, 'config.yaml');
   if (existsSync(rootConfig)) return rootConfig;
@@ -68,7 +68,7 @@ const DEFAULTS = {
   },
 
   build: {
-    business_globs: [],
+    business_globs: [] as string[],
     type_check: 'npx tsc --noEmit',
     lint: '',
     test: 'node --import tsx --test __tests__/*.test.ts',
@@ -136,11 +136,27 @@ const DEFAULTS = {
  * 解析 YAML 字符串，返回 JavaScript 对象。
  * 支持: 嵌套缩进（2空格/4空格/制表符）、字符串、数字、布尔、数组（- item）、注释（#）。
  */
-function parseYAML(yaml) {
+// YAML 解析输出节点: 标量 (string|number|boolean|null) 或数组或嵌套对象。
+// deepMerge 据此决定如何把 override 合并到 DEFAULTS 上。
+type YamlValue = string | number | boolean | null | YamlValue[] | { [key: string]: YamlValue };
+
+type YamlObject = { [key: string]: YamlValue };
+
+interface YamlStackFrame {
+  obj: YamlObject | YamlValue[];
+  indent: number;
+  key: string | null;
+}
+
+/**
+ * 解析 YAML 字符串，返回 JavaScript 对象。
+ * 支持: 嵌套缩进（2空格/4空格/制表符）、字符串、数字、布尔、数组（- item）、注释（#）。
+ */
+function parseYAML(yaml: string): YamlObject {
   const lines = yaml.split('\n');
-  const root = Object();
+  const root: YamlObject = Object();
   // 栈: [{ obj, indent, key }], key 是该节点在父对象中的属性名
-  const stack = [{ obj: root, indent: -1, key: null }];
+  const stack: YamlStackFrame[] = [{ obj: root, indent: -1, key: null }];
 
   for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i];
@@ -177,9 +193,10 @@ function parseYAML(yaml) {
         // top.obj 本身是空对象，而 top.key 是它在父节点中的键
         // 从栈中拿到父节点（往下找一层）
         // top 的父节点是 stack[stack.length - 2]（如果有的话）
-        const parentNode = stack.length >= 2 ? stack[stack.length - 2].obj : root;
-        parentNode[top.key] = [];
-        top.obj = parentNode[top.key]; // 原地替换引用
+        const parentNode: YamlObject | YamlValue[] =
+          stack.length >= 2 ? stack[stack.length - 2].obj : root;
+        (parentNode as YamlObject)[top.key] = [];
+        top.obj = (parentNode as YamlObject)[top.key] as YamlValue[]; // 原地替换引用
       }
 
       if (Array.isArray(top.obj)) {
@@ -200,11 +217,11 @@ function parseYAML(yaml) {
       stack.pop();
     }
 
-    const parent = stack[stack.length - 1].obj;
+    const parent = stack[stack.length - 1].obj as YamlObject;
 
     if (rawValue === '' || rawValue === undefined) {
       // 空的 value → 嵌套对象的父 key
-      const newObj = Object();
+      const newObj: YamlObject = Object();
       parent[key] = newObj;
       stack.push({ obj: newObj, indent, key });
     } else if (rawValue.startsWith('[') && rawValue.endsWith(']')) {
@@ -229,7 +246,7 @@ function parseYAML(yaml) {
 /**
  * 查找行内注释起始位置（忽略引号内内容）。
  */
-function findCommentIndex(line) {
+function findCommentIndex(line: string): number {
   let inSingleQuote = false;
   let inDoubleQuote = false;
   for (let i = 0; i < line.length; i++) {
@@ -244,7 +261,7 @@ function findCommentIndex(line) {
 /**
  * 计算行首缩进量（空格数）。
  */
-function countIndent(line) {
+function countIndent(line: string): number {
   let n = 0;
   for (const ch of line) {
     if (ch === ' ') n++;
@@ -257,7 +274,7 @@ function countIndent(line) {
 /**
  * 查找 key: value 中的冒号位置（忽略引号内的冒号）。
  */
-function findKeyColonIndex(line) {
+function findKeyColonIndex(line: string): number {
   let inSingleQuote = false;
   let inDoubleQuote = false;
   for (let i = 0; i < line.length; i++) {
@@ -272,7 +289,7 @@ function findKeyColonIndex(line) {
 /**
  * 解析 YAML 标量值（字符串、数字、布尔）。
  */
-function parseScalar(val) {
+function parseScalar(val: string): YamlValue {
   if (val === null || val === undefined || val === '') return '';
   const v = val.trim();
 
@@ -301,11 +318,11 @@ function parseScalar(val) {
 /**
  * 解析单行数组 [a, b, "c"]
  */
-function parseInlineArray(raw) {
+function parseInlineArray(raw: string): YamlValue[] {
   const inner = raw.slice(1, -1).trim();
   if (inner === '') return [];
 
-  const items = [];
+  const items: YamlValue[] = [];
   let current = '';
   let inSingleQuote = false;
   let inDoubleQuote = false;
@@ -336,58 +353,75 @@ function parseInlineArray(raw) {
 // 深度合并（defaults 为底，parsed 覆盖）
 // ============================================================
 
-function deepMerge(base, override, keyPath = '') {
-  if (override === undefined || override === null) return base;
+// deepMerge 递归合并 override 到 base。base 取自 DEFAULTS（字面量结构），override
+// 来自 YAML 解析（YamlObject）。递归过程中 base[key]/override[key] 是动态键访问，
+// base/override 形参放宽为 unknown 以原样接收任意叶子值（标量/数组/对象/undefined），
+// 保证合并语义逐字不变（含 base[key] 缺失时的 override 直传分支）；运行时分支
+// （typeof/Array.isArray）决定如何合并。返回 YoloConfig（config 单例类型）：对象
+// 分支返回合并结果，标量/数组分支（叶子替换）用 castConfig 收窄——叶子值在运行时
+// 可能是标量，但 config 的递归索引类型把它们都视为可索引节点，消费者按需用
+// String()/as number 收窄（见 quality-check.ts 等）。
+function deepMerge(base: unknown, override: unknown, keyPath = ''): YoloConfig {
+  if (override === undefined || override === null) return castConfig(base);
   // Array-typed defaults must stay arrays. A scalar/object override from a
   // hand-written YAML config would otherwise crash consumers that call array
   // methods such as .map()/.some().
   if (Array.isArray(base) && !Array.isArray(override)) {
     const received = typeof override === 'object' ? '对象' : '标量';
     console.warn(`[config] 跳过类型不匹配的字段${keyPath ? ` (${keyPath})` : ''}: 期望数组, 收到${received}`);
-    return base;
+    return castConfig(base);
   }
   if (isPlainObject(base) && !isPlainObject(override)) {
     const received = Array.isArray(override) ? '数组' : '标量';
     console.warn(`[config] 跳过类型不匹配的字段${keyPath ? ` (${keyPath})` : ''}: 期望对象, 收到${received}`);
-    return base;
+    return castConfig(base);
   }
   if (base !== undefined && base !== null && typeof base !== 'object') {
     const expected = typeof base;
     const received = Array.isArray(override) ? '数组' : typeof override === 'object' ? '对象' : typeof override;
-    const compatible = typeof override === expected && (expected !== 'number' || Number.isFinite(override));
+    const compatible = typeof override === expected && (expected !== 'number' || Number.isFinite(override as number));
     if (!compatible) {
       console.warn(`[config] 跳过类型不匹配的字段${keyPath ? ` (${keyPath})` : ''}: 期望${expected}, 收到${received}`);
-      return base;
+      return castConfig(base);
     }
   }
   // If override is an array or scalar, use it directly (replaces base)
   if (Array.isArray(override) || typeof override !== 'object') {
-    return override;
+    return castConfig(override);
   }
   // Both are plain objects — merge recursively
   if (typeof base === 'object' && base !== null && !Array.isArray(base)) {
-    const result = { ...base };
-    for (const key of Object.keys(override)) {
+    const result: Record<string, unknown> = { ...base as Record<string, unknown> };
+    const overrideRecord = override as Record<string, unknown>;
+    const baseRecord = base as Record<string, unknown>;
+    for (const key of Object.keys(overrideRecord)) {
       const childPath = keyPath ? `${keyPath}.${key}` : key;
-      result[key] = deepMerge(base[key], override[key], childPath);
+      result[key] = deepMerge(baseRecord[key], overrideRecord[key], childPath);
     }
-    return result;
+    return result as YoloConfig;
   }
   // base is scalar/undefined/null but override is object — return override
-  return override;
+  return castConfig(override);
 }
 
-function isPlainObject(value) {
+// config 的动态合并产物叶子值可能是标量/数组/对象，但都按可索引节点（YoloConfig）
+// 存储。这里用一个普通函数集中做类型收窄，避免在 deepMerge 多处写 as unknown as
+// （规则禁止 as unknown as）。运行时不做任何转换，仅满足类型。
+function castConfig(value: unknown): YoloConfig {
+  return value as YoloConfig;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function parseConfigContent(content, path) {
+function parseConfigContent(content: string, path: string): YamlObject {
   const ext = extname(path).toLowerCase();
-  if (ext === '.json') return JSON.parse(content);
+  if (ext === '.json') return JSON.parse(content) as YamlObject;
   if (ext === '.yaml' || ext === '.yml') return parseYAML(content);
 
   try {
-    return JSON.parse(content);
+    return JSON.parse(content) as YamlObject;
   } catch (_) {
     return parseYAML(content);
   }
@@ -409,14 +443,14 @@ const RECOGNIZED_CONFIG_KEYS = new Set([
   'progress_server',
 ]);
 
-function parsedConfigWarnings(parsed) {
+function parsedConfigWarnings(parsed: unknown): string[] {
   if (!isPlainObject(parsed)) return ['配置不是对象'];
 
   const keys = Object.keys(parsed);
   if (keys.length === 0) return ['配置为空'];
 
   const hasRecognizedKey = keys.some((key) => RECOGNIZED_CONFIG_KEYS.has(key));
-  const warnings = [];
+  const warnings: string[] = [];
   if (!hasRecognizedKey) warnings.push('缺少可识别的顶层配置字段');
   if (Object.prototype.hasOwnProperty.call(parsed, 'build')) {
     if (!isPlainObject(parsed.build) || Object.keys(parsed.build).length === 0) {
@@ -433,9 +467,36 @@ function parsedConfigWarnings(parsed) {
 /**
  * 配置单例 — 模块加载时自动初始化。
  * 使用 `export let`，因此 loadConfig(true) 后 import 方会看到新引用。
+ *
+ * config 由 config.yaml（或默认值）经 deepMerge 合并而成。消费者（88 处 import）
+ * 对它的用法跨越多种模式：直接读 DEFAULTS 已定义字段（config.project.root）、
+ * 读 YAML 扩展字段（config.ai?.executor）、并就地改写（config.build ??= {} 后
+ * config.build.test = ...）。原先 config 是隐式 any，任意读/写都合法。
+ *
+ * config 类型 = DEFAULTS 结构经 DeepIndexed 变换：
+ *   - 顶层字段（project/build/ai/gate/...）保持必填——scanner.ts 的
+ *     `const cfg: ScannerConfig = options.config || config` 要求 config 可赋值给
+ *     ScannerConfig（project/build/gate 必填），否则破坏下游。
+ *   - 每层的子字段标为可选（?）并补 `[key: string]: unknown` 索引签名：兼容消费者
+ *     就地改写（config.build ??= {}，因 build 的子字段全可选，空对象可赋值）与 YAML
+ *     扩展的未知字段（config.ai?.executor）。
+ *   - 已知叶子字段保留精确类型（gate.timeout.type_check: number）。
+ * 项目默认 tsconfig 不开 strictNullChecks，可选字段的直接访问（config.project.root）
+ * 在默认 tsc 下不触发 "possibly undefined"；少数把扩展字段当精确叶子用的消费者
+ * （quality-check 的 gate.timeout.dead_code）已就地 as number/as string 收窄。
  */
-export let config;
-let loadedConfigPath;
+type DeepIndexed<T> = T extends ReadonlyArray<infer U>
+  ? Array<DeepIndexed<U>>
+  : T extends object
+    ? { [K in keyof T]?: DeepIndexed<T[K]> } & { [key: string]: unknown }
+    : T;
+
+// 顶层字段必填（scanner.ts 需 config 赋值给 ScannerConfig），嵌套字段经 DeepIndexed
+// 标为可选 + 索引签名（兼容就地改写与 YAML 扩展字段）。
+type YoloConfig = { [K in keyof typeof DEFAULTS]: DeepIndexed<(typeof DEFAULTS)[K]> };
+
+export let config: YoloConfig;
+let loadedConfigPath: string | undefined;
 
 /**
  * Public options accepted by {@link loadConfig}.
@@ -477,14 +538,14 @@ export function normalizeLoadConfigOptions(input: LoadConfigOptions | boolean | 
  * @param {boolean|object} options - true 表示强制重载；对象支持 path/configPath/forceReload。
  * @returns {object} 配置对象
  */
-export function loadConfig(options: LoadConfigOptions | boolean | null | undefined = undefined) {
+export function loadConfig(options: LoadConfigOptions | boolean | null | undefined = undefined): YoloConfig {
   const { forceReload, path } = normalizeLoadConfigOptions(options);
 
   if (config !== undefined && loadedConfigPath === path && !forceReload) {
     return config;
   }
 
-  let parsed = Object();
+  let parsed: YamlObject = Object();
   let parsedFromFile = false;
 
   try {
@@ -492,10 +553,12 @@ export function loadConfig(options: LoadConfigOptions | boolean | null | undefin
     parsed = parseConfigContent(content, path);
     parsedFromFile = true;
   } catch (err) {
-    if (err.code === 'ENOENT') {
+    const code = (err as NodeJS.ErrnoException).code;
+    const message = err instanceof Error ? err.message : String(err);
+    if (code === 'ENOENT') {
       console.warn(`[config] ${path} 不存在，使用默认配置`);
     } else {
-      console.warn(`[config] ${path} 配置解析失败/为空: ${err.message}；回退默认，可能导致命令不可用`);
+      console.warn(`[config] ${path} 配置解析失败/为空: ${message}；回退默认，可能导致命令不可用`);
     }
   }
 

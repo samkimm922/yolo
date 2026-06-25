@@ -12,11 +12,13 @@ const SEVERITY_TO_PRIORITY = {
   HIGH: "P1",
   MEDIUM: "P2",
   LOW: "P3",
-};
+} as const;
 
-export function severityToPriority(severity) {
+type SeverityKey = keyof typeof SEVERITY_TO_PRIORITY;
+
+export function severityToPriority(severity: unknown): string {
   const normalized = String(severity || "").trim().toUpperCase();
-  return SEVERITY_TO_PRIORITY[normalized] || "P3";
+  return SEVERITY_TO_PRIORITY[normalized as SeverityKey] || "P3";
 }
 
 export const SEVERITY_PRIORITY_ENTRIES = Object.freeze({ ...SEVERITY_TO_PRIORITY });

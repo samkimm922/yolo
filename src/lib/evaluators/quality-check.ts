@@ -33,7 +33,7 @@ type KnipIssue = {
 };
 
 function configuredCommand(params: EvalParams = {}, key: BuildCommandKey): string {
-  return params.command || config.build?.[key] || "";
+  return params.command || (config.build?.[key] as string | undefined) || "";
 }
 
 function normalizeDiagnosticFilePath(filePath: unknown, ROOT: string): string {
@@ -423,7 +423,7 @@ export function evalNoNewDeadCode(params: EvalParams = {}, _taskScope: TaskScope
       return { passed: false, detail: "未配置 dead_code 命令，无法验证 no_new_dead_code", type: "no_new_dead_code" };
     }
     const knipResult = execCommand(command, {
-      cwd: ROOT, timeout: params.timeout_ms || config.gate?.timeout?.dead_code || 30000,
+      cwd: ROOT, timeout: params.timeout_ms || (config.gate?.timeout?.dead_code as number | undefined) || 30000,
     });
     if (knipResult.rejected) {
       return { passed: false, detail: `dead_code 命令被拒绝: ${knipResult.reject_detail}`, type: "no_new_dead_code" };

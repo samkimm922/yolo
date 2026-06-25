@@ -1,4 +1,36 @@
-const AGENT_PRESETS = {
+interface AgentPreset {
+  id: string;
+  label: string;
+  purpose: string;
+  phases: string[];
+  sdk_namespaces: string[];
+  gate_level: string;
+}
+
+interface AgentPlanStep {
+  id: string;
+  phase: string;
+  status: string;
+}
+
+interface AgentPlan {
+  preset: string;
+  label: string;
+  objective: string;
+  task_id: string | null;
+  gate_level: string;
+  sdk_namespaces: string[];
+  steps: AgentPlanStep[];
+}
+
+interface CreateAgentPlanInput {
+  preset?: string;
+  objective?: string;
+  taskId?: string;
+  task_id?: string;
+}
+
+const AGENT_PRESETS: Record<string, AgentPreset> = {
   pi: {
     id: "pi",
     label: "Product Implementation Agent",
@@ -41,15 +73,15 @@ const AGENT_PRESETS = {
   },
 };
 
-function clone(value) {
+function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
-export function listAgentPresets() {
+export function listAgentPresets(): AgentPreset[] {
   return Object.values(AGENT_PRESETS).map(clone);
 }
 
-export function getAgentPreset(id = "pi") {
+export function getAgentPreset(id: string = "pi"): AgentPreset {
   const preset = AGENT_PRESETS[id];
   if (!preset) {
     const available = Object.keys(AGENT_PRESETS).join(", ");
@@ -58,7 +90,7 @@ export function getAgentPreset(id = "pi") {
   return clone(preset);
 }
 
-export function createAgentPlan(input = Object()) {
+export function createAgentPlan(input: CreateAgentPlanInput = {}): AgentPlan {
   const preset = getAgentPreset(input.preset || "pi");
   const objective = input.objective || "";
   const taskId = input.taskId || input.task_id || null;

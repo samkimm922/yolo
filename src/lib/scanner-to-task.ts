@@ -3,17 +3,28 @@
 // review-fix, and acceptance use one contract.
 
 import { reviewFindingsToPrdTasks } from "../review/findings-to-tasks.js";
+import type { ReviewPrdTask } from "../review/findings-to-tasks.js";
+import type { ReviewFindingInput } from "../review/findings.js";
+
+interface ScannerToTasksResult {
+  autoFixTasks: ReviewPrdTask[];
+  claudeFixTasks: ReviewPrdTask[];
+  infoCount: number;
+}
 
 /**
- * @param {Array} findings - review-scanner.js findings
- * @param {number} [round=1] - review round
+ * @param findings - review-scanner.js findings
+ * @param [round=1] - review round
  * @returns {{ autoFixTasks: Array, claudeFixTasks: Array, infoCount: number }}
  */
-export function scannerToTasks(findings = [], round = 1) {
+export function scannerToTasks(
+  findings: ReviewFindingInput[] = [],
+  round = 1,
+): ScannerToTasksResult {
   const infoCount = findings.filter((finding) => finding?.fix_type === "INFO").length;
   const converted = reviewFindingsToPrdTasks(findings, { round });
-  const autoFixTasks = [];
-  const claudeFixTasks = [];
+  const autoFixTasks: ReviewPrdTask[] = [];
+  const claudeFixTasks: ReviewPrdTask[] = [];
 
   for (const task of converted.tasks) {
     if (task.fix_type === "AUTO_FIX") {
