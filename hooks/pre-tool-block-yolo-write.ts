@@ -9,18 +9,30 @@
 import { resolve } from "node:path";
 import { realpathSync } from "node:fs";
 
+// PreToolUse payload shape consumed by this hook. The hook is fail-closed
+// (invalid JSON → block), so unknown fields are tolerated via Record.
+interface PreToolUsePayload {
+  tool_name?: unknown;
+  tool_input?: {
+    command?: unknown;
+    file_path?: unknown;
+    path?: unknown;
+    notebook_path?: unknown;
+  };
+}
+
 let input = "";
 process.stdin.on('data', (chunk) => { input += chunk; });
 process.stdin.on('end', () => {
-  let data;
+  let data: PreToolUsePayload;
   try {
-    data = JSON.parse(input);
+    data = JSON.parse(input) as PreToolUsePayload;
   } catch {
     block("YOLO_HOOK_INVALID_JSON", "PreToolUse payload is invalid JSON; blocking fail-closed.");
     return;
   }
 
-  const toolName = (data.tool_name || '').toLowerCase();
+  const toolName = String(data.tool_name || '').toLowerCase();
   if (toolName === 'bash') {
     const command = data.tool_input?.command || '';
     if (typeof command === "string" && commandTouchesYoloState(command)) {
@@ -40,7 +52,7 @@ process.stdin.on('end', () => {
     return;
   }
 
-  const filePath = data.tool_input?.file_path || data.tool_input?.path || data.tool_input?.notebook_path || '';
+  const filePath = String(data.tool_input?.file_path || data.tool_input?.path || data.tool_input?.notebook_path || '');
   if (!filePath) {
     block("YOLO_HOOK_MISSING_PATH", "Write-like tool payload is missing file_path/path; blocking fail-closed.");
     return;
@@ -59,11 +71,11 @@ process.stdin.on('end', () => {
   process.exit(0);
 });
 
-function isWriteLikeTool(toolName) {
+function isWriteLikeTool(toolName: string) {
   return ["write", "edit", "multiedit", "notebookedit"].includes(toolName);
 }
 
-function canonicalizePath(filePath) {
+function canonicalizePath(filePath: unknown) {
   const normalized = String(filePath || "").replace(/\\/g, "/");
   if (!normalized) return "";
   if (!normalized.startsWith("/")) {
@@ -90,7 +102,7 @@ function projectStateRoot() {
   return `${canonicalizePath(process.cwd())}/.yolo`;
 }
 
-function isUnderProjectStateRoot(filePath) {
+function isUnderProjectStateRoot(filePath: unknown) {
   const normalized = String(filePath || "").replace(/\\/g, "/");
   if (!normalized) return false;
   if (!/(?:^|\/)\.yolo(?:\/|$)/i.test(normalized)) return false;
@@ -101,11 +113,11 @@ function isUnderProjectStateRoot(filePath) {
 }
 
 // Used for clean file paths from Write/Edit tools.
-function pathTouchesYoloState(filePath) {
+function pathTouchesYoloState(filePath: unknown) {
   return isUnderProjectStateRoot(filePath);
 }
 
-function block(code, message, file = null) {
+function block(code: string, message: string, file: string | null = null) {
   console.error(JSON.stringify({
     status: "blocked",
     code,
@@ -119,7 +131,7 @@ function block(code, message, file = null) {
 
 const YOLO_SEGMENT_RE = /(?<![A-Za-z0-9_.])\.yolo(?=\/|$|['"\s);&|])/gi;
 
-function commandTouchesYoloState(command) {
+function commandTouchesYoloState(command: string) {
   const subcommands = splitSubcommands(command);
   for (const sub of subcommands) {
     const trimmed = sub.trim();
@@ -130,7 +142,7 @@ function commandTouchesYoloState(command) {
   return false;
 }
 
-function subcommandTouchesProjectYolo(command) {
+function subcommandTouchesProjectYolo(command: string) {
   for (const token of splitShellTokens(command)) {
     const stripped = token.replace(/^['"]+|['"]+$/g, "");
     if (!stripped) continue;
@@ -141,9 +153,9 @@ function subcommandTouchesProjectYolo(command) {
   return false;
 }
 
-function extractYoloPaths(str) {
-  const paths = [];
-  let match;
+function extractYoloPaths(str: string): string[] {
+  const paths: string[] = [];
+  let match: RegExpExecArray | null;
   while ((match = YOLO_SEGMENT_RE.exec(str)) !== null) {
     let start = match.index;
     while (start > 0 && /[A-Za-z0-9._\-/~]/.test(str[start - 1])) start -= 1;
@@ -154,8 +166,8 @@ function extractYoloPaths(str) {
   return paths;
 }
 
-function splitSubcommands(command) {
-  const subs = [];
+function splitSubcommands(command: string): string[] {
+  const subs: string[] = [];
   let current = "";
   let inSingle = false;
   let inDouble = false;
@@ -199,7 +211,7 @@ function splitSubcommands(command) {
 
 // Whitelist: only direct yolo CLI entrypoints and `node … <yolo-script>` are allowed
 // to reference .yolo paths. Everything else is denied.
-function isYoloCliInvocation(command) {
+function isYoloCliInvocation(command: string) {
   const tokens = splitShellTokens(command);
   if (tokens.length === 0) return false;
 
@@ -240,14 +252,14 @@ const NODE_VALUE_FLAGS = new Set([
   "--input-type",
 ]);
 
-function isYoloScriptPath(token) {
+function isYoloScriptPath(token: unknown) {
   const segments = String(token || "").split("/").filter(Boolean);
   const last = segments[segments.length - 1] || "";
   return /^yolo(\.js|\.mjs|\.cjs|\.ts|\.tsx)?$/.test(last);
 }
 
-function splitShellTokens(command) {
-  const tokens = [];
+function splitShellTokens(command: string): string[] {
+  const tokens: string[] = [];
   let current = "";
   let inSingle = false;
   let inDouble = false;

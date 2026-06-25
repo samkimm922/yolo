@@ -21,6 +21,28 @@
 import { resolve } from "node:path";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 
+// PreToolUse payload shape consumed by this hook. The hook is fail-closed
+// (invalid JSON → block), so unknown fields are tolerated via Record.
+interface PreToolUsePayload {
+  tool_name?: unknown;
+  tool_input?: {
+    command?: unknown;
+    file_path?: unknown;
+    path?: unknown;
+    notebook_path?: unknown;
+  };
+}
+
+// Lifecycle status.json shape (only the fields this hook reads). Unknown
+// stages/fields are tolerated; authorization fails closed on anything missing.
+interface LifecycleStage {
+  id?: unknown;
+  status?: unknown;
+}
+interface LifecycleState {
+  stages?: unknown;
+}
+
 const EXCLUDE_DIR_SEGMENTS = new Set([
   ".yolo", ".claude", ".codex", ".agents",
   "node_modules", "dist", "build", ".git", "coverage",
@@ -30,9 +52,9 @@ const EXCLUDE_DIR_SEGMENTS = new Set([
 let input = "";
 process.stdin.on("data", (chunk) => { input += chunk; });
 process.stdin.on("end", () => {
-  let data;
+  let data: PreToolUsePayload;
   try {
-    data = JSON.parse(input);
+    data = JSON.parse(input) as PreToolUsePayload;
   } catch {
     block("LIFECYCLE_GATE_INVALID_JSON", "PreToolUse payload is invalid JSON; blocking fail-closed.");
     return;
@@ -63,7 +85,7 @@ process.stdin.on("end", () => {
     return;
   }
 
-  const filePath = data.tool_input?.file_path || data.tool_input?.path || data.tool_input?.notebook_path || "";
+  const filePath = String(data.tool_input?.file_path || data.tool_input?.path || data.tool_input?.notebook_path || "");
   if (!filePath) {
     block("LIFECYCLE_GATE_MISSING_PATH", "Write-like tool payload is missing file_path/path; blocking fail-closed.");
     return;
@@ -94,11 +116,11 @@ process.stdin.on("end", () => {
   process.exit(0);
 });
 
-function isWriteLikeTool(toolName) {
+function isWriteLikeTool(toolName: string) {
   return ["write", "edit", "multiedit", "notebookedit"].includes(toolName);
 }
 
-function canonicalizePath(filePath) {
+function canonicalizePath(filePath: unknown) {
   const normalized = String(filePath || "").replace(/\\/g, "/");
   if (!normalized) return "";
   if (!normalized.startsWith("/")) {
@@ -114,7 +136,7 @@ function canonicalizePath(filePath) {
     } catch {
       const parts = prefix.split("/").filter(Boolean);
       if (parts.length === 0) break;
-      remaining.push(parts.pop());
+      remaining.push(parts.pop() as string);
       prefix = parts.length === 0 ? "/" : `/${parts.join("/")}`;
     }
   }
@@ -125,16 +147,16 @@ function projectRootCanonical() {
   return canonicalizePath(process.cwd());
 }
 
-function pathSegments(filePath) {
+function pathSegments(filePath: unknown): string[] {
   return String(filePath || "").replace(/\\/g, "/").split("/").filter(Boolean);
 }
 
-function pathUnderExcludedDir(filePath) {
+function pathUnderExcludedDir(filePath: unknown) {
   const segments = pathSegments(filePath);
   return segments.some((segment) => EXCLUDE_DIR_SEGMENTS.has(segment));
 }
 
-function isProjectSourceFile(filePath) {
+function isProjectSourceFile(filePath: unknown) {
   const resolved = canonicalizePath(filePath);
   if (!resolved) return false;
   const root = projectRootCanonical();
@@ -161,13 +183,13 @@ function statusJsonPath() {
 function writesAuthorized() {
   const path = statusJsonPath();
   if (!existsSync(path)) return false;
-  let state;
+  let state: LifecycleState;
   try {
-    state = JSON.parse(readFileSync(path, "utf8"));
+    state = JSON.parse(readFileSync(path, "utf8")) as LifecycleState;
   } catch {
     return false;
   }
-  const stages = Array.isArray(state.stages) ? state.stages : [];
+  const stages = Array.isArray(state.stages) ? (state.stages as LifecycleStage[]) : [];
   const checkStage = stages.find((stage) => stage && stage.id === "check");
   if (!checkStage) return false;
   const status = String(checkStage.status || "").toLowerCase();
@@ -175,7 +197,7 @@ function writesAuthorized() {
 }
 
 // Bash write-to-source heuristics. Conservative: only flag clear write surface.
-function bashWritesToSource(command) {
+function bashWritesToSource(command: unknown) {
   const trimmed = String(command || "").trim();
   if (!trimmed) return false;
   // Yolo CLI calls are allowed to touch anything.
@@ -314,7 +336,7 @@ function interpreterEvalWritesToSource(command: unknown): boolean {
   return commandMentionsSourcePath(command);
 }
 
-function isYoloCliInvocation(command) {
+function isYoloCliInvocation(command: unknown) {
   const tokens = String(command || "").split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return false;
   let i = 0;
@@ -330,13 +352,13 @@ function isYoloCliInvocation(command) {
   return false;
 }
 
-function isYoloScriptPath(token) {
+function isYoloScriptPath(token: unknown) {
   const segments = String(token || "").split("/").filter(Boolean);
   const last = segments[segments.length - 1] || "";
   return /^yolo(\.js|\.mjs|\.cjs|\.ts|\.tsx)?$/.test(last);
 }
 
-function block(code, message, file: string | null = null) {
+function block(code: string, message: string, file: string | null = null) {
   console.error(JSON.stringify({ status: "blocked", code, message, file }));
   process.exit(2);
 }
