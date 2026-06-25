@@ -13,22 +13,145 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runYoloCli } from "../../src/cli/yolo.js";
-import { classifyFakeSuccessReport } from "../../src/release/readiness.js";
+import {
+  classifyFakeSuccessReport,
+  type FakeSuccessClassification,
+  type RunReport,
+} from "../../src/release/readiness.js";
 
 const DEFAULT_FIXTURES = Object.freeze(["frontend-vite", "backend-api"]);
 const DEFAULT_ROUNDS = 2;
 const YOLO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+
+/**
+ * Loose, write-only stream shape accepted by the YOLO CLI io bag. The CLI reads
+ * `io.stdout`/`io.stderr` as optional duck-typed writable streams (see
+ * src/cli/split/commands.ts), so this mirrors the contract it consumes rather
+ * than narrowing the exported runYoloCli signature.
+ */
+interface StreamLike {
+  write(chunk: unknown): boolean;
+}
+
+/** Structural shape of the JSON run reports produced by the YOLO CLI. */
+type SoakRunReport = RunReport;
+
+/** A parsed descriptor fixture (fixtures/<name>/fixture.json). */
+type FixtureDescriptor = Record<string, unknown>;
+
+interface SoakOptions {
+  rounds: number;
+  fixtures: string[];
+  dryRun: boolean;
+  real: boolean;
+  help: boolean;
+}
+
+/** Subset of SoakOptions carried through runSoak into each round fixture. */
+interface NormalizedSoakOptions {
+  rounds: number;
+  fixtures: string[];
+  dryRun: boolean;
+}
+
+/**
+ * Loose input bag accepted by runSoak(). All fields are optional because callers
+ * (the CLI, tests, programmatic users) pass partial overrides on top of the
+ * DEFAULT_ROUNDS/DEFAULT_FIXTURES/dryRun defaults. Mirrors the untyped
+ * `options = Object()` baseline contract.
+ */
+interface SoakRunInput {
+  rounds?: number;
+  fixtures?: string[];
+  dryRun?: boolean;
+}
+
+/** Result of a single CLI invocation captured by the soak harness. */
+interface CommandResult {
+  command: string;
+  argv: string[];
+  exit_code: number;
+  stdout: string;
+  stderr: string;
+  report: SoakRunReport | null;
+}
+
+/** A captured command result tagged with its soak step name. */
+interface CommandRecord extends CommandResult {
+  step: string;
+}
+
+interface CommandFailure {
+  round: number;
+  fixture: string;
+  step: string;
+  command: string;
+  exit_code: number;
+  expected_exit_codes: number[];
+  code: string | null;
+  status: string | null;
+  summary: string;
+}
+
+interface RoundFixtureResult {
+  reports: SoakRunReport[];
+  failures: CommandFailure[];
+  commands: CommandRecord[];
+}
+
+interface FixtureDetails {
+  root: string;
+  descriptor: FixtureDescriptor;
+  targetFile: string;
+  testFile: string;
+  testCommand: string;
+  requirementText: string;
+  requirementId: string;
+  title: string;
+}
+
+interface PresetInterview {
+  idea: string;
+  title: string;
+  answers: [string, string][];
+}
+
+/** Runtime context threaded through a single fixture run. */
+interface CliCommandContext {
+  projectRoot: string;
+  yoloRoot: string;
+  runYoloCli: typeof runYoloCli;
+}
+
+/** io bag passed to main(), mirroring what the YOLO CLI dispatcher consumes. */
+interface MainIo {
+  stdout?: { write(chunk: unknown): boolean } | null;
+  stderr?: { write(chunk: unknown): boolean } | null;
+  yoloRoot?: string;
+  runSoak?: typeof runSoak;
+  runYoloCli?: typeof runYoloCli;
+}
+
+/** Dependencies injected into runSoak(). */
+interface SoakDeps {
+  yoloRoot?: string;
+  runYoloCli?: typeof runYoloCli;
+}
 
 function clean(value: unknown) {
   return String(value ?? "").trim();
 }
 
 function readJson(path: string) {
-  return JSON.parse(readFileSync(path, "utf8"));
+  return JSON.parse(readFileSync(path, "utf8")) as unknown;
 }
 
-function asArray(value: unknown) {
-  return Array.isArray(value) ? value : [];
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return (value && typeof value === "object") ? value as Record<string, unknown> : {};
 }
 
 function rateValue(numerator: number, denominator: number) {
@@ -36,14 +159,14 @@ function rateValue(numerator: number, denominator: number) {
   return Number(((numerator / denominator) * 100).toFixed(1));
 }
 
-function readArgValue(argv: string[], index: number) {
+function readArgValue(argv: string[], index: number): { value: string | undefined; consumed: number } {
   const arg = argv[index] || "";
   if (arg.includes("=")) return { value: arg.split("=").slice(1).join("="), consumed: 0 };
   return { value: argv[index + 1], consumed: 1 };
 }
 
-export function parseSoakArgs(argv = []) {
-  const options = {
+export function parseSoakArgs(argv: string[] = []): SoakOptions {
+  const options: SoakOptions = {
     rounds: DEFAULT_ROUNDS,
     fixtures: [...DEFAULT_FIXTURES],
     dryRun: true,
@@ -97,19 +220,20 @@ export function usage() {
 
 function captureStream() {
   let value = "";
-  return {
-    stream: {
-      write(chunk: unknown) {
-        value += String(chunk);
-        return true;
-      },
+  const stream: StreamLike = {
+    write(chunk: unknown) {
+      value += String(chunk);
+      return true;
     },
+  };
+  return {
+    stream,
     text() {
       return value;
     },
-    json() {
+    json(): SoakRunReport | null {
       const text = value.trim();
-      return text ? JSON.parse(text) : null;
+      return text ? (JSON.parse(text) as SoakRunReport) : null;
     },
   };
 }
@@ -125,34 +249,39 @@ function copyFixtureToProject(source: string, destination: string) {
   }
 }
 
-function firstSourceFile(descriptor = Object()) {
-  const files = asArray(descriptor.files).map(clean).filter(Boolean);
+function firstSourceFile(descriptor: FixtureDescriptor = Object()) {
+  const files = asArray<string>(descriptor.files).map(clean).filter(Boolean);
   return files.find((file) => /^src\//.test(file))
     || files.find((file) => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(file))
     || "src/index.ts";
 }
 
-function firstTestFile(descriptor = Object()) {
-  const files = asArray(descriptor.files).map(clean).filter(Boolean);
+function firstTestFile(descriptor: FixtureDescriptor = Object()) {
+  const files = asArray<string>(descriptor.files).map(clean).filter(Boolean);
   return files.find((file) => /(^|\/)(test|tests|__tests__)\//.test(file))
     || files.find((file) => /\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$/.test(file))
     || "test/index.test.ts";
 }
 
-function fixtureDetails(name: string, yoloRoot = YOLO_ROOT) {
+function fixtureDetails(name: string, yoloRoot = YOLO_ROOT): FixtureDetails {
   const root = fixtureRoot(name, yoloRoot);
   if (!existsSync(root) || !statSync(root).isDirectory()) {
     throw new Error(`Fixture not found: ${name}`);
   }
   const descriptorPath = join(root, "fixture.json");
-  const descriptor = existsSync(descriptorPath) ? readJson(descriptorPath) : {};
+  const descriptor: FixtureDescriptor = existsSync(descriptorPath)
+    ? asRecord(readJson(descriptorPath))
+    : {};
   const targetFile = firstSourceFile(descriptor);
   const testFile = firstTestFile(descriptor);
-  const testCommand = clean(descriptor.run?.commands?.[0]) || "npm test";
-  const requirementText = clean(descriptor.requirement?.text)
+  const run = asRecord(descriptor.run);
+  const commands = asArray<unknown>(run.commands);
+  const testCommand = clean(commands[0]) || "npm test";
+  const requirement = asRecord(descriptor.requirement);
+  const requirementText = clean(requirement.text)
     || clean(descriptor.description)
     || `Exercise fixture ${name}.`;
-  const requirementId = clean(descriptor.requirement?.id) || `REQ-${name.toUpperCase()}`;
+  const requirementId = clean(requirement.id) || `REQ-${name.toUpperCase()}`;
   return {
     root,
     descriptor,
@@ -165,7 +294,7 @@ function fixtureDetails(name: string, yoloRoot = YOLO_ROOT) {
   };
 }
 
-function presetInterview(details) {
+function presetInterview(details: FixtureDetails): PresetInterview {
   const { requirementText, requirementId, targetFile, testFile, testCommand, title } = details;
   const demandText = `Verify ${title} fixture requirement ${requirementId} through the existing smoke test.`;
   const idea = [
@@ -191,7 +320,7 @@ function presetInterview(details) {
   };
 }
 
-async function runCliCommand(argv: string[], context) {
+async function runCliCommand(argv: string[], context: CliCommandContext): Promise<CommandResult> {
   const stdout = captureStream();
   const stderr = captureStream();
   const exitCode = await context.runYoloCli(argv, {
@@ -200,7 +329,7 @@ async function runCliCommand(argv: string[], context) {
     stderr: stderr.stream,
     yoloRoot: context.yoloRoot,
   });
-  let report = null;
+  let report: SoakRunReport | null = null;
   try {
     report = stdout.json();
   } catch {
@@ -216,7 +345,19 @@ async function runCliCommand(argv: string[], context) {
   };
 }
 
-function commandFailure(round, fixture, step, result, expectedExitCodes) {
+function commandFailure(
+  round: number,
+  fixture: string,
+  step: string,
+  result: CommandResult,
+  expectedExitCodes: number[],
+): CommandFailure {
+  // Field access on a RunReport (Record<string, unknown>) yields unknown; preserve
+  // the original truthiness (`|| null` / chained `||`) semantics verbatim.
+  const report = result.report ? asRecord(result.report) : {};
+  const code = report.code || null;
+  const status = report.status || null;
+  const summary = report.summary || clean(result.stderr) || clean(result.stdout) || "command failed";
   return {
     round,
     fixture,
@@ -224,25 +365,34 @@ function commandFailure(round, fixture, step, result, expectedExitCodes) {
     command: result.command,
     exit_code: result.exit_code,
     expected_exit_codes: expectedExitCodes,
-    code: result.report?.code || null,
-    status: result.report?.status || null,
-    summary: result.report?.summary || clean(result.stderr) || clean(result.stdout) || "command failed",
+    code: code as string | null,
+    status: status as string | null,
+    summary: summary as string,
   };
 }
 
-function pushRunReport(reports, round, fixture, step, result) {
+function pushRunReport(
+  reports: SoakRunReport[],
+  round: number,
+  fixture: string,
+  step: string,
+  result: CommandResult,
+): void {
   if (!result.report || typeof result.report !== "object") return;
+  const report = asRecord(result.report);
+  // Preserve original `||` fallback: prefer the report's run_id, else synthesize one.
+  const runId = report.run_id || `soak-${fixture}-r${round}-${step}`;
   reports.push({
     ...result.report,
-    run_id: result.report.run_id || `soak-${fixture}-r${round}-${step}`,
+    run_id: runId as string,
     soak_round: round,
     fixture,
     soak_step: step,
   });
 }
 
-function findJsonReports(root: string, names: string[]) {
-  const found = [];
+function findJsonReports(root: string, names: string[]): { path: string; report: SoakRunReport }[] {
+  const found: { path: string; report: SoakRunReport }[] = [];
   function visit(dir: string) {
     if (!existsSync(dir)) return;
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -251,7 +401,7 @@ function findJsonReports(root: string, names: string[]) {
         visit(path);
       } else if (entry.isFile() && entry.name.endsWith(".json") && names.some((name) => entry.name.includes(name))) {
         try {
-          found.push({ path, report: readJson(path) });
+          found.push({ path, report: asRecord(readJson(path)) as SoakRunReport });
         } catch {
           // Ignore malformed side reports; the command result remains the source of truth.
         }
@@ -262,8 +412,10 @@ function findJsonReports(root: string, names: string[]) {
   return found;
 }
 
-export function summarizeFakeSuccess(reports = []) {
-  const fakeReports = reports.map((report) => classifyFakeSuccessReport(report)).filter(Boolean);
+export function summarizeFakeSuccess(reports: SoakRunReport[] = []) {
+  const fakeReports = reports
+    .map((report) => classifyFakeSuccessReport(report))
+    .filter((report): report is FakeSuccessClassification => report !== null);
   return {
     fake_success: fakeReports.length,
     fake_success_rate: rateValue(fakeReports.length, reports.length),
@@ -272,7 +424,17 @@ export function summarizeFakeSuccess(reports = []) {
   };
 }
 
-export function buildSoakSummary({ rounds, fixtures, reports = [], failures = [] }) {
+export function buildSoakSummary({
+  rounds,
+  fixtures,
+  reports = [],
+  failures = [],
+}: {
+  rounds: number;
+  fixtures: string[];
+  reports?: SoakRunReport[];
+  failures?: CommandFailure[];
+}) {
   const fake = summarizeFakeSuccess(reports);
   return {
     rounds,
@@ -283,20 +445,35 @@ export function buildSoakSummary({ rounds, fixtures, reports = [], failures = []
   };
 }
 
-async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: cli }) {
+async function runRoundFixture({
+  round,
+  fixture,
+  options,
+  yoloRoot,
+  runYoloCli: cli,
+}: {
+  round: number;
+  fixture: string;
+  options: NormalizedSoakOptions;
+  yoloRoot: string;
+  runYoloCli: typeof runYoloCli;
+}): Promise<RoundFixtureResult> {
   const details = fixtureDetails(fixture, yoloRoot);
   const tempRoot = mkdtempSync(join(tmpdir(), `yolo-soak-${fixture}-r${round}-`));
   const projectRoot = join(tempRoot, basename(details.root));
-  const reports = [];
-  const failures = [];
-  const commands = [];
+  const reports: SoakRunReport[] = [];
+  const failures: CommandFailure[] = [];
+  const commands: CommandRecord[] = [];
+  // `options` is part of the run contract (e.g. dryRun) but the canonical soak
+  // path below does not read it directly; the binding is kept so the caller
+  // shape is unchanged from the untyped baseline.
 
   try {
     copyFixtureToProject(details.root, projectRoot);
     const interview = presetInterview(details);
-    const context = { projectRoot, yoloRoot, runYoloCli: cli };
+    const context: CliCommandContext = { projectRoot, yoloRoot, runYoloCli: cli };
 
-    async function step(name: string, argv: string[], expectedExitCodes = [0]) {
+    async function step(name: string, argv: string[], expectedExitCodes: number[] = [0]): Promise<CommandResult> {
       const result = await runCliCommand(argv, context);
       commands.push({ step: name, ...result });
       pushRunReport(reports, round, fixture, name, result);
@@ -313,6 +490,8 @@ async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: 
       `soak-${fixture}-r${round}`,
       "--json",
     ]);
+    // baseline assigned but did not read init; keep assignment verbatim
+    void init;
     if (failures.length) return { reports, failures, commands };
 
     const start = await step("interview-start", [
@@ -329,7 +508,8 @@ async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: 
     ]);
     if (failures.length) return { reports, failures, commands };
 
-    const sessionPath = start.report?.session_path;
+    const startReport = start.report ? asRecord(start.report) : {};
+    const sessionPath = startReport.session_path;
     if (!sessionPath) {
       failures.push({
         round,
@@ -350,7 +530,7 @@ async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: 
         "interview",
         "answer",
         "--session",
-        sessionPath,
+        sessionPath as string,
         "--question",
         question,
         "--answer",
@@ -364,13 +544,14 @@ async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: 
       "interview",
       "playback",
       "--session",
-      sessionPath,
+      sessionPath as string,
       "--confirm",
       "Confirmed for soak dry-run.",
       "--json",
     ]);
     if (failures.length) return { reports, failures, commands };
-    if (playback.report?.code !== "PLAYBACK_CONFIRMED") {
+    const playbackReport = playback.report ? asRecord(playback.report) : {};
+    if (playbackReport.code !== "PLAYBACK_CONFIRMED") {
       failures.push({
         round,
         fixture,
@@ -389,14 +570,15 @@ async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: 
       "interview",
       "to-demand",
       "--session",
-      sessionPath,
+      sessionPath as string,
       "--cwd",
       projectRoot,
       "--json",
     ]);
     if (failures.length) return { reports, failures, commands };
 
-    const demandDir = toDemand.report?.demand_dir;
+    const toDemandReport = toDemand.report ? asRecord(toDemand.report) : {};
+    const demandDir = toDemandReport.demand_dir;
     if (!demandDir) {
       failures.push({
         round,
@@ -412,16 +594,20 @@ async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: 
       return { reports, failures, commands };
     }
 
-    await step("tasks", ["tasks", "--demand", demandDir, "--cwd", projectRoot, "--json"]);
+    await step("tasks", ["tasks", "--demand", demandDir as string, "--cwd", projectRoot, "--json"]);
     if (failures.length) return { reports, failures, commands };
 
-    const prd = await step("prd", ["spec", "--demand", demandDir, "--json"]);
+    const prd = await step("prd", ["spec", "--demand", demandDir as string, "--json"]);
     if (failures.length) return { reports, failures, commands };
 
-    const prdPath = prd.report?.prd_path
-      || prd.report?.output_path
-      || prd.report?.outputs?.find((output) => output?.type === "prd" && output?.path)?.path
-      || prd.report?.artifacts?.find((path) => /(^|[/\\])prd\.json$/.test(String(path)));
+    const prdReport = prd.report ? asRecord(prd.report) : {};
+    const outputs = asArray<Record<string, unknown>>(prdReport.outputs);
+    const artifacts = asArray<unknown>(prdReport.artifacts);
+    // Preserve the original chained `||` precedence over the candidate PRD paths.
+    const prdPath = prdReport.prd_path
+      || prdReport.output_path
+      || outputs.find((output) => output?.type === "prd" && output?.path)?.path
+      || artifacts.find((path) => /(^|[/\\])prd\.json$/.test(String(path)));
     if (!prdPath) {
       failures.push({
         round,
@@ -437,7 +623,7 @@ async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: 
       return { reports, failures, commands };
     }
 
-    await step("check", ["check", prdPath, "--cwd", projectRoot, "--json"]);
+    await step("check", ["check", prdPath as string, "--cwd", projectRoot, "--json"]);
     if (failures.length) return { reports, failures, commands };
 
     await step("auto-dry-run", [
@@ -450,9 +636,12 @@ async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: 
     ], [2]);
 
     for (const item of findJsonReports(join(projectRoot, ".yolo"), ["run", "acceptance"])) {
+      const itemReport = asRecord(item.report);
+      // Preserve original `||` fallback for the synthesized run_id.
+      const runId = itemReport.run_id || `soak-${fixture}-r${round}-${basename(item.path)}`;
       reports.push({
         ...item.report,
-        run_id: item.report?.run_id || `soak-${fixture}-r${round}-${basename(item.path)}`,
+        run_id: runId as string,
         soak_round: round,
         fixture,
         soak_report_path: item.path,
@@ -465,16 +654,16 @@ async function runRoundFixture({ round, fixture, options, yoloRoot, runYoloCli: 
   }
 }
 
-export async function runSoak(options = Object(), deps = Object()) {
-  const normalized = {
+export async function runSoak(options: SoakRunInput = Object(), deps: SoakDeps = Object()) {
+  const normalized: NormalizedSoakOptions = {
     rounds: options.rounds ?? DEFAULT_ROUNDS,
     fixtures: options.fixtures ?? [...DEFAULT_FIXTURES],
     dryRun: options.dryRun !== false,
   };
   const yoloRoot = deps.yoloRoot || YOLO_ROOT;
   const cli = deps.runYoloCli || runYoloCli;
-  const reports = [];
-  const failures = [];
+  const reports: SoakRunReport[] = [];
+  const failures: CommandFailure[] = [];
 
   for (let round = 1; round <= normalized.rounds; round += 1) {
     for (const fixture of normalized.fixtures) {
@@ -514,10 +703,10 @@ export async function runSoak(options = Object(), deps = Object()) {
   return { summary, exitCode, reports };
 }
 
-export async function main(argv = process.argv.slice(2), io = Object()) {
+export async function main(argv: string[] = process.argv.slice(2), io: MainIo = Object()): Promise<number> {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
-  let options;
+  let options: SoakOptions;
 
   try {
     options = parseSoakArgs(argv);
