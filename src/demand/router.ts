@@ -10,6 +10,17 @@ import {
   type EvidenceRequirement,
 } from "./evidence-requirements.js";
 import { targetUserRoleItems } from "./interview.js";
+import type {
+  DemandBlockerLike,
+  DemandEvidenceRecord,
+  DemandEvidenceResult,
+  DemandRecord,
+  DemandRequirement,
+  DemandRuntimeInput,
+  DemandRuntimeOptions,
+  DemandScenario,
+  DemandSession,
+} from "./graph.js";
 
 export interface DemandTriageResult {
   schema_version: string;
@@ -23,15 +34,25 @@ export interface DemandTriageResult {
 }
 
 export interface DemandQuestion {
+  id?: string;
   slot: string;
   text: string;
+  plain_language_prompt?: string;
 }
 
 export interface DemandBlocker {
   code: string;
+  id?: string;
   slot?: string;
+  claim?: string;
+  evidence_requirement_id?: string;
   message: string;
+  topic?: string;
+  recommendations?: string[];
   role?: string;
+  path?: string;
+  change?: string;
+  human_needed?: boolean;
 }
 
 export interface DemandPrdReadinessResult {
@@ -88,6 +109,19 @@ export interface DemandSessionStateResult {
   next_actions: string[];
 }
 
+interface DemandRouterOptions extends DemandRuntimeOptions {
+  session?: DemandSession;
+  triage?: Partial<DemandTriageResult>;
+  suppressApproval?: boolean;
+  scanProjectState?: boolean;
+}
+
+interface DemandEvidenceTask {
+  role: string;
+  protocol: unknown;
+  reason: string;
+}
+
 export const DEMAND_ROUTER_SCHEMA_VERSION = "1.0";
 export const DEMAND_ROUTER_SCHEMA = "yolo.demand.router.v1";
 export const DEMAND_SESSION_STATE_SCHEMA_VERSION = "1.0";
@@ -121,7 +155,7 @@ export const DEMAND_REQUIRED_PRD_SLOTS = [
   "approval",
 ];
 
-const DEMAND_PRD_SLOT_QUESTIONS = {
+const DEMAND_PRD_SLOT_QUESTIONS: Record<string, { category: string; text: string }> = {
   problem: {
     category: "问题",
     text: "你要解决的业务问题是什么？请用一句话说明谁在什么场景下遇到什么困扰。",
@@ -206,26 +240,29 @@ export const DEMAND_EVIDENCE_AGENT_PROTOCOLS = {
   },
 };
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function asArray(value) {
+function asArray<T = unknown>(value: T | T[] | readonly T[] | null | undefined): T[] {
   if (value == null) return [];
-  return Array.isArray(value) ? value : [value];
+  return (Array.isArray(value) ? [...value] : [value]) as T[];
 }
 
-function stringItems(value) {
+function stringItems(value: unknown): string[] {
   return asArray(value)
     .flatMap((item) => {
-      if (item && typeof item === "object") return [item.text, item.title, item.summary, item.value, item.claim].filter(Boolean);
+      if (item && typeof item === "object") {
+        const record = item as DemandRecord;
+        return [record.text, record.title, record.summary, record.value, record.claim].filter(Boolean);
+      }
       return String(item ?? "").split(/\r?\n/);
     })
     .map(clean)
     .filter(Boolean);
 }
 
-function isNonMissingStatusItem(value) {
+function isNonMissingStatusItem(value: unknown): boolean {
   const text = clean(value).toLowerCase();
   if (!text) return true;
   if (/\b(but|except|however|unless)\b/.test(text)) return false;
@@ -235,15 +272,15 @@ function isNonMissingStatusItem(value) {
   return false;
 }
 
-function actionableMissingItems(value) {
+function actionableMissingItems(value: unknown): string[] {
   return stringItems(value).filter((item) => !isNonMissingStatusItem(item));
 }
 
-function hasItems(value) {
+function hasItems(value: unknown): boolean {
   return stringItems(value).length > 0;
 }
 
-function firstItems(...values) {
+function firstItems(...values: unknown[]): string[] {
   for (const value of values) {
     const items = stringItems(value);
     if (items.length > 0) return items;
@@ -251,7 +288,7 @@ function firstItems(...values) {
   return [];
 }
 
-function firstTargetUserItems(...values) {
+function firstTargetUserItems(...values: unknown[]): string[] {
   for (const value of values) {
     const items = targetUserRoleItems(value);
     if (items.length > 0) return items;
@@ -259,30 +296,31 @@ function firstTargetUserItems(...values) {
   return [];
 }
 
-function unique(value) {
+function unique(value: unknown): string[] {
   return [...new Set(asArray(value).map(clean).filter(Boolean))];
 }
 
-function stageForSlot(slot) {
+function stageForSlot(slot: string): string {
   if (["scope_in", "scope_out", "constraints", "acceptance_criteria", "risks"].includes(slot)) return "requirements";
   if (slot === "approval") return "approval";
   return "clarify";
 }
 
-function questionForSlot(slot) {
-  const prompt = DEMAND_PRD_SLOT_QUESTIONS[slot] || {};
+function questionForSlot(slot: string) {
+  const fallbackText = `请补充 ${slot}，以便继续判断 PRD 就绪状态。`;
+  const prompt = DEMAND_PRD_SLOT_QUESTIONS[slot] || { category: slot, text: fallbackText };
   return {
     id: `ASK_${String(slot).toUpperCase()}`,
     slot,
     stage: stageForSlot(slot),
     category: prompt.category || slot,
-    text: prompt.text || `请补充 ${slot}，以便继续判断 PRD 就绪状态。`,
-    plain_language_prompt: prompt.text || `请补充 ${slot}，以便继续判断 PRD 就绪状态。`,
+    text: prompt.text || fallbackText,
+    plain_language_prompt: prompt.text || fallbackText,
     required_for: ["prd_readiness"],
   };
 }
 
-function questionQueueFor(missingSlots = [], options = Object()) {
+function questionQueueFor(missingSlots: unknown[] = [], options: { suppressApproval?: boolean } = Object()): ReturnType<typeof questionForSlot>[] {
   const missing = new Set(asArray(missingSlots).map(clean).filter(Boolean));
   const nonApprovalSlots = DEMAND_REQUIRED_PRD_SLOTS
     .filter((slot) => slot !== "approval" && missing.has(slot));
@@ -293,7 +331,7 @@ function questionQueueFor(missingSlots = [], options = Object()) {
     .map((slot) => questionForSlot(slot));
 }
 
-function textFrom(...values) {
+function textFrom(...values: unknown[]): string {
   return values
     .flatMap((value) => {
       if (value && typeof value === "object") return Object.values(value);
@@ -304,9 +342,9 @@ function textFrom(...values) {
     .toLowerCase();
 }
 
-function demandTextItems(input = Object(), session = Object()) {
+function demandTextItems(input: DemandRuntimeInput = Object(), session: DemandSession = Object()): unknown[] {
   const requirements = requirementItems(session, input);
-  const scenarios = asArray(session.scenario_matrix?.scenarios || session.scenarios);
+  const scenarios = asArray<DemandScenario>(session.scenario_matrix?.scenarios || session.scenarios);
   return [
     input.objective,
     input.idea,
@@ -373,16 +411,16 @@ function demandTextItems(input = Object(), session = Object()) {
   ];
 }
 
-function resolveRoot(input = Object(), options = Object()) {
+function resolveRoot(input: DemandRuntimeInput = Object(), options: DemandRouterOptions = Object()): string {
   return resolve(clean(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd) || process.cwd());
 }
 
-function resolvePath(root, path) {
+function resolvePath(root: string, path: string): string {
   if (!path) return "";
   return isAbsolute(path) ? path : resolve(root, path);
 }
 
-function readJsonIfExists(path) {
+function readJsonIfExists(path: string): DemandRecord | null {
   if (!path || !existsSync(path)) return null;
   try {
     return JSON.parse(readFileSync(path, "utf8"));
@@ -391,7 +429,7 @@ function readJsonIfExists(path) {
   }
 }
 
-function readDemandSessionFile(pathOrDir) {
+function readDemandSessionFile(pathOrDir: string) {
   const resolved = resolve(pathOrDir);
   const sessionPath = existsSync(resolved) && !resolved.endsWith(".json")
     ? join(resolved, "session.json")
@@ -405,7 +443,7 @@ function readDemandSessionFile(pathOrDir) {
     if (schemaError) return { ok: false, path: sessionPath, error: schemaError };
     return { ok: true, path: sessionPath, dir: dirname(sessionPath), session };
   } catch (error) {
-    return { ok: false, path: sessionPath, error: `Demand session JSON parse failed: ${error.message}` };
+    return { ok: false, path: sessionPath, error: `Demand session JSON parse failed: ${error instanceof Error ? error.message : String(error)}` };
   }
 }
 
@@ -413,21 +451,22 @@ function readDemandSessionFile(pathOrDir) {
 // schema_version can silently change downstream behavior. Reject anything that
 // is not the canonical yolo.demand.session.v1 / 1.0 shape so callers fail
 // closed at the read boundary instead of drifting further down the pipeline.
-export function demandSessionSchemaError(session, sessionPath = "") {
+export function demandSessionSchemaError(session: unknown, sessionPath: string = ""): string | null {
   if (!session || typeof session !== "object" || Array.isArray(session)) {
     return `Demand session ${sessionPath} must be a JSON object`;
   }
-  if (session.schema_version !== DEMAND_SESSION_SCHEMA_VERSION) {
-    return `Demand session ${sessionPath} has unsupported schema_version "${session.schema_version}"; expected "${DEMAND_SESSION_SCHEMA_VERSION}"`;
+  const record = session as DemandRecord;
+  if (record.schema_version !== DEMAND_SESSION_SCHEMA_VERSION) {
+    return `Demand session ${sessionPath} has unsupported schema_version "${record.schema_version}"; expected "${DEMAND_SESSION_SCHEMA_VERSION}"`;
   }
-  if (session.schema !== DEMAND_SESSION_SCHEMA) {
-    return `Demand session ${sessionPath} has unsupported schema "${session.schema}"; expected "${DEMAND_SESSION_SCHEMA}"`;
+  if (record.schema !== DEMAND_SESSION_SCHEMA) {
+    return `Demand session ${sessionPath} has unsupported schema "${record.schema}"; expected "${DEMAND_SESSION_SCHEMA}"`;
   }
   return null;
 }
 
-function loadSession(input = Object(), options = Object()) {
-  if (input.session && typeof input.session === "object") return input.session;
+function loadSession(input: DemandRuntimeInput = Object(), options: DemandRouterOptions = Object()): DemandSession | null {
+  if (input.session && typeof input.session === "object") return input.session as DemandSession;
   const projectRoot = resolveRoot(input, options);
   const demandPath = clean(input.demandPath || input.demand_path || input.sessionPath || input.session_path);
   if (demandPath) {
@@ -435,11 +474,11 @@ function loadSession(input = Object(), options = Object()) {
     if (read.ok) return read.session;
   }
   const explicit = readJsonIfExists(resolvePath(projectRoot, clean(input.path || "")));
-  if (explicit?.schema === "yolo.demand.session.v1") return explicit;
+  if (explicit?.schema === "yolo.demand.session.v1") return explicit as DemandSession;
   return null;
 }
 
-function buildStatusSession(input = Object(), options = Object()) {
+function buildStatusSession(input: DemandRuntimeInput = Object(), options: DemandRouterOptions = Object()): DemandSession {
   const loaded = loadSession(input, options);
   if (loaded) return loaded;
   const objective = clean(input.objective || input.idea || input.requirement || input.text);
@@ -469,18 +508,18 @@ function buildStatusSession(input = Object(), options = Object()) {
   };
 }
 
-function targetFiles(session = Object(), input = Object()) {
+function targetFiles(session: DemandSession = Object(), input: DemandRuntimeInput = Object()): string[] {
   return unique([
     ...asArray(input.target_files || input.targetFiles),
     ...asArray(session.project?.target_files || session.target_files),
   ]);
 }
 
-function requirementItems(session = Object(), input = Object()) {
-  return asArray(session.requirements?.active || session.requirements || input.requirements);
+function requirementItems(session: DemandSession = Object(), input: DemandRuntimeInput = Object()): DemandRequirement[] {
+  return asArray<DemandRequirement>(session.requirements?.active || input.requirements?.active || session.requirements as DemandRequirement);
 }
 
-function acceptanceItems(session = Object(), input = Object()) {
+function acceptanceItems(session: DemandSession = Object(), input: DemandRuntimeInput = Object()): string[] {
   const requirements = requirementItems(session, input);
   return firstItems(
     input.acceptance_criteria,
@@ -493,7 +532,7 @@ function acceptanceItems(session = Object(), input = Object()) {
   );
 }
 
-function assumptions(session = Object(), input = Object()) {
+function assumptions(session: DemandSession = Object(), input: DemandRuntimeInput = Object()): string[] {
   return [
     ...stringItems(input.assumptions),
     ...stringItems(session.assumptions),
@@ -501,11 +540,11 @@ function assumptions(session = Object(), input = Object()) {
   ];
 }
 
-function evidenceItems(session = Object(), input = Object()) {
+function evidenceItems(session: DemandSession = Object(), input: DemandRuntimeInput = Object()): string[] {
   return firstItems(input.evidence, session.evidence, session.investigation?.evidence);
 }
 
-function normalizeEvidenceRole(value) {
+function normalizeEvidenceRole(value: unknown): string {
   const role = clean(value).toLowerCase().replace(/_/g, "-");
   if (role === "crosschecker") return "cross-checker";
   if (role === "cross-checker") return "cross-checker";
@@ -513,7 +552,7 @@ function normalizeEvidenceRole(value) {
   return role;
 }
 
-function evidenceResultSources(session = Object(), input = Object()) {
+function evidenceResultSources(session: DemandSession = Object(), input: DemandRuntimeInput = Object()): unknown[] {
   return [
     input.evidence_results,
     input.evidenceResults,
@@ -535,7 +574,7 @@ function evidenceResultSources(session = Object(), input = Object()) {
   ];
 }
 
-function evidenceResultItems(session = Object(), input = Object()) {
+function evidenceResultItems(session: DemandSession = Object(), input: DemandRuntimeInput = Object()): DemandEvidenceResult[] {
   return evidenceResultSources(session, input)
     .flatMap((value) => {
       if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -553,7 +592,7 @@ function evidenceResultItems(session = Object(), input = Object()) {
     .filter((item) => item.role);
 }
 
-function evidenceRecords(result = Object()) {
+function evidenceRecords(result: DemandEvidenceResult = Object()): Array<DemandEvidenceRecord | string> {
   return [
     result.evidence,
     result.result?.evidence,
@@ -567,7 +606,7 @@ function evidenceRecords(result = Object()) {
   ].flatMap((value) => asArray(value)).filter(Boolean);
 }
 
-function evidenceRecordScope(record = Object()) {
+function evidenceRecordScope(record: DemandEvidenceRecord | string = Object()): string {
   if (typeof record === "string") return "unknown";
   if (!record || typeof record !== "object") return "unknown";
   const scope = clean(record.scope || record.evidence_scope || record.source_scope || record.kind || record.type).toLowerCase();
@@ -593,20 +632,20 @@ function evidenceRecordScope(record = Object()) {
   return "unknown";
 }
 
-function evidenceRecordHasDeclaredScope(record = Object()) {
+function evidenceRecordHasDeclaredScope(record: DemandEvidenceRecord | string = Object()): boolean {
   if (!record || typeof record !== "object") return false;
   const scope = clean(record.scope || record.evidence_scope || record.source_scope).toLowerCase();
   return VALID_EVIDENCE_SCOPES.has(scope);
 }
 
-function evidenceRecordHasProjectLocator(record = Object()) {
+function evidenceRecordHasProjectLocator(record: DemandEvidenceRecord | string = Object()): boolean {
   if (!record || typeof record !== "object") return false;
   const path = clean(record.path || record.file || record.file_path || record.filename);
   if (!path || /^https?:\/\//i.test(path)) return false;
   return true;
 }
 
-function evidenceScopeSummary(result = Object()) {
+function evidenceScopeSummary(result: DemandEvidenceResult = Object()) {
   const records = evidenceRecords(result);
   const analyzed = records.map((record) => ({
     scope: evidenceRecordScope(record),
@@ -623,7 +662,7 @@ function evidenceScopeSummary(result = Object()) {
   };
 }
 
-function evidenceScopeDeclarationIssues(result = Object()) {
+function evidenceScopeDeclarationIssues(result: DemandEvidenceResult = Object()): DemandBlocker[] {
   const role = normalizeEvidenceRole(result.role || result.agent || result.agent_role || result.agentRole || result.name);
   const invalid = evidenceRecords(result).filter((record) => !evidenceRecordHasDeclaredScope(record));
   if (invalid.length === 0) return [];
@@ -634,7 +673,7 @@ function evidenceScopeDeclarationIssues(result = Object()) {
   }];
 }
 
-function resultEvidencePresent(result = Object()) {
+function resultEvidencePresent(result: DemandEvidenceResult = Object()): boolean {
   return hasItems(result.evidence)
     || hasItems(result.sources)
     || hasItems(result.findings)
@@ -643,7 +682,7 @@ function resultEvidencePresent(result = Object()) {
     || hasItems(result.output?.evidence);
 }
 
-function resultPayloadPresent(result = Object()) {
+function resultPayloadPresent(result: DemandEvidenceResult = Object()): boolean {
   return result.result != null
     || result.output != null
     || result.claim != null
@@ -652,7 +691,7 @@ function resultPayloadPresent(result = Object()) {
     || result.verdict != null;
 }
 
-function evidenceResultComplete(result = Object()) {
+function evidenceResultComplete(result: DemandEvidenceResult = Object()): boolean {
   const status = clean(result.status || result.state || result.completed_status).toLowerCase();
   const completed = result.completed === true
     || result.complete === true
@@ -660,14 +699,14 @@ function evidenceResultComplete(result = Object()) {
   return completed && resultEvidencePresent(result) && resultPayloadPresent(result);
 }
 
-function requiredEvidenceRoles(policy) {
+function requiredEvidenceRoles(policy: unknown): string[] {
   if (policy === "cross_check") return ["explorer", "cross-checker", "verifier"];
   if (policy === "single_agent") return ["explorer", "verifier"];
   return [];
 }
 
-function evidenceResultBlockingIssues(result = Object()) {
-  const issues = [];
+function evidenceResultBlockingIssues(result: DemandEvidenceResult = Object()): DemandBlocker[] {
+  const issues: DemandBlocker[] = [];
   const role = normalizeEvidenceRole(result.role || result.agent || result.agent_role || result.agentRole || result.name);
   const recommendation = clean(result.recommendation || result.result?.recommendation || result.output?.recommendation).toLowerCase();
   const verdict = clean(result.verdict || result.result?.verdict || result.output?.verdict).toLowerCase();
@@ -698,7 +737,7 @@ function evidenceResultBlockingIssues(result = Object()) {
   return issues;
 }
 
-function projectEvidenceBlockingIssues(result = Object()) {
+function projectEvidenceBlockingIssues(result: DemandEvidenceResult = Object()): DemandBlocker[] {
   const role = normalizeEvidenceRole(result.role || result.agent || result.agent_role || result.agentRole || result.name);
   const summary = evidenceScopeSummary(result);
   if (summary.records.length === 0 || summary.has_project) return [];
@@ -717,10 +756,10 @@ function projectEvidenceBlockingIssues(result = Object()) {
   }];
 }
 
-function activeBlockers(...sources) {
+function activeBlockers(...sources: unknown[]): DemandBlocker[] {
   return sources
     .flatMap((source) => asArray(source))
-    .filter((item) => item && typeof item === "object")
+    .filter((item): item is DemandBlockerLike => Boolean(item && typeof item === "object"))
     .filter((item) => item.cleared !== true && item.resolved !== true && !["cleared", "resolved", "dismissed"].includes(clean(item.status).toLowerCase()))
     .map((item) => ({
       ...item,
@@ -729,9 +768,9 @@ function activeBlockers(...sources) {
     }));
 }
 
-function uniqueBlockers(blockers = []) {
-  const seen = new Set();
-  const result = [];
+function uniqueBlockers(blockers: DemandBlocker[] = []): DemandBlocker[] {
+  const seen = new Set<string>();
+  const result: DemandBlocker[] = [];
   for (const blocker of blockers) {
     const key = `${blocker.code}\u0000${blocker.message}`;
     if (seen.has(key)) continue;
@@ -741,11 +780,11 @@ function uniqueBlockers(blockers = []) {
   return result;
 }
 
-function riskItems(session = Object(), input = Object()) {
+function riskItems(session: DemandSession = Object(), input: DemandRuntimeInput = Object()): string[] {
   return firstItems(input.risks, session.risks, session.reflection?.risks, session.investigation?.risks);
 }
 
-function slotValues(session = Object(), input = Object()) {
+function slotValues(session: DemandSession = Object(), input: DemandRuntimeInput = Object()): Record<string, string[]> {
   const requirements = requirementItems(session, input);
   const scopeIn = firstItems(
     input.scope_in,
@@ -768,7 +807,7 @@ function slotValues(session = Object(), input = Object()) {
   };
 }
 
-function unresolvedAssumptions(session = Object(), input = Object()) {
+function unresolvedAssumptions(session: DemandSession = Object(), input: DemandRuntimeInput = Object()): string[] {
   const raw = [
     ...asArray(input.assumptions),
     ...asArray(session.assumptions),
@@ -776,46 +815,52 @@ function unresolvedAssumptions(session = Object(), input = Object()) {
   ];
   return raw
     .filter((item) => {
-      if (item && typeof item === "object") return item.confirmed !== true && item.status !== "confirmed";
+      if (item && typeof item === "object") {
+        const record = item as DemandRecord & { confirmed?: boolean; status?: string };
+        return record.confirmed !== true && record.status !== "confirmed";
+      }
       return clean(item).length > 0;
     })
     .map((item) => {
-      if (item && typeof item === "object") return clean(item.text || item.summary || item.value || item.claim);
+      if (item && typeof item === "object") {
+        const record = item as DemandRecord;
+        return clean(record.text || record.summary || record.value || record.claim);
+      }
       return clean(item);
     })
     .filter(Boolean);
 }
 
-function hasGreenfieldSignal(text) {
+function hasGreenfieldSignal(text: string): boolean {
   return /\b(new|greenfield|from scratch|startup|mvp|idea|prototype)\b|新项目|从零|全新|想法|原型/.test(text);
 }
 
-function hasExistingSignal(text, files = [], input = Object()) {
+function hasExistingSignal(text: string, files: string[] = [], input: DemandRuntimeInput = Object()): boolean {
   return files.length > 0
     || Boolean(clean(input.demandPath || input.demand_path || input.sessionPath || input.session_path))
     || /\b(existing|current|legacy|brownfield|already|implemented|bug|fix|regression|refactor|production)\b|已有|现有|当前|线上|半成品|实现|修复|改造|回归/.test(text);
 }
 
-function hasHybridSignal(text) {
+function hasHybridSignal(text: string): boolean {
   return /\b(add|new feature|extend|integrate|support)\b|新增|增加|接入|扩展|加一个|做一个/.test(text);
 }
 
-function hasTechnicalRiskSignal(text) {
+function hasTechnicalRiskSignal(text: string): boolean {
   const copyOnlyEmptyState = /\bempty[- ]state copy\b|空状态文案/.test(text);
   const nonStateTechnical = /\b(field|schema|api|auth|authorization|authentication|permission|role|data flow|dataflow|migration|database|db|table|column|model|endpoint|route|session|token|oauth|cache|queue|event)\b|字段|表结构|模式|接口|认证|鉴权|权限|角色|数据流|迁移|数据库|数据表|模型|端点|路由|令牌|缓存|队列/.test(text);
   const stateTechnical = !copyOnlyEmptyState && (/\bstate\b|状态/.test(text));
   return nonStateTechnical || stateTechnical;
 }
 
-function hasHighCostSignal(text) {
+function hasHighCostSignal(text: string): boolean {
   return /\b(payment|billing|invoice|security|privacy|compliance|legal|medical|health|money|delete|loss|production|rollback|irreversible)\b|支付|账单|发票|安全|隐私|合规|法律|医疗|金额|删除|数据丢失|线上|不可逆|回滚/.test(text);
 }
 
-function hasPrdIntent(text) {
+function hasPrdIntent(text: string): boolean {
   return /\b(prd|requirements?|acceptance|ship|implement|execute|build now)\b|需求文档|验收|执行|实现|交付/.test(text);
 }
 
-export function inspectDemandTriage(input = Object(), options = Object()): DemandTriageResult {
+export function inspectDemandTriage(input: DemandRuntimeInput = Object(), options: DemandRouterOptions = Object()): DemandTriageResult {
   const session = options.session || buildStatusSession(input, options);
   const files = targetFiles(session, input);
   const sourceText = textFrom(...demandTextItems(input, session));
@@ -873,18 +918,18 @@ export function inspectDemandTriage(input = Object(), options = Object()): Deman
   };
 }
 
-export function inspectDemandPrdReadiness(input = Object(), options = Object()): DemandPrdReadinessResult {
+export function inspectDemandPrdReadiness(input: DemandRuntimeInput = Object(), options: DemandRouterOptions = Object()): DemandPrdReadinessResult {
   const session = options.session || buildStatusSession(input, options);
   const triage = options.triage || inspectDemandTriage(input, { ...options, session });
   const slots = slotValues(session, input);
   const missingSlots = DEMAND_REQUIRED_PRD_SLOTS.filter((slot) => !hasItems(slots[slot]));
-  const blockerList = Object.assign([], missingSlots.map((slot) => ({
+  const blockerList: DemandBlocker[] = Object.assign([], missingSlots.map((slot) => ({
     code: `MISSING_${slot.toUpperCase()}`,
     slot,
     message: `PRD readiness requires ${slot}.`,
   })));
   blockerList.push(...activeBlockers(input.blockers, session.blockers, session.readiness?.blockers));
-  const openQuestions = asArray(session.discussion?.open_questions || session.open_questions || input.open_questions)
+  const openQuestions = asArray<DemandRecord | string>(session.discussion?.open_questions || session.open_questions || input.open_questions)
     .map((item) => typeof item === "string" ? { text: clean(item), blocking: true } : {
       ...item,
       text: clean(item.text || item.question || item.message),
@@ -966,7 +1011,7 @@ export function inspectDemandPrdReadiness(input = Object(), options = Object()):
   };
 }
 
-export function buildDemandEvidenceTasks(triage = Object(), readiness = Object()) {
+export function buildDemandEvidenceTasks(triage: DemandTriageResult = Object(), readiness: DemandPrdReadinessResult = Object()): DemandEvidenceTask[] {
   if (triage.evidence_policy === "none") return [];
   const tasks = [{
     role: "explorer",
@@ -988,10 +1033,10 @@ export function buildDemandEvidenceTasks(triage = Object(), readiness = Object()
   return tasks;
 }
 
-export function inspectEvidenceAgreement(results = []) {
-  const items = asArray(results).filter(Boolean);
-  const conflicts = [];
-  const byClaim = new Map();
+export function inspectEvidenceAgreement(results: DemandEvidenceResult[] = []) {
+  const items = asArray<DemandEvidenceResult>(results).filter(Boolean);
+  const conflicts: DemandBlocker[] = [];
+  const byClaim = new Map<string, DemandEvidenceResult[]>();
   for (const result of items) {
     const claim = clean(result.claim).toLowerCase();
     if (!claim) continue;
@@ -1015,7 +1060,7 @@ export function inspectEvidenceAgreement(results = []) {
   };
 }
 
-function stageFrom(readiness = Object(), triage = Object()) {
+function stageFrom(readiness: DemandPrdReadinessResult = Object(), triage: DemandTriageResult = Object()): string {
   if (readiness.prd_intake_ready) return "prd_ready";
   if (asArray(readiness.evidence_requirements).some((item) => item?.status === "pending")) return "evidence";
   const missingSlots = asArray(readiness.missing_slots).map(clean).filter(Boolean);
@@ -1027,9 +1072,15 @@ function stageFrom(readiness = Object(), triage = Object()) {
   return "discuss";
 }
 
-function nextActionsFor(stage, triage = Object(), readiness = Object(), evidenceTasks = [], nextQuestion = null) {
+function nextActionsFor(
+  stage: string,
+  triage: DemandTriageResult = Object(),
+  readiness: DemandPrdReadinessResult = Object(),
+  evidenceTasks: DemandEvidenceTask[] = [],
+  nextQuestion: DemandQuestion | null = null,
+): string[] {
   const requirementActions = evidenceRequirementNextActions(readiness.evidence_requirements);
-  const actions = [];
+  const actions: string[] = [];
   actions.push(...requirementActions);
   if (readiness.prd_intake_ready) actions.push("Run yolo spec --demand <session.json|dir> after approved demand artifacts exist.");
   else if (nextQuestion?.text) {
@@ -1044,7 +1095,13 @@ function nextActionsFor(stage, triage = Object(), readiness = Object(), evidence
   return [...new Set(actions.filter(Boolean))];
 }
 
-function nextActionFor(stage, triage = Object(), readiness = Object(), evidenceTasks = [], nextQuestion = null) {
+function nextActionFor(
+  stage: string,
+  triage: DemandTriageResult = Object(),
+  readiness: DemandPrdReadinessResult = Object(),
+  evidenceTasks: DemandEvidenceTask[] = [],
+  nextQuestion: DemandQuestion | null = null,
+): string {
   const actions = nextActionsFor(stage, triage, readiness, evidenceTasks, nextQuestion);
   if (actions.length > 0) return actions[0];
   if (readiness.prd_intake_ready) return "Run yolo spec --demand <session.json|dir> after approved demand artifacts exist.";
@@ -1056,7 +1113,7 @@ function nextActionFor(stage, triage = Object(), readiness = Object(), evidenceT
   return triage.route === "careful" ? "Discuss risks and evidence blockers before PRD." : "Continue fast demand clarification.";
 }
 
-export function buildDemandSessionState(input = Object(), options = Object()): DemandSessionStateResult {
+export function buildDemandSessionState(input: DemandRuntimeInput = Object(), options: DemandRouterOptions = Object()): DemandSessionStateResult {
   const session = buildStatusSession(input, options);
   const triage = inspectDemandTriage(input, { ...options, session });
   const readiness = inspectDemandPrdReadiness(input, { ...options, session, triage });

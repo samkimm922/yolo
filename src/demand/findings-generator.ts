@@ -9,13 +9,110 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnProviderPrompt as defaultSpawnProviderPrompt, YOLO_PACKAGE_ROOT } from "../runtime/execution/provider-adapter.js";
+import type { DemandRecord } from "./graph.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
 
+interface FindingLike extends DemandRecord {
+  id?: unknown;
+  description?: unknown;
+  files?: unknown;
+  scope?: {
+    targets?: Array<{
+      file?: string;
+      metadata?: {
+        checks?: Array<{
+          name?: string;
+          params?: DemandRecord & { required?: boolean };
+        }>;
+      };
+    }>;
+  };
+  post_conditions?: Array<{
+    params?: {
+      matcher?: {
+        any?: Array<{
+          text?: string;
+          options?: {
+            case_sensitive?: boolean;
+          };
+        }>;
+      };
+    };
+  }>;
+}
+
+interface FindingsPayload extends DemandRecord {
+  findings?: FindingLike[];
+}
+
+export interface FindingsProviderConfig extends DemandRecord {
+  ai?: DemandRecord;
+}
+
+export interface FindingsProviderPromptOptions extends DemandRecord {
+  timeout: number;
+  cwd: string;
+  rootDir: string;
+  runtimeDir: string;
+  config: FindingsProviderConfig;
+  detectModelProvider?: unknown;
+  killTree?: unknown;
+  spawnImpl?: unknown;
+  commandExists?: unknown;
+  existsSync?: unknown;
+  readFileSync?: unknown;
+  packageRoot?: string;
+}
+
+export interface FindingsOptions extends DemandRecord {
+  projectRoot?: string;
+  projectContext?: string;
+  runtimeDir?: string;
+  runtime_dir?: string;
+  provider?: string;
+  model?: string;
+  settings?: string;
+  claudePermissionMode?: string;
+  claude_permission_mode?: string;
+  config?: FindingsProviderConfig;
+  timeout?: number;
+  timeout_ms?: number;
+  outputFile?: string;
+  spawnProviderPrompt?: (prompt: string, options: FindingsProviderPromptOptions) => Promise<ProviderRunLike>;
+  detectModelProvider?: unknown;
+  killTree?: unknown;
+  spawnImpl?: unknown;
+  commandExists?: unknown;
+  existsSync?: unknown;
+  readFileSync?: unknown;
+  packageRoot?: string;
+}
+
+export interface ProviderRunLike extends DemandRecord {
+  success?: boolean;
+  provider?: string;
+  stdout?: string;
+  stderr?: string;
+  reason?: string;
+  blocked?: boolean;
+  adapter_contract_inspection?: DemandRecord & {
+    blockers?: Array<DemandRecord & { code?: string }>;
+  };
+}
+
+type FindingsParseResult =
+  | { ok: true; data: FindingsPayload; json: string }
+  | { ok: false; error: string; raw: string };
+
+type FindingsValidationResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
 // ── 加载项目上下文 ───────────────────────────────────────────────
-export function loadProjectContext(projectRoot = PACKAGE_ROOT) {
-  const context = [];
+export function loadProjectContext(projectRoot: string = PACKAGE_ROOT): string {
+  const context: string[] = [];
   const claudeMd = join(projectRoot, ".claude", "CLAUDE.md");
   if (existsSync(claudeMd)) {
     const md = readFileSync(claudeMd, "utf8");
@@ -27,8 +124,9 @@ export function loadProjectContext(projectRoot = PACKAGE_ROOT) {
   const pkgJson = join(projectRoot, "package.json");
   if (existsSync(pkgJson)) {
     try {
-      const pkg = JSON.parse(readFileSync(pkgJson, "utf8"));
-      context.push(`框架: ${pkg.dependencies?.["@tarojs/taro"] ? "Taro (React)" : "Node.js"}`);
+      const pkg = JSON.parse(readFileSync(pkgJson, "utf8")) as DemandRecord;
+      const dependencies = pkg.dependencies && typeof pkg.dependencies === "object" ? pkg.dependencies as DemandRecord : {};
+      context.push(`框架: ${dependencies["@tarojs/taro"] ? "Taro (React)" : "Node.js"}`);
       context.push(`包管理: pnpm`);
     } catch {}
   }
@@ -36,7 +134,7 @@ export function loadProjectContext(projectRoot = PACKAGE_ROOT) {
 }
 
 // ── PM Prompt 模板 ────────────────────────────────────────────────
-export function buildPmPrompt(requirement, projectContext) {
+export function buildPmPrompt(requirement: unknown, projectContext: unknown): string {
   return `你是一个产品经理。把下面的需求拆成原子开发任务，输出结构化 JSON。
 
 ## 项目背景
@@ -110,7 +208,7 @@ pre_conditions/post_conditions 必须使用上面的对象格式，不能输出�
 }
 
 // ── 验证 findings 格式 ────────────────────────────────────────────
-export function validateFindings(data) {
+export function validateFindings(data: FindingsPayload | null | undefined): FindingsValidationResult {
   if (!data || !Array.isArray(data.findings)) {
     return { ok: false, error: "缺少 findings 数组" };
   }
@@ -122,13 +220,13 @@ export function validateFindings(data) {
   return { ok: true };
 }
 
-function stripJsonCodeFences(text = "") {
+function stripJsonCodeFences(text: string = ""): string {
   return text
     .replace(/```(?:json|JSON)?\s*/g, "")
     .replace(/```/g, "");
 }
 
-function extractBalancedJsonObject(text = "") {
+function extractBalancedJsonObject(text: string = ""): string | null {
   const start = text.indexOf("{");
   if (start < 0) return null;
 
@@ -164,17 +262,17 @@ function extractBalancedJsonObject(text = "") {
   return null;
 }
 
-export function parseFindingsJsonOutput(text = "") {
+export function parseFindingsJsonOutput(text: string = ""): FindingsParseResult {
   const trimmed = stripJsonCodeFences(text).trim();
   try {
-    return { ok: true, data: JSON.parse(trimmed), json: trimmed };
+    return { ok: true, data: JSON.parse(trimmed) as FindingsPayload, json: trimmed };
   } catch {
     const balanced = extractBalancedJsonObject(trimmed);
     if (!balanced) {
       return { ok: false, error: "未找到有效 JSON 输出", raw: trimmed.slice(0, 500) };
     }
     try {
-      return { ok: true, data: JSON.parse(balanced), json: balanced };
+      return { ok: true, data: JSON.parse(balanced) as FindingsPayload, json: balanced };
     } catch (balancedError) {
       return { ok: false, error: `JSON 解析失败: ${balancedError.message}`, raw: balanced.slice(0, 500) };
     }
@@ -182,7 +280,7 @@ export function parseFindingsJsonOutput(text = "") {
 }
 
 // ── 调模型生成 findings ──────────────────────────────────────────
-function findingsProviderConfig(options = Object()) {
+function findingsProviderConfig(options: FindingsOptions = Object()): FindingsProviderConfig {
   const config = options.config || {};
   const ai = config.ai || {};
   const provider = options.provider || ai.provider || ai.executor || "claude";
@@ -199,12 +297,12 @@ function findingsProviderConfig(options = Object()) {
   };
 }
 
-export async function generateFindings(prompt, timeout = 300000, options = Object()) {
+export async function generateFindings(prompt: string, timeout: number = 300000, options: FindingsOptions = Object()) {
   const projectRoot = resolve(options.projectRoot || PACKAGE_ROOT);
   const runtimeDir = resolve(options.runtimeDir || options.runtime_dir || join(projectRoot, "tmp"));
   try { mkdirSync(runtimeDir, { recursive: true }); } catch {}
   const spawnProviderPrompt = options.spawnProviderPrompt || defaultSpawnProviderPrompt;
-  let providerRun;
+  let providerRun: ProviderRunLike;
   try {
     providerRun = await spawnProviderPrompt(prompt, {
       timeout,
@@ -221,7 +319,7 @@ export async function generateFindings(prompt, timeout = 300000, options = Objec
       packageRoot: options.packageRoot || YOLO_PACKAGE_ROOT,
     });
   } catch (error) {
-    return { ok: false, error: error.message };
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
   if (providerRun.success === false) {
     return {
@@ -234,13 +332,13 @@ export async function generateFindings(prompt, timeout = 300000, options = Objec
   const parsed = parseFindingsJsonOutput(providerRun.stdout || "");
   if (!parsed.ok) return parsed;
   const validation = validateFindings(parsed.data);
-  if (!validation.ok) {
+  if ("error" in validation) {
     return { ok: false, error: validation.error, raw: parsed.json.slice(0, 500) };
   }
   return { ok: true, data: parsed.data };
 }
 
-export async function generateFindingsFromRequirement(input, options = Object()) {
+export async function generateFindingsFromRequirement(input: string | (DemandRecord & { requirement?: string }), options: FindingsOptions = Object()) {
   const requirement = typeof input === "string" ? input : input?.requirement;
   if (!requirement || !requirement.trim()) {
     return { ok: false, error: "缺少需求描述" };

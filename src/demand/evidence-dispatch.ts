@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
+import { type Dirent, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { loadConfig } from "../core/config.js";
 import { spawnProviderPrompt as defaultSpawnProviderPrompt } from "../runtime/execution/provider-adapter.js";
@@ -16,56 +16,269 @@ import {
   evidenceRequirementBlockers,
   evidenceRequirementSummary,
 } from "./evidence-requirements.js";
+import type {
+  DemandEvidenceResult,
+  DemandMaybeArray,
+  DemandRecord,
+  DemandRuntimeInput,
+  DemandRuntimeOptions,
+  DemandSession,
+} from "./graph.js";
+import type {
+  DemandBlocker,
+  DemandPrdReadinessResult,
+  DemandSessionStateResult,
+} from "./router.js";
 
 export const DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION = "1.0";
 export const DEMAND_EVIDENCE_DISPATCH_SCHEMA = "yolo.demand.evidence_dispatch.v1";
 const VALID_EVIDENCE_SCOPES = new Set(["project", "external", "user", "unknown"]);
 
-function clean(value) {
+export interface BoundaryChange {
+  path: string;
+  change: "deleted" | "modified" | "added";
+}
+
+type BoundarySnapshot = Map<string, string>;
+
+export interface BoundaryMutationProbe {
+  enabled: boolean;
+  path: string;
+  content: string;
+}
+
+export interface DemandEvidenceAiConfig extends DemandRecord {
+  provider?: string;
+  executor?: string;
+  model?: string;
+  codex_model?: string;
+  codex_sandbox?: string;
+  codex_approval?: string;
+  settings?: string;
+  claude_tools?: string;
+  claude_allowed_tools?: string;
+  claude_disallowed_tools?: string;
+  claude_disable_slash_commands?: boolean;
+  claude_no_session_persistence?: boolean;
+  claude_permission_mode?: string;
+  agent_tool_profile?: string;
+  max_budget_usd?: string;
+  timeout_ms?: number | string;
+}
+
+export interface DemandEvidenceProviderOptions extends DemandRecord {
+  timeout?: number;
+  cwd?: string;
+  rootDir?: string;
+  runtimeDir: string;
+  config: DemandRecord & { ai: DemandEvidenceAiConfig };
+  detectModelProvider?: () => string;
+}
+
+export interface DemandEvidenceBoundaryResult extends DemandRecord {
+  project_mutation: string;
+  allowed_write_roots: string[];
+  changes: BoundaryChange[];
+}
+
+export interface DemandEvidenceDispatchInput extends DemandRuntimeInput {
+  dispatchId?: unknown;
+  dispatch_id?: unknown;
+  boundaryMutationProbe?: unknown;
+  boundary_mutation_probe?: unknown;
+  boundaryMutationProbeContent?: unknown;
+  boundary_mutation_probe_content?: unknown;
+  agentToolProfile?: unknown;
+  agent_tool_profile?: unknown;
+  toolProfile?: unknown;
+  tool_profile?: unknown;
+  provider?: unknown;
+  executor?: unknown;
+  model?: unknown;
+  agentCommand?: unknown;
+  agent_command?: unknown;
+  customCommand?: unknown;
+  custom_command?: unknown;
+  maxBudgetUsd?: unknown;
+  max_budget_usd?: unknown;
+  allowFullAgentTools?: boolean;
+  allow_full_agent_tools?: boolean;
+  timeout_ms?: unknown;
+  timeoutMs?: unknown;
+  config?: DemandRecord;
+}
+
+export interface DemandEvidenceProviderRun extends DemandRecord {
+  success?: boolean;
+  provider?: string | null;
+  command?: unknown;
+  exitCode?: number | null;
+  signal?: string | null;
+  stdout?: string;
+  stderr?: string;
+  timedOut?: boolean;
+}
+
+export type DemandEvidenceSpawnProviderPrompt = (
+  prompt: string,
+  options: DemandEvidenceProviderOptions,
+) => Promise<DemandEvidenceProviderRun>;
+
+export interface DemandEvidenceDispatchOptions extends DemandRuntimeOptions {
+  status?: DemandSessionStateResult;
+  spawnProviderPrompt?: DemandEvidenceSpawnProviderPrompt;
+  boundaryMutationProbe?: unknown;
+  boundary_mutation_probe?: unknown;
+  boundaryMutationProbeContent?: unknown;
+  boundary_mutation_probe_content?: unknown;
+  agentToolProfile?: unknown;
+  agent_tool_profile?: unknown;
+  toolProfile?: unknown;
+  tool_profile?: unknown;
+  provider?: unknown;
+  model?: unknown;
+  agentCommand?: unknown;
+  agent_command?: unknown;
+  maxBudgetUsd?: unknown;
+  max_budget_usd?: unknown;
+  allowFullAgentTools?: boolean;
+  allow_full_agent_tools?: boolean;
+  timeout_ms?: unknown;
+  timeoutMs?: unknown;
+  config?: DemandRecord;
+  configPath?: unknown;
+}
+
+interface ExplicitDemandSessionRead {
+  explicit: boolean;
+  ok: boolean;
+  session: DemandSession | null;
+  path?: string;
+  code?: string;
+  message?: string;
+}
+
+interface DemandEvidenceTaskLike extends DemandRecord {
+  role?: string;
+  reason?: string;
+  protocol?: unknown;
+}
+
+export interface DemandEvidenceAction extends DemandRecord {
+  id: string;
+  role: string;
+  status: string;
+  reason: string;
+  protocol: unknown;
+  prompt_ref: string;
+  output_path: string;
+  output_file: string;
+}
+
+export interface DemandEvidenceDispatchPlan extends DemandRecord {
+  schema_version: string;
+  schema: string;
+  status: string;
+  code: string;
+  summary: string;
+  generated_at: string;
+  project_root: string;
+  state_root: string;
+  output_dir: string;
+  output_file: string;
+  execution_policy: DemandRecord;
+  boundary_mutation_probe: BoundaryMutationProbe | null;
+  demand_status: DemandSessionStateResult;
+  actions: DemandEvidenceAction[];
+}
+
+export interface DemandEvidenceDispatchResult extends DemandRecord {
+  schema_version: string;
+  schema: string;
+  status: string;
+  code: string;
+  summary: string;
+  generated_at: string;
+  project_root: string;
+  state_root: string;
+  output_dir: string | null;
+  output_file: string | null;
+  actions: DemandEvidenceAction[];
+  agent_results: DemandEvidenceResult[];
+  provider_runs: DemandRecord[];
+  blockers?: DemandBlocker[];
+  artifacts: string[];
+  demand_status?: DemandSessionStateResult | null;
+  readiness?: DemandPrdReadinessResult;
+  demand_status_after_dispatch?: DemandRecord;
+  boundary?: DemandEvidenceBoundaryResult;
+}
+
+interface JsonParseResult {
+  parsed: unknown | null;
+  repaired: boolean;
+  error: string;
+}
+
+interface NormalizeAgentResultInput extends DemandRecord {
+  action?: Partial<DemandEvidenceAction> & DemandRecord;
+  providerRun?: DemandEvidenceProviderRun;
+  parsed?: unknown | null;
+  parseError?: string;
+}
+
+interface DemandEvidenceAgentPromptInput extends DemandRecord {
+  action?: Partial<DemandEvidenceAction> & DemandRecord;
+  plan?: Partial<DemandEvidenceDispatchPlan> & DemandRecord;
+  previousResults?: DemandEvidenceResult[];
+}
+
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function nowIso() {
+function nowIso(): string {
   return new Date().toISOString();
 }
 
-function safeId(value) {
+function safeId(value: unknown): string {
   return clean(value).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "demand-evidence";
 }
 
-function resolveRoot(value, fallback = process.cwd()) {
+function resolveRoot(value: unknown, fallback: string = process.cwd()): string {
   return resolve(clean(value) || fallback);
 }
 
-function resolvePath(root, path) {
+function resolvePath(root: string, path: unknown): string {
   if (!path) return "";
-  return isAbsolute(path) ? path : resolve(root, path);
+  const normalizedPath = clean(path);
+  return isAbsolute(normalizedPath) ? normalizedPath : resolve(root, normalizedPath);
 }
 
-function repoRelative(path, projectRoot) {
+function repoRelative(path: string, projectRoot: string): string {
   return relative(projectRoot, path).replace(/\\/g, "/");
 }
 
-function stableJson(value) {
+function stableJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function writeJson(path, value) {
+function writeJson(path: string, value: unknown): string {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, stableJson(value), "utf8");
   return path;
 }
 
-function isWithin(path, root) {
+function isWithin(path: string, root: string): boolean {
   const rel = relative(root, path);
   return rel === "" || (rel && !rel.startsWith("..") && !isAbsolute(rel));
 }
 
-function excludedDir(name) {
+function excludedDir(name: string): boolean {
   return [".git", "node_modules", "dist", "coverage", ".next", ".cache"].includes(name);
 }
 
-function gitFiles(projectRoot) {
+function gitFiles(projectRoot: string): string[] | null {
   const run = spawnSync("git", ["-C", projectRoot, "ls-files", "-co", "--exclude-standard", "-z"], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
@@ -74,8 +287,8 @@ function gitFiles(projectRoot) {
   return run.stdout.split("\0").filter(Boolean);
 }
 
-function walkFiles(root, dir = root, acc = []) {
-  let entries = [];
+function walkFiles(root: string, dir: string = root, acc: string[] = []): string[] {
+  let entries: Dirent[] = [];
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch {
@@ -90,7 +303,7 @@ function walkFiles(root, dir = root, acc = []) {
   return acc;
 }
 
-function boundaryEntryDigest(path) {
+function boundaryEntryDigest(path: string): string | null {
   try {
     const stat = lstatSync(path);
     if (stat.isSymbolicLink()) return `symlink:${readlinkSync(path)}`;
@@ -101,11 +314,11 @@ function boundaryEntryDigest(path) {
   }
 }
 
-function buildBoundarySnapshot(projectRoot, allowedRoots = []) {
+function buildBoundarySnapshot(projectRoot: string, allowedRoots: string[] = []): BoundarySnapshot {
   const allowed = allowedRoots.map((path) => resolve(path));
   const git = gitFiles(projectRoot);
   const files = git ? [...new Set([...git, ...walkFiles(projectRoot)])] : walkFiles(projectRoot);
-  const snapshot = new Map();
+  const snapshot = new Map<string, string>();
   for (const file of files) {
     const absolute = resolve(projectRoot, file);
     if (allowed.some((root) => isWithin(absolute, root))) continue;
@@ -115,8 +328,8 @@ function buildBoundarySnapshot(projectRoot, allowedRoots = []) {
   return snapshot;
 }
 
-function diffBoundarySnapshots(before, after) {
-  const changes = [];
+function diffBoundarySnapshots(before: BoundarySnapshot, after: BoundarySnapshot): BoundaryChange[] {
+  const changes: BoundaryChange[] = [];
   for (const [file, digest] of before.entries()) {
     if (!after.has(file)) changes.push({ path: file, change: "deleted" });
     else if (after.get(file) !== digest) changes.push({ path: file, change: "modified" });
@@ -127,17 +340,17 @@ function diffBoundarySnapshots(before, after) {
   return changes.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-function truncate(value, max = 12000) {
+function truncate(value: unknown, max: number = 12000): string {
   const text = String(value ?? "");
   return text.length > max ? `${text.slice(0, max)}\n[truncated ${text.length - max} chars]` : text;
 }
 
-function asArray(value) {
+function asArray<T = unknown>(value: DemandMaybeArray<T> | T): T[] {
   if (value == null) return [];
-  return Array.isArray(value) ? value : [value];
+  return Array.isArray(value) ? [...value] as T[] : [value as T];
 }
 
-function isNonMissingStatusItem(value) {
+function isNonMissingStatusItem(value: unknown): boolean {
   const text = clean(value).toLowerCase();
   if (!text) return true;
   if (/\b(but|except|however|unless)\b/.test(text)) return false;
@@ -147,7 +360,7 @@ function isNonMissingStatusItem(value) {
   return false;
 }
 
-function sanitizeMissing(value) {
+function sanitizeMissing(value: unknown): string[] {
   return asArray(value)
     .flatMap((item) => String(item ?? "").split(/\r?\n/))
     .map(clean)
@@ -155,21 +368,22 @@ function sanitizeMissing(value) {
     .filter((item) => !isNonMissingStatusItem(item));
 }
 
-function evidenceScopeErrors(value) {
+function evidenceScopeErrors(value: unknown): string[] {
   return asArray(value).flatMap((record, index) => {
     if (!record || typeof record !== "object") return [`evidence[${index}] must be an object with scope.`];
-    const scope = clean(record.scope || record.evidence_scope || record.source_scope).toLowerCase();
+    const evidence = record as DemandRecord;
+    const scope = clean(evidence.scope || evidence.evidence_scope || evidence.source_scope).toLowerCase();
     if (VALID_EVIDENCE_SCOPES.has(scope)) return [];
     return [`evidence[${index}] must declare scope as project, external, user, or unknown.`];
   });
 }
 
-function explicitDemandSessionPath(input = Object()) {
+function explicitDemandSessionPath(input: DemandEvidenceDispatchInput = Object()): string {
   const legacyDemandPath = typeof input.demand === "string" ? input.demand : "";
   return clean(input.demandPath || input.demand_path || input.sessionPath || input.session_path || legacyDemandPath);
 }
 
-function readExplicitDemandSession(input = Object(), projectRoot) {
+function readExplicitDemandSession(input: DemandEvidenceDispatchInput = Object(), projectRoot: string): ExplicitDemandSessionRead {
   const path = explicitDemandSessionPath(input);
   if (!path) return { explicit: false, ok: true, session: null };
   const demandPath = resolvePath(projectRoot, path);
@@ -180,11 +394,12 @@ function readExplicitDemandSession(input = Object(), projectRoot) {
       ok: false,
       code: "DEMAND_SESSION_NOT_FOUND",
       path: sessionPath,
+      session: null,
       message: `Demand session not found: ${sessionPath}`,
     };
   }
   try {
-    const session = JSON.parse(readFileSync(sessionPath, "utf8"));
+    const session = JSON.parse(readFileSync(sessionPath, "utf8")) as DemandSession;
     const schemaError = demandSessionSchemaError(session, sessionPath);
     if (schemaError) {
       return {
@@ -192,6 +407,7 @@ function readExplicitDemandSession(input = Object(), projectRoot) {
         ok: false,
         code: "DEMAND_SESSION_SCHEMA_INVALID",
         path: sessionPath,
+        session: null,
         message: schemaError,
       };
     }
@@ -202,13 +418,14 @@ function readExplicitDemandSession(input = Object(), projectRoot) {
       ok: false,
       code: "DEMAND_SESSION_JSON_INVALID",
       path: sessionPath,
-      message: `Demand session JSON parse failed: ${error.message}`,
+      session: null,
+      message: `Demand session JSON parse failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
 
-function readDemandSession(input = Object(), projectRoot) {
-  if (input.session && typeof input.session === "object") return input.session;
+function readDemandSession(input: DemandEvidenceDispatchInput = Object(), projectRoot: string): DemandSession | null {
+  if (input.session && typeof input.session === "object") return input.session as DemandSession;
   const explicit = readExplicitDemandSession(input, projectRoot);
   if (explicit.explicit) return explicit.ok ? explicit.session : null;
   const path = clean(input.demand);
@@ -217,13 +434,20 @@ function readDemandSession(input = Object(), projectRoot) {
   const sessionPath = existsSync(demandPath) && !demandPath.endsWith(".json") ? join(demandPath, "session.json") : demandPath;
   if (!existsSync(sessionPath)) return null;
   try {
-    return JSON.parse(readFileSync(sessionPath, "utf8"));
+    return JSON.parse(readFileSync(sessionPath, "utf8")) as DemandSession;
   } catch {
     return null;
   }
 }
 
-function invalidDemandSessionDispatchResult(read, input = Object(), options = Object(), projectRoot, stateRoot, execute) {
+function invalidDemandSessionDispatchResult(
+  read: ExplicitDemandSessionRead,
+  input: DemandEvidenceDispatchInput = Object(),
+  options: DemandEvidenceDispatchOptions = Object(),
+  projectRoot: string,
+  stateRoot: string,
+  execute: boolean,
+): DemandEvidenceDispatchResult {
   return {
     schema_version: DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION,
     schema: DEMAND_EVIDENCE_DISPATCH_SCHEMA,
@@ -257,37 +481,45 @@ function invalidDemandSessionDispatchResult(read, input = Object(), options = Ob
   };
 }
 
-function dispatchIdFor(input = Object(), status = Object()) {
+function dispatchIdFor(input: DemandEvidenceDispatchInput = Object(), status: DemandSessionStateResult | DemandRecord = Object()): string {
   const explicit = clean(input.dispatchId || input.dispatch_id);
   if (explicit) return safeId(explicit);
-  const session = status?.state?.session_id || status?.demand_id || input.id || input.demandId || input.demand_id || "dispatch";
+  const statusRecord = status as DemandRecord;
+  const stateRecord = statusRecord.state && typeof statusRecord.state === "object" ? statusRecord.state as DemandRecord : {};
+  const session = stateRecord.session_id || statusRecord.demand_id || input.id || input.demandId || input.demand_id || "dispatch";
   const stamp = new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 17);
   const suffix = Math.random().toString(36).slice(2, 8);
   return safeId(`${session}-${stamp}-${suffix}`);
 }
 
-function outputDirFor(input = Object(), options = Object(), projectRoot, stateRoot, status) {
+function outputDirFor(
+  input: DemandEvidenceDispatchInput = Object(),
+  options: DemandEvidenceDispatchOptions = Object(),
+  projectRoot: string,
+  stateRoot: string,
+  status: DemandSessionStateResult | DemandRecord,
+): string {
   const explicit = input.outputDir || input.output_dir || options.outputDir || options.output_dir;
   if (explicit) return resolvePath(projectRoot, explicit);
   return join(stateRoot, "demand", "evidence", dispatchIdFor(input, status));
 }
 
-function agentToolProfile(input = Object(), options = Object()) {
+function agentToolProfile(input: DemandEvidenceDispatchInput = Object(), options: DemandEvidenceDispatchOptions = Object()): string {
   return clean(options.agentToolProfile || options.agent_tool_profile || options.toolProfile || options.tool_profile || input.agentToolProfile || input.agent_tool_profile || input.toolProfile || input.tool_profile || "boundary").toLowerCase();
 }
 
-function safeClaudePermissionMode(value) {
+function safeClaudePermissionMode(value: unknown): string {
   const mode = clean(value || "acceptEdits");
   return ["bypasspermissions", "dangerously-skip-permissions"].includes(mode.toLowerCase()) ? "acceptEdits" : mode;
 }
 
-function safeRepoRelativePath(value) {
+function safeRepoRelativePath(value: unknown): string {
   const path = clean(value).replace(/\\/g, "/").replace(/^\/+/, "");
   if (!path || path === "." || path === ".." || path.startsWith("../") || path.includes("/../")) return "";
   return path;
 }
 
-function boundaryMutationProbe(input = Object(), options = Object()) {
+function boundaryMutationProbe(input: DemandEvidenceDispatchInput = Object(), options: DemandEvidenceDispatchOptions = Object()): BoundaryMutationProbe | null {
   const path = safeRepoRelativePath(
     options.boundaryMutationProbe
     || options.boundary_mutation_probe
@@ -307,7 +539,7 @@ function boundaryMutationProbe(input = Object(), options = Object()) {
   };
 }
 
-function actionForTask(task, index, outputDir, projectRoot) {
+function actionForTask(task: DemandEvidenceTaskLike, index: number, outputDir: string, projectRoot: string): DemandEvidenceAction {
   const role = task.role || `agent-${index + 1}`;
   const outputPath = join(outputDir, `${safeId(role)}.json`);
   return {
@@ -322,7 +554,10 @@ function actionForTask(task, index, outputDir, projectRoot) {
   };
 }
 
-export function buildDemandEvidenceDispatchPlan(input = Object(), options = Object()) {
+export function buildDemandEvidenceDispatchPlan(
+  input: DemandEvidenceDispatchInput = Object(),
+  options: DemandEvidenceDispatchOptions = Object(),
+): DemandEvidenceDispatchPlan {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const toolProfile = agentToolProfile(input, options);
@@ -375,14 +610,15 @@ export function buildDemandEvidenceDispatchPlan(input = Object(), options = Obje
   };
 }
 
-function renderJsonBlock(value) {
+function renderJsonBlock(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-export function buildDemandEvidenceAgentPrompt({ action = Object(), plan = Object(), previousResults = [] } = Object()) {
-  const protocol = action.protocol || {};
+export function buildDemandEvidenceAgentPrompt({ action = Object(), plan = Object(), previousResults = [] }: DemandEvidenceAgentPromptInput = Object()): string {
+  const protocol = (action.protocol && typeof action.protocol === "object" ? action.protocol : {}) as DemandRecord;
   const status = plan.demand_status || {};
-  const toolProfile = clean(plan.execution_policy?.agent_tool_profile || "boundary");
+  const executionPolicy = (plan.execution_policy && typeof plan.execution_policy === "object" ? plan.execution_policy : {}) as DemandRecord;
+  const toolProfile = clean(executionPolicy.agent_tool_profile || "boundary");
   const mutationProbe = plan.boundary_mutation_probe;
   const renderedProtocol = mutationProbe?.enabled
     ? {
@@ -466,7 +702,7 @@ export function buildDemandEvidenceAgentPrompt({ action = Object(), plan = Objec
   ].join("\n");
 }
 
-function parseJsonCandidate(candidate) {
+function parseJsonCandidate(candidate: string): JsonParseResult {
   try {
     return { parsed: JSON.parse(candidate), repaired: false, error: "" };
   } catch (error) {
@@ -481,11 +717,11 @@ function parseJsonCandidate(candidate) {
         return { parsed: JSON.parse(repaired), repaired: true, error: "" };
       } catch {}
     }
-    return { parsed: null, repaired: false, error: error.message };
+    return { parsed: null, repaired: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
-function extractJsonObject(text = "") {
+function extractJsonObject(text: unknown = ""): JsonParseResult {
   const trimmed = clean(text);
   if (!trimmed) return { parsed: null, repaired: false, error: "empty provider output" };
   const direct = parseJsonCandidate(trimmed);
@@ -507,7 +743,7 @@ function extractJsonObject(text = "") {
   return { parsed: null, repaired: false, error: errors.find(Boolean) || "no JSON object found in provider output" };
 }
 
-function normalizeAgentResult({ action = Object(), providerRun = Object(), parsed = null, parseError = "" } = Object()) {
+function normalizeAgentResult({ action = Object(), providerRun = Object(), parsed = null, parseError = "" }: NormalizeAgentResultInput = Object()): DemandEvidenceResult {
   if (!providerRun.success || !parsed || typeof parsed !== "object") {
     const errorCode = !parsed ? "EVIDENCE_AGENT_INVALID_JSON" : "EVIDENCE_AGENT_PROVIDER_FAILED";
     return {
@@ -536,21 +772,23 @@ function normalizeAgentResult({ action = Object(), providerRun = Object(), parse
     };
   }
 
-  const normalized = {
-    schema_version: parsed.schema_version || DEMAND_EVIDENCE_RESULT_SCHEMA_VERSION,
-    schema: parsed.schema || DEMAND_EVIDENCE_RESULT_SCHEMA,
-    ...parsed,
-    role: parsed.role || action.role,
-    status: parsed.status || "completed",
-    completed: parsed.completed !== false,
+  const parsedRecord = parsed as DemandRecord;
+  const normalized: DemandEvidenceResult = {
+    schema_version: parsedRecord.schema_version as string | undefined || DEMAND_EVIDENCE_RESULT_SCHEMA_VERSION,
+    schema: parsedRecord.schema as string | undefined || DEMAND_EVIDENCE_RESULT_SCHEMA,
+    ...parsedRecord,
+    role: parsedRecord.role as string | undefined || action.role,
+    status: parsedRecord.status as string | undefined || "completed",
+    completed: parsedRecord.completed !== false,
   };
-  normalized.missing = sanitizeMissing(normalized.missing);
+  const normalizedMissing = sanitizeMissing(normalized.missing);
+  normalized.missing = normalizedMissing;
   const scopeErrors = evidenceScopeErrors(normalized.evidence);
   if (scopeErrors.length > 0) {
     normalized.status = "blocked";
     normalized.completed = true;
     normalized.recommendation = "block";
-    normalized.missing = [...normalized.missing, ...scopeErrors];
+    normalized.missing = [...normalizedMissing, ...scopeErrors];
     normalized.result = {
       ...(normalized.result || {}),
       verdict: "blocked",
@@ -560,9 +798,10 @@ function normalizeAgentResult({ action = Object(), providerRun = Object(), parse
   return normalized;
 }
 
-function executionConfig(input = Object(), options = Object()) {
-  const loaded = options.config || input.config || loadConfig(options.configPath ? { path: options.configPath } : false);
-  const ai = {
+function executionConfig(input: DemandEvidenceDispatchInput = Object(), options: DemandEvidenceDispatchOptions = Object()): DemandRecord & { ai: DemandRecord } {
+  const configPath = clean(options.configPath);
+  const loaded = (options.config || input.config || loadConfig(configPath ? { path: configPath } : false)) as DemandRecord & { ai?: DemandRecord };
+  const ai: DemandRecord = {
     ...(loaded.ai || {}),
   };
   const mutationProbe = boundaryMutationProbe(input, options);
@@ -614,7 +853,10 @@ function executionConfig(input = Object(), options = Object()) {
   };
 }
 
-export async function runDemandEvidenceDispatchRuntime(input = Object(), options = Object()) {
+export async function runDemandEvidenceDispatchRuntime(
+  input: DemandEvidenceDispatchInput = Object(),
+  options: DemandEvidenceDispatchOptions = Object(),
+): Promise<DemandEvidenceDispatchResult> {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const execute = input.executeAgents === true
@@ -642,7 +884,7 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
     stateRoot,
   });
 
-  const result = Object.assign(Object(), {
+  const result: DemandEvidenceDispatchResult = Object.assign(Object(), {
     ...plan,
     mode: execute ? "execute" : "dry_run",
     status: plan.actions.length === 0 ? "pass" : execute ? "blocked" : "dry_run",
@@ -664,16 +906,17 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
   if (plan.actions.length === 0 || !execute) return result;
   if (!allow) return result;
 
-  const spawnProviderPrompt = options.spawnProviderPrompt || defaultSpawnProviderPrompt;
+  const spawnProviderPrompt: DemandEvidenceSpawnProviderPrompt = options.spawnProviderPrompt
+    || defaultSpawnProviderPrompt as DemandEvidenceSpawnProviderPrompt;
   const config = executionConfig(input, options);
   const timeout = Number(input.timeout_ms || input.timeoutMs || options.timeout_ms || options.timeoutMs || config.ai?.timeout_ms || 480000);
   mkdirSync(plan.output_dir, { recursive: true });
   const boundaryBefore = buildBoundarySnapshot(plan.project_root, [plan.output_dir]);
 
-  const previousResults = [];
+  const previousResults: DemandEvidenceResult[] = [];
   for (const action of plan.actions) {
     const prompt = buildDemandEvidenceAgentPrompt({ action, plan, previousResults });
-    let providerRun;
+    let providerRun: DemandEvidenceProviderRun;
     try {
       providerRun = await spawnProviderPrompt(prompt, {
         timeout,
@@ -690,7 +933,7 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
         command: null,
         exitCode: null,
         stdout: "",
-        stderr: error.message,
+        stderr: error instanceof Error ? error.message : String(error),
         timedOut: false,
       };
     }
@@ -726,7 +969,9 @@ export async function runDemandEvidenceDispatchRuntime(input = Object(), options
     changes: boundaryChanges,
   };
 
-  const session = readDemandSession(input, plan.project_root) || plan.demand_status?.session || undefined;
+  const demandStatusSession = "session" in plan.demand_status ? plan.demand_status.session : undefined;
+  const session = readDemandSession(input, plan.project_root)
+    || (demandStatusSession && typeof demandStatusSession === "object" ? demandStatusSession as DemandSession : undefined);
   const readiness = inspectDemandPrdReadiness({
     ...input,
     evidence_results: result.agent_results,
