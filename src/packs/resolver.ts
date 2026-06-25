@@ -3,19 +3,60 @@ import {
   discoverPackManifests,
   PACK_MANIFEST_KINDS,
   PACK_MANIFEST_SCHEMA_VERSION,
+  type DiscoveredManifest,
+  type ManifestValidationError,
+  type NormalizedManifest,
 } from "./manifest.js";
 
 export const PACK_RESOLVER_SCHEMA = "yolo.pack.resolver.v1";
 
-function clean(value) {
+interface ResolveProjectContextOptions {
+  projectRoot?: unknown;
+  project_root?: unknown;
+  cwd?: unknown;
+  stateRoot?: unknown;
+  state_root?: unknown;
+  roots?: unknown;
+  manifestRoots?: unknown;
+  manifest_roots?: unknown;
+  requiresAcceptanceAdapter?: unknown;
+  requires_acceptance_adapter?: unknown;
+}
+
+type SelectionEntry = NormalizedManifest | {
+  id: string;
+  kind: string;
+  status: "warning";
+  reason: string;
+  capabilities: never[];
+  source_path: string;
+};
+
+type Selected = Record<string, SelectionEntry>;
+
+export interface ResolverBlocker {
+  code: string;
+  message: string;
+  manifest_id?: string | null;
+  path?: string;
+}
+
+export interface ResolverWarning {
+  code: string;
+  kind?: string;
+  manifest_id?: string;
+  message: string;
+}
+
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function firstValidByKind(manifests, kind) {
+function firstValidByKind(manifests: DiscoveredManifest[], kind: string): NormalizedManifest | null {
   return manifests.find((entry) => entry.manifest.kind === kind && entry.validation.valid)?.manifest || null;
 }
 
-function unknownSelection(kind) {
+function unknownSelection(kind: string): SelectionEntry {
   return {
     id: "unknown/custom",
     kind,
@@ -26,18 +67,18 @@ function unknownSelection(kind) {
   };
 }
 
-export function resolveProjectContext(options = Object()) {
-  const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
-  const stateRoot = resolve(options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
+export function resolveProjectContext(options: ResolveProjectContextOptions = {}) {
+  const projectRoot = resolve(String(options.projectRoot || options.project_root || options.cwd || process.cwd()));
+  const stateRoot = resolve(String(options.stateRoot || options.state_root || join(projectRoot, ".yolo")));
   const discovery = discoverPackManifests({ ...options, projectRoot, stateRoot });
   const invalid = discovery.manifests.filter((entry) => !entry.validation.valid);
-  const selected = Object();
+  const selected: Selected = {};
   for (const kind of PACK_MANIFEST_KINDS) {
     selected[kind] = firstValidByKind(discovery.manifests, kind) || unknownSelection(kind);
   }
 
   const requiresAcceptanceAdapter = options.requiresAcceptanceAdapter === true || options.requires_acceptance_adapter === true;
-  const blockers = invalid.flatMap((entry) => entry.validation.errors.map((error) => ({
+  const blockers: ResolverBlocker[] = invalid.flatMap((entry) => entry.validation.errors.map((error: ManifestValidationError) => ({
     code: error.code,
     message: error.message,
     manifest_id: entry.manifest.id || null,
@@ -50,15 +91,14 @@ export function resolveProjectContext(options = Object()) {
     });
   }
 
-  const warnings = [];
+  const warnings: ResolverWarning[] = [];
   for (const [kind, manifest] of Object.entries(selected)) {
-    const item = Object.assign(Object(), manifest);
-    if (item.id === "unknown/custom") {
+    if (manifest.id === "unknown/custom") {
       warnings.push({ code: "RESOLVER_UNKNOWN_CONTEXT", kind, message: `${kind} resolved to unknown/custom.` });
     }
   }
   for (const entry of discovery.manifests) {
-    warnings.push(...entry.validation.warnings.map((warning) => ({
+    warnings.push(...entry.validation.warnings.map((warning: ManifestValidationError) => ({
       code: warning.code,
       manifest_id: entry.manifest.id,
       message: warning.message,
@@ -73,8 +113,8 @@ export function resolveProjectContext(options = Object()) {
     state_root: stateRoot,
     manifest_roots: discovery.roots,
     selected,
-    selected_packs: Object.values(selected).filter((manifest) => !String(Object.assign(Object(), manifest).kind).endsWith("_adapter")),
-    selected_adapters: Object.values(selected).filter((manifest) => String(Object.assign(Object(), manifest).kind).endsWith("_adapter")),
+    selected_packs: Object.values(selected).filter((manifest) => !manifest.kind.endsWith("_adapter")),
+    selected_adapters: Object.values(selected).filter((manifest) => manifest.kind.endsWith("_adapter")),
     blockers,
     warnings,
     manifests: discovery.manifests.map((entry) => ({
