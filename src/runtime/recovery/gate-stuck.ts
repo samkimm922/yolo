@@ -84,7 +84,7 @@ export function buildContractSuspectTransition({
   attempt,
   now = undefined,
 }: {
-  task: { id: unknown };
+  task: { id: string };
   suspect: { evidence_file: unknown };
   failedSummary: string;
   attempt: number;
@@ -116,7 +116,7 @@ export function buildRepeatedGateFailureTransition({
   attempt,
   now = undefined,
 }: {
-  taskId: unknown;
+  taskId: string;
   attempt: number;
   now?: string;
 }) {
@@ -134,7 +134,7 @@ export function buildMaxRetryFailure({
   attempt,
   now = undefined,
 }: {
-  taskId: unknown;
+  taskId: string;
   gateExitCode: number;
   attempt: number;
   now?: string;
