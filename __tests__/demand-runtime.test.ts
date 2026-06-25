@@ -20,51 +20,79 @@ import { inspectStoryAtomicityFromPrd } from "../src/demand/story-atomicity.js";
 import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
 import { demandSessionSchemaError } from "../src/demand/router.js";
-import { generateFindings, parseFindingsJsonOutput, validateFindings } from "../src/demand/findings-generator.js";
+import {
+  generateFindings,
+  parseFindingsJsonOutput,
+  validateFindings,
+  type FindingsProviderPromptOptions,
+  type ProviderRunLike as FindingsProviderRun,
+} from "../src/demand/findings-generator.js";
+import type {
+  DemandAssumptionFact,
+  DemandPrdDocument,
+  DemandRecord,
+  DemandRuntimeInput,
+  DemandSession,
+  DemandTargetFileFact,
+  DemandTask,
+  DemandTaskSessionPlan,
+} from "../src/demand/graph.js";
 
-interface PrdResult {
-  [key: string]: unknown;
+interface DemandPrdResultForTest extends DemandRecord {
   status: string;
-  code: string;
-  prd: Record<string, unknown>;
-  tasks: Record<string, unknown>[];
-  compiled?: { prd: Record<string, unknown> };
+  code?: string;
+  blockers?: DemandRecord[];
   artifacts: string[];
-  blockers: Record<string, unknown>[];
-  quality_report?: Record<string, unknown>;
+  outputs?: Array<{ path: string; type: string; stage?: string }>;
+  grounding?: DemandRecord | null;
+  prd_path?: string | null;
+  output_path?: string | null;
+  prd?: DemandPrdDocument | null;
+  quality_report?: DemandRecord & { blockers?: Array<{ code?: string }> };
 }
 
-function requirePrd(result: ReturnType<typeof runDemandPrdRuntime>): asserts result is ReturnType<typeof runDemandPrdRuntime> & { prd: NonNullable<ReturnType<typeof runDemandPrdRuntime>["prd"]> } {
+function requirePrd(result: DemandPrdResultForTest): asserts result is DemandPrdResultForTest & { prd: DemandPrdDocument } {
   if (!("prd" in result) || result.prd === null || result.prd === undefined) {
     throw new Error(`expected prd to exist, got status=${result.status}`);
   }
 }
 
-function assertTaskSessionPlan(task, demandId) {
+function requirePrdTasks(prd: DemandPrdDocument): DemandTask[] {
+  if (!Array.isArray(prd.tasks)) {
+    throw new Error("expected demand PRD tasks");
+  }
+  return prd.tasks;
+}
+
+function assertTaskSessionPlan(task: DemandTask, demandId: string): DemandTaskSessionPlan {
+  if (typeof task.id !== "string") {
+    throw new Error("task session plan requires a string task id");
+  }
+  const taskId = task.id;
   const session = task.handoff?.session;
-  assert.ok(session, `missing session plan for ${task.id}`);
-  const taskRoot = `.yolo/demand/${demandId}/tasks/${task.id}`;
+  assert.ok(session, `missing session plan for ${taskId}`);
+  const taskRoot = `.yolo/demand/${demandId}/tasks/${taskId}`;
   assert.equal(session.schema, "yolo.demand.task_session_plan.v1");
-  assert.equal(session.session_id, `${task.id}-session`);
-  assert.equal(session.task_id, task.id);
+  assert.equal(session.session_id, `${taskId}-session`);
+  assert.equal(session.task_id, taskId);
   assert.equal(session.demand_id, demandId);
   assert.equal(session.state_path, `${taskRoot}/session.json`);
   assert.equal(session.handoff_path, `${taskRoot}/handoff.md`);
   assert.equal(session.evidence_path, `${taskRoot}/evidence.jsonl`);
-  assert.equal(session.memory_update_paths.includes(".yolo/memory/CURRENT_HANDOFF.md"), true);
-  assert.equal(session.memory_update_paths.includes(".yolo/memory/PROGRESS.md"), true);
-  assert.equal(session.memory_update_paths.includes(".yolo/state/session-memory.jsonl"), true);
+  assert.equal(session.memory_update_paths?.includes(".yolo/memory/CURRENT_HANDOFF.md"), true);
+  assert.equal(session.memory_update_paths?.includes(".yolo/memory/PROGRESS.md"), true);
+  assert.equal(session.memory_update_paths?.includes(".yolo/state/session-memory.jsonl"), true);
   assert.equal(session.progress_update_path, ".yolo/memory/PROGRESS.md");
-  assert.equal(session.resume_instructions.includes(task.id), true);
+  assert.equal(session.resume_instructions?.includes(taskId), true);
   return session;
 }
 
-function writeJson(file, value) {
+function writeJson(file: string, value: unknown): void {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function defaultDemandTargetFileContent(file) {
+function defaultDemandTargetFileContent(file: string): string {
   if (file.endsWith("inventory-list.tsx")) {
     return [
       "export function InventoryList({ items }) {",
@@ -82,22 +110,25 @@ function defaultDemandTargetFileContent(file) {
   return "export const yoloDemandTarget = true;\n";
 }
 
-function writeProjectFile(root, file, content = defaultDemandTargetFileContent(file)) {
+function writeProjectFile(root: string, file: string, content: string = defaultDemandTargetFileContent(file)): void {
   const path = join(root, file);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, content, "utf8");
 }
 
-function seedDemandTargetFiles(root, files) {
+function seedDemandTargetFiles(root: string, files: string[]): void {
   for (const file of files) writeProjectFile(root, file);
 }
 
-function duplicateTaskKeys(tasks) {
-  const seen = new Set();
-  const duplicates = [];
+function duplicateTaskKeys(tasks: DemandTask[] = []): string[] {
+  const seen = new Set<string>();
+  const duplicates: string[] = [];
   for (const task of tasks) {
-    const targets = (task.scope?.targets || [])
-      .map((target) => target.file || target)
+    const rawTargets = Array.isArray(task.scope?.targets)
+      ? task.scope.targets as Array<string | { file?: string }>
+      : [];
+    const targets = rawTargets
+      .map((target) => String(typeof target === "string" ? target : target.file || target))
       .filter(Boolean)
       .sort()
       .join(",");
@@ -108,7 +139,37 @@ function duplicateTaskKeys(tasks) {
   return duplicates;
 }
 
-function assertExecutableTaskGraph(tasks: any[]) {
+function isRecord(value: unknown): value is DemandRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isTargetFileFact(value: unknown): value is DemandTargetFileFact {
+  return isRecord(value) && typeof value.file === "string";
+}
+
+function isAssumptionFact(value: unknown): value is DemandAssumptionFact {
+  return isRecord(value);
+}
+
+function targetFileFacts(value: unknown): DemandTargetFileFact[] {
+  return Array.isArray(value) ? value.filter(isTargetFileFact) : [];
+}
+
+function traceId(value: DemandRecord | string | undefined): string {
+  return typeof value === "string" ? value : String(value?.id ?? "");
+}
+
+function textValue(value: unknown): string {
+  return String(value ?? "");
+}
+
+type GenerateFindingsResult = Awaited<ReturnType<typeof generateFindings>>;
+
+function hasFindingsProviderRun(value: GenerateFindingsResult): value is GenerateFindingsResult & { provider_run: FindingsProviderRun } {
+  return isRecord(value) && "provider_run" in value && isRecord(value.provider_run);
+}
+
+function assertExecutableTaskGraph(tasks: DemandTask[]) {
   const ids = new Set(tasks.map((task) => task.id));
   const roots = tasks.filter((task) => (task.depends_on || []).length === 0);
   assert.ok(roots.length > 0, "task graph must have at least one zero-dependency root");
@@ -151,7 +212,7 @@ function acceptanceAdapterManifest() {
   };
 }
 
-function taskcliDemandInput(root) {
+function taskcliDemandInput(root: string): DemandRuntimeInput {
   return {
     projectRoot: root,
     stateRoot: join(root, ".yolo"),
@@ -181,7 +242,7 @@ function taskcliDemandInput(root) {
   };
 }
 
-function taskcliInterviewToDemandStyleSession() {
+function taskcliInterviewToDemandStyleSession(): DemandSession {
   return {
     id: "DEMAND-20260619-TASKCLI-REAL-STYLE",
     phase: "prd_intake",
@@ -397,7 +458,7 @@ describe("demand findings generator output parsing", () => {
   test("uses provider adapter defaults without dangerous claude permissions", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-findings-generator-"));
     let capturedPrompt = "";
-    let capturedOptions = null;
+    let capturedOptions: FindingsProviderPromptOptions | null = null;
     try {
       const result = await generateFindings("build findings", 1234, {
         projectRoot: root,
@@ -415,6 +476,9 @@ describe("demand findings generator output parsing", () => {
 
       assert.equal(result.ok, true);
       assert.equal(capturedPrompt, "build findings");
+      if (capturedOptions === null) {
+        throw new Error("expected findings provider options to be captured");
+      }
       assert.equal(capturedOptions.timeout, 1234);
       assert.equal(capturedOptions.rootDir, root);
       assert.equal(capturedOptions.config.ai.claude_permission_mode, "acceptEdits");
@@ -448,11 +512,11 @@ describe("demand findings generator output parsing", () => {
 
       assert.equal(result.ok, false);
       assert.equal(spawned, false);
-      const providerRun = (result as { provider_run?: any }).provider_run;
-      assert.ok(providerRun);
+      assert.ok(hasFindingsProviderRun(result));
+      const providerRun = result.provider_run;
       assert.equal(providerRun.blocked, true);
       assert.equal(providerRun.reason, "agent_permission_unsafe");
-      assert.ok(providerRun.adapter_contract_inspection.blockers.some((blocker) => blocker.code === "AGENT_PERMISSION_UNSAFE"));
+      assert.ok(providerRun.adapter_contract_inspection?.blockers?.some((blocker) => blocker.code === "AGENT_PERMISSION_UNSAFE"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -502,7 +566,7 @@ describe("demand runtime", () => {
       assert.equal(grounded.status, "applied");
       assert.deepEqual(grounded.session.project.target_files, ["src/taskcli.ts"]);
 
-      const target = grounded.target_files.find((item) => item.file === "src/taskcli.ts");
+      const target = targetFileFacts(grounded.target_files).find((item) => item.file === "src/taskcli.ts");
       assert.ok(target);
       assert.equal(target.status, "planned_new_file");
       assert.equal(target.allow_new_files, true);
@@ -528,17 +592,17 @@ describe("demand runtime", () => {
         stateRoot: join(root, ".yolo"),
         demandPath: approved.demand_path,
         writeArtifacts: true,
-      });
+      }) as DemandPrdResultForTest;
 
       assert.equal(spec.status, "success", JSON.stringify(spec.blockers, null, 2));
-      assert.equal((spec as any).grounding?.applied, true);
-      assert.ok(spec.prd);
+      assert.equal(spec.grounding?.applied, true);
+      requirePrd(spec);
       const prdPath = spec.artifacts.find((path) => path.endsWith("prd.json"));
       assert.ok(prdPath);
-      assert.equal((spec as any).prd_path, prdPath);
-      assert.equal((spec as any).output_path, prdPath);
+      assert.equal(spec.prd_path, prdPath);
+      assert.equal(spec.output_path, prdPath);
       assert.equal(spec.artifacts[0], prdPath);
-      const outputs = (spec as any).outputs || [];
+      const outputs = spec.outputs || [];
       assert.equal(outputs.find((output) => output.type === "prd")?.path, prdPath);
       assert.equal(outputs.find((output) => output.path.endsWith("session.json"))?.type, "demand_session");
       assert.equal(outputs.find((output) => output.path.endsWith("GROUNDING.json"))?.type, "grounding");
@@ -547,16 +611,18 @@ describe("demand runtime", () => {
       assert.equal(existsSync(join(root, ".yolo/lifecycle/discovery.json")), true);
       assert.equal(existsSync(join(root, ".yolo/lifecycle/roadmap.json")), true);
 
-      const savedSession = JSON.parse(readFileSync(approved.demand_path, "utf8"));
+      const savedSession = JSON.parse(readFileSync(approved.demand_path, "utf8")) as DemandSession;
       assert.deepEqual(savedSession.project.target_files, ["src/taskcli.ts"]);
       assert.equal(savedSession.project_facts.target_files[0].status, "planned_new_file");
 
-      const prd = spec.prd as any;
-      const task = prd.tasks[0];
+      const prd = spec.prd;
+      const tasks = requirePrdTasks(prd);
+      const task = tasks[0];
+      assert.ok(task.scope?.targets);
       assert.deepEqual(task.scope.targets.map((target) => target.file), ["src/taskcli.ts"]);
       assert.equal(task.scope.allow_new_files, true);
       assert.equal(prd.demand.project_facts.target_files[0].status, "planned_new_file");
-      assertExecutableTaskGraph(prd.tasks);
+      assertExecutableTaskGraph(tasks);
 
       const check = inspectYoloCheck({
         prdPath,
@@ -769,7 +835,7 @@ describe("demand runtime", () => {
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
         writeArtifacts: false,
-      });
+      }) as DemandPrdResultForTest;
 
       assert.equal(prd.status, "success", JSON.stringify(prd.blockers, null, 2));
       requirePrd(prd);
@@ -921,7 +987,7 @@ describe("demand runtime", () => {
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
         writeArtifacts: false,
-      });
+      }) as DemandPrdResultForTest;
 
       assert.equal(prd.status, "success", JSON.stringify(prd.blockers, null, 2));
       assert.equal(prd.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"), false);
@@ -1213,7 +1279,7 @@ describe("demand runtime", () => {
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
         writeArtifacts: false,
-      });
+      }) as DemandPrdResultForTest;
 
       assert.equal(prd.status, "blocked");
       assert.equal(prd.code, "DEMAND_QUALITY_BLOCKED");
@@ -1349,7 +1415,7 @@ describe("demand runtime", () => {
       });
 
       assert.equal(prd.status, "blocked");
-      const grounding = (prd as any).grounding;
+      const grounding = (prd as DemandPrdResultForTest).grounding;
       assert.equal(grounding?.reason, "candidate_files_require_explicit_confirmation");
       assert.deepEqual(grounding?.candidate_target_files, ["src/inventory-list.ts"]);
     } finally {
@@ -1390,7 +1456,9 @@ describe("demand runtime", () => {
       assert.equal(discuss.status, "blocked");
       assert.deepEqual(discuss.session.project.target_files, []);
       assert.equal(targetFact.status, "invalid_scope");
-      const outsideAssumption = discuss.session.project_facts.assumptions.find((fact) => /lowStockThreshold/.test(fact.text));
+      const outsideAssumption = discuss.session.project_facts.assumptions
+        .filter(isAssumptionFact)
+        .find((fact) => /lowStockThreshold/.test(textValue(fact.text)));
       assert.notEqual(outsideAssumption.status, "verified");
       assert.equal(outsideAssumption.verified_by?.includes("project_read"), false);
       assert.equal(discuss.readiness.blockers.some((blocker) => (
@@ -1597,7 +1665,7 @@ describe("demand runtime", () => {
       });
 
       assert.equal(discuss.status, "success");
-      assert.equal(discuss.session.question_trace[0].id, "Q-STOCKOUT-PROOF");
+      assert.equal(traceId(discuss.session.question_trace[0]), "Q-STOCKOUT-PROOF");
       assert.equal(discuss.session.prd_intake.question_ids.includes("Q-STOCKOUT-PROOF"), true);
       assert.equal(discuss.session.approval_reason, "Business owner confirmed this is enough for MVP.");
       assert.equal(discuss.session.scenario_matrix.scenarios[0].source_question_ids.includes("Q-STOCKOUT-PROOF"), true);
@@ -1613,7 +1681,7 @@ describe("demand runtime", () => {
       assert.equal(prd.status, "success");
       requirePrd(prd);
       assert.equal(prd.prd.base_commit, "abcdef0");
-      assert.equal(prd.prd.demand.question_trace[0].id, "Q-STOCKOUT-PROOF");
+      assert.equal(traceId(prd.prd.demand.question_trace[0]), "Q-STOCKOUT-PROOF");
       assert.equal(prd.prd.tasks[0].source_question_ids.includes("Q-STOCKOUT-PROOF"), true);
       assert.equal(prd.prd.tasks[0].handoff.source_question_ids.includes("Q-STOCKOUT-PROOF"), true);
       assert.equal(typeof prd.prd.tasks[0].verification_hint, "string");
@@ -1895,10 +1963,10 @@ describe("demand runtime", () => {
       assert.equal(scenarios.length, 6);
       assert.equal(scenarios.some((scenario) => scenario.requirement_id === "REQ-001-S01"), true);
       assert.equal(scenarios.some((scenario) => scenario.requirement_id === "REQ-002-S02"), true);
-      assert.equal(scenarios.every((scenario) => !(/新增列表/.test(scenario.desired_behavior) && /新增卡片|卡片显示/.test(scenario.desired_behavior))), true);
-      assert.equal(scenarios.every((scenario) => !(/编辑/.test(scenario.desired_behavior) && /移动/.test(scenario.desired_behavior))), true);
-      assert.equal(scenarios.every((scenario) => !(/(?<!未)归档/u.test(scenario.desired_behavior) && /刷新|重新加载|恢复/.test(scenario.desired_behavior))), true);
-      assert.match(discuss.session.scenario_matrix.atomic_task_rule, /one user-visible story/);
+      assert.equal(scenarios.every((scenario) => !(/新增列表/.test(textValue(scenario.desired_behavior)) && /新增卡片|卡片显示/.test(textValue(scenario.desired_behavior)))), true);
+      assert.equal(scenarios.every((scenario) => !(/编辑/.test(textValue(scenario.desired_behavior)) && /移动/.test(textValue(scenario.desired_behavior)))), true);
+      assert.equal(scenarios.every((scenario) => !(/(?<!未)归档/u.test(textValue(scenario.desired_behavior)) && /刷新|重新加载|恢复/.test(textValue(scenario.desired_behavior)))), true);
+      assert.match(textValue(discuss.session.scenario_matrix.atomic_task_rule), /one user-visible story/);
 
       const prd = runDemandPrdRuntime({
         projectRoot: root,
@@ -1914,8 +1982,8 @@ describe("demand runtime", () => {
       if (!("compiled" in prd) || !prd.compiled) throw new Error("expected compiled");
       const compiledPrd = prd.compiled.prd;
       assert.equal(compiledPrd.tasks.some((task) => task.requirement_ids.includes("REQ-003-S02")), true);
-      assert.equal(compiledPrd.tasks.every((task) => !(/编辑/.test(task.description) && /移动/.test(task.description))), true);
-      assert.match(compiledPrd.demand.atomicity_contract.rule, /one user-visible story/);
+      assert.equal(compiledPrd.tasks.every((task) => !(/编辑/.test(textValue(task.description)) && /移动/.test(textValue(task.description)))), true);
+      assert.match(textValue(compiledPrd.demand.atomicity_contract.rule), /one user-visible story/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

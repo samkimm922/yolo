@@ -1,5 +1,18 @@
 import { createHash } from "node:crypto";
 import { detectExternalResearchSignal } from "../lib/research-signal.js";
+import type {
+  DemandEvidenceRecord,
+  DemandEvidenceResult,
+  DemandMaybeArray,
+  DemandRecord,
+  DemandRequirement,
+  DemandRequirementsState,
+  DemandRuntimeOptions,
+  DemandScenario,
+  DemandScenarioSurface,
+  DemandSession,
+  DemandTargetFileFact,
+} from "./graph.js";
 
 export type EvidenceRequirementKind = "external" | "project";
 export type EvidenceRequirementStatus = "pending" | "satisfied";
@@ -11,6 +24,30 @@ export interface EvidenceRequirement {
   reason: string;
   matches: string[];
   status: EvidenceRequirementStatus;
+}
+
+interface EvidenceRequirementOptions extends DemandRuntimeOptions {
+  kinds?: DemandMaybeArray<EvidenceRequirementKind | string>;
+  texts?: unknown;
+  evidence_results?: unknown;
+  evidenceResults?: unknown;
+  evidence_records?: unknown;
+  evidenceRecords?: unknown;
+  external_research_attempted?: boolean;
+  externalResearchAttempted?: boolean;
+  greenfield?: boolean;
+  context_type?: string;
+  contextType?: string;
+}
+
+interface EvidenceRecordCarrier {
+  record: DemandEvidenceRecord;
+  carrier: DemandRecord;
+}
+
+interface ProjectFactSignal {
+  requires_project: boolean;
+  matches: string[];
 }
 
 const PROJECT_FACT_ASSUMPTION_RE =
@@ -30,31 +67,31 @@ const SCOPED_EXISTING_PROJECT_FACT_RE =
 const SCOPED_EXISTING_PROJECT_FACT_REVERSE =
   /\b(project|codebase|repo|code|file|module|component|api|service|endpoint|route|schema|database|table|column)\b[^\n.]{0,60}\b(existing|current|already|legacy|implemented|production)\b/i;
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function asArray(value) {
+function asArray<T = unknown>(value: DemandMaybeArray<T> | T): T[] {
   if (value == null) return [];
-  return Array.isArray(value) ? value : [value];
+  return Array.isArray(value) ? [...value] as T[] : [value as T];
 }
 
-function uniqueStrings(value) {
+function uniqueStrings(value: unknown): string[] {
   return [...new Set(asArray(value).map(clean).filter(Boolean))];
 }
 
-function targetFilesFromSession(session = Object()) {
+function targetFilesFromSession(session: DemandSession = Object()): string[] {
   return uniqueStrings(session.project?.target_files || session.target_files);
 }
 
-function scenarioSurfaces(session = Object()) {
-  const scenarios = asArray(session.scenario_matrix?.scenarios || session.scenarios);
-  return scenarios.flatMap((scenario) => asArray(scenario?.surfaces));
+function scenarioSurfaces(session: DemandSession = Object()): DemandScenarioSurface[] {
+  const scenarios = asArray<DemandScenario>(session.scenario_matrix?.scenarios || session.scenarios);
+  return scenarios.flatMap((scenario) => asArray<DemandScenarioSurface>(scenario?.surfaces));
 }
 
-function targetFileFactsFromSession(session = Object()) {
-  return asArray(session.project_facts?.target_files || session.project?.target_file_facts)
-    .filter((fact) => fact && typeof fact === "object")
+function targetFileFactsFromSession(session: DemandSession = Object()): DemandTargetFileFact[] {
+  return asArray<DemandTargetFileFact | string>(session.project_facts?.target_files || session.project?.target_file_facts)
+    .filter((fact): fact is DemandTargetFileFact => Boolean(fact && typeof fact === "object"))
     .map((fact) => ({
       ...fact,
       file: clean(fact.file || fact.path),
@@ -63,12 +100,12 @@ function targetFileFactsFromSession(session = Object()) {
     .filter((fact) => fact.file);
 }
 
-function isPlannedNewTargetFact(fact = Object()) {
+function isPlannedNewTargetFact(fact: DemandTargetFileFact = Object()): boolean {
   const status = clean(fact.status).toLowerCase();
   return status === "planned_new_file" || fact.new_file === true || fact.allow_new_files === true;
 }
 
-function isExistingTargetFact(fact = Object()) {
+function isExistingTargetFact(fact: DemandTargetFileFact = Object()): boolean {
   if (isPlannedNewTargetFact(fact)) return false;
   const status = clean(fact.status).toLowerCase();
   return ["verified", "project_read", "existing", "exists"].includes(status)
@@ -77,7 +114,7 @@ function isExistingTargetFact(fact = Object()) {
     || fact.allow_new_files === false;
 }
 
-function targetAllowsNewFile(session = Object(), file = "") {
+function targetAllowsNewFile(session: DemandSession = Object(), file: string = ""): boolean {
   const target = clean(file);
   if (!target) return false;
   return scenarioSurfaces(session).some((surface) => (
@@ -86,7 +123,7 @@ function targetAllowsNewFile(session = Object(), file = "") {
   ));
 }
 
-function greenfieldText(input = Object(), session = Object()) {
+function greenfieldText(input: DemandSession = Object(), session: DemandSession = Object()): string {
   return [
     input.context_type,
     input.contextType,
@@ -114,7 +151,7 @@ function greenfieldText(input = Object(), session = Object()) {
   ].flatMap(textFromValue).join("\n");
 }
 
-export function isGreenfieldDemandSession(input = Object(), session = Object(), options = Object()) {
+export function isGreenfieldDemandSession(input: DemandSession = Object(), session: DemandSession = Object(), options: EvidenceRequirementOptions = Object()): boolean {
   if (options.greenfield === true || options.context_type === "greenfield" || options.contextType === "greenfield") return true;
   if (options.greenfield === false || options.context_type === "brownfield" || options.contextType === "brownfield") return false;
 
@@ -143,38 +180,39 @@ export function isGreenfieldDemandSession(input = Object(), session = Object(), 
     || (targetFiles.length === 0 && textGreenfield);
 }
 
-function hashId(kind, topic, reason) {
+function hashId(kind: EvidenceRequirementKind, topic: unknown, reason: unknown): string {
   const digest = createHash("sha1").update(`${kind}\n${clean(topic).toLowerCase()}\n${clean(reason)}`).digest("hex").slice(0, 8).toUpperCase();
   return `EVREQ-${kind.toUpperCase()}-${digest}`;
 }
 
-function truncate(value, max = 240) {
+function truncate(value: unknown, max: number = 240): string {
   const text = clean(value).replace(/\s+/g, " ");
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 }
 
-function textFromValue(value) {
+function textFromValue(value: unknown): string[] {
   if (value == null) return [];
   if (Array.isArray(value)) return value.flatMap(textFromValue);
   if (typeof value === "object") {
+    const record = value as DemandRecord;
     return [
-      value.text,
-      value.title,
-      value.summary,
-      value.value,
-      value.claim,
-      value.answer,
-      value.question,
-      value.message,
-      value.reason,
+      record.text,
+      record.title,
+      record.summary,
+      record.value,
+      record.claim,
+      record.answer,
+      record.question,
+      record.message,
+      record.reason,
     ].flatMap(textFromValue);
   }
   const text = clean(value);
   return text ? [text] : [];
 }
 
-function demandRequirementTextItems(input = Object(), session = Object()) {
-  const requirements = asArray(session.requirements?.active || session.requirements || input.requirements);
+function demandRequirementTextItems(input: DemandSession = Object(), session: DemandSession = Object()): string[] {
+  const requirements = asArray<DemandRequirement | DemandRequirementsState>(session.requirements?.active || session.requirements || input.requirements);
   const scenarios = asArray(session.scenario_matrix?.scenarios || session.scenarios);
   const rounds = asArray(session.discussion?.rounds || input.question_trace || input.questions);
   return [
@@ -225,13 +263,16 @@ function demandRequirementTextItems(input = Object(), session = Object()) {
     session.discussion?.open_questions,
     session.discussion?.decisions,
     rounds,
-    requirements.flatMap((requirement) => [
-      requirement.text,
-      requirement.title,
-      requirement.acceptance_criteria,
-      requirement.acceptance_scenarios,
-      requirement.scenarios,
-    ]),
+    requirements.flatMap((rawRequirement) => {
+      const requirement = rawRequirement as DemandRequirement;
+      return [
+        requirement.text,
+        requirement.title,
+        requirement.acceptance_criteria,
+        requirement.acceptance_scenarios,
+        requirement.scenarios,
+      ];
+    }),
     scenarios.flatMap((scenario) => [
       scenario.current_behavior,
       scenario.desired_behavior,
@@ -252,7 +293,7 @@ function demandRequirementTextItems(input = Object(), session = Object()) {
   ].flatMap(textFromValue);
 }
 
-function topicFromExternalMatch(text, match) {
+function topicFromExternalMatch(text: string, match: string): string {
   const source = clean(text);
   const raw = clean(match);
   if (!source || !raw) return raw;
@@ -266,7 +307,7 @@ function topicFromExternalMatch(text, match) {
   return truncate(`${before}${raw}${after}`);
 }
 
-function sentenceForProjectMatch(text) {
+function sentenceForProjectMatch(text: unknown): string {
   const source = clean(text);
   if (!source) return "";
   const direct = source
@@ -276,11 +317,11 @@ function sentenceForProjectMatch(text) {
   return truncate(direct || source);
 }
 
-function isFutureDeliveryText(text) {
+function isFutureDeliveryText(text: unknown): boolean {
   return FUTURE_DELIVERY_TEXT_RE.test(clean(text));
 }
 
-function assertsExistingProjectFact(text) {
+function assertsExistingProjectFact(text: unknown): boolean {
   const source = clean(text);
   if (!source) return false;
   const strong = STRONG_EXISTING_PROJECT_FACT_RE.test(source) || STRONG_EXISTING_PROJECT_FACT_REVERSE.test(source);
@@ -289,16 +330,16 @@ function assertsExistingProjectFact(text) {
   return SCOPED_EXISTING_PROJECT_FACT_RE.test(source) || SCOPED_EXISTING_PROJECT_FACT_REVERSE.test(source);
 }
 
-function shouldKeepProjectFactAssumption(text) {
+function shouldKeepProjectFactAssumption(text: unknown): boolean {
   const source = clean(text);
   if (!(PROJECT_FACT_ASSUMPTION_RE.test(source) || PROJECT_FACT_ASSUMPTION_REVERSE.test(source))) return false;
   return !isFutureDeliveryText(source) || assertsExistingProjectFact(source);
 }
 
-export function detectProjectFactAssumptionSignal(...texts) {
+export function detectProjectFactAssumptionSignal(...texts: unknown[]): ProjectFactSignal {
   const text = texts.map(clean).filter(Boolean).join("\n");
   if (!text) return { requires_project: false, matches: [] };
-  const matches = [];
+  const matches: string[] = [];
   for (const item of text.split(/\r?\n/).map(clean).filter(Boolean)) {
     if (shouldKeepProjectFactAssumption(item)) {
       matches.push(sentenceForProjectMatch(item));
@@ -307,8 +348,11 @@ export function detectProjectFactAssumptionSignal(...texts) {
   return { requires_project: matches.length > 0, matches: uniqueStrings(matches) };
 }
 
-function addRequirement(map, { kind, topic, reason, matches }) {
-  const normalizedTopic = truncate(topic || matches?.[0] || reason || kind);
+function addRequirement(
+  map: Map<string, EvidenceRequirement>,
+  { kind, topic, reason, matches }: { kind: EvidenceRequirementKind; topic?: unknown; reason: string; matches?: unknown },
+): void {
+  const normalizedTopic = truncate(topic || asArray(matches)[0] || reason || kind);
   if (!normalizedTopic) return;
   const id = hashId(kind, normalizedTopic, reason);
   const existing = map.get(id);
@@ -326,9 +370,9 @@ function addRequirement(map, { kind, topic, reason, matches }) {
   });
 }
 
-export function deriveEvidenceRequirements(input = Object(), session = Object(), options = Object()): EvidenceRequirement[] {
+export function deriveEvidenceRequirements(input: DemandSession = Object(), session: DemandSession = Object(), options: EvidenceRequirementOptions = Object()): EvidenceRequirement[] {
   const kinds = new Set(asArray(options.kinds || ["external", "project"]).map(clean));
-  const map = new Map();
+  const map = new Map<string, EvidenceRequirement>();
   const texts = [
     ...demandRequirementTextItems(input, session),
     ...asArray(options.texts).flatMap(textFromValue),
@@ -370,7 +414,7 @@ export function deriveEvidenceRequirements(input = Object(), session = Object(),
   return [...map.values()];
 }
 
-function evidenceRecordScope(record = Object()) {
+function evidenceRecordScope(record: DemandEvidenceRecord | string = Object()): string {
   if (typeof record === "string" || !record || typeof record !== "object") return "unknown";
   const scope = clean(record.scope || record.evidence_scope || record.source_scope || record.kind || record.type).toLowerCase();
   if (["project", "repo", "repository", "codebase", "local"].includes(scope)) return "project";
@@ -390,41 +434,45 @@ function evidenceRecordScope(record = Object()) {
   return "unknown";
 }
 
-function looksLikeEvidenceRecord(value) {
-  return value && typeof value === "object" && (
-    value.scope != null
-    || value.evidence_scope != null
-    || value.source_scope != null
-    || value.url != null
-    || value.href != null
-    || value.link != null
-    || value.path != null
-    || value.file != null
-    || value.source != null
+function looksLikeEvidenceRecord(value: unknown): value is DemandEvidenceRecord {
+  if (!value || typeof value !== "object") return false;
+  const record = value as DemandEvidenceRecord;
+  return (
+    record.scope != null
+    || record.evidence_scope != null
+    || record.source_scope != null
+    || record.url != null
+    || record.href != null
+    || record.link != null
+    || record.path != null
+    || record.file != null
+    || record.source != null
   );
 }
 
-function evidenceRecordsFromValue(value, carrier = Object()) {
+function evidenceRecordsFromValue(value: unknown, carrier: DemandRecord = Object()): EvidenceRecordCarrier[] {
   if (value == null) return [];
   if (Array.isArray(value)) return value.flatMap((item) => evidenceRecordsFromValue(item, carrier));
   if (typeof value !== "object") return [];
-  if (looksLikeEvidenceRecord(value) && !Array.isArray(value.evidence)) return [{ record: value, carrier }];
+  const result = value as DemandEvidenceResult;
+  const carrierRecord = value as DemandRecord;
+  if (looksLikeEvidenceRecord(value) && !Array.isArray(result.evidence)) return [{ record: value, carrier }];
   const nested = [
-    value.evidence,
-    value.result?.evidence,
-    value.output?.evidence,
-    value.sources,
-    value.result?.sources,
-    value.output?.sources,
-    value.findings,
-    value.result?.findings,
-    value.output?.findings,
-  ].flatMap((item) => evidenceRecordsFromValue(item, value));
+    result.evidence,
+    result.result?.evidence,
+    result.output?.evidence,
+    result.sources,
+    result.result?.sources,
+    result.output?.sources,
+    result.findings,
+    result.result?.findings,
+    result.output?.findings,
+  ].flatMap((item) => evidenceRecordsFromValue(item, carrierRecord));
   if (nested.length > 0) return nested;
-  return Object.values(value).flatMap((item) => evidenceRecordsFromValue(item, value));
+  return Object.values(value).flatMap((item) => evidenceRecordsFromValue(item, carrierRecord));
 }
 
-function collectEvidenceRecords(input = Object(), session = Object(), options = Object()) {
+function collectEvidenceRecords(input: DemandSession = Object(), session: DemandSession = Object(), options: EvidenceRequirementOptions = Object()): EvidenceRecordCarrier[] {
   return [
     input.evidence_results,
     input.evidenceResults,
@@ -451,7 +499,7 @@ function collectEvidenceRecords(input = Object(), session = Object(), options = 
   ].flatMap((source) => evidenceRecordsFromValue(source));
 }
 
-function validRecordForRequirement(record = Object(), requirement = Object()) {
+function validRecordForRequirement(record: DemandEvidenceRecord = Object(), requirement: EvidenceRequirement): boolean {
   if (!record || typeof record !== "object") return false;
   if (evidenceRecordScope(record) !== requirement.kind) return false;
   const source = clean(record.source || record.source_type || record.category || record.kind || record.type);
@@ -465,7 +513,7 @@ function validRecordForRequirement(record = Object(), requirement = Object()) {
   return Boolean(path) && !/^https?:\/\//i.test(path);
 }
 
-function textTokens(value) {
+function textTokens(value: unknown): string[] {
   return clean(value)
     .toLowerCase()
     .replace(/https?:\/\//g, " ")
@@ -474,7 +522,7 @@ function textTokens(value) {
     .filter((token) => token.length >= 3);
 }
 
-function topicMatchesEvidence(requirement = Object(), record = Object(), carrier = Object()) {
+function topicMatchesEvidence(requirement: EvidenceRequirement, record: DemandEvidenceRecord = Object(), carrier: DemandRecord = Object()): boolean {
   const covers = uniqueStrings([
     record.covers,
     record.covered_requirements,
@@ -508,19 +556,20 @@ function topicMatchesEvidence(requirement = Object(), record = Object(), carrier
   return matched.length >= Math.min(2, tokens.length);
 }
 
-function externalResearchAttempted(input = Object(), session = Object(), options = Object()) {
-  const nestedAttempted = (value) => {
+function externalResearchAttempted(input: DemandSession = Object(), session: DemandSession = Object(), options: EvidenceRequirementOptions = Object()): boolean {
+  const nestedAttempted = (value: unknown): boolean => {
     if (value == null) return false;
     if (Array.isArray(value)) return value.some(nestedAttempted);
     if (typeof value !== "object") return false;
-    if (value.external_research_attempted === true || value.externalResearchAttempted === true) return true;
+    const result = value as DemandEvidenceResult & { external_research_attempted?: boolean; externalResearchAttempted?: boolean };
+    if (result.external_research_attempted === true || result.externalResearchAttempted === true) return true;
     return [
-      value.result,
-      value.output,
-      value.evidence_results,
-      value.evidenceResults,
-      value.agent_results,
-      value.agentResults,
+      result.result,
+      result.output,
+      result.evidence_results,
+      result.evidenceResults,
+      result.agent_results,
+      result.agentResults,
     ].some(nestedAttempted);
   };
   return input.external_research_attempted === true
@@ -541,7 +590,7 @@ function externalResearchAttempted(input = Object(), session = Object(), options
     || nestedAttempted(options.evidenceResults);
 }
 
-export function evaluateEvidenceRequirements(requirements = [], input = Object(), session = Object(), options = Object()): EvidenceRequirement[] {
+export function evaluateEvidenceRequirements(requirements: EvidenceRequirement[] = [], input: DemandSession = Object(), session: DemandSession = Object(), options: EvidenceRequirementOptions = Object()): EvidenceRequirement[] {
   const records = collectEvidenceRecords(input, session, options);
   const attempted = externalResearchAttempted(input, session, options);
   return asArray(requirements).map((requirement) => {
@@ -559,17 +608,17 @@ export function evaluateEvidenceRequirements(requirements = [], input = Object()
   });
 }
 
-export function buildEvidenceRequirements(input = Object(), session = Object(), options = Object()): EvidenceRequirement[] {
+export function buildEvidenceRequirements(input: DemandSession = Object(), session: DemandSession = Object(), options: EvidenceRequirementOptions = Object()): EvidenceRequirement[] {
   const requirements = deriveEvidenceRequirements(input, session, options);
   if (requirements.length === 0) return [];
   return evaluateEvidenceRequirements(requirements, input, session, options);
 }
 
-export function pendingEvidenceRequirements(requirements = []) {
+export function pendingEvidenceRequirements(requirements: EvidenceRequirement[] = []): EvidenceRequirement[] {
   return asArray(requirements).filter((item) => item?.status === "pending");
 }
 
-export function evidenceRequirementBlockers(requirements = []) {
+export function evidenceRequirementBlockers(requirements: EvidenceRequirement[] = []) {
   return pendingEvidenceRequirements(requirements).map((requirement) => ({
     code: requirement.kind === "external"
       ? "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"
@@ -584,7 +633,7 @@ export function evidenceRequirementBlockers(requirements = []) {
   }));
 }
 
-export function evidenceRequirementSummary(requirements = []) {
+export function evidenceRequirementSummary(requirements: EvidenceRequirement[] = []) {
   const items = asArray(requirements);
   return {
     total: items.length,
@@ -604,7 +653,7 @@ export function evidenceRequirementSummary(requirements = []) {
   };
 }
 
-export function evidenceRequirementNextActions(requirements = []) {
+export function evidenceRequirementNextActions(requirements: EvidenceRequirement[] = []): string[] {
   return pendingEvidenceRequirements(requirements).map((requirement) =>
     `必须为证据需求 ${requirement.id}（${requirement.topic}）收集 ${requirement.kind} 证据，并在 evidence.covers 中绑定 ${requirement.id}。`
   );
