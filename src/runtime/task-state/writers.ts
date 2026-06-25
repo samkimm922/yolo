@@ -3,19 +3,68 @@ import { redactDeep } from "../../lib/security/redact.js";
 import { writeStateAtomic } from "../persist/atomic-state.js";
 import { readJsonFileBounded } from "../../lib/bounded-read.js";
 
-function clean(value) {
+type TaskStateRecord = Record<string, unknown>;
+
+type TaskResultRecord = TaskStateRecord & {
+  id?: unknown;
+  task_id?: unknown;
+  taskId?: unknown;
+  run_id?: unknown;
+  runId?: unknown;
+  workspace_root?: unknown;
+  workspaceRoot?: unknown;
+  attempt_id?: unknown;
+  attemptId?: unknown;
+  session_id?: unknown;
+  sessionId?: unknown;
+  attempt?: unknown;
+  retries?: unknown;
+  timestamp?: unknown;
+};
+
+type TaskResultOptions = TaskStateRecord & {
+  now?: unknown;
+  task_id?: unknown;
+  taskId?: unknown;
+  run_id?: unknown;
+  runId?: unknown;
+  workspace_root?: unknown;
+  workspaceRoot?: unknown;
+  attempt_id?: unknown;
+  attemptId?: unknown;
+  attempt?: unknown;
+  retries?: unknown;
+  allowInitialAttempt?: unknown;
+  allow_initial_attempt?: unknown;
+};
+
+type NormalizeAttemptIdInput = {
+  taskId?: unknown;
+  record?: TaskResultRecord;
+  options?: TaskResultOptions;
+};
+
+type PrdTaskRecord = TaskStateRecord & {
+  id?: unknown;
+};
+
+type PrdDocument = TaskStateRecord & {
+  tasks?: Array<PrdTaskRecord | null | string | number | boolean>;
+};
+
+function clean(value: unknown) {
   return typeof value === "string" ? value.trim() : value;
 }
 
-function firstPresent(...values) {
+function firstPresent(...values: unknown[]) {
   return values.find((value) => clean(value) !== undefined && clean(value) !== null && clean(value) !== "");
 }
 
-function taskResultError(field, reason = "missing") {
+function taskResultError(field: string, reason = "missing") {
   return new Error(`Invalid task result: ${field} ${reason}`);
 }
 
-function normalizeAttemptId({ taskId, record = Object(), options = Object() } = Object()) {
+function normalizeAttemptId({ taskId, record = Object(), options = Object() }: NormalizeAttemptIdInput = Object()) {
   const explicit = firstPresent(
     record.attempt_id,
     record.attemptId,
@@ -35,7 +84,7 @@ function normalizeAttemptId({ taskId, record = Object(), options = Object() } = 
   return "";
 }
 
-export function normalizeTaskResultRecord(record = Object(), options = Object()) {
+export function normalizeTaskResultRecord(record: TaskResultRecord = Object(), options: TaskResultOptions = Object()) {
   if (!record || typeof record !== "object" || Array.isArray(record)) {
     throw taskResultError("record", "must be an object");
   }
@@ -60,16 +109,16 @@ export function normalizeTaskResultRecord(record = Object(), options = Object())
   };
 }
 
-export function appendTaskResult(resultsFile, record, options = Object()) {
+export function appendTaskResult(resultsFile: Parameters<typeof appendFileSync>[0], record: TaskResultRecord, options: TaskResultOptions = Object()) {
   const payload = normalizeTaskResultRecord(record, options);
   const safe = redactDeep(payload);
   appendFileSync(resultsFile, `${JSON.stringify(safe)}\n`, "utf8");
   return payload;
 }
 
-export function updatePrdTaskStatusFile(prdPath, taskId, update) {
+export function updatePrdTaskStatusFile(prdPath: string, taskId: string, update: TaskStateRecord) {
   try {
-    const prd = readJsonFileBounded(prdPath, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
+    const prd = readJsonFileBounded<PrdDocument>(prdPath, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
     // Guard: legacy/migrated PRDs may contain null/non-object entries inside `tasks`.
     // Without this, `.find((item) => item.id === taskId)` throws TypeError on null
     // entries, which is caught by the outer try/catch and silently reported as
