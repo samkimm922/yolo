@@ -26,7 +26,7 @@ const DEMAND_APPROVED_EVENT = "demand.approved";
 // gate — logic is preserved verbatim; only types are added.
 type Loose = Record<string, unknown>;
 
-interface DemandCheck {
+export interface DemandCheck {
   code: string;
   passed: boolean;
   severity: string;
@@ -34,7 +34,7 @@ interface DemandCheck {
   [key: string]: unknown;
 }
 
-interface DemandQualityCheck {
+export interface DemandQualityCheck {
   code: string;
   passed: boolean;
   points: number;
@@ -43,7 +43,7 @@ interface DemandQualityCheck {
   [key: string]: unknown;
 }
 
-interface DemandQualityDimension {
+export interface DemandQualityDimension {
   code: string;
   label: string;
   weight: number;

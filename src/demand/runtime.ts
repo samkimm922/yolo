@@ -1791,7 +1791,7 @@ function groundingArtifact(value: Loose = Object()): Loose {
   return artifact as Loose;
 }
 
-export function runDemandPrdRuntime(input: Loose = Object(), options: Loose = Object()): Loose {
+export function runDemandPrdRuntime(input: Loose = Object(), options: Loose = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const demandPath = resolvePath(projectRoot, input.demandPath || input.demand_path || input.demand || defaultDemandSessionPath(stateRoot, input.id || "")) as string;
@@ -1867,7 +1867,7 @@ export function runDemandPrdRuntime(input: Loose = Object(), options: Loose = Ob
     );
   }
 
-  const result: Loose = {
+  const result = {
     status: compiled.status,
     code: compiled.code,
     summary: compiled.summary,
@@ -1894,7 +1894,7 @@ export function runDemandPrdRuntime(input: Loose = Object(), options: Loose = Ob
   return result;
 }
 
-export function runDemandTaskRuntime(input: Loose = Object(), options: Loose = Object()): Loose {
+export function runDemandTaskRuntime(input: Loose = Object(), options: Loose = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const demandPath = resolvePath(projectRoot, input.demandPath || input.demand_path || input.demand || defaultDemandSessionPath(stateRoot, input.id || "")) as string;
@@ -1958,7 +1958,7 @@ export function runDemandTaskRuntime(input: Loose = Object(), options: Loose = O
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
   const outputFile = resolvePath(projectRoot, input.outputFile || input.output_file || join(read.dir, "tasks.json")) as string;
   const artifacts = shouldWrite ? [writeJson(outputFile, plan)] : [];
-  const result: Loose = {
+  const result = {
     status: plan.status,
     code: plan.status === "success" ? "DEMAND_TASKS_READY" : "DEMAND_TASKS_BLOCKED",
     summary: plan.status === "success"
