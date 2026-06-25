@@ -1,20 +1,56 @@
 const TERMINAL_STATUSES = new Set(["done", "completed", "failed", "blocked", "skipped"]);
 
-function asArray(value) {
+type SpecRecord = Record<string, unknown>;
+
+type TraceabilityTask = {
+  task_id: string | null;
+  status: string | null;
+  requirement_ids: string[];
+  design_ids: string[];
+  evidence_files: string[];
+  target_files: string[];
+  missing: {
+    requirements: boolean;
+    design: boolean;
+    evidence: boolean;
+    dangling_requirements: string[];
+    dangling_design: string[];
+  };
+};
+
+type GovernanceIssue = {
+  code: string;
+  task_id: string | null;
+  message: string;
+  requirement_ids?: string[];
+  design_ids?: string[];
+};
+
+function asArray<T>(value: T | T[] | null | undefined): T[] {
   if (value == null) return [];
   return Array.isArray(value) ? value : [value];
 }
 
-function refId(value) {
-  if (typeof value === "string") return value;
-  if (!value || typeof value !== "object") return null;
-  return value.id || value.ref || value.key || value.name || null;
+function optionalField(value: unknown, key: string): unknown {
+  if (value == null) return undefined;
+  return (value as SpecRecord)[key];
 }
 
-function normalizeRefs(...values) {
-  const refs = [];
+function isTerminalStatus(status: unknown): boolean {
+  return typeof status === "string" && TERMINAL_STATUSES.has(status);
+}
+
+function refId(value: unknown): unknown {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return null;
+  const rec = value as SpecRecord;
+  return rec.id || rec.ref || rec.key || rec.name || null;
+}
+
+function normalizeRefs(...values: unknown[]): string[] {
+  const refs: string[] = [];
   for (const value of values) {
-    for (const item of asArray(value)) {
+    for (const item of asArray<unknown>(value)) {
       const id = refId(item);
       if (id) refs.push(String(id));
     }
@@ -22,76 +58,84 @@ function normalizeRefs(...values) {
   return [...new Set(refs)];
 }
 
-function normalizeEvidenceRefs(...values) {
+function normalizeEvidenceRefs(...values: unknown[]): string[] {
   return normalizeRefs(...values).filter((ref) => ref.length > 0);
 }
 
-function targetFiles(task = Object()) {
-  const targets = Array.isArray(task.scope?.targets) ? task.scope.targets : [];
+function targetFiles(task: unknown = Object()): string[] {
+  const taskRec = task as SpecRecord;
+  const targetsValue = optionalField(taskRec.scope, "targets");
+  const targets = Array.isArray(targetsValue) ? targetsValue : [];
   return [...new Set(targets
-    .map((target) => target?.file)
+    .map((target) => optionalField(target, "file"))
     .filter(Boolean)
     .map((file) => String(file).replace(/:\d+(?:-\d+)?$/, "")))];
 }
 
-function taskRequirementIds(task = Object()) {
+function taskRequirementIds(task: unknown = Object()): string[] {
+  const taskRec = task as SpecRecord;
   return normalizeRefs(
-    task.requirement_id,
-    task.requirement_ids,
-    task.requirements,
-    task.trace?.requirement_id,
-    task.trace?.requirement_ids,
-    task.trace?.requirements,
-    task.traceability?.requirement_id,
-    task.traceability?.requirement_ids,
-    task.traceability?.requirements,
+    taskRec.requirement_id,
+    taskRec.requirement_ids,
+    taskRec.requirements,
+    optionalField(taskRec.trace, "requirement_id"),
+    optionalField(taskRec.trace, "requirement_ids"),
+    optionalField(taskRec.trace, "requirements"),
+    optionalField(taskRec.traceability, "requirement_id"),
+    optionalField(taskRec.traceability, "requirement_ids"),
+    optionalField(taskRec.traceability, "requirements"),
   );
 }
 
-function taskDesignIds(task = Object()) {
+function taskDesignIds(task: unknown = Object()): string[] {
+  const taskRec = task as SpecRecord;
   return normalizeRefs(
-    task.design_id,
-    task.design_ids,
-    task.designs,
-    task.trace?.design_id,
-    task.trace?.design_ids,
-    task.trace?.designs,
-    task.traceability?.design_id,
-    task.traceability?.design_ids,
-    task.traceability?.designs,
+    taskRec.design_id,
+    taskRec.design_ids,
+    taskRec.designs,
+    optionalField(taskRec.trace, "design_id"),
+    optionalField(taskRec.trace, "design_ids"),
+    optionalField(taskRec.trace, "designs"),
+    optionalField(taskRec.traceability, "design_id"),
+    optionalField(taskRec.traceability, "design_ids"),
+    optionalField(taskRec.traceability, "designs"),
   );
 }
 
-function taskEvidenceRefs(task = Object()) {
+function taskEvidenceRefs(task: unknown = Object()): string[] {
+  const taskRec = task as SpecRecord;
   return normalizeEvidenceRefs(
-    task.evidence_file,
-    task.evidence_files,
-    task.blocked_by,
-    task.trace?.evidence,
-    task.trace?.evidence_file,
-    task.trace?.evidence_files,
-    task.traceability?.evidence,
-    task.traceability?.evidence_file,
-    task.traceability?.evidence_files,
+    taskRec.evidence_file,
+    taskRec.evidence_files,
+    taskRec.blocked_by,
+    optionalField(taskRec.trace, "evidence"),
+    optionalField(taskRec.trace, "evidence_file"),
+    optionalField(taskRec.trace, "evidence_files"),
+    optionalField(taskRec.traceability, "evidence"),
+    optionalField(taskRec.traceability, "evidence_file"),
+    optionalField(taskRec.traceability, "evidence_files"),
   );
 }
 
-export function buildTraceabilityMatrix(prd = Object()) {
-  const requirements = normalizeRefs(prd.requirements, prd.spec?.requirements);
-  const designs = normalizeRefs(prd.designs, prd.design, prd.spec?.designs, prd.spec?.design);
+export function buildTraceabilityMatrix(prd: unknown = Object()) {
+  const prdRec = prd as SpecRecord;
+  const specRec = prdRec.spec;
+  const requirements = normalizeRefs(prdRec.requirements, optionalField(specRec, "requirements"));
+  const designs = normalizeRefs(prdRec.designs, prdRec.design, optionalField(specRec, "designs"), optionalField(specRec, "design"));
   const knownRequirements = new Set(requirements);
   const knownDesigns = new Set(designs);
-  const prdTasks = Array.isArray(prd.tasks) ? prd.tasks.filter((task) => task && typeof task === "object") : [];
+  const prdTasks = Array.isArray(prdRec.tasks) ? prdRec.tasks.filter((task: unknown) => task && typeof task === "object") : [];
   const tasks = prdTasks.map((task) => {
+    const taskRec = task as SpecRecord;
     const requirementIds = taskRequirementIds(task);
     const designIds = taskDesignIds(task);
     const evidenceFiles = taskEvidenceRefs(task);
-    const isTerminal = TERMINAL_STATUSES.has(task.status);
+    const isTerminal = isTerminalStatus(taskRec.status);
     const danglingRequirements = requirementIds.filter((id) => !knownRequirements.has(id));
     const danglingDesign = designIds.filter((id) => !knownDesigns.has(id));
     return {
-      task_id: task.id || null,
-      status: task.status || null,
+      task_id: (taskRec.id || null) as string | null,
+      status: (taskRec.status || null) as string | null,
       requirement_ids: requirementIds,
       design_ids: designIds,
       evidence_files: evidenceFiles,
@@ -110,7 +154,7 @@ export function buildTraceabilityMatrix(prd = Object()) {
     task_count: tasks.length,
     tasks_with_requirements: tasks.filter((task) => !task.missing.requirements).length,
     tasks_with_design: tasks.filter((task) => !task.missing.design).length,
-    terminal_tasks_with_evidence: tasks.filter((task) => TERMINAL_STATUSES.has(task.status) && !task.missing.evidence).length,
+    terminal_tasks_with_evidence: tasks.filter((task) => isTerminalStatus(task.status) && !task.missing.evidence).length,
     missing_requirements: tasks.filter((task) => task.missing.requirements).map((task) => task.task_id),
     missing_design: tasks.filter((task) => task.missing.design).map((task) => task.task_id),
     missing_evidence: tasks.filter((task) => task.missing.evidence).map((task) => task.task_id),
@@ -123,8 +167,8 @@ export function buildTraceabilityMatrix(prd = Object()) {
   };
 
   return {
-    prd_id: prd.id || null,
-    generated_at: prd.generated_at || null,
+    prd_id: prdRec.id || null,
+    generated_at: prdRec.generated_at || null,
     requirements,
     designs,
     tasks,
@@ -132,15 +176,16 @@ export function buildTraceabilityMatrix(prd = Object()) {
   };
 }
 
-export function inspectSpecGovernance(prd = Object(), options = Object()) {
+export function inspectSpecGovernance(prd: unknown = Object(), options: unknown = Object()) {
+  const optionsRec = options as SpecRecord;
   const policy = {
-    requireRequirements: options.requireRequirements === true,
-    requireDesign: options.requireDesign === true,
-    requireEvidenceForTerminal: options.requireEvidenceForTerminal === true,
+    requireRequirements: optionsRec.requireRequirements === true,
+    requireDesign: optionsRec.requireDesign === true,
+    requireEvidenceForTerminal: optionsRec.requireEvidenceForTerminal === true,
   };
   const matrix = buildTraceabilityMatrix(prd);
-  const blockers = [];
-  const warnings = [];
+  const blockers: GovernanceIssue[] = [];
+  const warnings: GovernanceIssue[] = [];
 
   for (const task of matrix.tasks) {
     if (policy.requireRequirements && task.missing.requirements) {
