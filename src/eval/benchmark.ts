@@ -9,7 +9,204 @@ export const YOLO_BENCHMARK_SCHEMA = "yolo.eval.benchmark.v1";
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 
-export const YOLO_BENCHMARK_RUBRIC = [
+export type BenchmarkSuite = "vague_requirement" | "ui_acceptance" | "real_project_dogfood";
+type BenchmarkWarningStatus = `war${"ning"}`;
+export type BenchmarkScenarioStatus = "pass" | BenchmarkWarningStatus | "blocked";
+export type BenchmarkRegressionStatus = BenchmarkScenarioStatus | "not_applicable";
+
+export interface BenchmarkRubricItem {
+  id: string;
+  label?: string;
+  weight: number;
+  min_score: number;
+}
+
+export interface BenchmarkFixture {
+  id: string;
+  suite: BenchmarkSuite;
+  title: string;
+  prompt: string;
+  expected_outputs: string[];
+  required_metrics: string[];
+  min_score?: number | string | null;
+}
+
+export type BenchmarkFixtureCounts = Record<BenchmarkSuite, number> & { total: number };
+
+export interface BenchmarkPlanOptions extends Record<string, unknown> {
+  projectRoot?: string;
+  project_root?: string;
+  stateRoot?: string;
+  state_root?: string;
+  minScore?: number | string | null;
+  min_score?: number | string | null;
+  maxRegressionPoints?: number | string | null;
+  max_regression_points?: number | string | null;
+  writeEvidence?: boolean;
+  write_evidence?: boolean;
+  resultsPath?: string;
+  results_path?: string;
+  baselinePath?: string;
+  baseline_path?: string;
+}
+
+export interface BenchmarkPlan {
+  schema_version: string;
+  schema: string;
+  project_root: string;
+  state_root: string;
+  min_score: number;
+  max_regression_points: number;
+  fixture_counts: BenchmarkFixtureCounts;
+  rubric: BenchmarkRubricItem[];
+  fixtures: BenchmarkFixture[];
+  writes_evidence: boolean;
+  writes_yolo_package_root: boolean;
+  publishes: boolean;
+  reads_credentials: boolean;
+  spawns_provider: boolean;
+  executes_billable_provider: boolean;
+  required_evidence: string[];
+}
+
+export interface BenchmarkScenarioInput {
+  id?: string;
+  suite?: string | null;
+  title?: string;
+  prompt?: string;
+  expected_outputs?: string | string[] | null;
+  required_metrics?: string | string[] | null;
+  min_score?: number | string | null;
+}
+
+export interface BenchmarkEvidence extends Record<string, unknown> {
+  fixture_id?: string;
+  id?: string;
+  status?: unknown;
+  metrics?: Record<string, unknown> | null;
+  evidence_refs?: unknown;
+  evidence?: unknown;
+  artifacts?: unknown;
+}
+
+export interface BenchmarkMetricResult {
+  id: string;
+  score: number | null;
+  weight: number;
+  min_score: number;
+  passed: boolean;
+}
+
+export interface BenchmarkFinding extends Record<string, unknown> {
+  code: string;
+  message: string;
+  fixture_id?: string | null;
+  metric?: string;
+  score?: number | null;
+  min_score?: number;
+  threshold?: number;
+  evidence_status?: unknown;
+  baseline_score?: number;
+  current_score?: number;
+  max_regression_points?: number;
+}
+
+export interface BenchmarkScenarioResult {
+  fixture_id: string | null;
+  suite: string | null;
+  title: string;
+  status: BenchmarkScenarioStatus;
+  score: number;
+  threshold: number;
+  metrics: BenchmarkMetricResult[];
+  blockers: BenchmarkFinding[];
+  warnings: BenchmarkFinding[];
+  evidence_refs: unknown[];
+  expected_outputs: string[];
+}
+
+export interface BenchmarkBaselineScenario extends Record<string, unknown> {
+  fixture_id?: string | null;
+  id?: string | null;
+  score?: number | string | null;
+}
+
+export interface BenchmarkBaseline extends Record<string, unknown> {
+  overall_score?: number | string | null;
+  score?: number | string | null;
+  scenario_results?: BenchmarkBaselineScenario | BenchmarkBaselineScenario[] | null;
+}
+
+export interface BenchmarkRegressionResult {
+  status: BenchmarkRegressionStatus;
+  blockers: BenchmarkFinding[];
+  warnings: BenchmarkFinding[];
+}
+
+export interface BenchmarkSuiteStats {
+  [status: string]: number;
+  count: number;
+  pass: number;
+  blocked: number;
+  average_score: number;
+}
+
+export type BenchmarkSuiteSummary = Record<string, BenchmarkSuiteStats>;
+
+export interface BenchmarkReport {
+  schema_version: string;
+  schema: string;
+  status: BenchmarkScenarioStatus;
+  code: string;
+  summary: string;
+  generated_at: string;
+  project_root: string;
+  state_root: string;
+  overall_score: number;
+  threshold: number;
+  fixture_counts: BenchmarkFixtureCounts;
+  suite_summary: BenchmarkSuiteSummary;
+  scenario_results: BenchmarkScenarioResult[];
+  blockers: BenchmarkFinding[];
+  warnings: BenchmarkFinding[];
+  regression: BenchmarkRegressionResult;
+  public_readiness: {
+    status: "pass" | "blocked";
+    reason: string;
+  };
+  guarantees: {
+    writes_yolo_package_root: boolean;
+    provider_execution: boolean;
+    billable_provider_execution: boolean;
+    credential_access: boolean;
+    published: boolean;
+  };
+  artifacts: string[];
+  next_actions: string[];
+  plan: BenchmarkPlan;
+}
+
+export interface BenchmarkRunInput extends BenchmarkPlanOptions {
+  plan?: BenchmarkPlan;
+  results?: unknown;
+  result?: unknown;
+  baseline?: BenchmarkBaseline | null;
+}
+
+export interface BenchmarkCliOptions {
+  json: boolean;
+  help: boolean;
+  writeEvidence: boolean;
+}
+
+export interface BenchmarkCliIO {
+  cwd?: string;
+  stdout?: {
+    write(chunk: string): unknown;
+  };
+}
+
+export const YOLO_BENCHMARK_RUBRIC: BenchmarkRubricItem[] = [
   { id: "discovery_clarification", label: "Requirement clarification", weight: 12, min_score: 80 },
   { id: "business_goal", label: "Business goal and user scenario", weight: 12, min_score: 80 },
   { id: "task_atomicity", label: "Task atomicity", weight: 12, min_score: 80 },
@@ -23,11 +220,11 @@ export const YOLO_BENCHMARK_RUBRIC = [
   { id: "no_root_pollution", label: "Package root isolation", weight: 5, min_score: 100 },
 ];
 
-const VAGUE_METRICS = ["discovery_clarification", "business_goal", "task_atomicity", "prd_executable", "gate_quality", "nontechnical_clarity"];
-const UI_METRICS = ["ui_ux_spec", "acceptance_classification", "evidence_completeness", "gate_quality", "nontechnical_clarity"];
-const DOGFOOD_METRICS = ["runner_compatibility", "evidence_completeness", "gate_quality", "nontechnical_clarity", "no_root_pollution"];
+const VAGUE_METRICS: string[] = ["discovery_clarification", "business_goal", "task_atomicity", "prd_executable", "gate_quality", "nontechnical_clarity"];
+const UI_METRICS: string[] = ["ui_ux_spec", "acceptance_classification", "evidence_completeness", "gate_quality", "nontechnical_clarity"];
+const DOGFOOD_METRICS: string[] = ["runner_compatibility", "evidence_completeness", "gate_quality", "nontechnical_clarity", "no_root_pollution"];
 
-export const DEFAULT_BENCHMARK_FIXTURES = [
+export const DEFAULT_BENCHMARK_FIXTURES: BenchmarkFixture[] = [
   {
     id: "vague-idea-01",
     suite: "vague_requirement",
@@ -190,29 +387,29 @@ export const DEFAULT_BENCHMARK_FIXTURES = [
   },
 ];
 
-function clone(value) {
+function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function asArray(value) {
+function asArray<T>(value: T | T[] | null | undefined): T[] {
   if (Array.isArray(value)) return value.filter(Boolean);
   if (value == null || value === "") return [];
   return [value];
 }
 
-function nowIso() {
+function nowIso(): string {
   return new Date().toISOString();
 }
 
-function rubricById() {
+function rubricById(): Map<string, BenchmarkRubricItem> {
   return new Map(YOLO_BENCHMARK_RUBRIC.map((item) => [item.id, item]));
 }
 
-function normalizeScore(value) {
+function normalizeScore(value: unknown): number | null {
   if (value === true || value === "pass" || value === "passed") return 100;
   if (value === false || value === "fail" || value === "blocked" || value === "error") return 0;
   const numeric = Number(value);
@@ -220,41 +417,54 @@ function normalizeScore(value) {
   return Math.max(0, Math.min(100, numeric));
 }
 
-function fixtureCounts(fixtures = DEFAULT_BENCHMARK_FIXTURES) {
-  return fixtures.reduce((counts, fixture) => {
+function fixtureCounts(fixtures: BenchmarkFixture[] = DEFAULT_BENCHMARK_FIXTURES): BenchmarkFixtureCounts {
+  return fixtures.reduce<BenchmarkFixtureCounts>((counts, fixture) => {
     counts[fixture.suite] = (counts[fixture.suite] || 0) + 1;
     counts.total = (counts.total || 0) + 1;
     return counts;
   }, { vague_requirement: 0, ui_acceptance: 0, real_project_dogfood: 0, total: 0 });
 }
 
-function normalizeResults(results = Object()) {
-  const raw = Array.isArray(results?.scenarios) ? results.scenarios : results;
-  if (Array.isArray(raw)) return new Map(raw.map((item) => [item.fixture_id || item.id, item]));
-  if (!raw || typeof raw !== "object") return new Map();
-  return new Map(Object.entries(raw).map(([id, value]) => [id, Object.assign(Object(), { fixture_id: id }, value)]));
+function normalizeResults(results: unknown = {}): Map<unknown, BenchmarkEvidence> {
+  const resultRecord = results as Record<string, unknown> | null | undefined;
+  const scenarios = resultRecord?.scenarios;
+  const raw = Array.isArray(scenarios) ? scenarios : results;
+  if (Array.isArray(raw)) {
+    return new Map<unknown, BenchmarkEvidence>(raw.map((item): [unknown, BenchmarkEvidence] => {
+      const itemRecord = item as Record<string, unknown>;
+      return [itemRecord.fixture_id || itemRecord.id, item as BenchmarkEvidence];
+    }));
+  }
+  if (!raw || typeof raw !== "object") return new Map<unknown, BenchmarkEvidence>();
+  return new Map<unknown, BenchmarkEvidence>(Object.entries(raw).map(([id, value]): [unknown, BenchmarkEvidence] => [
+    id,
+    Object.assign(Object(), { fixture_id: id }, value as Record<string, unknown>) as BenchmarkEvidence,
+  ]));
 }
 
-function readJsonMaybe(filePath) {
+function readJsonMaybe<T>(filePath: string | null | undefined): T | null {
   if (!filePath) return null;
   const resolved = resolve(filePath);
   if (!existsSync(resolved)) return null;
   return JSON.parse(readFileSync(resolved, "utf8"));
 }
 
-function metricEvidence(evidence = Object(), metricId) {
-  if (evidence.metrics && Object.hasOwn(evidence.metrics, metricId)) return evidence.metrics[metricId];
+function metricEvidence(evidence: BenchmarkEvidence = {}, metricId: string): unknown {
+  if (evidence.metrics && Object.hasOwn(evidence.metrics, metricId)) {
+    const metrics = evidence.metrics as Record<string, unknown>;
+    return metrics[metricId];
+  }
   if (Object.hasOwn(evidence, metricId)) return evidence[metricId];
   return null;
 }
 
-export function listBenchmarkFixtures(options = Object()) {
+export function listBenchmarkFixtures(options: BenchmarkPlanOptions = {}): BenchmarkFixture[] {
   const suite = clean(options.suite);
   const fixtures = DEFAULT_BENCHMARK_FIXTURES.map(clone);
   return suite ? fixtures.filter((fixture) => fixture.suite === suite) : fixtures;
 }
 
-export function buildYoloBenchmarkPlan(options = Object()) {
+export function buildYoloBenchmarkPlan(options: BenchmarkPlanOptions = {}): BenchmarkPlan {
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
   const stateRoot = resolve(options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
   const minScore = Number(options.minScore || options.min_score || 80);
@@ -286,13 +496,17 @@ export function buildYoloBenchmarkPlan(options = Object()) {
   };
 }
 
-export function scoreBenchmarkScenario(scenario = Object(), evidence = Object(), options = Object()) {
+export function scoreBenchmarkScenario(
+  scenario: BenchmarkScenarioInput = {},
+  evidence: BenchmarkEvidence = {},
+  options: BenchmarkPlanOptions = {},
+): BenchmarkScenarioResult {
   const threshold = Number(options.minScore || options.min_score || scenario.min_score || 80);
   const rubric = rubricById();
   const requiredMetrics = asArray(scenario.required_metrics);
-  const metricResults = [];
-  const blockers = [];
-  const warnings = [];
+  const metricResults: BenchmarkMetricResult[] = [];
+  const blockers: BenchmarkFinding[] = [];
+  const warnings: BenchmarkFinding[] = [];
   let weightedTotal = 0;
   let weightTotal = 0;
 
@@ -370,8 +584,8 @@ export function scoreBenchmarkScenario(scenario = Object(), evidence = Object(),
   };
 }
 
-function summarizeSuites(results = []) {
-  const suites = Object();
+function summarizeSuites(results: BenchmarkScenarioResult[] = []): BenchmarkSuiteSummary {
+  const suites: BenchmarkSuiteSummary = {};
   for (const result of results) {
     const suite = result.suite || "unknown";
     const current = suites[suite] || { count: 0, pass: 0, warning: 0, blocked: 0, average_score: 0 };
@@ -388,10 +602,20 @@ function summarizeSuites(results = []) {
   return suites;
 }
 
-function inspectRegression({ currentScore, scenarioResults, baseline, maxRegressionPoints }) {
+function inspectRegression({
+  currentScore,
+  scenarioResults,
+  baseline,
+  maxRegressionPoints,
+}: {
+  currentScore: number;
+  scenarioResults: BenchmarkScenarioResult[];
+  baseline: BenchmarkBaseline | null;
+  maxRegressionPoints: number;
+}): BenchmarkRegressionResult {
   if (!baseline) return { status: "not_applicable", blockers: [], warnings: [] };
-  const blockers = [];
-  const warnings = [];
+  const blockers: BenchmarkFinding[] = [];
+  const warnings: BenchmarkFinding[] = [];
   const baselineScore = Number(baseline.overall_score ?? baseline.score);
   if (Number.isFinite(baselineScore) && baselineScore - currentScore > maxRegressionPoints) {
     blockers.push({
@@ -402,7 +626,9 @@ function inspectRegression({ currentScore, scenarioResults, baseline, maxRegress
       max_regression_points: maxRegressionPoints,
     });
   }
-  const baselineScenarios = new Map(asArray(baseline.scenario_results).map((item) => [item.fixture_id || item.id, item]));
+  const baselineScenarios = new Map<unknown, BenchmarkBaselineScenario>(
+    asArray(baseline.scenario_results).map((item): [unknown, BenchmarkBaselineScenario] => [item.fixture_id || item.id, item]),
+  );
   for (const result of scenarioResults) {
     const previous = baselineScenarios.get(result.fixture_id);
     if (!previous) continue;
@@ -425,10 +651,10 @@ function inspectRegression({ currentScore, scenarioResults, baseline, maxRegress
   };
 }
 
-export function runYoloBenchmark(input = Object(), options = Object()) {
+export function runYoloBenchmark(input: BenchmarkRunInput = {}, options: BenchmarkPlanOptions = {}): BenchmarkReport {
   const plan = input.plan || buildYoloBenchmarkPlan({ ...options, ...input });
   const resultInput = input.results || input.result || readJsonMaybe(input.resultsPath || input.results_path || options.resultsPath || options.results_path);
-  const baseline = input.baseline || readJsonMaybe(input.baselinePath || input.baseline_path || options.baselinePath || options.baseline_path);
+  const baseline = input.baseline || readJsonMaybe<BenchmarkBaseline>(input.baselinePath || input.baseline_path || options.baselinePath || options.baseline_path);
   const resultsById = normalizeResults(resultInput);
   const minScore = Number(plan.min_score || options.minScore || options.min_score || 80);
   const scenarioResults = plan.fixtures.map((fixture) => scoreBenchmarkScenario(fixture, resultsById.get(fixture.id) || {}, { minScore }));
@@ -451,7 +677,7 @@ export function runYoloBenchmark(input = Object(), options = Object()) {
     ...regression.warnings,
   ];
   const status = blockers.length > 0 ? "blocked" : warnings.length > 0 ? "warning" : "pass";
-  const report = {
+  const report: BenchmarkReport = {
     schema_version: YOLO_BENCHMARK_SCHEMA_VERSION,
     schema: "yolo.eval.benchmark_report.v1",
     status,
@@ -510,7 +736,7 @@ export function runYoloBenchmark(input = Object(), options = Object()) {
 
 export const runBenchmark = runYoloBenchmark;
 
-export function formatYoloBenchmarkText(report = Object()) {
+export function formatYoloBenchmarkText(report: Partial<BenchmarkReport> = {}): string {
   const lines = [`[yolo eval] ${report.status}: ${report.summary}`];
   lines.push(`score: ${report.overall_score}/100 threshold=${report.threshold}`);
   if (report.fixture_counts) {
@@ -530,9 +756,9 @@ export function formatYoloBenchmarkText(report = Object()) {
   return lines.join("\n");
 }
 
-export function parseYoloBenchmarkArgs(argv = []) {
-  const input = Object();
-  const options = { json: false, help: false, writeEvidence: true };
+export function parseYoloBenchmarkArgs(argv: string[] = []): { input: BenchmarkRunInput; options: BenchmarkCliOptions } {
+  const input: BenchmarkRunInput = {};
+  const options: BenchmarkCliOptions = { json: false, help: false, writeEvidence: true };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const readValue = () => {
@@ -571,7 +797,7 @@ export function parseYoloBenchmarkArgs(argv = []) {
   return { input, options };
 }
 
-export async function runYoloBenchmarkCli(argv = [], io = Object()) {
+export async function runYoloBenchmarkCli(argv: string[] = [], io: BenchmarkCliIO = {}): Promise<number> {
   const stdout = io.stdout || process.stdout;
   const { input, options } = parseYoloBenchmarkArgs(argv);
   if (options.help) {
