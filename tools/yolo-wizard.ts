@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createInterface } from "node:readline/promises";
+import { createInterface, type Interface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { initProject } from "../src/core/bootstrap.js";
 import { runPiAgent } from "../src/agents/pi.js";
@@ -12,19 +12,25 @@ import { formatYoloCheckText, inspectYoloCheck } from "../src/runtime/gates/chec
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "..");
 
-function timestamp() {
+/** Result of runPiAgent, narrowed through its real return type. */
+type PiResult = Awaited<ReturnType<typeof runPiAgent>>;
+/** A loose result record used by result-formatting helpers. */
+type ResultRecord = Record<string, unknown>;
+type MenuChoice = "init" | "plan" | "check" | "run" | "quit" | "unknown";
+
+function timestamp(): string {
   return new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14);
 }
 
-function defaultProjectRoot() {
+function defaultProjectRoot(): string {
   return resolve(YOLO_ROOT, "../..");
 }
 
-function stateRootFor(projectRoot) {
+function stateRootFor(projectRoot: string): string {
   return join(resolve(projectRoot), ".yolo");
 }
 
-export function inspectWizardRunGuard(projectRoot, prdPath) {
+export function inspectWizardRunGuard(projectRoot: string, prdPath: string) {
   const resolvedProjectRoot = resolve(projectRoot);
   return inspectLifecycleGuard({
     command: "yolo-run",
@@ -34,7 +40,7 @@ export function inspectWizardRunGuard(projectRoot, prdPath) {
   });
 }
 
-export function inspectWizardCheck(projectRoot, prdPath) {
+export function inspectWizardCheck(projectRoot: string, prdPath: string) {
   const resolvedProjectRoot = resolve(projectRoot);
   return inspectYoloCheck({
     prdPath,
@@ -44,22 +50,22 @@ export function inspectWizardCheck(projectRoot, prdPath) {
   }, { learnFailures: true });
 }
 
-function print(lines = []) {
+function print(lines: string[] = []): void {
   for (const line of lines) output.write(`${line}\n`);
 }
 
-function artifactLines(artifacts) {
-  if (Array.isArray(artifacts)) return artifacts.filter(Boolean);
-  return Object.entries(artifacts || {})
+function artifactLines(artifacts: unknown): string[] {
+  if (Array.isArray(artifacts)) return artifacts.filter(Boolean).map(String);
+  return Object.entries((artifacts as Record<string, unknown>) || {})
     .filter(([, value]) => Boolean(value))
     .map(([key, value]) => `${key}: ${value}`);
 }
 
-function trimAnswer(value = "") {
+function trimAnswer(value: unknown = ""): string {
   return String(value || "").trim();
 }
 
-export function normalizeMenuChoice(value = "") {
+export function normalizeMenuChoice(value: unknown = ""): MenuChoice {
   const text = trimAnswer(value);
   if (["1", "init", "初始化"].includes(text)) return "init";
   if (["2", "plan", "计划"].includes(text)) return "plan";
@@ -69,14 +75,25 @@ export function normalizeMenuChoice(value = "") {
   return "unknown";
 }
 
-export function planToMarkdown(result = Object()) {
-  const actions = result.plan?.actions || [];
-  const artifacts = result.artifacts || result.plan?.artifacts || {};
+function asPlanActions(result: ResultRecord): Array<{ id?: unknown; summary?: unknown }> {
+  const plan = result.plan as Record<string, unknown> | undefined;
+  const actions = plan?.actions;
+  return Array.isArray(actions) ? (actions as Array<{ id?: unknown; summary?: unknown }>) : [];
+}
+
+function asStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String) : [];
+}
+
+export function planToMarkdown(result: PiResult | ResultRecord = Object()): string {
+  const record = result as ResultRecord;
+  const actions = asPlanActions(record);
+  const artifacts = (record.artifacts || (record.plan as Record<string, unknown> | undefined)?.artifacts || {}) as Record<string, unknown>;
   const lines = [
     "# YOLO Plan",
     "",
-    `Status: ${result.status || "unknown"}`,
-    `Summary: ${result.summary || ""}`,
+    `Status: ${record.status || "unknown"}`,
+    `Summary: ${record.summary || ""}`,
     "",
     "## Artifacts",
     "",
@@ -91,32 +108,34 @@ export function planToMarkdown(result = Object()) {
     lines.push(`- ${action.id}: ${action.summary}`);
   }
 
-  if (result.next_actions?.length) {
+  const nextActions = asStringList(record.next_actions);
+  if (nextActions.length) {
     lines.push("", "## Next", "");
-    for (const action of result.next_actions) lines.push(`- ${action}`);
+    for (const action of nextActions) lines.push(`- ${action}`);
   }
 
   lines.push("");
   return lines.join("\n");
 }
 
-export function friendlyPreflightSummary(result = Object()) {
-  if (result.runner_readiness?.can_execute) {
+export function friendlyPreflightSummary(result: ResultRecord = Object()): { ok: boolean; title: string; next: string[] } {
+  const runnerReadiness = result.runner_readiness as Record<string, unknown> | undefined;
+  if (runnerReadiness?.can_execute) {
     return {
       ok: true,
       title: "PRD 检查通过，可以进入执行前确认。",
-      next: result.runner_readiness.next_actions || [],
+      next: asStringList(runnerReadiness.next_actions),
     };
   }
 
   return {
     ok: false,
     title: `PRD 还不能执行，发现 ${result.blocked_count || 0} 个阻断项。`,
-    next: result.runner_readiness?.next_actions || ["先修 PRD，再重新检查。"],
+    next: asStringList(runnerReadiness?.next_actions).length ? asStringList(runnerReadiness?.next_actions) : ["先修 PRD，再重新检查。"],
   };
 }
 
-async function askRequired(rl, question) {
+async function askRequired(rl: Interface, question: string): Promise<string> {
   while (true) {
     const answer = trimAnswer(await rl.question(question));
     if (answer) return answer;
@@ -124,12 +143,12 @@ async function askRequired(rl, question) {
   }
 }
 
-async function askProjectRoot(rl) {
+async function askProjectRoot(rl: Interface): Promise<string> {
   const answer = trimAnswer(await rl.question(`项目文件夹路径（直接回车 = ${defaultProjectRoot()}）：`));
   return resolve(answer || defaultProjectRoot());
 }
 
-async function confirmDanger(rl, message) {
+async function confirmDanger(rl: Interface, message: string): Promise<boolean> {
   print([
     "",
     "这一步会真的运行 YOLO 执行链路，可能修改项目文件。",
@@ -140,22 +159,24 @@ async function confirmDanger(rl, message) {
   return answer === "我确认";
 }
 
-async function handleInit(rl) {
+async function handleInit(rl: Interface): Promise<void> {
   const projectRoot = await askProjectRoot(rl);
   const projectName = trimAnswer(await rl.question("项目名称（直接回车 = demo）：")) || "demo";
   const result = initProject({ projectRoot, projectName });
+  const created = asStringList(result.created);
   print([
     "",
     result.status === "success" ? "初始化完成。" : "初始化没有完成。",
     `项目：${result.project_root}`,
-    result.created?.length ? `新建了 ${result.created.length} 个文件/目录。` : "没有新建文件，可能之前已经初始化过。",
+    created.length ? `新建了 ${created.length} 个文件/目录。` : "没有新建文件，可能之前已经初始化过。",
   ]);
-  if (result.next_actions?.length) {
-    print(["下一步：", ...result.next_actions.map((item) => `- ${item}`)]);
+  const nextActions = asStringList(result.next_actions);
+  if (nextActions.length) {
+    print(["下一步：", ...nextActions.map((item) => `- ${item}`)]);
   }
 }
 
-async function handlePlan(rl) {
+async function handlePlan(rl: Interface): Promise<void> {
   const projectRoot = await askProjectRoot(rl);
   const requirement = await askRequired(rl, "用大白话描述你想让 YOLO 做什么：");
   const title = trimAnswer(await rl.question("给这个任务起个名字（直接回车 = YOLO 任务）：")) || "YOLO 任务";
@@ -175,13 +196,14 @@ async function handlePlan(rl) {
     result.status === "success" ? "计划已生成，没有改代码。" : "计划生成失败。",
     `计划文件：${planPath}`,
   ]);
-  const dynamicResult = Object.assign(Object(), result);
-  if (dynamicResult.plan?.actions?.length) {
-    print(["YOLO 打算做这些事：", ...dynamicResult.plan.actions.map((action) => `- ${action.summary}`)]);
+  const record = result as ResultRecord;
+  const actions = asPlanActions(record);
+  if (actions.length) {
+    print(["YOLO 打算做这些事：", ...actions.map((action) => `- ${action.summary}`)]);
   }
 }
 
-async function handleCheck(rl) {
+async function handleCheck(rl: Interface): Promise<void> {
   const projectRoot = await askProjectRoot(rl);
   const prdInput = await askRequired(rl, "把 PRD JSON 文件路径粘贴到这里：");
   const prdPath = resolve(projectRoot, prdInput);
@@ -194,7 +216,7 @@ async function handleCheck(rl) {
   print(["", formatYoloCheckText(result)]);
 }
 
-async function handleRun(rl) {
+async function handleRun(rl: Interface): Promise<void> {
   const projectRoot = await askProjectRoot(rl);
   const prdInput = await askRequired(rl, "把已经检查过的 PRD JSON 文件路径粘贴到这里：");
   const prdPath = resolve(projectRoot, prdInput);
@@ -232,12 +254,13 @@ async function handleRun(rl) {
     `执行结果：${result.status || "unknown"}`,
     result.summary || "",
   ]);
-  const artifacts = artifactLines(result.artifacts);
+  const artifacts = artifactLines((result as ResultRecord).artifacts);
   if (artifacts.length) {
     print(["报告文件：", ...artifacts.map((item) => `- ${item}`)]);
   }
-  if (result.next_actions?.length) {
-    print(["下一步：", ...result.next_actions.map((item) => `- ${item}`)]);
+  const nextActions = asStringList(result.next_actions);
+  if (nextActions.length) {
+    print(["下一步：", ...nextActions.map((item) => `- ${item}`)]);
   }
 }
 
