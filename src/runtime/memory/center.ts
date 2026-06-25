@@ -18,6 +18,29 @@ import { applyMemoryRetention } from "./retention.js";
 
 export const MEMORY_CENTER_SCHEMA_VERSION = "1.0";
 
+type MemoryRecord = Record<string, unknown>;
+
+type MemoryPaths = {
+  projectRoot: string;
+  stateRoot: string;
+  stateDir: string;
+  memoryDir: string;
+  packageMode: boolean;
+};
+
+type MemoryDocClassification = {
+  category: string;
+  action: string;
+  reason: string;
+  stale?: boolean;
+};
+
+type DiscoveredMemoryDocument = MemoryDocClassification & {
+  path: string;
+  bytes: number;
+  mtime_ms: number;
+};
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_YOLO_ROOT = resolve(__dirname, "../../..");
 const EXCLUDED_DIRS = new Set([".git", "node_modules"]);
@@ -51,30 +74,30 @@ const STAGE_COMMANDS = {
   learn: "/yolo-learn",
 };
 
-function toPosix(path) {
+function toPosix(path: string): string {
   return path.replaceAll("\\", "/");
 }
 
-function rel(root, file) {
+function rel(root: string, file: string): string {
   return toPosix(relative(root, file));
 }
 
-function displayPath(root, file) {
+function displayPath(root: string, file: string): string {
   const relativePath = rel(root, file);
   if (relativePath === "") return ".";
   return relativePath && !relativePath.startsWith("..") ? relativePath : file;
 }
 
-function stableJson(value) {
+function stableJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function stateRelativePath(relativePath) {
+function stateRelativePath(relativePath: string): string {
   const path = toPosix(relativePath);
   return path.startsWith(".yolo/") ? path.slice(".yolo/".length) : path;
 }
 
-function readText(filePath) {
+function readText(filePath: string): string {
   try {
     return readFileSync(filePath, "utf8");
   } catch {
@@ -82,40 +105,47 @@ function readText(filePath) {
   }
 }
 
-function readJson(filePath, fallback = null) {
+function readJson<T = unknown>(filePath: string, fallback: T = null as T): T {
   try {
-    return JSON.parse(readFileSync(filePath, "utf8"));
+    return JSON.parse(readFileSync(filePath, "utf8")) as T;
   } catch {
     return fallback;
   }
 }
 
-function readJsonlTail(filePath, limit = 3) {
+function readJsonlTail(filePath: string, limit = 3): MemoryRecord[] {
   if (!existsSync(filePath)) return [];
   return readFileSync(filePath, "utf8")
     .split("\n")
     .filter(Boolean)
     .slice(-limit)
-    .map((line) => {
+    .map((line): MemoryRecord => {
       try {
-        return JSON.parse(line);
+        return JSON.parse(line) as MemoryRecord;
       } catch {
         return { raw: line };
       }
     });
 }
 
-function isYoloPackageRoot(projectRoot) {
-  const pkg = readJson(join(projectRoot, "package.json"), {});
+function isYoloPackageRoot(projectRoot: string): boolean {
+  const pkg = readJson<MemoryRecord>(join(projectRoot, "package.json"), {});
   return pkg?.name === "yolo" && existsSync(join(projectRoot, "src/runtime"));
 }
 
-export function resolveMemoryPaths(options = Object()) {
-  const projectRoot = resolve(options.projectRoot || options.yoloRoot || options.cwd || process.cwd());
-  const packageMode = options.packageMode ?? isYoloPackageRoot(projectRoot);
-  const stateRoot = resolve(options.stateRoot || options.state_root || (packageMode ? projectRoot : join(projectRoot, ".yolo")));
-  const stateDir = resolve(options.stateDir || options.state_dir || join(stateRoot, "state"));
-  const memoryDir = resolve(options.memoryDir || options.memory_dir || (packageMode ? join(projectRoot, "docs/memory") : join(stateRoot, "memory")));
+type WalkFilesOptions = {
+  includeHidden?: boolean;
+  includeArchive?: boolean;
+  maxFiles?: number;
+};
+
+export function resolveMemoryPaths(options: MemoryRecord = Object()): MemoryPaths {
+  const projectRoot = resolve(String(options.projectRoot || options.yoloRoot || options.cwd || process.cwd()));
+  const rawPackageMode = options.packageMode;
+  const packageMode = rawPackageMode == null ? isYoloPackageRoot(projectRoot) : Boolean(rawPackageMode);
+  const stateRoot = resolve(String(options.stateRoot || options.state_root || (packageMode ? projectRoot : join(projectRoot, ".yolo"))));
+  const stateDir = resolve(String(options.stateDir || options.state_dir || join(stateRoot, "state")));
+  const memoryDir = resolve(String(options.memoryDir || options.memory_dir || (packageMode ? join(projectRoot, "docs/memory") : join(stateRoot, "memory"))));
   return {
     projectRoot,
     stateRoot,
@@ -125,13 +155,13 @@ export function resolveMemoryPaths(options = Object()) {
   };
 }
 
-function walkFiles(root, options = Object()) {
-  const files = [];
+function walkFiles(root: string, options: WalkFilesOptions = Object()): string[] {
+  const files: string[] = [];
   const includeHidden = options.includeHidden !== false;
   const includeArchive = options.includeArchive === true;
   const maxFiles = options.maxFiles || 5000;
 
-  function visit(dir) {
+  function visit(dir: string): void {
     if (files.length >= maxFiles || !existsSync(dir)) return;
     const entries = readdirSync(dir, { withFileTypes: true })
       .filter((entry) => includeHidden || !entry.name.startsWith("."))
@@ -155,17 +185,25 @@ function walkFiles(root, options = Object()) {
   return files;
 }
 
-function readJsonlSummary(filePath) {
+type JsonlSummary = {
+  exists: boolean;
+  line_count: number;
+  parsed_count: number;
+  invalid_count: number;
+  latest_ts: string | null;
+};
+
+function readJsonlSummary(filePath: string): JsonlSummary {
   if (!existsSync(filePath)) {
     return { exists: false, line_count: 0, parsed_count: 0, invalid_count: 0, latest_ts: null };
   }
   const lines = readFileSync(filePath, "utf8").split("\n").filter(Boolean);
   let parsedCount = 0;
   let invalidCount = 0;
-  let latestTs = null;
+  let latestTs: string | null = null;
   for (const line of lines) {
     try {
-      const parsed = JSON.parse(line);
+      const parsed = JSON.parse(line) as MemoryRecord;
       parsedCount += 1;
       const ts = parsed.ts || parsed.logged_at || parsed.finished_at || parsed.started_at;
       if (ts && (!latestTs || String(ts) > latestTs)) latestTs = String(ts);
@@ -182,7 +220,7 @@ function readJsonlSummary(filePath) {
   };
 }
 
-function classifyMemoryDocument(relativePath, content = "") {
+function classifyMemoryDocument(relativePath: string, content = ""): MemoryDocClassification {
   const path = toPosix(relativePath);
   const statePath = stateRelativePath(path);
   const name = path.split("/").at(-1) || path;
@@ -302,11 +340,11 @@ function classifyMemoryDocument(relativePath, content = "") {
   };
 }
 
-export function discoverMemoryDocuments(options = Object()) {
+export function discoverMemoryDocuments(options: MemoryRecord = Object()) {
   const paths = resolveMemoryPaths(options);
-  const files = walkFiles(paths.projectRoot, { includeArchive: true, includeHidden: true })
+  const files: DiscoveredMemoryDocument[] = walkFiles(paths.projectRoot, { includeArchive: true, includeHidden: true })
     .filter((file) => file.endsWith(".md") || file.endsWith(".jsonl"))
-    .map((file) => {
+    .map((file): DiscoveredMemoryDocument => {
       const relativePath = rel(paths.projectRoot, file);
       const content = file.endsWith(".md") ? readText(file) : "";
       const stat = statSync(file);
@@ -327,9 +365,9 @@ export function discoverMemoryDocuments(options = Object()) {
   };
 }
 
-export function buildMemoryAudit(options = Object()) {
+export function buildMemoryAudit(options: MemoryRecord = Object()) {
   const discovered = discoverMemoryDocuments(options);
-  const byAction = Object();
+  const byAction: Record<string, number> = Object();
   for (const doc of discovered.documents) {
     byAction[doc.action] = (byAction[doc.action] || 0) + 1;
   }
@@ -348,11 +386,13 @@ export function buildMemoryAudit(options = Object()) {
   };
 }
 
-function listTreeFiles(root, options = Object()) {
-  const maxFiles = options.maxFiles || 800;
-  const files = [];
+type ListTreeFilesOptions = { maxFiles?: number };
 
-  function visit(dir) {
+function listTreeFiles(root: string, options: ListTreeFilesOptions = Object()): string[] {
+  const maxFiles = options.maxFiles || 800;
+  const files: string[] = [];
+
+  function visit(dir: string): void {
     if (files.length >= maxFiles || !existsSync(dir)) return;
     const entries = readdirSync(dir, { withFileTypes: true })
       .filter((entry) => !entry.name.startsWith(".") || entry.name === ".yolo")
@@ -382,8 +422,8 @@ function listTreeFiles(root, options = Object()) {
   return files;
 }
 
-function treeLines(paths) {
-  const lines = [];
+function treeLines(paths: string[]): string[] {
+  const lines: string[] = [];
   for (const path of paths) {
     const depth = path.split("/").length - 1;
     const indent = "  ".repeat(depth);
@@ -392,14 +432,14 @@ function treeLines(paths) {
   return lines;
 }
 
-function countFiles(projectRoot, predicate) {
+function countFiles(projectRoot: string, predicate: (relativePath: string) => boolean): number {
   return walkFiles(projectRoot, { includeArchive: false, includeHidden: false })
     .filter((file) => predicate(rel(projectRoot, file)))
     .length;
 }
 
-function sourceCounts(projectRoot) {
-  const packageJson = readJson(join(projectRoot, "package.json"), {});
+function sourceCounts(projectRoot: string) {
+  const packageJson = readJson<MemoryRecord>(join(projectRoot, "package.json"), {});
   const rootFiles = existsSync(projectRoot)
     ? readdirSync(projectRoot).filter((file) => statSync(join(projectRoot, file)).isFile()).sort()
     : [];
@@ -420,7 +460,7 @@ function sourceCounts(projectRoot) {
   };
 }
 
-function ledgerSummaries(stateDir) {
+function ledgerSummaries(stateDir: string): Record<string, JsonlSummary> {
   const ledgers = [
     "changes.jsonl",
     "events.jsonl",
@@ -434,23 +474,25 @@ function ledgerSummaries(stateDir) {
   return Object.fromEntries(ledgers.map((name) => [name, readJsonlSummary(join(stateDir, name))]));
 }
 
-function lifecycleSummary(paths) {
+type LifecycleStage = MemoryRecord & { id?: string; status?: string; label?: string };
+
+function lifecycleSummary(paths: MemoryPaths) {
   const statusPath = join(paths.stateRoot, "lifecycle", "status.json");
-  const status = readJson(statusPath, null);
+  const status = readJson<MemoryRecord | null>(statusPath, null);
   if (!status) {
     return {
       exists: false,
       status_path: statusPath,
       current_stage: null,
       active_stage: null,
-      blocked_stages: [],
+      blocked_stages: [] as LifecycleStage[],
       completed_count: 0,
       next_action: "Run /yolo-init to create project memory, lifecycle, and specs.",
     };
   }
 
-  const stages = Array.isArray(status.stages)
-    ? status.stages.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry))
+  const stages: LifecycleStage[] = Array.isArray(status.stages)
+    ? status.stages.filter((entry): entry is LifecycleStage => entry && typeof entry === "object" && !Array.isArray(entry))
     : [];
   const current = stages.find((stage) => stage.id === status.current_stage) || null;
   const blocked = stages.filter((stage) => stage.status === "blocked");
@@ -463,59 +505,62 @@ function lifecycleSummary(paths) {
     completed_count: stages.filter((stage) => stage.status === "completed").length,
     next_action: blocked.length
       ? `Resolve blocked lifecycle stage(s): ${blocked.map((stage) => stage.id).join(", ")}.`
-      : `Continue with ${STAGE_COMMANDS[status.current_stage] || "/yolo-doctor"}.`,
+      : `Continue with ${STAGE_COMMANDS[status.current_stage as keyof typeof STAGE_COMMANDS] || "/yolo-doctor"}.`,
   };
 }
 
-function latestLifecycleReports(paths, limit = 3) {
+function latestLifecycleReports(paths: MemoryPaths, limit = 3) {
   const dir = join(paths.stateRoot, "lifecycle");
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .filter((name) => name.endsWith(".json") && name !== "status.json")
-    .map((name) => {
+    .map((name): MemoryRecord | null => {
       const file = join(dir, name);
-      const report = readJson(file, null);
+      const report = readJson<MemoryRecord | null>(file, null);
       if (!report) return null;
+      const nestedReport = report.report as MemoryRecord | undefined;
+      const stage = report.stage as MemoryRecord | undefined;
       return {
         path: rel(paths.projectRoot, file),
-        stage: report.stage?.id || name.replace(/\.json$/, ""),
+        stage: stage?.id || name.replace(/\.json$/, ""),
         status: report.status || "unknown",
-        summary: report.report?.summary || report.summary || "",
+        summary: nestedReport?.summary || report.summary || "",
         updated_at: report.updated_at || report.created_at || "",
         mtime: statSync(file).mtimeMs,
       };
     })
-    .filter(Boolean)
-    .sort((a, b) => b.mtime - a.mtime)
+    .filter((report): report is MemoryRecord => report !== null)
+    .sort((a, b) => (b.mtime as number) - (a.mtime as number))
     .slice(0, limit);
 }
 
-function latestDemandSession(paths) {
+function latestDemandSession(paths: MemoryPaths) {
   const demandDir = join(paths.stateRoot, "demand");
   if (!existsSync(demandDir)) return null;
-  const candidates = [];
+  const candidates: MemoryRecord[] = [];
   for (const entry of readdirSync(demandDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const file = join(demandDir, entry.name, "session.json");
-    const session = readJson(file, null);
+    const session = readJson<MemoryRecord | null>(file, null);
     if (!session) continue;
+    const readiness = session.readiness as MemoryRecord | undefined;
     candidates.push({
       path: rel(paths.projectRoot, file),
       id: session.id || entry.name,
       phase: session.phase || "unknown",
-      readiness_level: session.readiness?.readiness_level || "unknown",
-      readiness_status: session.readiness?.status || "unknown",
-      quality_score: session.readiness?.quality_score ?? null,
-      blocker_count: Array.isArray(session.readiness?.blockers) ? session.readiness.blockers.length : 0,
-      next_actions: Array.isArray(session.readiness?.next_actions) ? session.readiness.next_actions : [],
+      readiness_level: readiness?.readiness_level || "unknown",
+      readiness_status: readiness?.status || "unknown",
+      quality_score: readiness?.quality_score ?? null,
+      blocker_count: Array.isArray(readiness?.blockers) ? readiness.blockers.length : 0,
+      next_actions: Array.isArray(readiness?.next_actions) ? readiness.next_actions : [],
       mtime: statSync(file).mtimeMs,
     });
   }
-  candidates.sort((a, b) => b.mtime - a.mtime);
+  candidates.sort((a, b) => (b.mtime as number) - (a.mtime as number));
   return candidates[0] || null;
 }
 
-function projectBrainSummary(paths) {
+function projectBrainSummary(paths: MemoryPaths) {
   const lifecycle = lifecycleSummary(paths);
   const latestDemand = latestDemandSession(paths);
   const latestReports = latestLifecycleReports(paths);
@@ -525,18 +570,24 @@ function projectBrainSummary(paths) {
     latest_demand: latestDemand,
     latest_reports: latestReports,
     session_tail: sessionTail,
-    next_action: latestDemand?.next_actions?.[0] || lifecycle.next_action,
+    next_action: nextActionOr(latestDemand?.next_actions, lifecycle.next_action),
   };
 }
 
-function compactSessionMemoryLine(entry = Object()) {
+function nextActionOr(nextActions: unknown, fallback: string): string {
+  if (!Array.isArray(nextActions) || nextActions.length === 0) return fallback;
+  const first = nextActions[0];
+  return first != null && String(first) !== "" ? String(first) : fallback;
+}
+
+function compactSessionMemoryLine(entry: MemoryRecord = Object()): string {
   const summary = entry.summary || entry.message || entry.event || entry.raw || "";
   const source = entry.source || entry.type || "session";
   const ts = entry.ts || entry.logged_at || entry.created_at || "";
   return `- ${ts ? `${ts} ` : ""}${source}: ${String(summary).slice(0, 160) || "recorded checkpoint"}`;
 }
 
-function archiveSummary(stateDir) {
+function archiveSummary(stateDir: string) {
   const archiveDir = join(stateDir, "archive");
   const jsonlDir = join(archiveDir, "jsonl");
   const generatedSnapshots = existsSync(archiveDir)
@@ -550,10 +601,10 @@ function archiveSummary(stateDir) {
   return { archive_dir: archiveDir, jsonl_archive_dir: jsonlDir, generated_snapshots: generatedSnapshots, archived_jsonl_files: archivedJsonl };
 }
 
-function latestValidationText(projectRoot) {
+function latestValidationText(projectRoot: string): string {
   const progress = readText(join(projectRoot, "docs/yolo-public-sdk-progress.md"));
   const matches = [...progress.matchAll(/(\d+\s+tests\s+\/\s+\d+\s+suites\s+\/\s+0\s+fail)/g)];
-  return matches.length ? matches.at(-1)[1].replace(/\s+/g, " ") : "not recorded";
+  return matches.length ? (matches.at(-1)?.[1] ?? "not recorded").replace(/\s+/g, " ") : "not recorded";
 }
 
 export function buildProjectTreeMarkdown(options = Object()) {
@@ -871,7 +922,7 @@ export function buildMemoryIndexMarkdown(options = Object()) {
   ].join("\n");
 }
 
-function writeDoc(filePath, content, dryRun) {
+function writeDoc(filePath: string, content: string, dryRun: boolean): { path: string; bytes: number } {
   if (!dryRun) {
     mkdirSync(dirname(filePath), { recursive: true });
     writeFileSync(filePath, content, "utf8");
@@ -879,7 +930,7 @@ function writeDoc(filePath, content, dryRun) {
   return { path: filePath, bytes: Buffer.byteLength(content, "utf8") };
 }
 
-function buildDocs(options = Object()) {
+function buildDocs(options: MemoryRecord = Object()) {
   return {
     "MEMORY_INDEX.md": buildMemoryIndexMarkdown(options),
     "CURRENT_STATUS.md": buildCurrentStatusMarkdown(options),
@@ -892,7 +943,7 @@ function buildDocs(options = Object()) {
   };
 }
 
-export function refreshMemoryCenter(options = Object()) {
+export function refreshMemoryCenter(options: MemoryRecord = Object()) {
   const paths = resolveMemoryPaths(options);
   const dryRun = options.dryRun === true || options.dry_run === true;
   const learningMigration = options.migrateLearning === false || options.migrate_learning === false
@@ -913,9 +964,9 @@ export function refreshMemoryCenter(options = Object()) {
       pruneGeneratedArchives: options.pruneGeneratedArchives ?? options.prune_generated_archives,
     });
   const docs = buildDocs({ ...options, ...paths });
-  const written = [];
-  for (const name of Object.keys(docs)) {
-    written.push(writeDoc(join(paths.memoryDir, name), docs[name], dryRun));
+  const written: { path: string; bytes: number }[] = [];
+  for (const [name, content] of Object.entries(docs)) {
+    written.push(writeDoc(join(paths.memoryDir, name), content, dryRun));
   }
 
   const audit = buildMemoryAudit({ ...options, ...paths });
@@ -935,7 +986,7 @@ export function refreshMemoryCenter(options = Object()) {
   };
 }
 
-function argValue(argv, name) {
+function argValue(argv: string[], name: string): { value: string | null; consumed: number } {
   const flag = `--${name}=`;
   const exact = `--${name}`;
   for (let i = 0; i < argv.length; i++) {
@@ -946,8 +997,8 @@ function argValue(argv, name) {
   return { value: null, consumed: 0 };
 }
 
-function parseMemoryCenterArgs(argv = []) {
-  const options = Object.assign(Object(), {
+function parseMemoryCenterArgs(argv: string[] = []): MemoryRecord {
+  const options: MemoryRecord = Object.assign(Object(), {
     dryRun: argv.includes("--dry-run"),
     json: argv.includes("--json"),
     writeLegacyPointers: argv.includes("--legacy-pointers") || argv.includes("--write-legacy-pointers"),
@@ -966,7 +1017,9 @@ function parseMemoryCenterArgs(argv = []) {
   return options;
 }
 
-export function runMemoryCenterCli(argv = process.argv.slice(2), io = Object()) {
+type StreamLike = { write(chunk: string): void };
+
+export function runMemoryCenterCli(argv: string[] = process.argv.slice(2), io: { stdout?: StreamLike; stderr?: StreamLike } = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   try {
@@ -998,10 +1051,10 @@ export function runMemoryCenterCli(argv = process.argv.slice(2), io = Object()) 
     const result = {
       schema_version: MEMORY_CENTER_SCHEMA_VERSION,
       status: "error",
-      error: error.message,
+      error: (error as Error).message,
     };
     if (argv.includes("--json")) stdout.write(stableJson(result));
-    else stderr.write(`[memory-center] error: ${error.message}\n`);
+    else stderr.write(`[memory-center] error: ${(error as Error).message}\n`);
     return result;
   }
 }
