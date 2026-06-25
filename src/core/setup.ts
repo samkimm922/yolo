@@ -2,7 +2,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildProjectBootstrapPlan, initProject } from "./bootstrap.js";
+import {
+  buildProjectBootstrapPlan,
+  initProject,
+  type ProjectBootstrapPlan,
+} from "./bootstrap.js";
 import { buildYoloDoctorReport } from "../devtools/doctor.js";
 import {
   installAgentBridge,
@@ -12,6 +16,47 @@ import {
 
 export const YOLO_SETUP_SCHEMA_VERSION = "1.0";
 export const YOLO_SETUP_SCHEMA = "yolo.project_setup.result.v1";
+
+export interface ProjectSetupOptions {
+  projectRoot?: string;
+  project_root?: string;
+  cwd?: string;
+  yoloRoot?: string;
+  yolo_root?: string;
+  homeDir?: string;
+  home_dir?: string;
+  targets?: unknown;
+  target?: unknown;
+  scope?: unknown;
+  scopes?: unknown;
+  installScope?: unknown;
+  install_scope?: unknown;
+  projectName?: unknown;
+  project_name?: unknown;
+  name?: unknown;
+  now?: string | number | Date;
+  force?: unknown;
+  dryRun?: unknown;
+  dry_run?: unknown;
+}
+
+type DoctorReport = ReturnType<typeof buildYoloDoctorReport>;
+type SetupGap = {
+  code: string;
+  severity: string;
+  source: string;
+  message: string;
+  paths?: string[];
+  [key: string]: unknown;
+};
+type NextAction = {
+  id: string;
+  command?: string;
+  args?: string[];
+  type?: string;
+  verifies?: string;
+  gap_codes?: string[];
+};
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_YOLO_ROOT = resolve(__dirname, "../..");
@@ -37,28 +82,28 @@ const DEVELOPMENT_MARKERS = [
   ".git",
 ];
 
-function readArgList(values = []) {
+function readArgList(values: string[] = []): string {
   return values.length === 0 ? "" : values.join(",");
 }
 
-function scopeOption(scopes = []) {
+function scopeOption(scopes: string[] = []): string {
   return scopes.length === 0 ? "none" : readArgList(scopes);
 }
 
-function instructionFileFor(projectRoot, target) {
+function instructionFileFor(projectRoot: string, target: string): string {
   return join(projectRoot, target === "claude" ? "CLAUDE.md" : "AGENTS.md");
 }
 
-function fileHasManagedBridge(path) {
+function fileHasManagedBridge(path: string): boolean {
   if (!existsSync(path)) return false;
   return readFileSync(path, "utf8").includes(BRIDGE_START);
 }
 
-function fileHasUserContent(path) {
+function fileHasUserContent(path: string): boolean {
   return existsSync(path) && readFileSync(path, "utf8").trim().length > 0;
 }
 
-function readJsonParseError(path) {
+function readJsonParseError(path: string): string | null {
   if (!existsSync(path)) return null;
   try {
     JSON.parse(readFileSync(path, "utf8"));
@@ -68,10 +113,14 @@ function readJsonParseError(path) {
   }
 }
 
-function missingBootstrapArtifacts(plan = Object()) {
+function missingBootstrapArtifacts(plan: ProjectBootstrapPlan = Object()): {
+  directories: string[];
+  files: string[];
+  count: number;
+} {
   const projectRoot = plan.project_root;
-  const missingDirs = (plan.directories || []).filter((dir) => !existsSync(join(projectRoot, dir)));
-  const missingFiles = (plan.files || []).map((file) => file.path).filter((path) => !existsSync(join(projectRoot, path)));
+  const missingDirs = plan.directories.filter((dir) => !existsSync(join(projectRoot, dir)));
+  const missingFiles = plan.files.map((file) => file.path).filter((path) => !existsSync(join(projectRoot, path)));
   return {
     directories: missingDirs,
     files: missingFiles,
@@ -79,38 +128,45 @@ function missingBootstrapArtifacts(plan = Object()) {
   };
 }
 
-function bootstrapExistingCount(plan = Object()) {
+function bootstrapExistingCount(plan: ProjectBootstrapPlan = Object()): number {
   const projectRoot = plan.project_root;
-  const existingDirs = (plan.directories || []).filter((dir) => existsSync(join(projectRoot, dir))).length;
-  const existingFiles = (plan.files || []).filter((file) => existsSync(join(projectRoot, file.path))).length;
+  const existingDirs = plan.directories.filter((dir) => existsSync(join(projectRoot, dir))).length;
+  const existingFiles = plan.files.filter((file) => existsSync(join(projectRoot, file.path))).length;
   return existingDirs + existingFiles;
 }
 
-function hasDevelopmentMarkers(projectRoot) {
+function hasDevelopmentMarkers(projectRoot: string): boolean {
   return DEVELOPMENT_MARKERS.some((marker) => existsSync(join(projectRoot, marker)));
 }
 
-function doctorBridgeExistingCount(report = Object()) {
-  const total = report.agent_bridge?.expected_artifact_count || 0;
-  const missing = report.agent_bridge?.missing_artifact_count || 0;
+function doctorBridgeExistingCount(report: DoctorReport = Object()): number {
+  const agentBridge = report.agent_bridge as Record<string, unknown> | undefined;
+  const total = (agentBridge?.expected_artifact_count as number) || 0;
+  const missing = (agentBridge?.missing_artifact_count as number) || 0;
   return Math.max(0, total - missing);
 }
 
-function doctorGap(check = Object()) {
-  const paths = [check.path].filter(Boolean);
-  const missingArtifacts = check.missing_artifacts || [];
+function doctorGap(check: Record<string, unknown> = Object()): SetupGap {
+  const paths = [check.path].filter(Boolean) as string[];
+  const missingArtifacts = (check.missing_artifacts as Array<Record<string, unknown>>) || [];
   return {
-    code: check.code,
-    severity: check.severity || "error",
+    code: check.code as string,
+    severity: (check.severity as string) || "error",
     source: "doctor",
-    message: check.message,
+    message: check.message as string,
     paths,
     missing_artifacts: missingArtifacts.map((artifact) => artifact.relative_path || artifact.path).filter(Boolean),
   };
 }
 
-function riskyGaps({ projectRoot, targets, scopes, force, initialDoctor }) {
-  const gaps = [];
+function riskyGaps({ projectRoot, targets, scopes, force, initialDoctor }: {
+  projectRoot: string;
+  targets: string[];
+  scopes: string[];
+  force: boolean;
+  initialDoctor: DoctorReport;
+}): SetupGap[] {
+  const gaps: SetupGap[] = [];
   if (!existsSync(projectRoot)) {
     gaps.push({
       code: "YOLO_SETUP_PROJECT_ROOT_MISSING",
@@ -168,7 +224,11 @@ function riskyGaps({ projectRoot, targets, scopes, force, initialDoctor }) {
   return gaps;
 }
 
-function classifySetupState({ plan, initialDoctor, riskGaps }) {
+function classifySetupState({ plan, initialDoctor, riskGaps }: {
+  plan: ProjectBootstrapPlan;
+  initialDoctor: DoctorReport;
+  riskGaps: SetupGap[];
+}): string {
   if (riskGaps.length > 0) return "risky";
   if (initialDoctor.status === "pass") return "initialized";
 
@@ -178,11 +238,15 @@ function classifySetupState({ plan, initialDoctor, riskGaps }) {
   return "partial";
 }
 
-function resultStateFromDoctor(report = Object()) {
+function resultStateFromDoctor(report: DoctorReport = Object()): string {
   return report.status === "pass" ? "initialized" : "partial";
 }
 
-function setupCommandArgs({ projectRoot, targets, scopes }) {
+function setupCommandArgs({ projectRoot, targets, scopes }: {
+  projectRoot: string;
+  targets: string[];
+  scopes: string[];
+}): string[] {
   return [
     "setup",
     projectRoot,
@@ -194,7 +258,11 @@ function setupCommandArgs({ projectRoot, targets, scopes }) {
   ];
 }
 
-function doctorCommandArgs({ projectRoot, targets, scopes }) {
+function doctorCommandArgs({ projectRoot, targets, scopes }: {
+  projectRoot: string;
+  targets: string[];
+  scopes: string[];
+}): string[] {
   return [
     "doctor",
     projectRoot,
@@ -206,7 +274,15 @@ function doctorCommandArgs({ projectRoot, targets, scopes }) {
   ];
 }
 
-function nextActions({ status, dryRun, projectRoot, targets, scopes, riskGaps, finalDoctor }) {
+function nextActions({ status, dryRun, projectRoot, targets, scopes, riskGaps, finalDoctor }: {
+  status: string;
+  dryRun: boolean;
+  projectRoot: string;
+  targets: string[];
+  scopes: string[];
+  riskGaps: SetupGap[];
+  finalDoctor: DoctorReport;
+}): NextAction[] {
   if (riskGaps.length > 0) {
     return [
       {
@@ -273,7 +349,7 @@ function nextActions({ status, dryRun, projectRoot, targets, scopes, riskGaps, f
   ];
 }
 
-function summarizeInitResult(result) {
+function summarizeInitResult(result: ReturnType<typeof initProject> | null) {
   if (!result) return null;
   return {
     status: result.status,
@@ -286,7 +362,7 @@ function summarizeInitResult(result) {
   };
 }
 
-function summarizeBridgeResult(result) {
+function summarizeBridgeResult(result: ReturnType<typeof installAgentBridge> | null) {
   if (!result) return null;
   return {
     status: result.status,
@@ -300,8 +376,12 @@ function summarizeBridgeResult(result) {
   };
 }
 
-function buildGaps({ missingBootstrap, initialDoctor, riskGaps }) {
-  const gaps = [...riskGaps];
+function buildGaps({ missingBootstrap, initialDoctor, riskGaps }: {
+  missingBootstrap: ReturnType<typeof missingBootstrapArtifacts>;
+  initialDoctor: DoctorReport;
+  riskGaps: SetupGap[];
+}): SetupGap[] {
+  const gaps: SetupGap[] = [...riskGaps];
   if (missingBootstrap.count > 0) {
     gaps.push({
       code: "YOLO_SETUP_BOOTSTRAP_MISSING",
@@ -312,12 +392,12 @@ function buildGaps({ missingBootstrap, initialDoctor, riskGaps }) {
       files: missingBootstrap.files,
     });
   }
-  for (const blocker of initialDoctor.blockers || []) gaps.push(doctorGap(blocker));
-  for (const warning of initialDoctor.warnings || []) gaps.push(doctorGap(warning));
+  for (const blocker of (initialDoctor.blockers || [])) gaps.push(doctorGap(blocker as Record<string, unknown>));
+  for (const warning of (initialDoctor.warnings || [])) gaps.push(doctorGap(warning as Record<string, unknown>));
   return gaps;
 }
 
-function humanContextGaps(setupState) {
+function humanContextGaps(setupState: string): SetupGap[] {
   if (!["partial", "risky"].includes(setupState)) return [];
   return [
     {
@@ -353,14 +433,14 @@ function humanContextGaps(setupState) {
   ];
 }
 
-export function setupProject(options = Object()) {
+export function setupProject(options: ProjectSetupOptions = Object()) {
   const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
   const yoloRoot = resolve(options.yoloRoot || options.yolo_root || DEFAULT_YOLO_ROOT);
   const homeDir = resolve(options.homeDir || options.home_dir || homedir());
-  const targets = normalizeAgentTargets(options.targets || options.target || "both");
+  const targets = normalizeAgentTargets((options.targets || options.target || "both") as string);
   const scopes = Array.isArray(options.scopes)
     ? options.scopes
-    : normalizeInstallScopes(options.scope || options.installScope || options.install_scope || "project");
+    : normalizeInstallScopes((options.scope || options.installScope || options.install_scope || "project") as string);
   const dryRun = options.dryRun === true || options.dry_run === true;
   const force = options.force === true;
   const projectName = options.projectName || options.project_name || options.name;
@@ -480,45 +560,56 @@ export function setupProject(options = Object()) {
   };
 }
 
-export function inspectProjectSetupTarget(options = Object()) {
+export function inspectProjectSetupTarget(options: ProjectSetupOptions = Object()) {
   return setupProject({ ...options, dryRun: true });
 }
 
-export function buildProjectSetupPlan(options = Object()) {
+export function buildProjectSetupPlan(options: ProjectSetupOptions = Object()) {
   return setupProject({ ...options, dryRun: true });
 }
 
 export const runProjectSetup = setupProject;
 
-export function formatProjectSetupText(result = Object()) {
+export function formatProjectSetupText(result: Record<string, unknown> = Object()): string {
+  const targets = (result.targets as string[] | undefined) || [];
+  const scopes = (result.scopes as string[] | undefined) || [];
   const lines = [
     `[yolo setup] ${result.status}: ${result.summary}`,
     `root: ${result.project_root}`,
     `state: ${result.setup_state} -> ${result.final_state}`,
-    `targets: ${(result.targets || []).join(",") || "none"}`,
-    `scopes: ${(result.scopes || []).join(",") || "none"}`,
+    `targets: ${targets.join(",") || "none"}`,
+    `scopes: ${scopes.join(",") || "none"}`,
   ];
 
-  if (result.init_result) {
-    lines.push(`initProject: created ${result.init_result.created?.length || 0}, skipped ${result.init_result.skipped?.length || 0}`);
+  const initResult = result.init_result as Record<string, unknown> | undefined;
+  if (initResult) {
+    const created = (initResult.created as string[] | undefined)?.length || 0;
+    const initSkipped = (initResult.skipped as string[] | undefined)?.length || 0;
+    lines.push(`initProject: created ${created}, skipped ${initSkipped}`);
   }
-  if (result.agent_bridge_result) {
-    const bridge = result.agent_bridge_result;
-    const changed = (bridge.written?.length || 0) + (bridge.overwritten?.length || 0);
-    lines.push(`installAgentBridge: changed ${changed}, skipped ${bridge.skipped?.length || 0}`);
+  const bridgeResult = result.agent_bridge_result as Record<string, unknown> | undefined;
+  if (bridgeResult) {
+    const written = (bridgeResult.written as string[] | undefined)?.length || 0;
+    const overwritten = (bridgeResult.overwritten as string[] | undefined)?.length || 0;
+    const bridgeSkipped = (bridgeResult.skipped as string[] | undefined)?.length || 0;
+    lines.push(`installAgentBridge: changed ${written + overwritten}, skipped ${bridgeSkipped}`);
   }
-  if (result.gaps?.length) {
+  const gaps = (result.gaps as Array<Record<string, unknown>>) || [];
+  if (gaps.length) {
     lines.push("gaps:");
-    for (const gap of result.gaps.slice(0, 20)) lines.push(`  - ${gap.code}: ${gap.message}`);
+    for (const gap of gaps.slice(0, 20)) lines.push(`  - ${gap.code}: ${gap.message}`);
   }
-  if (result.human_context_gaps?.length) {
+  const contextGaps = (result.human_context_gaps as Array<Record<string, unknown>>) || [];
+  if (contextGaps.length) {
     lines.push("human context still needed:");
-    for (const gap of result.human_context_gaps) lines.push(`  - ${gap.code}: ${gap.message}`);
+    for (const gap of contextGaps) lines.push(`  - ${gap.code}: ${gap.message}`);
   }
-  if (result.next_actions?.length) {
+  const nextActions = (result.next_actions as Array<Record<string, unknown>>) || [];
+  if (nextActions.length) {
     lines.push("next:");
-    for (const action of result.next_actions) {
-      const command = action.command ? `${action.command} ${(action.args || []).join(" ")}` : action.id;
+    for (const action of nextActions) {
+      const args = (action.args as string[] | undefined) || [];
+      const command = action.command ? `${action.command} ${args.join(" ")}` : action.id;
       lines.push(`  - ${command}`);
     }
   }

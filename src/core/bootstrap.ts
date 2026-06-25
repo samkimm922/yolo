@@ -6,16 +6,45 @@ import { refreshMemoryCenter } from "../runtime/memory/center.js";
 
 export const PROJECT_BOOTSTRAP_SCHEMA_VERSION = "1.0";
 
-function normalizeProjectName(projectRoot, projectName) {
+export interface ProjectBootstrapOptions {
+  projectRoot?: string;
+  project_root?: string;
+  cwd?: string;
+  projectName?: unknown;
+  project_name?: unknown;
+  name?: unknown;
+  now?: string | number | Date;
+  force?: unknown;
+  dryRun?: unknown;
+  dry_run?: unknown;
+}
+
+export interface ProjectBootstrapFile {
+  path: string;
+  role: string;
+  content: string;
+  stage?: string | null;
+}
+
+export interface ProjectBootstrapPlan {
+  schema_version: string;
+  project_root: string;
+  project_name: string;
+  directories: string[];
+  files: ProjectBootstrapFile[];
+  file_count: number;
+}
+
+function normalizeProjectName(projectRoot: string, projectName: unknown): string {
   const fallback = basename(projectRoot) || "project";
   return String(projectName || fallback).trim() || fallback;
 }
 
-function stableJson(value) {
+function stableJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function projectConfig(projectName) {
+function projectConfig(projectName: string): string {
   return stableJson({
     schema_version: PROJECT_BOOTSTRAP_SCHEMA_VERSION,
     project: {
@@ -39,7 +68,7 @@ function projectConfig(projectName) {
   });
 }
 
-function memoryIndexTemplate(projectName) {
+function memoryIndexTemplate(projectName: string): string {
   return [
     `# ${projectName} YOLO Memory`,
     "",
@@ -92,7 +121,7 @@ function memoryIndexTemplate(projectName) {
   ].join("\n");
 }
 
-function memoryStatusTemplate(projectName) {
+function memoryStatusTemplate(projectName: string): string {
   return [
     `# ${projectName} Current Status`,
     "",
@@ -105,7 +134,7 @@ function memoryStatusTemplate(projectName) {
   ].join("\n");
 }
 
-function memoryHandoffTemplate(projectName) {
+function memoryHandoffTemplate(projectName: string): string {
   return [
     `# ${projectName} Handoff`,
     "",
@@ -134,7 +163,7 @@ function memoryHandoffTemplate(projectName) {
   ].join("\n");
 }
 
-function documentGovernanceTemplate(projectName) {
+function documentGovernanceTemplate(projectName: string): string {
   return [
     `# ${projectName} Document Governance`,
     "",
@@ -160,7 +189,7 @@ function documentGovernanceTemplate(projectName) {
   ].join("\n");
 }
 
-function memoryTreeTemplate(projectName) {
+function memoryTreeTemplate(projectName: string): string {
   return [
     `# ${projectName} Project Tree`,
     "",
@@ -169,7 +198,7 @@ function memoryTreeTemplate(projectName) {
   ].join("\n");
 }
 
-function memoryAuditTemplate(projectName) {
+function memoryAuditTemplate(projectName: string): string {
   return [
     `# ${projectName} Memory Audit`,
     "",
@@ -180,7 +209,7 @@ function memoryAuditTemplate(projectName) {
   ].join("\n");
 }
 
-function projectBriefTemplate(projectName) {
+function projectBriefTemplate(projectName: string): string {
   return [
     `# ${projectName} Project Brief`,
     "",
@@ -215,7 +244,7 @@ function projectBriefTemplate(projectName) {
   ].join("\n");
 }
 
-function progressTemplate(projectName) {
+function progressTemplate(projectName: string): string {
   return [
     `# ${projectName} Progress`,
     "",
@@ -244,7 +273,7 @@ function progressTemplate(projectName) {
   ].join("\n");
 }
 
-function prdPipelineTemplate(projectName) {
+function prdPipelineTemplate(projectName: string): string {
   return [
     `# ${projectName} PRD Pipeline`,
     "",
@@ -283,7 +312,7 @@ function prdPipelineTemplate(projectName) {
   ].join("\n");
 }
 
-function taskAtomicityTemplate(projectName) {
+function taskAtomicityTemplate(projectName: string): string {
   return [
     `# ${projectName} Task Atomicity`,
     "",
@@ -326,7 +355,7 @@ function taskAtomicityTemplate(projectName) {
   ].join("\n");
 }
 
-function contextReadmeTemplate(projectName) {
+function contextReadmeTemplate(projectName: string): string {
   return [
     `# ${projectName} Context Guide`,
     "",
@@ -363,7 +392,7 @@ function contextReadmeTemplate(projectName) {
   ].join("\n");
 }
 
-function prdIntakeTemplate(projectName) {
+function prdIntakeTemplate(projectName: string): string {
   return [
     `# ${projectName} PRD Intake`,
     "",
@@ -410,7 +439,7 @@ function prdIntakeTemplate(projectName) {
   ].join("\n");
 }
 
-function openQuestionsTemplate(projectName) {
+function openQuestionsTemplate(projectName: string): string {
   return [
     `# ${projectName} Open Questions`,
     "",
@@ -425,7 +454,7 @@ function openQuestionsTemplate(projectName) {
   ].join("\n");
 }
 
-function decisionLogTemplate(projectName) {
+function decisionLogTemplate(projectName: string): string {
   return [
     `# ${projectName} Decision Log`,
     "",
@@ -437,7 +466,7 @@ function decisionLogTemplate(projectName) {
   ].join("\n");
 }
 
-function contextDocTemplate(title, description, bullets = []) {
+function contextDocTemplate(title: string, description: string, bullets: string[] = []): string {
   return [
     `# ${title}`,
     "",
@@ -449,7 +478,7 @@ function contextDocTemplate(title, description, bullets = []) {
   ].join("\n");
 }
 
-function learningIndexTemplate(projectName) {
+function learningIndexTemplate(projectName: string): string {
   return [
     `# ${projectName} Learning Index`,
     "",
@@ -460,7 +489,7 @@ function learningIndexTemplate(projectName) {
   ].join("\n");
 }
 
-function lessonsPlaybookTemplate(projectName) {
+function lessonsPlaybookTemplate(projectName: string): string {
   return [
     `# ${projectName} Lessons Playbook`,
     "",
@@ -471,7 +500,7 @@ function lessonsPlaybookTemplate(projectName) {
   ].join("\n");
 }
 
-function constitutionTemplate(projectName) {
+function constitutionTemplate(projectName: string): string {
   return [
     `# ${projectName} Constitution`,
     "",
@@ -491,7 +520,7 @@ function constitutionTemplate(projectName) {
   ].join("\n");
 }
 
-function designMdTemplate(projectName) {
+function designMdTemplate(projectName: string): string {
   return [
     `# ${projectName} Design System`,
     "",
@@ -648,11 +677,11 @@ function specsReadme() {
   ].join("\n");
 }
 
-export function buildProjectBootstrapPlan(options = Object()) {
+export function buildProjectBootstrapPlan(options: ProjectBootstrapOptions = Object()): ProjectBootstrapPlan {
   const projectRoot = resolve(options.projectRoot || options.cwd || process.cwd());
   const projectName = normalizeProjectName(projectRoot, options.projectName || options.name);
   const lifecycle = buildLifecycleStateFiles({ projectName, now: options.now });
-  const directories = [
+  const directories: string[] = [
     ".yolo",
     ".yolo/lifecycle",
     ".yolo/memory",
@@ -667,7 +696,7 @@ export function buildProjectBootstrapPlan(options = Object()) {
     ".yolo/templates",
     "specs",
   ];
-  const files = [
+  const files: ProjectBootstrapFile[] = [
     { path: ".yolo/config.json", role: "config", content: projectConfig(projectName) },
     { path: ".yolo/constitution.md", role: "constitution", content: constitutionTemplate(projectName) },
     { path: "DESIGN.md", role: "design-system", content: designMdTemplate(projectName) },
@@ -724,14 +753,14 @@ export function buildProjectBootstrapPlan(options = Object()) {
   };
 }
 
-export function initProject(options = Object()) {
+export function initProject(options: ProjectBootstrapOptions = Object()) {
   const plan = buildProjectBootstrapPlan(options);
   const force = options.force === true;
   const dryRun = options.dryRun === true || options.dry_run === true;
-  const createdDirs = [];
-  const created = [];
-  const overwritten = [];
-  const skipped = [];
+  const createdDirs: string[] = [];
+  const created: string[] = [];
+  const overwritten: string[] = [];
+  const skipped: string[] = [];
 
   for (const dir of plan.directories) {
     const absoluteDir = join(plan.project_root, dir);
@@ -758,8 +787,8 @@ export function initProject(options = Object()) {
     else created.push(file.path);
   }
 
-  let session_memory = null;
-  let memory_refresh = null;
+  let session_memory: ReturnType<typeof appendSessionMemory> | null = null;
+  let memory_refresh: ReturnType<typeof refreshMemoryCenter> | null = null;
   const freshMemory = created.includes(".yolo/memory/MEMORY_INDEX.md");
   if (!dryRun && freshMemory) {
     session_memory = appendSessionMemory({
