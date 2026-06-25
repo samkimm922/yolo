@@ -12,15 +12,48 @@ import { appendLearningRecord } from './center.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_YOLO_ROOT = resolve(__dirname, "../../..");
 
-// ── helpers ──────────────────────────────────────────────────────────
-function readJSON(fp) {
-  if (!existsSync(fp)) return {};
-  try { return JSON.parse(readFileSync(fp, 'utf8')); } catch { return {}; }
-}
-function writeJSON(fp, obj) { writeFileSync(fp, JSON.stringify(obj, null, 2), 'utf8'); }
+/** A loose JSON record, used for parsed stats/rules files. */
+type JsonRecord = Record<string, unknown>;
 
-function parseArgs(argv) {
-  const args = { mode: null, task: '', result: '', gate: '', message: '', projectRoot: '', stateRoot: '' };
+/** Parsed CLI arguments for the learn script. */
+interface LearnArgs extends JsonRecord {
+  mode: "load" | "record" | "escalate" | null;
+  task: string;
+  result: string;
+  gate: string;
+  message: string;
+  projectRoot: string;
+  stateRoot: string;
+}
+
+/** Resolved filesystem paths used by the learn script. */
+interface LearnPaths {
+  projectRoot: string;
+  stateRoot: string;
+  stateDir: string;
+  runtime: string;
+  progress: string;
+  stats: string;
+  rules: string;
+  conditionStats: string;
+}
+
+/** Reads the numeric `warn_count` from a condition-stats entry (defensive: ignores non-objects). */
+function warnCountOf(value: unknown): number {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? Number((value as JsonRecord).warn_count)
+    : NaN;
+}
+
+// ── helpers ──────────────────────────────────────────────────────────
+function readJSON(fp: string): JsonRecord {
+  if (!existsSync(fp)) return {};
+  try { return JSON.parse(readFileSync(fp, 'utf8')) as JsonRecord; } catch { return {}; }
+}
+function writeJSON(fp: string, obj: unknown): void { writeFileSync(fp, JSON.stringify(obj, null, 2), 'utf8'); }
+
+function parseArgs(argv: string[]): LearnArgs {
+  const args: LearnArgs = { mode: null, task: '', result: '', gate: '', message: '', projectRoot: '', stateRoot: '' };
   for (const a of argv) {
     if (a === '--load') args.mode = 'load';
     else if (a === '--record') args.mode = 'record';
@@ -35,9 +68,9 @@ function parseArgs(argv) {
   return args;
 }
 
-function resolveLearnPaths(args = Object()) {
-  const projectRoot = resolve(args.projectRoot || DEFAULT_YOLO_ROOT);
-  const stateRoot = resolve(args.stateRoot || DEFAULT_YOLO_ROOT);
+function resolveLearnPaths(args: JsonRecord = Object()): LearnPaths {
+  const projectRoot = resolve(String(args.projectRoot) || DEFAULT_YOLO_ROOT);
+  const stateRoot = resolve(String(args.stateRoot) || DEFAULT_YOLO_ROOT);
   const stateDir = join(stateRoot, 'state');
   const runtimeDir = join(stateDir, 'runtime');
   return {
@@ -53,7 +86,7 @@ function resolveLearnPaths(args = Object()) {
 }
 
 // ── --load ───────────────────────────────────────────────────────────
-function load(paths) {
+function load(paths: LearnPaths): void {
   let progressContent = '';
   if (existsSync(paths.progress)) {
     const raw = readFileSync(paths.progress, 'utf8');
@@ -70,13 +103,13 @@ function load(paths) {
   // WARN→FAIL 升级提示
   const condStats = readJSON(paths.conditionStats);
   const escalatedWarns = Object.entries(condStats)
-    .filter(([, v]) => Object.assign(Object(), v).warn_count >= 3)
+    .filter(([, v]) => warnCountOf(v) >= 3)
     .map(([name, v]) => {
-      const stats = Object.assign(Object(), v);
-      if (stats.warn_count >= 5) {
-        return `- ⛔ **${name}**: WARN 已出现 ${stats.warn_count} 次，升级为 FAIL — 必须修复`;
+      const warnCount = warnCountOf(v);
+      if (warnCount >= 5) {
+        return `- ⛔ **${name}**: WARN 已出现 ${warnCount} 次，升级为 FAIL — 必须修复`;
       }
-      return `- ⚠️ **${name}**: WARN 已出现 ${stats.warn_count} 次 — 即将升级（累计 ${stats.warn_count}/5）`;
+      return `- ⚠️ **${name}**: WARN 已出现 ${warnCount} 次 — 即将升级（累计 ${warnCount}/5）`;
     });
   const escalateSection = escalatedWarns.length > 0
     ? ['## 🔁 重复 WARN 升级提示', ...escalatedWarns, ''].join('\n')
@@ -92,7 +125,7 @@ function load(paths) {
 }
 
 // ── 追踪 condition 级别 WARN（从 gate JSON 日志）─────────────────
-function trackConditionWarns(taskId, paths) {
+function trackConditionWarns(taskId: string, paths: LearnPaths): void {
   const logDir = paths.runtime;
   if (!existsSync(logDir)) return;
   try {
@@ -101,15 +134,22 @@ function trackConditionWarns(taskId, paths) {
       .sort();
     if (!files.length) return;
     const latest = files[files.length - 1];
-    const data = JSON.parse(readFileSync(join(logDir, latest), 'utf8'));
-    const warnGates = (data.gates || []).filter((g) => !g.passed && g.severity === 'WARN');
+    const data = JSON.parse(readFileSync(join(logDir, latest), 'utf8')) as JsonRecord;
+    const warnGates = (Array.isArray(data.gates) ? data.gates : [])
+      .filter((g) => {
+        const gate = g as JsonRecord;
+        return !gate.passed && gate.severity === 'WARN';
+      });
     if (!warnGates.length) return;
 
     const stats = readJSON(paths.conditionStats);
     for (const g of warnGates) {
-      if (!stats[g.name]) stats[g.name] = { warn_count: 0, last_seen: '' };
-      stats[g.name].warn_count++;
-      stats[g.name].last_seen = new Date().toISOString().slice(0, 10);
+      const gate = g as JsonRecord;
+      const name = String(gate.name);
+      if (!stats[name]) stats[name] = { warn_count: 0, last_seen: '' };
+      const entry = stats[name] as JsonRecord;
+      entry.warn_count = Number(entry.warn_count) + 1;
+      entry.last_seen = new Date().toISOString().slice(0, 10);
     }
     mkdirSync(dirname(paths.conditionStats), { recursive: true });
     writeJSON(paths.conditionStats, stats);
@@ -117,7 +157,7 @@ function trackConditionWarns(taskId, paths) {
 }
 
 // ── --record ─────────────────────────────────────────────────────────
-function record(args, paths) {
+function record(args: LearnArgs, paths: LearnPaths): void {
   const date = new Date().toISOString().slice(0, 10);
   const lines = [
     `## [${date}] ${args.task}`,
@@ -163,20 +203,20 @@ function record(args, paths) {
   if (args.result === 'fail' && args.gate) {
     const stats = readJSON(paths.stats);
     const key = args.gate;
-    stats[key] = (stats[key] || 0) + 1;
+    stats[key] = (Number(stats[key]) || 0) + 1;
     mkdirSync(dirname(paths.stats), { recursive: true });
     writeJSON(paths.stats, stats);
     // 追踪 condition 级别的 WARN（WARN→FAIL 升级）
     if (args.task) trackConditionWarns(args.task, paths);
     // ≥2 次同步提炼规则写入 learned-rules.json
-    if (stats[key] >= 2) {
+    if (Number(stats[key]) >= 2) {
       recordRule(args.gate, args.message, paths);
     }
   }
 }
 
 // 从失败信息提炼规则关键词
-function extractRule(gate, message) {
+function extractRule(gate: string, message: string): { source: string; rule: string } {
   const clean = message.replace(/\x1b\[[0-9;]*m/g, '').slice(0, 200);
   if (clean.includes('TS') || clean.includes('tsc')) return { source: 'tsc', rule: `类型错误: ${clean.slice(0, 80)}` };
   const gateRules = { '文件范围': '改动文件数或行数超标', '断言密度': '测试断言密度不足', '危险模式': '代码包含危险模式' };
@@ -187,7 +227,7 @@ function extractRule(gate, message) {
 }
 
 // 同类失败 ≥2 次 → 提炼规则写入 learned-rules.json
-function recordRule(gate, message, paths) {
+function recordRule(gate: string, message: string, paths: LearnPaths): void {
   const rules = readJSON(paths.rules);
   const { source, rule } = extractRule(gate, message);
   // 安全防护：禁止污染原型链
@@ -200,12 +240,12 @@ function recordRule(gate, message, paths) {
 }
 
 // ── --escalate ───────────────────────────────────────────────────────
-function escalate(paths) {
+function escalate(paths: LearnPaths): void {
   const stats = readJSON(paths.conditionStats);
   const escalated = Object.entries(stats)
-    .filter(([, v]) => Object.assign(Object(), v).warn_count >= 5)
+    .filter(([, v]) => warnCountOf(v) >= 5)
     .map(([name, v]) => {
-      const item = Object.assign(Object(), v);
+      const item = v !== null && typeof v === "object" && !Array.isArray(v) ? v as JsonRecord : {};
       return { name, warn_count: item.warn_count, last_seen: item.last_seen };
     });
   process.stdout.write(JSON.stringify(escalated));
@@ -213,7 +253,7 @@ function escalate(paths) {
 }
 
 // ── main ─────────────────────────────────────────────────────────────
-export function runLearnCli(argv = process.argv.slice(2)) {
+export function runLearnCli(argv: string[] = process.argv.slice(2)) {
   const args = parseArgs(argv);
   const paths = resolveLearnPaths(args);
   if (!args.mode) {
