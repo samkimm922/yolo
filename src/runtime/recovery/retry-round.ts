@@ -1,7 +1,11 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export function appendUniqueIds(target, items = []) {
+/**
+ * Append `items` to `target`, omitting ids already present (in either the
+ * existing target or the items added so far). Mutates and returns `target`.
+ */
+export function appendUniqueIds(target: string[], items: string[] = []) {
   const seen = new Set(target);
   for (const item of items) {
     if (!seen.has(item)) {
@@ -11,7 +15,11 @@ export function appendUniqueIds(target, items = []) {
   }
 }
 
-export function removeIds(target, items = []) {
+/**
+ * Remove every id in `items` from `target`, preserving order of the rest.
+ * Mutates `target` in place (compacts via a write index).
+ */
+export function removeIds(target: string[], items: string[] = []) {
   const removing = new Set(items);
   let writeIndex = 0;
   for (const item of target) {
@@ -22,7 +30,38 @@ export function removeIds(target, items = []) {
   target.length = writeIndex;
 }
 
-export function loadExpandedTasksForRetryFile(expandedTasksFile) {
+/** Task ids / per-task outcome collections shared across retry rounds. */
+interface TaskResultSets {
+  completed?: string[];
+  failed?: string[];
+  skipped?: string[];
+  blocked?: string[];
+  contractReview?: string[];
+  stop_reason?: string;
+}
+/** A task definition as read from a PRD or expanded-task snapshot. */
+interface RetryTask {
+  id: string;
+  status?: unknown;
+  task_kind?: unknown;
+  source?: unknown;
+  [key: string]: unknown;
+}
+
+/** A PRD document (subset of fields recovery reads/writes). */
+interface RetryPrd {
+  id?: unknown;
+  title?: unknown;
+  generated_by?: unknown;
+  tasks?: RetryTask[];
+  source_prd?: unknown;
+  retry_of?: unknown;
+  retry_round?: unknown;
+  parent_run_id?: unknown;
+  [key: string]: unknown;
+}
+
+export function loadExpandedTasksForRetryFile(expandedTasksFile: string): RetryTask[] {
   if (!existsSync(expandedTasksFile)) return [];
   try {
     const data = JSON.parse(readFileSync(expandedTasksFile, "utf8"));
@@ -32,14 +71,26 @@ export function loadExpandedTasksForRetryFile(expandedTasksFile) {
   }
 }
 
-export function findRetryTaskById(id, prd = Object(), expandedTasks = []) {
+export function findRetryTaskById(
+  id: string,
+  prd: RetryPrd = {},
+  expandedTasks: RetryTask[] = [],
+): RetryTask | null {
   return (prd.tasks || []).find((task) => task.id === id) ||
     expandedTasks.find((task) => task.id === id) ||
     null;
 }
 
-export function prepareRetryTasks({ failedIds = [], prd = Object(), expandedTasks = [] }) {
-  const missingRetryTaskIds = [];
+export function prepareRetryTasks({
+  failedIds = [],
+  prd = {},
+  expandedTasks = [],
+}: {
+  failedIds?: string[];
+  prd?: RetryPrd;
+  expandedTasks?: RetryTask[];
+}) {
+  const missingRetryTaskIds: string[] = [];
   const retryTasks = failedIds
     .map((id) => {
       const original = findRetryTaskById(id, prd, expandedTasks);
@@ -49,7 +100,7 @@ export function prepareRetryTasks({ failedIds = [], prd = Object(), expandedTask
       }
       return { ...original, status: "pending" };
     })
-    .filter(Boolean);
+    .filter(Boolean) as RetryTask[];
 
   return { retryTasks, missingRetryTaskIds };
 }
@@ -61,6 +112,13 @@ export function buildRetryPrd({
   round,
   parentRunId,
   normalizePrdPath = (value) => value,
+}: {
+  prd: RetryPrd;
+  prdPath: string;
+  retryTasks: RetryTask[];
+  round: number;
+  parentRunId: unknown;
+  normalizePrdPath?: (value: string) => string;
 }) {
   return {
     ...prd,
@@ -74,35 +132,60 @@ export function buildRetryPrd({
   };
 }
 
-export function writeRetryPrdFile({ yoloRoot, retryPrd, round, nowMs = Date.now() }) {
+export function writeRetryPrdFile({
+  yoloRoot,
+  retryPrd,
+  round,
+  nowMs = Date.now(),
+}: {
+  yoloRoot: string;
+  retryPrd: RetryPrd;
+  round: number;
+  nowMs?: number;
+}) {
   const filePath = join(yoloRoot, "data", `retry-round${round}-${nowMs}.json`);
   writeFileSync(filePath, JSON.stringify(retryPrd, null, 2));
   return filePath;
 }
 
-export function buildRetryCompletedSet({ resumeCompleted = new Set(), completed = [], skipped = [] }) {
-  return new Set([
+export function buildRetryCompletedSet({
+  resumeCompleted = new Set<string>(),
+  completed = [],
+  skipped = [],
+}: {
+  resumeCompleted?: Set<string>;
+  completed?: string[];
+  skipped?: string[];
+}) {
+  return new Set<string>([
     ...resumeCompleted,
     ...completed,
     ...skipped,
   ]);
 }
 
-export function retryBlockedFailureIds(retryResults = Object()) {
+export function retryBlockedFailureIds(retryResults: TaskResultSets = {}) {
   const contractReview = new Set(retryResults.contractReview || []);
   return (retryResults.blocked || []).filter((id) => !contractReview.has(id));
 }
 
 export function syncRetryCompletions({
-  retryResults = Object(),
-  prd = Object(),
+  retryResults = {},
+  prd = {},
   taskResults,
   taskPostconditionsPass,
   updateTaskStatus,
-  log = (..._args) => {},
+  log = (..._args: unknown[]) => {},
+}: {
+  retryResults?: TaskResultSets;
+  prd?: RetryPrd;
+  taskResults: TaskResultSets & { completed: string[]; failed: string[]; skipped: string[] };
+  taskPostconditionsPass: (task: RetryTask, prd: RetryPrd) => { passed: boolean; failed: string[] };
+  updateTaskStatus: (id: string, update: Record<string, unknown>) => void;
+  log?: (...args: unknown[]) => void;
 }) {
-  const synced = [];
-  const blocked = [];
+  const synced: string[] = [];
+  const blocked: { id: string; failed: string[] }[] = [];
 
   for (const id of retryResults.completed || []) {
     const originalTask = (prd.tasks || []).find((task) => task.id === id);
@@ -128,7 +211,13 @@ export function syncRetryCompletions({
   return { synced, blocked };
 }
 
-export function mergeRetryRoundResults({ taskResults, retryResults }) {
+export function mergeRetryRoundResults({
+  taskResults,
+  retryResults,
+}: {
+  taskResults: TaskResultSets & { completed: string[]; failed: string[]; skipped: string[] };
+  retryResults: TaskResultSets;
+}) {
   appendUniqueIds(taskResults.completed, retryResults.completed || []);
   appendUniqueIds(taskResults.failed, retryResults.failed || []);
   appendUniqueIds(taskResults.failed, retryBlockedFailureIds(retryResults));
@@ -140,7 +229,7 @@ export function mergeRetryRoundResults({ taskResults, retryResults }) {
   return taskResults;
 }
 
-export function cleanupRetryPrdFile(filePath) {
+export function cleanupRetryPrdFile(filePath: string) {
   try {
     unlinkSync(filePath);
     return { deleted: true };

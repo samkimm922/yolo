@@ -93,7 +93,7 @@ const INVENTORY = [
   ["src/runtime/progress/server.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 18 }],
   ["src/runtime/progress/ui-evidence.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 4 }],
   ["src/runtime/recovery/retry-orchestrator.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 2 }],
-  ["src/runtime/recovery/retry-round.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 5 }],
+  ["src/runtime/recovery/retry-round.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 9 }],
   ["src/runtime/review-loop/orchestrator.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 3 }],
   ["src/runtime/review-loop/round-helpers.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 4 }],
   ["src/runtime/run-lifecycle/finalize.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 11 }],

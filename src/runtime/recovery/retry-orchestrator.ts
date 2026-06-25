@@ -11,7 +11,7 @@ import {
 
 function noop() {}
 
-function appendUniqueDefault(target, items = []) {
+function appendUniqueDefault(target: string[], items: string[] = []) {
   const seen = new Set(target);
   for (const item of items) {
     if (!seen.has(item)) {
@@ -34,7 +34,7 @@ export async function runRetryPhase({
   taskPostconditionsPass,
   updateTaskStatus,
   appendUnique = appendUniqueDefault,
-  normalizeRepoPath = (value) => value,
+  normalizeRepoPath = (value: string) => value,
   maxRetryRounds = 3,
   logProgress = noop,
 } = Object()) {
