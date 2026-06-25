@@ -9,13 +9,104 @@ import { buildTeamDispatchPlan } from "./team-contracts.js";
 
 const DEFAULT_YOLO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
+type PiInput = Record<string, unknown>;
+type PiContext = Record<string, unknown>;
+type PiParams = Record<string, unknown>;
+
+interface PiCommandActionInput {
+  id: unknown;
+  phase: unknown;
+  summary: unknown;
+  command: unknown;
+  args?: unknown;
+  cwd?: unknown;
+  stdin?: unknown;
+  creates?: unknown;
+  timeout_ms?: unknown;
+}
+
+interface PiRuntimeActionInput {
+  id: unknown;
+  phase: unknown;
+  summary: unknown;
+  runtime: unknown;
+  params?: unknown;
+  timeout_ms?: unknown;
+}
+
+interface PiObserveActionInput {
+  id: unknown;
+  phase: unknown;
+  summary: unknown;
+  artifacts?: unknown;
+  next_actions?: unknown;
+}
+
+export interface PiAction {
+  id: unknown;
+  phase: unknown;
+  kind: string;
+  status: string;
+  summary: unknown;
+  command?: unknown;
+  args?: string[];
+  cwd?: string | null;
+  stdin?: string | null;
+  creates?: string[];
+  timeout_ms?: number;
+  runtime?: string;
+  params?: PiParams;
+  artifacts?: string[];
+  next_actions?: string[];
+}
+
+export interface PiObservation {
+  action_id: unknown;
+  status: string;
+  summary: unknown;
+  code?: string;
+  artifacts?: string[];
+  next_actions: string[];
+  dry_run?: boolean;
+  dryRun?: boolean;
+  lifecycle_guard?: unknown;
+  blockers?: unknown[];
+  [key: string]: unknown;
+}
+
+export interface PiExecutorContext {
+  plan?: Record<string, unknown>;
+  input?: PiInput;
+  options?: Record<string, unknown>;
+}
+
+export interface PiRunOptions {
+  executor?: (action: PiAction, context: PiExecutorContext) => Promise<Record<string, unknown>>;
+  execute?: boolean;
+  [key: string]: unknown;
+}
+
+export interface PiArtifacts {
+  yoloRoot: string;
+  projectRoot: string;
+  stateRoot: string;
+  runId: string;
+  outputDir: string;
+  findingsPath: string;
+  prdPath: string;
+  requirementFile: string | null;
+  discoveryPath: string;
+  statePath: string;
+}
+
 function nowStamp() {
   return new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14);
 }
 
-function asAbs(path, base) {
+function asAbs(path: unknown, base: string): string | null {
   if (!path) return null;
-  return isAbsolute(path) ? path : resolve(base, path);
+  const value = String(path);
+  return isAbsolute(value) ? value : resolve(base, value);
 }
 
 function tail(text = "", max = 4000) {
@@ -23,11 +114,21 @@ function tail(text = "", max = 4000) {
   return value.length > max ? value.slice(-max) : value;
 }
 
-function script(yoloRoot, name) {
+function script(yoloRoot: string, name: string): string {
   return join(yoloRoot, name);
 }
 
-function commandAction({ id, phase, summary, command, args = [], cwd, stdin, creates = [], timeout_ms = 120000 }) {
+function commandAction({
+  id,
+  phase,
+  summary,
+  command,
+  args = [],
+  cwd,
+  stdin,
+  creates = [],
+  timeout_ms = 120000,
+}: PiCommandActionInput): PiAction {
   return {
     id,
     phase,
@@ -35,47 +136,61 @@ function commandAction({ id, phase, summary, command, args = [], cwd, stdin, cre
     status: "pending",
     summary,
     command,
-    args,
-    cwd,
-    stdin,
-    creates,
-    timeout_ms,
+    args: (args as string[]) || [],
+    cwd: cwd === undefined ? undefined : String(cwd),
+    stdin: stdin === undefined ? undefined : String(stdin),
+    creates: (creates as string[]) || [],
+    timeout_ms: timeout_ms === undefined ? 120000 : Number(timeout_ms),
   };
 }
 
-function runtimeAction({ id, phase, summary, runtime, params = Object(), timeout_ms = 120000 }) {
+function runtimeAction({
+  id,
+  phase,
+  summary,
+  runtime,
+  params = {},
+  timeout_ms = 120000,
+}: PiRuntimeActionInput): PiAction {
   return {
     id,
     phase,
     kind: "runtime",
     status: "pending",
     summary,
-    runtime,
-    params,
+    runtime: String(runtime),
+    params: (params as PiParams) || {},
     artifacts: [],
     next_actions: [],
-    timeout_ms,
+    timeout_ms: timeout_ms === undefined ? 120000 : Number(timeout_ms),
   };
 }
 
-function observeAction({ id, phase, summary, artifacts = [], next_actions = [] }) {
+function observeAction({
+  id,
+  phase,
+  summary,
+  artifacts = [],
+  next_actions = [],
+}: PiObserveActionInput): PiAction {
   return {
     id,
     phase,
     kind: "observe",
     status: "pending",
     summary,
-    artifacts,
-    next_actions,
+    artifacts: (artifacts as string[]) || [],
+    next_actions: (next_actions as string[]) || [],
   };
 }
 
-function resolvePiArtifacts(input = Object(), context = Object()) {
-  const yoloRoot = resolve(context.yoloRoot || DEFAULT_YOLO_ROOT);
-  const projectRoot = resolve(context.projectRoot || resolve(yoloRoot, "../.."));
-  const stateRoot = resolve(context.stateRoot || context.state_root || yoloRoot);
-  const runId = input.runId || input.run_id || `pi-run-${nowStamp()}`;
-  const outputDir = asAbs(input.outputDir || input.output_dir || join("data", "pi", runId), stateRoot);
+function resolvePiArtifacts(input: PiInput = {}, context: PiContext = {}): PiArtifacts {
+  const yoloRoot = resolve(String(context.yoloRoot || DEFAULT_YOLO_ROOT));
+  const projectRoot = resolve(String(context.projectRoot || resolve(yoloRoot, "../..")));
+  const stateRoot = resolve(String(context.stateRoot || context.state_root || yoloRoot));
+  const runId = String(input.runId || input.run_id || `pi-run-${nowStamp()}`);
+  const outputDirRaw = asAbs(input.outputDir || input.output_dir || join("data", "pi", runId), stateRoot);
+  const outputDir = outputDirRaw ?? join(stateRoot, "data", "pi", runId);
   const findingsPath = asAbs(input.findingsPath || input.findings_path, stateRoot) || join(outputDir, "findings.json");
   const prdPath = asAbs(input.prdPath || input.prd_path, stateRoot) || join(outputDir, "prd.json");
   const requirementFile = asAbs(input.requirementFile || input.requirement_file, projectRoot);
@@ -94,13 +209,13 @@ function resolvePiArtifacts(input = Object(), context = Object()) {
   };
 }
 
-function readRequirementForDiscovery(requirement, requirementFile) {
-  if (requirement?.trim()) return requirement;
+function readRequirementForDiscovery(requirement: unknown, requirementFile: string | null): string {
+  if (requirement != null && String(requirement).trim()) return String(requirement);
   if (requirementFile && existsSync(requirementFile)) return readFileSync(requirementFile, "utf8");
   return "";
 }
 
-function discoveryInputForPi(input = Object(), artifacts = Object(), requirement = "") {
+function discoveryInputForPi(input: PiInput = {}, artifacts: PiArtifacts, requirement = "") {
   const sourceRequirement = readRequirementForDiscovery(requirement, artifacts.requirementFile);
   return {
     requirement: sourceRequirement,
@@ -118,7 +233,7 @@ function discoveryInputForPi(input = Object(), artifacts = Object(), requirement
   };
 }
 
-function executionConfigForPi(input = Object()) {
+function executionConfigForPi(input: PiInput = {}) {
   const model = input.model;
   const agentCommand = input.agentCommand || input.agent_command || input.customCommand || input.custom_command;
   const executor = input.executor || input.provider || (agentCommand ? "custom" : null);
@@ -139,7 +254,7 @@ function executionConfigForPi(input = Object()) {
   };
 }
 
-function adapterEvidenceConfigForPi(input = Object()) {
+function adapterEvidenceConfigForPi(input: PiInput = {}) {
   return {
     ...(input.collectEvidence === true || input.collect_evidence === true ? { collectEvidence: true } : {}),
     ...(input.executeAdapter === true || input.execute_adapter === true ? { executeAdapter: true } : {}),
@@ -147,11 +262,11 @@ function adapterEvidenceConfigForPi(input = Object()) {
   };
 }
 
-export function createPiRunPlan(input = Object(), context = Object()) {
+export function createPiRunPlan(input: PiInput = {}, context: PiContext = {}) {
   const artifacts = resolvePiArtifacts(input, context);
-  const mode = input.mode || "dev";
-  const title = input.title || "PI implementation";
-  const requirement = input.requirement || "";
+  const mode = String(input.mode || "dev");
+  const title = String(input.title || "PI implementation");
+  const requirement = String(input.requirement || "");
   const sourcePrdPath = asAbs(input.prdPath || input.prd_path, artifacts.stateRoot);
   const sourceFindingsPath = asAbs(input.findingsPath || input.findings_path, artifacts.stateRoot);
   const hasRequirement = Boolean(requirement.trim() || artifacts.requirementFile);
@@ -395,24 +510,25 @@ export function createPiRunPlan(input = Object(), context = Object()) {
   };
 }
 
-export async function defaultPiExecutor(action, context = Object()) {
+export async function defaultPiExecutor(action: PiAction, context: PiExecutorContext = {}): Promise<Record<string, unknown>> {
   if (action.kind === "runtime") {
     const { runPiRuntime } = await import("../runtime/pi-runtimes.js");
-    return runPiRuntime(action.runtime, action.params || {}, {
+    const artifacts = (context.plan?.artifacts as Record<string, unknown>) || {};
+    return runPiRuntime(String(action.runtime), (action.params as PiParams) || {}, {
       timeout_ms: action.timeout_ms,
-      projectRoot: context.plan?.artifacts?.projectRoot,
-      stateRoot: context.plan?.artifacts?.stateRoot,
-      yoloRoot: context.plan?.artifacts?.yoloRoot,
+      projectRoot: artifacts.projectRoot,
+      stateRoot: artifacts.stateRoot,
+      yoloRoot: artifacts.yoloRoot,
     });
   }
 
-  for (const file of action.creates || []) {
+  for (const file of (action.creates as string[]) || []) {
     mkdirSync(dirname(file), { recursive: true });
   }
 
-  const result = spawnSync(action.command, action.args, {
-    cwd: action.cwd,
-    input: action.stdin,
+  const result = spawnSync(String(action.command), (action.args as string[]) || [], {
+    cwd: (action.cwd as string) || undefined,
+    input: (action.stdin as string) || undefined,
     encoding: "utf8",
     timeout: action.timeout_ms,
     stdio: ["pipe", "pipe", "pipe"],
@@ -427,20 +543,20 @@ export async function defaultPiExecutor(action, context = Object()) {
     signal: result.signal,
     stdout_tail: tail(result.stdout),
     stderr_tail: tail(result.stderr),
-    artifacts: action.creates || [],
+    artifacts: (action.creates as string[]) || [],
     next_actions: result.status === 0
       ? []
       : ["Inspect stderr/stdout tail, fix the root cause, then resume from the failed phase."],
   };
 }
 
-function isDryRunObservation(observation = Object()) {
+function isDryRunObservation(observation: Record<string, unknown> = {}) {
   return observation.dry_run === true ||
     observation.dryRun === true ||
     observation.code === "RUNNER_DRY_RUN_READY";
 }
 
-export async function runPiAgent(input = Object(), options = Object()) {
+export async function runPiAgent(input: PiInput = {}, options: PiRunOptions = {}) {
   const plan = createPiRunPlan(input, options);
   if (plan.status !== "success") return plan;
 
@@ -453,14 +569,14 @@ export async function runPiAgent(input = Object(), options = Object()) {
       next_actions: ["Pass execute=true or use yolo-pi --execute to run the plan."],
       artifacts: plan.artifacts,
       plan,
-      observations: [],
+      observations: [] as PiObservation[],
     };
   }
 
   mkdirSync(dirname(plan.artifacts.statePath), { recursive: true });
   const executor = options.executor || defaultPiExecutor;
-  const observations = [];
-  const writeState = (status, summary) => {
+  const observations: PiObservation[] = [];
+  const writeState = (status: string, summary: unknown) => {
     writeFileSync(plan.artifacts.statePath, JSON.stringify({
       status,
       summary,
@@ -471,27 +587,27 @@ export async function runPiAgent(input = Object(), options = Object()) {
   };
   writeState("running", "PI execution started.");
 
-  for (const action of plan.actions) {
+  for (const action of (plan.actions as PiAction[])) {
     // BUG-C3: lifecycle gate must fire for EVERY runtime execute action
     // (pi.execute.*), not just pi.execute.runner. Otherwise a blocked check
     // still permits other write-capable execute actions (installer, etc.)
     // to run. Observe actions are read-only and bypass the gate.
-    if (action.kind === "runtime" && action.id?.startsWith("pi.execute.")) {
+    if (action.kind === "runtime" && String(action.id ?? "").startsWith("pi.execute.")) {
       const guard = inspectLifecycleGuard({
         command: "yolo-run",
         projectRoot: plan.artifacts.projectRoot,
         stateRoot: plan.artifacts.stateRoot,
-        prdPath: action.params?.prdPath || plan.artifacts.prdPath,
+        prdPath: (action.params as PiParams)?.prdPath || plan.artifacts.prdPath,
       });
       if (guard.status !== "pass") {
-        const observation = {
+        const observation: PiObservation = {
           action_id: action.id,
           status: "error",
           summary: guard.summary,
           code: guard.code || "LIFECYCLE_GUARD_BLOCKED",
           lifecycle_guard: guard,
-          blockers: guard.blockers || [],
-          next_actions: guard.next_actions || ["Run /yolo-next before starting implementation."],
+          blockers: (guard.blockers as unknown[]) || [],
+          next_actions: (guard.next_actions as string[]) || ["Run /yolo-next before starting implementation."],
         };
         observations.push(observation);
         writeState("error", observation.summary);
@@ -514,23 +630,23 @@ export async function runPiAgent(input = Object(), options = Object()) {
         action_id: action.id,
         status: "success",
         summary: action.summary,
-        artifacts: action.artifacts || [],
-        next_actions: action.next_actions || [],
-      });
+        artifacts: (action.artifacts as string[]) || [],
+        next_actions: (action.next_actions as string[]) || [],
+      } as PiObservation);
       writeState("running", action.summary);
       continue;
     }
 
     const observation = await executor(action, { plan, input, options });
-    observations.push({ action_id: action.id, ...observation });
-    if (isDryRunObservation(observation)) {
+    observations.push({ action_id: action.id, ...observation } as PiObservation);
+    if (isDryRunObservation(observation as Record<string, unknown>)) {
       writeState("dry_run", `PI dry-run stopped at ${action.id}.`);
       return {
         status: "dry_run",
         summary: `PI dry-run stopped at ${action.id}.`,
         code: "PI_DRY_RUN_READY",
         exit_code: 2,
-        next_actions: observation.next_actions || ["Run without dryRun to continue execution."],
+        next_actions: (observation.next_actions as string[]) || ["Run without dryRun to continue execution."],
         artifacts: plan.artifacts,
         plan,
         observations,
@@ -538,13 +654,13 @@ export async function runPiAgent(input = Object(), options = Object()) {
         dry_run: true,
       };
     }
-    writeState(observation.status === "success" ? "running" : "error", observation.summary);
-    if (observation.status !== "success") {
+    writeState((observation.status as string) === "success" ? "running" : "error", observation.summary);
+    if ((observation.status as string) !== "success") {
       return {
         status: "error",
         summary: `PI stopped at ${action.id}.`,
-        code: observation.code || "PI_ACTION_FAILED",
-        next_actions: observation.next_actions || ["Fix the failed action, then rerun PI from a stable PRD/findings artifact."],
+        code: (observation.code as string) || "PI_ACTION_FAILED",
+        next_actions: (observation.next_actions as string[]) || ["Fix the failed action, then rerun PI from a stable PRD/findings artifact."],
         artifacts: plan.artifacts,
         plan,
         observations,
@@ -564,11 +680,11 @@ export async function runPiAgent(input = Object(), options = Object()) {
   };
 }
 
-export function createPiAgent(context = Object()) {
+export function createPiAgent(context: PiContext = {}) {
   return {
     id: "pi",
     label: "Product Implementation Agent",
-    createPlan: (input = Object()) => createPiRunPlan(input, context),
-    run: (input = Object(), options = Object()) => runPiAgent(input, { ...context, ...options }),
+    createPlan: (input: PiInput = {}) => createPiRunPlan(input, context),
+    run: (input: PiInput = {}, options: PiRunOptions = {}) => runPiAgent(input, { ...context, ...options }),
   };
 }
