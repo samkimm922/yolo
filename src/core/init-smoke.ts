@@ -13,22 +13,60 @@ import { writeLifecycleStageReport } from "../lifecycle/progress.js";
 
 export const INIT_TO_FIRST_PRD_SMOKE_SCHEMA_VERSION = "1.0";
 
-function cleanString(value, fallback = "") {
+export interface InitToFirstPrdSmokeOptions {
+  projectRoot?: string;
+  project_root?: string;
+  cwd?: string;
+  projectName?: unknown;
+  project_name?: unknown;
+  name?: unknown;
+  prdPath?: string;
+  prd_path?: string;
+  targetFile?: unknown;
+  target_file?: unknown;
+  specId?: unknown;
+  spec_id?: unknown;
+  title?: unknown;
+  prdId?: unknown;
+  prd_id?: unknown;
+  generatedAt?: unknown;
+  generated_at?: unknown;
+  language?: unknown;
+  framework?: unknown;
+  packageManager?: unknown;
+  package_manager?: unknown;
+  baseCommit?: unknown;
+  base_commit?: unknown;
+  mode?: unknown;
+  now?: string | number | Date;
+  specPackage?: unknown;
+  force?: unknown;
+  dryRun?: unknown;
+  dry_run?: unknown;
+}
+
+function cleanString(value: unknown, fallback: string = ""): string {
   const text = String(value ?? "").trim();
   return text || fallback;
 }
 
-function stableJson(value) {
+function stableJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function projectRelative(projectRoot, filePath) {
+function projectRelative(projectRoot: string, filePath: string): string {
   const absolute = isAbsolute(filePath) ? filePath : join(projectRoot, filePath);
   const rel = relative(projectRoot, absolute);
   return rel && !rel.startsWith("..") && !isAbsolute(rel) ? rel.replaceAll("\\", "/") : absolute;
 }
 
-function demandQualityReport() {
+function demandQualityReport(): {
+  schema_version: string;
+  schema: string;
+  status: string;
+  total_score: number;
+  dimensions: unknown[];
+} {
   return {
     schema_version: "1.0",
     schema: "yolo.demand.quality.v1",
@@ -38,11 +76,17 @@ function demandQualityReport() {
   };
 }
 
-function demandFieldsForSmoke(prd, targetFile) {
+type SmokePrd = ReturnType<typeof specLifecycleToPrd>;
+
+function demandFieldsForSmoke(prd: SmokePrd, targetFile: string) {
   const quality = demandQualityReport();
   const targetFiles = [...new Set([
     targetFile,
-    ...((prd.tasks || []).flatMap((task) => (task.scope?.targets || []).map((target) => target.file).filter(Boolean))),
+    ...((prd.tasks || []).flatMap((task) => {
+      const scope = task.scope as Record<string, unknown> | undefined;
+      const targets = (scope?.targets || []) as Array<Record<string, unknown>>;
+      return targets.map((target) => target.file).filter(Boolean);
+    })),
   ].filter(Boolean))];
   return {
     source: "approved_demand",
@@ -53,7 +97,7 @@ function demandFieldsForSmoke(prd, targetFile) {
       approval: { approved: true, effective_for_prd: true },
       project_facts: {
         target_files: targetFiles.map((file) => ({ file, status: "verified" })),
-        assumptions: [],
+        assumptions: [] as unknown[],
       },
       quality_report: quality,
     },
@@ -63,17 +107,20 @@ function demandFieldsForSmoke(prd, targetFile) {
       quality_status: "pass",
       quality_report: quality,
     },
-    requirements: (prd.requirements || []).map((requirement) => ({
-      ...requirement,
-      demand_trace: requirement.demand_trace || {
-        source: "init_to_first_prd_smoke",
-        evidence: targetFiles,
-      },
-    })),
+    requirements: (prd.requirements || []).map((requirement) => {
+      const requirementRec = requirement as Record<string, unknown>;
+      return {
+        ...requirement,
+        demand_trace: requirementRec.demand_trace || {
+          source: "init_to_first_prd_smoke",
+          evidence: targetFiles,
+        },
+      };
+    }),
   };
 }
 
-function defaultSmokeSpec(options = Object()) {
+function defaultSmokeSpec(options: InitToFirstPrdSmokeOptions = Object()) {
   const targetFile = cleanString(options.targetFile || options.target_file, "specs/tasks.md");
   return buildSpecLifecyclePackage({
     id: cleanString(options.specId || options.spec_id, "SPEC-FIRST-PRD-SMOKE"),
@@ -131,7 +178,7 @@ function defaultSmokeSpec(options = Object()) {
   });
 }
 
-export function buildInitToFirstPrdSmokePlan(options = Object()) {
+export function buildInitToFirstPrdSmokePlan(options: InitToFirstPrdSmokeOptions = Object()) {
   const projectRoot = resolve(options.projectRoot || options.cwd || process.cwd());
   const projectName = cleanString(options.projectName || options.name, projectRoot.split(/[\\/]/).filter(Boolean).at(-1) || "project");
   const prdPath = projectRelative(projectRoot, options.prdPath || options.prd_path || ".yolo/smoke/first-prd.json");
@@ -178,7 +225,7 @@ export function buildInitToFirstPrdSmokePlan(options = Object()) {
   };
 }
 
-export async function runInitToFirstPrdSmoke(options = Object()) {
+export async function runInitToFirstPrdSmoke(options: InitToFirstPrdSmokeOptions = Object()) {
   const plan = buildInitToFirstPrdSmokePlan(options);
   const dryRun = options.dryRun === true || options.dry_run === true;
   const projectRoot = plan.project_root;
