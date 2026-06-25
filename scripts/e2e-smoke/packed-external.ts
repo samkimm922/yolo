@@ -22,6 +22,66 @@ const STUB_PATH = join(REPO_ROOT, "scripts", "e2e-smoke", "provider-stub.mjs");
 const TARGET_FILE = "components/ExternalSmokeBadge.tsx";
 const TARGET_MARKER = "YOLO_PACKED_EXTERNAL_SMOKE_MARKER";
 
+type JsonRecord = Record<string, unknown>;
+
+type LifecycleStatus = JsonRecord & {
+  current_stage?: string;
+  updated_at?: string;
+  stages: Array<JsonRecord & { id?: string; status?: string }>;
+};
+
+type GateArtifact = JsonRecord & {
+  gates?: Array<JsonRecord & { name?: string; status?: string; detail?: string }>;
+};
+
+type AcceptanceReport = JsonRecord & {
+  artifact_integrity?: JsonRecord & {
+    artifacts?: Array<JsonRecord & { absolute_path?: string; path?: string }>;
+  };
+};
+
+type DeliveryCommandResult = JsonRecord & {
+  status?: string;
+  ship?: JsonRecord & { status?: string };
+};
+
+type DeliveryLifecycleReport = JsonRecord & {
+  status?: string;
+  report?: JsonRecord & { status?: string };
+};
+
+type RunReport = JsonRecord & {
+  status?: string;
+};
+
+type TscBaseline = JsonRecord & {
+  meta?: JsonRecord & { status?: string };
+};
+
+type ExternalConfig = JsonRecord & {
+  build: JsonRecord & {
+    type_check?: string;
+  };
+};
+
+type PackedPrd = JsonRecord & {
+  demand: {
+    approval: {
+      effective_for_prd?: boolean;
+    };
+  };
+};
+
+type YoloJsonResult = JsonRecord & {
+  status?: string;
+  code?: string;
+  run_id?: string;
+};
+
+type YoloRunResult = YoloJsonResult & {
+  run_id: string;
+};
+
 const LIFECYCLE_STAGES = [
   ["idea", 1, "Idea intake", "idea.json", false],
   ["discovery", 2, "Discovery", "discovery.json", false],
@@ -96,17 +156,17 @@ function writeJson(path: string, value: unknown) {
   writeText(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function readJson(path: string) {
-  return JSON.parse(readFileSync(path, "utf8"));
+function readJson<T = unknown>(path: string): T {
+  return JSON.parse(readFileSync(path, "utf8")) as T;
 }
 
-function readJsonl(path: string) {
+function readJsonl<T = unknown>(path: string): T[] {
   if (!existsSync(path)) return [];
   return readFileSync(path, "utf8")
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => JSON.parse(line));
+    .map((line) => JSON.parse(line) as T);
 }
 
 function isInside(parent: string, child: string) {
@@ -153,14 +213,14 @@ function runChecked(label: string, command: string, args: string[], {
   return { ...result, exitCode };
 }
 
-function parseJsonOutput(text: string) {
+function parseJsonOutput<T = unknown>(text: string): T {
   const trimmed = String(text || "").trim();
   try {
-    return JSON.parse(trimmed);
+    return JSON.parse(trimmed) as T;
   } catch {}
   for (let index = trimmed.lastIndexOf("{"); index >= 0; index = trimmed.lastIndexOf("{", index - 1)) {
     try {
-      return JSON.parse(trimmed.slice(index));
+      return JSON.parse(trimmed.slice(index)) as T;
     } catch {}
   }
   throw new Error(`No JSON object found in command output:\n${trimmed.slice(-4000)}`);
@@ -376,7 +436,7 @@ function writeExternalConfig(projectRoot: string, options: { mutateBusinessSrcOn
     applies_to: ["ui", "browser"],
   });
   assertCondition(existsSync(join(projectRoot, ".yolo", "config.json")), "external .yolo/config.json exists");
-  assertCondition(readJson(join(projectRoot, ".yolo", "config.json")).build.type_check === "npx tsc --noEmit", "external config uses JSON type_check=npx tsc --noEmit");
+  assertCondition(readJson<ExternalConfig>(join(projectRoot, ".yolo", "config.json")).build.type_check === "npx tsc --noEmit", "external config uses JSON type_check=npx tsc --noEmit");
 }
 
 function qualityReport() {
@@ -479,7 +539,7 @@ function buildApprovedPrd(projectRoot: string, baseCommit: string) {
 function writeApprovedPrd(projectRoot: string, baseCommit: string) {
   const prdPath = join(projectRoot, ".yolo", "data", "prd", "current", "packed-external-prd.json");
   writeJson(prdPath, buildApprovedPrd(projectRoot, baseCommit));
-  const prd = readJson(prdPath);
+  const prd = readJson<PackedPrd>(prdPath);
   assertCondition(prd.demand.approval.effective_for_prd === true, "PRD demand.approval.effective_for_prd is true");
   return prdPath;
 }
@@ -519,7 +579,7 @@ function seedLifecycleStage(projectRoot: string, stageId: string, report: object
   if (!stageInfo) fail(`unknown lifecycle stage: ${stageId}`);
   writeJson(join(lifecycleRoot, stageInfo.artifact), lifecycleArtifact(stageId, "packed-external-next-shape", report));
   const statusPath = join(lifecycleRoot, "status.json");
-  const status = readJson(statusPath);
+  const status = readJson<LifecycleStatus>(statusPath);
   const nextStage = LIFECYCLE_STAGES.find((stage) => stage.sequence === stageInfo.sequence + 1)?.id || stageId;
   status.current_stage = nextStage;
   status.updated_at = new Date().toISOString();
@@ -533,7 +593,7 @@ function seedLifecycleStage(projectRoot: string, stageId: string, report: object
   pass(`seeded lifecycle ${stageId}`);
 }
 
-function runYoloJson(projectRoot: string, label: string, args: string[], expected = [0]) {
+function runYoloJson<T extends YoloJsonResult = YoloJsonResult>(projectRoot: string, label: string, args: string[], expected = [0]): T {
   const yolo = installedYoloBin(projectRoot);
   const result = runChecked(label, yolo, args, {
     cwd: projectRoot,
@@ -545,7 +605,7 @@ function runYoloJson(projectRoot: string, label: string, args: string[], expecte
       ...(label === "yolo run" ? { YOLO_DEBUG_WORKTREE_NODE_MODULES: "1" } : {}),
     },
   });
-  const json = parseJsonOutput(result.stdout);
+  const json = parseJsonOutput<T>(result.stdout);
   const status = json.status || json.code || "unknown";
   log(`[transition] ${label} -> ${status}`);
   return json;
@@ -554,8 +614,8 @@ function runYoloJson(projectRoot: string, label: string, args: string[], expecte
 function assertLedgerProgress(projectRoot: string, runId: string) {
   const runsPath = join(projectRoot, ".yolo", "state", "runs.jsonl");
   const artifactsPath = join(projectRoot, ".yolo", "state", "artifacts.jsonl");
-  const runs = readJsonl(runsPath);
-  const artifacts = readJsonl(artifactsPath);
+  const runs = readJsonl<JsonRecord & { run_id?: string }>(runsPath);
+  const artifacts = readJsonl<JsonRecord & { event?: string }>(artifactsPath);
   assertCondition(runs.length > 0, "runs.jsonl has real ledger entries");
   assertCondition(runs.some((record) => record.run_id === runId), "runs.jsonl contains the packed smoke run_id");
   assertCondition(artifacts.length > 0, "artifacts.jsonl has real ledger entries");
@@ -598,13 +658,13 @@ function findGateArtifact(projectRoot: string, taskId: string) {
 function assertWorktreeNodeModulesBuildGate(projectRoot: string) {
   const gatePath = findGateArtifact(projectRoot, "TASK-PACKED-EXTERNAL-1");
   assertCondition(gatePath && existsSync(gatePath), "gate artifact exists for packed external task");
-  const gate = readJson(gatePath);
+  const gate = readJson<GateArtifact>(gatePath);
   const buildGate = (gate.gates || []).find((entry) => entry.name === "POST-BUILD");
   assertCondition(buildGate?.status === "pass", "POST-BUILD gate passed in the real worktree");
   assertCondition(String(buildGate.detail || "").includes("npm run build"), "POST-BUILD gate ran npm run build");
 }
 
-function assertAcceptanceUsedRunReport(acceptance: any, runReportPath: string) {
+function assertAcceptanceUsedRunReport(acceptance: AcceptanceReport, runReportPath: string) {
   const resolved = resolve(runReportPath);
   const artifacts = acceptance.artifact_integrity?.artifacts || [];
   const found = artifacts.some((artifact) => resolve(artifact.absolute_path || artifact.path || "") === resolved);
@@ -630,10 +690,10 @@ function seedAdapterEvidence(projectRoot: string) {
   assertCondition(existsSync(evidencePath), "packed smoke adapter evidence exists");
 }
 
-function assertDeliveryComplete(projectRoot: string, ship: any) {
+function assertDeliveryComplete(projectRoot: string, ship: DeliveryCommandResult) {
   assertCondition(ship.status === "success", "delivery command returned success");
   assertCondition(ship.ship?.status === "success", "delivery ship gate status is success");
-  const deliveryReport = readJson(join(projectRoot, ".yolo", "lifecycle", "delivery-report.json"));
+  const deliveryReport = readJson<DeliveryLifecycleReport>(join(projectRoot, ".yolo", "lifecycle", "delivery-report.json"));
   assertCondition(deliveryReport.status === "completed", "delivery lifecycle report is completed");
   assertCondition(deliveryReport.report?.status === "success", "delivery lifecycle report is not pending or fake green");
 }
@@ -665,7 +725,7 @@ async function runSmoke(argv = process.argv.slice(2)) {
       cwd: projectRoot,
       timeout: 120000,
     });
-    const initJson = parseJsonOutput(init.stdout);
+    const initJson = parseJsonOutput<YoloJsonResult>(init.stdout);
     assertCondition(initJson.status === "success", "installed yolo init succeeds outside the repository");
 
     const baseCommit = initGitRepository(projectRoot);
@@ -678,7 +738,7 @@ async function runSmoke(argv = process.argv.slice(2)) {
     const check = runYoloJson(projectRoot, "yolo check", ["check", prdPath, "--cwd", projectRoot, "--json"]);
     assertCondition(check.status === "pass", "check passed on approved external PRD");
 
-    const run = runYoloJson(projectRoot, "yolo run", [
+    const run = runYoloJson<YoloRunResult>(projectRoot, "yolo run", [
       "run",
       prdPath,
       "--cwd",
@@ -692,7 +752,7 @@ async function runSmoke(argv = process.argv.slice(2)) {
     assertCondition(Boolean(run.run_id), "run returned a run_id");
     const runReportPath = join(projectRoot, ".yolo", "state", "reports", run.run_id, "run-report.json");
     assertCondition(existsSync(runReportPath), "runner wrote the real state/reports/<run_id>/run-report.json");
-    const runReport = readJson(runReportPath);
+    const runReport = readJson<RunReport>(runReportPath);
     assertCondition(runReport.status === "success", "real run-report status is success");
 
     const targetPath = join(projectRoot, TARGET_FILE);
@@ -702,7 +762,7 @@ async function runSmoke(argv = process.argv.slice(2)) {
 
     const baselinePath = findTscBaseline(projectRoot);
     assertCondition(baselinePath && existsSync(baselinePath), "tsc baseline exists after runner startup/finalize archive");
-    assertCondition(readJson(baselinePath).meta?.status === "pass", "tsc baseline status is pass, not silent ENOENT");
+    assertCondition(readJson<TscBaseline>(baselinePath).meta?.status === "pass", "tsc baseline status is pass, not silent ENOENT");
     assertWorktreeNodeModulesBuildGate(projectRoot);
 
     const review = runYoloJson(projectRoot, "yolo review", ["review", TARGET_FILE, "--cwd", projectRoot, "--json"]);
@@ -722,7 +782,7 @@ async function runSmoke(argv = process.argv.slice(2)) {
     assertCondition(acceptance.status === "pass", "acceptance passed using explicit run-report");
     assertAcceptanceUsedRunReport(acceptance, runReportPath);
 
-    const prdAfter = readJson(prdPath);
+    const prdAfter = readJson<PackedPrd>(prdPath);
     assertCondition(prdAfter.demand?.approval?.effective_for_prd === true, "approval contract remains effective_for_prd=true after run");
 
     const ship = runYoloJson(projectRoot, "yolo release ship", ["release", "ship", prdPath, "--cwd", projectRoot, "--json"]);

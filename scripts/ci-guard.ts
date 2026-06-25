@@ -12,6 +12,11 @@ const WORKFLOW_DIR = resolve(ROOT, ".github", "workflows");
 const SOURCE_ROOTS = ["src", "lib", "bin", "scripts", ".github/workflows"];
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", ".yolo", ".yolo-worktrees"]);
 
+function hasErrorCode(error: unknown, code: string): boolean {
+  if ((typeof error !== "object" && typeof error !== "function") || error === null) return false;
+  return "code" in error && error.code === code;
+}
+
 function walk(relativeDir: string, files: string[] = []) {
   const absolute = resolve(ROOT, relativeDir);
   if (!existsSync(absolute)) return files;
@@ -35,8 +40,8 @@ function workflowFiles() {
 function readRepoTextIfPresent(file: string): string | null {
   try {
     return readFileSync(resolve(ROOT, file), "utf8");
-  } catch (error: any) {
-    if (error?.code === "ENOENT") return null;
+  } catch (error: unknown) {
+    if (hasErrorCode(error, "ENOENT")) return null;
     throw error;
   }
 }

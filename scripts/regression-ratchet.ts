@@ -48,6 +48,13 @@ function trimOutput(value: string | Buffer | null | undefined) {
   return `... truncated ...\n${text.slice(-4000)}`;
 }
 
+function errorMessage(error: unknown) {
+  if ((typeof error === "object" || typeof error === "function") && error !== null && "message" in error) {
+    return error.message;
+  }
+  return undefined;
+}
+
 function runNamedTest(entry: RegressionRatchetEntry) {
   const args = [
     "--import",
@@ -80,8 +87,8 @@ function validateEntry(entry: RegressionRatchetEntry, seenIds: Set<string>): Ent
   let pattern: RegExp;
   try {
     pattern = new RegExp(entry.test_name_pattern);
-  } catch (error: any) {
-    failures.push(`invalid test_name_pattern regex ${JSON.stringify(entry.test_name_pattern)}: ${error.message}`);
+  } catch (error: unknown) {
+    failures.push(`invalid test_name_pattern regex ${JSON.stringify(entry.test_name_pattern)}: ${errorMessage(error)}`);
     return { entry, failures };
   }
 

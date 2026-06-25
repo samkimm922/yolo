@@ -26,7 +26,79 @@ import { execSync } from 'node:child_process';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_DIR = resolve(__dirname, '..');
 
-const PRD_DIRS = [
+type MutableRecord = Record<string, unknown>;
+type PatternPredicate = (filename: string) => boolean;
+
+type ConditionRecord = MutableRecord & {
+  id?: string;
+  type?: string;
+  condition?: string;
+  evaluator?: string;
+  params?: MutableRecord;
+  file?: unknown;
+  text?: unknown;
+  pattern?: unknown;
+  severity?: string;
+};
+
+type TargetFileRecord = MutableRecord & {
+  file?: unknown;
+};
+
+type ConstraintRecord = MutableRecord & {
+  target_file?: string;
+  target_files?: Array<string | TargetFileRecord>;
+  max_files?: number;
+  max_lines?: number;
+  must_use?: unknown[];
+  must_not_use?: unknown[];
+  acceptance?: unknown[];
+};
+
+type ScopeRecord = MutableRecord & {
+  targets?: unknown[];
+  max_files?: unknown;
+  max_lines_per_file?: unknown;
+};
+
+type TaskRecord = MutableRecord & {
+  priority?: number | string;
+  type?: string;
+  task_kind?: string;
+  status?: string;
+  title?: string;
+  id?: string;
+  constraints?: ConstraintRecord;
+  scope?: ScopeRecord;
+  pre_conditions?: unknown[];
+  post_conditions?: unknown[];
+  acceptance?: unknown[];
+  acceptance_criteria?: unknown[];
+};
+
+type PrdDocument = MutableRecord & {
+  $schema?: string;
+  version?: string;
+  id?: string;
+  title?: unknown;
+  project?: MutableRecord & { name?: string; language?: string };
+  generated_by?: string;
+  generated_at?: string;
+  base_commit?: string;
+  findings?: unknown;
+  tasks?: TaskRecord[];
+};
+
+type MigrationResult = {
+  file: string;
+  ok: boolean;
+  error?: string;
+  skip?: boolean;
+  reason?: string;
+  migrated?: boolean;
+};
+
+const PRD_DIRS: Array<{ dir: string; pattern: PatternPredicate }> = [
   { dir: resolve(YOLO_DIR, 'data'),        pattern: (f) => f.startsWith('prd-') && f.endsWith('.json') },
   { dir: resolve(YOLO_DIR, 'closed-loop'), pattern: (f) => (f.startsWith('bugfix-prd-') || f.endsWith('-prd.json')) && f.endsWith('.json') },
 ];
@@ -37,8 +109,8 @@ try { baseCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf8', cw
 
 // ── 合法枚举值 ──
 const VALID_GENERATED_BY = ['human', 'code-review-agent', 'security-review-agent', 'yolo-review-agent', 'other'];
-const PRIORITY_MAP = { 0: 'P0', 1: 'P1', 2: 'P2', 3: 'P3' };
-const TASK_KIND_TO_TYPE = {
+const PRIORITY_MAP: Record<number, string> = { 0: 'P0', 1: 'P1', 2: 'P2', 3: 'P3' };
+const TASK_KIND_TO_TYPE: Record<string, string> = {
   mechanical: 'bugfix',
   atomic_fix: 'bugfix',
   atomic_feature: 'feature',
@@ -47,7 +119,7 @@ const TASK_KIND_TO_TYPE = {
 };
 
 // 旧 evaluator 名 → 新 condition type
-const CONDITION_TYPE_MAP = {
+const CONDITION_TYPE_MAP: Record<string, string> = {
   'line_count': 'file_lines_max',
   'code_line_count': 'file_lines_max',
   'file_line_count': 'file_lines_max',
@@ -55,18 +127,21 @@ const CONDITION_TYPE_MAP = {
   'max_lines': 'file_lines_max',
   'condition': 'code_contains', // fallback
 };
+const VALID_PRIORITIES: readonly unknown[] = ['P0', 'P1', 'P2', 'P3'];
+const VALID_TASK_TYPES: readonly unknown[] = ['bugfix', 'feature', 'refactor', 'cleanup', 'security'];
+const VALID_TASK_STATUSES: readonly unknown[] = ['pending', 'completed', 'invalid', 'skipped', 'stuck', 'failed', 'merged_into'];
 
 // ── ID 生成 ──
 let idCounter = 0;
 function nextId() { idCounter++; return idCounter; }
 
-function genPrdId(filename) {
+function genPrdId(filename: string) {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const stem = filename.replace('.json', '').replace(/^prd-/, '').replace(/[^A-Z0-9]/g, '-').toUpperCase().slice(0, 20);
   return `PRD-${dateStr}-${stem}-${nextId()}`;
 }
 
-function genTaskId(existingId, type) {
+function genTaskId(existingId: string | undefined, type: string | undefined) {
   // 尝试修复已有 ID
   if (existingId && /^[A-Z]+-[A-Z0-9-]+-[0-9]+$/.test(existingId)) return existingId;
 
@@ -95,17 +170,28 @@ function genTaskId(existingId, type) {
   return `${prefix}-TASK-${String(nextId()).padStart(3, '0')}`;
 }
 
-function genConditionId(role, localId, index) {
+function genConditionId(role: string, localId: string | undefined, index: number) {
   if (localId && /^(PRE|POST|AUTO)-[A-Z0-9_-]+$/.test(localId)) return localId;
   const num = localId ? localId.replace(/[^0-9]/g, '') || String(index + 1) : String(index + 1);
   return `${role}-${num}`;
 }
 
-// ── 条件格式修复：condition+evaluator → type+params ──
-function fixConditionFormat(cond, role, index) {
-  if (!cond || typeof cond !== 'object') return cond;
+function isObjectRecord(value: unknown): value is MutableRecord {
+  return typeof value === 'object' && value !== null;
+}
 
-  const fixed = { ...cond };
+function errorMessage(error: unknown) {
+  if ((typeof error === 'object' || typeof error === 'function') && error !== null && 'message' in error) {
+    return error.message;
+  }
+  return undefined;
+}
+
+// ── 条件格式修复：condition+evaluator → type+params ──
+function fixConditionFormat(cond: unknown, role: string, index: number) {
+  if (!isObjectRecord(cond)) return cond;
+
+  const fixed: ConditionRecord = { ...cond };
 
   // 修复 id
   fixed.id = genConditionId(role, fixed.id, index);
@@ -130,11 +216,12 @@ function fixConditionFormat(cond, role, index) {
 
   // 确保 params 存在
   if (!fixed.params) {
-    fixed.params = Object();
+    const params: MutableRecord = Object();
+    fixed.params = params;
     // 从旧字段迁移 common params
-    if (fixed.file) { fixed.params.file = fixed.file; delete fixed.file; }
-    if (fixed.text) { fixed.params.text = fixed.text; delete fixed.text; }
-    if (fixed.pattern) { fixed.params.pattern = fixed.pattern; delete fixed.pattern; }
+    if (fixed.file) { params.file = fixed.file; delete fixed.file; }
+    if (fixed.text) { params.text = fixed.text; delete fixed.text; }
+    if (fixed.pattern) { params.pattern = fixed.pattern; delete fixed.pattern; }
   }
 
   // 确保 severity
@@ -150,14 +237,14 @@ function fixConditionFormat(cond, role, index) {
 }
 
 // ── constraints → scope + pre/post_conditions ──
-function convertConstraints(task) {
+function convertConstraints(task: TaskRecord) {
   if (!task.constraints) return task;
 
   const c = task.constraints;
 
   // scope
   if (!task.scope) {
-    const targets = [];
+    const targets: Array<{ file: unknown }> = [];
     if (c.target_file) {
       targets.push({ file: c.target_file });
     }
@@ -175,9 +262,10 @@ function convertConstraints(task) {
 
   // must_use → post_conditions
   if (c.must_use && Array.isArray(c.must_use) && c.must_use.length > 0) {
-    task.post_conditions = task.post_conditions || [];
+    const postConditions = task.post_conditions || [];
+    task.post_conditions = postConditions;
     c.must_use.forEach((pattern, i) => {
-      task.post_conditions.push({
+      postConditions.push({
         id: `POST-MUST-${i + 1}`,
         type: 'code_contains',
         params: { text: pattern, file: c.target_file || '' },
@@ -188,9 +276,10 @@ function convertConstraints(task) {
 
   // must_not_use → pre_conditions (should NOT be there before fix)
   if (c.must_not_use && Array.isArray(c.must_not_use) && c.must_not_use.length > 0) {
-    task.pre_conditions = task.pre_conditions || [];
+    const preConditions = task.pre_conditions || [];
+    task.pre_conditions = preConditions;
     c.must_not_use.forEach((pattern, i) => {
-      task.pre_conditions.push({
+      preConditions.push({
         id: `PRE-MUSTNOT-${i + 1}`,
         type: 'code_not_contains',
         params: { text: pattern, file: c.target_file || '' },
@@ -217,12 +306,12 @@ function convertConstraints(task) {
 }
 
 // ── 修复单个 task ──
-function fixTask(task) {
+function fixTask(task: TaskRecord) {
   // priority: 数字→字符串
   if (typeof task.priority === 'number') {
     task.priority = PRIORITY_MAP[task.priority] || 'P2';
   }
-  if (!task.priority || !['P0', 'P1', 'P2', 'P3'].includes(task.priority)) {
+  if (!task.priority || !VALID_PRIORITIES.includes(task.priority)) {
     task.priority = 'P2';
   }
 
@@ -234,13 +323,13 @@ function fixTask(task) {
       task.type = 'bugfix';
     }
   }
-  if (!['bugfix', 'feature', 'refactor', 'cleanup', 'security'].includes(task.type)) {
+  if (!VALID_TASK_TYPES.includes(task.type)) {
     task.type = 'bugfix';
   }
 
   // status
   if (task.status === 'done') task.status = 'completed';
-  if (!task.status || !['pending', 'completed', 'invalid', 'skipped', 'stuck', 'failed', 'merged_into'].includes(task.status)) {
+  if (!task.status || !VALID_TASK_STATUSES.includes(task.status)) {
     task.status = 'pending';
   }
 
@@ -302,12 +391,12 @@ function fixTask(task) {
 }
 
 // ── 迁移单个文件 ──
-function migrateFile(filePath, fileName) {
-  let prd;
+function migrateFile(filePath: string, fileName: string): MigrationResult {
+  let prd: PrdDocument | TaskRecord[];
   try {
-    prd = JSON.parse(readFileSync(filePath, 'utf8'));
+    prd = JSON.parse(readFileSync(filePath, 'utf8')) as PrdDocument | TaskRecord[];
   } catch (e) {
-    return { file: fileName, ok: false, error: `JSON 解析失败: ${e.message}` };
+    return { file: fileName, ok: false, error: `JSON 解析失败: ${errorMessage(e)}` };
   }
 
   // 1. 裸数组 → 包装
