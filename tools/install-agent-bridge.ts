@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveWithinRoot } from "../src/lib/security/path-guard.js";
+import type { YoloCommand } from "../src/workflows/command-registry.js";
 import {
   getYoloCommand,
   listYoloCommands,
@@ -15,19 +16,106 @@ const DEFAULT_YOLO_ROOT = resolve(__dirname, "..");
 const BRIDGE_START = "<!-- yolo-agent-bridge:start -->";
 const BRIDGE_END = "<!-- yolo-agent-bridge:end -->";
 
-function unique(values) {
+/** A YOLO-owned artifact that install-agent-bridge writes to disk.
+ *  Carries an index signature so it stays structurally assignable to the
+ *  ReleaseRecord-based plan types consumed by the release dogfood pack.
+ *  Exported so downstream modules can name the return type of the plan/result. */
+export interface BridgeArtifact {
+  target: string;
+  scope: string;
+  path: string;
+  relative_path: string;
+  role: string;
+  command?: string;
+  content: string;
+  [key: string]: unknown;
+}
+
+/** Options accepted by install-agent-bridge entrypoints (CLI + SDK). */
+interface AgentBridgeOptions {
+  projectRoot?: string | null;
+  project_root?: string;
+  cwd?: string;
+  yoloRoot?: string;
+  yolo_root?: string;
+  homeDir?: string;
+  home_dir?: string;
+  // SDK/dogfood callers pass loosely-typed values here; the runtime helpers
+  // (normalizeAgentTargets/normalizeInstallScopes/asScopes) coerce via String().
+  targets?: unknown;
+  scopes?: unknown;
+  scope?: unknown;
+  installScope?: unknown;
+  install_scope?: unknown;
+  commands?: unknown;
+  // installCommands is a pass-through field some SDK callers carry; it is not
+  // consumed here but the original Object() default accepted it, so declare it.
+  installCommands?: unknown;
+  dryRun?: boolean;
+  dry_run?: boolean;
+  force?: boolean;
+  help?: boolean;
+}
+
+/** Parsed argv options produced by parseAgentBridgeArgs. */
+interface ParsedAgentBridgeArgs {
+  projectRoot: string;
+  yoloRoot: string;
+  homeDir: string;
+  targets: string[];
+  scopes: string[];
+  commands: boolean;
+  dryRun: boolean;
+  force: boolean;
+  help: boolean;
+}
+
+interface BridgeBuilderOptions {
+  agent?: string;
+  yoloRoot?: string;
+}
+
+interface SlashCommandBuilderOptions {
+  yoloRoot?: string;
+}
+
+interface NativeSkillFileParams {
+  projectRoot: string;
+  homeDir: string;
+  target: string;
+  scope: string;
+  yoloRoot: string;
+}
+
+interface WritePlainArtifactParams {
+  file: BridgeArtifact;
+  dryRun: boolean;
+  force: boolean;
+  written: string[];
+  planned: string[];
+  overwritten: string[];
+  skipped: string[];
+}
+
+interface BridgeManifest {
+  schema: string;
+  generated_at?: string;
+  entries: string[];
+}
+
+function unique(values: string[]): string[] {
   return [...new Set(values)].map(String);
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function parseList(value) {
+function parseList(value: unknown): string[] {
   return clean(value).split(",").map((item) => clean(item).toLowerCase()).filter(Boolean);
 }
 
-export function normalizeAgentTargets(value = "both") {
+export function normalizeAgentTargets(value: unknown = "both"): string[] {
   const targets = parseList(value || "both");
   const expanded = targets.flatMap((target) => target === "both" ? ["codex", "claude"] : [target]);
   const normalized = unique(expanded);
@@ -38,7 +126,7 @@ export function normalizeAgentTargets(value = "both") {
   return normalized.length > 0 ? normalized : ["codex", "claude"];
 }
 
-export function normalizeInstallScopes(value = "project") {
+export function normalizeInstallScopes(value: unknown = "project"): string[] {
   const scopes = parseList(value || "project");
   const expanded = scopes.flatMap((scope) => scope === "both" ? ["project", "user"] : [scope]);
   const normalized = unique(expanded);
@@ -50,14 +138,24 @@ export function normalizeInstallScopes(value = "project") {
   return normalized.length > 0 ? normalized : ["project"];
 }
 
-function readArgValue(argv, index, prefix) {
+function readArgValue(argv: string[], index: number, prefix: string): { value: string; consumed: number } {
   const arg = argv[index];
   if (arg.includes("=")) return { value: arg.slice(prefix.length + 1), consumed: 0 };
   return { value: argv[index + 1], consumed: 1 };
 }
 
-export function parseAgentBridgeArgs(argv = process.argv.slice(2)) {
-  const options = {
+export function parseAgentBridgeArgs(argv: string[] = process.argv.slice(2)): ParsedAgentBridgeArgs {
+  const options: {
+    projectRoot: string | null;
+    yoloRoot: string;
+    homeDir: string;
+    targets: string[];
+    scopes: string[];
+    commands: boolean;
+    dryRun: boolean;
+    force: boolean;
+    help: boolean;
+  } = {
     projectRoot: null,
     yoloRoot: DEFAULT_YOLO_ROOT,
     homeDir: homedir(),
@@ -108,10 +206,10 @@ export function parseAgentBridgeArgs(argv = process.argv.slice(2)) {
   options.projectRoot = resolve(options.projectRoot || process.cwd());
   options.yoloRoot = resolve(options.yoloRoot || DEFAULT_YOLO_ROOT);
   options.homeDir = resolve(options.homeDir || homedir());
-  return options;
+  return options as ParsedAgentBridgeArgs;
 }
 
-export function buildAgentBridgeBlock({ agent, yoloRoot = DEFAULT_YOLO_ROOT } = Object()) {
+export function buildAgentBridgeBlock({ agent, yoloRoot = DEFAULT_YOLO_ROOT }: BridgeBuilderOptions = Object()) {
   const label = agent === "claude" ? "Claude Code" : "Codex";
   return [
     BRIDGE_START,
@@ -152,7 +250,7 @@ export function buildAgentBridgeBlock({ agent, yoloRoot = DEFAULT_YOLO_ROOT } = 
   ].join("\n");
 }
 
-export function mergeAgentBridgeBlock(existing = "", block = "") {
+export function mergeAgentBridgeBlock(existing: string = "", block: string = "") {
   if (!existing.trim()) return `${block.trimEnd()}\n`;
   const start = existing.indexOf(BRIDGE_START);
   const end = existing.indexOf(BRIDGE_END);
@@ -164,76 +262,86 @@ export function mergeAgentBridgeBlock(existing = "", block = "") {
   return `${existing.trimEnd()}\n\n${block.trimEnd()}\n`;
 }
 
-function instructionFileFor(projectRoot, target) {
+function instructionFileFor(projectRoot: string, target: string): string {
   return join(projectRoot, target === "claude" ? "CLAUDE.md" : "AGENTS.md");
 }
 
-function relativeToProject(projectRoot, path) {
+function relativeToProject(projectRoot: string, path: string): string {
   return path.startsWith(projectRoot) ? path.slice(projectRoot.length + 1) : path;
 }
 
-function relativeToBase(baseDir, path) {
+function relativeToBase(baseDir: string, path: string): string {
   return path.startsWith(baseDir) ? path.slice(baseDir.length + 1) : path;
 }
 
-function displayRelativePath(baseDir, path, scope) {
+function displayRelativePath(baseDir: string, path: string, scope: string): string {
   const relativePath = relativeToBase(baseDir, path);
   return scope === "user" ? `~/${relativePath}` : relativePath;
 }
 
-function asScopes(options = Object()) {
-  if (Array.isArray(options.scopes)) return options.scopes;
+function asScopes(options: AgentBridgeOptions = Object()): string[] {
+  if (Array.isArray(options.scopes)) return options.scopes.map((scope) => String(scope));
   return normalizeInstallScopes(options.scope || options.installScope || options.install_scope || "project");
 }
 
-function commandDefinitions() {
+function commandDefinitions(): YoloCommand[] {
   return listYoloCommands({ recommended: true });
 }
 
-function renderCommandUsage(commandInput) {
+function renderCommandUsage(commandInput: string | { name: string }): string {
   return renderYoloCommandUsage(commandInput);
 }
 
-function primarySlashNameForCommand(command = Object()) {
+function primarySlashNameForCommand(command: YoloCommand = Object()): string {
   if (command.stability === "stable") return `yolo-${command.name}`;
   if (String(command.name || "").startsWith("yolo-")) return command.name;
   return `yolo-${command.name}`;
 }
 
-function isDemandCompatibilityAlias(command = Object()) {
-  return command.alias_for === "demand"
-    && command.stability === "compat"
-    && Boolean(command.demand_stage || command.demand_mode);
+// demand_stage/demand_mode are optional runtime fields carried by demand
+// compatibility aliases; YoloCommand does not declare them statically, so read
+// them via a Record narrowing to preserve the existing lookup behavior.
+function commandExtra(command: YoloCommand): Record<string, unknown> {
+  return command as Record<string, unknown>;
 }
 
-function isDemandHostCommand(command = Object()) {
+function isDemandCompatibilityAlias(command: YoloCommand = Object()): boolean {
+  const extra = commandExtra(command);
+  return command.alias_for === "demand"
+    && command.stability === "compat"
+    && Boolean(extra.demand_stage || extra.demand_mode);
+}
+
+function isDemandHostCommand(command: YoloCommand = Object()): boolean {
   return command.name === "demand" || isDemandCompatibilityAlias(command);
 }
 
-function demandAliasSlashRoute(command = Object()) {
+function demandAliasSlashRoute(command: YoloCommand = Object()): string {
   if (!isDemandCompatibilityAlias(command)) return "";
-  if (command.demand_mode) return `/yolo-demand --mode ${command.demand_mode}`;
-  return `/yolo-demand --stage ${command.demand_stage || command.mode}`;
+  const extra = commandExtra(command);
+  if (extra.demand_mode) return `/yolo-demand --mode ${extra.demand_mode}`;
+  return `/yolo-demand --stage ${extra.demand_stage || command.mode}`;
 }
 
-function demandAliasRoute(command = Object()) {
+function demandAliasRoute(command: YoloCommand = Object()): string {
   if (!isDemandCompatibilityAlias(command)) return "";
-  if (command.demand_mode) return `yolo demand --mode ${command.demand_mode}`;
-  return `yolo demand --stage ${command.demand_stage || command.mode}`;
+  const extra = commandExtra(command);
+  if (extra.demand_mode) return `yolo demand --mode ${extra.demand_mode}`;
+  return `yolo demand --stage ${extra.demand_stage || command.mode}`;
 }
 
-function compatibilityAliasRoute(command = Object()) {
+function compatibilityAliasRoute(command: YoloCommand = Object()): string {
   if (isDemandCompatibilityAlias(command)) return demandAliasRoute(command);
   return command.usage || "";
 }
 
-function isWriteCommand(command = Object()) {
+function isWriteCommand(command: YoloCommand = Object()): boolean {
   return command.writes_code === true
     || ["run", "fix", "runner", "init", "setup", "install"].includes(command.name)
     || ["run", "fix", "runner", "init", "setup", "install"].includes(command.mode);
 }
 
-function allowedToolsForCommand(command = Object()) {
+function allowedToolsForCommand(command: YoloCommand = Object()): string[] {
   const tools = ["Read", "Bash", "Glob", "Grep"];
   if (isWriteCommand(command)) {
     tools.push("Edit", "Write");
@@ -241,7 +349,7 @@ function allowedToolsForCommand(command = Object()) {
   return tools.map((tool) => `  - ${tool}`);
 }
 
-function stageStopRule(command = Object()) {
+function stageStopRule(command: YoloCommand = Object()): string {
   if (command.name === "demand") {
     return "- `/yolo-demand` is the unified demand-stage interview host. Route internally between brainstorm, interview, discover, discuss, office-hours, status, evidence dispatch, and spec-readiness. If slots are missing, ask exactly one `next_question` and stop; do not enter `/yolo-spec` in the same response.";
   }
@@ -257,7 +365,7 @@ function stageStopRule(command = Object()) {
   return "- Stage stop: complete only this command's stage, then stop with artifacts, blockers, and the next recommended `/yolo-*` command. Do not advance to tasks, spec, check, run, fix, or source-code edits in the same response.";
 }
 
-function demandHostRules(command = Object()) {
+function demandHostRules(command: YoloCommand = Object()): string[] {
   if (!isDemandHostCommand(command)) return [];
   return [
     "- Demand host default: run one-question mode. If required slots are missing, return exactly one `next_question` and wait for the user's answer.",
@@ -267,7 +375,7 @@ function demandHostRules(command = Object()) {
   ];
 }
 
-function executionApprovalRule(command = Object()) {
+function executionApprovalRule(command: YoloCommand = Object()): string {
   if (isWriteCommand(command)) {
     return "- Execution approval must be current and specific to this run/fix scope.";
   }
@@ -277,7 +385,7 @@ function executionApprovalRule(command = Object()) {
 // BUG-2: bare /yolo router — status-first entry point.
 // No args → run yolo-status, follow guard recommendation.
 // Freeform args → dispatch by intent to demand/auto/ship/status.
-export function buildBareYoloSlashCommand({ yoloRoot = DEFAULT_YOLO_ROOT } = Object()) {
+export function buildBareYoloSlashCommand({ yoloRoot = DEFAULT_YOLO_ROOT }: SlashCommandBuilderOptions = Object()) {
   const statusCommand = getYoloCommand("status");
   return [
     "---",
@@ -319,7 +427,7 @@ export function buildBareYoloSlashCommand({ yoloRoot = DEFAULT_YOLO_ROOT } = Obj
   ].join("\n");
 }
 
-export function buildClaudeSlashCommand(commandName, { yoloRoot = DEFAULT_YOLO_ROOT } = Object()) {
+export function buildClaudeSlashCommand(commandName: string, { yoloRoot = DEFAULT_YOLO_ROOT }: SlashCommandBuilderOptions = Object()) {
   const command = getYoloCommand(commandName);
 
   return [
@@ -367,8 +475,8 @@ export function buildClaudeSlashCommand(commandName, { yoloRoot = DEFAULT_YOLO_R
   ].join("\n");
 }
 
-function codexMenuDescription(command = Object()) {
-  const descriptions = {
+function codexMenuDescription(command: YoloCommand = Object()): string {
+  const descriptions: Record<string, string> = {
     demand: "统一需求访谈主持入口：缺槽位时 one-question 只问一个 next_question；不输出大段建议、不进 PRD、不改代码。",
     auto: "全自动执行 YOLO 流水线：需求澄清 \u2192 spec \u2192 check \u2192 实现 \u2192 review \u2192 交付；各阶段独立 gate。",
     ship: "交付判断：在 spec、gate、证据和 review 全部通过前，fail closed 阻止发布。",
@@ -383,7 +491,7 @@ function codexMenuDescription(command = Object()) {
   return descriptions[command.name] || command.description || "";
 }
 
-export function buildYoloNativeSkill({ agent = "codex", yoloRoot = DEFAULT_YOLO_ROOT } = Object()) {
+export function buildYoloNativeSkill({ agent = "codex", yoloRoot = DEFAULT_YOLO_ROOT }: BridgeBuilderOptions = Object()) {
   const label = agent === "claude" ? "Claude Code" : "Codex";
   const recommendedCommands = listYoloCommands({ recommended: true });
   const demandAliases = listYoloCommands({ compatibilityAliases: true })
@@ -448,7 +556,7 @@ export function buildYoloNativeSkill({ agent = "codex", yoloRoot = DEFAULT_YOLO_
   ].join("\n");
 }
 
-export function buildCodexSourceCommandSkill(commandName, { yoloRoot = DEFAULT_YOLO_ROOT } = Object()) {
+export function buildCodexSourceCommandSkill(commandName: string, { yoloRoot = DEFAULT_YOLO_ROOT }: SlashCommandBuilderOptions = Object()) {
   const command = getYoloCommand(commandName);
   const aliases = commandName === "yolo"
     ? "`/yolo`, `/yolo status`, `/yolo demand`, `/yolo tasks`, `/yolo check`, `/yolo run`, or `/yolo review`"
@@ -501,7 +609,7 @@ export function buildCodexSourceCommandSkill(commandName, { yoloRoot = DEFAULT_Y
   ].join("\n");
 }
 
-export function buildCodexSlashCommandSkill(commandName, { yoloRoot = DEFAULT_YOLO_ROOT } = Object()) {
+export function buildCodexSlashCommandSkill(commandName: string, { yoloRoot = DEFAULT_YOLO_ROOT }: SlashCommandBuilderOptions = Object()) {
   const command = getYoloCommand(commandName);
   return [
     "---",
@@ -554,7 +662,7 @@ export function buildCodexSlashCommandSkill(commandName, { yoloRoot = DEFAULT_YO
   ].join("\n");
 }
 
-function nativeSkillFile({ projectRoot, homeDir, target, scope, yoloRoot }) {
+function nativeSkillFile({ projectRoot, homeDir, target, scope, yoloRoot }: NativeSkillFileParams): BridgeArtifact {
   const baseDir = scope === "user" ? homeDir : projectRoot;
   const path = target === "claude"
     ? join(baseDir, scope === "user" ? ".claude/skills/yolo/SKILL.md" : ".claude/skills/yolo/SKILL.md")
@@ -569,7 +677,7 @@ function nativeSkillFile({ projectRoot, homeDir, target, scope, yoloRoot }) {
   };
 }
 
-function writePlainArtifact({ file, dryRun, force, written, planned, overwritten, skipped }) {
+function writePlainArtifact({ file, dryRun, force, written, planned, overwritten, skipped }: WritePlainArtifactParams): void {
   if (dryRun) {
     planned.push(file.relative_path);
     return;
@@ -589,7 +697,7 @@ function writePlainArtifact({ file, dryRun, force, written, planned, overwritten
 
 const MAX_INSTALL_FILE_COUNT = 12;
 
-export function buildAgentBridgeInstallPlan(options = Object()) {
+export function buildAgentBridgeInstallPlan(options: AgentBridgeOptions = Object()) {
   const projectRoot = resolve(options.projectRoot || process.cwd());
   const yoloRoot = resolve(options.yoloRoot || DEFAULT_YOLO_ROOT);
   const homeDir = resolve(options.homeDir || options.home_dir || homedir());
@@ -679,7 +787,9 @@ export function buildAgentBridgeInstallPlan(options = Object()) {
   };
 }
 
-function buildClaudeProjectSettings({ yoloRoot }) {
+type AgentBridgeInstallPlan = ReturnType<typeof buildAgentBridgeInstallPlan>;
+
+function buildClaudeProjectSettings({ yoloRoot = DEFAULT_YOLO_ROOT }: { yoloRoot?: string }): string {
   // yoloRoot is the package root when run from source (repo/) but the dist dir
   // when run from the built CLI (repo/dist/), because DEFAULT_YOLO_ROOT =
   // resolve(__dirname, "..") differs between source and build. Resolve to the
@@ -715,22 +825,24 @@ function buildClaudeProjectSettings({ yoloRoot }) {
 // BUG-3: manifest-based reconcile — track yolo-owned files and clean up orphans on upgrade.
 const MANIFEST_FILENAME = ".yolo-bridge-manifest.json";
 
-function manifestPathForBaseDir(baseDir) {
+function manifestPathForBaseDir(baseDir: string): string {
   return join(baseDir, MANIFEST_FILENAME);
 }
 
-function readYoloBridgeManifest(baseDir) {
+function readYoloBridgeManifest(baseDir: string): BridgeManifest | null {
   const path = manifestPathForBaseDir(baseDir);
   if (!existsSync(path)) return null;
   try {
-    const data = JSON.parse(readFileSync(path, "utf8"));
-    if (data && Array.isArray(data.entries)) return data;
+    const data = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    if (data && typeof data === "object" && Array.isArray((data as Record<string, unknown>).entries)) {
+      return data as BridgeManifest;
+    }
   } catch { /* corrupt manifest → treat as no manifest */ }
   return null;
 }
 
-function buildManifestEntriesForScope(plan, scope, baseDir) {
-  const entries = [];
+function buildManifestEntriesForScope(plan: AgentBridgeInstallPlan, scope: string, baseDir: string): string[] {
+  const entries: string[] = [];
   for (const file of [...plan.native_skill_files, ...plan.claude_slash_commands]) {
     if (file.scope !== scope) continue;
     entries.push(relativeToBase(baseDir, file.path));
@@ -738,14 +850,23 @@ function buildManifestEntriesForScope(plan, scope, baseDir) {
   return entries;
 }
 
-function isYoloManagedManifestEntry(entry) {
+function isYoloManagedManifestEntry(entry: string): boolean {
   return (entry.startsWith(".claude/commands/") && entry.endsWith(".md"))
     || entry.startsWith(".claude/skills/yolo/")
     || entry.startsWith(".codex/skills/yolo/")
     || entry.startsWith(".agents/skills/yolo/");
 }
 
-function resolveManifestEntryForDeletion(baseDir, entry) {
+interface ManifestDeletionResolution {
+  ok: boolean;
+  path?: string;
+  reason?: string;
+}
+
+function resolveManifestEntryForDeletion(
+  baseDir: string,
+  entry: unknown,
+): ManifestDeletionResolution {
   const value = typeof entry === "string" ? entry : "";
   if (!value) return { ok: false, reason: "invalid_entry" };
   if (value.includes("\0")) return { ok: false, reason: "null_byte" };
@@ -759,15 +880,15 @@ function resolveManifestEntryForDeletion(baseDir, entry) {
   return { ok: true, path: resolved.path };
 }
 
-export function installAgentBridge(options = Object()) {
+export function installAgentBridge(options: AgentBridgeOptions = Object()) {
   const plan = buildAgentBridgeInstallPlan(options);
   const dryRun = options.dryRun === true || options.dry_run === true;
   const force = options.force === true;
-  const written = [];
-  const planned = [];
-  const skipped = [];
-  const overwritten = [];
-  const reconciled = [];
+  const written: string[] = [];
+  const planned: string[] = [];
+  const skipped: string[] = [];
+  const overwritten: string[] = [];
+  const reconciled: string[] = [];
 
   // BUG-3: reconcile — delete orphaned yolo entries from previous manifest before writing new files.
   for (const scope of plan.scopes) {
@@ -783,7 +904,7 @@ export function installAgentBridge(options = Object()) {
         continue;
       }
       const orphanPath = resolved.path;
-      if (!existsSync(orphanPath)) continue;
+      if (!orphanPath || !existsSync(orphanPath)) continue;
       if (dryRun) {
         planned.push(`[reconcile] ${entry}`);
       } else {
