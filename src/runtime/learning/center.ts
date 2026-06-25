@@ -10,15 +10,76 @@ import { dirname, join, relative, resolve } from "node:path";
 
 export const LEARNING_CENTER_SCHEMA_VERSION = "1.0";
 
-function toPosix(path) {
+/** A loose JSON record, used for external input/options coming from callers/tests. */
+type JsonRecord = Record<string, unknown>;
+
+/** Narrows an unknown value to a JSON record (non-null, non-array object). */
+function isRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** A parsed JSONL line; either a valid JSON object or a malformed-line marker. */
+interface JsonlRecord extends JsonRecord {
+  parse_error?: boolean;
+  raw?: string;
+}
+
+/** The deterministic fingerprint embedded in every learning record. */
+interface LearningFingerprint extends JsonRecord {
+  type: string;
+  gate: string;
+  files: string[];
+  directories: string[];
+  error_codes: string[];
+  risk_patterns: string[];
+  task_type: string;
+}
+
+/** A normalized learning record as written to the learning ledger. */
+export interface LearningRecord extends JsonRecord {
+  schema_version: string;
+  id: string;
+  ts: string;
+  type: string;
+  source: string;
+  status: string;
+  confidence: number;
+  task_id: string;
+  gate: string;
+  lesson: string;
+  prevention: string;
+  fingerprint: LearningFingerprint;
+  fingerprint_key: string;
+  occurrence_count: number;
+  evidence_refs: string[];
+  tags: string[];
+  legacy_source: string;
+  legacy_id: string;
+}
+
+/** Resolved filesystem paths used by the learning center. */
+export interface LearningPaths extends JsonRecord {
+  projectRoot: string;
+  packageMode: boolean;
+  stateRoot: string;
+  stateDir: string;
+  memoryDir: string;
+  learningFile: string;
+  legacyKnowledgeFile: string;
+  legacyLessonsFile: string;
+  legacyRedTeamFile: string;
+  learnedRulesFile: string;
+}
+
+function toPosix(path: unknown): string {
   return String(path || "").replaceAll("\\", "/");
 }
 
-function rel(root, file) {
+function rel(root: string, file: string): string {
   return toPosix(relative(root, file));
 }
 
-function readText(filePath) {
+function readText(filePath: string): string {
   try {
     return readFileSync(filePath, "utf8");
   } catch {
@@ -26,7 +87,7 @@ function readText(filePath) {
   }
 }
 
-function readJson(filePath, fallback = null) {
+function readJson(filePath: string, fallback: unknown = null): unknown {
   try {
     return JSON.parse(readFileSync(filePath, "utf8"));
   } catch {
@@ -34,10 +95,10 @@ function readJson(filePath, fallback = null) {
   }
 }
 
-function readJsonl(filePath) {
+function readJsonl(filePath: string): unknown[] {
   const text = readText(filePath);
   if (!text.trim()) return [];
-  const records = [];
+  const records: unknown[] = [];
   for (const line of text.split("\n").filter(Boolean)) {
     try {
       records.push(JSON.parse(line));
@@ -48,50 +109,51 @@ function readJsonl(filePath) {
   return records;
 }
 
-function stableJson(value) {
+function stableJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function hashId(value) {
+function hashId(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 }
 
-function isYoloPackageRoot(projectRoot) {
-  const pkg = readJson(join(projectRoot, "package.json"), {});
+function isYoloPackageRoot(projectRoot: string): boolean {
+  const pkg = readJson(join(projectRoot, "package.json"), {}) as JsonRecord | null;
   return pkg?.name === "yolo" && existsSync(join(projectRoot, "src/runtime"));
 }
 
-export function resolveLearningPaths(options = Object()) {
-  const projectRoot = resolve(options.projectRoot || options.yoloRoot || options.cwd || process.cwd());
-  const packageMode = options.packageMode ?? isYoloPackageRoot(projectRoot);
-  const stateRoot = resolve(options.stateRoot || options.state_root || (packageMode ? projectRoot : join(projectRoot, ".yolo")));
-  const stateDir = resolve(options.stateDir || options.state_dir || join(stateRoot, "state"));
-  const memoryDir = resolve(options.memoryDir || options.memory_dir || (packageMode ? join(projectRoot, "docs/memory") : join(stateRoot, "memory")));
+export function resolveLearningPaths(options: JsonRecord = Object()): LearningPaths {
+  const projectRoot = resolve(String(options.projectRoot || options.yoloRoot || options.cwd || process.cwd()));
+  const explicitPackageMode = options.packageMode;
+  const packageMode: boolean = explicitPackageMode === undefined ? isYoloPackageRoot(projectRoot) : Boolean(explicitPackageMode);
+  const stateRoot = resolve(String(options.stateRoot || options.state_root || (packageMode ? projectRoot : join(projectRoot, ".yolo"))));
+  const stateDir = resolve(String(options.stateDir || options.state_dir || join(stateRoot, "state")));
+  const memoryDir = resolve(String(options.memoryDir || options.memory_dir || (packageMode ? join(projectRoot, "docs/memory") : join(stateRoot, "memory"))));
   return {
     projectRoot,
     packageMode,
     stateRoot,
     stateDir,
     memoryDir,
-    learningFile: resolve(options.learningFile || options.learning_file || join(stateDir, "learning.jsonl")),
-    legacyKnowledgeFile: resolve(options.legacyKnowledgeFile || join(projectRoot, "closed-loop/knowledge-base.jsonl")),
-    legacyLessonsFile: resolve(options.legacyLessonsFile || join(projectRoot, "closed-loop/lessons.jsonl")),
-    legacyRedTeamFile: resolve(options.legacyRedTeamFile || join(projectRoot, "closed-loop/red-team-report.jsonl")),
-    learnedRulesFile: resolve(options.learnedRulesFile || join(projectRoot, "learned-rules.json")),
+    learningFile: resolve(String(options.learningFile || options.learning_file || join(stateDir, "learning.jsonl"))),
+    legacyKnowledgeFile: resolve(String(options.legacyKnowledgeFile || join(projectRoot, "closed-loop/knowledge-base.jsonl"))),
+    legacyLessonsFile: resolve(String(options.legacyLessonsFile || join(projectRoot, "closed-loop/lessons.jsonl"))),
+    legacyRedTeamFile: resolve(String(options.legacyRedTeamFile || join(projectRoot, "closed-loop/red-team-report.jsonl"))),
+    learnedRulesFile: resolve(String(options.learnedRulesFile || join(projectRoot, "learned-rules.json"))),
   };
 }
 
-function asArray(value) {
+function asArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter(Boolean).map(String);
   if (!value) return [];
   return [String(value)];
 }
 
-function unique(values) {
+function unique(values: string[]): string[] {
   return [...new Set(values.filter(Boolean).map((value) => String(value).trim()).filter(Boolean))];
 }
 
-function directoriesForFiles(files = []) {
+function directoriesForFiles(files: string[] = []): string[] {
   return unique(files.map((file) => {
     const normalized = toPosix(file);
     if (!normalized.includes("/")) return "";
@@ -99,14 +161,14 @@ function directoriesForFiles(files = []) {
   }).filter(Boolean));
 }
 
-function extractErrorCodes(text = "") {
+function extractErrorCodes(text: unknown = ""): string[] {
   const matches = String(text).match(/\b(?:TS|E|ERR|R)\d{3,5}\b/g) || [];
   return unique(matches);
 }
 
-function extractRiskPatterns(text = "") {
+function extractRiskPatterns(text: unknown = ""): string[] {
   const source = String(text).toLowerCase();
-  const patterns = [];
+  const patterns: string[] = [];
   for (const [needle, label] of [
     ["as unknown as", "double_type_assertion"],
     ["as any", "unsafe_any"],
@@ -119,18 +181,18 @@ function extractRiskPatterns(text = "") {
     ["file scope", "file_scope"],
     ["must_use", "prd_constraint"],
     ["must_not_use", "prd_constraint"],
-  ]) {
+  ] as const) {
     if (source.includes(needle.toLowerCase())) patterns.push(label);
   }
   return unique(patterns);
 }
 
-function gateFromText(text = "") {
+function gateFromText(text: unknown = ""): string {
   const match = String(text).match(/^([^:：]{2,80})[:：]/);
   return match ? match[1].trim() : "";
 }
 
-function normalizedType(type = "") {
+function normalizedType(type: unknown = ""): string {
   const value = String(type || "").toLowerCase();
   if (["trap", "pitfall"].includes(value)) return "pitfall";
   if (["error", "failure", "gate_knowledge"].includes(value)) return "failure";
@@ -139,15 +201,23 @@ function normalizedType(type = "") {
   return value || "lesson";
 }
 
-function defaultPrevention(input = Object()) {
+function defaultPrevention(input: JsonRecord = Object()): string {
   if (input.prevention) return String(input.prevention);
   if (input.strategy) return String(input.strategy);
   if (input.type === "red_team" || input.attack_type) return `Keep blocking ${input.attack_type || "this risk pattern"} with deterministic gates.`;
-  return input.lesson || input.content || input.knowledge || input.summary || "";
+  return String(input.lesson || input.content || input.knowledge || input.summary || "");
 }
 
-export function createLearningRecord(input = Object(), options = Object()) {
-  const now = options.now?.toISOString?.() || options.now || new Date().toISOString();
+/** Formats an optional `now` value (a Date, or a date-like with toISOString, or an ISO string) into an ISO timestamp. */
+function toIsoNow(now: unknown): string {
+  if (now && typeof now === "object" && typeof (now as { toISOString?: unknown }).toISOString === "function") {
+    return (now as Date).toISOString();
+  }
+  return now ? String(now) : new Date().toISOString();
+}
+
+export function createLearningRecord(input: JsonRecord = Object(), options: JsonRecord = Object()): LearningRecord {
+  const now = toIsoNow(options.now);
   const files = unique(asArray(input.files || input.related_files || input.file || input.filename));
   const directories = unique([
     ...asArray(input.directories),
@@ -171,14 +241,14 @@ export function createLearningRecord(input = Object(), options = Object()) {
   const confidence = Number.isFinite(Number(input.confidence))
     ? Math.max(0, Math.min(10, Number(input.confidence)))
     : (status === "promoted" ? 8 : 5);
-  const fingerprint = {
+  const fingerprint: LearningFingerprint = {
     type,
     gate,
     files,
     directories,
     error_codes: errorCodes,
     risk_patterns: riskPatterns,
-    task_type: input.task_type || "",
+    task_type: String(input.task_type || ""),
   };
   const fingerprintKey = hashId(fingerprint);
   const id = input.id
@@ -192,7 +262,7 @@ export function createLearningRecord(input = Object(), options = Object()) {
     source: String(input.source || input.legacy_source || "learning_center"),
     status,
     confidence,
-    task_id: input.task_id || input.source_task || "",
+    task_id: String(input.task_id || input.source_task || ""),
     gate,
     lesson,
     prevention,
@@ -201,16 +271,28 @@ export function createLearningRecord(input = Object(), options = Object()) {
     occurrence_count: Number.isFinite(Number(input.occurrence_count)) ? Number(input.occurrence_count) : 1,
     evidence_refs: unique(asArray(input.evidence_refs || input.refs || input.related_files || input.filename)),
     tags: unique(asArray(input.tags)),
-    legacy_source: input.legacy_source || "",
-    legacy_id: input.legacy_id || "",
+    legacy_source: String(input.legacy_source || ""),
+    legacy_id: String(input.legacy_id || ""),
   };
 }
 
-export function readLearningRecords(filePath) {
-  return readJsonl(filePath).filter((record) => record && !record.parse_error);
+/** True unless the value is a malformed-JSONL marker ({ parse_error: true }). */
+function isParsableRecord(value: unknown): boolean {
+  if (!value) return false;
+  return !(isRecord(value) && value.parse_error === true);
 }
 
-function mergeRecord(base, next) {
+/** Type guard: a non-null object JSONL line that is not a malformed-line marker. */
+function isLegacyEntry(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === "object" && !(isRecord(value) && value.parse_error === true);
+}
+
+export function readLearningRecords(filePath: string): LearningRecord[] {
+  return readJsonl(filePath)
+    .filter(isParsableRecord) as LearningRecord[];
+}
+
+function mergeRecord(base: LearningRecord, next: LearningRecord): LearningRecord {
   return {
     ...base,
     ts: String(next.ts || "") > String(base.ts || "") ? next.ts : base.ts,
@@ -224,19 +306,19 @@ function mergeRecord(base, next) {
   };
 }
 
-export function dedupeLearningRecords(records = []) {
-  const byKey = new Map();
+export function dedupeLearningRecords(records: LearningRecord[] = []): LearningRecord[] {
+  const byKey = new Map<string, LearningRecord>();
   for (const record of records) {
     const normalized = record.schema_version === LEARNING_CENTER_SCHEMA_VERSION
       ? record
       : createLearningRecord(record);
     const key = normalized.fingerprint_key || normalized.id;
-    byKey.set(key, byKey.has(key) ? mergeRecord(byKey.get(key), normalized) : normalized);
+    byKey.set(key, byKey.has(key) ? mergeRecord(byKey.get(key) as LearningRecord, normalized) : normalized);
   }
   return [...byKey.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
-export function writeLearningRecords(filePath, records = [], options = Object()) {
+export function writeLearningRecords(filePath: string, records: LearningRecord[] = [], options: JsonRecord = Object()) {
   const dryRun = options.dryRun === true || options.dry_run === true;
   const content = records.map((record) => JSON.stringify(record)).join("\n");
   if (!dryRun) {
@@ -246,7 +328,7 @@ export function writeLearningRecords(filePath, records = [], options = Object())
   return { file: filePath, records: records.length, dry_run: dryRun };
 }
 
-export function appendLearningRecord(input = Object(), options = Object()) {
+export function appendLearningRecord(input: JsonRecord = Object(), options: JsonRecord = Object()) {
   const paths = resolveLearningPaths(options);
   const record = createLearningRecord(input, options);
   if (options.dryRun === true || options.dry_run === true) {
@@ -257,9 +339,9 @@ export function appendLearningRecord(input = Object(), options = Object()) {
   return { status: "ok", dry_run: false, file: paths.learningFile, record };
 }
 
-function legacyKnowledgeRecords(paths) {
+function legacyKnowledgeRecords(paths: LearningPaths): LearningRecord[] {
   return readJsonl(paths.legacyKnowledgeFile)
-    .filter((entry) => entry && typeof entry === "object" && !entry.parse_error)
+    .filter(isLegacyEntry)
     .map((entry) => createLearningRecord({
       type: entry.type,
       lesson: entry.content,
@@ -276,9 +358,9 @@ function legacyKnowledgeRecords(paths) {
     }));
 }
 
-function legacyLessonRecords(paths) {
+function legacyLessonRecords(paths: LearningPaths): LearningRecord[] {
   return readJsonl(paths.legacyLessonsFile)
-    .filter((entry) => entry && typeof entry === "object" && !entry.parse_error)
+    .filter(isLegacyEntry)
     .filter((entry) => entry.knowledge || entry.result === "FAIL" || entry.result === "PARTIAL")
     .map((entry) => createLearningRecord({
       type: entry.knowledge_type || "failure",
@@ -296,9 +378,9 @@ function legacyLessonRecords(paths) {
     }));
 }
 
-function legacyRedTeamRecords(paths) {
+function legacyRedTeamRecords(paths: LearningPaths): LearningRecord[] {
   return readJsonl(paths.legacyRedTeamFile)
-    .filter((entry) => entry && typeof entry === "object" && !entry.parse_error)
+    .filter(isLegacyEntry)
     .map((entry) => createLearningRecord({
       type: "red_team",
       lesson: `${entry.attack_type || "red-team case"} was ${entry.blocked ? "blocked" : "not blocked"}`,
@@ -316,24 +398,27 @@ function legacyRedTeamRecords(paths) {
     }));
 }
 
-function learnedRuleRecords(paths) {
-  const rules = readJson(paths.learnedRulesFile, {});
-  return Object.entries(rules || {}).map(([key, entry]) => createLearningRecord({
-    type: "rule",
-    lesson: Object.assign(Object(), entry).rule || key,
-    prevention: Object.assign(Object(), entry).strategy || Object.assign(Object(), entry).rule || key,
-    confidence: 7,
-    status: "candidate",
-    source: "learned_rules",
-    legacy_source: rel(paths.projectRoot, paths.learnedRulesFile),
-    legacy_id: key,
-    gate: Object.assign(Object(), entry).gate || key,
-    ts: Object.assign(Object(), entry).learned_at || Object.assign(Object(), entry).since,
-    tags: ["learned_rule"],
-  }));
+function learnedRuleRecords(paths: LearningPaths): LearningRecord[] {
+  const rules = readJson(paths.learnedRulesFile, {}) as JsonRecord | null;
+  return Object.entries(rules || {}).map(([key, entry]) => {
+    const rule = isRecord(entry) ? entry : {};
+    return createLearningRecord({
+      type: "rule",
+      lesson: rule.rule || key,
+      prevention: rule.strategy || rule.rule || key,
+      confidence: 7,
+      status: "candidate",
+      source: "learned_rules",
+      legacy_source: rel(paths.projectRoot, paths.learnedRulesFile),
+      legacy_id: key,
+      gate: rule.gate || key,
+      ts: rule.learned_at || rule.since,
+      tags: ["learned_rule"],
+    });
+  });
 }
 
-export function collectLegacyLearningRecords(options = Object()) {
+export function collectLegacyLearningRecords(options: JsonRecord = Object()) {
   const paths = resolveLearningPaths(options);
   const sources = [
     { name: "legacy_knowledge", records: legacyKnowledgeRecords(paths) },
@@ -348,7 +433,7 @@ export function collectLegacyLearningRecords(options = Object()) {
   };
 }
 
-export function migrateLegacyLearning(options = Object()) {
+export function migrateLegacyLearning(options: JsonRecord = Object()) {
   const paths = resolveLearningPaths(options);
   const current = readLearningRecords(paths.learningFile);
   const legacy = collectLegacyLearningRecords(paths);
@@ -368,14 +453,14 @@ export function migrateLegacyLearning(options = Object()) {
   };
 }
 
-export function summarizeLearningCenter(options = Object()) {
+export function summarizeLearningCenter(options: JsonRecord = Object()) {
   const paths = resolveLearningPaths(options);
   const records = readLearningRecords(paths.learningFile);
-  const byType = Object();
-  const byStatus = Object();
-  const bySource = Object();
-  const byGate = Object();
-  const byRisk = Object();
+  const byType: Record<string, number> = Object();
+  const byStatus: Record<string, number> = Object();
+  const bySource: Record<string, number> = Object();
+  const byGate: Record<string, number> = Object();
+  const byRisk: Record<string, number> = Object();
   for (const record of records) {
     byType[record.type] = (byType[record.type] || 0) + 1;
     byStatus[record.status] = (byStatus[record.status] || 0) + 1;
@@ -398,11 +483,15 @@ export function summarizeLearningCenter(options = Object()) {
   };
 }
 
-function taskText(task = Object(), extraText = "") {
-  const acceptance = (task.acceptance_criteria || [])
-    .map((item) => typeof item === "string" ? item : (item.description || item.message || ""))
+function taskText(task: JsonRecord = Object(), extraText = ""): string {
+  const acceptance = asArray(task.acceptance_criteria)
+    .map((item) => {
+      if (typeof item === "string") return item;
+      const record: JsonRecord = isRecord(item) ? item : Object();
+      return String(record.description || record.message || "");
+    })
     .join("\n");
-  const conditions = [...(task.pre_conditions || []), ...(task.post_conditions || [])]
+  const conditions = [...asArray(task.pre_conditions), ...asArray(task.post_conditions)]
     .map((condition) => JSON.stringify(condition))
     .join("\n");
   return [
@@ -413,20 +502,21 @@ function taskText(task = Object(), extraText = "") {
     acceptance,
     conditions,
     extraText,
-  ].filter(Boolean).join("\n");
+  ].filter((value) => value !== undefined && value !== null && value !== false && value !== 0 && value !== "").map((value) => String(value)).join("\n");
 }
 
-function learningQueryFromTask(input = Object()) {
-  const task = input.task || {};
+function learningQueryFromTask(input: JsonRecord = Object()) {
+  const task: JsonRecord = isRecord(input.task) ? input.task : {};
+  const scope = isRecord(task.scope) ? task.scope : {};
   const targetFiles = unique([
     ...asArray(input.files || input.targetFiles || input.target_files),
-    ...(task.scope?.targets || []).map((target) => target.file),
-    ...(task.scope?.readonly_files || []),
+    ...asArray(scope.targets).map((target) => String(isRecord(target) ? (target.file ?? "") : "")),
+    ...asArray(scope.readonly_files),
   ]);
-  const queryText = taskText(task, [input.lastGateError, input.failureText, input.gate].filter(Boolean).join("\n"));
+  const queryText = taskText(task, [input.lastGateError, input.failureText, input.gate].filter(Boolean).map(String).join("\n"));
   return {
-    task_id: task.id || input.taskId || "",
-    task_type: task.type || input.taskType || input.task_type || "",
+    task_id: String(task.id || input.taskId || ""),
+    task_type: String(task.type || input.taskType || input.task_type || ""),
     gate: String(input.gate || input.failedGate || input.failed_gate || "").trim(),
     files: targetFiles,
     directories: unique([
@@ -445,13 +535,13 @@ function learningQueryFromTask(input = Object()) {
   };
 }
 
-function intersects(a = [], b = []) {
+function intersects(a: string[] = [], b: string[] = []): string[] {
   const set = new Set(a.filter(Boolean));
   return b.filter(Boolean).filter((item) => set.has(item));
 }
 
-function relatedPathMatches(queryFiles = [], recordFiles = []) {
-  const matches = [];
+function relatedPathMatches(queryFiles: string[] = [], recordFiles: string[] = []): string[] {
+  const matches: string[] = [];
   for (const queryFile of queryFiles) {
     for (const recordFile of recordFiles) {
       if (!queryFile || !recordFile) continue;
@@ -463,33 +553,46 @@ function relatedPathMatches(queryFiles = [], recordFiles = []) {
   return unique(matches);
 }
 
-function recordLearningFiles(record = Object()) {
+function recordLearningFiles(record: LearningRecord = Object()): string[] {
   return unique([
     ...asArray(record.fingerprint?.files),
     ...asArray(record.evidence_refs),
   ]);
 }
 
-function scoreStatus(status = "") {
+function scoreStatus(status = ""): number {
   if (status === "promoted") return 2;
   if (status === "candidate") return 1;
   if (status === "deprecated") return -4;
   return 0;
 }
 
-export function scoreLearningRecord(record = Object(), query = learningQueryFromTask()) {
-  const reasons = [];
+/** Structured query used to score and select learning records. */
+interface LearningQuery {
+  files?: string[];
+  directories?: string[];
+  error_codes?: string[];
+  risk_patterns?: string[];
+  gate?: string;
+  task_type?: string;
+  text?: string;
+  task_id?: string;
+  [key: string]: unknown;
+}
+
+export function scoreLearningRecord(record: LearningRecord = Object(), query: LearningQuery = learningQueryFromTask()): { score: number; reasons: string[] } {
+  const reasons: string[] = [];
   let score = 0;
   if (record.status === "deprecated") return { score: -10, reasons: ["deprecated"] };
 
   const recordFiles = recordLearningFiles(record);
-  const fileMatches = relatedPathMatches(query.files, recordFiles);
+  const fileMatches = relatedPathMatches(asArray(query.files), recordFiles);
   if (fileMatches.length) {
     score += 5;
     reasons.push(`file:${fileMatches.slice(0, 3).join(",")}`);
   }
 
-  const directoryMatches = intersects(query.directories, asArray(record.fingerprint?.directories));
+  const directoryMatches = intersects(asArray(query.directories), asArray(record.fingerprint?.directories));
   if (directoryMatches.length) {
     score += 2;
     reasons.push(`dir:${directoryMatches.slice(0, 3).join(",")}`);
@@ -506,13 +609,13 @@ export function scoreLearningRecord(record = Object(), query = learningQueryFrom
     }
   }
 
-  const errorMatches = intersects(query.error_codes, asArray(record.fingerprint?.error_codes));
+  const errorMatches = intersects(asArray(query.error_codes), asArray(record.fingerprint?.error_codes));
   if (errorMatches.length) {
     score += Math.min(8, errorMatches.length * 4);
     reasons.push(`error:${errorMatches.slice(0, 4).join(",")}`);
   }
 
-  const riskMatches = intersects(query.risk_patterns, asArray(record.fingerprint?.risk_patterns));
+  const riskMatches = intersects(asArray(query.risk_patterns), asArray(record.fingerprint?.risk_patterns));
   if (riskMatches.length) {
     score += Math.min(6, riskMatches.length * 3);
     reasons.push(`risk:${riskMatches.slice(0, 4).join(",")}`);
@@ -530,8 +633,8 @@ export function scoreLearningRecord(record = Object(), query = learningQueryFrom
   return { score: Number(score.toFixed(2)), reasons };
 }
 
-export function selectRelevantLearningRecords(records = [], input = Object(), options = Object()) {
-  const query = input.files || input.task || input.gate || input.lastGateError
+export function selectRelevantLearningRecords(records: LearningRecord[] = [], input: JsonRecord = Object(), options: JsonRecord = Object()) {
+  const query: LearningQuery = input.files || input.task || input.gate || input.lastGateError
     ? learningQueryFromTask(input)
     : input;
   const limit = Number(options.limit || input.limit || 5);
@@ -543,7 +646,7 @@ export function selectRelevantLearningRecords(records = [], input = Object(), op
     .slice(0, Math.max(0, limit));
 }
 
-export function retrieveRelevantLearningRecords(options = Object()) {
+export function retrieveRelevantLearningRecords(options: JsonRecord = Object()) {
   const paths = resolveLearningPaths(options);
   const records = readLearningRecords(paths.learningFile);
   const selected = selectRelevantLearningRecords(records, options, options);
@@ -557,11 +660,11 @@ export function retrieveRelevantLearningRecords(options = Object()) {
   };
 }
 
-function compactText(value = "", max = 220) {
+function compactText(value: unknown = "", max = 220): string {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
-export function buildExperiencePackText(options = Object()) {
+export function buildExperiencePackText(options: JsonRecord = Object()): string {
   const result = retrieveRelevantLearningRecords(options);
   const maxChars = Number(options.maxChars || options.max_chars || 1800);
   if (!result.selected.length) return "";
@@ -582,22 +685,22 @@ export function buildExperiencePackText(options = Object()) {
   return lines.join("\n").slice(0, maxChars).trim();
 }
 
-function countLines(title, items) {
+function countLines(title: string, items: [string, number][]): string[] {
   if (!items.length) return [`- ${title}: none`];
   return [`- ${title}:`, ...items.map(([name, count]) => `  - ${name}: ${count}`)];
 }
 
-function isLocalLegacySource(record = Object()) {
+function isLocalLegacySource(record: LearningRecord = Object()): boolean {
   const source = String(record.source || "");
   return source.startsWith("legacy_") || source === "learned_rules";
 }
 
-function summarizeRecords(records = []) {
-  const byType = Object();
-  const byStatus = Object();
-  const bySource = Object();
-  const byGate = Object();
-  const byRisk = Object();
+function summarizeRecords(records: LearningRecord[] = []) {
+  const byType: Record<string, number> = Object();
+  const byStatus: Record<string, number> = Object();
+  const bySource: Record<string, number> = Object();
+  const byGate: Record<string, number> = Object();
+  const byRisk: Record<string, number> = Object();
   for (const record of records) {
     byType[record.type] = (byType[record.type] || 0) + 1;
     byStatus[record.status] = (byStatus[record.status] || 0) + 1;
@@ -616,7 +719,17 @@ function summarizeRecords(records = []) {
   };
 }
 
-export function buildLearningIndexMarkdown(options = Object()) {
+/** Formats an optional `now` option for markdown headers: uses toISOString when the
+ *  value is date-like, otherwise the current time. Mirrors the original optional-chain behavior. */
+function optionNow(options: JsonRecord): string {
+  const now = options.now;
+  if (now && typeof now === "object" && typeof (now as { toISOString?: unknown }).toISOString === "function") {
+    return (now as Date).toISOString();
+  }
+  return new Date().toISOString();
+}
+
+export function buildLearningIndexMarkdown(options: JsonRecord = Object()): string {
   const paths = resolveLearningPaths(options);
   const summary = summarizeLearningCenter(paths);
   const publicSafeMode = options.publicSafeMode ?? options.public_safe_mode ?? paths.packageMode;
@@ -628,7 +741,7 @@ export function buildLearningIndexMarkdown(options = Object()) {
   return [
     "# YOLO Learning Index",
     "",
-    `> Generated: ${options.now?.toISOString?.() || new Date().toISOString()}`,
+    `> Generated: ${optionNow(options)}`,
     "",
     "This file summarizes the machine-readable learning ledger. The ledger is model-agnostic: providers receive only short, relevant experience packs derived from these records.",
     "",
@@ -661,7 +774,7 @@ export function buildLearningIndexMarkdown(options = Object()) {
   ].filter((line) => line !== null).join("\n");
 }
 
-export function buildLessonsPlaybookMarkdown(options = Object()) {
+export function buildLessonsPlaybookMarkdown(options: JsonRecord = Object()): string {
   const paths = resolveLearningPaths(options);
   const summary = summarizeLearningCenter(paths);
   const publicSafeMode = options.publicSafeMode ?? options.public_safe_mode ?? paths.packageMode;
@@ -669,11 +782,11 @@ export function buildLessonsPlaybookMarkdown(options = Object()) {
     .filter((record) => !publicSafeMode || !isLocalLegacySource(record))
     .filter((record) => record.lesson)
     .sort((a, b) => Number(b.confidence || 0) - Number(a.confidence || 0))
-    .slice(0, options.maxLessons || 40);
+    .slice(0, Number(options.maxLessons) || 40);
   const lines = [
     "# YOLO Lessons Playbook",
     "",
-    `> Generated: ${options.now?.toISOString?.() || new Date().toISOString()}`,
+    `> Generated: ${optionNow(options)}`,
     "",
     "Use these lessons as advisory context first. Only promoted, machine-verifiable lessons should become blocking gates.",
     "",
