@@ -21,23 +21,38 @@ export const DEFAULT_MEMORY_RETENTION = {
 
 const GENERATED_ARCHIVE_RE = /^(CHANGELOG|PROJECT_TREE|SYSTEM_STATE)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.md$/;
 
-function timestampId(now = new Date()) {
+function timestampId(now: Date | string = new Date()): string {
   const date = now instanceof Date ? now : new Date(now);
   return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
 }
 
-function monthId(now = new Date()) {
+function monthId(now: Date | string = new Date()): string {
   const date = now instanceof Date ? now : new Date(now);
   return date.toISOString().slice(0, 7);
 }
 
-function jsonlLines(text) {
+function jsonlLines(text: string): string[] {
   return text.split("\n").filter(Boolean);
 }
 
-function defaultArchiveDirFor(filePath, now = new Date()) {
+function defaultArchiveDirFor(filePath: string, now: Date | string = new Date()): string {
   return join(dirname(filePath), "archive", "jsonl", monthId(now));
 }
+
+type FsLike = {
+  existsSync: typeof defaultExistsSync;
+  readFileSync: typeof defaultReadFileSync;
+  writeFileSync: typeof defaultWriteFileSync;
+  mkdirSync: typeof defaultMkdirSync;
+};
+
+type TrimJsonlArgs = Partial<FsLike> & {
+  filePath?: string;
+  maxLines?: number;
+  archiveDir?: string | null;
+  dryRun?: boolean;
+  now?: Date | string;
+};
 
 export function trimJsonlWithArchive({
   filePath,
@@ -49,7 +64,7 @@ export function trimJsonlWithArchive({
   readFileSync = defaultReadFileSync,
   writeFileSync = defaultWriteFileSync,
   mkdirSync = defaultMkdirSync,
-} = Object()) {
+}: TrimJsonlArgs = Object()) {
   if (!filePath) throw new Error("filePath is required");
   if (!Number.isFinite(maxLines) || maxLines < 0) throw new Error("maxLines must be a non-negative number");
   if (!existsSync(filePath)) {
@@ -98,10 +113,20 @@ export function trimJsonlWithArchive({
   };
 }
 
-function retentionValue(options, camelKey, snakeKey, fallback) {
+type RetentionOptions = Record<string, unknown>;
+
+function retentionValue(options: RetentionOptions, camelKey: string, snakeKey: string, fallback: number): number {
   const value = options[camelKey] ?? options[snakeKey];
-  return Number.isFinite(value) ? value : fallback;
+  return Number.isFinite(value as number) ? (value as number) : fallback;
 }
+
+type PruneArgs = {
+  stateDir?: string;
+  dryRun?: boolean;
+  existsSync?: typeof defaultExistsSync;
+  readdirSync?: typeof defaultReaddirSync;
+  rmSync?: typeof defaultRmSync;
+};
 
 export function pruneGeneratedArchiveSnapshots({
   stateDir,
@@ -109,13 +134,13 @@ export function pruneGeneratedArchiveSnapshots({
   existsSync = defaultExistsSync,
   readdirSync = defaultReaddirSync,
   rmSync = defaultRmSync,
-} = Object()) {
+}: PruneArgs = Object()) {
   const archiveDir = join(resolve(stateDir || "state"), "archive");
   if (!existsSync(archiveDir)) {
-    return { status: "missing", archive_dir: archiveDir, deleted: [], deleted_count: 0, dry_run: dryRun };
+    return { status: "missing", archive_dir: archiveDir, deleted: [] as string[], deleted_count: 0, dry_run: dryRun };
   }
 
-  const deleted = [];
+  const deleted: string[] = [];
   for (const entry of readdirSync(archiveDir, { withFileTypes: true })) {
     if (!entry.isFile() || !GENERATED_ARCHIVE_RE.test(entry.name)) continue;
     const filePath = join(archiveDir, entry.name);
@@ -132,12 +157,12 @@ export function pruneGeneratedArchiveSnapshots({
   };
 }
 
-export function applyMemoryRetention(options = Object()) {
-  const stateDir = resolve(options.stateDir || options.state_dir || "state");
+export function applyMemoryRetention(options: RetentionOptions = Object()) {
+  const stateDir = resolve(String(options.stateDir || options.state_dir || "state"));
   const dryRun = options.dryRun === true || options.dry_run === true;
-  const now = options.now || new Date();
-  const archiveDir = options.archiveDir || options.archive_dir || join(stateDir, "archive", "jsonl", monthId(now));
-  const ledgers = [
+  const now = (options.now as Date | string | undefined) || new Date();
+  const archiveDir = String(options.archiveDir || options.archive_dir || join(stateDir, "archive", "jsonl", monthId(now)));
+  const ledgers: Array<[string, number]> = [
     ["changes.jsonl", retentionValue(options, "maxChanges", "max_changes", DEFAULT_MEMORY_RETENTION.changes)],
     ["events.jsonl", retentionValue(options, "maxEvents", "max_events", DEFAULT_MEMORY_RETENTION.events)],
     ["runs.jsonl", retentionValue(options, "maxRuns", "max_runs", DEFAULT_MEMORY_RETENTION.runs)],
@@ -158,7 +183,7 @@ export function applyMemoryRetention(options = Object()) {
   const pruneGeneratedArchives = options.pruneGeneratedArchives ?? options.prune_generated_archives ?? true;
   const prunedGeneratedArchives = pruneGeneratedArchives
     ? pruneGeneratedArchiveSnapshots({ stateDir, dryRun })
-    : { status: "skipped", archive_dir: join(stateDir, "archive"), deleted: [], deleted_count: 0, dry_run: dryRun };
+    : { status: "skipped", archive_dir: join(stateDir, "archive"), deleted: [] as string[], deleted_count: 0, dry_run: dryRun };
 
   return {
     schema_version: MEMORY_RETENTION_SCHEMA_VERSION,
@@ -167,8 +192,8 @@ export function applyMemoryRetention(options = Object()) {
     state_dir: stateDir,
     archive_dir: archiveDir,
     ledgers: results,
-    archived_record_count: results.reduce((sum, result) => sum + (result.archived || 0), 0),
-    trimmed_ledger_count: results.filter((result) => result.trimmed).length,
+    archived_record_count: results.reduce((sum, result) => sum + ((result as { archived?: number }).archived || 0), 0),
+    trimmed_ledger_count: results.filter((result) => (result as { trimmed?: boolean }).trimmed).length,
     pruned_generated_archives: prunedGeneratedArchives,
   };
 }
