@@ -2,7 +2,19 @@ export const TEAM_AGENT_CONTRACT_SCHEMA_VERSION = "1.0";
 export const TEAM_AGENT_CONTRACT_SCHEMA = "yolo.team.agent_contract.v1";
 export const TEAM_DISPATCH_PLAN_SCHEMA = "yolo.team.dispatch_plan.v1";
 
-export const TEAM_AGENT_CONTRACTS = [
+export interface TeamAgentContract {
+  id: string;
+  label: string;
+  purpose: string;
+  lifecycle_stages: string[];
+  may_edit_code: boolean;
+  owns: string[];
+  inputs: string[];
+  outputs: string[];
+  stop_conditions: string[];
+}
+
+export const TEAM_AGENT_CONTRACTS: TeamAgentContract[] = [
   {
     id: "pi-agent",
     label: "PI Orchestrator",
@@ -104,38 +116,61 @@ export const TEAM_AGENT_CONTRACTS = [
   },
 ];
 
-function clone(value) {
+type RuntimeBindingInput = Record<string, unknown>;
+type RuntimeBindingMap = Record<string, RuntimeBindingInput | string>;
+type DispatchOptions = {
+  currentStage?: unknown;
+  current_stage?: unknown;
+  objective?: unknown;
+  executable?: unknown;
+  mode?: unknown;
+  executionMode?: unknown;
+  execution_mode?: unknown;
+  runtimeBindings?: unknown;
+  runtime_bindings?: unknown;
+  evidenceOnlyRoles?: unknown;
+  evidence_only_roles?: unknown;
+};
+
+function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function asArray(value) {
+function asArray<T>(value: T | T[] | null | undefined): T[] {
   if (Array.isArray(value)) return value.filter(Boolean);
   if (value == null || value === "") return [];
   return [value];
 }
 
-function runtimeBindings(options = Object()) {
+function runtimeBindings(options: DispatchOptions): RuntimeBindingMap {
   const raw = options.runtimeBindings || options.runtime_bindings || {};
   if (Array.isArray(raw)) {
-    return Object.fromEntries(raw
+    return Object.fromEntries((raw as Array<RuntimeBindingInput>)
       .filter((binding) => binding?.agent_id || binding?.agentId || binding?.id)
-      .map((binding) => [clean(binding.agent_id || binding.agentId || binding.id), binding]));
+      .map((binding) => {
+        const rec = binding as Record<string, unknown>;
+        return [clean(rec.agent_id || rec.agentId || rec.id), binding];
+      }));
   }
-  return raw && typeof raw === "object" ? raw : {};
+  return raw && typeof raw === "object" ? (raw as RuntimeBindingMap) : {};
 }
 
-function evidenceOnlyRoles(options = Object(), selected = []) {
+function evidenceOnlyRoles(options: DispatchOptions, selected: TeamAgentContract[] = []): Set<string> {
   const explicit = asArray(options.evidenceOnlyRoles || options.evidence_only_roles).map(clean);
   if (explicit.length > 0) return new Set(explicit);
   const executable = options.executable === true || clean(options.mode || options.executionMode || options.execution_mode) === "execute";
   return executable ? new Set() : new Set(selected.map((agent) => agent.id));
 }
 
-function normalizeRuntimeBinding(agent, bindings = Object()) {
+function normalizeRuntimeBinding(agent: TeamAgentContract, bindings: RuntimeBindingMap = {}): {
+  runtime: string;
+  provider: string | null;
+  evidence_output: string | null;
+} | null {
   const binding = bindings[agent.id] || bindings[agent.label] || null;
   if (!binding) return null;
   if (typeof binding === "string") {
@@ -145,10 +180,11 @@ function normalizeRuntimeBinding(agent, bindings = Object()) {
       evidence_output: null,
     };
   }
+  const rec = binding as Record<string, unknown>;
   return {
-    runtime: clean(binding.runtime || binding.adapter || binding.command || binding.provider || "external"),
-    provider: clean(binding.provider || ""),
-    evidence_output: clean(binding.evidence_output || binding.evidenceOutput || ""),
+    runtime: clean(rec.runtime || rec.adapter || rec.command || rec.provider || "external"),
+    provider: clean(rec.provider || ""),
+    evidence_output: clean(rec.evidence_output || rec.evidenceOutput || ""),
   };
 }
 
@@ -165,13 +201,14 @@ export function getTeamAgentContract(id = "pi-agent") {
   return clone(contract);
 }
 
-export function validateTeamAgentContract(contract = Object()) {
-  const errors = [];
+export function validateTeamAgentContract(contract: { id?: unknown; label?: unknown; purpose?: unknown; lifecycle_stages?: unknown; owns?: unknown; inputs?: unknown; outputs?: unknown; stop_conditions?: unknown; may_edit_code?: unknown } = {}) {
+  const errors: Array<{ code: string; field: string; message: string }> = [];
+  const rec = contract as Record<string, unknown>;
   for (const field of ["id", "label", "purpose"]) {
-    if (!clean(contract[field])) errors.push({ code: "TEAM_AGENT_FIELD_MISSING", field, message: `${field} is required` });
+    if (!clean(rec[field])) errors.push({ code: "TEAM_AGENT_FIELD_MISSING", field, message: `${field} is required` });
   }
   for (const field of ["lifecycle_stages", "owns", "inputs", "outputs", "stop_conditions"]) {
-    if (!Array.isArray(contract[field]) || contract[field].length === 0) {
+    if (!Array.isArray(rec[field]) || (rec[field] as unknown[]).length === 0) {
       errors.push({ code: "TEAM_AGENT_ARRAY_EMPTY", field, message: `${field} must be a non-empty array` });
     }
   }
@@ -193,7 +230,7 @@ export function agentsForLifecycleStage(stageId = "idea") {
     .map(clone);
 }
 
-export function buildTeamDispatchPlan(options = Object()) {
+export function buildTeamDispatchPlan(options: DispatchOptions = {}) {
   const currentStage = clean(options.currentStage || options.current_stage || "idea");
   const objective = clean(options.objective);
   const agents = agentsForLifecycleStage(currentStage);
