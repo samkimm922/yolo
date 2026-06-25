@@ -7,11 +7,77 @@ import { resolve, relative, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 
 // ══════════════════════════════════════════════════════════════════════
+// 内部类型
+// ══════════════════════════════════════════════════════════════════════
+
+// review scanner findings 喂给 fixer 的最小结构：file/line/match/scanner_id/
+// severity/description/fix_type。修复失败时还会带 reason（见 escalated 项）。
+interface AutoFixFinding {
+  file?: string | null;
+  line?: number;
+  match?: string | null;
+  scanner_id?: string;
+  severity?: string;
+  description?: string;
+  fix_type?: string;
+  reason?: string;
+}
+
+// 一个修复任务（来自 scannerToTasks 的 AUTO_FIX 项）。fix_rule 决定走哪个 fixer，
+// scope.targets 是待改文件，fix_findings 是命中点。
+interface AutoFixTaskTarget {
+  file?: string;
+}
+
+interface AutoFixTask {
+  id?: string;
+  fix_type?: string;
+  fix_rule?: string;
+  scope?: { targets?: AutoFixTaskTarget[] };
+  fix_findings?: AutoFixFinding[];
+}
+
+// fixer 的统一返回：modified=改后内容（字符串），changes=改动数，
+// escalated=无法自动修的升级项。
+interface FixerResult {
+  modified: string;
+  changes: number;
+  escalated?: AutoFixFinding[];
+}
+
+type Fixer = (content: string, findings: AutoFixFinding[], filePath: string, rootDir: string) => FixerResult;
+
+// applyFixesToFile 的返回：modified=是否有改动（布尔），changes=改动数，
+// escalated=无法自动修的升级项。与 FixerResult 的 modified 语义不同（此处是开关）。
+interface ApplyFixesResult {
+  modified: boolean;
+  changes: number;
+  escalated?: AutoFixFinding[];
+}
+
+// tsc/eslint 错误条目（parseTscErrors/flattenEslintErrors/diffNewErrors 共用）。
+interface LintError {
+  file: string;
+  line: number;
+  code: string;
+  message: string;
+  source?: string;
+}
+
+// execFileSync 的注入签名（与 node:child_process execFileSync 的运行时返回一致：
+// 传 encoding 时是 string，否则是 Buffer）。调用处用 String() 收窄以保留原 any 行为。
+type ExecFileSyncLike = (
+  cmd: string,
+  args: readonly string[],
+  options?: { cwd?: string; encoding?: string; timeout?: number; stdio?: Array<"pipe" | "ignore" | "inherit" | null>; maxBuffer?: number },
+) => string | Buffer;
+
+// ══════════════════════════════════════════════════════════════════════
 // 工具函数
 // ══════════════════════════════════════════════════════════════════════
 
 /** 计算从 srcFile 到 targetFile 的 import 路径（不含扩展名） */
-function relativeImportPath(srcFile, targetFile, rootDir) {
+function relativeImportPath(srcFile: string, targetFile: string, rootDir: string): string {
   const srcAbs = resolve(rootDir, srcFile);
   const tgtAbs = resolve(rootDir, targetFile);
   const srcDir = dirname(srcAbs);
@@ -21,10 +87,10 @@ function relativeImportPath(srcFile, targetFile, rootDir) {
 }
 
 /** 从 COLLECTIONS 对象源码中解析 key → value 映射 */
-function parseCollectionsMap(collectionsSrc) {
-  const map = new Map(); // value (collection name) → key (CONSTANT name)
+function parseCollectionsMap(collectionsSrc: string): Map<string, string> {
+  const map = new Map<string, string>(); // value (collection name) → key (CONSTANT name)
   const re = /^\s*([A-Z_][A-Z0-9_]*)\s*:\s*['"]([^'"]+)['"]\s*,?\s*(?:\/\/.*)?$/gm;
-  let m;
+  let m: RegExpExecArray | null;
   while ((m = re.exec(collectionsSrc)) !== null) {
     map.set(m[2], m[1]);
   }
@@ -34,8 +100,8 @@ function parseCollectionsMap(collectionsSrc) {
 /**
  * 解析 TSC 错误输出，格式: relative/path.ts(line,col): error TSxxxx: message
  */
-function parseTscErrors(stdout, rootDir) {
-  const errors = [];
+function parseTscErrors(stdout: string, rootDir: string): LintError[] {
+  const errors: LintError[] = [];
   const lines = stdout.split("\n");
   for (const line of lines) {
     const m = line.match(/^(.+?)\((\d+),\d+\):\s*(error|warning)\s+(TS\d+):\s*(.+)$/);
@@ -52,10 +118,10 @@ function parseTscErrors(stdout, rootDir) {
 }
 
 /** 展平 ESLint JSON 结果为文件级错误列表 */
-function flattenEslintErrors(eslintResult, rootDir) {
-  const errors = [];
+function flattenEslintErrors(eslintResult: unknown, rootDir: string): LintError[] {
+  const errors: LintError[] = [];
   if (!Array.isArray(eslintResult)) return errors;
-  for (const r of eslintResult) {
+  for (const r of eslintResult as Array<{ filePath?: string; messages?: Array<{ line?: number; ruleId?: string; message?: string }> }>) {
     const file = r.filePath ? relative(rootDir, r.filePath) : "";
     for (const msg of r.messages || []) {
       errors.push({
@@ -73,12 +139,12 @@ function flattenEslintErrors(eslintResult, rootDir) {
  * 两组错误比较：currentErrors 中存在但 baselineErrors 中不存在的，
  * 且文件路径在 modifiedFiles 中。
  */
-function diffNewErrors(baselineErrors, currentErrors, modifiedFiles) {
+function diffNewErrors(baselineErrors: LintError[], currentErrors: LintError[], modifiedFiles: string[]): LintError[] {
   const baselineSet = new Set(
-    baselineErrors.map(e => `${e.file}:${e.line}:${e.code}`),
+    baselineErrors.map((e) => `${e.file}:${e.line}:${e.code}`),
   );
   const fileSet = new Set(modifiedFiles);
-  return currentErrors.filter(e => {
+  return currentErrors.filter((e) => {
     if (!fileSet.has(e.file)) return false;
     return !baselineSet.has(`${e.file}:${e.line}:${e.code}`);
   });
@@ -88,8 +154,8 @@ function diffNewErrors(baselineErrors, currentErrors, modifiedFiles) {
 // 修复器注册表
 // ══════════════════════════════════════════════════════════════════════
 
-function getFixer(scannerId) {
-  const FIXERS = {
+function getFixer(scannerId: string): Fixer | null {
+  const FIXERS: Record<string, Fixer> = {
     "debug-console-log": fixConsoleLog,
     "debug-debugger": fixDebugger,
     "raw-collection": fixRawCollection,
@@ -102,18 +168,18 @@ function getFixer(scannerId) {
 // 修复器: console.log — 移除 console.log(...) 调用行
 // ══════════════════════════════════════════════════════════════════════
 
-function fixConsoleLog(content, findings, filePath, rootDir) {
+function fixConsoleLog(content: string, findings: AutoFixFinding[], filePath: string, rootDir: string): FixerResult {
   if (!findings || findings.length === 0) return { modified: content, changes: 0 };
 
   const lines = content.split("\n");
   // 自底向上删除，行号不受影响
   const sorted = [...findings]
-    .filter(f => f.line > 0 && f.line <= lines.length)
-    .sort((a, b) => b.line - a.line);
+    .filter((f) => (f.line ?? 0) > 0 && (f.line ?? 0) <= lines.length)
+    .sort((a, b) => (b.line ?? 0) - (a.line ?? 0));
 
   let changes = 0;
   for (const f of sorted) {
-    const idx = f.line - 1;
+    const idx = (f.line ?? 1) - 1;
     const original = lines[idx];
     if (original === undefined) continue;
 
@@ -141,17 +207,17 @@ function fixConsoleLog(content, findings, filePath, rootDir) {
 // 修复器: debugger — 移除 debugger; / debugger 语句
 // ══════════════════════════════════════════════════════════════════════
 
-function fixDebugger(content, findings, filePath, rootDir) {
+function fixDebugger(content: string, findings: AutoFixFinding[], filePath: string, rootDir: string): FixerResult {
   if (!findings || findings.length === 0) return { modified: content, changes: 0 };
 
   const lines = content.split("\n");
   const sorted = [...findings]
-    .filter(f => f.line > 0 && f.line <= lines.length)
-    .sort((a, b) => b.line - a.line);
+    .filter((f) => (f.line ?? 0) > 0 && (f.line ?? 0) <= lines.length)
+    .sort((a, b) => (b.line ?? 0) - (a.line ?? 0));
 
   let changes = 0;
   for (const f of sorted) {
-    const idx = f.line - 1;
+    const idx = (f.line ?? 1) - 1;
     const original = lines[idx];
     if (original === undefined) continue;
 
@@ -177,29 +243,29 @@ function fixDebugger(content, findings, filePath, rootDir) {
 // 修复器: R6 测试 mock 双重断言 — 只处理已知安全的 db.collection mockReturnValue
 // ══════════════════════════════════════════════════════════════════════
 
-function isTestFile(filePath = "") {
+function isTestFile(filePath = ""): boolean {
   return filePath.includes("/__tests__/") || /\.(test|spec)\.[tj]sx?$/.test(filePath);
 }
 
-function fixSafeR6UnknownAs(content, findings, filePath, rootDir) {
+function fixSafeR6UnknownAs(content: string, findings: AutoFixFinding[], filePath: string, rootDir: string): FixerResult {
   if (!findings || findings.length === 0) return { modified: content, changes: 0 };
   if (!isTestFile(filePath)) {
     return {
       modified: content,
       changes: 0,
-      escalated: findings.map(f => ({ file: f.file, line: f.line, reason: "R6 auto-fix 仅允许测试文件" })),
+      escalated: findings.map((f) => ({ file: f.file, line: f.line, reason: "R6 auto-fix 仅允许测试文件" })),
     };
   }
 
   const lines = content.split("\n");
   const sorted = [...findings]
-    .filter(f => f.line > 0 && f.line <= lines.length)
-    .sort((a, b) => b.line - a.line);
-  const escalated = [];
+    .filter((f) => (f.line ?? 0) > 0 && (f.line ?? 0) <= lines.length)
+    .sort((a, b) => (b.line ?? 0) - (a.line ?? 0));
+  const escalated: AutoFixFinding[] = [];
   let changes = 0;
 
   for (const f of sorted) {
-    const idx = f.line - 1;
+    const idx = (f.line ?? 1) - 1;
     const original = lines[idx];
     if (original === undefined || !original.includes("as unknown as")) continue;
 
@@ -238,7 +304,7 @@ function fixSafeR6UnknownAs(content, findings, filePath, rootDir) {
 // 修复器: raw-collection — db.collection('name') → COLLECTIONS.CONSTANT
 // ══════════════════════════════════════════════════════════════════════
 
-function fixRawCollection(content, findings, filePath, rootDir) {
+function fixRawCollection(content: string, findings: AutoFixFinding[], filePath: string, rootDir: string): FixerResult {
   if (!findings || findings.length === 0) return { modified: content, changes: 0 };
 
   // 1. 查找并解析 COLLECTIONS 常量文件
@@ -248,8 +314,8 @@ function fixRawCollection(content, findings, filePath, rootDir) {
     resolve(rootDir, "src/constants.ts"),
   ];
 
-  let collectionsMap = null;
-  let collectionsFilePath = null;
+  let collectionsMap: Map<string, string> | null = null;
+  let collectionsFilePath: string | null = null;
   for (const p of collectionsPaths) {
     if (existsSync(p)) {
       try {
@@ -267,7 +333,7 @@ function fixRawCollection(content, findings, filePath, rootDir) {
     return {
       modified: content,
       changes: 0,
-      escalated: findings.map(f => ({
+      escalated: findings.map((f) => ({
         file: f.file,
         line: f.line,
         reason: "COLLECTIONS 常量文件不可用",
@@ -277,8 +343,8 @@ function fixRawCollection(content, findings, filePath, rootDir) {
 
   // 2. 提取每条 finding 中的集合名字符串
   const colNameRe = /db\.collection\s*\(\s*['"]([^'"]+)['"]\s*\)/;
-  const changesByLine = new Map(); // line → { oldStr, constName }
-  const escalated = [];
+  const changesByLine = new Map<number, { oldStr: string; constName: string }>(); // line → { oldStr, constName }
+  const escalated: AutoFixFinding[] = [];
 
   for (const f of findings) {
     const m = (f.match || "").match(colNameRe);
@@ -296,7 +362,7 @@ function fixRawCollection(content, findings, filePath, rootDir) {
       });
       continue;
     }
-    changesByLine.set(f.line, { oldStr: m[1], constName });
+    changesByLine.set(f.line ?? 0, { oldStr: m[1], constName });
   }
 
   if (changesByLine.size === 0) {
@@ -363,7 +429,7 @@ function fixRawCollection(content, findings, filePath, rootDir) {
 // 单文件修复调度
 // ══════════════════════════════════════════════════════════════════════
 
-function applyFixesToFile(filePath, findings, rootDir) {
+function applyFixesToFile(filePath: string, findings: AutoFixFinding[], rootDir: string): ApplyFixesResult {
   const absPath = resolve(rootDir, filePath);
   if (!existsSync(absPath)) {
     return { modified: false, changes: 0, escalated: undefined };
@@ -372,23 +438,23 @@ function applyFixesToFile(filePath, findings, rootDir) {
   const content = readFileSync(absPath, "utf8");
 
   // 按 scanner_id 分组
-  const groups = new Map();
+  const groups = new Map<string, AutoFixFinding[]>();
   for (const f of findings) {
-    const key = f.scanner_id;
+    const key = f.scanner_id ?? "";
     if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(f);
+    groups.get(key)!.push(f);
   }
 
   let current = content;
   let totalChanges = 0;
-  const allEscalated = [];
+  const allEscalated: AutoFixFinding[] = [];
 
   const sortedKeys = [...groups.keys()].sort();
   for (const scannerId of sortedKeys) {
-    const group = groups.get(scannerId);
+    const group = groups.get(scannerId) ?? [];
     const fixer = getFixer(scannerId);
     if (!fixer) {
-      allEscalated.push(...group.map(f => ({
+      allEscalated.push(...group.map((f) => ({
         file: f.file,
         line: f.line,
         reason: `无可用修复器: ${scannerId}`,
@@ -406,10 +472,11 @@ function applyFixesToFile(filePath, findings, rootDir) {
         allEscalated.push(...result.escalated);
       }
     } catch (err) {
-      allEscalated.push(...group.map(f => ({
+      const message = err instanceof Error ? err.message : String(err);
+      allEscalated.push(...group.map((f) => ({
         file: f.file,
         line: f.line,
-        reason: `修复器异常: ${err.message}`,
+        reason: `修复器异常: ${message}`,
       })));
     }
   }
@@ -430,18 +497,18 @@ function applyFixesToFile(filePath, findings, rootDir) {
 // ══════════════════════════════════════════════════════════════════════
 
 /**
- * @param {string[]} files - 相对路径数组
- * @param {string} rootDir - 项目根目录绝对路径
- * @param {Function} [_efSync] - 可注入的 execFileSync
- * @returns {Promise<{ passed: boolean, errors: Array }>}
+ * @param files - 相对路径数组
+ * @param rootDir - 项目根目录绝对路径
+ * @param _efSync - 可注入的 execFileSync
+ * @returns {passed, errors} errors 为新增的 tsc/eslint 错误（带 source）
  */
-async function validateAutoFix(files, rootDir, _efSync) {
+async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecFileSyncLike): Promise<{ passed: boolean; errors: LintError[] }> {
   const efs = _efSync || execFileSync;
-  const absFiles = files.map(f => resolve(rootDir, f).replace(/\\/g, "/"));
-  const relFiles = files.map(f => f.replace(/\\/g, "/"));
+  const absFiles = files.map((f) => resolve(rootDir, f).replace(/\\/g, "/"));
+  const relFiles = files.map((f) => f.replace(/\\/g, "/"));
 
-  let baselineTscErrors = [];
-  let baselineEslintErrors = [];
+  let baselineTscErrors: LintError[] = [];
+  let baselineEslintErrors: LintError[] = [];
 
   // 1. stash 当前修改（仅针对目标文件），取基线
   try {
@@ -457,19 +524,19 @@ async function validateAutoFix(files, rootDir, _efSync) {
         stdio: ["pipe", "pipe", "pipe"],
       });
     } catch (e) {
-      baselineTscErrors = parseTscErrors(e.stdout || "", rootDir);
+      baselineTscErrors = parseTscErrors((e as { stdout?: string }).stdout || "", rootDir);
     }
 
     // 基线 ESLint
     try {
-      const out = efs("pnpm", ["exec", "eslint", ...relFiles, "--format", "json"], {
+      const out = String(efs("pnpm", ["exec", "eslint", ...relFiles, "--format", "json"], {
         cwd: rootDir, encoding: "utf8", timeout: 30000,
         stdio: ["pipe", "pipe", "pipe"],
-      });
+      }));
       baselineEslintErrors = flattenEslintErrors(JSON.parse(out.trim() || "[]"), rootDir);
     } catch (e) {
       try {
-        baselineEslintErrors = flattenEslintErrors(JSON.parse(e.stdout?.trim() || "[]"), rootDir);
+        baselineEslintErrors = flattenEslintErrors(JSON.parse((e as { stdout?: string }).stdout?.trim() || "[]"), rootDir);
       } catch { /* eslint JSON parse failed — assume no baseline errors */ }
     }
 
@@ -489,27 +556,27 @@ async function validateAutoFix(files, rootDir, _efSync) {
   }
 
   // 2. 当前状态 TSC
-  let currentTscErrors = [];
+  let currentTscErrors: LintError[] = [];
   try {
     efs("pnpm", ["exec", "tsc", "--noEmit"], {
       cwd: rootDir, encoding: "utf8", timeout: 60000,
       stdio: ["pipe", "pipe", "pipe"],
     });
   } catch (e) {
-    currentTscErrors = parseTscErrors(e.stdout || "", rootDir);
+    currentTscErrors = parseTscErrors((e as { stdout?: string }).stdout || "", rootDir);
   }
 
   // 3. 当前状态 ESLint
-  let currentEslintErrors = [];
+  let currentEslintErrors: LintError[] = [];
   try {
-    const out = efs("pnpm", ["exec", "eslint", ...relFiles, "--format", "json"], {
+    const out = String(efs("pnpm", ["exec", "eslint", ...relFiles, "--format", "json"], {
       cwd: rootDir, encoding: "utf8", timeout: 30000,
       stdio: ["pipe", "pipe", "pipe"],
-    });
+    }));
     currentEslintErrors = flattenEslintErrors(JSON.parse(out.trim() || "[]"), rootDir);
   } catch (e) {
     try {
-      currentEslintErrors = flattenEslintErrors(JSON.parse(e.stdout?.trim() || "[]"), rootDir);
+      currentEslintErrors = flattenEslintErrors(JSON.parse((e as { stdout?: string }).stdout?.trim() || "[]"), rootDir);
     } catch { /* eslint JSON parse failed */ }
   }
 
@@ -520,8 +587,8 @@ async function validateAutoFix(files, rootDir, _efSync) {
   return {
     passed: newTsc.length === 0 && newEslint.length === 0,
     errors: [
-      ...newTsc.map(e => ({ ...e, source: "tsc" })),
-      ...newEslint.map(e => ({ ...e, source: "eslint" })),
+      ...newTsc.map((e) => ({ ...e, source: "tsc" })),
+      ...newEslint.map((e) => ({ ...e, source: "eslint" })),
     ],
   };
 }
@@ -531,14 +598,14 @@ async function validateAutoFix(files, rootDir, _efSync) {
 // ══════════════════════════════════════════════════════════════════════
 
 /**
- * @param {object} task - 任务对象（含 scope.targets）
- * @param {string} rootDir - 项目根目录绝对路径
- * @param {Function} [_efSync] - 可注入的 execFileSync
- * @returns {Promise<{ success: boolean, escalatedTasks?: Array }>}
+ * @param task - 任务对象（含 scope.targets）
+ * @param rootDir - 项目根目录绝对路径
+ * @param _efSync - 可注入的 execFileSync
+ * @returns {success, escalatedTasks?, modifiedFiles?}
  */
-async function handleEslintFix(task, rootDir, _efSync) {
+async function handleEslintFix(task: AutoFixTask, rootDir: string, _efSync?: ExecFileSyncLike): Promise<{ success: boolean; escalatedTasks?: AutoFixFinding[]; modifiedFiles?: string[] }> {
   const efs = _efSync || execFileSync;
-  const files = (task.scope?.targets || []).map(t => t.file).filter(Boolean);
+  const files = (task.scope?.targets || []).map((t) => t.file).filter(Boolean) as string[];
   if (files.length === 0) return { success: true };
 
   try {
@@ -549,13 +616,13 @@ async function handleEslintFix(task, rootDir, _efSync) {
   } catch (e) {
     // eslint 在残留不可自动修复的错误时退出非零 — 检查剩余错误
     try {
-      const stdout = e.stdout || "";
+      const stdout = (e as { stdout?: string }).stdout || "";
       const result = JSON.parse(stdout.trim() || "[]");
       const remaining = Array.isArray(result)
-        ? result.filter(r => r.errorCount > 0 || r.warningCount > 0)
+        ? (result as Array<{ errorCount?: number; warningCount?: number; filePath?: string; messages?: Array<{ ruleId?: string; severity?: number; line?: number; message?: string }> }>).filter((r) => (r.errorCount ?? 0) > 0 || (r.warningCount ?? 0) > 0)
         : [];
       if (remaining.length > 0) {
-        const escalatedTasks = [];
+        const escalatedTasks: AutoFixFinding[] = [];
         for (const r of remaining) {
           for (const msg of r.messages || []) {
             escalatedTasks.push({
@@ -574,12 +641,12 @@ async function handleEslintFix(task, rootDir, _efSync) {
     } catch { /* JSON parse failed — assume clean */ }
   }
 
-  let changedFiles = [];
+  let changedFiles: string[] = [];
   try {
-    const diff = efs("git", ["diff", "--name-only", "--", ...files], {
+    const diff = String(efs("git", ["diff", "--name-only", "--", ...files], {
       cwd: rootDir, encoding: "utf8", timeout: 15000,
       stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
+    })).trim();
     changedFiles = diff ? diff.split("\n").filter(Boolean) : [];
   } catch { /* diff unavailable: keep success but no changed file evidence */ }
 
@@ -593,19 +660,32 @@ async function handleEslintFix(task, rootDir, _efSync) {
 /**
  * 批量执行 AUTO_FIX 任务，直接修改文件、校验并提交或升级。
  *
- * @param {Array} tasks - scannerToTasks() 输出的 AUTO_FIX 任务数组
- * @param {string} rootDir - 项目根目录绝对路径
- * @param {object} [options={}]
- * @param {Function} [options.commitFn] - async (task, prdPath, modifiedFiles) => { committed }
- * @param {Function} [options.logP] - (scope, level, message) => void
- * @param {string} [options.prdPath] - PRD JSON 文件路径，传给 commitFn
- * @param {Function} [options.execFileSync] - 可注入的子进程执行函数
- * @param {Function} [options.readFileSync] - 可注入的文件读取函数
- * @param {Function} [options.writeFileSync] - 可注入的文件写入函数
- * @param {Function} [options.existsSync] - 可注入的文件存在检查函数
- * @returns {Promise<{ success: boolean, escalatedTasks?: Array, stats: { fixed: number, escalated: number, unchanged: number } }>}
+ * @param tasks - scannerToTasks() 输出的 AUTO_FIX 任务数组
+ * @param rootDir - 项目根目录绝对路径
+ * @param options.commitFn - async (task, prdPath, modifiedFiles) => { committed }
+ * @param options.logP - (scope, level, message) => void
+ * @param options.prdPath - PRD JSON 文件路径，传给 commitFn
+ * @param options.execFileSync - 可注入的子进程执行函数
+ * @param options.readFileSync - 可注入的文件读取函数
+ * @param options.writeFileSync - 可注入的文件写入函数
+ * @param options.existsSync - 可注入的文件存在检查函数
+ * @returns {success, escalatedTasks?, modifiedFiles, stats}
  */
-export async function applyAutoFixTasks(tasks, rootDir, options = Object()) {
+interface ApplyAutoFixTasksOptions {
+  commitFn?: (task: AutoFixTask, prdPath: string, modifiedFiles: string[]) => Promise<unknown>;
+  logP?: (scope: string, level: string, message: string) => void;
+  prdPath?: string;
+  execFileSync?: ExecFileSyncLike;
+  readFileSync?: (path: string, encoding: string) => string;
+  writeFileSync?: (path: string, data: string, encoding: string) => void;
+  existsSync?: (path: string) => boolean;
+}
+
+export async function applyAutoFixTasks(
+  tasks: AutoFixTask[],
+  rootDir: string,
+  options: ApplyAutoFixTasksOptions = {},
+): Promise<{ success: boolean; escalatedTasks?: AutoFixFinding[]; modifiedFiles: string[]; stats: { fixed: number; escalated: number; unchanged: number } }> {
   const {
     commitFn,
     logP,
@@ -622,12 +702,12 @@ export async function applyAutoFixTasks(tasks, rootDir, options = Object()) {
   const exs = injectedExists || existsSync;
 
   const stats = { fixed: 0, escalated: 0, unchanged: 0 };
-  const allEscalatedTasks = [];
-  const allModifiedFiles = [];
+  const allEscalatedTasks: AutoFixFinding[] = [];
+  const allModifiedFiles: string[] = [];
   let hasAnyFix = false;
 
   for (const task of tasks) {
-    const scannerId = task.fix_rule;
+    const scannerId = task.fix_rule ?? "";
 
     // ── ESLint 自动修复（特殊通道） ──
     if (scannerId?.startsWith("eslint-")) {
@@ -638,10 +718,10 @@ export async function applyAutoFixTasks(tasks, rootDir, options = Object()) {
         for (const file of result.modifiedFiles || []) allModifiedFiles.push(file);
         if (commitFn && prdPath) {
           try {
-            const targets = (result.modifiedFiles?.length ? result.modifiedFiles : (task.scope?.targets || []).map(t => t.file).filter(Boolean));
+            const targets = (result.modifiedFiles?.length ? result.modifiedFiles : (task.scope?.targets || []).map((t) => t.file).filter(Boolean)) as string[];
             await commitFn(task, prdPath, targets);
           } catch (e) {
-            if (logP) logP("AUTO_FIX", "commit", `失败: ${e.message}`);
+            if (logP) logP("AUTO_FIX", "commit", `失败: ${e instanceof Error ? e.message : String(e)}`);
           }
         }
         if (logP) logP("AUTO_FIX", "✅", `${task.id}: eslint --fix 已执行`);
@@ -651,7 +731,7 @@ export async function applyAutoFixTasks(tasks, rootDir, options = Object()) {
         if (logP) logP("AUTO_FIX", "⚠️", `${task.id}: eslint --fix 后仍有 ${result.escalatedTasks.length} 个错误，升级为 CLAUDE_FIX`);
       } else {
         const findings = task.fix_findings || [];
-        allEscalatedTasks.push(...findings.map(f => ({
+        allEscalatedTasks.push(...findings.map((f) => ({
           file: f.file,
           scanner_id: f.scanner_id,
           severity: f.severity || "MEDIUM",
@@ -670,7 +750,7 @@ export async function applyAutoFixTasks(tasks, rootDir, options = Object()) {
     const fixer = getFixer(scannerId);
     if (!fixer) {
       const findings = task.fix_findings || [];
-      allEscalatedTasks.push(...findings.map(f => ({
+      allEscalatedTasks.push(...findings.map((f) => ({
         file: f.file,
         scanner_id: f.scanner_id,
         severity: f.severity || "MEDIUM",
@@ -685,8 +765,8 @@ export async function applyAutoFixTasks(tasks, rootDir, options = Object()) {
     }
 
     // ── 逐文件修复 ──
-    const modifiedFiles = [];
-    const escalatedFindings = [];
+    const modifiedFiles: string[] = [];
+    const escalatedFindings: AutoFixFinding[] = [];
 
     for (const target of (task.scope?.targets || [])) {
       const filePath = target.file;
@@ -700,7 +780,7 @@ export async function applyAutoFixTasks(tasks, rootDir, options = Object()) {
 
       try {
         const content = rfs(absPath, "utf8");
-        const fileFindings = (task.fix_findings || []).filter(f => f.file === filePath);
+        const fileFindings = (task.fix_findings || []).filter((f) => f.file === filePath);
         if (fileFindings.length === 0) continue;
 
         const { modified, changes, escalated } = fixer(content, fileFindings, filePath, rootDir);
@@ -715,19 +795,20 @@ export async function applyAutoFixTasks(tasks, rootDir, options = Object()) {
           allModifiedFiles.push(filePath);
         }
       } catch (err) {
-        const ff = (task.fix_findings || []).filter(f => f.file === filePath);
-        escalatedFindings.push(...ff.map(f => ({
+        const message = err instanceof Error ? err.message : String(err);
+        const ff = (task.fix_findings || []).filter((f) => f.file === filePath);
+        escalatedFindings.push(...ff.map((f) => ({
           file: f.file,
           line: f.line,
-          reason: `修复异常: ${err.message}`,
+          reason: `修复异常: ${message}`,
         })));
-        if (logP) logP("AUTO_FIX", "❌", `修复异常 ${filePath}: ${err.message}`);
+        if (logP) logP("AUTO_FIX", "❌", `修复异常 ${filePath}: ${message}`);
       }
     }
 
     // ── 汇总升级项 ──
     if (escalatedFindings.length > 0) {
-      allEscalatedTasks.push(...escalatedFindings.map(f => ({
+      allEscalatedTasks.push(...escalatedFindings.map((f) => ({
         file: f.file,
         scanner_id: scannerId,
         severity: "MEDIUM",
@@ -751,7 +832,7 @@ export async function applyAutoFixTasks(tasks, rootDir, options = Object()) {
           try {
             await commitFn(task, prdPath, modifiedFiles);
           } catch (e) {
-            if (logP) logP("AUTO_FIX", "commit", `失败: ${e.message}`);
+            if (logP) logP("AUTO_FIX", "commit", `失败: ${e instanceof Error ? e.message : String(e)}`);
           }
         }
 
@@ -764,11 +845,11 @@ export async function applyAutoFixTasks(tasks, rootDir, options = Object()) {
             stdio: ["pipe", "pipe", "pipe"],
           });
         } catch (rollbackErr) {
-          if (logP) logP("AUTO_FIX", "❌", `回退失败: ${rollbackErr.message}`);
+          if (logP) logP("AUTO_FIX", "❌", `回退失败: ${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}`);
         }
 
         const findings = task.fix_findings || [];
-        allEscalatedTasks.push(...findings.map(f => ({
+        allEscalatedTasks.push(...findings.map((f) => ({
           file: f.file,
           scanner_id: f.scanner_id,
           severity: f.severity || "MEDIUM",

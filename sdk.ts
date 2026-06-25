@@ -478,10 +478,10 @@ function buildExperimentalSdkFacade(sdk: SdkFacadeSource) {
 }
 
 export function createYoloSdk(options: CreateYoloSdkOptions = {}) {
-  const cfg = options.config || loadConfig({
+  const cfg = (options.config || loadConfig({
     forceReload: Boolean(options.forceConfigReload),
     path: options.configPath,
-  });
+  })) as typeof config;
   const yoloRoot = resolve(options.yoloRoot || __dirname);
   const projectRoot = resolve(options.projectRoot || process.cwd());
   const stateRoot = resolve(options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
