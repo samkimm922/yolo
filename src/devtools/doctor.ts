@@ -21,7 +21,42 @@ export const YOLO_DOCTOR_SCHEMA_VERSION = "1.0";
 export const YOLO_DOCTOR_SCHEMA = "yolo.doctor.report.v1";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function check(code, severity, passed, message, extra = Object()) {
+type AgentBridgeInstallPlan = ReturnType<typeof buildAgentBridgeInstallPlan>;
+type BridgeArtifact = NonNullable<AgentBridgeInstallPlan["files"][number]>;
+
+export interface DoctorCheck {
+  code: string;
+  severity: "error" | "warning";
+  passed: boolean;
+  message: string;
+  [key: string]: unknown;
+}
+
+interface ReadJsonResult {
+  ok: boolean;
+  value?: unknown;
+  error?: string;
+}
+
+interface LifecycleInspection {
+  path?: string;
+  exists: boolean;
+  state?: unknown;
+  validation: {
+    status: string;
+    valid: boolean;
+    errors: Array<{ code: string; message: string }>;
+    warnings: Array<{ code: string; message: string }>;
+  };
+}
+
+function check(
+  code: string,
+  severity: "error" | "warning",
+  passed: boolean,
+  message: string,
+  extra: Record<string, unknown> = {},
+): DoctorCheck {
   return {
     code,
     severity,
@@ -31,43 +66,43 @@ function check(code, severity, passed, message, extra = Object()) {
   };
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function readJsonSafe(path) {
+function readJsonSafe(path: string): ReadJsonResult {
   try {
     return { ok: true, value: JSON.parse(readFileSync(path, "utf8")) };
   } catch (error) {
-    return { ok: false, error: error?.message || String(error) };
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
-function artifactStatus(file = Object()) {
-  const path = file.path || "";
+function artifactStatus(file: Record<string, unknown> = {}) {
+  const path = typeof file.path === "string" ? file.path : "";
   const exists = Boolean(path) && existsSync(path);
   const size = exists ? statSync(path).size : 0;
   return {
-    target: file.target || file.agent_target || null,
-    scope: file.scope || null,
-    role: file.role || "workflow_skill",
-    command: file.command || null,
+    target: (file.target as string | undefined) || (file.agent_target as string | undefined) || null,
+    scope: (file.scope as string | undefined) || null,
+    role: (file.role as string | undefined) || "workflow_skill",
+    command: (file.command as string | undefined) || null,
     path,
-    relative_path: file.relative_path || path,
+    relative_path: (file.relative_path as string | undefined) || path,
     exists,
     non_empty: size > 0,
   };
 }
 
-function expectedBridgeArtifacts(bridgePlan = Object()) {
+function expectedBridgeArtifacts(bridgePlan: AgentBridgeInstallPlan): BridgeArtifact[] {
   return [
-    ...(bridgePlan.files || []),
-    ...(bridgePlan.native_skill_files || []),
-    ...(bridgePlan.claude_slash_commands || []),
+    ...bridgePlan.files,
+    ...bridgePlan.native_skill_files,
+    ...bridgePlan.claude_slash_commands,
   ];
 }
 
-function lifecycleInspection(projectRoot) {
+function lifecycleInspection(projectRoot: string): LifecycleInspection {
   const statusPath = lifecycleStatusPath({ projectRoot });
   if (!existsSync(statusPath)) {
     return {
@@ -94,19 +129,34 @@ function lifecycleInspection(projectRoot) {
       validation: {
         status: "invalid",
         valid: false,
-        errors: [{ code: "LIFECYCLE_STATUS_PARSE_FAILED", message: error?.message || String(error) }],
+        errors: [{ code: "LIFECYCLE_STATUS_PARSE_FAILED", message: error instanceof Error ? error.message : String(error) }],
         warnings: [],
       },
     };
   }
 }
 
-export function buildYoloDoctorReport(options = Object()) {
-  const projectRoot = resolve(options.projectRoot || options.project_root || options.cwd || process.cwd());
-  const yoloRoot = resolve(options.yoloRoot || options.yolo_root || join(__dirname, "../.."));
-  const homeDir = resolve(options.homeDir || options.home_dir || homedir());
-  const targets = options.targets || options.target || "both";
-  const scope = options.scope || options.installScope || options.install_scope || "project";
+interface BuildDoctorReportOptions {
+  projectRoot?: unknown;
+  project_root?: unknown;
+  cwd?: unknown;
+  yoloRoot?: unknown;
+  yolo_root?: unknown;
+  homeDir?: unknown;
+  home_dir?: unknown;
+  targets?: unknown;
+  target?: unknown;
+  scope?: unknown;
+  installScope?: unknown;
+  install_scope?: unknown;
+}
+
+export function buildYoloDoctorReport(options: BuildDoctorReportOptions = {}) {
+  const projectRoot = resolve(String(options.projectRoot || options.project_root || options.cwd || process.cwd()));
+  const yoloRoot = resolve(String(options.yoloRoot || options.yolo_root || join(__dirname, "../..")));
+  const homeDir = resolve(String(options.homeDir || options.home_dir || homedir()));
+  const targets = String(options.targets || options.target || "both");
+  const scope = String(options.scope || options.installScope || options.install_scope || "project");
   const configPath = join(projectRoot, ".yolo/config.json");
   const configRead = existsSync(configPath) ? readJsonSafe(configPath) : { ok: false, error: "missing" };
   const lifecycle = lifecycleInspection(projectRoot);
@@ -198,7 +248,7 @@ export function buildYoloDoctorReport(options = Object()) {
       status_path: lifecycle.path,
       exists: lifecycle.exists,
       validation: lifecycle.validation,
-      current_stage: Object.assign(Object(), lifecycle).state?.current_stage || null,
+      current_stage: (lifecycle.state as Record<string, unknown> | undefined)?.current_stage || null,
     },
     commands: {
       schema: commandRegistry.schema,
@@ -228,7 +278,7 @@ export function buildYoloDoctorReport(options = Object()) {
   };
 }
 
-export function formatYoloDoctorText(report = Object()) {
+export function formatYoloDoctorText(report: ReturnType<typeof buildYoloDoctorReport>) {
   const lines = [
     `[yolo doctor] ${report.status}`,
     `project: ${report.project_root}`,
@@ -250,9 +300,28 @@ export function formatYoloDoctorText(report = Object()) {
   return lines.join("\n");
 }
 
-function parseDoctorArgs(argv = []) {
-  const options = { json: false, help: false };
-  const input = Object();
+interface DoctorParsedInput {
+  projectRoot?: string;
+  targets?: string;
+  scope?: string;
+  homeDir?: string;
+}
+
+interface DoctorParsedOptions {
+  json: boolean;
+  help: boolean;
+}
+
+interface DoctorIo {
+  stdout?: { write: (data: string) => void };
+  cwd?: string;
+  yoloRoot?: string;
+  home_dir?: string;
+}
+
+function parseDoctorArgs(argv: string[] = []): { input: DoctorParsedInput; options: DoctorParsedOptions } {
+  const options: DoctorParsedOptions = { json: false, help: false };
+  const input: DoctorParsedInput = {};
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--json") options.json = true;
@@ -276,7 +345,7 @@ function parseDoctorArgs(argv = []) {
   return { input, options };
 }
 
-export function runYoloDoctorCli(argv = [], io = Object()) {
+export function runYoloDoctorCli(argv: string[] = [], io: DoctorIo = {}): number {
   const stdout = io.stdout || process.stdout;
   const { input, options } = parseDoctorArgs(argv);
   if (options.help) {
