@@ -56,7 +56,7 @@ function answerAllRequired(session) {
 
 describe("demand interview", () => {
   test("initializes a non-technical interview session from idea", () => withRoot((root) => {
-    const session = newSession(root);
+    const session: any = newSession(root);
 
     assert.equal(DEMAND_INTERVIEW_SCHEMA_VERSION, "1.0");
     assert.equal(session.schema, DEMAND_INTERVIEW_SCHEMA);
@@ -83,7 +83,7 @@ describe("demand interview", () => {
   }));
 
   test("answers questions in order and advances coverage", () => withRoot((root) => {
-    const session = newSession(root);
+    const session: any = newSession(root);
 
     answer(session, "target_users", "Store managers who review inventory every morning and decide which SKU to replenish first.");
     assert.equal(session.answers.target_users.normalized.items[0], "Store managers who review inventory every morning and decide which SKU to replenish first.");
@@ -94,7 +94,7 @@ describe("demand interview", () => {
     answer(session, "pain_points", "Stockouts are discovered after customers complain, which causes rush replenishment work.");
     answer(session, "desired_outcome", "Store managers can see low-stock risks before the item sells out and prioritize replenishment.");
 
-    const coverage = inspectDemandInterviewCoverage(session);
+    const coverage: any = inspectDemandInterviewCoverage(session);
     assert.equal(coverage.ready_for_discuss, true);
     assert.equal(coverage.ready_for_prd_intake, false);
     assert.ok(coverage.answered_slots.includes("desired_outcome"));
@@ -103,7 +103,7 @@ describe("demand interview", () => {
   }));
 
   test("creates slot-specific follow-up questions for short or technical answers", () => withRoot((root) => {
-    const session = newSession(root);
+    const session: any = newSession(root);
 
     answer(session, "target_users", "API");
 
@@ -116,13 +116,13 @@ describe("demand interview", () => {
     assert.match(session.follow_up_questions[0].plain_language_prompt, /角色|频率|负责/);
     assert.ok(session.readiness.warnings.some((warning) => warning.slot === "target_users"));
 
-    const chineseTechSession = newSession(root);
+    const chineseTechSession: any = newSession(root);
     answer(chineseTechSession, "target_users", "接口 数据库");
     assert.equal(chineseTechSession.follow_up_questions[0].reason, "technical_only");
   }));
 
   test("does not count command-like feature lines as target user roles", () => withRoot((root) => {
-    const session = newSession(root);
+    const session: any = newSession(root);
 
     answer(session, "target_users", "taskcli add creates a new task in src/tasks.ts");
 
@@ -136,7 +136,7 @@ describe("demand interview", () => {
   }));
 
   test("keeps hyphenated product or fixture names inside valid role answers", () => withRoot((root) => {
-    const session = newSession(root);
+    const session: any = newSession(root);
 
     answer(session, "target_users", "Release managers and fixture maintainers check Node.js basic daily before publishing and are responsible for confirming smoke results.");
 
@@ -146,18 +146,18 @@ describe("demand interview", () => {
   }));
 
   test("does not ask follow-up questions for sufficiently specific answers", () => withRoot((root) => {
-    const session = newSession(root);
+    const session: any = newSession(root);
 
     answer(session, "target_users", "Store managers who review inventory every morning and are responsible for deciding which SKU to replenish first.");
 
-    const coverage = inspectDemandInterviewCoverage(session);
+    const coverage: any = inspectDemandInterviewCoverage(session);
     assert.equal(coverage.follow_up_questions.some((question) => question.slot === "target_users"), false);
     assert.equal(coverage.follow_up_plan.status, "clear");
     assert.equal(coverage.quality.level, "sufficient");
   }));
 
   test("does not mark detailed MVP tradeoffs vague only because they mention automation", () => withRoot((root) => {
-    const session = newSession(root);
+    const session: any = newSession(root);
 
     answer(session, "mvp_priority", "MVP includes threshold comparison, visible low-stock label, and filter; supplier automation is explicitly deferred out of version one.");
 
@@ -166,7 +166,7 @@ describe("demand interview", () => {
   }));
 
   test("gates PRD intake on critical slots plus explicit approval", () => withRoot((root) => {
-    const session = answerAllRequired(newSession(root));
+    const session: any = answerAllRequired(newSession(root));
 
     let coverage = inspectDemandInterviewCoverage(session);
     assert.equal(coverage.ready_for_discuss, true);
@@ -188,7 +188,7 @@ describe("demand interview", () => {
   }));
 
   test("converts interview answers into demand runtime input", () => withRoot((root) => {
-    const session = answerAllRequired(newSession(root));
+    const session: any = answerAllRequired(newSession(root));
     answer(session, "execution_approval", true);
 
     const input = demandInterviewToDemandInput(session);
@@ -207,7 +207,7 @@ describe("demand interview", () => {
     assert.equal(input.followups.length, 0);
     assert.equal(input.interview.coverage.follow_up_plan.status, "clear");
 
-    const demandSession = buildDemandSession(input, { now: "2026-05-29T13:00:00.000Z" });
+    const demandSession: any = buildDemandSession(input, { now: "2026-05-29T13:00:00.000Z" });
     assert.equal(demandSession.id, session.demand_id);
     assert.deepEqual(demandSession.project.target_users, input.target_users);
     assert.equal(demandSession.approval.approved, true);
@@ -216,7 +216,7 @@ describe("demand interview", () => {
   }));
 
   test("keeps Chinese enumeration phrases as one demand item", () => withRoot((root) => {
-    const session = newSession(root);
+    const session: any = newSession(root);
     const criterion = "看板包含 Todo、Doing、Done 三列，卡片可在列之间移动。";
     const proof = "验收时完成新增列表、新增卡片、编辑、移动、归档、刷新持久化并刷新后仍保留。";
 
@@ -230,7 +230,7 @@ describe("demand interview", () => {
     assert.deepEqual(input.success_criteria, [criterion]);
     assert.deepEqual(input.proof, [proof]);
 
-    const demandSession = buildDemandSession({
+    const demandSession: any = buildDemandSession({
       objective: "让产品负责人使用中文看板管理任务状态。",
       target_users: "产品负责人",
       status_quo: "现在靠表格维护任务状态。",
@@ -244,11 +244,11 @@ describe("demand interview", () => {
   }));
 
   test("preserves follow-up warnings and quality metadata during PRD conversion", () => withRoot((root) => {
-    const session = answerAllRequired(newSession(root));
+    const session: any = answerAllRequired(newSession(root));
     answer(session, "target_users", "API");
     answer(session, "execution_approval", true);
 
-    const coverage = inspectDemandInterviewCoverage(session);
+    const coverage: any = inspectDemandInterviewCoverage(session);
     assert.equal(coverage.ready_for_prd_intake, false);
     assert.ok(coverage.follow_up_questions.some((question) => question.slot === "target_users"));
     assert.ok(coverage.readiness.warnings.some((warning) => warning.slot === "target_users"));
@@ -260,7 +260,7 @@ describe("demand interview", () => {
     assert.ok(input.interview.coverage.follow_up_questions.some((question) => question.slot === "target_users"));
     assert.ok(input.interview.coverage.warnings.some((warning) => warning.slot === "target_users"));
 
-    const demandSession = buildDemandSession(input, { now: "2026-05-29T13:00:00.000Z" });
+    const demandSession: any = buildDemandSession(input, { now: "2026-05-29T13:00:00.000Z" });
     assert.ok(demandSession.interview.coverage.follow_up_questions.some((question) => question.slot === "target_users"));
     assert.ok(demandSession.interview.coverage.quality.low_quality_slots.includes("target_users"));
   }));

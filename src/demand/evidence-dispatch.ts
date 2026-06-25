@@ -245,7 +245,7 @@ function readDemandSession(input: Loose = Object(), projectRoot: string): unknow
   }
 }
 
-function invalidDemandSessionDispatchResult(read: DemandSessionRead, input: Loose = Object(), options: Loose = Object(), projectRoot: string, stateRoot: string, execute: boolean): Loose {
+function invalidDemandSessionDispatchResult(read: DemandSessionRead, input: Loose = Object(), options: Loose = Object(), projectRoot: string, stateRoot: string, execute: boolean): DemandEvidenceDispatchRuntimeResult {
   return {
     schema_version: DEMAND_EVIDENCE_DISPATCH_SCHEMA_VERSION,
     schema: DEMAND_EVIDENCE_DISPATCH_SCHEMA,
@@ -266,15 +266,15 @@ function invalidDemandSessionDispatchResult(read: DemandSessionRead, input: Loos
       agent_tool_profile: agentToolProfile(input, options),
     },
     demand_status: null,
-    actions: [] as unknown[],
+    actions: [] as Loose[],
     blockers: [{
       code: read.code || "DEMAND_SESSION_INVALID",
       message: read.message || "Explicit demand session source is invalid.",
       path: read.path || null,
       human_needed: true,
     }],
-    agent_results: [] as unknown[],
-    provider_runs: [] as unknown[],
+    agent_results: [] as Loose[],
+    provider_runs: [] as Loose[],
     artifacts: [] as string[],
   };
 }
@@ -651,7 +651,37 @@ function executionConfig(input: Loose = Object(), options: Loose = Object()): Lo
   };
 }
 
-export async function runDemandEvidenceDispatchRuntime(input: Loose = Object(), options: Loose = Object()) {
+// Structured runtime result. The fields tests and the CLI read on the top-level
+// result (actions/blockers/agent_results/readiness/boundary/...) are typed as
+// concrete arrays/records so consumers (incl. __tests__) can access them without
+// `any` (the N7 alignment pitfall). An index signature carries any passthrough.
+export interface DemandEvidenceDispatchRuntimeResult {
+  schema_version?: string;
+  schema?: string;
+  status: string;
+  code: string;
+  summary?: string;
+  generated_at?: string;
+  project_root?: string;
+  state_root?: string;
+  output_dir?: string | null;
+  output_file?: string | null;
+  mode?: string;
+  actions: Loose[];
+  blockers: Loose[];
+  agent_results: Loose[];
+  provider_runs: Loose[];
+  artifacts: string[];
+  readiness?: DemandPrdReadinessResult | Loose;
+  boundary?: Loose;
+  execution_policy?: Loose;
+  boundary_mutation_probe?: BoundaryMutationProbe | null;
+  demand_status?: Loose;
+  demand_status_after_dispatch?: Loose;
+  [key: string]: unknown;
+}
+
+export async function runDemandEvidenceDispatchRuntime(input: Loose = Object(), options: Loose = Object()): Promise<DemandEvidenceDispatchRuntimeResult> {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || input.cwd || options.projectRoot || options.project_root || options.cwd);
   const stateRoot = resolveRoot(input.stateRoot || input.state_root || options.stateRoot || options.state_root, join(projectRoot, ".yolo"));
   const execute = input.executeAgents === true
@@ -679,7 +709,7 @@ export async function runDemandEvidenceDispatchRuntime(input: Loose = Object(), 
     stateRoot,
   });
 
-  const result: Loose = Object.assign(Object() as Loose, {
+  const result: DemandEvidenceDispatchRuntimeResult = Object.assign(Object(), {
     ...plan,
     mode: execute ? "execute" : "dry_run",
     status: (plan as Loose).actions && ((plan as Loose).actions as unknown[]).length === 0 ? "pass" : execute ? "blocked" : "dry_run",
@@ -693,9 +723,10 @@ export async function runDemandEvidenceDispatchRuntime(input: Loose = Object(), 
       : execute
         ? "Demand evidence agent execution requires explicit authorization."
         : "Demand evidence agents planned without execution.",
-    agent_results: [] as unknown[],
-    provider_runs: [] as unknown[],
+    agent_results: [] as Loose[],
+    provider_runs: [] as Loose[],
     artifacts: [] as string[],
+    blockers: [] as Loose[],
   });
 
   const planActions = ((plan as Loose).actions as Loose[]) || [];

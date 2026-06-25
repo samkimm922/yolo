@@ -93,7 +93,7 @@ async function runCliJson(argv, cwd) {
 
 describe("demand evidence dispatch", () => {
   test("builds a concrete dispatch plan from evidence tasks", () => {
-    const plan = buildDemandEvidenceDispatchPlan(completeRiskyDemand, {
+    const plan: any = buildDemandEvidenceDispatchPlan(completeRiskyDemand, {
       projectRoot: "/repo",
       stateRoot: "/repo/.yolo",
     });
@@ -105,11 +105,11 @@ describe("demand evidence dispatch", () => {
   });
 
   test("agent prompt tells providers to return JSON without writing result artifacts", () => {
-    const plan = buildDemandEvidenceDispatchPlan(completeRiskyDemand, {
+    const plan: any = buildDemandEvidenceDispatchPlan(completeRiskyDemand, {
       projectRoot: "/repo",
       stateRoot: "/repo/.yolo",
     });
-    const prompt = buildDemandEvidenceAgentPrompt({ action: plan.actions[0], plan });
+    const prompt: any = buildDemandEvidenceAgentPrompt({ action: plan.actions[0], plan });
 
     assert.match(prompt, /Do not ask permission to write the evidence result/);
     assert.match(prompt, /harness captures stdout and writes artifacts/);
@@ -121,7 +121,7 @@ describe("demand evidence dispatch", () => {
 
   test("dry-run does not spawn provider agents", async () => {
     let calls = 0;
-    const result = await runDemandEvidenceDispatchRuntime(completeRiskyDemand, {
+    const result: any = await runDemandEvidenceDispatchRuntime(completeRiskyDemand, {
       projectRoot: "/repo",
       stateRoot: "/repo/.yolo",
       spawnProviderPrompt: async () => {
@@ -150,7 +150,7 @@ describe("demand evidence dispatch", () => {
         { input: { demandPath: badSchemaPath }, code: "DEMAND_SESSION_SCHEMA_INVALID" },
       ];
       for (const { input, code } of cases) {
-        const result = await runDemandEvidenceDispatchRuntime({
+        const result: any = await runDemandEvidenceDispatchRuntime({
           ...input,
         }, {
           projectRoot: root,
@@ -176,7 +176,7 @@ describe("demand evidence dispatch", () => {
       const sessionPath = join(root, ".yolo/demand/session.json");
       writeJson(sessionPath, completeRiskyDemandSession);
 
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         demandPath: sessionPath,
       }, {
         projectRoot: root,
@@ -195,7 +195,7 @@ describe("demand evidence dispatch", () => {
   });
 
   test("execute mode requires explicit agent dispatch authorization", async () => {
-    const result = await runDemandEvidenceDispatchRuntime({
+    const result: any = await runDemandEvidenceDispatchRuntime({
       ...completeRiskyDemand,
       executeAgents: true,
     }, {
@@ -245,7 +245,7 @@ describe("demand evidence dispatch", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-"));
     const calls = [];
     try {
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -281,7 +281,7 @@ describe("demand evidence dispatch", () => {
   test("codex dispatch does not inherit a claude default model or force read-only sandbox", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-codex-"));
     try {
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -317,7 +317,7 @@ describe("demand evidence dispatch", () => {
   test("claude dispatch uses safe permission mode and disallows write tools by default", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-claude-"));
     try {
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -359,7 +359,7 @@ describe("demand evidence dispatch", () => {
   test("claude full tool profile requires explicit authorization for full semantic mode", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-claude-full-"));
     try {
-      const withoutAllow = await runDemandEvidenceDispatchRuntime({
+      const withoutAllow: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -389,7 +389,7 @@ describe("demand evidence dispatch", () => {
       });
       assert.equal(withoutAllow.status, "pass", JSON.stringify(withoutAllow.readiness?.blockers, null, 2));
 
-      const withAllow = await runDemandEvidenceDispatchRuntime({
+      const withAllow: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -430,7 +430,7 @@ describe("demand evidence dispatch", () => {
   test("claude research profile labels research while keeping tools available", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-claude-research-"));
     try {
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -474,7 +474,7 @@ describe("demand evidence dispatch", () => {
       success_criteria: ["External web research is recorded as external evidence and project facts use project paths."],
     };
     try {
-      const missingExternal = await runDemandEvidenceDispatchRuntime({
+      const missingExternal: any = await runDemandEvidenceDispatchRuntime({
         ...researchDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -544,7 +544,7 @@ describe("demand evidence dispatch", () => {
   test("external research background mention does not force fetch evidence", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-external-background-"));
     try {
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         objective: "Verify project-scoped evidence for existing inventory API claims while allowing external research as background only.",
         executeAgents: true,
@@ -577,7 +577,7 @@ describe("demand evidence dispatch", () => {
   test("boundary blocks project file mutation even when agent results pass", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-boundary-"));
     try {
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -615,7 +615,7 @@ describe("demand evidence dispatch", () => {
       mkdirSync(join(root, "src"), { recursive: true });
       writeFileSync(join(root, "src", "contract.ts"), "export const contract = true;\n", "utf8");
 
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -665,7 +665,7 @@ describe("demand evidence dispatch", () => {
     try {
       const init = spawnSync("git", ["init"], { cwd: root, encoding: "utf8" });
       if (init.status !== 0) return;
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -705,7 +705,7 @@ describe("demand evidence dispatch", () => {
       if (init.status !== 0) return;
       writeFileSync(join(root, ".gitignore"), ".env\n", "utf8");
 
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -744,7 +744,7 @@ describe("demand evidence dispatch", () => {
       mkdirSync(join(root, "src"), { recursive: true });
       writeFileSync(join(root, "src", "existing.txt"), "before\n", "utf8");
 
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -787,7 +787,7 @@ describe("demand evidence dispatch", () => {
       mkdirSync(join(root, "src"), { recursive: true });
       writeFileSync(join(outside, "target.txt"), "outside target\n", "utf8");
 
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -825,7 +825,7 @@ describe("demand evidence dispatch", () => {
   test("repairs minor Claude JSON key drift and records the repair", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-json-repair-"));
     try {
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -864,7 +864,7 @@ describe("demand evidence dispatch", () => {
   test("invalid agent JSON fails closed with explicit blocker code", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-invalid-json-"));
     try {
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -896,7 +896,7 @@ describe("demand evidence dispatch", () => {
   test("agent evidence without explicit scope is blocked during normalization", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-scope-required-"));
     try {
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,
@@ -933,7 +933,7 @@ describe("demand evidence dispatch", () => {
   test("agent conflict remains a readiness blocker after dispatch", async () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-dispatch-conflict-"));
     try {
-      const result = await runDemandEvidenceDispatchRuntime({
+      const result: any = await runDemandEvidenceDispatchRuntime({
         ...completeRiskyDemand,
         executeAgents: true,
         allowAgentDispatch: true,

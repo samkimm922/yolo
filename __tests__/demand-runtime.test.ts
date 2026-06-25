@@ -34,13 +34,14 @@ interface PrdResult {
   quality_report?: Record<string, unknown>;
 }
 
-function requirePrd(result: ReturnType<typeof runDemandPrdRuntime>): asserts result is ReturnType<typeof runDemandPrdRuntime> & { prd: NonNullable<ReturnType<typeof runDemandPrdRuntime>["prd"]> } {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function requirePrd(result: any): asserts result is any {
   if (!("prd" in result) || result.prd === null || result.prd === undefined) {
     throw new Error(`expected prd to exist, got status=${result.status}`);
   }
 }
 
-function assertTaskSessionPlan(task, demandId) {
+function assertTaskSessionPlan(task: any, demandId: any) {
   const session = task.handoff?.session;
   assert.ok(session, `missing session plan for ${task.id}`);
   const taskRoot = `.yolo/demand/${demandId}/tasks/${task.id}`;
@@ -386,7 +387,7 @@ describe("demand findings generator output parsing", () => {
       "This object is ready for audit-to-prd.",
     ].join("\n");
 
-    const parsed = parseFindingsJsonOutput(output);
+    const parsed: any = parseFindingsJsonOutput(output);
 
     assert.equal(parsed.ok, true, JSON.stringify(parsed));
     assert.equal(parsed.data.findings[0].scope.targets[0].metadata.checks[0].params.required, true);
@@ -463,7 +464,7 @@ describe("demand runtime", () => {
   test("infers a traceable planned new file from greenfield CLI demand text", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-grounding-"));
     try {
-      const approved = runDemandApprovedRuntime(taskcliDemandInput(root));
+      const approved: any = runDemandApprovedRuntime(taskcliDemandInput(root));
       assert.equal(approved.status, "success");
       assert.deepEqual(approved.session.project.target_files, []);
 
@@ -471,7 +472,7 @@ describe("demand runtime", () => {
       assert.deepEqual(inferred.map((item) => item.file), ["src/taskcli.ts"]);
       assert.equal(inferred[0].status, "planned_new_file");
 
-      const grounded = groundDemandExecutionScope(approved.session, { projectRoot: root });
+      const grounded: any = groundDemandExecutionScope(approved.session, { projectRoot: root });
       assert.equal(grounded.applied, true);
       assert.deepEqual(grounded.session.project.target_files, ["src/taskcli.ts"]);
       const fact = grounded.session.project_facts.target_files[0];
@@ -497,7 +498,7 @@ describe("demand runtime", () => {
       assert.equal(inferred[0].status, "planned_new_file");
       assert.equal(inferred[0].source, "demand_greenfield_inference");
 
-      const grounded = groundDemandExecutionScope(session, { projectRoot: root });
+      const grounded: any = groundDemandExecutionScope(session, { projectRoot: root });
       assert.equal(grounded.applied, true, JSON.stringify(grounded, null, 2));
       assert.equal(grounded.status, "applied");
       assert.deepEqual(grounded.session.project.target_files, ["src/taskcli.ts"]);
@@ -522,8 +523,8 @@ describe("demand runtime", () => {
   test("spec --demand auto-grounds greenfield demand into executable PRD accepted by check", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-grounding-prd-"));
     try {
-      const approved = runDemandApprovedRuntime(taskcliDemandInput(root), { writeLifecycle: false });
-      const spec = runDemandPrdRuntime({
+      const approved: any = runDemandApprovedRuntime(taskcliDemandInput(root), { writeLifecycle: false });
+      const spec: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: approved.demand_path,
@@ -551,21 +552,21 @@ describe("demand runtime", () => {
       assert.deepEqual(savedSession.project.target_files, ["src/taskcli.ts"]);
       assert.equal(savedSession.project_facts.target_files[0].status, "planned_new_file");
 
-      const prd = spec.prd as any;
+      const prd = spec.prd;
       const task = prd.tasks[0];
       assert.deepEqual(task.scope.targets.map((target) => target.file), ["src/taskcli.ts"]);
       assert.equal(task.scope.allow_new_files, true);
       assert.equal(prd.demand.project_facts.target_files[0].status, "planned_new_file");
       assertExecutableTaskGraph(prd.tasks);
 
-      const check = inspectYoloCheck({
+      const check: any = inspectYoloCheck({
         prdPath,
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         writeLifecycle: false,
       });
       assert.equal(check.status, "pass", JSON.stringify(check.blockers, null, 2));
-      const runGuard = inspectLifecycleGuard({
+      const runGuard: any = inspectLifecycleGuard({
         command: "yolo-run",
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -671,7 +672,7 @@ describe("demand runtime", () => {
       assert.equal(isGreenfieldDemandSession({}, session), true);
       assert.deepEqual(deriveEvidenceRequirements({}, session, { kinds: ["project"] }), []);
 
-      const readiness = inspectDemandReadiness(session, {
+      const readiness: any = inspectDemandReadiness(session, {
         phase: "prd",
         projectRoot: root,
         stateDir: join(root, ".yolo", "state"),
@@ -710,7 +711,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-task-dedup-"));
     try {
       seedDemandTargetFiles(root, ["src/taskcli.ts", "__tests__/taskcli.test.ts"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demand_id: "DEMAND-TASK-DEDUP",
@@ -764,7 +765,7 @@ describe("demand runtime", () => {
       ];
       writeJson(join(discuss.demand_dir, "session.json"), discuss.session);
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -822,7 +823,7 @@ describe("demand runtime", () => {
       const root = mkdtempSync(join(tmpdir(), `yolo-demand-generic-${item.name}-`));
       try {
         seedDemandTargetFiles(root, [item.file]);
-        const discuss = runDemandDiscussRuntime({
+        const discuss: any = runDemandDiscussRuntime({
           projectRoot: root,
           stateRoot: join(root, ".yolo"),
           demand_id: `DEMAND-${item.name.toUpperCase()}`,
@@ -848,7 +849,7 @@ describe("demand runtime", () => {
         assert.equal(discuss.session.requirements.active.length, item.expectedStories);
         assert.equal(discuss.session.scenario_matrix.scenarios.length, item.expectedStories);
 
-        const prd = runDemandPrdRuntime({
+        const prd: any = runDemandPrdRuntime({
           projectRoot: root,
           stateRoot: join(root, ".yolo"),
           demandPath: discuss.demand_dir,
@@ -867,7 +868,7 @@ describe("demand runtime", () => {
         if (item.name === "csv-pipeline" || item.name === "notes-library") {
           const prdPath = join(root, `${item.name}-prd.json`);
           writeJson(prdPath, prd.prd);
-          const check = inspectYoloCheck({
+          const check: any = inspectYoloCheck({
             prdPath,
             projectRoot: root,
             stateRoot: join(root, ".yolo"),
@@ -888,7 +889,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-url-shortener-"));
     try {
       seedDemandTargetFiles(root, ["src/url-shortener.ts"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demand_id: "DEMAND-URL-SHORTENER",
@@ -916,7 +917,7 @@ describe("demand runtime", () => {
       assert.equal(discuss.readiness.blockers.some((blocker) => blocker.code === "EXTERNAL_RESEARCH_EVIDENCE_REQUIRED"), false);
       assert.equal(discuss.readiness.evidence_requirements.some((requirement) => requirement.kind === "external"), false);
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -955,7 +956,7 @@ describe("demand runtime", () => {
         },
       };
 
-      const grounded = groundDemandExecutionScope(session, { projectRoot: root });
+      const grounded: any = groundDemandExecutionScope(session, { projectRoot: root });
       assert.equal(grounded.applied, false);
       assert.equal(grounded.status, "blocked");
       assert.equal(grounded.reason, "candidate_files_require_explicit_confirmation");
@@ -970,14 +971,14 @@ describe("demand runtime", () => {
   test("prunes scaffold candidate facts when greenfield scope is grounded", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-grounding-scaffold-"));
     try {
-      const approved = runDemandApprovedRuntime(taskcliDemandInput(root));
+      const approved: any = runDemandApprovedRuntime(taskcliDemandInput(root));
       approved.session.project.candidate_target_files = ["specs/tasks.md"];
       approved.session.project_facts.target_files = [
         { file: "specs/tasks.md", status: "candidate", source: "auto_scout_candidate" },
       ];
       approved.session.project_facts.candidate_target_files = ["specs/tasks.md"];
 
-      const grounded = groundDemandExecutionScope(approved.session, { projectRoot: root });
+      const grounded: any = groundDemandExecutionScope(approved.session, { projectRoot: root });
       assert.equal(grounded.applied, true);
       assert.deepEqual(
         grounded.session.project_facts.target_files.map((fact) => fact.status),
@@ -992,7 +993,7 @@ describe("demand runtime", () => {
   test("brainstorm writes gsd-style demand artifact pack without business code", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-brainstorm-"));
     try {
-      const result = runDemandBrainstormRuntime({
+      const result: any = runDemandBrainstormRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Build inventory stockout prevention for store managers.",
@@ -1021,7 +1022,7 @@ describe("demand runtime", () => {
   test("brainstorm persists content-derived evidence requirements in session state", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-evidence-requirements-"));
     try {
-      const result = runDemandBrainstormRuntime({
+      const result: any = runDemandBrainstormRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Create onboarding checklist copy modeled on https://example.com/checklist-guide.",
@@ -1032,7 +1033,7 @@ describe("demand runtime", () => {
         writeArtifacts: true,
       });
 
-      const read = readDemandSession(join(result.demand_dir, "session.json"));
+      const read: any = readDemandSession(join(result.demand_dir, "session.json"));
       assert.equal(read.ok, true);
       assert.equal(read.session.evidence_requirements.length > 0, true);
       assert.equal(read.session.evidence_requirements[0].kind, "external");
@@ -1047,7 +1048,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-discuss-"));
     try {
       seedDemandTargetFiles(root, ["src/services/label-summary.ts"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Build a label summary helper for support operators.",
@@ -1069,12 +1070,12 @@ describe("demand runtime", () => {
 
       assert.equal(discuss.status, "success");
       assert.equal(discuss.readiness.readiness_level, "L3");
-      const read = readDemandSession(join(discuss.demand_dir, "session.json"));
+      const read: any = readDemandSession(join(discuss.demand_dir, "session.json"));
       assert.equal(read.ok, true);
       assert.equal(read.session.approval.approved, true);
       assert.equal(read.session.approval.effective_for_prd, true);
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1103,14 +1104,14 @@ describe("demand runtime", () => {
       assert.equal(prd.prd.execution_readiness.session_handoff.task_count, prd.prd.tasks.length);
       assert.equal(prd.prd.demand.atomicity_contract.session_handoff.session_count, prd.prd.tasks.length);
 
-      const check = inspectYoloCheck({
+      const check: any = inspectYoloCheck({
         prdPath: prd.artifacts[0],
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         writeLifecycle: true,
       });
       assert.notEqual(check.checks.find((item) => item.name === "demand_contract").status, "blocked");
-      const guard = inspectLifecycleGuard({
+      const guard: any = inspectLifecycleGuard({
         command: "yolo-run",
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -1126,7 +1127,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-prd-effective-"));
     try {
       seedDemandTargetFiles(root, ["src/services/label-summary.ts"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Build a label summary helper for support operators.",
@@ -1148,12 +1149,12 @@ describe("demand runtime", () => {
       assert.equal(discuss.status, "success");
       assert.equal(discuss.readiness.executable_prd_ready, true);
 
-      const read = readDemandSession(join(discuss.demand_dir, "session.json"));
+      const read: any = readDemandSession(join(discuss.demand_dir, "session.json"));
       assert.equal(read.ok, true);
       delete read.session.approval.effective_for_prd;
       writeJson(join(discuss.demand_dir, "session.json"), read.session);
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1166,7 +1167,7 @@ describe("demand runtime", () => {
       assert.equal(prd.prd.demand.approval.approved, true);
       assert.equal(prd.prd.demand.approval.effective_for_prd, true);
 
-      const check = inspectYoloCheck({
+      const check: any = inspectYoloCheck({
         prdPath: prd.artifacts[0],
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -1184,7 +1185,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-quality-proof-"));
     try {
       seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Show store managers low-stock alerts in the inventory list.",
@@ -1208,7 +1209,7 @@ describe("demand runtime", () => {
       assert.equal(discuss.status, "success");
       assert.equal(discuss.readiness.executable_prd_ready, true);
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1231,7 +1232,7 @@ describe("demand runtime", () => {
     try {
       mkdirSync(join(root, "src/pages"), { recursive: true });
       writeFileSync(join(root, "src/pages/inventory-list.tsx"), "export function InventoryList({ items }) { return items.map((item) => item.quantity).join(','); }\n", "utf8");
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Show store managers low-stock alerts in the inventory list.",
@@ -1262,7 +1263,7 @@ describe("demand runtime", () => {
         || blocker.fact_grounding_issues?.some((issue) => issue.code === "QUALITY_FIELD_ASSUMPTION_VERIFIED")
       )));
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1285,7 +1286,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-conditional-style-"));
     try {
       seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Show store managers low-stock alerts in the inventory list.",
@@ -1319,7 +1320,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-candidate-scope-"));
     try {
       seedDemandTargetFiles(root, ["src/inventory-list.ts"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Update `inventory-list` service so store managers get low-stock alert calculations.",
@@ -1341,7 +1342,7 @@ describe("demand runtime", () => {
       assert.ok(discuss.session.project.candidate_target_files.includes("src/inventory-list.ts"));
       assert.equal(discuss.readiness.executable_prd_ready, false);
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1362,7 +1363,7 @@ describe("demand runtime", () => {
     const outsideFile = `${root}-outside.js`;
     try {
       writeFileSync(outsideFile, "export const lowStockThreshold = 3;\n", "utf8");
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Show store managers a low-stock signal.",
@@ -1398,7 +1399,7 @@ describe("demand runtime", () => {
         && blocker.fact_grounding_issues?.some((issue) => issue.code === "QUALITY_TARGET_FILE_WITHIN_PROJECT")
       )), true);
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1420,7 +1421,7 @@ describe("demand runtime", () => {
     const outsideFile = `${root}-outside.js`;
     try {
       writeFileSync(outsideFile, "export const outsideProject = true;\n", "utf8");
-      const readiness = inspectDemandReadiness({
+      const readiness: any = inspectDemandReadiness({
         phase: "prd",
         vision: {
           statement: "Show store managers a clear low-stock signal.",
@@ -1472,7 +1473,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-quality-pure-"));
     try {
       seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Show store managers low-stock alerts in the inventory list.",
@@ -1493,7 +1494,7 @@ describe("demand runtime", () => {
         playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1508,7 +1509,7 @@ describe("demand runtime", () => {
       const proofless = clone(discuss.session);
       proofless.scenario_matrix.scenarios[0].proof = "";
       proofless.scenario_matrix.scenarios[0].surfaces[0].proof = "";
-      const proofQuality = inspectDemandQuality(proofless, {
+      const proofQuality: any = inspectDemandQuality(proofless, {
         phase: "prd",
         tasks: prd.prd.tasks,
         atomicity: passAtomicity,
@@ -1519,7 +1520,7 @@ describe("demand runtime", () => {
 
       const missingHandoffTasks = clone(prd.prd.tasks);
       delete missingHandoffTasks[0].handoff;
-      const handoffQuality = inspectDemandQuality(discuss.session, {
+      const handoffQuality: any = inspectDemandQuality(discuss.session, {
         phase: "prd",
         tasks: missingHandoffTasks,
         atomicity: passAtomicity,
@@ -1530,7 +1531,7 @@ describe("demand runtime", () => {
 
       const missingSessionPlanTasks = clone(prd.prd.tasks);
       delete missingSessionPlanTasks[0].handoff.session;
-      const sessionPlanQuality = inspectDemandQuality(discuss.session, {
+      const sessionPlanQuality: any = inspectDemandQuality(discuss.session, {
         phase: "prd",
         tasks: missingSessionPlanTasks,
         atomicity: passAtomicity,
@@ -1539,7 +1540,7 @@ describe("demand runtime", () => {
       assert.equal(sessionPlanQuality.status, "blocked");
       assert.ok(sessionPlanQuality.blockers.some((blocker) => blocker.code === "QUALITY_TASK_SESSION_PLAN_COMPLETE"));
 
-      const atomicityQuality = inspectDemandQuality(discuss.session, {
+      const atomicityQuality: any = inspectDemandQuality(discuss.session, {
         phase: "prd",
         tasks: prd.prd.tasks,
         atomicity: {
@@ -1560,7 +1561,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-interview-"));
     try {
       seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Show store managers low-stock alerts in the inventory list.",
@@ -1602,7 +1603,7 @@ describe("demand runtime", () => {
       assert.equal(discuss.session.approval_reason, "Business owner confirmed this is enough for MVP.");
       assert.equal(discuss.session.scenario_matrix.scenarios[0].source_question_ids.includes("Q-STOCKOUT-PROOF"), true);
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1628,7 +1629,7 @@ describe("demand runtime", () => {
     try {
       writeJson(join(root, ".yolo", "adapters", "local-browser.manifest.json"), acceptanceAdapterManifest());
       seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Show store managers low-stock alerts in the inventory list.",
@@ -1649,7 +1650,7 @@ describe("demand runtime", () => {
         playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1666,7 +1667,7 @@ describe("demand runtime", () => {
       assert.equal(Array.isArray(uiTask.handoff.state_matrix), true);
       assert.equal(Array.isArray(uiTask.handoff.evidence_plan), true);
 
-      const check = inspectYoloCheck({
+      const check: any = inspectYoloCheck({
         prdPath: prd.artifacts[0],
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -1685,7 +1686,7 @@ describe("demand runtime", () => {
   test("approved-demand PRD compilation blocks before requirements confirmation", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-blocked-"));
     try {
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Build alerts",
@@ -1694,7 +1695,7 @@ describe("demand runtime", () => {
         playback: { confirmed: true, confirmed_by: "user" },
         writeArtifacts: true,
       });
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1713,7 +1714,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-budget-"));
     try {
       seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx", "src/services/inventory-alerts.ts"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Show store managers low-stock alerts in the inventory list.",
@@ -1738,7 +1739,7 @@ describe("demand runtime", () => {
       discuss.session.scenario_matrix.scenarios[0].surfaces[0].session_budget.max_files = 3;
       writeFileSync(join(discuss.demand_dir, "session.json"), `${JSON.stringify(discuss.session, null, 2)}\n`, "utf8");
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1756,7 +1757,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-atomic-"));
     try {
       seedDemandTargetFiles(root, ["src/services/inventory-alerts.ts", "src/pages/inventory-list.tsx", "src/services/inventory-alerts.test.ts"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Show store managers low-stock alerts in the inventory list.",
@@ -1779,7 +1780,7 @@ describe("demand runtime", () => {
         writeArtifacts: true,
       });
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1794,7 +1795,7 @@ describe("demand runtime", () => {
       const prdPath = join(root, "inventory-demand-prd.json");
       writeJson(join(root, ".yolo/adapters/local-browser.manifest.json"), acceptanceAdapterManifest());
       writeJson(prdPath, prd.prd);
-      const check = inspectYoloCheck({
+      const check: any = inspectYoloCheck({
         prdPath,
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
@@ -1854,7 +1855,7 @@ describe("demand runtime", () => {
         "export function saveBoard(board) { localStorage.setItem(STORAGE_KEY, JSON.stringify(board)); }",
         "",
       ].join("\n"));
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Build a local board MVP.",
@@ -1900,7 +1901,7 @@ describe("demand runtime", () => {
       assert.equal(scenarios.every((scenario) => !(/(?<!未)归档/u.test(scenario.desired_behavior) && /刷新|重新加载|恢复/.test(scenario.desired_behavior))), true);
       assert.match(discuss.session.scenario_matrix.atomic_task_rule, /one user-visible story/);
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1925,7 +1926,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-deferred-confirm-"));
     try {
       seedDemandTargetFiles(root, ["src/api/orders.ts", "src/api/orders.test.ts"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Reject negative order line quantities for operations admins.",
@@ -1952,7 +1953,7 @@ describe("demand runtime", () => {
       assert.equal(discuss.session.approval.effective_for_prd, false);
       assert.ok(discuss.readiness.blockers.some((blocker) => blocker.code === "DEFERRED_SCOPE_CONFIRMED"));
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -1970,7 +1971,7 @@ describe("demand runtime", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-demand-cjk-"));
     try {
       seedDemandTargetFiles(root, ["src/pages/inventory-list.tsx"]);
-      const discuss = runDemandDiscussRuntime({
+      const discuss: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demand_id: "DEMAND-20260529-库存预警",
@@ -1993,7 +1994,7 @@ describe("demand runtime", () => {
         writeArtifacts: true,
       });
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,

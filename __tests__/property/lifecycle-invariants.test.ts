@@ -325,7 +325,7 @@ describe("property lifecycle invariants", () => {
     runProperty("INV-1", 0x1A11CE, graphCaseInput, ({ input }, rng) => {
       const root = propertyTempRoot("yolo-inv1-");
       try {
-        const prd = makeStrictPrd({
+        const prd: any = makeStrictPrd({
           id: `PRD-20260620-INV1-${input.seed}`,
           title: `Topology property ${input.domain}`,
           tasks: input.tasks,
@@ -357,12 +357,12 @@ describe("property lifecycle invariants", () => {
     runProperty("INV-2", 0x2D6D00, duplicateSurfaceCaseInput, ({ input }) => {
       const root = propertyTempRoot("yolo-inv2-");
       try {
-        const discuss = runDemandDiscussCase(root, input);
+        const discuss: any = runDemandDiscussCase(root, input);
         assert.equal(discuss.status, "success", `discuss should be ready: ${stableJson(discuss.blockers)}`);
         applyDuplicateSurfaces(discuss, input);
         writeMutatedSession(discuss);
 
-        const compiled = compileDemand(root, discuss);
+        const compiled: any = compileDemand(root, discuss);
         assert.equal(compiled.status, "success", `compiled demand should succeed: ${stableJson(compiled.blockers)}`);
         assert.equal(compiled.code, "DEMAND_PRD_READY");
         assertNoDuplicateTaskKeys(compiled.prd.tasks);
@@ -386,14 +386,14 @@ describe("property lifecycle invariants", () => {
     runProperty("INV-3", 0x34EAF1, (rng, seed) => demandCaseInput(rng, seed, true), ({ input }) => {
       const root = propertyTempRoot("yolo-inv3-");
       try {
-        const discuss = runDemandDiscussCase(root, input);
+        const discuss: any = runDemandDiscussCase(root, input);
         markSessionGreenfieldPlanned(discuss.session, input.targetFile);
         writeMutatedSession(discuss);
 
         assert.equal(isGreenfieldDemandSession({}, discuss.session), true);
         assert.deepEqual(deriveEvidenceRequirements({}, discuss.session, { kinds: ["project"] }), []);
 
-        const compiled = compileDemand(root, discuss);
+        const compiled: any = compileDemand(root, discuss);
         assert.equal(compiled.status, "success", `greenfield compile should succeed: ${stableJson(compiled.blockers)}`);
         assert.equal(compiled.code, "DEMAND_PRD_READY");
         assert.equal(compiled.readiness.executable_prd_ready, true);
@@ -468,9 +468,9 @@ describe("property lifecycle invariants", () => {
     runProperty("INV-5", 0x5EAD1, (rng, seed) => demandCaseInput(rng, seed, false), ({ input }) => {
       const root = propertyTempRoot("yolo-inv5-");
       try {
-        const discuss = runDemandDiscussCase(root, input);
+        const discuss: any = runDemandDiscussCase(root, input);
         assert.equal(discuss.status, "success", `discuss should be ready: ${stableJson(discuss.blockers)}`);
-        const compiled = compileDemand(root, discuss);
+        const compiled: any = compileDemand(root, discuss);
         assert.equal(compiled.readiness.executable_prd_ready, true, stableJson(compiled.readiness.blockers));
         assert.equal(compiled.quality_report.status, "pass", stableJson(compiled.quality_report.blockers));
         assert.equal(compiled.status, "success");

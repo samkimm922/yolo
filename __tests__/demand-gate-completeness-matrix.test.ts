@@ -51,8 +51,8 @@ function sessionWithFullCoverage() {
 
 describe("demand gate completeness matrix", () => {
   test("passes when all roles have scenarios, all scenarios have exceptions, all requirements have acceptance evidence", () => {
-    const session = sessionWithFullCoverage();
-    const result = inspectDemandReadiness(session, { phase: "prd" });
+    const session: any = sessionWithFullCoverage();
+    const result: any = inspectDemandReadiness(session, { phase: "prd" });
 
     const matrixCheck = result.checks.find((c) => c.code === "COMPLETENESS_MATRIX");
     assert.ok(matrixCheck, "COMPLETENESS_MATRIX check must exist");
@@ -69,10 +69,10 @@ describe("demand gate completeness matrix", () => {
   });
 
   test("blocks when a role has no matching scenario", () => {
-    const session = sessionWithFullCoverage();
+    const session: any = sessionWithFullCoverage();
     session.vision.target_users.push("regional director"); // no scenario for this role
 
-    const result = inspectDemandReadiness(session, { phase: "discuss" });
+    const result: any = inspectDemandReadiness(session, { phase: "discuss" });
     const matrixCheck = result.checks.find((c) => c.code === "COMPLETENESS_MATRIX");
     assert.ok(matrixCheck);
     assert.equal(matrixCheck.passed, false, "must block when a role has no scenario");
@@ -85,11 +85,11 @@ describe("demand gate completeness matrix", () => {
   });
 
   test("ignores command-like feature lines when checking role scenario coverage", () => {
-    const session = sessionWithFullCoverage();
+    const session: any = sessionWithFullCoverage();
     session.vision.target_users.push("taskcli add writes a task to src/tasks.ts");
     session.vision.target_users.push("list archived tasks with --done");
 
-    const result = inspectDemandReadiness(session, { phase: "discuss" });
+    const result: any = inspectDemandReadiness(session, { phase: "discuss" });
     const matrixCheck = result.checks.find((c) => c.code === "COMPLETENESS_MATRIX");
     assert.ok(matrixCheck);
     assert.equal(matrixCheck.passed, true, "command-like feature descriptions must not become uncovered roles");
@@ -97,12 +97,12 @@ describe("demand gate completeness matrix", () => {
   });
 
   test("blocks when a scenario has no exception Q&A", () => {
-    const session = sessionWithFullCoverage();
+    const session: any = sessionWithFullCoverage();
     // Session-level exceptions activate the per-scenario check
     session.prd_intake = { exceptions: ["What if system is down?"] };
     session.scenario_matrix.scenarios[0].exceptions = [];
 
-    const result = inspectDemandReadiness(session, { phase: "prd" });
+    const result: any = inspectDemandReadiness(session, { phase: "prd" });
     const matrixCheck = result.checks.find((c) => c.code === "COMPLETENESS_MATRIX");
     assert.ok(matrixCheck);
     assert.equal(matrixCheck.passed, false, "must block when exception data was collected but a scenario misses it");
@@ -114,10 +114,10 @@ describe("demand gate completeness matrix", () => {
   });
 
   test("blocks when a requirement has no acceptance evidence", () => {
-    const session = sessionWithFullCoverage();
+    const session: any = sessionWithFullCoverage();
     session.requirements.active[1].acceptance_scenarios = [];
 
-    const result = inspectDemandReadiness(session, { phase: "discuss" });
+    const result: any = inspectDemandReadiness(session, { phase: "discuss" });
     const matrixCheck = result.checks.find((c) => c.code === "COMPLETENESS_MATRIX");
     assert.ok(matrixCheck);
     assert.equal(matrixCheck.passed, false, "must block when a requirement has no acceptance proof");
@@ -129,12 +129,12 @@ describe("demand gate completeness matrix", () => {
   });
 
   test("blocks with multiple errors combined", () => {
-    const session = sessionWithFullCoverage();
+    const session: any = sessionWithFullCoverage();
     session.vision.target_users.push("external auditor");
     session.scenario_matrix.scenarios[0].exceptions = [];
     session.requirements.active[0].acceptance_scenarios = [];
 
-    const result = inspectDemandReadiness(session, { phase: "discuss" });
+    const result: any = inspectDemandReadiness(session, { phase: "discuss" });
     const matrixCheck = result.checks.find((c) => c.code === "COMPLETENESS_MATRIX");
     assert.ok(matrixCheck);
     assert.equal(matrixCheck.passed, false);
@@ -148,7 +148,7 @@ describe("demand gate completeness matrix", () => {
       requirements: { active: [] },
     };
 
-    const result = inspectDemandReadiness(session, { phase: "discuss" });
+    const result: any = inspectDemandReadiness(session, { phase: "discuss" });
     const matrixCheck = result.checks.find((c) => c.code === "COMPLETENESS_MATRIX");
     assert.ok(matrixCheck);
     assert.equal(matrixCheck.passed, true, "empty session has no completeness violations");
@@ -156,29 +156,29 @@ describe("demand gate completeness matrix", () => {
   });
 
   test("severity is warning at discuss phase, error at PRD phase", () => {
-    const session = sessionWithFullCoverage();
+    const session: any = sessionWithFullCoverage();
     session.vision.target_users.push("external auditor"); // creates a completeness violation
 
-    const discussResult = inspectDemandReadiness(session, { phase: "discuss" });
+    const discussResult: any = inspectDemandReadiness(session, { phase: "discuss" });
     const discussCheck = discussResult.checks.find((c) => c.code === "COMPLETENESS_MATRIX");
     assert.equal(discussCheck.severity, "warning", "must be warning at discuss phase");
     assert.equal(discussCheck.passed, false);
 
-    const prdResult = inspectDemandReadiness(session, { phase: "prd" });
+    const prdResult: any = inspectDemandReadiness(session, { phase: "prd" });
     const prdCheck = prdResult.checks.find((c) => c.code === "COMPLETENESS_MATRIX");
     assert.equal(prdCheck.severity, "error", "must be error at PRD phase");
     assert.equal(prdCheck.passed, false);
   });
 
   test("blocks when session has zero exceptions across all scenarios", () => {
-    const session = sessionWithFullCoverage();
+    const session: any = sessionWithFullCoverage();
     // Remove all exceptions from every scenario (zero-exception session)
     for (const scenario of session.scenario_matrix.scenarios) {
       scenario.exceptions = [];
     }
     session.prd_intake = undefined;
 
-    const result = inspectDemandReadiness(session, { phase: "prd" });
+    const result: any = inspectDemandReadiness(session, { phase: "prd" });
     const matrixCheck = result.checks.find((c) => c.code === "COMPLETENESS_MATRIX");
     assert.ok(matrixCheck);
     assert.equal(matrixCheck.passed, false, "must block when no scenario has exceptions");

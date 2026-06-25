@@ -1791,7 +1791,33 @@ function groundingArtifact(value: Loose = Object()): Loose {
   return artifact as Loose;
 }
 
-export function runDemandPrdRuntime(input: Loose = Object(), options: Loose = Object()) {
+// Result of runDemandPrdRuntime. Fields the CLI/tests read (prd, compiled,
+// preflight, readiness, blockers, ...) are typed so the ReturnType-derived
+// test helpers and dynamic consumers keep working without `any`.
+export interface DemandPrdRuntimeResult {
+  status: string;
+  code: string;
+  summary: string;
+  demand_path?: string;
+  demand_id?: unknown;
+  prd_path?: string | null;
+  output_path?: string | null;
+  compiled?: DemandPrdCompiledResult | Loose;
+  prd?: Loose | null;
+  preflight?: Loose | null;
+  grounding?: Loose;
+  grounded_session?: Loose;
+  readiness?: unknown;
+  quality_report?: unknown;
+  blockers: Loose[];
+  warnings: Loose[];
+  artifacts: string[];
+  outputs: Loose[];
+  next_actions: string[];
+  [key: string]: unknown;
+}
+
+export function runDemandPrdRuntime(input: Loose = Object(), options: Loose = Object()): DemandPrdRuntimeResult {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const demandPath = resolvePath(projectRoot, input.demandPath || input.demand_path || input.demand || defaultDemandSessionPath(stateRoot, input.id || "")) as string;
@@ -1867,7 +1893,7 @@ export function runDemandPrdRuntime(input: Loose = Object(), options: Loose = Ob
     );
   }
 
-  const result = {
+  const result: DemandPrdRuntimeResult = {
     status: compiled.status,
     code: compiled.code,
     summary: compiled.summary,
@@ -1894,7 +1920,26 @@ export function runDemandPrdRuntime(input: Loose = Object(), options: Loose = Ob
   return result;
 }
 
-export function runDemandTaskRuntime(input: Loose = Object(), options: Loose = Object()) {
+// Result of runDemandTaskRuntime. Fields the CLI/tests read are typed so the
+// ReturnType-derived test helpers and dynamic consumers keep working.
+export interface DemandTaskRuntimeResult {
+  status: string;
+  code: string;
+  summary: string;
+  demand_path?: string;
+  demand_id?: unknown;
+  plan?: Loose;
+  readiness?: unknown;
+  atomicity?: Loose;
+  blockers: Loose[];
+  warnings: Loose[];
+  artifacts: string[];
+  outputs: Loose[];
+  next_actions: string[];
+  [key: string]: unknown;
+}
+
+export function runDemandTaskRuntime(input: Loose = Object(), options: Loose = Object()): DemandTaskRuntimeResult {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const stateRoot = stateRootFor({ ...input, projectRoot }, options);
   const demandPath = resolvePath(projectRoot, input.demandPath || input.demand_path || input.demand || defaultDemandSessionPath(stateRoot, input.id || "")) as string;
@@ -1922,11 +1967,11 @@ export function runDemandTaskRuntime(input: Loose = Object(), options: Loose = O
       demand_path: read.path,
       demand_id: readSession.id,
       readiness,
-      blockers: readiness.blockers || [],
-      warnings: readiness.warnings || [],
+      blockers: (readiness.blockers as Loose[]) || [],
+      warnings: (readiness.warnings as Loose[]) || [],
       artifacts: [] as string[],
       outputs: [] as Loose[],
-      next_actions: readiness.next_actions || ["Resolve demand blockers before task planning."],
+      next_actions: (readiness.next_actions as string[]) || ["Resolve demand blockers before task planning."],
     };
   }
 
@@ -1958,10 +2003,10 @@ export function runDemandTaskRuntime(input: Loose = Object(), options: Loose = O
   const shouldWrite = input.writeArtifacts !== false && input.write_artifacts !== false && options.writeArtifacts !== false;
   const outputFile = resolvePath(projectRoot, input.outputFile || input.output_file || join(read.dir, "tasks.json")) as string;
   const artifacts = shouldWrite ? [writeJson(outputFile, plan)] : [];
-  const result = {
-    status: plan.status,
-    code: plan.status === "success" ? "DEMAND_TASKS_READY" : "DEMAND_TASKS_BLOCKED",
-    summary: plan.status === "success"
+  const result: DemandTaskRuntimeResult = {
+    status: clean(plan.status),
+    code: clean(plan.status) === "success" ? "DEMAND_TASKS_READY" : "DEMAND_TASKS_BLOCKED",
+    summary: clean(plan.status) === "success"
       ? "Demand task plan artifact created."
       : "Demand task plan is blocked by atomicity or compile issues.",
     demand_path: read.path,
@@ -1973,11 +2018,11 @@ export function runDemandTaskRuntime(input: Loose = Object(), options: Loose = O
     warnings: [...(readiness.warnings as Loose[] || []), ...(atomicity.warnings as Loose[] || [])],
     artifacts,
     outputs: artifacts.map((path) => ({ path, type: "demand_task_plan" })),
-    next_actions: plan.status === "success"
+    next_actions: clean(plan.status) === "success"
       ? ["Use yolo spec --demand <session.json|dir> to compile the executable PRD."]
-      : blockers.map((blocker) => blocker.message).filter(Boolean),
+      : blockers.map((blocker) => clean(blocker.message)).filter(Boolean),
   };
-  if (shouldWrite && plan.status === "success" && shouldWriteLifecycle(input, options)) {
+  if (shouldWrite && clean(plan.status) === "success" && shouldWriteLifecycle(input, options)) {
     attachLifecycle(result, "roadmap", { projectRoot, stateRoot }, "yolo-tasks");
   }
   return result;

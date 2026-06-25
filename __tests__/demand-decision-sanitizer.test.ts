@@ -12,7 +12,7 @@ describe("demand decision sanitizer", () => {
       mkdirSync(join(root, "src"), { recursive: true });
       writeFileSync(join(root, "src/visible-result.ts"), "export const ready = true;\n", "utf8");
 
-      const result = runDemandDiscussRuntime({
+      const result: any = runDemandDiscussRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         idea: "Expose a visible readiness result for release operators.",

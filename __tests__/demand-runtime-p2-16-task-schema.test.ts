@@ -65,11 +65,11 @@ describe("P2.16 task schema enhancement", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-p2-16-io-"));
     try {
       seedInventoryProject(root);
-      const discuss = runDemandDiscussRuntime(baseDiscussInput(root, {
+      const discuss: any = runDemandDiscussRuntime(baseDiscussInput(root, {
         target_files: ["src/pages/inventory-list.tsx", "src/services/inventory-alerts.ts"],
       }));
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -106,12 +106,12 @@ describe("P2.16 task schema enhancement", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-p2-16-depgraph-"));
     try {
       seedInventoryProject(root);
-      const discuss = runDemandDiscussRuntime(baseDiscussInput(root, {
+      const discuss: any = runDemandDiscussRuntime(baseDiscussInput(root, {
         success_criteria: ["Inventory service marks low-stock SKUs.", "Inventory list displays a visible low-stock badge."],
         target_files: ["src/services/inventory-alerts.ts", "src/pages/inventory-list.tsx", "src/services/inventory-alerts.test.ts"],
       }));
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -190,9 +190,9 @@ describe("P2.16 task schema enhancement", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-p2-16-musthaves-"));
     try {
       seedInventoryProject(root);
-      const discuss = runDemandDiscussRuntime(baseDiscussInput(root));
+      const discuss: any = runDemandDiscussRuntime(baseDiscussInput(root));
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -234,12 +234,12 @@ describe("P2.16 task schema enhancement", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-p2-16-verify-pipe-"));
     try {
       seedInventoryProject(root);
-      const discuss = runDemandDiscussRuntime(baseDiscussInput(root));
+      const discuss: any = runDemandDiscussRuntime(baseDiscussInput(root));
 
       discuss.session.scenario_matrix.scenarios[0].verify_command = "npm test | grep PASS";
       writeFileSync(join(discuss.demand_dir, "session.json"), JSON.stringify(discuss.session, null, 2) + "\n", "utf8");
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -262,12 +262,12 @@ describe("P2.16 task schema enhancement", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-p2-16-verify-redirect-"));
     try {
       seedInventoryProject(root);
-      const discuss = runDemandDiscussRuntime(baseDiscussInput(root));
+      const discuss: any = runDemandDiscussRuntime(baseDiscussInput(root));
 
       discuss.session.scenario_matrix.scenarios[0].verify_command = "npm test > output.txt";
       writeFileSync(join(discuss.demand_dir, "session.json"), JSON.stringify(discuss.session, null, 2) + "\n", "utf8");
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -289,12 +289,12 @@ describe("P2.16 task schema enhancement", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-p2-16-verify-semicolon-"));
     try {
       seedInventoryProject(root);
-      const discuss = runDemandDiscussRuntime(baseDiscussInput(root));
+      const discuss: any = runDemandDiscussRuntime(baseDiscussInput(root));
 
       discuss.session.scenario_matrix.scenarios[0].verify_command = "npm test; echo done";
       writeFileSync(join(discuss.demand_dir, "session.json"), JSON.stringify(discuss.session, null, 2) + "\n", "utf8");
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
@@ -316,12 +316,12 @@ describe("P2.16 task schema enhancement", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-p2-16-verify-valid-"));
     try {
       seedInventoryProject(root);
-      const discuss = runDemandDiscussRuntime(baseDiscussInput(root));
+      const discuss: any = runDemandDiscussRuntime(baseDiscussInput(root));
 
       discuss.session.scenario_matrix.scenarios[0].verify_command = "npm test";
       writeFileSync(join(discuss.demand_dir, "session.json"), JSON.stringify(discuss.session, null, 2) + "\n", "utf8");
 
-      const prd = runDemandPrdRuntime({
+      const prd: any = runDemandPrdRuntime({
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
