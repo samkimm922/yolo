@@ -109,7 +109,11 @@ import {
 } from "./interview-helpers.js";
 import { runYoloBrainstormCli, runYoloDiscussCli } from "./commands-demand.js";
 
-export async function runYoloInitCli(argv = [], io = Object()) {
+function looseErrorMessage(error: unknown) {
+  return (error as { message?: string } | null | undefined)?.message;
+}
+
+export async function runYoloInitCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloInitArgs(argv);
@@ -136,15 +140,15 @@ export async function runYoloInitCli(argv = [], io = Object()) {
       summary: "failed to initialize YOLO project",
       exit_code: 1,
       code: "INIT_FAILED",
-      error: error.message,
+      error: looseErrorMessage(error),
     };
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    else stderr.write(`[yolo init] error: ${error.message}\n`);
+    else stderr.write(`[yolo init] error: ${looseErrorMessage(error)}\n`);
     return result.exit_code;
   }
 }
 
-export async function runYoloSetupCli(argv = [], io = Object()) {
+export async function runYoloSetupCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloSetupArgs(argv);
@@ -175,15 +179,15 @@ export async function runYoloSetupCli(argv = [], io = Object()) {
       summary: "failed to run YOLO project setup",
       exit_code: 1,
       code: "SETUP_FAILED",
-      error: error.message,
+      error: looseErrorMessage(error),
     };
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    else stderr.write(`[yolo setup] error: ${error.message}\n`);
+    else stderr.write(`[yolo setup] error: ${looseErrorMessage(error)}\n`);
     return result.exit_code;
   }
 }
 
-export async function runYoloInstallCli(argv = [], io = Object()) {
+export async function runYoloInstallCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloSetupArgs(argv);
@@ -213,15 +217,15 @@ export async function runYoloInstallCli(argv = [], io = Object()) {
       summary: "failed to install YOLO agent bridge",
       exit_code: 1,
       code: "INSTALL_FAILED",
-      error: error.message,
+      error: looseErrorMessage(error),
     };
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    else stderr.write(`[yolo install] error: ${error.message}\n`);
+    else stderr.write(`[yolo install] error: ${looseErrorMessage(error)}\n`);
     return result.exit_code;
   }
 }
 
-export async function runYoloMemoryCli(argv = [], io = Object()) {
+export async function runYoloMemoryCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloMemoryArgs(argv);
@@ -256,15 +260,15 @@ export async function runYoloMemoryCli(argv = [], io = Object()) {
       summary: "failed to refresh YOLO memory center",
       exit_code: 1,
       code: "MEMORY_REFRESH_FAILED",
-      error: error.message,
+      error: looseErrorMessage(error),
     };
     if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    else stderr.write(`[yolo memory] error: ${error.message}\n`);
+    else stderr.write(`[yolo memory] error: ${looseErrorMessage(error)}\n`);
     return result.exit_code;
   }
 }
 
-export async function runYoloCheckCli(argv = [], io = Object()) {
+export async function runYoloCheckCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   let parsed;
@@ -308,7 +312,7 @@ export async function runYoloCheckCli(argv = [], io = Object()) {
   return report.status === "pass" ? 0 : report.status === "warning" ? 2 : 1;
 }
 
-export async function runYoloNextCli(argv = [], io = Object()) {
+export async function runYoloNextCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const { input, options } = parseYoloWorkflowArgs(argv);
 
@@ -339,7 +343,7 @@ export async function runYoloNextCli(argv = [], io = Object()) {
   return 0;
 }
 
-export async function runYoloProgressUiEvidenceCli(argv = [], io = Object()) {
+export async function runYoloProgressUiEvidenceCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const { input, options } = parseYoloProgressUiEvidenceArgs(argv);
 
