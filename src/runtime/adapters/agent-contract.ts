@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-const PROVIDER_ALIASES = {
+const PROVIDER_ALIASES: Record<string, string> = {
   anthropic: "claude",
   claude: "claude",
   codex: "codex",
@@ -10,7 +10,7 @@ const PROVIDER_ALIASES = {
   local: "custom",
 };
 
-const PROVIDER_COMMANDS = {
+const PROVIDER_COMMANDS: Record<string, string | null> = {
   claude: "claude",
   codex: "codex",
   custom: null,
@@ -20,43 +20,45 @@ export const AGENT_ADAPTER_CONTRACT_SCHEMA_VERSION = "1.1";
 export const AGENT_ADAPTER_CONTRACT_SCHEMA = "yolo.runtime.agent_adapter_contract.v1";
 export const DEFAULT_CLAUDE_PERMISSION_MODE = "acceptEdits";
 
-function cleanString(value) {
+function cleanString(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function positiveNumber(value) {
+function positiveNumber(value: unknown): number | null {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : null;
 }
 
-function commandForProvider(provider, config = Object()) {
-  if (provider === "custom") return cleanString(config.ai?.custom_command || config.ai?.command) || null;
+function commandForProvider(provider: string, config: Record<string, unknown> = Object()): string | null {
+  const ai = (config.ai as Record<string, unknown>) || {};
+  if (provider === "custom") return cleanString(ai.custom_command || ai.command) || null;
   return PROVIDER_COMMANDS[provider] || provider;
 }
 
-function commandExecutable(command) {
+function commandExecutable(command: unknown): string | null {
   const value = cleanString(command);
   if (!value) return null;
   return value.split(/\s+/)[0] || null;
 }
 
-function positiveInteger(value, fallback) {
+function positiveInteger(value: unknown, fallback: number): number {
   const number = Number(value);
   return Number.isInteger(number) && number >= 0 ? number : fallback;
 }
 
-function positiveMilliseconds(value, fallback = null) {
+function positiveMilliseconds(value: unknown, fallback: number | null = null): number | null {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
-function uniqueResolved(paths = []) {
+function uniqueResolved(paths: unknown[] = []): string[] {
   return [...new Set(paths.map(cleanString).filter(Boolean).map((path) => resolve(path)))];
 }
 
-function adapterAllowedRoots({ options = Object(), config = Object() } = Object()) {
-  const explicit = options.allowedRoots || options.allowed_roots || config.ai?.allowed_roots || config.ai?.allowedRoots;
-  const roots = Array.isArray(explicit) ? explicit : (explicit ? [explicit] : []);
+function adapterAllowedRoots({ options = Object(), config = Object() }: { options?: Record<string, unknown>; config?: Record<string, unknown> } = Object()): string[] {
+  const ai = (config.ai as Record<string, unknown>) || {};
+  const explicit = options.allowedRoots || options.allowed_roots || ai.allowed_roots || ai.allowedRoots;
+  const roots: unknown[] = Array.isArray(explicit) ? [...explicit] : (explicit ? [explicit] : []);
   roots.push(options.rootDir || options.root_dir || options.projectRoot || options.project_root);
   roots.push(options.workDir || options.work_dir);
   roots.push(options.runtimeDir || options.runtime_dir);
@@ -64,8 +66,8 @@ function adapterAllowedRoots({ options = Object(), config = Object() } = Object(
   return resolved.length > 0 ? resolved : [resolve(process.cwd())];
 }
 
-function timeoutPolicy(options = Object(), config = Object()) {
-  const ai = config.ai || {};
+function timeoutPolicy(options: Record<string, unknown> = Object(), config: Record<string, unknown> = Object()) {
+  const ai = (config.ai as Record<string, unknown>) || {};
   const maxMs = positiveMilliseconds(
     options.timeoutMs || options.timeout_ms || options.timeout || ai.timeout_ms || ai.timeoutMs,
     480000,
@@ -78,8 +80,8 @@ function timeoutPolicy(options = Object(), config = Object()) {
   };
 }
 
-function retryPolicy(options = Object(), config = Object()) {
-  const ai = config.ai || {};
+function retryPolicy(options: Record<string, unknown> = Object(), config: Record<string, unknown> = Object()) {
+  const ai = (config.ai as Record<string, unknown>) || {};
   return {
     max_attempts: positiveInteger(
       options.maxAttempts || options.max_attempts || options.retryAttempts || options.retry_attempts || ai.retry_attempts || ai.max_attempts,
@@ -96,7 +98,7 @@ function retryPolicy(options = Object(), config = Object()) {
   };
 }
 
-function outputSchemaFor(capabilities = Object()) {
+function outputSchemaFor(capabilities: Record<string, unknown> = Object()) {
   return {
     schema: "yolo.runtime.provider_run_result.v1",
     required: true,
@@ -108,7 +110,7 @@ function outputSchemaFor(capabilities = Object()) {
   };
 }
 
-function rootPolicy(options = Object(), allowedRoots = []) {
+function rootPolicy(options: Record<string, unknown> = Object(), allowedRoots: string[] = []) {
   return {
     root_dir: options.rootDir || options.root_dir || options.projectRoot || options.project_root || null,
     work_dir: options.workDir || options.work_dir || null,
@@ -119,15 +121,18 @@ function rootPolicy(options = Object(), allowedRoots = []) {
   };
 }
 
-export function normalizeAgentProvider(value) {
-  const provider = cleanString(typeof value === "object" ? value?.selected || value?.provider : value).toLowerCase();
+export function normalizeAgentProvider(value: unknown): string | null {
+  const source = typeof value === "object" && value !== null
+    ? ((value as Record<string, unknown>).selected ?? (value as Record<string, unknown>).provider)
+    : value;
+  const provider = cleanString(source).toLowerCase();
   if (!provider || provider === "auto") return null;
   return PROVIDER_ALIASES[provider] || provider;
 }
 
-export function buildAgentAdapterCapabilities(provider, config = Object()) {
+export function buildAgentAdapterCapabilities(provider: unknown, config: Record<string, unknown> = Object()) {
   const normalized = normalizeAgentProvider(provider) || "claude";
-  const ai = config.ai || {};
+  const ai = (config.ai as Record<string, unknown>) || {};
   const codexSandbox = cleanString(ai.codex_sandbox || "workspace-write");
   const claudePermissionMode = cleanString(ai.claude_permission_mode || DEFAULT_CLAUDE_PERMISSION_MODE);
   const customMode = cleanString(ai.custom_sandbox || "external");
@@ -182,14 +187,17 @@ export function buildAgentAdapterCapabilities(provider, config = Object()) {
   };
 }
 
-export function buildAgentAdapterContract(options = Object()) {
-  const config = options.config || {};
-  const requested = normalizeAgentProvider(options.requested || options.provider || config.ai?.executor || config.ai?.provider);
-  const selected = normalizeAgentProvider(options.selected || options.providerDetection?.selected || requested || "claude") || "claude";
+export function buildAgentAdapterContract(options: Record<string, unknown> = Object()) {
+  const config = (options.config as Record<string, unknown>) || {};
+  const ai = (config.ai as Record<string, unknown>) || {};
+  const providerDetection = (options.providerDetection as Record<string, unknown>) || {};
+  const requested = normalizeAgentProvider(options.requested || options.provider || ai.executor || ai.provider);
+  const selected = normalizeAgentProvider(options.selected || providerDetection.selected || requested || "claude") || "claude";
   const command = commandForProvider(selected, config);
   const capabilities = buildAgentAdapterCapabilities(selected, config);
-  const budgetUsd = positiveNumber(config.ai?.max_budget_usd);
+  const budgetUsd = positiveNumber(ai.max_budget_usd);
   const allowedRoots = adapterAllowedRoots({ options, config });
+  const available = (options.available as Record<string, unknown> | undefined) || undefined;
 
   return {
     schema_version: AGENT_ADAPTER_CONTRACT_SCHEMA_VERSION,
@@ -197,7 +205,7 @@ export function buildAgentAdapterContract(options = Object()) {
     provider: selected,
     requested_provider: requested,
     command,
-    available: options.available?.[selected] ?? null,
+    available: available?.[selected] ?? null,
     capabilities,
     timeout: timeoutPolicy(options, config),
     retry_policy: retryPolicy(options, config),
@@ -229,8 +237,8 @@ export function buildAgentAdapterContract(options = Object()) {
       approval_policy: capabilities.approval_policy,
       file_write: capabilities.file_write,
       shell_exec: capabilities.shell_exec,
-      allowed_tools: cleanString(config.ai?.claude_allowed_tools || config.ai?.allowed_tools || ""),
-      disallowed_tools: cleanString(config.ai?.claude_disallowed_tools || config.ai?.disallowed_tools || ""),
+      allowed_tools: cleanString(ai.claude_allowed_tools || ai.allowed_tools || ""),
+      disallowed_tools: cleanString(ai.claude_disallowed_tools || ai.disallowed_tools || ""),
       fail_closed: true,
     },
     sandbox: {
@@ -243,20 +251,33 @@ export function buildAgentAdapterContract(options = Object()) {
   };
 }
 
-function defaultCommandExists() {
+function defaultCommandExists(): null {
   return null;
 }
 
-export function inspectAgentAdapterContract(options = Object()) {
-  const providerDetection = options.providerDetection || {};
-  const config = options.config || {};
-  const requested = normalizeAgentProvider(options.requested || providerDetection.requested || config.ai?.executor || config.ai?.provider);
+export interface ContractBlocker {
+  code: string;
+  provider?: string;
+  message: string;
+  command?: string | null;
+  approval_policy?: string;
+  sandbox_mode?: string;
+  max_usd?: number | null;
+  [key: string]: unknown;
+}
+
+export function inspectAgentAdapterContract(options: Record<string, unknown> = Object()) {
+  const providerDetection = (options.providerDetection as Record<string, unknown>) || {};
+  const config = (options.config as Record<string, unknown>) || {};
+  const ai = (config.ai as Record<string, unknown>) || {};
+  const requested = normalizeAgentProvider(options.requested || providerDetection.requested || ai.executor || ai.provider);
   const selected = normalizeAgentProvider(options.provider || providerDetection.selected || requested || "claude") || "claude";
   const command = commandForProvider(selected, config);
   const executable = selected === "custom" ? commandExecutable(command) : command;
-  const commandExists = options.commandExists || defaultCommandExists;
-  const available = {
-    ...(providerDetection.available || {}),
+  const commandExists = (options.commandExists as ((command: unknown) => unknown) | undefined) || defaultCommandExists;
+  const detectionAvailable = (providerDetection.available as Record<string, unknown> | undefined) || {};
+  const available: Record<string, unknown> = {
+    ...detectionAvailable,
   };
   if (available[selected] == null && executable) {
     const exists = commandExists(executable);
@@ -276,8 +297,8 @@ export function inspectAgentAdapterContract(options = Object()) {
     projectRoot: options.projectRoot || options.project_root,
     timeoutMs: options.timeoutMs || options.timeout_ms || options.timeout,
   });
-  const blockers = [];
-  const warnings = [];
+  const blockers: ContractBlocker[] = [];
+  const warnings: ContractBlocker[] = [];
 
   if (!command) {
     blockers.push({
