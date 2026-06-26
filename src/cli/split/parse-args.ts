@@ -9,10 +9,10 @@ import {
   throwUnknownFlags,
 } from "./parse-helpers.js";
 
-export function parseYoloInitArgs(argv = []) {
+export function parseYoloInitArgs(argv: string[] = []) {
   const input = Object();
   const options = { json: false, help: false, force: false, dryRun: false };
-  const unknownFlags = [];
+  const unknownFlags: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -47,7 +47,7 @@ export function parseYoloInitArgs(argv = []) {
   return { input, options };
 }
 
-export function parseYoloSetupArgs(argv = []) {
+export function parseYoloSetupArgs(argv: string[] = []) {
   const input = Object();
   const options = {
     json: false,
@@ -57,7 +57,7 @@ export function parseYoloSetupArgs(argv = []) {
     target: "both",
     scope: "project",
   };
-  const unknownFlags = [];
+  const unknownFlags: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -104,7 +104,7 @@ export function parseYoloSetupArgs(argv = []) {
   return { input, options };
 }
 
-export function parseYoloMemoryArgs(argv = []) {
+export function parseYoloMemoryArgs(argv: string[] = []) {
   const input = Object();
   const options = Object.assign(Object(), {
     json: false,
@@ -116,7 +116,7 @@ export function parseYoloMemoryArgs(argv = []) {
     pruneGeneratedArchives: true,
   });
 
-  const unknownFlags = [];
+  const unknownFlags: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -156,7 +156,7 @@ export function parseYoloMemoryArgs(argv = []) {
   return { input, options };
 }
 
-export function parseYoloReleaseCandidateArgs(argv = []) {
+export function parseYoloReleaseCandidateArgs(argv: string[] = []) {
   const input = Object();
   const options = {
     json: false,
@@ -166,7 +166,7 @@ export function parseYoloReleaseCandidateArgs(argv = []) {
     allowUnknown: false,
   };
 
-  const unknownFlags = [];
+  const unknownFlags: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -199,10 +199,10 @@ export function parseYoloReleaseCandidateArgs(argv = []) {
   return { input, options };
 }
 
-export function parseYoloProgressUiEvidenceArgs(argv = []) {
+export function parseYoloProgressUiEvidenceArgs(argv: string[] = []) {
   const input = Object();
   const options = { json: false, help: false, writeArtifacts: true };
-  const unknownFlags = [];
+  const unknownFlags: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -231,10 +231,10 @@ export function parseYoloProgressUiEvidenceArgs(argv = []) {
   return { input, options };
 }
 
-export function parseYoloCheckArgs(argv = []) {
+export function parseYoloCheckArgs(argv: string[] = []) {
   const input = Object();
   const options = { json: false, help: false, writeLifecycle: true, collectEvidence: false, executeAdapter: false, allowAdapterCommands: false };
-  const unknownFlags = [];
+  const unknownFlags: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -295,7 +295,7 @@ export function parseYoloCheckArgs(argv = []) {
   return { input, options };
 }
 
-export function parseYoloAcceptArgs(argv = []) {
+export function parseYoloAcceptArgs(argv: string[] = []) {
   return parseYoloCheckArgs(argv);
 }
 
