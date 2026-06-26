@@ -94,7 +94,7 @@ export function inspectPostPrecheckSkip({
     return { shouldSkip: false, reason: explicit.reason, file: explicit.file };
   }
 
-  const targetFiles = (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
+  const targetFiles = (task.scope?.targets || []).map((target: { file?: string }) => target.file).filter(Boolean);
   if (targetFiles.length > 0 && typeCheckCommand) {
     // P12.I1: default executor is safeExecSync (argv parse, reject shell metacharacters,
     // no shell). Tests may inject a mock execSync for unit control.

@@ -8,14 +8,17 @@ export function specGovernancePolicy(options = Object()) {
   };
 }
 
-export function formatSpecGovernanceBlockers(blockers = [], limit = 8) {
+export function formatSpecGovernanceBlockers(
+  blockers: Array<{ code?: string; task_id?: string | null; message?: string }> = [],
+  limit = 8,
+) {
   return blockers
     .slice(0, limit)
     .map((blocker) => `${blocker.code}${blocker.task_id ? ` task=${blocker.task_id}` : ""}: ${blocker.message}`)
     .join("\n");
 }
 
-export function inspectSpecGovernanceGate({ prd, policyOptions = Object() }) {
+export function inspectSpecGovernanceGate({ prd, policyOptions = Object() }: { prd?: unknown; policyOptions?: Record<string, unknown> } = Object()) {
   const result = inspectSpecGovernance(prd, specGovernancePolicy(policyOptions));
   if (result.blocks_execution) {
     return {

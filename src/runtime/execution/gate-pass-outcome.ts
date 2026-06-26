@@ -18,8 +18,8 @@ export function buildPreMergePostconditionFailureOutcome({
   };
 }
 
-export function buildCommitExceptionRetryOutcome(error) {
-  const message = error?.message;
+export function buildCommitExceptionRetryOutcome(error: unknown) {
+  const message = (error as { message?: string } | null | undefined)?.message;
   return {
     reason: `commit 异常（将重试）: ${message}`,
     errorTitle: "commit 异常（将重试）",

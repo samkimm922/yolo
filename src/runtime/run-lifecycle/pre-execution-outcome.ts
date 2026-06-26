@@ -2,7 +2,21 @@
 // No module-level side effects so tests can import it directly.
 // Behavior is identical to the former inline判定 in runPreExecutionGates.
 
-export function decidePreExecutionOutcome(gate, { exitOnFailure } = Object()) {
+type PreExecutionGate = {
+  status?: string;
+  stage?: string;
+  code?: string;
+  exit_code?: number;
+  message?: string;
+  messages?: string[];
+  contract: { doctor?: unknown; migration?: unknown; evidence_path?: unknown };
+  spec: { result?: unknown };
+} & Record<string, unknown>;
+
+export function decidePreExecutionOutcome(
+  gate: PreExecutionGate,
+  { exitOnFailure }: { exitOnFailure?: boolean } = Object(),
+) {
   if (gate.status === "pass") {
     return {
       halt: false,

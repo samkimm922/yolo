@@ -1,6 +1,8 @@
 import { failTaskTransition } from "../task-state/transitions.js";
 
-export function exceptionFailureKey(error) {
+type ExceptionLikeError = { message?: string } | null | undefined;
+
+export function exceptionFailureKey(error: ExceptionLikeError) {
   return `exception:${(error?.message || "unknown").substring(0, 50)}`;
 }
 

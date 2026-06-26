@@ -27,7 +27,7 @@ export function resolveRunnerContext(options = Object(), {
   };
 }
 
-export function applyRunnerContextSideEffects(context, {
+export function applyRunnerContextSideEffects(context: { rootDir: string; runtimeDir: string; stateRoot: string }, {
   ensureCanonicalDirs,
   setContractRoot,
   setTaskLogsDir,
