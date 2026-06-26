@@ -1,35 +1,67 @@
-export function mergedSourceTaskIds(task = Object()) {
-  return Array.isArray(task.merged_from) ? task.merged_from.filter((id) => id && id !== task.id) : [];
+type LogFn = (...args: unknown[]) => void;
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }
 
-export function updateMergedSourceTasks({ task, update = Object(), updateTaskStatus, now = new Date().toISOString() }) {
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function asArray<T = unknown>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+
+export function mergedSourceTaskIds(task: unknown = Object()): string[] {
+  const rec = asRecord(task);
+  const merged = rec.merged_from;
+  const ownId = rec.id;
+  if (!Array.isArray(merged)) return [];
+  return merged.filter((id): id is string => Boolean(id) && id !== ownId && typeof id === "string");
+}
+
+export function updateMergedSourceTasks({
+  task,
+  update = Object(),
+  updateTaskStatus,
+  now = new Date().toISOString(),
+}: {
+  task: unknown;
+  update?: Record<string, unknown>;
+  updateTaskStatus: (id: string, update: Record<string, unknown>) => void;
+  now?: string;
+}): string[] {
   const ids = mergedSourceTaskIds(task);
   if (ids.length === 0) return [];
+  const taskRec = asRecord(task);
   for (const id of ids) {
     updateTaskStatus(id, {
       ...update,
-      merged_into: task.id,
+      merged_into: taskRec.id,
       updatedAt: now,
     });
   }
   return ids;
 }
 
-export function deriveParentTaskId(taskId) {
-  if (!taskId) return taskId;
-  return taskId
+export function deriveParentTaskId(taskId: unknown): string {
+  const id = asString(taskId);
+  if (!id) return id;
+  return id
     .replace(/(-[A-Z]-\d+)$/, "")
     .replace(/(-[A-Z])$/, "")
     .replace(/(-P\d+)$/, "");
 }
 
-export function buildChildTaskMap(tasks = []) {
-  const childMap = new Map();
-  for (const task of tasks) {
-    const parentId = deriveParentTaskId(task.id);
-    if (!parentId || parentId === task.id) continue;
+export function buildChildTaskMap(tasks: unknown = []): Map<string, Set<string>> {
+  const childMap = new Map<string, Set<string>>();
+  for (const task of asArray<unknown>(tasks)) {
+    const rec = asRecord(task);
+    const taskId = asString(rec.id);
+    const parentId = deriveParentTaskId(taskId);
+    if (!parentId || parentId === taskId) continue;
     if (!childMap.has(parentId)) childMap.set(parentId, new Set());
-    childMap.get(parentId).add(task.id);
+    childMap.get(parentId)!.add(taskId);
   }
   return childMap;
 }
@@ -39,13 +71,22 @@ export function completeParentIfAllChildrenDone({
   childMap,
   completedIds,
   updateTaskStatus,
-  log = (..._args) => {},
+  log = (..._args: unknown[]) => {},
   now = new Date().toISOString(),
-}) {
-  const parentId = deriveParentTaskId(task.id);
-  if (!parentId || parentId === task.id || !childMap.has(parentId)) return false;
+}: {
+  task: unknown;
+  childMap: Map<string, Set<string>>;
+  completedIds: Set<string>;
+  updateTaskStatus: (id: string, update: Record<string, unknown>) => void;
+  log?: LogFn;
+  now?: string;
+}): boolean {
+  const rec = asRecord(task);
+  const taskId = asString(rec.id);
+  const parentId = deriveParentTaskId(taskId);
+  if (!parentId || parentId === taskId || !childMap.has(parentId)) return false;
 
-  const childIds = [...childMap.get(parentId)];
+  const childIds = [...childMap.get(parentId)!];
   const allChildrenDone = childIds.every((childId) => completedIds.has(childId));
   if (!allChildrenDone || completedIds.has(parentId)) return false;
 
@@ -64,30 +105,52 @@ export function blockParentForChildFailure({
   childMap,
   reason,
   updateTaskStatus,
-  log = (..._args) => {},
+  log = (..._args: unknown[]) => {},
   now = new Date().toISOString(),
-}) {
-  const parentId = deriveParentTaskId(task.id);
-  if (!parentId || parentId === task.id || !childMap.has(parentId)) return false;
+}: {
+  task: unknown;
+  childMap: Map<string, Set<string>>;
+  reason: unknown;
+  updateTaskStatus: (id: string, update: Record<string, unknown>) => void;
+  log?: LogFn;
+  now?: string;
+}): boolean {
+  const rec = asRecord(task);
+  const taskId = asString(rec.id);
+  const parentId = deriveParentTaskId(taskId);
+  if (!parentId || parentId === taskId || !childMap.has(parentId)) return false;
 
   updateTaskStatus(parentId, {
     status: "blocked",
-    blockedByChild: task.id,
-    blockedReason: reason || "child_failed",
+    blockedByChild: taskId,
+    blockedReason: asString(reason) || "child_failed",
     updatedAt: now,
   });
-  log(parentId, "parent-blocked", `子任务失败: ${task.id}`);
+  log(parentId, "parent-blocked", `子任务失败: ${taskId}`);
   return true;
 }
 
-export function dependencyBlockers({ task, completedIds, tasks = [], taskCountsAsCompleted }) {
+export function dependencyBlockers({
+  task,
+  completedIds,
+  tasks = [],
+  taskCountsAsCompleted,
+}: {
+  task: unknown;
+  completedIds: Set<string>;
+  tasks?: unknown;
+  taskCountsAsCompleted: (task: Record<string, unknown> | undefined) => boolean;
+}): string[] {
+  const rec = asRecord(task);
   const dependencies = [...new Set([
-    ...(task.depends_on || []),
-    ...(task.dependencies || []),
-  ].filter(Boolean))];
+    ...asArray<unknown>(rec.depends_on),
+    ...asArray<unknown>(rec.dependencies),
+  ].filter(Boolean).map((id) => String(id)))];
   return dependencies.filter((dependencyId) => {
     if (completedIds.has(dependencyId)) return false;
-    const dependencyTask = tasks.find((candidate) => candidate.id === dependencyId);
-    return !taskCountsAsCompleted(dependencyTask);
+    const dependencyTask = asArray<unknown>(tasks).find(
+      (candidate) => asRecord(candidate).id === dependencyId,
+    );
+    return !taskCountsAsCompleted(dependencyTask === undefined ? undefined : asRecord(dependencyTask));
   });
 }

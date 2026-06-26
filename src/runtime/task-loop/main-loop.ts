@@ -18,11 +18,38 @@ import { expandTasksForMainLoop } from "./expansion.js";
 import { buildTaskSummary } from "../execution/task-summary.js";
 import { buildRelayInjection } from "../execution/summary-relay.js";
 
-function noop() {}
+type LogFn = (...args: unknown[]) => void;
+
+function noop(): void {}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function asArray<T = unknown>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+
+interface MainLoopResults extends Record<string, unknown> {
+  completed: string[];
+  failed: string[];
+  blocked: string[];
+  contractReview: string[];
+  remediation: unknown[];
+  immediateRemediationQueue: unknown[];
+  preflight: { status?: string; blocks_execution?: boolean; blockers?: Record<string, unknown>[] } | null;
+  blockers: Record<string, unknown>[];
+  stop_reason: string | null;
+  stop_fail_key: string | null;
+}
 
 export async function runMainLoopWithRuntime({
   prdPath,
-  preCompleted = new Set(),
+  preCompleted = new Set<string>(),
   mode,
   rootDir,
   yoloRoot,
@@ -39,10 +66,41 @@ export async function runMainLoopWithRuntime({
   skippedTaskPostconditionsPass,
   log = noop,
   writeRelayArtifact = null,
-} = Object()) {
-  const prd = loadPRD(prdPath);
-  const results = { completed: [], failed: [], skipped: [], blocked: [], contractReview: [], remediation: [], immediateRemediationQueue: [], preflight: null, blockers: [], stop_reason: null, stop_fail_key: null };
-  const completedIds = new Set(preCompleted);
+}: {
+  prdPath: string;
+  preCompleted?: Set<unknown>;
+  mode: string;
+  rootDir: string;
+  yoloRoot: string;
+  expandedTasksFile: string;
+  progress: { total: number; done: number; failed: number; [key: string]: unknown };
+  runResultsTracker: { completed: Set<unknown>; failed: unknown[] };
+  priorityOrder: Record<string, number>;
+  loadPRD: (prdPath: string) => unknown;
+  runTask: (task: Record<string, unknown>, prdPath: string, options: { relayText: string }) => Promise<unknown>;
+  updateTaskStatus: (id: string, update: Record<string, unknown>) => void;
+  recordTaskTransition: (transition: unknown) => void;
+  taskCountsAsCompleted: (task: Record<string, unknown> | undefined) => boolean;
+  taskIsSplitParent: (task: Record<string, unknown>) => boolean;
+  skippedTaskPostconditionsPass: (task: unknown, prd: unknown) => { passed: boolean; failed: string[] };
+  log?: LogFn;
+  writeRelayArtifact?: ((relayText: string, summaries: unknown[]) => void) | null;
+} = Object() as never): Promise<MainLoopResults> {
+  const prd = asRecord(loadPRD(prdPath));
+  const results: MainLoopResults = {
+    completed: [],
+    failed: [],
+    skipped: [],
+    blocked: [],
+    contractReview: [],
+    remediation: [],
+    immediateRemediationQueue: [],
+    preflight: null,
+    blockers: [],
+    stop_reason: null,
+    stop_fail_key: null,
+  };
+  const completedIds = new Set<string>([...preCompleted].map((id) => String(id)));
   const { expanded, beforeMerge, mergedCount, preflight } = expandTasksForMainLoop({
     tasks: prd.tasks || [],
     completedIds,
@@ -57,7 +115,7 @@ export async function runMainLoopWithRuntime({
     log("合并器", "", `合并前 ${beforeMerge} 个任务 → 合并后 ${mergedCount} 个`);
   }
 
-  progress.total = expanded.filter((task) => task.status !== "completed").length;
+  progress.total = expanded.filter((task) => asRecord(task).status !== "completed").length;
 
   writeExpandedTasksSnapshot({
     filePath: expandedTasksFile,
@@ -68,17 +126,22 @@ export async function runMainLoopWithRuntime({
 
   if (preflight?.blocks_execution) {
     results.preflight = preflight;
-    results.blockers = preflight.blockers || [];
-    for (const blocker of preflight.blockers || []) {
-      appendUniqueTaskIds(results.blocked, blocker.task_ids || (blocker.task_id ? [blocker.task_id] : []));
-      log("preflight", "blocked", `${blocker.code}: ${blocker.message}`);
+    results.blockers = asArray<unknown>(preflight.blockers).map((b) => asRecord(b));
+    for (const blocker of asArray<unknown>(preflight.blockers)) {
+      const blockerRec = asRecord(blocker);
+      const taskIds = asArray<unknown>(blockerRec.task_ids);
+      const ids = taskIds.length > 0
+        ? taskIds.map(String)
+        : (blockerRec.task_id ? [asString(blockerRec.task_id)] : []);
+      appendUniqueTaskIds(results.blocked, ids);
+      log("preflight", "blocked", `${asString(blockerRec.code)}: ${asString(blockerRec.message)}`);
     }
     return results;
   }
 
   const childTaskMap = buildChildTaskMap(expanded);
 
-  const completedTaskSummaries = [];
+  const completedTaskSummaries: ReturnType<typeof buildTaskSummary>[] = [];
   let relayText = "";
 
   let lastFailKey = "";
@@ -110,21 +173,29 @@ export async function runMainLoopWithRuntime({
       lastFailKey,
       loadPrd: () => loadPRD(prdPath),
       skippedTaskPostconditionsPass,
-      updateMergedSourceTasks: (item, update) => updateMergedSourceTasks({
+      updateMergedSourceTasks: (item: Record<string, unknown>, update: Record<string, unknown>) => updateMergedSourceTasks({
         task: item,
         update,
         updateTaskStatus,
       }),
-      markParentCompleteIfAllChildrenDone: (item, map, ids) => completeParentIfAllChildrenDone({
+      markParentCompleteIfAllChildrenDone: (
+        item: Record<string, unknown>,
+        map: unknown,
+        ids: Set<string>,
+      ) => completeParentIfAllChildrenDone({
         task: item,
-        childMap: map,
+        childMap: map as Map<string, Set<string>>,
         completedIds: ids,
         updateTaskStatus,
         log,
       }),
-      markParentBlockedByChildFailure: (item, map, reason) => blockParentForChildFailure({
+      markParentBlockedByChildFailure: (
+        item: Record<string, unknown>,
+        map: unknown,
+        reason: string,
+      ) => blockParentForChildFailure({
         task: item,
-        childMap: map,
+        childMap: map as Map<string, Set<string>>,
         reason,
         updateTaskStatus,
         log,
@@ -155,7 +226,7 @@ export async function runMainLoopWithRuntime({
 
     updateExpandedTaskSnapshot({
       filePath: expandedTasksFile,
-      taskId: task.id,
+      taskId: asString(asRecord(task).id),
       outcome,
     });
 
