@@ -112,7 +112,7 @@ import {
 } from "./interview-helpers.js";
 import { runYoloBrainstormCli, runYoloDiscussCli } from "./commands-demand.js";
 
-export async function runYoloAcceptCli(argv = [], io = Object()) {
+export async function runYoloAcceptCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloAcceptArgs(argv);
@@ -145,7 +145,7 @@ export async function runYoloAcceptCli(argv = [], io = Object()) {
   return workflowExitCode(report);
 }
 
-export async function runYoloDiscoverCli(argv = [], io = Object()) {
+export async function runYoloDiscoverCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const { input, options } = parseYoloWorkflowArgs(argv);
 
@@ -169,7 +169,7 @@ export async function runYoloDiscoverCli(argv = [], io = Object()) {
   return workflowExitCode(result);
 }
 
-export async function runYoloPlanCli(argv = [], io = Object()) {
+export async function runYoloPlanCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloWorkflowArgs(argv);
@@ -207,7 +207,7 @@ export async function runYoloPlanCli(argv = [], io = Object()) {
   return workflowExitCode(result);
 }
 
-export async function runYoloPrdCli(argv = [], io = Object()) {
+export async function runYoloPrdCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloWorkflowArgs(argv);
@@ -266,7 +266,7 @@ export async function runYoloWorkflowPlanCli(workflow: string, argv: string[] = 
   return 2;
 }
 
-export async function runYoloReviewCli(argv = [], io = Object()) {
+export async function runYoloReviewCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloWorkflowArgs(argv);
@@ -299,7 +299,7 @@ export async function runYoloReviewCli(argv = [], io = Object()) {
   return result.status === "success" ? 0 : 1;
 }
 
-export async function runYoloShipCli(argv = [], io = Object()) {
+export async function runYoloShipCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloWorkflowArgs(argv);
@@ -326,7 +326,7 @@ export async function runYoloShipCli(argv = [], io = Object()) {
   return result.status === "success" ? 0 : 1;
 }
 
-export async function runYoloLearnCli(argv = [], io = Object()) {
+export async function runYoloLearnCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const { input, options } = parseYoloWorkflowArgs(argv);
 

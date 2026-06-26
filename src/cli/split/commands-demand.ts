@@ -112,7 +112,7 @@ import {
 } from "./interview-helpers.js";
 import { runYoloInterviewCli } from "./commands-interview.js";
 
-export async function runYoloBrainstormCli(argv = [], io = Object()) {
+export async function runYoloBrainstormCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const { input, options } = parseYoloWorkflowArgs(argv);
 
@@ -234,7 +234,7 @@ async function runYoloDemandStageCli(stage: string, input: Record<string, unknow
   return 2;
 }
 
-export async function runYoloDemandCli(argv = [], io = Object()) {
+export async function runYoloDemandCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const commandNames = new Set(["status", "dispatch", "evidence"]);
   const stageNames = new Set(["brainstorm", "interview", "office-hours", "office_hours", "office", "discover", "discovery", "discuss", "discussion", "prd"]);
@@ -308,7 +308,7 @@ export async function runYoloDemandCli(argv = [], io = Object()) {
   return workflowExitCode(result);
 }
 
-export async function runYoloDiscussCli(argv = [], io = Object()) {
+export async function runYoloDiscussCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const { input, options } = parseYoloWorkflowArgs(argv);
 

@@ -12,7 +12,7 @@ import {
   throwUnknownFlags,
 } from "./parse-helpers.js";
 
-export function parseYoloArgs(argv = process.argv.slice(2)) {
+export function parseYoloArgs(argv: string[] = process.argv.slice(2)) {
   const input = Object();
   const options = {
     json: false,
@@ -23,10 +23,10 @@ export function parseYoloArgs(argv = process.argv.slice(2)) {
     collectEvidence: false,
     executeAdapter: false,
     allowAdapterCommands: false,
-    startProgressServer: undefined,
-    runReviewLoop: undefined,
+    startProgressServer: undefined as boolean | undefined,
+    runReviewLoop: undefined as boolean | undefined,
   };
-  const unknownFlags = [];
+  const unknownFlags: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -91,7 +91,7 @@ export function parseYoloArgs(argv = process.argv.slice(2)) {
   return { input, options };
 }
 
-export function parseYoloAutoArgs(argv = [], context = Object()) {
+export function parseYoloAutoArgs(argv: string[] = [], context: { cwd?: string } = {}) {
   const input = Object();
   const options = {
     json: false,
@@ -101,8 +101,8 @@ export function parseYoloAutoArgs(argv = [], context = Object()) {
     collectEvidence: false,
     executeAdapter: false,
     allowAdapterCommands: false,
-    startProgressServer: undefined,
-    runReviewLoop: undefined,
+    startProgressServer: undefined as boolean | undefined,
+    runReviewLoop: undefined as boolean | undefined,
   };
   const positionals: string[] = [];
   const unknownFlags: string[] = [];
