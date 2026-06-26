@@ -113,7 +113,7 @@ import {
 import { runYoloBrainstormCli, runYoloDiscussCli } from "./commands-demand.js";
 import { runYoloAcceptCli, runYoloShipCli } from "./commands-spec.js";
 
-export async function runYoloReleaseCandidateCli(argv = [], io = Object()) {
+export async function runYoloReleaseCandidateCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const { input, options } = parseYoloReleaseCandidateArgs(argv);
@@ -178,7 +178,7 @@ export async function runYoloReleaseCandidateCli(argv = [], io = Object()) {
   }
 }
 
-export async function runYoloReleaseCli(argv = [], io = Object()) {
+export async function runYoloReleaseCli(argv: string[] = [], io = Object()) {
   const first = argv[0] && !argv[0].startsWith("--") ? cleanCliText(argv[0]).toLowerCase() : "";
   if (first === "accept" || first === "ui-review") {
     return runYoloAcceptCli(argv.slice(1), io);
@@ -196,7 +196,7 @@ export async function runYoloReleaseCli(argv = [], io = Object()) {
   return runYoloReleaseCandidateCli(argv, { ...io, releaseCandidateCommand: "release", releaseCandidateStage: "release-candidate" });
 }
 
-export async function runYoloAutoCli(argv = [], io = Object()) {
+export async function runYoloAutoCli(argv: string[] = [], io = Object()) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
   const yoloRoot = io.yoloRoot || defaultYoloRoot;
