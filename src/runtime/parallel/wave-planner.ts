@@ -8,15 +8,15 @@ export const CONTROLLED_PARALLEL_WAVE_START_GATE_SCHEMA = "yolo.runtime.parallel
 
 const SAFE_TASK_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
-function clone(value) {
+function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function asArray(value) {
+function asArray<T>(value: T | T[] | null | undefined): T[] {
   if (Array.isArray(value)) return value.filter(Boolean);
   if (value == null || value === "") return [];
   return [value];
@@ -176,11 +176,11 @@ export function buildTaskDependencyGraph(input = Object()) {
   };
 }
 
-function canJoinWave(task, waveTasks) {
+function canJoinWave(task: Record<string, unknown>, waveTasks: Record<string, unknown>[]) {
   return !waveTasks.some((existing) => conflictBetween(task, existing));
 }
 
-function worktreeForTask({ task, waveIndex, worktreeRoot }) {
+function worktreeForTask({ task, waveIndex, worktreeRoot }: { task: Record<string, unknown>; waveIndex: number; worktreeRoot: string }) {
   const id = taskId(task);
   return {
     task_id: id,
@@ -191,7 +191,7 @@ function worktreeForTask({ task, waveIndex, worktreeRoot }) {
   };
 }
 
-function statusIsPass(value) {
+function statusIsPass(value: unknown): boolean {
   return ["pass", "passed", "success", "completed", "done"].includes(clean(value).toLowerCase());
 }
 
@@ -257,7 +257,7 @@ export function inspectParallelWaveStartGate(input = Object(), options = Object(
   };
 }
 
-function waveRecord({ waveIndex, tasks, worktreeRoot }) {
+function waveRecord({ waveIndex, tasks, worktreeRoot }: { waveIndex: number; tasks: Record<string, unknown>[]; worktreeRoot: string }) {
   const conflicts = detectParallelConflicts(tasks);
   return {
     id: `wave-${String(waveIndex).padStart(2, "0")}`,
@@ -289,7 +289,7 @@ export function planControlledParallelWaves(input = Object(), options = Object()
     if (!taskCanRun({ status: node.status })) completed.add(node.id);
   }
   const planned = new Set();
-  const waves = [];
+  const waves: Array<ReturnType<typeof waveRecord> & { start_gate?: unknown }> = [];
   const blockers = [...graph.blockers];
   let guard = 0;
 
@@ -380,7 +380,7 @@ export function planControlledParallelWaves(input = Object(), options = Object()
 
 export const buildControlledParallelExecutionPlan = planControlledParallelWaves;
 
-function reportForTask(taskIdValue, taskReports = []) {
+function reportForTask(taskIdValue: string, taskReports = []) {
   return taskReports.find((report) => clean(report.task_id || report.taskId || report.id) === taskIdValue);
 }
 
