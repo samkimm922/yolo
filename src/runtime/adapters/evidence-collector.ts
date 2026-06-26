@@ -9,52 +9,52 @@ import { execCommand } from "../../lib/security/safe-exec.js";
 export const ADAPTER_EVIDENCE_COLLECTOR_SCHEMA_VERSION = "1.0";
 export const ADAPTER_EVIDENCE_COLLECTOR_SCHEMA = "yolo.adapter.evidence_collector.v1";
 
-function nowIso() {
+function nowIso(): string {
   return new Date().toISOString();
 }
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function safeId(value) {
+function safeId(value: unknown): string {
   return clean(value).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "adapter";
 }
 
-function repoRelative(path, projectRoot) {
+function repoRelative(path: string, projectRoot: string): string {
   return relative(projectRoot, path).replace(/\\/g, "/");
 }
 
-function truncate(value, max = 4000) {
+function truncate(value: unknown, max = 4000): string {
   const text = String(value ?? "");
   return text.length > max ? `${text.slice(0, max)}\n[truncated ${text.length - max} chars]` : text;
 }
 
-function unique(values = []) {
+function unique<T>(values: T[] = []): T[] {
   return [...new Set(values.filter(Boolean))];
 }
 
-function platformValues(value) {
+function platformValues(value: unknown): unknown[] {
   if (Array.isArray(value)) return value.flatMap(platformValues);
   if (value && typeof value === "object") {
     return [
-      value.id,
-      value.key,
-      value.name,
-      value.type,
-      value.platform,
-      value.platforms,
-      value.target_platform,
-      value.targetPlatform,
+      (value as Record<string, unknown>).id,
+      (value as Record<string, unknown>).key,
+      (value as Record<string, unknown>).name,
+      (value as Record<string, unknown>).type,
+      (value as Record<string, unknown>).platform,
+      (value as Record<string, unknown>).platforms,
+      (value as Record<string, unknown>).target_platform,
+      (value as Record<string, unknown>).targetPlatform,
     ].flatMap(platformValues);
   }
   return clean(value) ? [value] : [];
 }
 
-function normalizePlatform(value) {
+function normalizePlatform(value: unknown): string {
   const normalized = clean(value).toLowerCase().replace(/[\s_]+/g, "-");
   if (!normalized) return "";
-  const aliases = {
+  const aliases: Record<string, string> = {
     browser: "h5",
     html5: "h5",
     web: "h5",
@@ -73,12 +73,12 @@ function normalizePlatform(value) {
   return aliases[normalized] || normalized;
 }
 
-function normalizePlatforms(values = []) {
-  return unique(platformValues(values).map(normalizePlatform));
+function normalizePlatforms(values: unknown[] = []): string[] {
+  return unique(platformValues(values).map(normalizePlatform).filter((v): v is string => Boolean(v)));
 }
 
-function inferRequiredPlatforms(input = Object(), options = Object()) {
-  const prd = input.prd || input.prd_contract || input.prdContract || options.prd || options.prd_contract || options.prdContract || {};
+function inferRequiredPlatforms(input: Record<string, unknown> = Object(), options: Record<string, unknown> = Object()): string[] {
+  const prd = ((input.prd || input.prd_contract || input.prdContract || options.prd || options.prd_contract || options.prdContract) as Record<string, unknown>) || {};
   return normalizePlatforms([
     input.requiredPlatform,
     input.required_platform,
@@ -100,25 +100,25 @@ function inferRequiredPlatforms(input = Object(), options = Object()) {
     prd.platforms,
     prd.targetPlatform,
     prd.target_platform,
-    prd.project?.platform,
-    prd.project?.platforms,
-    prd.runtime?.platform,
-    prd.runtime?.platforms,
+    (prd.project as Record<string, unknown> | undefined)?.platform,
+    (prd.project as Record<string, unknown> | undefined)?.platforms,
+    (prd.runtime as Record<string, unknown> | undefined)?.platform,
+    (prd.runtime as Record<string, unknown> | undefined)?.platforms,
   ]);
 }
 
-function adapterAppliesTo(adapter = Object()) {
+function adapterAppliesTo(adapter: Record<string, unknown> = Object()): string[] {
   return asArray(adapter?.applies_to).map(String);
 }
 
-function missingRequiredPlatforms(requiredPlatforms = [], coveredPlatforms = []) {
+function missingRequiredPlatforms(requiredPlatforms: string[] = [], coveredPlatforms: string[] = []): string[] {
   const covered = new Set(coveredPlatforms);
   return requiredPlatforms.filter((platform) => !covered.has(platform));
 }
 
-function evidenceCoveredPlatforms(record = Object()) {
+function evidenceCoveredPlatforms(record: Record<string, unknown> = Object()): string[] {
   if (!record || typeof record !== "object") return [];
-  const coverageFields = (source = Object()) => [
+  const coverageFields = (source: Record<string, unknown> = Object()): unknown[] => [
     source.covered_platform,
     source.covered_platforms,
     source.platform,
@@ -130,59 +130,88 @@ function evidenceCoveredPlatforms(record = Object()) {
   ];
   return normalizePlatforms([
     ...coverageFields(record),
-    ...coverageFields(record.ui_evidence || {}),
-    ...coverageFields(record.evidence || {}),
-    ...coverageFields(record.result || {}),
+    ...coverageFields((record.ui_evidence as Record<string, unknown>) || {}),
+    ...coverageFields((record.evidence as Record<string, unknown>) || {}),
+    ...coverageFields((record.result as Record<string, unknown>) || {}),
   ]);
 }
 
-function annotateEvidenceRecord(record = Object(), plan = Object()) {
+function annotateEvidenceRecord(record: Record<string, unknown> = Object(), plan: Record<string, unknown> = Object()): Record<string, unknown> {
   if (!record || typeof record !== "object" || Array.isArray(record)) return record;
   return {
     ...record,
-    adapter_applies_to: plan.adapter_applies_to || adapterAppliesTo(plan.adapter),
+    adapter_applies_to: plan.adapter_applies_to || adapterAppliesTo((plan.adapter as Record<string, unknown>) || Object()),
     required_platform: plan.required_platform || null,
     required_platforms: plan.required_platforms || [],
   };
 }
 
-function normalizeCommand(entry = Object(), index = 0) {
+function normalizeCommand(entry: Record<string, unknown> | string = Object(), index = 0) {
   const command = typeof entry === "string" ? entry : entry.command;
   return {
-    id: clean(entry.id || entry.name || `command-${index + 1}`),
+    id: clean((entry as Record<string, unknown>).id || (entry as Record<string, unknown>).name || `command-${index + 1}`),
     command: clean(command),
-    timeout_ms: Number(entry.timeout_ms || entry.timeoutMs || 30000),
-    evidence_path: clean(entry.evidence_path || entry.evidencePath || entry.output_path || entry.outputPath),
-    platforms: normalizePlatforms([entry.platforms, entry.platform, entry.target_platform, entry.targetPlatform]),
+    timeout_ms: Number((entry as Record<string, unknown>).timeout_ms || (entry as Record<string, unknown>).timeoutMs || 30000),
+    evidence_path: clean((entry as Record<string, unknown>).evidence_path || (entry as Record<string, unknown>).evidencePath || (entry as Record<string, unknown>).output_path || (entry as Record<string, unknown>).outputPath),
+    platforms: normalizePlatforms([(entry as Record<string, unknown>).platforms, (entry as Record<string, unknown>).platform, (entry as Record<string, unknown>).target_platform, (entry as Record<string, unknown>).targetPlatform]),
   };
 }
 
-function readJsonEvidence(path) {
+function readJsonEvidence(path: string): Record<string, unknown> | null {
   if (!path || !existsSync(path)) return null;
   try {
     return JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
     return {
-      parse_error: error.message,
+      parse_error: (error as { message?: string })?.message ?? String(error),
       raw: truncate(readFileSync(path, "utf8")),
     };
   }
 }
 
-function mergeEvidence(records = []) {
+function mergeEvidence(records: Array<Record<string, unknown>> = []): Record<string, unknown> | null {
   const objects = records.filter((record) => record && typeof record === "object" && !Array.isArray(record));
   if (objects.length === 0) return null;
   return Object.assign({}, ...objects.map((record) => record.ui_evidence || record));
 }
 
-function collectorArtifactPath({ projectRoot, stateRoot, adapter, artifactName }) {
+function collectorArtifactPath({ projectRoot, stateRoot, adapter, artifactName }: { projectRoot: string; stateRoot: string; adapter: Record<string, unknown> | null; artifactName?: string }): string {
   const fileName = artifactName || `${safeId(adapter?.id)}-latest.json`;
   return resolve(projectRoot, stateRoot, "state/evidence/adapters", fileName);
 }
 
-function commandPlatformBlockers(commands = [], requiredPlatforms = []) {
+interface AdapterCommand {
+  id: string;
+  command: string;
+  timeout_ms: number;
+  evidence_path: string;
+  platforms: string[];
+}
+
+export interface AdapterCommandResult {
+  id: string;
+  command: string;
+  started_at: string;
+  finished_at: string;
+  status: string;
+  exit_code: number | null;
+  signal: string | null;
+  error: string | null;
+  stdout: string;
+  stderr: string;
+  evidence_path: string | null;
+  evidence_file: string | null;
+  evidence_found: boolean | null;
+  adapter_applies_to: string[];
+  required_platform: string | null;
+  required_platforms: string[];
+}
+
+type UiEvidence = (Record<string, unknown> & { screenshots?: unknown[] }) | null;
+
+function commandPlatformBlockers(commands: AdapterCommand[] = [], requiredPlatforms: string[] = []): Array<Record<string, unknown>> {
   if (requiredPlatforms.length === 0) return [];
-  const blockers = [];
+  const blockers: Array<Record<string, unknown>> = [];
   for (const command of commands) {
     if (!command.platforms.length) {
       blockers.push({
@@ -208,16 +237,17 @@ function commandPlatformBlockers(commands = [], requiredPlatforms = []) {
   return blockers;
 }
 
-export function buildAdapterEvidencePlan(input = Object(), options = Object()) {
-  const projectRoot = resolve(input.projectRoot || input.project_root || options.projectRoot || options.project_root || process.cwd());
-  const stateRoot = resolve(input.stateRoot || input.state_root || options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
+export function buildAdapterEvidencePlan(input: Record<string, unknown> = Object(), options: Record<string, unknown> = Object()) {
+  const projectRoot = resolve(String(input.projectRoot || input.project_root || options.projectRoot || options.project_root || process.cwd()));
+  const stateRoot = resolve(String(input.stateRoot || input.state_root || options.stateRoot || options.state_root || join(projectRoot, ".yolo")));
   const resolver = input.resolver || options.resolver || resolveProjectContext({
     projectRoot,
     stateRoot,
     requiresAcceptanceAdapter: input.requiresAcceptanceAdapter === true || input.requires_acceptance_adapter === true || options.requiresAcceptanceAdapter === true || options.requires_acceptance_adapter === true,
   });
-  const adapter = input.adapterManifest || input.adapter_manifest || selectedAcceptanceAdapter(resolver) || resolver?.selected?.acceptance_adapter || null;
-  const adapterApplies = adapterAppliesTo(adapter);
+  const resolverRec = (resolver as Record<string, unknown>) || {};
+  const adapter = ((input.adapterManifest || input.adapter_manifest || selectedAcceptanceAdapter(resolverRec) || ((resolverRec.selected as Record<string, unknown>)?.acceptance_adapter)) as Record<string, unknown> | null) || null;
+  const adapterApplies = adapterAppliesTo((adapter as Record<string, unknown>) || Object());
   const requiredPlatforms = inferRequiredPlatforms(input, options);
   const adapterCoveredPlatforms = normalizePlatforms(adapterApplies);
   const missingAdapterPlatforms = adapter?.id && adapter.id !== "unknown/custom"
@@ -234,7 +264,7 @@ export function buildAdapterEvidencePlan(input = Object(), options = Object()) {
     projectRoot,
     stateRoot,
     adapter,
-    artifactName: input.artifactName || input.artifact_name || options.artifactName || options.artifact_name,
+    artifactName: (input.artifactName || input.artifact_name || options.artifactName || options.artifact_name) as string | undefined,
   });
   const hasValidAdapter = Boolean(adapter?.id && adapter.id !== "unknown/custom");
   const status = !hasValidAdapter || commands.length === 0 || missingAdapterPlatforms.length > 0 || commandPlatformBlockersList.length > 0 ? "blocked" : "ready";
@@ -245,7 +275,7 @@ export function buildAdapterEvidencePlan(input = Object(), options = Object()) {
       : missingAdapterPlatforms.length > 0
         ? "ADAPTER_PLATFORM_NOT_COVERED"
         : commandPlatformBlockersList.length > 0
-          ? commandPlatformBlockersList[0].code
+          ? (commandPlatformBlockersList[0].code as string)
           : "ADAPTER_EVIDENCE_PLAN_READY";
   const summary = status === "ready"
     ? "Adapter evidence commands are ready for controlled execution."
@@ -299,26 +329,33 @@ export function buildAdapterEvidencePlan(input = Object(), options = Object()) {
   };
 }
 
-export function runAdapterEvidenceCollector(input = Object(), options = Object()) {
+export function runAdapterEvidenceCollector(input: Record<string, unknown> = Object(), options: Record<string, unknown> = Object()) {
   const plan = buildAdapterEvidencePlan(input, options);
   const execute = input.execute === true || input.executeAdapter === true || input.execute_adapter === true || options.execute === true || options.executeAdapter === true || options.execute_adapter === true;
   const allow = input.allowAdapterCommands === true || input.allow_adapter_commands === true || options.allowAdapterCommands === true || options.allow_adapter_commands === true;
   const writeArtifact = input.writeArtifact !== false && input.write_artifact !== false && options.writeArtifact !== false && options.write_artifact !== false;
-  const result = Object.assign(Object(), {
+  const baseStatus: string = plan.status === "blocked" ? "blocked" : execute ? "blocked" : "dry_run";
+  const baseCode: string = plan.status === "blocked" ? plan.code : execute ? "ADAPTER_COMMAND_EXECUTION_NOT_ALLOWED" : "ADAPTER_EVIDENCE_DRY_RUN";
+  const baseSummary: string = plan.status === "blocked"
+    ? plan.summary
+    : execute
+      ? "Adapter command execution requires explicit authorization."
+      : "Adapter evidence collector planned commands without executing them.";
+  const result = {
     ...plan,
     mode: execute ? "execute" : "dry_run",
-    status: plan.status === "blocked" ? "blocked" : execute ? "blocked" : "dry_run",
-    code: plan.status === "blocked" ? plan.code : execute ? "ADAPTER_COMMAND_EXECUTION_NOT_ALLOWED" : "ADAPTER_EVIDENCE_DRY_RUN",
-    summary: plan.status === "blocked"
-      ? plan.summary
-      : execute
-        ? "Adapter command execution requires explicit authorization."
-        : "Adapter evidence collector planned commands without executing them.",
-    command_results: [],
-    collected_evidence: [],
-    ui_evidence: null,
-    artifacts: [],
-  });
+    status: baseStatus,
+    code: baseCode,
+    summary: baseSummary,
+    platform_coverage: { ...plan.platform_coverage } as typeof plan.platform_coverage & {
+      evidence_covered_platforms?: string[];
+      missing_evidence_platforms?: string[];
+    },
+    command_results: [] as AdapterCommandResult[],
+    collected_evidence: [] as Array<Record<string, unknown>>,
+    ui_evidence: null as UiEvidence,
+    artifacts: [] as string[],
+  };
 
   if (plan.status === "blocked") {
     return result;
@@ -330,8 +367,8 @@ export function runAdapterEvidenceCollector(input = Object(), options = Object()
     return result;
   }
 
-  const commandResults = [];
-  const evidenceRecords = [];
+  const commandResults: AdapterCommandResult[] = [];
+  const evidenceRecords: Array<Record<string, unknown>> = [];
   for (const command of plan.commands) {
     const startedAt = nowIso();
     // P12.I2: route untrusted evidence_path through resolveWithinRoot咽喉.
@@ -396,7 +433,7 @@ export function runAdapterEvidenceCollector(input = Object(), options = Object()
   const evidenceCovered = unique(evidenceRecords.flatMap(evidenceCoveredPlatforms));
   const missingEvidencePlatforms = missingRequiredPlatforms(plan.required_platforms || [], evidenceCovered);
   result.platform_coverage = {
-    ...(plan.platform_coverage || {}),
+    ...plan.platform_coverage,
     evidence_covered_platforms: evidenceCovered,
     missing_evidence_platforms: missingEvidencePlatforms,
     status: missingEvidencePlatforms.length > 0 ? "blocked" : "pass",
@@ -419,7 +456,7 @@ export function runAdapterEvidenceCollector(input = Object(), options = Object()
   if (writeArtifact) {
     mkdirSync(dirname(plan.artifact_path), { recursive: true });
     writeFileSync(plan.artifact_path, JSON.stringify(result, null, 2), "utf8");
-    result.artifacts.push(plan.artifact_path);
+    (result.artifacts).push(plan.artifact_path);
   }
 
   return result;

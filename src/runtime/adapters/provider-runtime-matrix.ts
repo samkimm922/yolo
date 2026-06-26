@@ -12,34 +12,37 @@ export const PROVIDER_RUNTIME_MATRIX_SCHEMA_VERSION = "1.0";
 export const PROVIDER_CLI_DRY_RUN_MATRIX_SCHEMA_VERSION = "1.0";
 export const DEFAULT_PROVIDER_RUNTIME_MATRIX_PROVIDERS = ["claude", "codex", "custom"];
 
-function cleanString(value) {
+function cleanString(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function withTrailingSeparator(pathValue) {
+function withTrailingSeparator(pathValue: string): string {
   return pathValue.endsWith(sep) ? pathValue : `${pathValue}${sep}`;
 }
 
-function pathInside(child, parent) {
+function pathInside(child: string, parent: string): boolean {
   const resolvedChild = resolve(child);
   const resolvedParent = resolve(parent);
   return resolvedChild === resolvedParent || resolvedChild.startsWith(withTrailingSeparator(resolvedParent));
 }
 
-function providerOverrides(options = Object(), provider) {
+function providerOverrides(options: Record<string, unknown> = Object(), provider: string): Record<string, unknown> {
+  const camel = (options.providerConfigs as Record<string, unknown> | undefined) || {};
+  const snake = (options.provider_configs as Record<string, unknown> | undefined) || {};
   return {
-    ...(options.providerConfigs?.[provider] || {}),
-    ...(options.provider_configs?.[provider] || {}),
+    ...((camel[provider] as Record<string, unknown>) || {}),
+    ...((snake[provider] as Record<string, unknown>) || {}),
   };
 }
 
-function providerConfig(baseConfig = Object(), provider, options = Object()) {
+function providerConfig(baseConfig: Record<string, unknown> = Object(), provider: string, options: Record<string, unknown> = Object()): Record<string, unknown> {
   const override = providerOverrides(options, provider);
-  const ai = {
-    ...(baseConfig.ai || {}),
+  const overrideAi = (override.ai as Record<string, unknown>) || {};
+  const ai: Record<string, unknown> = {
+    ...((baseConfig.ai as Record<string, unknown>) || {}),
     executor: provider,
     provider,
-    ...(override.ai || {}),
+    ...overrideAi,
   };
 
   if (provider === "custom" && !cleanString(ai.custom_command || ai.command)) {
@@ -62,40 +65,57 @@ function providerConfig(baseConfig = Object(), provider, options = Object()) {
   };
 }
 
-function providerList(providers) {
-  return (providers || DEFAULT_PROVIDER_RUNTIME_MATRIX_PROVIDERS)
+function providerList(providers: unknown): string[] {
+  const list = (providers as unknown[] | undefined) || DEFAULT_PROVIDER_RUNTIME_MATRIX_PROVIDERS;
+  return list
     .map((provider) => normalizeAgentProvider(provider))
-    .filter(Boolean);
+    .filter((provider): provider is string => Boolean(provider));
 }
 
-function serializeInvocation(invocation) {
+function serializeInvocation(invocation: ReturnType<typeof buildProviderInvocation> | null) {
   if (!invocation) return null;
+  const inv = invocation as {
+    provider?: string;
+    command?: string;
+    args?: string[];
+    settingsFile?: string | null;
+    settings?: unknown;
+    outputFile?: string | null;
+    customCommand?: string | null;
+  };
   return {
-    provider: invocation.provider,
-    command: invocation.command,
-    args: invocation.args,
-    settings_file: invocation.settingsFile || null,
-    settings: invocation.settings || null,
-    output_file: invocation.outputFile || null,
-    custom_command: invocation.customCommand || null,
+    provider: inv.provider,
+    command: inv.command,
+    args: inv.args ?? [],
+    settings_file: inv.settingsFile || null,
+    settings: inv.settings || null,
+    output_file: inv.outputFile || null,
+    custom_command: inv.customCommand || null,
   };
 }
 
-function cliArgsInclude(args = [], value) {
+function cliArgsInclude(args: unknown[] = [], value: unknown): boolean {
   return Array.isArray(args) && args.includes(value);
 }
 
-export function buildProviderRuntimeMatrix(options = Object()) {
-  const config = options.config || {};
-  const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
-  const stateRoot = resolve(options.stateRoot || options.state_root || join(projectRoot, ".yolo"));
-  const runtimeDir = resolve(options.runtimeDir || options.runtime_dir || join(stateRoot, "state", "runtime"));
-  const gateLogDir = resolve(options.gateLogDir || options.gate_log_dir || runtimeDir);
-  const workDir = resolve(options.workDir || options.work_dir || projectRoot);
-  const rootDir = resolve(options.rootDir || options.root_dir || projectRoot);
-  const commandExists = options.commandExists || (() => null);
-  const existsSync = options.existsSync || defaultExistsSync;
-  const packageRoot = resolve(options.packageRoot || options.package_root || YOLO_PACKAGE_ROOT);
+export interface MatrixBlocker {
+  code: string;
+  provider?: string;
+  message: string;
+  [key: string]: unknown;
+}
+
+export function buildProviderRuntimeMatrix(options: Record<string, unknown> = Object()) {
+  const config = (options.config as Record<string, unknown>) || {};
+  const projectRoot = resolve(String(options.projectRoot || options.project_root || process.cwd()));
+  const stateRoot = resolve(String(options.stateRoot || options.state_root || join(projectRoot, ".yolo")));
+  const runtimeDir = resolve(String(options.runtimeDir || options.runtime_dir || join(stateRoot, "state", "runtime")));
+  const gateLogDir = resolve(String(options.gateLogDir || options.gate_log_dir || runtimeDir));
+  const workDir = resolve(String(options.workDir || options.work_dir || projectRoot));
+  const rootDir = resolve(String(options.rootDir || options.root_dir || projectRoot));
+  const commandExists = (options.commandExists as ((command: unknown) => unknown) | undefined) || (() => null);
+  const existsSync = (options.existsSync as ((path: string) => boolean) | undefined) || defaultExistsSync;
+  const packageRoot = resolve(String(options.packageRoot || options.package_root || YOLO_PACKAGE_ROOT));
 
   const entries = providerList(options.providers).map((provider) => {
     const entryConfig = providerConfig(config, provider, options);
@@ -109,9 +129,9 @@ export function buildProviderRuntimeMatrix(options = Object()) {
       workDir,
       runtimeDir,
     });
-    let invocation = null;
-    let invocationError = null;
-    let invocationPreflight = {
+    let invocation: ReturnType<typeof buildProviderInvocation> | null = null;
+    let invocationError: string | null = null;
+    let invocationPreflight: ReturnType<typeof inspectProviderInvocationPreflight> = {
       status: "pass",
       blocks_execution: false,
       blockers: [],
@@ -130,7 +150,7 @@ export function buildProviderRuntimeMatrix(options = Object()) {
       });
       invocationPreflight = inspectProviderInvocationPreflight(invocation, { existsSync, commandExists });
     } catch (error) {
-      invocationError = error?.message || String(error);
+      invocationError = (error as { message?: string })?.message || String(error);
     }
     const blockers = [
       ...(inspection.blockers || []),
@@ -177,10 +197,10 @@ export function buildProviderRuntimeMatrix(options = Object()) {
   };
 }
 
-export function inspectProviderRuntimeMatrix(options = Object()) {
+export function inspectProviderRuntimeMatrix(options: Record<string, unknown> = Object()) {
   const matrix = buildProviderRuntimeMatrix(options);
-  const blockers = [];
-  const warnings = [];
+  const blockers: MatrixBlocker[] = [];
+  const warnings: MatrixBlocker[] = [];
 
   if (matrix.gate_log_dir !== matrix.runtime_dir) {
     blockers.push({
@@ -215,7 +235,7 @@ export function inspectProviderRuntimeMatrix(options = Object()) {
         message: entry.invocation_error,
       });
     }
-    if (entry.provider === "codex" && !pathInside(entry.invocation?.output_file || "", matrix.runtime_dir)) {
+    if (entry.provider === "codex" && !pathInside(String(entry.invocation?.output_file || ""), matrix.runtime_dir)) {
       blockers.push({
         code: "PROVIDER_MATRIX_CODEX_OUTPUT_OUTSIDE_RUNTIME",
         provider: entry.provider,
@@ -242,16 +262,18 @@ export function inspectProviderRuntimeMatrix(options = Object()) {
   };
 }
 
-export function buildProviderCliDryRunMatrix(options = Object()) {
+export function buildProviderCliDryRunMatrix(options: Record<string, unknown> = Object()) {
   const runtimeMatrix = buildProviderRuntimeMatrix(options);
   const requireExplicitBudget = options.requireExplicitBudget === true || options.require_explicit_budget === true;
-  const workDir = resolve(options.workDir || options.work_dir || runtimeMatrix.project_root);
+  const workDir = resolve(String(options.workDir || options.work_dir || runtimeMatrix.project_root));
 
   const providers = runtimeMatrix.providers.map((entry) => {
-    const contract = entry.contract || {};
-    const capabilities = contract.capabilities || {};
-    const invocation = entry.invocation || {};
-    const args = invocation.args || [];
+    const contract = (entry.contract || {}) as Record<string, unknown>;
+    const capabilities = (contract.capabilities || {}) as Record<string, unknown>;
+    const invocation = (entry.invocation || {}) as Record<string, unknown>;
+    const args = (invocation.args as unknown[]) || [];
+    const budget = (contract.budget as Record<string, unknown>) || {};
+    const sandbox = (contract.sandbox as Record<string, unknown>) || {};
     return {
       provider: entry.provider,
       status: entry.status,
@@ -272,19 +294,19 @@ export function buildProviderCliDryRunMatrix(options = Object()) {
       },
       budget: {
         required: requireExplicitBudget,
-        max_usd: contract.budget?.max_usd ?? null,
-        enforceable: contract.budget?.enforceable === true,
+        max_usd: budget.max_usd ?? null,
+        enforceable: budget.enforceable === true,
         present_in_cli: entry.provider === "claude"
           ? cliArgsInclude(args, "--max-budget-usd")
           : false,
       },
       sandbox: {
-        mode: contract.sandbox?.mode || null,
-        approval_policy: contract.sandbox?.approval_policy || null,
-        file_write: contract.sandbox?.file_write ?? null,
-        shell_exec: contract.sandbox?.shell_exec ?? null,
+        mode: sandbox.mode || null,
+        approval_policy: sandbox.approval_policy || null,
+        file_write: sandbox.file_write ?? null,
+        shell_exec: sandbox.shell_exec ?? null,
       },
-      command_available: entry.available?.[entry.provider] ?? null,
+      command_available: (entry.available as Record<string, unknown> | undefined)?.[entry.provider] ?? null,
       selected_provider: entry.selected_provider,
       requested_provider: entry.requested_provider,
       invocation_error: entry.invocation_error,
@@ -318,11 +340,11 @@ export function buildProviderCliDryRunMatrix(options = Object()) {
   };
 }
 
-export function inspectProviderCliDryRunMatrix(options = Object()) {
+export function inspectProviderCliDryRunMatrix(options: Record<string, unknown> = Object()) {
   const runtimeInspection = options.matrix ? null : inspectProviderRuntimeMatrix(options);
-  const matrix = options.matrix || buildProviderCliDryRunMatrix(options);
-  const blockers = [];
-  const warnings = [];
+  const matrix = (options.matrix as ReturnType<typeof buildProviderCliDryRunMatrix>) || buildProviderCliDryRunMatrix(options);
+  const blockers: MatrixBlocker[] = [];
+  const warnings: MatrixBlocker[] = [];
 
   if (runtimeInspection) {
     blockers.push(...runtimeInspection.blockers.map((blocker) => ({
@@ -370,7 +392,7 @@ export function inspectProviderCliDryRunMatrix(options = Object()) {
         message: "provider CLI dry-run entry must document prompt-over-stdin execution",
       });
     }
-    if (entry.output_capture?.output_file && !pathInside(entry.output_capture.output_file, matrix.runtime_dir)) {
+    if (entry.output_capture?.output_file && !pathInside(String(entry.output_capture.output_file), matrix.runtime_dir)) {
       blockers.push({
         code: "CLI_DRY_RUN_OUTPUT_OUTSIDE_RUNTIME",
         provider: entry.provider,

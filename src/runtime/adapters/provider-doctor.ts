@@ -3,22 +3,22 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { commandExistsSync } from "../../lib/security/safe-exec.js";
 
-function defaultCommandExists(command) {
+function defaultCommandExists(command: unknown): boolean {
   // P12.I1: PATH walk via fs.accessSync — no sh -c, no injection surface.
   return commandExistsSync(String(command ?? "").trim());
 }
 
-function cleanString(value) {
+function cleanString(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function commandName(value) {
+function commandName(value: unknown): string | null {
   const command = cleanString(value);
   if (!command) return null;
   return command.split(/\s+/)[0] || null;
 }
 
-function normalizeProvider(value) {
+function normalizeProvider(value: unknown): string | null {
   const provider = cleanString(value).toLowerCase();
   if (["codex", "openai"].includes(provider)) return "codex";
   if (["claude", "anthropic"].includes(provider)) return "claude";
@@ -26,30 +26,31 @@ function normalizeProvider(value) {
   return null;
 }
 
-export function detectModelProvider(options = Object()) {
-  const config = options.config || {};
-  const commandExists = options.commandExists || defaultCommandExists;
-  const customCommand = commandName(config.ai?.custom_command || config.ai?.command);
+export function detectModelProvider(options: Record<string, unknown> = Object()) {
+  const config = (options.config as Record<string, unknown>) || {};
+  const commandExists = (options.commandExists as ((command: unknown) => unknown) | undefined) || defaultCommandExists;
+  const ai = (config.ai as Record<string, unknown>) || {};
+  const customCommand = commandName(ai.custom_command || ai.command);
   const available = {
     codex: Boolean(commandExists("codex")),
     claude: Boolean(commandExists("claude")),
     custom: customCommand ? Boolean(commandExists(customCommand)) : false,
   };
 
-  const configured = normalizeProvider(config.ai?.executor || config.ai?.provider);
+  const configured = normalizeProvider(ai.executor || ai.provider);
   const requested = configured;
 
-  if (requested && available[requested]) {
+  if (requested && available[requested as keyof typeof available]) {
     return { selected: requested, requested, available, reason: "configured_provider_available" };
   }
 
-  if (requested && !available[requested]) {
+  if (requested && !available[requested as keyof typeof available]) {
     const fallback = available.codex ? "codex" : available.claude ? "claude" : available.custom ? "custom" : requested;
     return { selected: fallback, requested, available, reason: "configured_provider_unavailable" };
   }
 
   const selected = available.codex ? "codex" : available.claude ? "claude" : available.custom ? "custom" : "claude";
-  return { selected, requested: null, available, reason: available[selected] ? "auto_detected" : "no_cli_detected" };
+  return { selected, requested: null, available, reason: available[selected as keyof typeof available] ? "auto_detected" : "no_cli_detected" };
 }
 
 export function runProviderDoctorCli() {
