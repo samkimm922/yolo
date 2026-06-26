@@ -1,14 +1,56 @@
-export function shouldBlockReviewTaskLimit(taskCount, maxTasks) {
+type AppendUniqueFn = (target: unknown[], items?: unknown[]) => void;
+
+type ReviewTaskShape = Record<string, unknown>;
+
+function isFn(value: unknown): value is AppendUniqueFn {
+  return typeof value === "function";
+}
+
+function asArrayField(target: Record<string, unknown>, key: string): unknown[] {
+  const existing = target[key];
+  if (Array.isArray(existing)) return existing as unknown[];
+  const fresh: unknown[] = [];
+  target[key] = fresh;
+  return fresh;
+}
+
+export function shouldBlockReviewTaskLimit(taskCount: number, maxTasks: number): boolean {
   return taskCount > maxTasks;
 }
 
-function appendUniqueFallback(target, items = []) {
+function appendUniqueFallback(target: unknown[], items: unknown[] = []) {
   for (const item of items) {
     if (!target.includes(item)) target.push(item);
   }
 }
 
-export function buildReviewTaskLimitBlock({ round, taskCount, maxTasks, taskIds = [] }) {
+export type ReviewTaskLimitBlock = {
+  blockerId: string;
+  message: string;
+  errorTitle: string;
+  errorDetail: string;
+  status: string;
+  reason: string;
+  human_needed: boolean;
+  recovery_action: string;
+  meta: {
+    round: number;
+    phase: string;
+    generated_tasks: number;
+    max_allowed: number;
+    blocked_task_ids: string[];
+    human_needed: boolean;
+    recoverable: boolean;
+    queue_strategy: string;
+  };
+};
+
+export function buildReviewTaskLimitBlock({ round, taskCount, maxTasks, taskIds = [] }: {
+  round: number;
+  taskCount: number;
+  maxTasks: number;
+  taskIds?: string[];
+}): ReviewTaskLimitBlock {
   const blockerId = `REVIEW-TASK-LIMIT-R${round}`;
   return {
     blockerId,
@@ -32,11 +74,15 @@ export function buildReviewTaskLimitBlock({ round, taskCount, maxTasks, taskIds 
   };
 }
 
-export function markReviewTaskLimitBlocked({ taskResults, taskLimitBlock, appendUnique }) {
+export function markReviewTaskLimitBlocked({ taskResults, taskLimitBlock, appendUnique }: {
+  taskResults: Record<string, unknown> | null | undefined;
+  taskLimitBlock: ReviewTaskLimitBlock | null | undefined;
+  appendUnique?: unknown;
+}): Record<string, unknown> | null | undefined {
   if (!taskResults || !taskLimitBlock) return taskResults;
-  if (!Array.isArray(taskResults.blocked)) taskResults.blocked = [];
-  const append = appendUnique || appendUniqueFallback;
-  append(taskResults.blocked, [taskLimitBlock.blockerId]);
+  const blocked = asArrayField(taskResults, "blocked");
+  const append = isFn(appendUnique) ? appendUnique : appendUniqueFallback;
+  append(blocked, [taskLimitBlock.blockerId]);
   taskResults.review_blocker = {
     id: taskLimitBlock.blockerId,
     status: taskLimitBlock.status,
@@ -57,13 +103,22 @@ export function markReviewOutcome({
   message,
   humanNeeded = false,
   meta = Object(),
-} = Object()) {
+}: {
+  taskResults?: Record<string, unknown> | null;
+  appendUnique?: unknown;
+  id?: string | null;
+  status?: string;
+  reason?: string;
+  message?: string;
+  humanNeeded?: boolean;
+  meta?: Record<string, unknown>;
+} = Object()): Record<string, unknown> | null | undefined {
   if (!taskResults || !id) return taskResults;
-  if (!Array.isArray(taskResults.failed)) taskResults.failed = [];
-  if (!Array.isArray(taskResults.blocked)) taskResults.blocked = [];
-  const append = appendUnique || appendUniqueFallback;
-  append(taskResults.failed, [id]);
-  if (status === "blocked") append(taskResults.blocked, [id]);
+  const failed = asArrayField(taskResults, "failed");
+  const blocked = asArrayField(taskResults, "blocked");
+  const append = isFn(appendUnique) ? appendUnique : appendUniqueFallback;
+  append(failed, [id]);
+  if (status === "blocked") append(blocked, [id]);
   taskResults.review_outcome = {
     id,
     status,
@@ -79,13 +134,18 @@ export function appendReviewTasksToPrd({
   prd,
   progress,
   tasks = [],
-  ensureTaskShape = (task) => task,
-}) {
-  const added = [];
-  if (!Array.isArray(prd.tasks)) prd.tasks = [];
+  ensureTaskShape = (task: ReviewTaskShape) => task,
+}: {
+  prd: Record<string, unknown>;
+  progress?: { total: number } | null;
+  tasks?: ReviewTaskShape[];
+  ensureTaskShape?: (task: ReviewTaskShape) => ReviewTaskShape;
+}): Array<{ id: unknown; priority: unknown; title: unknown }> {
+  const added: Array<{ id: unknown; priority: unknown; title: unknown }> = [];
+  const prdTasks = Array.isArray(prd.tasks) ? (prd.tasks as ReviewTaskShape[]) : ((prd.tasks = []) as ReviewTaskShape[]);
   for (const task of tasks) {
     ensureTaskShape(task);
-    prd.tasks.push(task);
+    prdTasks.push(task);
     if (progress) progress.total++;
     added.push({
       id: task.id,
@@ -96,19 +156,33 @@ export function appendReviewTasksToPrd({
   return added;
 }
 
-export function reviewTaskIdSet(tasks = []) {
-  return new Set(tasks.map((task) => task.id).filter(Boolean));
+export function reviewTaskIdSet(tasks: ReviewTaskShape[] = []): Set<string> {
+  return new Set(tasks.map((task) => task.id).filter(Boolean) as string[]);
 }
 
-export function hasReviewFixFailures(reviewResults = Object()) {
-  return (reviewResults.failed || []).length > 0 || (reviewResults.blocked || []).length > 0;
+export function hasReviewFixFailures(reviewResults: Record<string, unknown> = Object()): boolean {
+  const failed = Array.isArray(reviewResults.failed) ? reviewResults.failed : [];
+  const blocked = Array.isArray(reviewResults.blocked) ? reviewResults.blocked : [];
+  return failed.length > 0 || blocked.length > 0;
 }
 
-export function reviewFixFailureDetail(reviewResults = Object()) {
-  return `failed=${(reviewResults.failed || []).length}, blocked=${(reviewResults.blocked || []).length}`;
+export function reviewFixFailureDetail(reviewResults: Record<string, unknown> = Object()): string {
+  const failed = Array.isArray(reviewResults.failed) ? reviewResults.failed : [];
+  const blocked = Array.isArray(reviewResults.blocked) ? reviewResults.blocked : [];
+  return `failed=${failed.length}, blocked=${blocked.length}`;
 }
 
-export function pendingReviewDecision({ pendingReviewTasks = [], prevPendingCount, round }) {
+export type PendingReviewDecision = {
+  action: "continue" | "break" | "next-round";
+  nextPendingCount: number;
+  message: string | null;
+};
+
+export function pendingReviewDecision({ pendingReviewTasks = [], prevPendingCount, round }: {
+  pendingReviewTasks?: ReviewTaskShape[];
+  prevPendingCount?: number;
+  round: number;
+}): PendingReviewDecision {
   if (pendingReviewTasks.length === 0) {
     return {
       action: "continue",
