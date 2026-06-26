@@ -289,7 +289,7 @@ export function planControlledParallelWaves(input = Object(), options = Object()
     if (!taskCanRun({ status: node.status })) completed.add(node.id);
   }
   const planned = new Set();
-  const waves: Array<ReturnType<typeof waveRecord> & { start_gate?: unknown }> = [];
+  const waves: Array<ReturnType<typeof waveRecord> & { start_gate?: ReturnType<typeof inspectParallelWaveStartGate> }> = [];
   const blockers = [...graph.blockers];
   let guard = 0;
 
