@@ -6,56 +6,92 @@ const AUTO_FIX_RECIPES = new Set([
   "raw-collection",
 ]);
 
-function scannerIds(task = Object()) {
-  return (task.source_findings || task.fix_findings || [])
-    .map((finding) => finding.scanner_id || finding.rule_id)
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function asArray<T = unknown>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+
+function scannerIds(task: unknown = Object()): string[] {
+  const rec = asRecord(task);
+  const findings = asArray<unknown>(rec.source_findings).length > 0
+    ? asArray<unknown>(rec.source_findings)
+    : asArray<unknown>(rec.fix_findings);
+  return findings
+    .map((finding) => {
+      const fRec = asRecord(finding);
+      const id = fRec.scanner_id ?? fRec.rule_id;
+      return typeof id === "string" ? id : "";
+    })
     .filter(Boolean);
 }
 
-function hasOnlyScanner(task, scannerId) {
+function hasOnlyScanner(task: unknown, scannerId: string): boolean {
   const ids = scannerIds(task);
   return ids.length > 0 && ids.every((id) => id === scannerId);
 }
 
-export function isSplitOrStructuralRefactorTask(task = Object()) {
-  const text = `${task.title || ""}\n${task.description || ""}`.toLowerCase();
+export function isSplitOrStructuralRefactorTask(task: unknown = Object()): boolean {
+  const rec = asRecord(task);
+  const text = `${asString(rec.title)}\n${asString(rec.description)}`.toLowerCase();
   const ids = scannerIds(task);
-  return task.scope?.allow_new_files === true ||
+  const scope = asRecord(rec.scope);
+  return scope.allow_new_files === true ||
     ids.includes("R9-file-length") ||
     /拆分|split|提取|文件.*行|file-length|超过\s*\d+\s*行/.test(text);
 }
 
-export function hasAutoFixRecipe(task = Object()) {
-  const rule = task.fix_rule || scannerIds(task)[0] || "";
+export function hasAutoFixRecipe(task: unknown = Object()): boolean {
+  const rec = asRecord(task);
+  const rule = asString(rec.fix_rule) || scannerIds(task)[0] || "";
   return AUTO_FIX_RECIPES.has(rule);
 }
 
-function sourceFindings(task = Object()) {
-  return task.source_findings || task.fix_findings || [];
+function sourceFindings(task: unknown = Object()): unknown[] {
+  const rec = asRecord(task);
+  const primary = asArray<unknown>(rec.source_findings);
+  if (primary.length > 0) return primary;
+  return asArray<unknown>(rec.fix_findings);
 }
 
-function isTestFile(filePath = "") {
+function isTestFile(filePath: string = ""): boolean {
   return filePath.includes("/__tests__/") || /\.(test|spec)\.[tj]sx?$/.test(filePath);
 }
 
-export function hasSafeR6UnknownAsRecipe(task = Object()) {
-  const targets = task.scope?.targets || [];
+export function hasSafeR6UnknownAsRecipe(task: unknown = Object()): boolean {
+  const rec = asRecord(task);
+  const scope = asRecord(rec.scope);
+  const targets = asArray<unknown>(scope.targets);
   if (!hasOnlyScanner(task, "R6-as-unknown-as") || targets.length !== 1) return false;
-  const targetFile = targets[0]?.file || "";
+  const firstTarget = asRecord(targets[0]);
+  const targetFile = asString(firstTarget.file);
   if (!isTestFile(targetFile)) return false;
   const findings = sourceFindings(task);
   if (findings.length === 0) return false;
   return findings.every((finding) => {
-    const findingFile = finding.file || targetFile;
-    const text = `${finding.context || ""}\n${finding.match || ""}`;
+    const fRec = asRecord(finding);
+    const findingFile = asString(fRec.file) || targetFile;
+    const text = `${asString(fRec.context)}\n${asString(fRec.match)}`;
     return findingFile === targetFile &&
       /as unknown as/.test(text) &&
       /mockReturnValue|vi\.mocked|TypedCollection<unknown>/.test(text);
   });
 }
 
-export function classifyTaskExecution(task = Object()) {
-  if (task.task_kind === "deterministic_check" || task.execution_mode === "deterministic_check") {
+export function classifyTaskExecution(task: unknown = Object()): {
+  route: string;
+  reason: string;
+  quality_profile: string;
+  provider_required: boolean;
+} {
+  const rec = asRecord(task);
+  if (rec.task_kind === "deterministic_check" || rec.execution_mode === "deterministic_check") {
     return {
       route: "deterministic_check",
       reason: "deterministic_postcondition_check",
@@ -82,7 +118,7 @@ export function classifyTaskExecution(task = Object()) {
     };
   }
 
-  if (task.fix_type === "AUTO_FIX") {
+  if (rec.fix_type === "AUTO_FIX") {
     if (hasAutoFixRecipe(task)) {
       return {
         route: "auto_fix",
@@ -99,7 +135,8 @@ export function classifyTaskExecution(task = Object()) {
     };
   }
 
-  if (hasOnlyScanner(task, "R6-as-unknown-as") && (task.scope?.targets || []).length === 1) {
+  const scope = asRecord(rec.scope);
+  if (hasOnlyScanner(task, "R6-as-unknown-as") && asArray<unknown>(scope.targets).length === 1) {
     return {
       route: "provider",
       reason: "mechanical_no_safe_recipe_yet",
