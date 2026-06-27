@@ -4,7 +4,7 @@ export function exceptionFailureKey(error: unknown) {
   return `exception:${((error as { message?: string } | null | undefined)?.message || "unknown").substring(0, 50)}`;
 }
 
-export function hasRepeatedExceptionFailure(history: Array<{ message?: string }> = [], failKey = "") {
+export function hasRepeatedExceptionFailure(history: Array<{ message?: string; [key: string]: unknown }> = [], failKey = "") {
   if (history.length < 2) return false;
   const last2 = history.slice(-2);
   return last2.length >= 2 && last2.every((item) => item.message && item.message.includes(failKey.slice(0, 30)));
