@@ -1,23 +1,62 @@
-import { buildProviderCapabilityBits } from "../adapters/provider-capability-bits.js";
+import {
+  PROVIDER_CAPABILITY_FIELDS,
+  type ProviderCapabilityField,
+  buildProviderCapabilityBits,
+} from "../adapters/provider-capability-bits.js";
 import { normalizeAgentProvider } from "../adapters/agent-contract.js";
 
 export const PROVIDER_CAPABILITY_GATE_SCHEMA_VERSION = "1.0";
 
-function cleanString(value) {
+type ProviderCapabilityPrd = {
+  required_capabilities?: unknown;
+  tasks?: Array<{ required_capabilities?: unknown }>;
+  [key: string]: unknown;
+};
+
+type ProviderCapabilityOptions = {
+  prd?: ProviderCapabilityPrd;
+  config?: {
+    ai?: {
+      executor?: unknown;
+      provider?: unknown;
+      capability_overrides?: Record<string, boolean>;
+    };
+  };
+  provider?: unknown;
+};
+
+type CapabilityBlocker = {
+  code: string;
+  provider: string;
+  capability: string;
+  message: string;
+};
+
+type CapabilityWarning = {
+  code: string;
+  provider: string;
+  message: string;
+};
+
+function isProviderCapabilityField(value: string): value is ProviderCapabilityField {
+  return (PROVIDER_CAPABILITY_FIELDS as readonly string[]).includes(value);
+}
+
+function cleanString(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function arrayItems(value) {
-  if (Array.isArray(value)) return value.filter(Boolean);
+function arrayItems(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter(Boolean).map((item) => String(item));
   if (typeof value === "string") return value.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
   return [];
 }
 
-function requiredCapabilitiesFromPrd(prd = Object()) {
+function requiredCapabilitiesFromPrd(prd: ProviderCapabilityPrd = Object()): string[] {
   const explicit = arrayItems(prd.required_capabilities);
   if (explicit.length > 0) return explicit;
 
-  const fromTasks = [];
+  const fromTasks: string[] = [];
   for (const task of prd.tasks || []) {
     const taskCaps = arrayItems(task.required_capabilities);
     for (const cap of taskCaps) {
@@ -27,15 +66,15 @@ function requiredCapabilitiesFromPrd(prd = Object()) {
   return fromTasks;
 }
 
-export function inspectProviderCapabilityGate(options = Object()) {
+export function inspectProviderCapabilityGate(options: ProviderCapabilityOptions = Object()) {
   const prd = options.prd || {};
   const config = options.config || {};
   const provider = normalizeAgentProvider(options.provider || config.ai?.executor || config.ai?.provider) || "claude";
   const capabilities = buildProviderCapabilityBits(provider, config.ai?.capability_overrides);
   const required = requiredCapabilitiesFromPrd(prd);
 
-  const blockers = [];
-  const warnings = [];
+  const blockers: CapabilityBlocker[] = [];
+  const warnings: CapabilityWarning[] = [];
 
   if (required.length === 0) {
     return {
@@ -52,7 +91,10 @@ export function inspectProviderCapabilityGate(options = Object()) {
 
   for (const cap of required) {
     const normalizedCap = cleanString(cap).toLowerCase().replace(/-/g, "_");
-    if (capabilities[normalizedCap] !== true) {
+    const supported = isProviderCapabilityField(normalizedCap)
+      ? capabilities[normalizedCap] === true
+      : false;
+    if (!supported) {
       blockers.push({
         code: "PROVIDER_CAPABILITY_MISSING",
         provider,

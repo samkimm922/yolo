@@ -3,7 +3,27 @@
 import { execFileSync } from "node:child_process";
 import { classifyTaskExecution } from "../task-loop/router.js";
 
-function execGit(cwd, args) {
+type DiffTaskTarget = string | { file?: string; path?: string };
+type DiffTaskLike = {
+  scope?: { targets?: DiffTaskTarget | DiffTaskTarget[] };
+  quality_budget?: {
+    max_files?: number;
+    max_added_lines?: number;
+    max_removed_lines?: number;
+    max_total_lines?: number;
+  };
+  [key: string]: unknown;
+};
+
+type NumstatEntry = { file: string; added: number; removed: number };
+
+type DiffQualityFailure = { code: string; detail: string };
+
+function errorMessage(error: unknown): string {
+  return (error as { message?: string } | null | undefined)?.message || String(error || "unknown error");
+}
+
+function execGit(cwd: string, args: readonly string[]): string {
   return execFileSync("git", ["-C", cwd, ...args], {
     encoding: "utf8",
     stdio: ["pipe", "pipe", "pipe"],
@@ -11,12 +31,16 @@ function execGit(cwd, args) {
   }).trim();
 }
 
-function targetFiles(task = Object()) {
-  return (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
+function targetFiles(task: DiffTaskLike = Object()): string[] {
+  const targets = task.scope?.targets;
+  const list: DiffTaskTarget[] = Array.isArray(targets) ? targets : targets ? [targets] : [];
+  return list
+    .map((target) => (typeof target === "string" ? target : target?.file))
+    .filter((file): file is string => Boolean(file));
 }
 
-function mergeNumstat(unstagedOutput, stagedOutput) {
-  const map = new Map();
+function mergeNumstat(unstagedOutput: string, stagedOutput: string): NumstatEntry[] {
+  const map = new Map<string, NumstatEntry>();
   for (const line of [...unstagedOutput.split("\n"), ...stagedOutput.split("\n")].filter(Boolean)) {
     const [addedRaw, removedRaw, file] = line.split("\t");
     const added = addedRaw === "-" ? 0 : Number(addedRaw) || 0;
@@ -27,7 +51,7 @@ function mergeNumstat(unstagedOutput, stagedOutput) {
   return [...map.values()];
 }
 
-function parseNumstat(output) {
+function parseNumstat(output: string): NumstatEntry[] {
   return output.split("\n").filter(Boolean).map((line) => {
     const [addedRaw, removedRaw, file] = line.split("\t");
     return {
@@ -38,14 +62,14 @@ function parseNumstat(output) {
   });
 }
 
-function changedFiles(cwd) {
+function changedFiles(cwd: string): string[] {
   const unstaged = execGit(cwd, ["diff", "--name-only"]).split("\n").filter(Boolean);
   const staged = execGit(cwd, ["diff", "--cached", "--name-only"]).split("\n").filter(Boolean);
   const untracked = execGit(cwd, ["ls-files", "--others", "--exclude-standard"]).split("\n").filter(Boolean);
   return [...new Set([...staged, ...unstaged, ...untracked])];
 }
 
-export function validateDiffQuality(task = Object(), options = Object()) {
+export function validateDiffQuality(task: DiffTaskLike = Object(), options: { cwd?: string } = Object()) {
   const cwd = options.cwd || process.cwd();
   const route = classifyTaskExecution(task);
   if (route.quality_profile !== "single_line_mechanical") {
@@ -60,9 +84,9 @@ export function validateDiffQuality(task = Object(), options = Object()) {
   }
 
   const targets = targetFiles(task);
-  let numstat;
-  let changed;
-  let untracked;
+  let numstat: NumstatEntry[];
+  let changed: string[];
+  let untracked: string[];
   try {
     numstat = mergeNumstat(
       execGit(cwd, ["diff", "--numstat", "--", ...targets]),
@@ -80,7 +104,7 @@ export function validateDiffQuality(task = Object(), options = Object()) {
       failures: [
         {
           code: "DIFF_QUALITY_GIT_UNAVAILABLE",
-          detail: `无法确定 diff（git 失败）: ${gitError?.message || String(gitError)}`,
+          detail: `无法确定 diff（git 失败）: ${errorMessage(gitError)}`,
         },
       ],
       recovery_hint: "diff-quality-gate 依赖 git 探测变更范围，git 不可用时拒绝放行。",
@@ -97,7 +121,7 @@ export function validateDiffQuality(task = Object(), options = Object()) {
     max_total_lines: task.quality_budget?.max_total_lines ?? 20,
   };
 
-  const failures = [];
+  const failures: DiffQualityFailure[] = [];
   if (changed.length > budget.max_files) {
     failures.push({
       code: "TOO_MANY_FILES_FOR_MECHANICAL_FIX",
