@@ -2,7 +2,9 @@ import { buildFailureHint } from "../gates/failure-analysis.js";
 
 export const FRESH_SESSION_CONTEXT_CONTRACT_SCHEMA = "yolo.task.fresh_session_context.v1";
 
-function clean(value) {
+type ScopeTarget = string | { file?: unknown } | null | undefined;
+
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
@@ -16,7 +18,7 @@ export function buildFreshSessionContextContract({
   hasFailureHint = false,
 } = Object()) {
   const targets = (task.scope?.targets || [])
-    .map((target) => clean(target?.file || target))
+    .map((target: ScopeTarget) => clean((target as { file?: unknown })?.file ?? target))
     .filter(Boolean);
   const readonly = (task.scope?.readonly_files || []).map(clean).filter(Boolean);
   return {
@@ -27,8 +29,8 @@ export function buildFreshSessionContextContract({
     attempt: Number(attempt) || 1,
     allowed_context_refs: [
       { kind: "prd_slice", ref: prdPath },
-      ...targets.map((file) => ({ kind: "scope_target", ref: file })),
-      ...readonly.map((file) => ({ kind: "readonly_file", ref: file })),
+      ...targets.map((file: string) => ({ kind: "scope_target", ref: file })),
+      ...readonly.map((file: string) => ({ kind: "readonly_file", ref: file })),
       ...(stateRoot ? [{ kind: "bounded_learning", ref: stateRoot }] : []),
       ...(hasFailureHint ? [{ kind: "bounded_failure_hint", ref: "last_gate_error_summary" }] : []),
     ],

@@ -1,17 +1,17 @@
 {
-  "max_errors": 1016,
+  "max_errors": 988,
   "command": "tsc -p tsconfig.json --noEmit --strict --pretty false",
-  "updated_at": "2026-06-27T01:51:21.598Z",
+  "updated_at": "2026-06-27T02:10:00.938Z",
   "profiles": {
     "strict": {
-      "max_errors": 1016,
+      "max_errors": 988,
       "command": "tsc -p tsconfig.json --noEmit --strict --pretty false",
-      "updated_at": "2026-06-27T01:51:21.598Z"
+      "updated_at": "2026-06-27T02:10:00.938Z"
     },
     "strict_no_implicit_any": {
-      "max_errors": 1622,
+      "max_errors": 1574,
       "command": "tsc -p tsconfig.json --noEmit --strict --noImplicitAny --pretty false",
-      "updated_at": "2026-06-27T01:51:21.598Z"
+      "updated_at": "2026-06-27T02:10:00.938Z"
     }
   }
 }
