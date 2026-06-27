@@ -12,15 +12,56 @@ import {
 } from "../task-state/transitions.js";
 import { safeExecFileSync } from "../../lib/security/safe-exec.js";
 
-export function dryRunArtifactTarget(task = Object()) {
-  return task.scope?.targets?.[0]?.file || "";
+type DryRunTask = {
+  id?: unknown;
+  title?: unknown;
+  description?: unknown;
+  scope?: {
+    targets?: ReadonlyArray<{ file?: unknown } | null | undefined>;
+  };
+  test_generation?: {
+    required_commands?: readonly unknown[];
+  };
+};
+
+type DryRunCommandResult = {
+  command: string;
+  exit_code: number;
+  stdout: string;
+  stderr: string;
+};
+
+type DryRunCommandOptions = {
+  cwd?: string;
+  timeout?: number;
+  execFileSync?: typeof safeExecFileSync;
+};
+
+function errorMessage(error: unknown): string {
+  return (error as { message?: string } | null | undefined)?.message || String(error || "unknown error");
 }
 
-export function runDryRunCommand(command, {
+function errorStatus(error: unknown): number | undefined {
+  const status = (error as { status?: unknown } | null | undefined)?.status;
+  return typeof status === "number" ? status : undefined;
+}
+
+function errorStream(error: unknown, key: "stdout" | "stderr"): string {
+  const value = (error as Record<string, unknown> | null | undefined)?.[key];
+  return String(value ?? "");
+}
+
+export function dryRunArtifactTarget(task: DryRunTask = Object()): string {
+  const first = task.scope?.targets?.[0];
+  const file = (first as { file?: unknown } | null | undefined)?.file;
+  return typeof file === "string" && file ? file : "";
+}
+
+export function runDryRunCommand(command: string, {
   cwd,
   timeout = 120000,
   execFileSync = safeExecFileSync,
-} = Object()) {
+}: DryRunCommandOptions = Object()): DryRunCommandResult {
   // P12.I1: default executor is safeExecFileSync (routes through execArgv, no shell).
   // Tests may inject a mock execFileSync for unit control.
   try {
@@ -29,31 +70,38 @@ export function runDryRunCommand(command, {
       encoding: "utf8",
       timeout,
     });
-    return { command, exit_code: 0, stdout: stdout.trim().slice(0, 4000), stderr: "" };
+    return { command, exit_code: 0, stdout: String(stdout).trim().slice(0, 4000), stderr: "" };
   } catch (error) {
     return {
       command,
-      exit_code: error.status ?? 1,
-      stdout: String(error.stdout || "").trim().slice(0, 4000),
-      stderr: String(error.stderr || error.message || "").trim().slice(0, 4000),
+      exit_code: errorStatus(error) ?? 1,
+      stdout: errorStream(error, "stdout").trim().slice(0, 4000),
+      stderr: (errorStream(error, "stderr") || errorMessage(error)).trim().slice(0, 4000),
     };
   }
 }
 
-function prdDisplayPath(prdPath, yoloRoot) {
+function prdDisplayPath(prdPath: string, yoloRoot: string): string {
   return String(prdPath).replace(`${yoloRoot}/`, "");
 }
 
-export function renderDryRunArtifact(task, prdPath, {
-  yoloRoot,
-  projectRoot,
+type RenderDryRunOptions = {
+  yoloRoot?: string;
+  projectRoot?: string;
+  now?: string;
+  runCommand?: (command: string) => DryRunCommandResult;
+};
+
+export function renderDryRunArtifact(task: DryRunTask, prdPath: string, {
+  yoloRoot = "",
+  projectRoot = "",
   now = new Date().toISOString(),
-  runCommand = (command) => runDryRunCommand(command, { cwd: yoloRoot }),
-} = Object()) {
-  const commands = task.test_generation?.required_commands || [];
-  const commandResults = commands.map((command) => runCommand(command));
+  runCommand = (command: string) => runDryRunCommand(command, { cwd: yoloRoot }),
+}: RenderDryRunOptions = Object()): string {
+  const commands = (task.test_generation?.required_commands || []).map((entry) => String(entry));
+  const commandResults = commands.map((command: string) => runCommand(command));
   const target = dryRunArtifactTarget(task);
-  const verdict = commandResults.every((result) => result.exit_code === 0) ? "PASS" : "WARN";
+  const verdict = commandResults.every((result: DryRunCommandResult) => result.exit_code === 0) ? "PASS" : "WARN";
   const currentPrd = prdDisplayPath(prdPath, yoloRoot);
 
   if (target.endsWith(".json")) {
@@ -80,7 +128,7 @@ export function renderDryRunArtifact(task, prdPath, {
   }
 
   const commandSection = commandResults.length
-    ? commandResults.map((result) => `### ${result.command}\n\n- exit_code: ${result.exit_code}\n\nstdout:\n\n\`\`\`text\n${result.stdout || "(empty)"}\n\`\`\`\n\nstderr:\n\n\`\`\`text\n${result.stderr || "(empty)"}\n\`\`\``).join("\n\n")
+    ? commandResults.map((result: DryRunCommandResult) => `### ${result.command}\n\n- exit_code: ${result.exit_code}\n\nstdout:\n\n\`\`\`text\n${result.stdout || "(empty)"}\n\`\`\`\n\nstderr:\n\n\`\`\`text\n${result.stderr || "(empty)"}\n\`\`\``).join("\n\n")
     : "No commands required for this artifact.";
 
   return `# ${task.title || task.id}\n\n- generated_at: ${now}\n- generated_by: yolo deterministic dry_run_artifact producer\n- task_id: ${task.id}\n- target: ${target}\n- current_prd: ${currentPrd}\n\n## Goal\n\n${task.description || "Create the requested dry-run artifact."}\n\n## Guardrails\n\n- Do not modify business application code.\n- Do not modify runner, gate, PRD, or schema files for this dry-run task.\n- Stop if required evidence cannot be produced.\n- Keep the artifact small and readable for a fresh session.\n\n## Cost Budget\n\n- Model call: skipped for deterministic dry-run artifact production.\n- File scope: only the declared artifact target.\n- Runtime: command smoke checks only when explicitly required.\n\n## Success Criteria\n\n- Declared target artifact exists.\n- Scope target is touched.\n- No out-of-scope file is required for this artifact.\n- Recovery can use this file as handoff evidence.\n\n## Command Evidence\n\n${commandSection}\n`;
@@ -118,15 +166,15 @@ export function completeDryRunArtifactTask({
   loadPRD,
   taskPostconditionsPass,
   recordTaskTransition,
-  logTaskDone = (..._args) => {},
-  logProgress = (..._args) => {},
+  logTaskDone = (..._args: unknown[]) => {},
+  logProgress = (..._args: unknown[]) => {},
 } = Object()) {
   const target = dryRunArtifactTarget(task);
   if (!target) return { status: "failed", reason: "dry_run_artifact missing scope target" };
 
   // P12.I2: route untrusted target through resolveWithinRoot咽喉.
   const guardResult = resolveWithinRoot(projectRoot, target);
-  if (!guardResult.ok) {
+  if (!guardResult.ok || !guardResult.path) {
     const reason = `scope target escapes project root: ${guardResult.detail}`;
     recordTaskTransition(prdPath, failTaskTransition({
       taskId: task.id,

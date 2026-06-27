@@ -7,11 +7,23 @@ import {
 } from "../invariants.js";
 import { inspectAtomicTask as defaultInspectAtomicTask } from "./atomic-task-doctor.js";
 
-function asArray(value) {
-  return Array.isArray(value) ? value : value == null ? [] : [value];
+function asArray<T = unknown>(value: T | readonly T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : value == null ? [] : [value as T];
 }
 
-function postConditionPathEntries(condition, index) {
+function errorMessage(error: unknown): string {
+  return (error as { message?: string } | null | undefined)?.message || String(error || "unknown error");
+}
+
+type PostCondition = {
+  params?: {
+    file?: unknown;
+    file_path?: unknown;
+    files?: unknown;
+  };
+};
+
+function postConditionPathEntries(condition: PostCondition | null | undefined, index: number) {
   const params = condition?.params || {};
   return [
     ...asArray(params.file).map((value) => ({ role: `post_conditions[${index}].params.file`, value })),
@@ -78,14 +90,15 @@ export async function validateContextPackBeforeSession({
     return { ok: !result.blocks_execution, result, artifact };
   } catch (error) {
     if (isRuntimeInvariantViolation(error)) {
+      const invariant = error as { blockers?: unknown[]; code?: string; message?: string };
       return {
         ok: false,
         result: {
           status: "fail",
           blocks_execution: true,
-          failures: error.blockers || [{
-            code: error.code,
-            detail: error.message,
+          failures: invariant.blockers || [{
+            code: invariant.code,
+            detail: invariant.message,
           }],
         },
       };
@@ -95,7 +108,7 @@ export async function validateContextPackBeforeSession({
       result: {
         status: "fail",
         blocks_execution: true,
-        failures: [{ code: "CONTEXT_PACK_VALIDATOR_ERROR", detail: error.message }],
+        failures: [{ code: "CONTEXT_PACK_VALIDATOR_ERROR", detail: errorMessage(error) }],
       },
     };
   }
@@ -113,17 +126,22 @@ export async function validateTestGenerationAfterSession({
     return {
       status: "fail",
       blocks_execution: true,
-      failures: [{ code: "TEST_GENERATION_VALIDATOR_ERROR", detail: error.message }],
+      failures: [{ code: "TEST_GENERATION_VALIDATOR_ERROR", detail: errorMessage(error) }],
     };
   }
 }
 
-export function shouldRunAtomicTaskDoctor(task) {
+export function shouldRunAtomicTaskDoctor(task: {
+  status?: unknown;
+  task_kind?: unknown;
+  atomic_task_doctor?: unknown;
+  type?: unknown;
+} | null | undefined) {
   if (!task || task.status === "done" || task.status === "completed") return false;
   if (task.task_kind === "dry_run_artifact") return false;
   if (task.task_kind === "yolo_engine_change") return false;
   if (task.atomic_task_doctor === false) return false;
-  return ["bugfix", "feature", "refactor", "cleanup", "security"].includes(task.type || "");
+  return ["bugfix", "feature", "refactor", "cleanup", "security"].includes(String(task?.type || ""));
 }
 
 export function runAtomicTaskDoctorGate({
@@ -131,7 +149,7 @@ export function runAtomicTaskDoctorGate({
   prdPath,
   yoloRoot,
   inspectAtomicTask = defaultInspectAtomicTask,
-  logTaskBash = (..._args) => {},
+  logTaskBash = (..._args: unknown[]) => {},
 } = Object()) {
   if (!shouldRunAtomicTaskDoctor(task)) return { ok: true, skipped: true };
   try {
@@ -156,7 +174,7 @@ export function runAtomicTaskDoctorGate({
         score: 999,
         evidence_file: null,
         next_action: "fix_atomic_task_doctor_error",
-        error: error.message,
+        error: errorMessage(error),
       },
     };
   }
