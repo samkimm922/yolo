@@ -13,11 +13,11 @@ export function providerFailureDiagnostic(providerRun = Object()) {
   ].filter(Boolean).join(" ");
 }
 
-function terminalProviderPhase(reason) {
+function terminalProviderPhase(reason: string) {
   return reason === "provider_budget_exceeded" ? "provider_budget" : "provider_preflight";
 }
 
-function providerStatusFailureReason(providerName, providerRun = Object(), diagnostic = "", providerFailure = Object()) {
+function providerStatusFailureReason(providerName: string, providerRun: { status?: string; timedOut?: boolean; success?: boolean; reason?: string } = Object(), diagnostic = "", providerFailure: { detail?: string } = Object()) {
   if (providerRun.status === "timed_out" || providerRun.timedOut === true) return `${providerName} 超时`;
   if (providerRun.status === "no_output") return `${providerName} 输出为空`;
   if (providerRun.status === "killed") return `${providerName} 被终止${diagnostic ? `: ${diagnostic}` : ""}`;
@@ -46,7 +46,7 @@ export function buildProviderFailureOutcome({
   const attemptLedger = (providerRun.attempt_ledger && providerRun.attempt_ledger.length > 0
     ? providerRun.attempt_ledger
     : [buildProviderAttemptLedgerEntry(providerRun)]
-  ).map((entry) => ({
+  ).map((entry: { task_id?: string; attempt?: number; [key: string]: unknown }) => ({
     ...entry,
     task_id: entry.task_id || taskId,
     attempt: entry.attempt ?? attempt,
@@ -103,7 +103,7 @@ export function buildDiffQualityFailureOutcome({
   attempt = 0,
   maxRetry = 1,
 } = Object()) {
-  const failures = diffQualityGate.failures || [];
+  const failures: Array<{ code?: string; detail?: string }> = diffQualityGate.failures || [];
   const failReason = `diff-quality-gate blocked: ${failures.map((failure) => failure.code).join(", ")}`;
   const lastGateError = [
     failReason,
@@ -155,7 +155,7 @@ export function buildTestGenerationFailureOutcome({
   testGenerationGate = Object(),
   attempt = 0,
 } = Object()) {
-  const failReason = `test-generation-validator blocked: ${(testGenerationGate.failures || []).map((failure) => failure.code).join(", ")}`;
+  const failReason = `test-generation-validator blocked: ${((testGenerationGate.failures || []) as Array<{ code?: string }>).map((failure) => failure.code).join(", ")}`;
   return {
     failReason,
     transition: createTaskTransition({

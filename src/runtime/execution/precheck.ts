@@ -22,19 +22,19 @@ if (!taskId || !prdPath) {
   process.exit(1);
 }
 
-let prd;
+let prd: { tasks?: Array<{ id?: string; pre_conditions?: unknown[]; scope?: { targets?: Array<{ file?: string }> } }> };
 try {
   prd = readJsonFileBounded(resolve(prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
 } catch (e) {
   console.error(`无法加载 PRD 文件: ${prdPath}`);
-  console.error(e.message);
+  console.error((e as { message?: string } | null | undefined)?.message || String(e));
   process.exit(1);
 }
-const task = (prd.tasks || []).find((t) => t.id === taskId)
+const task = (prd.tasks || []).find((t: { id?: string }) => t.id === taskId)
   // splitTask 子任务回退：AUDIT-004-F1-A → AUDIT-004-F1, AUDIT-002-F1-P1 → AUDIT-002-F1
   || (() => {
     const parentId = taskId.replace(/(-[A-Z]-\d+)$/, '').replace(/(-[A-Z])$/, '').replace(/(-P\d+)$/, '');
-    return parentId !== taskId ? (prd.tasks || []).find((t) => t.id === parentId) : null;
+    return parentId !== taskId ? (prd.tasks || []).find((t: { id?: string }) => t.id === parentId) : null;
   })();
 
 if (!task) {
@@ -67,13 +67,13 @@ if (!result.allPass) {
   // pre_conditions 检查的是代码模式（如调用 getCardById），而根因可能
   // 在另一个文件（如 card.service.ts 新增了导出）。
   // 验证 tsc 是否仍对目标文件报错，若无错则跳过（无需重复修复）。
-  const targets = (task.scope?.targets || []).map(t => t.file).filter(Boolean);
+  const targets = (task.scope?.targets || []).map((t: { file?: string }) => t.file).filter(Boolean) as string[];
   if (targets.length > 0) {
     const TSC_TIMEOUT = 30000;
     // P12.I1: literal pnpm+tsc argv via safe-exec (no shell, no injection surface).
     const ran = execArgv(["pnpm", "exec", "tsc", "--noEmit"], { cwd: ROOT, timeout: TSC_TIMEOUT });
     if (ran.ok) {
-      const hasTargetErrors = targets.some(t => ran.stdout.includes(t));
+      const hasTargetErrors = targets.some((t: string) => ran.stdout.includes(t));
       if (!hasTargetErrors) {
         console.log(`PRE-CHECK SKIP: ${taskId} — tsc 无目标文件错误（可能已被前置任务修复），跳过修复`);
         process.exit(0);
@@ -82,7 +82,7 @@ if (!result.allPass) {
       // tsc 非零退出 → 存在类型错误。检查错误是否涉及目标文件。
       const tscOut = `${ran.stdout || ""}${ran.stderr || ""}`.trim();
       if (tscOut) {
-        const hasTargetErrors = targets.some(t => tscOut.includes(t));
+        const hasTargetErrors = targets.some((t: string) => tscOut.includes(t));
         if (!hasTargetErrors) {
           console.log(`PRE-CHECK SKIP: ${taskId} — tsc 无目标文件错误（可能已被前置任务修复），跳过修复`);
           process.exit(0);

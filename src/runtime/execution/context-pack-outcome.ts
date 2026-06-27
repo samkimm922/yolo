@@ -6,7 +6,7 @@ export function buildContextPackFailureOutcome({
   attempt = 0,
 } = Object()) {
   const contextPackGate = contextGate.result || contextGate;
-  const failReason = `context-pack-validator blocked: ${(contextPackGate.failures || []).map((failure) => failure.code).join(", ")}`;
+  const failReason = `context-pack-validator blocked: ${((contextPackGate.failures || []) as Array<{ code?: string }>).map((failure) => failure.code).join(", ")}`;
   return {
     failReason,
     transition: createTaskTransition({

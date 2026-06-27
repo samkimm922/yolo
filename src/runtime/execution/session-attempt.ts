@@ -4,8 +4,8 @@ import { buildPromptSession } from "./session-prompt.js";
 import { validateContextPackBeforeSession } from "./session-validation.js";
 import { blockedTaskTransition } from "../task-state/transitions.js";
 
-function isUnsafeWorktreeError(error) {
-  return String(error?.message || error).startsWith("createWorktree: unsafe ");
+function isUnsafeWorktreeError(error: unknown) {
+  return String((error as { message?: string } | null | undefined)?.message || error).startsWith("createWorktree: unsafe ");
 }
 
 export async function prepareProviderSession({
@@ -24,12 +24,12 @@ export async function prepareProviderSession({
   createWorktree,
   computeTaskTimeout,
   spawnProviderInWorktree,
-  logTaskBash = (..._args) => {},
-  logProgress = (..._args) => {},
-  logEvent = (..._args) => {},
-  onWorktreeCreated = (..._args) => {},
+  logTaskBash = (..._args: unknown[]) => {},
+  logProgress = (..._args: unknown[]) => {},
+  logEvent = (..._args: unknown[]) => {},
+  onWorktreeCreated = (..._args: unknown[]) => {},
   nowMs = () => Date.now(),
-  createSessionId = ({ task, attempt }) => `${task?.id || "task"}-attempt-${attempt}`,
+  createSessionId = ({ task, attempt }: { task?: { id?: string }; attempt: number }) => `${task?.id || "task"}-attempt-${attempt}`,
   validateContextPack = validateContextPackBeforeSession,
   captureBaselines = captureExecutionBaselines,
 } = Object()) {
@@ -105,7 +105,7 @@ export async function prepareProviderSession({
     wt = createWorktree(task.id);
   } catch (error) {
     if (!isUnsafeWorktreeError(error)) throw error;
-    const failReason = String(error?.message || error);
+    const failReason = String((error as { message?: string } | null | undefined)?.message || error);
     return {
       action: "return",
       reason: "worktree_blocked",
