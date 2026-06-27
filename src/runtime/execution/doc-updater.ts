@@ -6,7 +6,7 @@ import { execFileSync as defaultExecFileSync } from 'child_process';
 const today = new Date().toISOString().split('T')[0];
 const now = () => new Date().toLocaleTimeString('zh-CN', { hour12: false });
 
-type ExecFileSyncFn = typeof defaultExecFileSync;
+type ExecFileSyncFn = (file: string, args?: readonly string[], options?: unknown) => string | Buffer;
 
 interface UpdateDocsInput {
   taskId: string;

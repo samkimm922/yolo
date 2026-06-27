@@ -25,6 +25,18 @@ type AutoFixTaskWithId = AutoFixTask & { id: string };
 
 type IsBusinessFileFn = (file: string) => boolean;
 type LogFn = (...args: unknown[]) => void;
+type AutoFixResult = {
+  success: boolean;
+  modifiedFiles?: string[];
+  escalatedTasks?: unknown[];
+  stats?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+type ApplyAutoFixTasksFn = (
+  tasks: AutoFixTask[],
+  projectRoot: string,
+  options: { logP: LogFn },
+) => Promise<AutoFixResult>;
 
 interface BuildDeterministicAutoFixResultRecordArgs {
   task?: AutoFixTask;
@@ -37,13 +49,13 @@ interface BuildDeterministicAutoFixResultRecordArgs {
 interface TryDeterministicAutoFixTaskArgs {
   task: AutoFixTaskWithId;
   prdPath: string;
-  startedAtMs: number;
+  startedAtMs?: number;
   projectRoot: string;
-  applyAutoFixTasks?: typeof defaultApplyAutoFixTasks;
-  loadPRD: (prdPath: string) => unknown;
-  taskPostconditionsPass: (task: AutoFixTask, prd: unknown, projectRoot?: string) => { passed: boolean; failed: string[] };
-  commitTask: (task: AutoFixTask, prdPath: string, files: string[]) => Promise<{ committed?: boolean; skippedCommit?: boolean; [key: string]: unknown }>;
-  recordTaskTransition: (prdPath: string, transition: unknown) => unknown;
+  applyAutoFixTasks?: ApplyAutoFixTasksFn;
+  loadPRD?: (prdPath: string) => unknown;
+  taskPostconditionsPass?: (task: AutoFixTask, prd: unknown, projectRoot?: string) => { passed: boolean; failed: string[] };
+  commitTask?: (task: AutoFixTask, prdPath: string, files: string[]) => Promise<{ committed?: boolean; skippedCommit?: boolean; [key: string]: unknown }>;
+  recordTaskTransition?: (prdPath: string, transition: unknown) => unknown;
   logProgress?: LogFn;
   logTaskBash?: LogFn;
   logTaskDone?: LogFn;
@@ -88,13 +100,13 @@ export function buildDeterministicAutoFixResultRecord({
 export async function tryDeterministicAutoFixTask({
   task,
   prdPath,
-  startedAtMs,
+  startedAtMs = Date.now(),
   projectRoot,
   applyAutoFixTasks = defaultApplyAutoFixTasks,
-  loadPRD,
-  taskPostconditionsPass,
-  commitTask,
-  recordTaskTransition,
+  loadPRD = () => Object(),
+  taskPostconditionsPass = () => ({ passed: true, failed: [] }),
+  commitTask = async () => ({ committed: false }),
+  recordTaskTransition = () => undefined,
   logProgress = (..._args: unknown[]) => {},
   logTaskBash = (..._args: unknown[]) => {},
   logTaskDone = (..._args: unknown[]) => {},
