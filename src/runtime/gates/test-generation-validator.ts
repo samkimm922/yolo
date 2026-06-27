@@ -7,20 +7,57 @@ import { readJsonFileBounded } from "../../lib/bounded-read.js";
 const DEFAULT_MODE = "reuse_existing";
 const TEST_FILE_RE = /(^__tests__\/|^tests\/|\/__tests__\/|\.(test|spec)\.[cm]?[jt]sx?$)/i;
 
-function asArray(value) {
-  if (Array.isArray(value)) return value.filter(Boolean);
-  return value ? [value] : [];
+type TestGenTarget = string | { file?: string; path?: string };
+type TestGenTaskLike = {
+  id?: string;
+  scope?: { allow_new_files?: boolean; targets?: TestGenTarget | TestGenTarget[] };
+  test_generation?: {
+    mode?: string;
+    reason?: string;
+    max_new_test_files?: number;
+    allowed_test_files?: unknown;
+    max_test_lines_changed?: number | null;
+    failure_policy?: { same_failure_limit?: number };
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+type ChangedFileEntry = { status: string; file: string; isNew: boolean };
+
+type TestFailureHistoryItem = { kind?: string; key?: string };
+
+type TestGenValidateOptions = {
+  cwd?: string;
+  changedFiles?: ChangedFileEntry[];
+  failureHistory?: TestFailureHistoryItem[];
+};
+
+type TestGenFailure = { code: string; detail: string };
+type TestGenWarning = { code: string; detail: string };
+
+type ChangedFilesProbe =
+  | { ok: true; files: ChangedFileEntry[]; error?: undefined }
+  | { ok: false; files: ChangedFileEntry[]; error: string };
+
+type CountAddedLinesResult =
+  | { ok: true; addedLines: number; error?: undefined }
+  | { ok: false; addedLines: number; error: string };
+
+function asArray<T = unknown>(value: T | T[] | null | undefined): T[] {
+  if (Array.isArray(value)) return value.filter(Boolean) as T[];
+  return value ? [value as T] : [];
 }
 
-function normalizePath(file) {
+function normalizePath(file: unknown): string {
   return String(file || "").replace(/^\.\//, "");
 }
 
-export function isTestFile(file) {
+export function isTestFile(file: unknown): boolean {
   return TEST_FILE_RE.test(normalizePath(file));
 }
 
-function matchPattern(file, pattern) {
+function matchPattern(file: unknown, pattern: unknown): boolean {
   const normalized = normalizePath(file);
   const p = normalizePath(pattern);
   if (!p) return false;
@@ -32,7 +69,7 @@ function matchPattern(file, pattern) {
   return normalized === p;
 }
 
-export function parseStatusLine(line) {
+export function parseStatusLine(line: string): ChangedFileEntry | null {
   const raw = line.replace(/\r?\n$/, "");
   if (!raw.trim()) return null;
   if (raw.startsWith("?? ")) return { status: "A", file: normalizePath(raw.slice(3)), isNew: true };
@@ -42,20 +79,23 @@ export function parseStatusLine(line) {
   return { status, file, isNew: status.includes("A") || status.includes("?") };
 }
 
-function fileAllowedByTaskScope(file, task) {
+function fileAllowedByTaskScope(file: unknown, task: TestGenTaskLike | undefined): boolean {
   const scope = task?.scope || {};
   if (scope.allow_new_files !== true) return false;
-  const targets = asArray(scope.targets).map((target) => normalizePath(target?.file || target)).filter(Boolean);
+  const targets = asArray<TestGenTarget>(scope.targets)
+    .map((target) => normalizePath(typeof target === "string" ? target : target?.file || target))
+    .filter(Boolean);
   const normalized = normalizePath(file);
   return targets.some((target) => normalized === target || normalized.startsWith(`${dirname(target)}/`));
 }
 
-function gitErrorDetail(error) {
-  const stderr = error?.stderr?.toString?.().trim();
-  return stderr || error?.message || String(error || "unknown git error");
+function gitErrorDetail(error: unknown): string {
+  const candidate = error as { stderr?: { toString?: () => string }; message?: string } | null | undefined;
+  const stderr = candidate?.stderr?.toString?.().trim();
+  return stderr || candidate?.message || String(error || "unknown git error");
 }
 
-function inspectChangedFiles(cwd = process.cwd()) {
+function inspectChangedFiles(cwd: string = process.cwd()): ChangedFilesProbe {
   let output = "";
   try {
     output = execFileSync("git", ["-C", cwd, "status", "--porcelain"], {
@@ -66,14 +106,17 @@ function inspectChangedFiles(cwd = process.cwd()) {
   } catch (error) {
     return { ok: false, files: [], error: `git status failed; cannot verify test generation changes: ${gitErrorDetail(error)}` };
   }
-  return { ok: true, files: output.split("\n").map(parseStatusLine).filter(Boolean) };
+  return {
+    ok: true,
+    files: output.split("\n").map(parseStatusLine).filter((entry): entry is ChangedFileEntry => Boolean(entry)),
+  };
 }
 
-export function getChangedFiles(cwd = process.cwd()) {
+export function getChangedFiles(cwd: string = process.cwd()): ChangedFileEntry[] {
   return inspectChangedFiles(cwd).files;
 }
 
-function countAddedLines(cwd, file, isNew) {
+function countAddedLines(cwd: string, file: string, isNew: boolean): CountAddedLinesResult {
   if (isNew && existsSync(resolve(cwd, file))) {
     return { ok: true, addedLines: readFileSync(resolve(cwd, file), "utf8").split("\n").length };
   }
@@ -98,16 +141,16 @@ function countAddedLines(cwd, file, isNew) {
   }
 }
 
-export function validateTestGeneration(task, options = Object()) {
+export function validateTestGeneration(task: TestGenTaskLike | undefined, options: TestGenValidateOptions = Object()) {
   const cwd = options.cwd || process.cwd();
   const policy = task?.test_generation || {};
   const mode = policy.mode || DEFAULT_MODE;
-  const changedProbe = Object.assign(Object(), Object.prototype.hasOwnProperty.call(options, "changedFiles")
+  const changedProbe: ChangedFilesProbe = Object.prototype.hasOwnProperty.call(options, "changedFiles")
     ? { ok: true, files: options.changedFiles || [] }
-    : inspectChangedFiles(cwd));
+    : inspectChangedFiles(cwd);
   const changedFiles = changedProbe.files || [];
-  const failures = [];
-  const warnings = [];
+  const failures: TestGenFailure[] = [];
+  const warnings: TestGenWarning[] = [];
 
   if (!changedProbe.ok) {
     failures.push({
@@ -169,9 +212,11 @@ export function validateTestGeneration(task, options = Object()) {
 
   const failurePolicy = policy.failure_policy || {};
   const sameFailureLimit = failurePolicy.same_failure_limit ?? 2;
-  const failureHistory = options.failureHistory || [];
-  const repeated = failureHistory.filter((item) => item && item.kind && item.key && item.kind.includes("test"));
-  const counts = new Map();
+  const failureHistory: TestFailureHistoryItem[] = options.failureHistory || [];
+  const repeated = failureHistory.filter((item): item is Required<TestFailureHistoryItem> =>
+    Boolean(item && item.kind && item.key && item.kind.includes("test")),
+  );
+  const counts = new Map<string, number>();
   for (const item of repeated) {
     const key = `${item.kind}:${item.key}`;
     counts.set(key, (counts.get(key) || 0) + 1);
@@ -198,8 +243,8 @@ export function validateTestGeneration(task, options = Object()) {
   };
 }
 
-function parseArgs(argv) {
-  const args = Object();
+function parseArgs(argv: readonly string[]): Record<string, string | boolean> {
+  const args: Record<string, string | boolean> = Object();
   for (const arg of argv) {
     const match = arg.match(/^--([^=]+)=(.*)$/);
     if (match) args[match[1]] = match[2];
@@ -208,8 +253,8 @@ function parseArgs(argv) {
   return args;
 }
 
-function loadTask(prdPath, taskId) {
-  const prd = readJsonFileBounded(resolve(prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
+function loadTask(prdPath: string, taskId: string): TestGenTaskLike {
+  const prd = readJsonFileBounded<{ tasks?: TestGenTaskLike[] }>(resolve(prdPath), { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   const task = (prd.tasks || []).find((item) => item.id === taskId);
   if (!task) throw new Error(`PRD 中未找到 task: ${taskId}`);
   return task;
@@ -223,12 +268,12 @@ if (isMain) {
     process.exit(2);
   }
   try {
-    const task = loadTask(args.prd, args.task);
-    const result = validateTestGeneration(task, { cwd: args.cwd || process.cwd() });
+    const task = loadTask(String(args.prd), String(args.task));
+    const result = validateTestGeneration(task, { cwd: args.cwd ? String(args.cwd) : process.cwd() });
     console.log(args.json ? JSON.stringify(result, null, 2) : `[test-generation] ${result.status}`);
     process.exit(result.status === "pass" ? 0 : result.status === "warning" ? 2 : 1);
   } catch (error) {
-    console.error(`[test-generation] ${error.message}`);
+    console.error(`[test-generation] ${(error as { message?: string } | null | undefined)?.message || String(error)}`);
     process.exit(2);
   }
 }
