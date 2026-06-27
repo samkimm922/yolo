@@ -9,7 +9,7 @@ export const PROVIDER_CAPABILITY_GATE_SCHEMA_VERSION = "1.0";
 
 type ProviderCapabilityPrd = {
   required_capabilities?: unknown;
-  tasks?: Array<{ required_capabilities?: unknown }>;
+  tasks?: Array<{ required_capabilities?: unknown; [key: string]: unknown }>;
   [key: string]: unknown;
 };
 
