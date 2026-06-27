@@ -169,7 +169,7 @@ export async function runYoloInterviewCli(argv: string[] = [], io: CliIo = {}) {
       if (!input.questionId) return error("answer", "MISSING_INTERVIEW_QUESTION", "Missing --question <id>.");
       if (!cleanCliText(input.answer)) return error("answer", "MISSING_INTERVIEW_ANSWER", "Missing --answer <text>.");
       const read = readInterviewState(input.sessionPath, projectRoot);
-      if (!read.ok) return error("answer", "INTERVIEW_SESSION_MISSING", read.error, 1);
+      if (read.ok === false) return error("answer", "INTERVIEW_SESSION_MISSING", read.error, 1);
       const questionId = resolveInterviewQuestionId(read.state, input.questionId);
       const question = (read.state.questions || []).find((item) => item.id === questionId);
       if (!question) return error("answer", "INTERVIEW_QUESTION_UNKNOWN", `Question not found: ${input.questionId}`, 1);
@@ -192,7 +192,7 @@ export async function runYoloInterviewCli(argv: string[] = [], io: CliIo = {}) {
     if (command === "status") {
       if (!input.sessionPath) return error("status", "MISSING_INTERVIEW_SESSION", "Missing --session <path|dir>.");
       const read = readInterviewState(input.sessionPath, projectRoot);
-      if (!read.ok) return error("status", "INTERVIEW_SESSION_MISSING", read.error, 1);
+      if (read.ok === false) return error("status", "INTERVIEW_SESSION_MISSING", read.error, 1);
       return emit("status", interviewResult("status", read.state, {
         summary: "Interview session loaded.",
       }));
@@ -201,7 +201,7 @@ export async function runYoloInterviewCli(argv: string[] = [], io: CliIo = {}) {
     if (command === "playback") {
       if (!input.sessionPath) return error("playback", "MISSING_INTERVIEW_SESSION", "Missing --session <path|dir>.");
       const read = readInterviewState(input.sessionPath, projectRoot);
-      if (!read.ok) return error("playback", "INTERVIEW_SESSION_MISSING", read.error, 1);
+      if (read.ok === false) return error("playback", "INTERVIEW_SESSION_MISSING", read.error, 1);
       const state = read.state;
       const generated = buildUnderstandingPlayback(state);
       const hasConfirm = cleanCliText(input.confirm).length > 0;
@@ -241,7 +241,7 @@ export async function runYoloInterviewCli(argv: string[] = [], io: CliIo = {}) {
     if (command === "to-demand") {
       if (!input.sessionPath) return error("to-demand", "MISSING_INTERVIEW_SESSION", "Missing --session <path|dir>.");
       const read = readInterviewState(input.sessionPath, projectRoot);
-      if (!read.ok) return error("to-demand", "INTERVIEW_SESSION_MISSING", read.error, 1);
+      if (read.ok === false) return error("to-demand", "INTERVIEW_SESSION_MISSING", read.error, 1);
       const stateForDemand = decorateInterviewState(cloneJson(read.state));
       if (stateForDemand.playback?.confirmed !== true) {
         return error("to-demand", "PLAYBACK_UNCONFIRMED", "Understanding playback has not been confirmed by the user. Run playback confirmation before to-demand.", 2);
