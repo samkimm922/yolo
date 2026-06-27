@@ -121,19 +121,17 @@ export function createInterviewState(input: { id?: string; title?: string; idea?
     idea: input.idea || input.title,
     source: "yolo-interview",
   });
+  const sessionId = session.id;
+  if (!sessionId) throw new Error("Demand interview session is missing id.");
   return decorateInterviewState({
     ...session,
-    interview_path: defaultInterviewPath(stateRoot, session.id),
+    interview_path: defaultInterviewPath(stateRoot, sessionId),
   });
 }
 
-type ReadInterviewResult = {
-  ok: boolean;
-  path: string;
-  error?: string;
-  dir?: string;
-  state?: InterviewState;
-};
+type ReadInterviewResult =
+  | { ok: true; path: string; dir: string; state: InterviewState }
+  | { ok: false; path: string; error: string; dir?: string; state?: undefined };
 
 export function readInterviewState(pathOrDir: unknown, cwd = process.cwd()): ReadInterviewResult {
   const path = resolveInterviewPath(pathOrDir, cwd);
