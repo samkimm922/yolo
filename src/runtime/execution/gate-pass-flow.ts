@@ -22,10 +22,10 @@ export async function handleGatePassFlow({
   cleanupWorktree,
   commitTask,
   recordTaskTransition,
-  logEvent = (..._args) => {},
-  logProgress = (..._args) => {},
-  logTaskError = (..._args) => {},
-  logTaskDone = (..._args) => {},
+  logEvent = (..._args: unknown[]) => {},
+  logProgress = (..._args: unknown[]) => {},
+  logTaskError = (..._args: unknown[]) => {},
+  logTaskDone = (..._args: unknown[]) => {},
   readDiffStats = readWorktreeDiffStats,
   buildBaseRecord = buildTaskExecutionBaseRecord,
   nowMs = () => Date.now(),
@@ -59,7 +59,7 @@ export async function handleGatePassFlow({
     return { action: "retry", reason: commitRetry.reason };
   }
 
-  const scopeTargets = (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
+  const scopeTargets = (task.scope?.targets || []).map((target: { file?: string }) => target.file).filter(Boolean);
   const baseRecord = buildBaseRecord({
     taskId: task.id,
     startedAtMs,

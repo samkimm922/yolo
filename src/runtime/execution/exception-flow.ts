@@ -1,6 +1,30 @@
 import { buildRunTaskExceptionOutcome } from "./exception-outcome.js";
 
-export function sleepFor(ms) {
+type TaskLike = { id: string; [key: string]: unknown };
+type WorktreeLike = { path?: string | null; branch?: string | null; [key: string]: unknown };
+type HistoryEntry = Record<string, unknown>;
+type CleanupWorktreeFn = (path: string, branch: string | null | undefined, success: boolean) => unknown;
+type RecordTaskTransitionFn = (transition: unknown) => unknown;
+type LogFn = (...args: unknown[]) => void;
+type SleepFn = (ms: number) => Promise<unknown>;
+
+interface HandleRunTaskExceptionFlowArgs {
+  task: TaskLike;
+  error: unknown;
+  attempt?: number;
+  history?: HistoryEntry[];
+  maxAttempts?: number;
+  currentWorktree?: WorktreeLike;
+  cleanupWorktree: CleanupWorktreeFn;
+  recordTaskTransition: RecordTaskTransitionFn;
+  logProgress?: LogFn;
+  logTaskError?: LogFn;
+  logTaskDone?: LogFn;
+  sleep?: SleepFn;
+  consoleError?: LogFn;
+}
+
+export function sleepFor(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -13,13 +37,14 @@ export async function handleRunTaskExceptionFlow({
   currentWorktree = Object(),
   cleanupWorktree,
   recordTaskTransition,
-  logProgress = (..._args) => {},
-  logTaskError = (..._args) => {},
-  logTaskDone = (..._args) => {},
+  logProgress = (..._args: unknown[]) => {},
+  logTaskError = (..._args: unknown[]) => {},
+  logTaskDone = (..._args: unknown[]) => {},
   sleep = sleepFor,
-  consoleError = (...args) => console.error(...args),
-} = Object()) {
-  consoleError(`[runTask] ${task.id} 重试 ${attempt} 异常:`, error?.message || error);
+  consoleError = (...args: unknown[]) => console.error(...args),
+}: HandleRunTaskExceptionFlowArgs = Object()) {
+  const errorMessage = (error as { message?: string } | null | undefined)?.message;
+  consoleError(`[runTask] ${task.id} 重试 ${attempt} 异常:`, errorMessage || error);
 
   try {
     logTaskError(task.id, `循环异常 (attempt ${attempt})`, String(error));
@@ -58,7 +83,7 @@ export async function handleRunTaskExceptionFlow({
   }
 
   logProgress(task.id, "", exceptionOutcome.retryMessage);
-  await sleep(exceptionOutcome.sleepMs);
+  await sleep(exceptionOutcome.sleepMs as number);
   return {
     action: "retry",
     cleanedWorktree,
