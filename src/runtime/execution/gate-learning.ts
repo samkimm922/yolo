@@ -1,6 +1,45 @@
 import { incrementRetryCountFile as defaultIncrementRetryCountFile } from "../recovery/gate-stuck.js";
 
-export function gateFailureLearnArgs({ taskId, gateExitCode, message, projectRoot = "", stateRoot = "" }) {
+interface GateFailureLearnArgsInput {
+  taskId: string;
+  gateExitCode: number | string;
+  message: string;
+  projectRoot?: string;
+  stateRoot?: string;
+}
+
+type GateFailureLike = {
+  failedSummary?: string;
+  lastGateError?: unknown;
+  historyEntry?: unknown;
+  [key: string]: unknown;
+};
+
+type GateFailureEntry = {
+  type?: string;
+  detail?: string;
+  [key: string]: unknown;
+};
+
+type LogFn = (...args: unknown[]) => void;
+type ExecNodeFn = (...args: unknown[]) => unknown;
+type IncrementRetryCountFileFn = (file: string, taskId: string) => unknown;
+
+interface ApplyGateFailureLearningEffectsArgs {
+  taskId: string;
+  gateExitCode: number | string;
+  failures?: GateFailureEntry[];
+  gateFailure?: GateFailureLike;
+  retryCountFile: string;
+  projectRoot?: string;
+  stateRoot?: string;
+  logAnalysis?: LogFn;
+  logFix?: LogFn;
+  execNode?: ExecNodeFn;
+  incrementRetryCountFile?: IncrementRetryCountFileFn;
+}
+
+export function gateFailureLearnArgs({ taskId, gateExitCode, message, projectRoot = "", stateRoot = "" }: GateFailureLearnArgsInput) {
   const args = [
     "--record",
     `--task=${taskId}`,
@@ -21,11 +60,11 @@ export function applyGateFailureLearningEffects({
   retryCountFile,
   projectRoot = "",
   stateRoot = "",
-  logAnalysis = (..._args) => {},
-  logFix = (..._args) => {},
+  logAnalysis = (..._args: unknown[]) => {},
+  logFix = (..._args: unknown[]) => {},
   execNode = () => null,
   incrementRetryCountFile = defaultIncrementRetryCountFile,
-} = Object()) {
+}: ApplyGateFailureLearningEffectsArgs = Object()) {
   const failedSummary = gateFailure.failedSummary || "";
   logAnalysis("", "├─", `分析: ${failedSummary}`);
   for (const failure of failures) {

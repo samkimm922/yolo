@@ -6,7 +6,21 @@ import { execFileSync as defaultExecFileSync } from 'child_process';
 const today = new Date().toISOString().split('T')[0];
 const now = () => new Date().toLocaleTimeString('zh-CN', { hour12: false });
 
-function resolveDocPaths(rootDir) {
+type ExecFileSyncFn = (file: string, args?: readonly string[], options?: unknown) => string | Buffer;
+
+interface UpdateDocsInput {
+  taskId: string;
+  taskTitle: string;
+  modifiedFiles?: string[];
+  status: string;
+}
+
+interface UpdateDocsOptions {
+  rootDir?: string;
+  execFileSync?: ExecFileSyncFn;
+}
+
+function resolveDocPaths(rootDir?: string) {
   const root = resolve(rootDir || process.cwd());
   return {
     root,
@@ -16,7 +30,7 @@ function resolveDocPaths(rootDir) {
   };
 }
 
-export async function updateDocs({ taskId, taskTitle, modifiedFiles, status }, options = Object()) {
+export async function updateDocs({ taskId, taskTitle, modifiedFiles, status }: UpdateDocsInput, options: UpdateDocsOptions = Object()) {
   const { root, session, snapshot, delivery } = resolveDocPaths(options.rootDir);
   const runGit = options.execFileSync || defaultExecFileSync;
   mkdirSync(dirname(session), { recursive: true });
@@ -113,7 +127,8 @@ export async function updateDocs({ taskId, taskTitle, modifiedFiles, status }, o
     });
   } catch (e) {
     // git add 失败不应阻断主流程（文件可能不存在）
-    console.error(`[doc-updater] git add 失败: ${e.message}`);
+    const message = (e as { message?: string } | null | undefined)?.message ?? String(e);
+    console.error(`[doc-updater] git add 失败: ${message}`);
   }
 
   return true;

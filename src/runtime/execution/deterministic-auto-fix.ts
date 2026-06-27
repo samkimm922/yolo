@@ -4,14 +4,72 @@ import {
   passTaskTransition,
 } from "../task-state/transitions.js";
 
-export function normalizeAutoFixTask(task = Object()) {
-  const findings = task.fix_findings || task.source_findings || [];
+type AutoFixFinding = {
+  file?: string;
+  scanner_id?: string;
+  rule_id?: string;
+  [key: string]: unknown;
+};
+
+type AutoFixTask = {
+  id?: string;
+  fix_rule?: string;
+  fix_type?: string;
+  fix_findings?: AutoFixFinding[];
+  source_findings?: AutoFixFinding[];
+  scope?: { targets?: Array<{ file?: string }> };
+  [key: string]: unknown;
+};
+
+type AutoFixTaskWithId = AutoFixTask & { id: string };
+
+type IsBusinessFileFn = (file: string) => boolean;
+type LogFn = (...args: unknown[]) => void;
+type AutoFixResult = {
+  success: boolean;
+  modifiedFiles?: string[];
+  escalatedTasks?: unknown[];
+  stats?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+type ApplyAutoFixTasksFn = (
+  tasks: AutoFixTask[],
+  projectRoot: string,
+  options: { logP: LogFn },
+) => Promise<AutoFixResult>;
+
+interface BuildDeterministicAutoFixResultRecordArgs {
+  task?: AutoFixTask;
+  modifiedFiles?: string[];
+  startedAtMs: number;
+  nowMs?: number;
+  isBusinessFile?: IsBusinessFileFn;
+}
+
+interface TryDeterministicAutoFixTaskArgs {
+  task: AutoFixTaskWithId;
+  prdPath: string;
+  startedAtMs?: number;
+  projectRoot: string;
+  applyAutoFixTasks?: ApplyAutoFixTasksFn;
+  loadPRD?: (prdPath: string) => unknown;
+  taskPostconditionsPass?: (task: AutoFixTask, prd: unknown, projectRoot?: string) => { passed: boolean; failed: string[] };
+  commitTask?: (task: AutoFixTask, prdPath: string, files: string[]) => Promise<{ committed?: boolean; skippedCommit?: boolean; [key: string]: unknown }>;
+  recordTaskTransition?: (prdPath: string, transition: unknown) => unknown;
+  logProgress?: LogFn;
+  logTaskBash?: LogFn;
+  logTaskDone?: LogFn;
+  isBusinessFile?: IsBusinessFileFn;
+}
+
+export function normalizeAutoFixTask(task: AutoFixTask = Object()): AutoFixTask {
+  const findings: AutoFixFinding[] = task.fix_findings || task.source_findings || [];
   const firstRule = task.fix_rule || findings[0]?.scanner_id || findings[0]?.rule_id || "";
   return {
     ...task,
     fix_type: "AUTO_FIX",
     fix_rule: firstRule,
-    fix_findings: findings.map((finding) => ({
+    fix_findings: findings.map((finding: AutoFixFinding) => ({
       ...finding,
       file: finding.file || task.scope?.targets?.[0]?.file,
       scanner_id: finding.scanner_id || finding.rule_id || firstRule,
@@ -25,16 +83,16 @@ export function buildDeterministicAutoFixResultRecord({
   startedAtMs,
   nowMs = Date.now(),
   isBusinessFile = () => false,
-} = Object()) {
-  const targetFiles = (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
+}: BuildDeterministicAutoFixResultRecordArgs = Object()) {
+  const targetFiles = (task.scope?.targets || []).map((target: { file?: string }) => target.file).filter(Boolean);
   return {
     deterministic_auto_fix: true,
     duration_sec: ((nowMs - startedAtMs) / 1000).toFixed(1),
     files_changed_total: modifiedFiles.length,
-    files_changed_business: modifiedFiles.filter(isBusinessFile).length,
-    files_changed_metadata: modifiedFiles.filter((file) => !isBusinessFile(file)).length,
-    scope_targets_touched: targetFiles.filter((file) => modifiedFiles.includes(file)),
-    scope_targets_missed: targetFiles.filter((file) => !modifiedFiles.includes(file)),
+    files_changed_business: modifiedFiles.filter((file: string) => isBusinessFile(file)).length,
+    files_changed_metadata: modifiedFiles.filter((file: string) => !isBusinessFile(file)).length,
+    scope_targets_touched: targetFiles.filter((file) => modifiedFiles.includes(file as string)),
+    scope_targets_missed: targetFiles.filter((file) => !modifiedFiles.includes(file as string)),
     out_of_scope_files: [],
   };
 }
@@ -42,18 +100,18 @@ export function buildDeterministicAutoFixResultRecord({
 export async function tryDeterministicAutoFixTask({
   task,
   prdPath,
-  startedAtMs,
+  startedAtMs = Date.now(),
   projectRoot,
   applyAutoFixTasks = defaultApplyAutoFixTasks,
-  loadPRD,
-  taskPostconditionsPass,
-  commitTask,
-  recordTaskTransition,
-  logProgress = (..._args) => {},
-  logTaskBash = (..._args) => {},
-  logTaskDone = (..._args) => {},
+  loadPRD = () => Object(),
+  taskPostconditionsPass = () => ({ passed: true, failed: [] }),
+  commitTask = async () => ({ committed: false }),
+  recordTaskTransition = () => undefined,
+  logProgress = (..._args: unknown[]) => {},
+  logTaskBash = (..._args: unknown[]) => {},
+  logTaskDone = (..._args: unknown[]) => {},
   isBusinessFile = () => false,
-} = Object()) {
+}: TryDeterministicAutoFixTaskArgs = Object()) {
   const result = await applyAutoFixTasks([normalizeAutoFixTask(task)], projectRoot, { logP: logProgress });
   const modifiedFiles = result.modifiedFiles || [];
 
