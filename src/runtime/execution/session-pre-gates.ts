@@ -21,12 +21,12 @@ export async function inspectSessionPreGateChecks({
   maxRetryForDiffQuality = 1,
   validateDiffQualityGate = validateDiffQuality,
   validateTestGeneration = validateTestGenerationAfterSession,
-  cleanupWorktree = (..._args) => {},
-  recordTaskTransition = (..._args) => {},
-  logProgress = (..._args) => {},
-  logTaskError = (..._args) => {},
-  logTaskBash = (..._args) => {},
-  logTaskDone = (..._args) => {},
+  cleanupWorktree = (..._args: unknown[]) => {},
+  recordTaskTransition = (..._args: unknown[]) => {},
+  logProgress = (..._args: unknown[]) => {},
+  logTaskError = (..._args: unknown[]) => {},
+  logTaskBash = (..._args: unknown[]) => {},
+  logTaskDone = (..._args: unknown[]) => {},
   nowMs = () => Date.now(),
 } = Object()) {
   if (providerOutputMissing(providerRun)) {

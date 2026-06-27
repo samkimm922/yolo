@@ -36,12 +36,12 @@ export function readWorktreeDiffStats({
     return {
       added: null,
       removed: null,
-      error: `git diff 统计失败: ${error?.message || String(error)}`,
+      error: `git diff 统计失败: ${(error as { message?: string } | null | undefined)?.message || String(error)}`,
     };
   }
 }
 
-export function buildScopeTargetCoverage(scopeTargets = [], changedFiles = []) {
+export function buildScopeTargetCoverage(scopeTargets: string[] = [], changedFiles: string[] = []) {
   const touched = scopeTargets.filter((target) =>
     changedFiles.some((file) => file === target || file.startsWith(target.endsWith("/") ? target : `${target}/`)),
   );

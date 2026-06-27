@@ -7,9 +7,9 @@ export function isAllowedDryRunArtifactTarget(task = Object(), file = "") {
 }
 
 export function taskTargetsEngineFiles(task = Object(), enginePaths = DEFAULT_ENGINE_PATHS) {
-  return (task.scope?.targets || []).some((target) => {
+  return (task.scope?.targets || []).some((target: { file?: string }) => {
     const file = target.file || "";
-    return enginePaths.some((enginePath) => file.startsWith(enginePath)) && !isAllowedDryRunArtifactTarget(task, file);
+    return enginePaths.some((enginePath: string) => file.startsWith(enginePath)) && !isAllowedDryRunArtifactTarget(task, file);
   });
 }
 

@@ -3,8 +3,8 @@ import { appendFileSync as defaultAppendFileSync } from "node:fs";
 
 export const DEFAULT_DOC_UPDATE_FILES = ["docs/memory/SESSION.md", "docs/memory/SNAPSHOT.md", "docs/memory/DELIVERY_LOG.md"];
 
-export function isDocUpdateHookFailure(error) {
-  const stderr = String(error?.stderr || "");
+export function isDocUpdateHookFailure(error: unknown) {
+  const stderr = String((error as { stderr?: unknown } | null | undefined)?.stderr || "");
   return stderr.includes("SNAPSHOT.md") || stderr.includes("doc-update-check");
 }
 
@@ -54,7 +54,7 @@ export function appendScopeAuditRecord({
       written: false,
       record,
       reason: "scope_audit_write_failed",
-      error: error.message,
+      error: (error as { message?: string } | null | undefined)?.message || String(error),
       blocked: required !== false,
     };
   }
@@ -98,7 +98,7 @@ export function applyScopeAudit({
   targetFiles = [],
   modified = [],
   required = true,
-  log = (..._args) => {},
+  log = (..._args: unknown[]) => {},
   appendRecord = appendScopeAuditRecord,
 } = Object()) {
   const decision = buildScopeAuditDecision({ task, outOfScope, targetFiles, modified });
@@ -156,7 +156,7 @@ export function buildOutOfScopeBlock({
   };
 }
 
-function uniqueFiles(files = []) {
+function uniqueFiles(files: string[] = []) {
   return [...new Set(files.filter(Boolean))];
 }
 
@@ -232,7 +232,7 @@ export async function updateDocsBeforeCommit({
       skipped: required === false,
       ...(required === false ? { warning: true } : { blocked: true }),
       reason: "doc_update_failed",
-      error: error?.message || String(error),
+      error: (error as { message?: string } | null | undefined)?.message || String(error),
       payload,
     };
   }
@@ -308,9 +308,9 @@ export async function runTaskCommitFlow({
   outOfScope = [],
   docUpdateRequired = true,
   mode = "fix",
-  log = (..._args) => {},
-  emitEvent = (..._args) => {},
-  refreshBaselines = (..._args) => {},
+  log = (..._args: unknown[]) => {},
+  emitEvent = (..._args: unknown[]) => {},
+  refreshBaselines = (..._args: unknown[]) => {},
   updateDocs,
   importDocUpdater,
   commitChanges = commitTaskChanges,
@@ -424,7 +424,7 @@ function readShortCommitHash({ rootDir, execFileSync = defaultExecFileSync } = O
   }
 }
 
-function resetStagedFiles(files, { rootDir, execFileSync = defaultExecFileSync } = Object()) {
+function resetStagedFiles(files: string[], { rootDir, execFileSync = defaultExecFileSync } = Object()) {
   if (!files?.length) return false;
   try {
     execFileSync("git", ["reset", "HEAD", "--", ...files], {
@@ -438,10 +438,11 @@ function resetStagedFiles(files, { rootDir, execFileSync = defaultExecFileSync }
   }
 }
 
-function describeGitError(error) {
-  const stderr = String(error?.stderr || "").trim();
-  const stdout = String(error?.stdout || "").trim();
-  return stderr || stdout || error?.message || String(error);
+function describeGitError(error: unknown) {
+  const err = error as { stderr?: unknown; stdout?: unknown; message?: string } | null | undefined;
+  const stderr = String(err?.stderr || "").trim();
+  const stdout = String(err?.stdout || "").trim();
+  return stderr || stdout || err?.message || String(error);
 }
 
 export function commitTaskChanges({

@@ -69,7 +69,7 @@ export function parseTscErrorFiles(tscOutput = "") {
   return { errorLines, files };
 }
 
-export function targetFilesHaveTscErrors(targetFiles = [], errorFiles = new Set()) {
+export function targetFilesHaveTscErrors(targetFiles: Array<string | undefined> = [], errorFiles: Set<string> = new Set()) {
   return targetFiles.some((file) => {
     const rel = String(file || "").replace(/^\.\//, "");
     return errorFiles.has(rel) || [...errorFiles].some((errorFile) => String(errorFile).endsWith(rel) || rel.endsWith(String(errorFile)));
@@ -94,7 +94,7 @@ export function inspectPostPrecheckSkip({
     return { shouldSkip: false, reason: explicit.reason, file: explicit.file };
   }
 
-  const targetFiles = (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
+  const targetFiles = ((task.scope?.targets || []) as Array<{ file?: string }>).map((target) => target.file).filter(Boolean);
   if (targetFiles.length > 0 && typeCheckCommand) {
     // P12.I1: default executor is safeExecSync (argv parse, reject shell metacharacters,
     // no shell). Tests may inject a mock execSync for unit control.
@@ -111,7 +111,8 @@ export function inspectPostPrecheckSkip({
     try {
       execSync(typeCheckCommand, { cwd: rootDir, encoding: "utf8", timeout: 120000 });
     } catch (error) {
-      const tscOutput = `${String(error?.stdout || "")}${String(error?.stderr || "")}`;
+      const err = error as { stdout?: unknown; stderr?: unknown } | null | undefined;
+      const tscOutput = `${String(err?.stdout || "")}${String(err?.stderr || "")}`;
       const { errorLines, files } = parseTscErrorFiles(tscOutput);
       if (errorLines.length > 0 && targetFilesHaveTscErrors(targetFiles, files)) {
         return {
