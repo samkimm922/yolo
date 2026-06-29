@@ -349,14 +349,24 @@ function interpreterEvalWritesToSource(command: unknown): boolean {
   while (index < tokens.length && /^[A-Z_][A-Z0-9_]*=/.test(tokens[index])) index += 1;
   const executable = commandBaseName(tokens[index]);
   const args = tokens.slice(index + 1);
+  // H5: cover all eval-capable interpreters, not just node/python. Adding
+  // ruby -e, perl -e, php -r, pwsh/powershell -c/-Command, and osascript.
   const isEvalInterpreter = (
     (["node", "nodejs", "bun", "deno"].includes(executable) && args.some((arg) => arg === "-e" || arg === "--eval"))
     || (/^python(?:\d+(?:\.\d+)?)?$/.test(executable) && args.includes("-c"))
+    || (executable === "ruby" && args.some((arg) => arg === "-e"))
+    || (executable === "perl" && args.some((arg) => arg === "-e"))
+    || (executable === "php" && args.some((arg) => arg === "-r"))
+    || ((executable === "pwsh" || executable === "powershell") && args.some((arg) => arg === "-c" || arg === "-command"))
+    || (executable === "osascript")
   );
   if (!isEvalInterpreter) return false;
-  if (!/\b(writeFileSync|appendFileSync|createWriteStream|rmSync|unlinkSync|mkdirSync|open|write_text|unlink|remove|rmtree)\b/.test(String(command || ""))) {
-    return false;
-  }
+  const text = String(command || "");
+  // H5: detect write/remove surfaces including fs.promises.writeFile and
+  // dynamically constructed names like 'write'+'FileSync' or "write"+"File".
+  const compacted = text.replace(/['"]\s*\+\s*['"]/g, "").replace(/\s+/g, "");
+  const writeSurface = /\b(writeFileSync|appendFileSync|createWriteStream|rmSync|unlinkSync|mkdirSync|open|write_text|unlink|remove|rmtree|promises\.writeFile|promises\.appendFile|Set-Content|Add-Content|Out-File|do\.shell_script|File\.write)\b/i.test(compacted);
+  if (!writeSurface) return false;
   return commandMentionsSourcePath(command);
 }
 
