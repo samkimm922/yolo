@@ -136,7 +136,7 @@ function reportEvidenceEntries(report: StageReportEntry = Object()): ProgressRec
   ].filter(meaningfulEvidenceEntry) as ProgressRecord[];
 }
 
-function unresolvedManualCriteria(report: StageReportEntry = Object()): ManualCriterion[] {
+function unresolvedManualCriteria(report: StageReportEntry = Object(), projectRoot?: string, stateRoot?: string): ManualCriterion[] {
   const manualCriteria: unknown[] = [
     ...(Array.isArray(report.manual_criteria) ? report.manual_criteria : []),
     ...(Array.isArray(report.report?.manual_criteria) ? report.report.manual_criteria : []),
@@ -144,7 +144,7 @@ function unresolvedManualCriteria(report: StageReportEntry = Object()): ManualCr
   if (manualCriteria.length === 0) return [];
 
   const manualEvidence = reportEvidenceEntries(report).filter(
-    (entry) => isStructuredManualAcceptanceEvidence(entry),
+    (entry) => isStructuredManualAcceptanceEvidence(entry, { projectRoot, stateRoot }),
   );
   return manualCriteria.filter((criterion) => {
     if (!criterion || typeof criterion !== "object") return true;
@@ -159,7 +159,7 @@ function unresolvedManualCriteria(report: StageReportEntry = Object()): ManualCr
   }) as ManualCriterion[];
 }
 
-function assertDeliveryManualAcceptanceResolved(stageId: string, { stateRoot } = Object()): void {
+function assertDeliveryManualAcceptanceResolved(stageId: string, { stateRoot, projectRoot } = Object()): void {
   if (stageId !== "delivery") return;
   const acceptancePath = lifecycleArtifactPath("acceptance", { stateRoot });
   if (!existsSync(acceptancePath)) return;
@@ -172,7 +172,7 @@ function assertDeliveryManualAcceptanceResolved(stageId: string, { stateRoot } =
   } catch {
     return;
   }
-  const unresolved = unresolvedManualCriteria(parsed);
+  const unresolved = unresolvedManualCriteria(parsed, projectRoot, stateRoot);
   if (unresolved.length === 0) return;
   throw new RuntimeInvariantViolation(
     "delivery_manual_acceptance_unresolved",
@@ -371,7 +371,7 @@ export function writeLifecycleStageReport(stageId: string, report: StageReportEn
     }
   }
 
-  assertDeliveryManualAcceptanceResolved(stageId, { stateRoot });
+  assertDeliveryManualAcceptanceResolved(stageId, { stateRoot, projectRoot: options.projectRoot || options.project_root });
 
   const stageReport = buildLifecycleStageReport(stageId, report, { ...options, stateRoot, now });
   const stageStatus = stageReport.status;
