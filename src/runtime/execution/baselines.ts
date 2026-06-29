@@ -40,14 +40,34 @@ export function parseTscBaselineKeys(output = "") {
   )];
 }
 
-export function parseEslintBaselineKeys(output = "", rootDir = "") {
-  const jsonStart = String(output).indexOf("[");
-  let results = [];
-  try {
-    results = jsonStart >= 0 ? JSON.parse(String(output).slice(jsonStart)) : [];
-  } catch {
-    results = [];
+// H12: Fail-closed baseline parsing. Tool output that is non-empty but not
+// parseable as JSON is CORRUPT — treating it as "zero issues" would silently
+// establish a clean baseline (fail-open). Empty output legitimately means zero
+// issues. On corrupt output we throw BASELINE_CORRUPT so callers block.
+export class BaselineParseError extends Error {
+  code = "BASELINE_CORRUPT";
+}
+
+function parseEslintJsonArray(output = "") {
+  const text = String(output || "");
+  const jsonStart = text.indexOf("[");
+  if (jsonStart < 0) {
+    // No array start: only acceptable if there is genuinely no diagnostic output.
+    if (text.trim() === "") return [];
+    throw new BaselineParseError("eslint output has no JSON array");
   }
+  let results;
+  try {
+    results = JSON.parse(text.slice(jsonStart));
+  } catch {
+    throw new BaselineParseError("eslint output is not valid JSON");
+  }
+  if (!Array.isArray(results)) throw new BaselineParseError("eslint output JSON is not an array");
+  return results;
+}
+
+export function parseEslintBaselineKeys(output = "", rootDir = "") {
+  const results = parseEslintJsonArray(output);
   const keys = [];
   for (const result of results) {
     const file = result.filePath?.replace(`${rootDir}/`, "") || "";
@@ -59,13 +79,7 @@ export function parseEslintBaselineKeys(output = "", rootDir = "") {
 }
 
 export function parseEslintBaselineErrorKeys(output = "", rootDir = "") {
-  const jsonStart = String(output).indexOf("[");
-  let results = [];
-  try {
-    results = jsonStart >= 0 ? JSON.parse(String(output).slice(jsonStart)) : [];
-  } catch {
-    results = [];
-  }
+  const results = parseEslintJsonArray(output);
   const keys = [];
   for (const result of results) {
     const file = result.filePath?.replace(`${rootDir}/`, "") || "";
@@ -292,7 +306,16 @@ export function captureTscBaseline({
   nowIso = () => new Date().toISOString(),
 } = Object()) {
   const run = runBaselineCommand({ rootDir, command, execSync, timeout: 60000 });
-  const keys = parseTscBaselineKeys(run.output);
+  let keys = [];
+  let status = run.status;
+  let reason = run.reason;
+  try {
+    keys = parseTscBaselineKeys(run.output);
+  } catch (error) {
+    // H12: corrupt tool output must not establish a clean baseline.
+    status = "blocked";
+    reason = (error instanceof BaselineParseError && error.code) || "BASELINE_CORRUPT";
+  }
   const baseline = buildBaselineArtifact({
     tool: "tsc",
     keys,
@@ -301,8 +324,8 @@ export function captureTscBaseline({
     stdout: run.stdout || run.output,
     stderr: run.stderr,
     commit: currentCommit(rootDir, execSync),
-    status: run.status,
-    reason: run.reason,
+    status,
+    reason,
     createdAt: nowIso(),
     updatedAt: nowIso(),
   });
@@ -318,7 +341,16 @@ export function captureEslintBaseline({
   nowIso = () => new Date().toISOString(),
 } = Object()) {
   const run = runBaselineCommand({ rootDir, command, execSync, timeout: 60000 });
-  const keys = parseEslintBaselineKeys(run.output, rootDir);
+  let keys = [];
+  let status = run.status;
+  let reason = run.reason;
+  try {
+    keys = parseEslintBaselineKeys(run.output, rootDir);
+  } catch (error) {
+    // H12: corrupt tool output must not establish a clean baseline.
+    status = "blocked";
+    reason = (error instanceof BaselineParseError && error.code) || "BASELINE_CORRUPT";
+  }
   const baseline = buildBaselineArtifact({
     tool: "eslint",
     keys,
@@ -327,8 +359,8 @@ export function captureEslintBaseline({
     stdout: run.stdout || run.output,
     stderr: run.stderr,
     commit: currentCommit(rootDir, execSync),
-    status: run.status,
-    reason: run.reason,
+    status,
+    reason,
     createdAt: nowIso(),
     updatedAt: nowIso(),
   });

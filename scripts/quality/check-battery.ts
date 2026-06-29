@@ -217,4 +217,51 @@ export const CHECK_BATTERY: CheckBatteryCase[] = [
     description: "Artifact integrity must not read or pass an absolute file outside rootDir.",
     expect: "blocked",
   },
+  // H12: corrupt/unparseable tool output must never fail-open to an empty baseline.
+  // A corrupt eslint baseline (non-array JSON) must structurally block, not pass.
+  {
+    id: "eslint_baseline_corrupt_blocks_check",
+    category: "hang_or_crash",
+    description: "A structurally invalid eslint baseline must block (fail-closed), not establish an empty baseline.",
+    expect: "blocked",
+    files: { ...VALID_FILES, "scripts/yolo/state/runtime/eslint-baseline.json": "{not valid json" },
+    prd: { version: "2.0", id: "PRD-INVALID-BASELINE", tasks: "not-an-array" },
+  },
+  {
+    id: "knip_baseline_corrupt_blocks_check",
+    category: "hang_or_crash",
+    description: "A structurally invalid dead_code baseline must block (fail-closed).",
+    expect: "blocked",
+    files: { ...VALID_FILES, "scripts/yolo/state/runtime/knip-baseline.json": "<<<corrupt>>>" },
+    prd: { version: "2.0", id: "PRD-INVALID-KNIP-BASELINE", tasks: "not-an-array" },
+  },
+  // Negative: a well-formed (empty-keys) baseline must NOT be over-blocked at the
+  // structural check layer when the PRD itself is otherwise valid.
+  {
+    id: "valid_baseline_keys_do_not_overblock_check",
+    category: "cannot_develop",
+    description: "A well-formed baseline (object with keys array) must not cause structural over-blocking of a valid PRD.",
+    expect: "pass",
+    files: { ...VALID_FILES, "scripts/yolo/state/runtime/eslint-baseline.json": JSON.stringify({ keys: [] }) },
+    prd: strictPrd(),
+  },
+  // H1: a negative caller override (strictExecution:false) must NOT relax the gate
+  // for a PRD that requires strict execution (L3/afk_ready). Such a PRD with
+  // missing demand evidence must still block (fail-closed), not be disarmed.
+  {
+    id: "strict_false_input_must_not_relax_gate",
+    category: "hang_or_crash",
+    description: "A strict (L3/afk_ready) PRD must remain blocked even if a caller passes strictExecution:false to relax it.",
+    expect: "blocked",
+    files: VALID_FILES,
+    prd: strictPrd({}, { demand: { id: "DEMAND-QUALITY", approval: { approved: false }, project_facts: { target_files: [], assumptions: [] } } }),
+  },
+  {
+    id: "strict_prd_without_relax_override_still_passes",
+    category: "cannot_develop",
+    description: "A legitimate approved strict PRD must pass the gate (no over-blocking from the H1 fix).",
+    expect: "pass",
+    files: VALID_FILES,
+    prd: strictPrd(),
+  },
 ];
