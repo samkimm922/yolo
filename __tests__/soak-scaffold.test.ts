@@ -25,6 +25,7 @@ function strictPrd(overrides = {}) {
     base_commit: "abcdef0",
     source: "approved_demand",
     demand_contract_required: true,
+    provider_capability: { opt_out: true },
     demand: {
       id: "DEMAND-SOAK",
       approval: { approved: true, effective_for_prd: true },

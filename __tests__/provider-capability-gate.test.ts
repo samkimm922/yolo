@@ -69,9 +69,20 @@ describe("provider capability bits and parity matrix", () => {
 });
 
 describe("provider capability gate", () => {
-  test("passes when PRD has no required capabilities", () => {
+  test("blocks when PRD declares no required capabilities (fail-closed)", () => {
     const result = inspectProviderCapabilityGate({
       prd: { tasks: [{ id: "T1" }] },
+      config: { ai: { executor: "claude" } },
+    });
+    assert.equal(result.status, "blocked");
+    assert.equal(result.blocks_execution, true);
+    assert.equal(result.required.length, 0);
+    assert.ok(result.blockers.some((b) => b.code === "PROVIDER_CAPABILITY_NOT_DECLARED"));
+  });
+
+  test("passes when PRD opts out of capability declaration explicitly", () => {
+    const result = inspectProviderCapabilityGate({
+      prd: { tasks: [{ id: "T1" }], provider_capability: { opt_out: true } },
       config: { ai: { executor: "claude" } },
     });
     assert.equal(result.status, "pass");

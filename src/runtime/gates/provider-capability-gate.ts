@@ -27,6 +27,18 @@ function requiredCapabilitiesFromPrd(prd = Object()) {
   return fromTasks;
 }
 
+// Fail-closed (M1): an undeclared capability requirement used to silently pass,
+// which lets a PRD run on a provider that may be incapable of executing it. With
+// no declaration we now block unless the PRD explicitly opts out (the operator
+// accepts the unverified-provider risk) — `provider_capability.opt_out: true`
+// or `required_capabilities: []` with an explicit `provider_capability` block.
+function providerCapabilityOptOut(prd = Object()) {
+  const declared = Object.prototype.hasOwnProperty.call(prd, "required_capabilities");
+  const block = prd.provider_capability || prd.provider_capabilities;
+  const explicit = block && typeof block === "object" ? block.opt_out : undefined;
+  return explicit === true || (declared && prd.required_capabilities != null && Array.isArray(prd.required_capabilities) && prd.required_capabilities.length === 0 && explicit === true);
+}
+
 export function inspectProviderCapabilityGate(options = Object()) {
   const prd = options.prd || {};
   const config = options.config || {};
@@ -38,15 +50,37 @@ export function inspectProviderCapabilityGate(options = Object()) {
   const warnings = [];
 
   if (required.length === 0) {
+    if (providerCapabilityOptOut(prd)) {
+      return {
+        status: "pass",
+        blocks_execution: false,
+        provider,
+        required,
+        capabilities,
+        blockers,
+        warnings: [{
+          code: "PROVIDER_CAPABILITY_OPT_OUT",
+          provider,
+          message: "No capability requirements declared; gate passed via explicit opt-out (provider risk unverified).",
+        }],
+        message: "No capability requirements declared; gate passed via explicit opt-out (provider risk unverified).",
+      };
+    }
+    // Fail-closed: an undeclared capability requirement must not silently pass.
+    blockers.push({
+      code: "PROVIDER_CAPABILITY_NOT_DECLARED",
+      provider,
+      message: `PRD declares no required_capabilities and no explicit provider_capability.opt_out. The provider's fitness to execute this task is unverified — declare required_capabilities or set provider_capability.opt_out=true to accept the risk.`,
+    });
     return {
-      status: "pass",
-      blocks_execution: false,
+      status: "blocked",
+      blocks_execution: true,
       provider,
       required,
       capabilities,
       blockers,
       warnings,
-      message: "No capability requirements declared; gate passes.",
+      message: "Provider capability requirement is undeclared; gate blocked (fail-closed).",
     };
   }
 
