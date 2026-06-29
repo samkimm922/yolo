@@ -102,8 +102,12 @@ function applyWarnEscalation(task: GateTask, { stateRoot }: { stateRoot?: string
     }
     return changed;
   } catch (error) {
-    // H2: IO / parse / subprocess failure must hard-block: escalate every WARN
-    // condition to FAIL so the gate cannot pass on unverified warnings.
+    // H2: IO / parse / subprocess failure must hard-block WHEN there are WARN
+    // conditions to protect — otherwise escalation would be silently disabled
+    // and recurring WARNs would stay non-blocking. When there are no WARN
+    // conditions, there is nothing to silently disable, so the failure is
+    // benign and we preserve the historical empty-result (no spurious stderr).
+    if (warnConditions.length === 0) return [];
     const changed: string[] = [];
     for (const condition of warnConditions) {
       condition.severity = "FAIL";
