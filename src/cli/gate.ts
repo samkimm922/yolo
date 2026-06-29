@@ -69,9 +69,9 @@ function resolveGateConfig({ argv, contractRoot, stateRoot }: { argv: string[]; 
 function applyWarnEscalation(task: GateTask, { stateRoot }: { stateRoot?: string | null } = {}) {
   // Fail-closed escalation policy: if the WARN→FAIL escalation mechanism cannot
   // be consulted (subprocess crash, IO error, or unparseable output) we must NOT
-  // silently disable escalation (the previous `catch { return []; }` did exactly
-  // that, letting recurring WARNs stay non-blocking). Instead escalate EVERY
-  // WARN condition to FAIL and report a structured code.
+  // silently disable escalation — the previous handler returned an empty array
+  // from its catch block, letting recurring WARNs stay non-blocking. Instead
+  // escalate EVERY WARN condition to FAIL and report a structured code.
   const warnConditions = (task.post_conditions || []).filter(
     (condition) => condition && condition.severity === "WARN" && condition.id !== undefined,
   );
