@@ -86,8 +86,11 @@ export function evalTestsPass(params: EvalParams = {}, _taskScope: TaskScope, RO
           };
         }
       }
-    } catch {}
-    return { passed: false, detail: `vitest 执行异常：${String(caught.message || caught.stderr || "").slice(0, 200)}`, type: "tests_pass" };
+    } catch {
+      // H12: vitest produced no parseable JSON result — fail-closed with a
+      // structured code rather than an empty/indeterminate result.
+    }
+    return { passed: false, detail: `vitest 执行异常：${String(caught.message || caught.stderr || "").slice(0, 200)}`, code: "OUTPUT_UNPARSEABLE", type: "tests_pass" };
   }
 }
 

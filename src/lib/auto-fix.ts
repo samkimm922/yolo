@@ -575,9 +575,25 @@ async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecF
     }));
     currentEslintErrors = flattenEslintErrors(JSON.parse(out.trim() || "[]"), rootDir);
   } catch (e) {
+    // H12: eslint output must be parseable. A parse failure on non-empty output
+    // is fail-open if swallowed ("assume clean"); instead hard-block validation.
+    const rawOut = (e as { stdout?: string }).stdout?.trim() || "";
     try {
-      currentEslintErrors = flattenEslintErrors(JSON.parse((e as { stdout?: string }).stdout?.trim() || "[]"), rootDir);
-    } catch { /* eslint JSON parse failed */ }
+      if (rawOut) {
+        currentEslintErrors = flattenEslintErrors(JSON.parse(rawOut), rootDir);
+      }
+    } catch {
+      return {
+        passed: false,
+        errors: [{
+          file: "",
+          line: 0,
+          code: "OUTPUT_UNPARSEABLE",
+          message: "eslint 输出无法解析为 JSON，无法确认是否引入新错误",
+          source: "eslint",
+        }],
+      };
+    }
   }
 
   // 4. 对比: 仅关注 modified files 中的新增错误
@@ -638,7 +654,23 @@ async function handleEslintFix(task: AutoFixTask, rootDir: string, _efSync?: Exe
         }
         return { success: false, escalatedTasks };
       }
-    } catch { /* JSON parse failed — assume clean */ }
+    } catch (parseErr) {
+      // H12: eslint --fix exit was non-zero AND its output could not be parsed.
+      // "Assume clean" is fail-open — escalate as a hard block instead.
+      void parseErr;
+      return {
+        success: false,
+        escalatedTasks: [{
+          file: "",
+          scanner_id: "eslint-OUTPUT_UNPARSEABLE",
+          severity: "HIGH",
+          line: 0,
+          description: "eslint --fix 输出无法解析为 JSON，无法确认剩余错误",
+          match: "OUTPUT_UNPARSEABLE",
+          fix_type: "CLAUDE_FIX",
+        }],
+      };
+    }
   }
 
   let changedFiles: string[] = [];

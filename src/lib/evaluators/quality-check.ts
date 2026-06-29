@@ -341,10 +341,19 @@ export function evalNoNewLintErrors(params: EvalParams = {}, _taskScope: TaskSco
   const baselinePath = join(ROOT, "scripts", "yolo", "state", "runtime", "eslint-baseline.json");
   let baselineKeys: string[] = [];
   if (existsSync(baselinePath)) {
+    let raw: string;
     try {
-      const json = JSON.parse(readFileSync(baselinePath, "utf8")) as { keys?: unknown[] };
+      raw = readFileSync(baselinePath, "utf8");
+    } catch {
+      return { passed: false, detail: "eslint baseline 不可读，lint 检查无法执行", code: "BASELINE_CORRUPT", type: "no_new_lint_errors" };
+    }
+    try {
+      const json = JSON.parse(raw) as { keys?: unknown[] };
       if (json && Array.isArray(json.keys)) baselineKeys = json.keys.map(String);
-    } catch {}
+      else return { passed: false, detail: "eslint baseline 格式损坏，无法进行新增 lint 错误比对", code: "BASELINE_CORRUPT", type: "no_new_lint_errors" };
+    } catch {
+      return { passed: false, detail: "eslint baseline JSON 无法解析，无法进行新增 lint 错误比对", code: "BASELINE_CORRUPT", type: "no_new_lint_errors" };
+    }
   }
 
   const command = configuredCommand(params, "lint");
@@ -411,11 +420,21 @@ export function evalNoNewDeadCode(params: EvalParams = {}, _taskScope: TaskScope
   const baselinePath = join(ROOT, "scripts", "yolo", "state", "runtime", "knip-baseline.json");
   let baselineKeys: string[] = [];
   if (existsSync(baselinePath)) {
+    let raw: string;
     try {
-      const parsed = JSON.parse(readFileSync(baselinePath, "utf8")) as { keys?: unknown[] };
-      baselineKeys = (parsed.keys || []).map(String);
+      raw = readFileSync(baselinePath, "utf8");
+    } catch {
+      return { passed: false, detail: "dead_code baseline 不可读，死代码检测不可用", code: "BASELINE_CORRUPT", type: "no_new_dead_code" };
     }
-    catch { /* baseline corrupt, ignore */ }
+    try {
+      const parsed = JSON.parse(raw) as { keys?: unknown[] };
+      if (!parsed || !Array.isArray(parsed.keys)) {
+        return { passed: false, detail: "dead_code baseline 格式损坏，无法进行新增死代码比对", code: "BASELINE_CORRUPT", type: "no_new_dead_code" };
+      }
+      baselineKeys = (parsed.keys || []).map(String);
+    } catch {
+      return { passed: false, detail: "dead_code baseline JSON 无法解析，无法进行新增死代码比对", code: "BASELINE_CORRUPT", type: "no_new_dead_code" };
+    }
   }
   try {
     const command = configuredCommand(params, "dead_code");

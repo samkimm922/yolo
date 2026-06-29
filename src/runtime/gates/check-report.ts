@@ -257,15 +257,27 @@ function executionMode(input = Object(), options = Object()) {
 }
 
 function strictExecutionPolicy({ prd, input = Object(), options = Object() } = Object()) {
-  if (input.strictExecution === false || input.strict_execution === false || options.strictExecution === false || options.strict_execution === false) return false;
-  if (input.requireDemandContract === false || input.require_demand_contract === false || options.requireDemandContract === false || options.require_demand_contract === false) return false;
-  if (input.strictExecution === true || input.strict_execution === true || options.strictExecution === true || options.strict_execution === true) return true;
-  if (input.requireDemandContract === true || input.require_demand_contract === true || options.requireDemandContract === true || options.require_demand_contract === true) return true;
+  // H1: caller (input/options) overrides may only make execution STRICTER, never
+  // relax it. A negative override (strictExecution:false) from a caller must NOT
+  // disable strict execution that the PRD itself requires (afk_ready/L3/strict
+  // mode). Previously `=== false` returned early and bypassed the PRD baseline —
+  // a fail-open that let callers disarm the gate. Negative overrides are ignored.
 
+  // PRD-derived baseline strictness is authoritative and cannot be relaxed.
   const mode = executionMode(input, options);
-  return STRICT_EXECUTION_MODES.has(mode) ||
+  let strict = STRICT_EXECUTION_MODES.has(mode) ||
     prd?.execution_readiness?.afk_ready === true ||
     prd?.execution_readiness?.level === "L3";
+
+  // Caller may only escalate (true). Negative values are deliberately ignored.
+  const callerRequestsStrict =
+    input.strictExecution === true || input.strict_execution === true ||
+    options.strictExecution === true || options.strict_execution === true ||
+    input.requireDemandContract === true || input.require_demand_contract === true ||
+    options.requireDemandContract === true || options.require_demand_contract === true;
+
+  if (callerRequestsStrict) strict = true;
+  return strict;
 }
 
 function strictWarningPolicy({ strictExecution, mode }) {

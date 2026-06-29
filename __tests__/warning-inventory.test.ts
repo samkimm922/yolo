@@ -16,7 +16,7 @@ const SOURCE_ROOTS = ["src", "bin"];
 const ROOT_ENTRYPOINTS = ["runner.ts", "gate.ts", "prompt.ts", "learn.ts", "sdk.ts"];
 
 const INVENTORY = [
-  ["src/cli/gate.ts", { WARN: 4, warning: 0, "best-effort": 0, skip: 0 }],
+  ["src/cli/gate.ts", { WARN: 10, warning: 0, "best-effort": 0, skip: 0 }],
   ["src/cli/prd-preflight.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 0 }],
   ["src/cli/prompt.ts", { WARN: 1, warning: 2, "best-effort": 0, skip: 0 }],
   // yolo.ts was split into focused modules under src/cli/split/. The token

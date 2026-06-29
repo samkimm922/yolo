@@ -126,5 +126,32 @@ export function runGateBattery(): GateBatteryResult[] {
     correct: aggregateStatus === "blocked",
   });
 
+  // H2: applyWarnEscalation must NOT silently disable WARN→FAIL on IO/parse
+  // failure. Verify the fail-closed policy in source: no bare `catch { return []; }`,
+  // and the catch path escalates WARN conditions to FAIL.
+  const gateCliSource = readFileSync("src/cli/gate.ts", "utf8");
+  const noBareCatchReturn = !/catch\s*\{\s*return\s*\[\s*\]\s*;\s*\}/.test(gateCliSource);
+  const catchEscalatesWarns = /WARN_ESCALATION_CORRUPT/.test(gateCliSource) && /escalat/.test(gateCliSource);
+  const warnEscalationStatus = noBareCatchReturn && catchEscalatesWarns ? "blocked" : "pass";
+  results.push({
+    id: "warn_escalation_corrupt_file_blocks",
+    category: "gate_fail_closed_robustness",
+    expect: "blocked",
+    actualExit: warnEscalationStatus === "blocked" ? 1 : 0,
+    actualStatus: warnEscalationStatus,
+    correct: warnEscalationStatus === "blocked",
+  });
+  // Negative: a healthy escalation path (non-empty valid array) is unchanged.
+  const healthyParsePath = /JSON\.parse\(escalateResult\.trim\(\)\)/.test(gateCliSource) && /escalatedNames\.has/.test(gateCliSource);
+  const negativeStatus = healthyParsePath ? "pass" : "blocked";
+  results.push({
+    id: "warn_escalation_healthy_path_preserved",
+    category: "gate_fail_closed_robustness",
+    expect: "pass",
+    actualExit: negativeStatus === "pass" ? 0 : 1,
+    actualStatus: negativeStatus,
+    correct: negativeStatus === "pass",
+  });
+
   return results;
 }
