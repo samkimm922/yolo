@@ -5,6 +5,19 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildLifecycleStageReport, writeLifecycleStageReport } from "../src/lifecycle/progress.js";
 import { createLifecycleStateSnapshot } from "../src/lifecycle/schema.js";
+import { generateApprovalKeyPair, signApproval } from "../src/lib/security/approval-signing.js";
+import { manualAcceptanceSignable } from "../src/lifecycle/manual-acceptance-keys.js";
+
+// Install a freshly-generated project-rooted manual-acceptance public key into
+// a test state root and return the matching private key (PEM). CR1 made
+// manual-acceptance verification real, so the legit "resolved -> allowed" path
+// must sign against an installed key rather than use a placeholder signature.
+function installManualAcceptanceKey(stateRoot) {
+  const { privateKeyPem, publicKeyPem } = generateApprovalKeyPair();
+  mkdirSync(join(stateRoot, "keys"), { recursive: true });
+  writeFileSync(join(stateRoot, "keys", "manual-acceptance.pub"), publicKeyPem, "utf8");
+  return privateKeyPem;
+}
 
 function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-lifecycle-progress-"));
@@ -219,19 +232,22 @@ describe("lifecycle progress", () => {
     const root = tempProject();
     const stateRoot = join(root, ".yolo");
     try {
+      // CR1: install a real keypair and sign the canonical payload so the
+      // "resolved -> allowed" path is real, not a placeholder-signature stub.
+      const maPrivateKey = installManualAcceptanceKey(stateRoot);
+      const resolvedEntry = {
+        type: "manual_acceptance",
+        task_id: "FEAT-1",
+        condition_id: "POST-MANUAL",
+        accepted_by: "operator",
+        accepted_at: "2026-06-20T00:00:00.000Z",
+        status: "accepted",
+      };
+      const signature = signApproval(manualAcceptanceSignable(resolvedEntry), maPrivateKey);
       writeLifecycleStageReport("acceptance", {
         status: "pass",
         summary: "manual acceptance resolved",
-        evidence: [{
-          type: "manual_acceptance",
-          task_id: "FEAT-1",
-          condition_id: "POST-MANUAL",
-          accepted_by: "operator",
-          accepted_at: "2026-06-20T00:00:00.000Z",
-          status: "accepted",
-          signature: "sig-test",
-          digest: "sha256:test",
-        }],
+        evidence: [{ ...resolvedEntry, signature, digest: "sha256:test" }],
         manual_criteria: [{
           task_id: "FEAT-1",
           condition_id: "POST-MANUAL",

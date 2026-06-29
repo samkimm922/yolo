@@ -14,6 +14,19 @@ import { inspectDemandReadiness } from "../src/demand/gate.js";
 import { inspectStoryAtomicityFromDemand } from "../src/demand/story-atomicity.js";
 import { parseYoloArgs } from "../src/cli/yolo.js";
 import { buildInitToFirstPrdSmokePlan } from "../src/core/init-smoke.js";
+import { generateApprovalKeyPair, signApproval } from "../src/lib/security/approval-signing.js";
+import { manualAcceptanceSignable } from "../src/lifecycle/manual-acceptance-keys.js";
+
+// Install a freshly-generated project-rooted manual-acceptance public key into
+// a test state root and return the matching private key (PEM). CR1 made
+// manual-acceptance verification real, so the legit "resolves delivery" path
+// must sign against an installed key rather than use a placeholder signature.
+function installManualAcceptanceKey(stateRoot) {
+  const { privateKeyPem, publicKeyPem } = generateApprovalKeyPair();
+  mkdirSync(join(stateRoot, "keys"), { recursive: true });
+  writeFileSync(join(stateRoot, "keys", "manual-acceptance.pub"), publicKeyPem, "utf8");
+  return privateKeyPem;
+}
 import { buildRunFinalAnswer } from "../src/runtime/evidence/report.js";
 import { buildYoloCommandRegistry, validateCommandLifecycleStageAlignment } from "../src/workflows/command-registry.js";
 import { createYoloSdk } from "../sdk.js";
@@ -336,23 +349,26 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     try {
       initLifecycleState({ projectRoot: root });
       const stateRoot = join(root, ".yolo");
+      // CR1: install a real keypair and sign the canonical payload so the
+      // "resolves delivery" path is real, not a placeholder-signature stub.
+      const maPrivateKey = installManualAcceptanceKey(stateRoot);
+      const resolvedEntry = {
+        type: "manual_acceptance",
+        task_id: "T1",
+        condition_id: "AC-1",
+        accepted_by: "user",
+        note: "Confirmed by product owner",
+        accepted_at: new Date().toISOString(),
+        status: "accepted",
+      };
+      const signature = signApproval(manualAcceptanceSignable(resolvedEntry), maPrivateKey);
       writeLifecycleStageReport("run", { status: "success", evidence: [{ path: "run.json" }] }, { ...lifecycleWriteOptions(root), skipSequenceCheck: true });
       writeLifecycleStageReport("review-fix", { status: "success", evidence: [{ path: "review.json" }] }, { ...lifecycleWriteOptions(root), skipSequenceCheck: true });
       writeLifecycleStageReport("acceptance", {
         status: "pass",
         evidence: [
           { path: "acceptance.json" },
-          {
-            type: "manual_acceptance",
-            task_id: "T1",
-            condition_id: "AC-1",
-            accepted_by: "user",
-            note: "Confirmed by product owner",
-            accepted_at: new Date().toISOString(),
-            status: "accepted",
-            signature: "sig-test",
-            digest: "sha256:test",
-          },
+          { ...resolvedEntry, signature, digest: "sha256:test" },
         ],
         manual_criteria: [{ task_id: "T1", condition_id: "AC-1", text: "UX matches brand guidelines" }],
       }, { ...lifecycleWriteOptions(root), skipSequenceCheck: true });

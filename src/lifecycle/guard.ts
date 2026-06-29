@@ -334,7 +334,7 @@ function validateEvidencePaths(projectRoot: string, report: GuardRecord = Object
   return blockers;
 }
 
-function hasManualAcceptanceCriteria(report: GuardRecord = Object()): boolean {
+function hasManualAcceptanceCriteria(report: GuardRecord = Object(), projectRoot?: string, stateRoot?: string): boolean {
   const nestedReport = report.report as GuardRecord | undefined;
   const manualCriteria = Array.isArray(report.manual_criteria) ? report.manual_criteria : [];
   const nested = Array.isArray(nestedReport?.manual_criteria) ? nestedReport.manual_criteria : [];
@@ -351,7 +351,7 @@ function hasManualAcceptanceCriteria(report: GuardRecord = Object()): boolean {
 
   const evidence = reportEvidenceEntries(report);
   const manualEvidence = evidence.filter(
-    (e) => isStructuredManualAcceptanceEvidence(e),
+    (e) => isStructuredManualAcceptanceEvidence(e, { projectRoot, stateRoot }),
   );
 
   const unresolved = allManual.filter((criterion) => {
@@ -480,7 +480,7 @@ function deliveryHardGateBlockers(stateRoot: string, projectRoot: string): Guard
       ));
     }
     blockers.push(...validateEvidencePaths(projectRoot, acceptance.report, "acceptance"));
-    if (hasManualAcceptanceCriteria(acceptance.report)) {
+    if (hasManualAcceptanceCriteria(acceptance.report, projectRoot, stateRoot)) {
       blockers.push(makeBlocker(
         "ACCEPTANCE_MANUAL_CRITERIA_UNRESOLVED",
         "acceptance",

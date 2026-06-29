@@ -8,6 +8,8 @@ import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
 import { initLifecycleState } from "../src/lifecycle/state.js";
 import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
 import { runYoloCli } from "../src/cli/yolo.js";
+import { generateApprovalKeyPair, signApproval } from "../src/lib/security/approval-signing.js";
+import { manualAcceptanceSignable } from "../src/lifecycle/manual-acceptance-keys.js";
 
 function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-acceptance-report-"));
@@ -21,6 +23,23 @@ function writeJson(file, payload) {
 function writeText(file, text) {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, text, "utf8");
+}
+
+// Install a freshly-generated project-rooted manual-acceptance public key into
+// a test state root and return the matching private key (PEM). CR1 made
+// manual-acceptance verification real (ed25519 over the canonical payload), so
+// tests that exercise the "legit signed evidence -> unblocked" path must sign
+// against an installed key rather than using a placeholder signature.
+function installManualAcceptanceKey(stateRoot) {
+  const { privateKeyPem, publicKeyPem } = generateApprovalKeyPair();
+  writeText(join(stateRoot, "keys", "manual-acceptance.pub"), publicKeyPem);
+  return privateKeyPem;
+}
+
+function signManualEntry(privateKeyPem, entry) {
+  const payload = manualAcceptanceSignable(entry);
+  if (!payload) throw new Error("test entry missing canonical manual-acceptance fields");
+  return signApproval(payload, privateKeyPem);
 }
 
 function prd(task = {}) {
@@ -1139,22 +1158,27 @@ describe("acceptance report", () => {
       initLifecycleState({ projectRoot: root });
       writeRunPass(root);
       writeReviewPass(root);
+      // CR1: manual-acceptance evidence must carry a real ed25519 signature
+      // verifiable against the project-rooted public key. Install a keypair and
+      // sign the canonical payload so this "legit -> unblocked" path is real.
+      const maPrivateKey = installManualAcceptanceKey(stateRoot);
+      const acceptedAt = new Date().toISOString();
+      const manualEntry = {
+        type: "manual_acceptance",
+        task_id: "FEAT-ACCEPT-001",
+        condition_id: "POST-ACCEPT-MANUAL",
+        accepted_by: "user",
+        note: "UX matches brand guidelines per review",
+        accepted_at: acceptedAt,
+        status: "accepted",
+      };
+      const signature = signManualEntry(maPrivateKey, manualEntry);
       writeLifecycleStageReport("acceptance", {
         status: "pass",
         summary: "acceptance passed with manual criteria resolved",
         evidence: [
           { path: "state/acceptance/evidence.json" },
-          {
-            type: "manual_acceptance",
-            task_id: "FEAT-ACCEPT-001",
-            condition_id: "POST-ACCEPT-MANUAL",
-            accepted_by: "user",
-            note: "UX matches brand guidelines per review",
-            accepted_at: new Date().toISOString(),
-            status: "accepted",
-            signature: "sig-test",
-            digest: "sha256:test",
-          },
+          { ...manualEntry, signature, digest: "sha256:test" },
         ],
         manual_criteria: report.manual_criteria,
       }, lifecycleWriteOptions(root));
@@ -1215,22 +1239,27 @@ describe("acceptance report", () => {
       initLifecycleState({ projectRoot: root });
       writeRunPass(root);
       writeReviewPass(root);
+      // CR1: sign the one resolved criterion for real so the "partial coverage"
+      // semantics stay exact (only POST-ACCEPT-MANUAL-2 is unresolved). With a
+      // placeholder signature the entry would be rejected and BOTH would count
+      // as unresolved, masking the partial-coverage intent.
+      const maPrivateKey = installManualAcceptanceKey(stateRoot);
+      const partialEntry = {
+        type: "manual_acceptance",
+        task_id: "FEAT-ACCEPT-001",
+        condition_id: "POST-ACCEPT-MANUAL-1",
+        accepted_by: "user",
+        note: "UX matches brand guidelines",
+        accepted_at: new Date().toISOString(),
+        status: "accepted",
+      };
+      const signature = signManualEntry(maPrivateKey, partialEntry);
       writeLifecycleStageReport("acceptance", {
         status: "pass",
         summary: "acceptance passed but only one manual criterion resolved",
         evidence: [
           { path: "state/acceptance/evidence.json" },
-          {
-            type: "manual_acceptance",
-            task_id: "FEAT-ACCEPT-001",
-            condition_id: "POST-ACCEPT-MANUAL-1",
-            accepted_by: "user",
-            note: "UX matches brand guidelines",
-            accepted_at: new Date().toISOString(),
-            status: "accepted",
-            signature: "sig-test",
-            digest: "sha256:test",
-          },
+          { ...partialEntry, signature, digest: "sha256:test" },
         ],
         manual_criteria: report.manual_criteria,
       }, lifecycleWriteOptions(root));
