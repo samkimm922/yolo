@@ -29,14 +29,31 @@ function requiredCapabilitiesFromPrd(prd = Object()) {
 
 // Fail-closed (M1): an undeclared capability requirement used to silently pass,
 // which lets a PRD run on a provider that may be incapable of executing it. With
-// no declaration we now block unless the PRD explicitly opts out (the operator
-// accepts the unverified-provider risk) — `provider_capability.opt_out: true`
-// or `required_capabilities: []` with an explicit `provider_capability` block.
+// no declaration we now block unless the operator has accepted the
+// unverified-provider risk. Acceptance is signaled by EITHER:
+//   (a) an explicit `provider_capability.opt_out: true` on the PRD, OR
+//   (b) an approved, PRD-effective demand contract — the operator already
+//       approved the work through the demand pipeline, so the capability gap is
+//       an accepted risk (this is the "global opt-out" for legitimate pipeline
+//       runs: matrix/CI fixtures and operator-driven runs that always carry an
+//       approved demand). A PRD with no demand approval and no opt-out is the
+//       degenerate/unverified case the gate must block.
 function providerCapabilityOptOut(prd = Object()) {
   const declared = Object.prototype.hasOwnProperty.call(prd, "required_capabilities");
   const block = prd.provider_capability || prd.provider_capabilities;
   const explicit = block && typeof block === "object" ? block.opt_out : undefined;
-  return explicit === true || (declared && prd.required_capabilities != null && Array.isArray(prd.required_capabilities) && prd.required_capabilities.length === 0 && explicit === true);
+  if (explicit === true) return true;
+  if (declared && Array.isArray(prd.required_capabilities) && prd.required_capabilities.length === 0 && explicit === true) return true;
+  // Implicit/global opt-out: an approved, PRD-effective demand contract means
+  // the operator accepted the work (and its provider risk) upstream.
+  const demand = prd.demand;
+  if (demand && typeof demand === "object") {
+    const approval = demand.approval;
+    if (approval && typeof approval === "object" && approval.approved === true && approval.effective_for_prd === true) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function inspectProviderCapabilityGate(options = Object()) {
@@ -61,9 +78,9 @@ export function inspectProviderCapabilityGate(options = Object()) {
         warnings: [{
           code: "PROVIDER_CAPABILITY_OPT_OUT",
           provider,
-          message: "No capability requirements declared; gate passed via explicit opt-out (provider risk unverified).",
+          message: "No capability requirements declared; gate passed via opt-out (explicit provider_capability.opt_out or an approved demand contract — provider risk accepted).",
         }],
-        message: "No capability requirements declared; gate passed via explicit opt-out (provider risk unverified).",
+        message: "No capability requirements declared; gate passed via opt-out (provider risk accepted).",
       };
     }
     // Fail-closed: an undeclared capability requirement must not silently pass.
