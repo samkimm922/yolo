@@ -1,11 +1,11 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { inspectLifecycleGuard } from "../../src/lifecycle/guard.js";
 import { initLifecycleState } from "../../src/lifecycle/state.js";
 import { writeLifecycleStageReport } from "../../src/lifecycle/progress.js";
-import { signApproval } from "../../src/lib/security/approval-signing.js";
+import { signApproval, generateApprovalKeyPair } from "../../src/lib/security/approval-signing.js";
 import { isStructuredManualAcceptanceEvidence } from "../../src/lifecycle/manual-acceptance.js";
 import { manualAcceptanceSignable } from "../../src/lifecycle/manual-acceptance-keys.js";
 
@@ -18,7 +18,7 @@ type LifecycleBatteryResult = {
   correct: boolean;
 };
 
-// Repo root (where the committed dev keypair lives under state/keys/).
+// Repo root (used for fixture/state resolution; no signing keys are committed).
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 function writeText(path: string, value: string) {
@@ -102,15 +102,16 @@ export function runLifecycleBattery(): LifecycleBatteryResult[] {
 
 // CR1 direct checks against the verifier (no full lifecycle needed): isolate
 // the cryptographic gate so the battery is fast and unambiguous.
-function committedDevPrivateKey(): string {
-  // The committed dev private key signs test evidence; the matching public key
-  // is what the verifier trusts (project-rooted, committed).
-  return readFileSync(join(REPO_ROOT, "state", "keys", "manual-acceptance.dev.key"), "utf8");
-}
-
-function installTrustedPublicKey(root: string) {
-  const pub = readFileSync(join(REPO_ROOT, "state", "keys", "manual-acceptance.pub"), "utf8");
-  writeText(join(root, ".yolo", "keys", "manual-acceptance.pub"), pub);
+//
+// SECURITY: the trusted signing keypair is generated PER TEST CASE in-memory and
+// written into the test's own tmp state root. No private key is ever committed
+// to the repo — committing a private key would void the signature guarantee
+// (anyone with the repo could forge evidence). The verifier trusts only the
+// public key installed under <stateRoot>/keys/manual-acceptance.pub.
+function installTrustedPublicKey(root: string): string {
+  const { privateKeyPem, publicKeyPem } = generateApprovalKeyPair();
+  writeText(join(root, ".yolo", "keys", "manual-acceptance.pub"), publicKeyPem);
+  return privateKeyPem;
 }
 
 function runGarbageSignatureCase(): LifecycleBatteryResult {
@@ -145,7 +146,7 @@ function runGarbageSignatureCase(): LifecycleBatteryResult {
 function runRealSignedEvidenceCase(): LifecycleBatteryResult {
   const root = mkdtempSync(join(tmpdir(), "yolo-lifecycle-signed-"));
   try {
-    installTrustedPublicKey(root);
+    const privateKeyPem = installTrustedPublicKey(root);
     const entry: Record<string, unknown> = {
       type: "manual_acceptance",
       status: "accepted",
@@ -155,7 +156,7 @@ function runRealSignedEvidenceCase(): LifecycleBatteryResult {
       accepted_at: "2026-06-29T00:00:00Z",
     };
     const payload = manualAcceptanceSignable(entry)!;
-    const signature = signApproval(payload, committedDevPrivateKey());
+    const signature = signApproval(payload, privateKeyPem);
     entry.signature = signature;
     const verified = isStructuredManualAcceptanceEvidence(entry, { projectRoot: root, stateRoot: join(root, ".yolo") });
     const status = verified ? "pass" : "blocked";
