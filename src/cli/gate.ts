@@ -67,6 +67,14 @@ function resolveGateConfig({ argv, contractRoot, stateRoot }: { argv: string[]; 
 }
 
 function applyWarnEscalation(task: GateTask, { stateRoot }: { stateRoot?: string | null } = {}) {
+  // Fail-closed escalation policy: if the WARN→FAIL escalation mechanism cannot
+  // be consulted (subprocess crash, IO error, or unparseable output) we must NOT
+  // silently disable escalation (the previous `catch { return []; }` did exactly
+  // that, letting recurring WARNs stay non-blocking). Instead escalate EVERY
+  // WARN condition to FAIL and report a structured code.
+  const warnConditions = (task.post_conditions || []).filter(
+    (condition) => condition && condition.severity === "WARN" && condition.id !== undefined,
+  );
   try {
     const args = [learnCli, "--escalate"];
     if (stateRoot) args.push(`--state-root=${stateRoot}`);
@@ -77,7 +85,11 @@ function applyWarnEscalation(task: GateTask, { stateRoot }: { stateRoot?: string
       stdio: ["pipe", "pipe", "pipe"],
     });
     const escalated: unknown = JSON.parse(escalateResult.trim());
-    if (!Array.isArray(escalated) || escalated.length === 0) return [];
+    if (!Array.isArray(escalated)) {
+      // Non-array output is corrupt — fail-closed: escalate all WARNs.
+      throw new Error("WARN_ESCALATION_CORRUPT: escalate output is not a JSON array");
+    }
+    if (escalated.length === 0) return [];
 
     const escalatedEntries = escalated as Array<{ name?: string }>;
     const escalatedNames = new Set(escalatedEntries.map((entry) => entry.name).filter((n): n is string => Boolean(n)));
@@ -89,8 +101,17 @@ function applyWarnEscalation(task: GateTask, { stateRoot }: { stateRoot?: string
       }
     }
     return changed;
-  } catch {
-    return [];
+  } catch (error) {
+    // H2: IO / parse / subprocess failure must hard-block: escalate every WARN
+    // condition to FAIL so the gate cannot pass on unverified warnings.
+    const changed: string[] = [];
+    for (const condition of warnConditions) {
+      condition.severity = "FAIL";
+      changed.push(condition.id as string);
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`WARN_ESCALATION_CORRUPT: escalation unavailable, escalating all WARN conditions to FAIL (${detail.slice(0, 160)})\n`);
+    return changed;
   }
 }
 
