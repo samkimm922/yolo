@@ -16,6 +16,14 @@ state/archive/
 state/runtime/
 state/evidence/
 
+# Signing keys — NEVER commit. Verification public keys are project-rooted
+# runtime secrets; private keys must live outside the repo (CI/external). A
+# committed private key voids every signature guarantee (anyone with the repo
+# could forge evidence/approvals).
+state/keys/
+*.key
+*.pem
+
 # Stress fixtures and demand evidence are runtime state; keep them on disk only.
 
 # Local logs and scratch files.
