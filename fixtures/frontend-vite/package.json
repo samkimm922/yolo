@@ -4,6 +4,6 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node --test test/counter.test.ts"
+    "test": "node --experimental-strip-types --test test/counter.test.ts"
   }
 }

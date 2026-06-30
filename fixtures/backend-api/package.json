@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/server.test.ts"
+    "test": "node --experimental-strip-types --test test/server.test.ts"
   }
 }
