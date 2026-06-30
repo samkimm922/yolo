@@ -118,6 +118,34 @@ function script(yoloRoot: string, name: string): string {
   return join(yoloRoot, name);
 }
 
+// H6: allowlist of executables a non-runtime PI command action may spawn. The
+// PI executor must not run an arbitrary binary from a (possibly tampered) plan;
+// only the trusted yolo CLI entrypoints and `node` on yolo-rooted scripts are
+// permitted. Anything else is rejected fail-closed by defaultPiExecutor.
+const ALLOWED_PI_COMMAND_BASENAMES = new Set([
+  "yolo", "yolo.js", "yolo.mjs", "yolo.cjs",
+  "yolo-gate", "yolo-gate.js",
+  "yolo-pi", "yolo-pi.js",
+  "yolo-prompt", "yolo-prompt.js",
+  "yolo-prd-preflight", "yolo-prd-preflight.js",
+  "yolo-prd-migrate-gates", "yolo-prd-migrate-gates.js",
+  "node", "nodejs",
+  "npx",
+]);
+
+function isAllowedPiCommand(command: string): boolean {
+  const trimmed = String(command || "").trim();
+  if (!trimmed) return false;
+  // Bare command (no path): must be an allowlisted basename.
+  if (!trimmed.includes("/")) {
+    return ALLOWED_PI_COMMAND_BASENAMES.has(trimmed);
+  }
+  // Path-prefixed: the basename must be allowlisted.
+  const segments = trimmed.split("/").filter(Boolean);
+  const last = segments[segments.length - 1] || "";
+  return ALLOWED_PI_COMMAND_BASENAMES.has(last);
+}
+
 function commandAction({
   id,
   phase,
@@ -522,11 +550,26 @@ export async function defaultPiExecutor(action: PiAction, context: PiExecutorCon
     });
   }
 
+  // H6: non-runtime actions execute a command via spawnSync. The command must be
+  // on the allowlist of trusted yolo CLI entrypoints — a malformed/tampered plan
+  // must not be able to spawn an arbitrary binary. Reject anything else
+  // fail-closed rather than executing it.
+  const command = String(action.command || "");
+  if (!isAllowedPiCommand(command)) {
+    return {
+      status: "error",
+      summary: `${action.id} rejected: command "${command.slice(0, 80)}" is not an allowed PI executor entrypoint.`,
+      exit_code: null as unknown as number,
+      code: "PI_EXECUTOR_COMMAND_NOT_ALLOWED",
+      command,
+    };
+  }
+
   for (const file of (action.creates as string[]) || []) {
     mkdirSync(dirname(file), { recursive: true });
   }
 
-  const result = spawnSync(String(action.command), (action.args as string[]) || [], {
+  const result = spawnSync(command, (action.args as string[]) || [], {
     cwd: (action.cwd as string) || undefined,
     input: (action.stdin as string) || undefined,
     encoding: "utf8",

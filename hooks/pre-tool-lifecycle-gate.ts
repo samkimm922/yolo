@@ -202,8 +202,16 @@ function statusJsonPath() {
   return `${root}/.yolo/lifecycle/status.json`;
 }
 
-// Authorization = check stage completed or warning. Fail-closed on missing,
-// unreadable, or any other status (pending/blocked/active).
+// Authorization = check stage completed, OR warning with an explicit
+// warning-approval stamp. Fail-closed on missing, unreadable, or any other
+// status (pending/blocked/active).
+//
+// H4: a `warning` check status is NOT automatically authorization — a non-fatal
+// warning surface must be explicitly accepted by the operator
+// (`warning_approved: true` on the check stage, written by the check/accept
+// flow once the warnings are reviewed). Without that stamp, warning fails closed
+// like any other non-completed state. This prevents a warning-heavy check from
+// silently authorizing writes the operator never reviewed.
 function writesAuthorized() {
   const path = statusJsonPath();
   if (!existsSync(path)) return false;
@@ -217,7 +225,13 @@ function writesAuthorized() {
   const checkStage = stages.find((stage) => stage && stage.id === "check");
   if (!checkStage) return false;
   const status = String(checkStage.status || "").toLowerCase();
-  return status === "completed" || status === "warning";
+  if (status === "completed") return true;
+  if (status === "warning") {
+    // H4: warning authorizes only with an explicit approval stamp.
+    const approved = (checkStage as Record<string, unknown>).warning_approved;
+    return approved === true;
+  }
+  return false;
 }
 
 // Bash write-to-source heuristics. Conservative: only flag clear write surface.

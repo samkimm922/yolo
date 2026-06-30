@@ -77,11 +77,32 @@ describe("pre-tool-lifecycle-gate hook", () => {
     }
   });
 
-  test("allows Write to source when check stage is warning (non-fatal)", () => {
-    const root = mkdtempSync(join(tmpdir(), "yolo-gate-warning-"));
+  test("H4: blocks Write on warning without explicit warning_approved stamp", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-gate-warning-blocked-"));
     try {
       makeSourceTree(root);
       writeStatus(root, checkStages("warning"));
+      // No warning_approved stamp -> warning is NOT authorization (H4).
+      const result = runHook(root, {
+        tool_name: "Write",
+        tool_input: { file_path: join(root, "src/new.ts") },
+      });
+      assert.equal(result.exitCode, 2);
+      assert.match(result.stderr, /LIFECYCLE_WRITE_NOT_AUTHORIZED/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("H4: allows Write on warning when explicitly warning_approved", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-gate-warning-approved-"));
+    try {
+      makeSourceTree(root);
+      const stages = checkStages("warning");
+      // Mark the check stage with an explicit operator approval stamp.
+      const checkStage = stages.find((s) => s.id === "check");
+      if (checkStage) checkStage.warning_approved = true;
+      writeStatus(root, stages);
       const result = runHook(root, {
         tool_name: "Write",
         tool_input: { file_path: join(root, "src/new.ts") },
