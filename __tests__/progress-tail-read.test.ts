@@ -6,6 +6,11 @@ import { test } from "node:test";
 import { readJsonlTail, readJsonlSince, readTextTail } from "../src/lib/bounded-read.js";
 import { readLifecycleDashboard } from "../src/runtime/progress/lifecycle-dashboard.js";
 
+// L8: bounded-read now types entries as unknown[] (honest for JSON.parse).
+// Narrow to the record shape the assertions use.
+type TailEntry = Record<string, unknown>;
+const entriesOf = (r: { entries: unknown[] }): TailEntry[] => r.entries as TailEntry[];
+
 // Regression coverage for bounded tail reads on the progress dashboard.
 //
 // Previously the dashboard read entire JSONL/text log files into memory via
@@ -35,9 +40,9 @@ test("readJsonlTail: small files behave like readFileSync (no truncation)", () =
 
     const result = readJsonlTail(file);
     assert.ok(result);
-    assert.equal(result.entries.length, 3);
-    assert.equal(result.entries[0].type, "TASK_START");
-    assert.equal(result.entries[2].result, "completed");
+    assert.equal(entriesOf(result).length, 3);
+    assert.equal(entriesOf(result)[0].type, "TASK_START");
+    assert.equal(entriesOf(result)[2].result, "completed");
     assert.equal(result.meta.truncated, false);
     assert.equal(result.meta.totalBytes, statSync(file).size);
     assert.equal(result.meta.bytesRead, statSync(file).size);
@@ -72,7 +77,7 @@ test("readJsonlTail: large file returns only the bounded tail and flags truncati
     assert.equal(result.meta.totalBytes, totalSize);
     assert.ok(result.meta.bytesRead <= maxBytes, `bytesRead ${result.meta.bytesRead} must be <= ${maxBytes}`);
     // The most-recent marker entry must be present in the tail.
-    const last = result.entries[result.entries.length - 1];
+    const last = entriesOf(result)[entriesOf(result).length - 1];
     assert.equal(last.type, "DONE");
     assert.equal(last.marker, "tail-anchor");
     // We must NOT have materialized the whole file into a single buffer.
@@ -92,9 +97,9 @@ test("readJsonlTail: maxEntries caps the parsed entries (keeps newest)", () => {
 
     const result = readJsonlTail(file, { maxEntries: 5 });
     assert.ok(result);
-    assert.equal(result.entries.length, 5);
+    assert.equal(entriesOf(result).length, 5);
     // Newest 5 are indices 45..49
-    assert.deepEqual(result.entries.map((e) => e.i), [45, 46, 47, 48, 49]);
+    assert.deepEqual(entriesOf(result).map((e) => e.i), [45, 46, 47, 48, 49]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -112,7 +117,7 @@ test("readJsonlSince: incremental reads return only appended entries", () => {
     // First read from offset 0 → both entries.
     const first = readJsonlSince(file, 0);
     assert.ok(first);
-    assert.equal(first.entries.length, 2);
+    assert.equal(entriesOf(first).length, 2);
     assert.equal(first.rotated, false);
     assert.ok(first.nextOffset > 0);
 
@@ -124,8 +129,8 @@ test("readJsonlSince: incremental reads return only appended entries", () => {
     // Incremental read from the previous offset returns only the new entry.
     const second = readJsonlSince(file, first.nextOffset);
     assert.ok(second);
-    assert.equal(second.entries.length, 1);
-    assert.equal(second.entries[0].n, 3);
+    assert.equal(entriesOf(second).length, 1);
+    assert.equal(entriesOf(second)[0].n, 3);
     assert.equal(second.rotated, false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -153,7 +158,7 @@ test("readJsonlSince: log rotation (shrink below offset) is flagged and resets",
     assert.ok(after);
     assert.equal(after.rotated, true, "rotation must be flagged when file shrank below offset");
     // On rotation we re-read from 0: the new entry must appear.
-    assert.ok(after.entries.some((e) => e.type === "NEW"));
+    assert.ok(entriesOf(after).some((e) => e.type === "NEW"));
     // nextOffset must now reflect the fresh (smaller) file size.
     assert.equal(after.nextOffset, statSync(file).size);
   } finally {
@@ -232,7 +237,7 @@ test("memory bound: parsing a 60MB JSONL does not allocate a 60MB string", () =>
     assert.equal(result.meta.totalBytes, totalSize);
     assert.ok(result.meta.bytesRead <= maxBytes, "bounded read window respected for 60MB file");
     assert.equal(result.meta.truncated, true);
-    const last = result.entries[result.entries.length - 1];
+    const last = entriesOf(result)[entriesOf(result).length - 1];
     assert.equal(last.marker, "end");
   } finally {
     rmSync(dir, { recursive: true, force: true });

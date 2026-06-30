@@ -195,11 +195,37 @@ export function rotateTaskResults({
   unlinkSync = defaultUnlinkSync,
   now = () => new Date(),
   consoleLog = (...args) => console.log(...args),
+  consoleError = (...args) => console.error(...args),
 } = Object()) {
   if (!existsSync(resultsFile)) return { rotated: false };
   const bakFile = `${resultsFile.replace(".jsonl", "")}.bak.${now().toISOString().replace(/[-:T]/g, "").slice(0, 15)}`;
-  try { copyFileSync(resultsFile, bakFile); } catch (_) {}
-  try { unlinkSync(resultsFile); } catch (_) {}
+  // L3: previously both ops swallowed errors with empty catches, and a failed
+  // copy was followed by an unlink — silently dropping the previous results
+  // with no backup. Track each op's outcome and only unlink after a successful
+  // copy; surface partial failures instead of masking them.
+  let copyError: unknown = null;
+  try {
+    copyFileSync(resultsFile, bakFile);
+  } catch (error) {
+    copyError = error;
+  }
+  if (copyError) {
+    // Backup failed — do NOT delete the original (would lose results with no archive).
+    consoleError(`[yolo-runner] 归档失败:无法复制 ${resultsFile} -> ${bakFile}: ${copyError instanceof Error ? copyError.message : String(copyError)}; 保留原文件`);
+    return { rotated: false, bakFile: null, copyError: copyError instanceof Error ? copyError.message : String(copyError) };
+  }
+  let unlinkError: unknown = null;
+  try {
+    unlinkSync(resultsFile);
+  } catch (error) {
+    unlinkError = error;
+  }
+  if (unlinkError) {
+    // Copy succeeded but original still present — non-fatal, but surface it.
+    consoleError(`[yolo-runner] 归档警告:已备份到 ${bakFile} 但无法删除原文件 ${resultsFile}: ${unlinkError instanceof Error ? unlinkError.message : String(unlinkError)}`);
+    consoleLog(`[yolo-runner] 已归档上次结果: ${bakFile} (原文件保留)`);
+    return { rotated: true, bakFile, unlinkError: unlinkError instanceof Error ? unlinkError.message : String(unlinkError) };
+  }
   consoleLog(`[yolo-runner] 已归档上次结果: ${bakFile}`);
   return { rotated: true, bakFile };
 }

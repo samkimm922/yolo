@@ -42,18 +42,18 @@ export interface BoundedReadMeta {
 
 /** Result of a JSONL tail read. */
 export interface JsonlTailResult {
-  /** Parsed JSON entries from the last lines (oldest → newest). Typed `any`
-   *  to match the prior `JSON.parse` ergonomics so callers can access fields
-   *  without per-site cast. */
-  entries: any[];
+  /** Parsed JSON entries from the last lines (oldest → newest). `unknown` is the
+   * honest type for arbitrary JSON.parse output; consumers narrow to the shape
+   * they expect (e.g. `Array<Record<string, unknown>>`). */
+  entries: unknown[];
   meta: BoundedReadMeta;
 }
 
 /** Result of an incremental JSONL read keyed on a byte offset. */
 export interface JsonlSinceResult {
-  /** New entries appended after `sinceByte` (oldest → newest). Typed `any` to
-   * match prior `JSON.parse` ergonomics. */
-  entries: any[];
+  /** New entries appended after `sinceByte` (oldest → newest). `unknown` is the
+   * honest type for arbitrary JSON.parse output; consumers narrow at use. */
+  entries: unknown[];
   /** New byte offset to pass on the next call (end-of-file). */
   nextOffset: number;
   /** True when the file shrank below `sinceByte` (rotation/truncation); the
@@ -171,9 +171,9 @@ function alignToLineStart(buf: Buffer, isTail: boolean): Buffer {
  * the previous `lines.map(JSON.parse).filter(Boolean)` pattern. Caps the number
  * of returned entries at `maxEntries` (keeping the newest).
  */
-function parseJsonlLines(text: string, maxEntries: number): any[] {
+function parseJsonlLines(text: string, maxEntries: number): unknown[] {
   const lines = text.split("\n");
-  const entries: any[] = [];
+  const entries: unknown[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!line) continue;
