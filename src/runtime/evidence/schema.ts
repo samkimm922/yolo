@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 export const EVIDENCE_SCHEMA_VERSION = "1.0";
 export const LEDGER_EVENT_SCHEMA = "yolo.ledger.event.v1";
@@ -71,7 +71,41 @@ function omitHashFields(value: EvidenceObject = Object(), fields: string[] = [])
 }
 
 export function ledgerRecordHash(record: EvidenceObject = Object()): string {
-  return sha256Evidence(omitHashFields(record, ["record_hash"]));
+  // record_sig is excluded so adding/removing a signature does not change the
+  // content hash (the sig is over record_hash+prev_hash, not the other way round).
+  return sha256Evidence(omitHashFields(record, ["record_hash", "record_sig"]));
+}
+
+// H3: HMAC-signed record hash. The plain ledgerRecordHash is a content hash
+// with no key, so anyone who can appendFileSync can forge a valid chain. When a
+// project HMAC key is available, records carry a record_sig computed with that
+// key over the (record_hash, prev_hash) tuple; validation requires the sig to
+// verify. This makes append-only write access insufficient to forge a chain —
+// the attacker also needs the project HMAC key.
+//
+// The key is resolved by the caller (project-rooted, e.g.
+// <stateRoot>/keys/ledger.hmac) and passed through options; when no key is
+// configured the system falls back to plain-hash validation (backward-
+// compatible with existing ledger records).
+export function ledgerRecordSig(record: EvidenceObject = Object(), hmacKey: string): string {
+  const material = {
+    record_hash: String(record.record_hash || ""),
+    prev_hash: record.prev_hash ?? null,
+  };
+  return createHmac(EVIDENCE_HASH_ALGORITHM, hmacKey).update(stableEvidenceJson(material)).digest("hex");
+}
+
+export function verifyLedgerRecordSig(record: EvidenceObject = Object(), hmacKey: string): boolean {
+  const sig = String(record.record_sig || "");
+  if (!sig) return false;
+  try {
+    const expected = ledgerRecordSig(record, hmacKey);
+    if (sig.length !== expected.length) return false;
+    // Constant-time compare to avoid timing oracles.
+    return timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  } catch {
+    return false;
+  }
 }
 
 export function evidenceArtifactDigest(artifact: EvidenceObject = Object()): string {
@@ -112,10 +146,17 @@ export function buildLedgerRecord<TData extends EvidenceObject = EvidenceObject>
     prev_hash: payloadPrevHash ?? options.prevHash ?? options.prev_hash ?? null,
     ...rest,
   };
-  return {
+  const withHash = {
     ...record,
     record_hash: ledgerRecordHash(record),
-  } as EvidenceLedgerRecord & TData;
+  };
+  // H3: when a project HMAC key is provided, attach a record_sig so the chain
+  // cannot be forged by append-only write access alone.
+  const hmacKey = options.hmacKey || options.hmac_key;
+  if (typeof hmacKey === "string" && hmacKey.length > 0) {
+    return { ...withHash, record_sig: ledgerRecordSig(withHash, hmacKey) } as unknown as EvidenceLedgerRecord & TData;
+  }
+  return withHash as EvidenceLedgerRecord & TData;
 }
 
 export function buildEvidenceArtifact<TPayload extends EvidenceObject = EvidenceObject>(
@@ -150,7 +191,7 @@ export function buildEvidenceArtifact<TPayload extends EvidenceObject = Evidence
   } as EvidenceArtifactRecord & TPayload;
 }
 
-export function validateLedgerRecord(record: unknown = Object()): EvidenceValidationResult {
+export function validateLedgerRecord(record: unknown = Object(), options: { hmacKey?: string } = Object()): EvidenceValidationResult {
   const errors: string[] = [];
   // ledger.jsonl files live on disk and may be corrupted by partial flushes,
   // SIGKILL mid-write, or external edits (the same boundary that readJsonl in
@@ -175,6 +216,18 @@ export function validateLedgerRecord(record: unknown = Object()): EvidenceValida
   else if (ledgerRecord.prev_hash !== null && !requiredString(ledgerRecord.prev_hash)) errors.push("prev_hash must be null or a hash string");
   if (!requiredString(ledgerRecord.record_hash)) errors.push("record_hash is required");
   else if (ledgerRecord.record_hash !== ledgerRecordHash(ledgerRecord)) errors.push("record_hash does not match record payload");
+  // H3: HMAC signature verification. When a project HMAC key is configured OR a
+  // record carries a record_sig, the sig must verify against the key. A record
+  // with record_sig but no key (key removed) fails closed — the chain was
+  // signed and can no longer be trusted without the key.
+  const hasSig = Boolean(ledgerRecord.record_sig);
+  const hmacKey = options.hmacKey;
+  if (hmacKey) {
+    if (!hasSig) errors.push("record_sig is required when a ledger HMAC key is configured");
+    else if (!verifyLedgerRecordSig(ledgerRecord, hmacKey)) errors.push("record_sig does not verify against the configured ledger HMAC key");
+  } else if (hasSig) {
+    errors.push("record_sig present but no ledger HMAC key configured to verify it");
+  }
   return {
     ok: errors.length === 0,
     errors,
