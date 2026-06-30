@@ -524,8 +524,15 @@ function warningApprovalDigest({ prdPath, mode, warnings = [] }: { prdPath: stri
 }
 
 function approvalValueMatches(value: unknown, expected: unknown): boolean {
-  if (!expected) return true;
-  return clean(value) === clean(expected);
+  // M5: previously `if (!expected) return true` — a missing expected value
+  // auto-matched any artifact value, including for key fields (prd_path, mode).
+  // For key fields a missing expected must NOT auto-match: if the artifact
+  // carries a value the caller didn't expect (or expect is unset), treat it as
+  // a mismatch so the approval is flagged for review rather than silently pass.
+  const expectedStr = clean(expected);
+  const valueStr = clean(value);
+  if (!expectedStr) return !valueStr;
+  return valueStr === expectedStr;
 }
 
 function hasApprovalAuditFields(approval: ApprovalArtifact = Object()): boolean {

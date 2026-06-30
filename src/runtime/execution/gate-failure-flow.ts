@@ -53,7 +53,11 @@ export function handleGateFailureFlow({
     reason: (gate.stdout || "").slice(0, 200),
   }));
 
-  const failures = analyzeFromGateLog(task.id, runtimeDir) ||
+  // M3: analyzeFromGateLog now returns { failures, unreadable }. Unwrap the
+  // failures array; when the log is unreadable we fall through to output
+  // analysis (the historical signal is unavailable, not "no failures").
+  const gateLogAnalysis = analyzeFromGateLog(task.id, runtimeDir);
+  const failures = gateLogAnalysis.failures ||
     analyzeOutput((gate.stdout || "").slice(0, 500));
   const gateFailure = summarizeFailures({
     failures,

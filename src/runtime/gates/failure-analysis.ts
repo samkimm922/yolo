@@ -1,30 +1,50 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-export function analyzeFailureFromGateLog(taskId, logDir) {
-  if (!taskId || !logDir || !existsSync(logDir)) return null;
+// M3: distinguish "no failures" from "couldn't read/parse". Previously every
+// error path returned null, which callers treated as "no historical failures" —
+// masking unreadable or corrupt gate logs.
+export type FailureAnalysisResult = {
+  /** null = genuinely no failures; the array = the failed gates. */
+  failures: unknown[] | null;
+  /** true when the analysis could not be completed (unreadable/corrupt log). */
+  unreadable: boolean;
+  reason?: string;
+};
+
+export function analyzeFailureFromGateLog(taskId, logDir): FailureAnalysisResult {
+  if (!taskId || !logDir || !existsSync(logDir)) {
+    return { failures: null, unreadable: false };
+  }
   try {
     const files = readdirSync(logDir)
       .filter((file) => file.startsWith(`gate-${taskId}-`) && file.endsWith(".json"))
       .sort();
-    if (!files.length) return null;
+    if (!files.length) return { failures: null, unreadable: false };
 
     const latest = files[files.length - 1];
     const data = JSON.parse(readFileSync(join(logDir, latest), "utf8"));
-    if (!Array.isArray(data.gates)) return null;
+    if (!Array.isArray(data.gates)) {
+      // Parsed but no gates array — corrupt log; surface as unreadable.
+      return { failures: null, unreadable: true, reason: "gate log has no gates array" };
+    }
 
     const failedGates = data.gates.filter((gate) => gate.passed === false);
-    if (!failedGates.length) return null;
+    if (!failedGates.length) return { failures: null, unreadable: false };
 
-    return failedGates.map((gate) => ({
-      id: gate.id || gate.name,
-      type: gate.type || gate.name,
-      detail: gate.detail || gate.message || `${gate.name} 失败`,
-      severity: gate.severity,
-      rules: [gate.type || gate.name],
-    }));
-  } catch {
-    return null;
+    return {
+      failures: failedGates.map((gate) => ({
+        id: gate.id || gate.name,
+        type: gate.type || gate.name,
+        detail: gate.detail || gate.message || `${gate.name} 失败`,
+        severity: gate.severity,
+        rules: [gate.type || gate.name],
+      })),
+      unreadable: false,
+    };
+  } catch (error) {
+    // Read/parse failure — surface as unreadable rather than "no failures".
+    return { failures: null, unreadable: true, reason: error instanceof Error ? error.message : String(error) };
   }
 }
 

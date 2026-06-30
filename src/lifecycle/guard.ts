@@ -862,7 +862,17 @@ export function inspectLifecycleDrift(projectRoot: string): LifecycleDriftResult
   try {
     status = JSON.parse(readFileSync(statusPath, "utf8"));
   } catch {
-    return { has_drift: false, drift_records };
+    // M6: a corrupt/unparseable status.json must NOT be reported as "no drift"
+    // (has_drift:false) — that masks tampering or partial flushes. Surface it
+    // as drift so the operator is forced to reconcile the lifecycle state.
+    drift_records.push({
+      stage: "status",
+      code: "LIFECYCLE_STATUS_CORRUPT",
+      declared: "parseable lifecycle status.json",
+      actual: "corrupt or unparseable status.json",
+      message: "status.json could not be parsed; lifecycle state is unverifiable",
+    });
+    return { has_drift: true, drift_records };
   }
   // Filter null/non-object entries from a corrupted-but-valid-JSON stages
   // array up front; downstream `entry.status` access would otherwise crash on
