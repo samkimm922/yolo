@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -693,6 +693,12 @@ export function inspectPrdContract(prd, options = Object()) {
 function readPrd(path) {
   const resolved = resolve(process.cwd(), path);
   if (!existsSync(resolved)) throw new Error(`PRD not found: ${path}`);
+  // H10: bound PRD reads (8MiB) so a hostile/oversized PRD cannot OOM the doctor.
+  const PRD_MAX_BYTES = 8 * 1024 * 1024;
+  const size = statSync(resolved).size;
+  if (size > PRD_MAX_BYTES) {
+    throw new Error(`PRD exceeds ${PRD_MAX_BYTES} byte limit (${size} bytes): ${path}`);
+  }
   return JSON.parse(readFileSync(resolved, "utf8"));
 }
 
