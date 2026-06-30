@@ -5,9 +5,10 @@ import { fileURLToPath } from "node:url";
 import { inspectLifecycleGuard } from "../../src/lifecycle/guard.js";
 import { initLifecycleState } from "../../src/lifecycle/state.js";
 import { writeLifecycleStageReport } from "../../src/lifecycle/progress.js";
-import { signApproval, generateApprovalKeyPair } from "../../src/lib/security/approval-signing.js";
+import { signApproval, generateApprovalKeyPair, approvalSignablePayload } from "../../src/lib/security/approval-signing.js";
 import { isStructuredManualAcceptanceEvidence } from "../../src/lifecycle/manual-acceptance.js";
 import { manualAcceptanceSignable } from "../../src/lifecycle/manual-acceptance-keys.js";
+import { approvalFromArtifact } from "../../src/runtime/acceptance/report.js";
 
 type LifecycleBatteryResult = {
   id: string;
@@ -97,7 +98,84 @@ export function runLifecycleBattery(): LifecycleBatteryResult[] {
   // payload must pass verification (and lift the manual-criteria block).
   results.push(runRealSignedEvidenceCase());
 
+  // CR2: a release approval artifact that carries a signature must verify against
+  // the project-rooted key. With NO key installed, a signature present cannot be
+  // proven valid → must block (never advisory).
+  results.push(runForgedApprovalSignatureCase());
+  // CR2 negative: the same artifact signed against the installed key passes.
+  results.push(runValidApprovalSignatureCase());
+
   return results;
+}
+
+// CR2: drive the approval-artifact signature verifier directly via
+// approvalFromArtifact (the same function buildAcceptanceReport uses). This
+// isolates the CR2 signature decision from the rest of the acceptance pipeline
+// (which would need a fully-populated PRD/runReport to reach the signature
+// branch). approvalFromArtifact reads the artifact file from disk and verifies
+// any present signature against the project-rooted key.
+function runApprovalSignatureCase(root: string, approval: Record<string, unknown>): string[] {
+  const stateRoot = join(root, ".yolo");
+  writeText(join(stateRoot, "lifecycle", "acceptance-approval.json"), `${JSON.stringify(approval, null, 2)}\n`);
+  const result = approvalFromArtifact(
+    join(stateRoot, "lifecycle", "acceptance-approval.json"),
+    { prd_path: "", mode: "release", warning_count: 0, warning_digest: "" },
+    root,
+  ) as { invalid_reasons?: Array<{ code?: string }> };
+  return (result.invalid_reasons || []).map((reason) => String(reason.code || ""));
+}
+
+function runForgedApprovalSignatureCase(): LifecycleBatteryResult {
+  const root = mkdtempSync(join(tmpdir(), "yolo-cr2-forged-approval-"));
+  try {
+    // NO project key installed — a signature present cannot be verified.
+    const codes = runApprovalSignatureCase(root, {
+      approved: true,
+      approved_by: "operator",
+      approved_at: "2026-06-30T00:00:00.000Z",
+      mode: "release",
+      signature: "FORGED-SIGNATURE-PAYLOAD-TAMPERED",
+    });
+    const blocked = codes.some((code) => code.includes("SIGNATURE_INVALID"));
+    return {
+      id: "forged_signature_without_pubkey_blocks",
+      category: "lifecycle_manual_acceptance_safety",
+      expect: "blocked",
+      actualExit: blocked ? 1 : 0,
+      actualStatus: blocked ? "blocked" : "pass",
+      correct: blocked,
+    };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function runValidApprovalSignatureCase(): LifecycleBatteryResult {
+  const root = mkdtempSync(join(tmpdir(), "yolo-cr2-valid-approval-"));
+  try {
+    const privateKeyPem = installTrustedPublicKey(root);
+    const approval: Record<string, unknown> = {
+      approved: true,
+      approved_by: "operator",
+      approved_at: "2026-06-30T00:00:00.000Z",
+      mode: "release",
+    };
+    // Sign the canonical approval payload with the installed key's private half.
+    approval.signature = signApproval(approvalSignablePayload(approval), privateKeyPem);
+    const codes = runApprovalSignatureCase(root, approval);
+    // A valid signature must introduce NO signature-related invalid reason.
+    const cleanSignature = codes.filter((code) => code.includes("SIGNATURE")).length === 0;
+    return {
+      id: "valid_signature_with_pubkey_passes",
+      category: "lifecycle_manual_acceptance_safety",
+      expect: "pass",
+      actualExit: cleanSignature ? 0 : 1,
+      actualStatus: cleanSignature ? "pass" : "blocked",
+      correct: cleanSignature,
+    };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
 
 // CR1 direct checks against the verifier (no full lifecycle needed): isolate
