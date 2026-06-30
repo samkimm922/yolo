@@ -8,6 +8,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isSafePathComponent } from "../../lib/security/path-guard.js";
 import { redact, redactDeep } from "../../lib/security/redact.js";
+import { withLedgerAppendLock } from "../evidence/ledger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "../../..");
@@ -86,7 +87,12 @@ export function writeTaskLog(taskId: string, entry: TaskLogEntry) {
     const runContext = taskLogRunId ? { run_id: taskLogRunId } : {};
     const safeEntry = redactDeep(entry || Object());
     const line = JSON.stringify({ ts: isoLocal(), ...safeEntry, task_id: taskId, ...runContext }) + "\n";
-    appendFileSync(join(taskLogsDir, `${taskId}.jsonl`), line, { encoding: "utf8", mode: 0o600 });
+    const logPath = join(taskLogsDir, `${taskId}.jsonl`);
+    // H8: serialize appends under the ledger lock so concurrent log writes don't
+    // interleave past PIPE_BUF and corrupt lines.
+    withLedgerAppendLock(logPath, {}, () => {
+      appendFileSync(logPath, line, { encoding: "utf8", mode: 0o600 });
+    });
   } catch (e) {
     console.error('[task-logger] writeTaskLog 失败:', e instanceof Error ? e.message : String(e));
     // crash-safe: 日志写入失败不阻塞主流程

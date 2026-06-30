@@ -2,6 +2,7 @@ import { appendFileSync } from "node:fs";
 import { redactDeep } from "../../lib/security/redact.js";
 import { writeStateAtomic } from "../persist/atomic-state.js";
 import { readJsonFileBounded } from "../../lib/bounded-read.js";
+import { withLedgerAppendLock } from "../evidence/ledger.js";
 
 type TaskStateRecord = Record<string, unknown>;
 
@@ -112,26 +113,36 @@ export function normalizeTaskResultRecord(record: TaskResultRecord = Object(), o
 export function appendTaskResult(resultsFile: Parameters<typeof appendFileSync>[0], record: TaskResultRecord, options: TaskResultOptions = Object()) {
   const payload = normalizeTaskResultRecord(record, options);
   const safe = redactDeep(payload);
-  appendFileSync(resultsFile, `${JSON.stringify(safe)}\n`, "utf8");
-  return payload;
+  // H8: serialize appends under the ledger lock so concurrent task-result
+  // writes (across workers) don't interleave past PIPE_BUF and corrupt lines.
+  return withLedgerAppendLock(String(resultsFile), {}, () => {
+    appendFileSync(resultsFile, `${JSON.stringify(safe)}\n`, "utf8");
+    return payload;
+  });
 }
 
 export function updatePrdTaskStatusFile(prdPath: string, taskId: string, update: TaskStateRecord) {
-  try {
-    const prd = readJsonFileBounded<PrdDocument>(prdPath, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
-    // Guard: legacy/migrated PRDs may contain null/non-object entries inside `tasks`.
-    // Without this, `.find((item) => item.id === taskId)` throws TypeError on null
-    // entries, which is caught by the outer try/catch and silently reported as
-    // `write_failed` — dropping the status update for an otherwise-valid task.
-    const task = (Array.isArray(prd.tasks) ? prd.tasks : []).find(
-      (item) => item && typeof item === "object" && item.id === taskId,
-    );
-    if (!task) return { wrote: false, reason: "task_not_found" };
+  // H9: the read→Object.assign→writeStateAtomic read-modify-write is only atomic
+  // at the final rename. Two workers updating different tasks would race: both
+  // read the same PRD, each applies one task update, and the second write clobbers
+  // the first (lost update). Wrap the whole RMW in the cross-worker ledger lock.
+  return withLedgerAppendLock(prdPath, {}, () => {
+    try {
+      const prd = readJsonFileBounded<PrdDocument>(prdPath, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
+      // Guard: legacy/migrated PRDs may contain null/non-object entries inside `tasks`.
+      // Without this, `.find((item) => item.id === taskId)` throws TypeError on null
+      // entries, which is caught by the outer try/catch and silently reported as
+      // `write_failed` — dropping the status update for an otherwise-valid task.
+      const task = (Array.isArray(prd.tasks) ? prd.tasks : []).find(
+        (item) => item && typeof item === "object" && item.id === taskId,
+      );
+      if (!task) return { wrote: false, reason: "task_not_found" };
 
-    Object.assign(task, update);
-    writeStateAtomic(prdPath, prd);
-    return { wrote: true, task, prd };
-  } catch (error) {
-    return { wrote: false, reason: "write_failed", error };
-  }
+      Object.assign(task, update);
+      writeStateAtomic(prdPath, prd);
+      return { wrote: true, task, prd };
+    } catch (error) {
+      return { wrote: false, reason: "write_failed", error };
+    }
+  });
 }

@@ -209,6 +209,7 @@ function runRunnerCase(testCase: RunnerBatteryCase): CaseResult {
 async function computeQuality() {
   const providerResults = await runProviderBattery();
   const shipResults = await runShipBattery();
+  const parallelResults = await runParallelBattery();
   const results = [
     ...CHECK_BATTERY.map(runCheckCase),
     ...ACCEPTANCE_BATTERY.map(runAcceptanceCase),
@@ -216,7 +217,7 @@ async function computeQuality() {
     ...RUNNER_BATTERY.map(runRunnerCase),
     ...providerResults,
     ...runConfigBattery(),
-    ...runParallelBattery(),
+    ...parallelResults,
     ...runReleaseBattery(),
     ...runEvidenceBattery(),
     ...shipResults,
