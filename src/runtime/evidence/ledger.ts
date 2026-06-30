@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
+import { readJsonlTail } from "../../lib/bounded-read.js";
 import {
   buildLedgerRecord,
   buildEvidenceArtifact,
@@ -244,7 +245,20 @@ function readJsonlRecords(filePath: string, options: LedgerOptions = Object()): 
     });
 }
 
+// L6: previousRecordHash previously read the WHOLE file (readJsonlRecords) and
+// scanned from the end — O(N) in ledger size on every append. The head hash is
+// always in the most recent records, so a bounded tail read is sufficient and
+// O(1)-ish in the file size. Fall back to a full read only if the tail window
+// somehow lacks a record_hash (e.g. a long run of hash-less records).
 function previousRecordHash(filePath: string): unknown {
+  const tail = readJsonlTail(filePath, { maxEntries: 64, maxBytes: 256 * 1024 });
+  if (tail && Array.isArray(tail.entries)) {
+    for (let index = tail.entries.length - 1; index >= 0; index -= 1) {
+      const record = tail.entries[index];
+      if (isRecord(record) && record.record_hash) return record.record_hash;
+    }
+  }
+  // Fallback: full read (rare — only when the tail window has no hash).
   const records = readJsonlRecords(filePath, { throwOnReadError: true });
   for (let index = records.length - 1; index >= 0; index -= 1) {
     const record = records[index];

@@ -284,11 +284,12 @@ function readReviewLog() {
     // are exact whenever the log fits the window.
     const tail = readJsonlTail(logFile, { maxBytes: LOG_TAIL_MAX_BYTES, maxEntries: LOG_TAIL_MAX_ENTRIES });
     if (!tail) return null;
-    const entries = tail.entries;
+    // L8: bounded-read entries are unknown[]; narrow to the record shape this consumer uses.
+    const entries = tail.entries as Array<Record<string, unknown>>;
     if (entries.length === 0) return null;
     const latest = entries[entries.length - 1];
     const rounds = entries.filter((e) => e?.type === "unified-review");
-    const totalBugs = rounds.reduce((sum, r) => sum + (r.bugs_found || 0), 0);
+    const totalBugs = rounds.reduce((sum, r) => sum + (Number(r.bugs_found) || 0), 0);
     return redactDeep({
       currentRound: latest.round || 0,
       totalRounds: rounds.length,
@@ -296,7 +297,7 @@ function readReviewLog() {
       latestStatus:
         latest.type === "error"
           ? "error"
-          : latest.bugs_found > 0
+          : Number(latest.bugs_found) > 0
             ? "bugs_found"
             : "clean",
       latestBugs: latest.bugs_found || 0,
@@ -321,7 +322,8 @@ function readTaskLogSummaries() {
       const filePath = join(taskLogsDir, f);
       const stat = statSync(filePath);
       const tail = readJsonlTail(filePath, { maxBytes: LOG_TAIL_MAX_BYTES, maxEntries: LOG_TAIL_MAX_ENTRIES });
-      const entries = tail ? tail.entries.map((entry) => redactDeep(entry)) : [];
+      // L8: narrow unknown[] entries to the record shape before redact.
+      const entries = tail ? (tail.entries as Array<Record<string, unknown>>).map((entry) => redactDeep(entry)) : [];
       const startEntry = entries.find((e) => e?.type === "TASK_START");
       const doneEntry = [...entries].reverse().find((e) => e?.type === "DONE");
       const hasError = entries.some((e) => e?.type === "ERROR");
@@ -403,10 +405,13 @@ export function gracefulShutdownProgressServer(reason: string, exitCode = 0): vo
   for (const watcher of [taskLogsWatcher, currentRunWatcher, reviewLogWatcher, selfWatcher]) {
     try { watcher?.close(); } catch { /* best-effort */ }
   }
+  // L5: clear the polling resync interval too.
+  try { if (taskLogsPollInterval) clearInterval(taskLogsPollInterval); } catch { /* best-effort */ }
   if (reason) process.stderr.write(`[progress-server] shutting down (${reason})\n`);
   process.exit(exitCode);
 }
 let taskLogsWatcher = null;
+let taskLogsPollInterval = null; // L5: polling resync fallback for fs.watch event loss
 let currentRunWatcher = null;
 let reviewLogWatcher = null;
 let fileWatchersStarted = false;
@@ -617,6 +622,38 @@ function startFileWatchers() {
       });
     }
   } catch { /* 目录不存在或无法监听 */ }
+
+  // L5: fs.watch can drop events (especially on macOS/network FS). Add a polling
+  // resync that re-scans the task-logs dir every few seconds and pushes any
+  // incremental entries the event watcher missed. This is the reliability floor
+  // underneath the event-based watcher.
+  taskLogsPollInterval = setInterval(() => {
+    try {
+      if (!existsSync(taskLogsDir)) return;
+      for (const filename of readdirSync(taskLogsDir)) {
+        if (!filename.endsWith(".jsonl")) continue;
+        const taskId = filename.replace(".jsonl", "");
+        const filePath = join(taskLogsDir, filename);
+        for (const client of sseClients) {
+          const state = Object.assign(Object(), client);
+          const lastPos = state.taskLogPositions.get(taskId) || 0;
+          const { entries, totalBytes } = readTaskLogIncremental(filePath, lastPos);
+          state.taskLogPositions.set(taskId, totalBytes);
+          if (entries.length > 0) {
+            try {
+              state.res.write(`event: task-log\ndata: ${JSON.stringify({ taskId, entries })}\n\n`);
+              refreshSseIdleTimeout(client);
+            } catch {
+              closeSseClient(client);
+            }
+          }
+        }
+      }
+    } catch { /* best-effort resync */ }
+  }, 5000);
+  // L5: unref so the polling interval does not keep the Node process (or tests)
+  // alive on its own — it only fires while the server is running.
+  if (taskLogsPollInterval && typeof taskLogsPollInterval.unref === "function") taskLogsPollInterval.unref();
 
   // 监听 current-run.json 变化（用 watchFile 做轮询式监听，更可靠）
   if (existsSync(CURRENT_RUN_FILE)) {
