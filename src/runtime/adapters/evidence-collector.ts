@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { resolveProjectContext } from "../../packs/resolver.js";
 import { asArray, selectedAcceptanceAdapter } from "../gates/readiness-policy.js";
@@ -157,15 +157,53 @@ function normalizeCommand(entry: Record<string, unknown> | string = Object(), in
   };
 }
 
-function readJsonEvidence(path: string): Record<string, unknown> | null {
+// H10: bound evidence reads to DEFAULT_JSON_FILE_MAX_BYTES (8MiB). An unbounded
+// readFileSync (and the catch path's SECOND unbounded read) let a huge or
+// hostile evidence file OOM the collector. A size violation is a structured
+// error record, not a crash or a silent empty result.
+const EVIDENCE_MAX_BYTES = 8 * 1024 * 1024;
+
+export function readJsonEvidence(path: string): Record<string, unknown> | null {
   if (!path || !existsSync(path)) return null;
+  // H11: open by path ONCE and read from the fd, closing the existsSync→
+  // readFileSync TOCTOU window (a symlink swapped between exists and read would
+  // be followed by the path-based read). fstat on the fd gives the size for the
+  // H10 bound without a separate path stat.
+  let fd: number | null = null;
   try {
-    return JSON.parse(readFileSync(path, "utf8"));
+    fd = openSync(path, "r");
   } catch (error) {
     return {
-      parse_error: (error as { message?: string })?.message ?? String(error),
-      raw: truncate(readFileSync(path, "utf8")),
+      parse_error: `cannot open evidence file: ${(error as { message?: string })?.message ?? String(error)}`,
     };
+  }
+  try {
+    // H10: size-cap before reading (fail-closed on oversized evidence).
+    const size = fstatSync(fd).size;
+    if (size > EVIDENCE_MAX_BYTES) {
+      return {
+        parse_error: `evidence file exceeds ${EVIDENCE_MAX_BYTES} byte limit (${size} bytes)`,
+        size_limit_exceeded: true,
+        size_bytes: size,
+      };
+    }
+    const content = readFileSync(fd, "utf8");
+    try {
+      return JSON.parse(content);
+    } catch (error) {
+      return {
+        parse_error: (error as { message?: string })?.message ?? String(error),
+        raw: truncate(content),
+      };
+    }
+  } catch (error) {
+    return {
+      parse_error: `cannot read evidence file: ${(error as { message?: string })?.message ?? String(error)}`,
+    };
+  } finally {
+    if (fd !== null) {
+      try { closeSync(fd); } catch { /* close is advisory; fd leaks are bounded by process exit */ }
+    }
   }
 }
 

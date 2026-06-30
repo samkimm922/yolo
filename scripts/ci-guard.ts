@@ -215,7 +215,7 @@ const PATH_GUARD_WINDOW = 3;
 // `relative/path` or `relative/path:line` -> audit reason. Add ONLY with a written audit
 // explaining why the path cannot reach untrusted content or stays within root.
 const PATH_GUARD_ALLOWLIST: Record<string, string> = {
-  "src/runtime/adapters/evidence-collector.ts:180": "resolve(projectRoot, stateRoot, 'state/evidence/adapters', fileName) — internal output path under stateRoot from fixed segments; not an external-content read.",
+  "src/runtime/adapters/evidence-collector.ts:218": "resolve(projectRoot, stateRoot, 'state/evidence/adapters', fileName) — internal output path under stateRoot from fixed segments; not an external-content read.",
 };
 
 export function inspectShellInjectionGuard() {

@@ -8,6 +8,10 @@ import { cleanCliText, defaultYoloRoot } from "./shared.js";
 
 function readJsonMaybe(file: string): unknown {
   try {
+    // H10: bound PRD discovery reads (8MiB) so a hostile/oversized PRD cannot OOM discovery.
+    const PRD_MAX_BYTES = 8 * 1024 * 1024;
+    const size = statSync(file).size;
+    if (size > PRD_MAX_BYTES) return null;
     return JSON.parse(readFileSync(file, "utf8"));
   } catch {
     return null;

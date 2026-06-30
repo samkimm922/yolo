@@ -83,10 +83,10 @@ YOLO 现在不是一团完全不能用的脚本堆；它已经有 SDK 入口、P
 - 外部安装 smoke 已覆盖 `createYoloSdk()`、`sdk.project.initProject()`、`sdk.agents.createPiPlan()` 和 `sdk.runtime.runRunner()` pending dry-run task，验证 package root 不产生 `state/`、`data/`、`logs/`，项目状态归入 consumer `.yolo`。
 - `__tests__/runner-state-root.test.mjs` 已覆盖 SDK 调真实 runner 执行 pending `dry_run_artifact` task，并验证 run report、progress snapshot、contract evidence、task-results、task-log 都写入 consumer `.yolo`，package root 不生成对应 run report。
 - `docs/api-reference.md`、`docs/fixture-matrix.md`、root CHANGELOG、docs CHANGELOG 和 `docs/memory/` 已覆盖 public beta API、fixture matrix、runtime adapter contract、provider/runtime matrix、provider CLI dry-run matrix、workflow target smoke、workflow rules/trigger index、hardening drill、controlled decision gate、operator state helper、operator runbook gate、post-release audit gate、stable graduation gate、manual external release evidence gate、P28-P39 evidence gates、runtime boundary candidate、memory center 状态、document governance 和剩余 release blockers；release readiness 会检查核心 public docs，package smoke 会检查 memory docs 进入 tarball。
-- 当前文档结构事实由 `docs-truth-sync` 锁住：`src/**/*.ts` 229 个、`__tests__/*.test.ts` 208 个、`docs/**/*.md` 21 个、根目录 `.ts` 7 个。
+- 当前文档结构事实由 `docs-truth-sync` 锁住：`src/**/*.ts` 229 个、`__tests__/*.test.ts` 209 个、`docs/**/*.md` 21 个、根目录 `.ts` 7 个。
 - 根目录和子目录共有 56 个带 shebang 的 `.mjs`/`.sh` 脚本。
 - `runner.ts` 13 行，是兼容 CLI/import entrypoint；实现已迁入 `src/runtime/runner-core.ts`，并继续拆出 `src/runtime/runner-core-helpers.ts`、`src/runtime/progress/embedded-server.ts`、`src/runtime/run-lifecycle/shutdown.ts`、`context.ts`、`progress-log.ts`、`recovery-checkpoints.ts`、`task-runtime-bindings.ts`、`process-handlers.ts` 和 `runtime-api-freeze.ts`；review/retry/run lifecycle pipeline、task execution loop、main loop、split PRD 写回、shutdown/timeout/fatal cleanup、context/checkpoint/process bindings 已拆到 internal runtime modules。
-- `src/**/*.ts` 229 个，`__tests__/*.test.ts` 208 个；`docs/yolo-public-sdk-progress.md` 与本文的结构数字已由 `docs-truth-sync` 测试锁住。
+- `src/**/*.ts` 229 个，`__tests__/*.test.ts` 209 个；`docs/yolo-public-sdk-progress.md` 与本文的结构数字已由 `docs-truth-sync` 测试锁住。
 - spec governance gate 已抽到 `src/runtime/gates/spec-governance-gate.mjs`，并由 `prd-preflight.mjs`、runner runtime 和 `runner.mjs` 执行前统一调用。
 - fixture harness 已抽到 `src/fixtures/harness.mjs`，可以把 fixture 复制到临时目录、运行 smoke command、写入 evidence artifact，并校验全部 expected evidence artifact、primary evidence schema 和安全命令策略。
 - `closed-loop/` 仍有 40 个文件，但 v1/v2 边界已由 legacy manifest 和结构测试锁为 readonly compatibility。
