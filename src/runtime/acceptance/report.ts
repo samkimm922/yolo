@@ -16,6 +16,7 @@ import { verifyArtifactIntegrity } from "../evidence/artifact-integrity.js";
 import type { ArtifactIntegrityRecord } from "../evidence/artifact-integrity.js";
 import { isWithin } from "../../lib/security/path-guard.js";
 import { verifyApprovalSignature, approvalSignablePayload } from "../../lib/security/approval-signing.js";
+import { resolveManualAcceptancePublicKey } from "../../lifecycle/manual-acceptance-keys.js";
 import { withRuntimeInvariantCode } from "../invariants.js";
 
 export const ACCEPTANCE_REPORT_SCHEMA_VERSION = "1.0";
@@ -551,7 +552,7 @@ function toArray<T>(value: unknown): T[] {
   return [value] as T[];
 }
 
-function approvalFromArtifact(path: unknown, expected: ApprovalWarningExpectation = Object(), boundaryRoot: string): ApprovalResult {
+export function approvalFromArtifact(path: unknown, expected: ApprovalWarningExpectation = Object(), boundaryRoot: string): ApprovalResult {
   const read = readApprovalArtifact(path, boundaryRoot);
   const artifact = asRecord(read.artifact);
   const payload = (artifact && asRecord(artifact.report)) || artifact;
@@ -575,16 +576,21 @@ function approvalFromArtifact(path: unknown, expected: ApprovalWarningExpectatio
     if (!approvalWarningsMatch(approval, expected)) {
       reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_WARNING_MISMATCH", message: "Approval artifact does not match the current warning set." });
     }
-    // P12.I4: ed25519 signature verification for release approvals.
-    // Enforcement model: fail-closed ONLY when YOLO_APPROVAL_PUBLIC_KEY is configured
-    // (i.e., the CI/release pipeline has committed to signed approvals). Without the
-    // env var, signature verification is advisory — existing dev/test flows that don't
-    // sign are not blocked. When a signature IS present, it must always verify.
-    const publicKey = clean(process.env.YOLO_APPROVAL_PUBLIC_KEY);
+    // CR2/P12.I4: ed25519 signature verification for release approvals.
+    // Enforcement model: fail-closed against the project-rooted committed public
+    // key (unified with manual-acceptance evidence — CR1). The verifier key lives
+    // at <stateRoot>/keys/manual-acceptance.pub and is NOT gated on an optional
+    // env var. When a signature IS present it MUST verify against that key; a
+    // missing key means we cannot prove the signature valid → block. When the
+    // committed key exists but the artifact carries no signature, that is also
+    // rejected (the pipeline has committed to signed approvals).
+    const publicKey = resolveManualAcceptancePublicKey(boundaryRoot);
     const signature = clean(approval?.signature);
     if (signature) {
       if (!publicKey) {
-        // Signature present but no public key configured — advisory, don't block.
+        // Signature present but the project-rooted verification key is unavailable
+        // — we cannot prove the signature valid, so fail-closed (never advisory).
+        reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_SIGNATURE_INVALID", message: "Approval signature present but the project-rooted verification key is unavailable; cannot verify." });
       } else {
         const signablePayload = approvalSignablePayload(approval);
         const sigResult = verifyApprovalSignature(signablePayload, signature, publicKey);
@@ -593,9 +599,9 @@ function approvalFromArtifact(path: unknown, expected: ApprovalWarningExpectatio
         }
       }
     } else if (publicKey) {
-      // Public key configured but no signature on the approval — fail-closed.
+      // Committed key configured but no signature on the approval — fail-closed.
       // The pipeline has committed to signed approvals; unsigned is rejected.
-      reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_SIGNATURE_MISSING", message: "YOLO_APPROVAL_PUBLIC_KEY is set but approval artifact has no signature. Sign the approval with the CI private key." });
+      reasons.push({ code: "ACCEPTANCE_WARNING_APPROVAL_SIGNATURE_MISSING", message: "A project-rooted approval public key is configured but the approval artifact has no signature. Sign the approval with the matching private key." });
     }
   }
   return {
