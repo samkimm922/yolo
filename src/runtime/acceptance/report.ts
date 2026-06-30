@@ -1161,6 +1161,9 @@ export function buildAcceptanceReport(input: AcceptanceInput = Object(), options
   const artifactIntegrity = verifyArtifactIntegrity(artifactPaths, {
     rootDir: projectRoot,
     expectedSha256ByPath: expectedArtifactDigests(input, options),
+    // M9: in release/ship mode an artifact with no pre-registered digest is
+    // unverified (potential post-hoc append) and must fail integrity.
+    requireExpectedDigest: releaseMode,
   }) as ArtifactIntegrityResult;
   pushArtifactIntegrityIssues(issues, artifactIntegrity);
   if (!prd) {
@@ -1212,6 +1215,19 @@ export function buildAcceptanceReport(input: AcceptanceInput = Object(), options
       warning_digest: warningApproval.expected.warning_digest,
       mode,
       human_needed: true,
+    });
+    summary = summarizeIssues(issues);
+  } else if (!releaseMode && summary.p1 === 0 && summary.p0 === 0 && releaseWarnings.length > 0 && !warningApproval.approved) {
+    // M7: accept mode previously skipped warning-approval entirely. A warning
+    // surface should not be silently ignored even in the intermediate accept
+    // step — surface it as a P2 (human_review) so it is visible and tracked,
+    // without hard-blocking the non-release accept flow (release/ship still
+    // hard-blocks via the branch above).
+    pushIssue(issues, "human_review", "ACCEPTANCE_WARNING_APPROVAL_ADVISORY", "Acceptance warnings are present and unapproved; review before release/ship (release mode will hard-block until approved).", {
+      approval_artifact: warningApproval.artifact_path || resolve(approvalPath),
+      warning_count: releaseWarnings.length,
+      warning_digest: warningApproval.expected.warning_digest,
+      mode,
     });
     summary = summarizeIssues(issues);
   }

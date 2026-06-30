@@ -48,17 +48,13 @@ function changedFiles(cwd) {
 export function validateDiffQuality(task = Object(), options = Object()) {
   const cwd = options.cwd || process.cwd();
   const route = classifyTaskExecution(task);
-  if (route.quality_profile !== "single_line_mechanical") {
-    return {
-      status: "pass",
-      blocks_execution: false,
-      skipped: true,
-      route,
-      summary: `quality gate skipped for ${route.quality_profile}`,
-      failures: [],
-    };
-  }
-
+  // M2: the gate previously SKIPPED for any non-single_line_mechanical profile
+  // (allowlist polarity inverted). It now runs for ALL profiles, but with
+  // profile-calibrated budgets: mechanical fixes stay tight (1 file/8 lines),
+  // while larger profiles (structural_refactor, default, deterministic_recipe)
+  // get proportionally looser defaults. A task can always override via
+  // task.quality_budget. New-file detection still applies everywhere (a fix
+  // should not create files regardless of profile).
   const targets = targetFiles(task);
   let numstat;
   let changed;
@@ -90,11 +86,22 @@ export function validateDiffQuality(task = Object(), options = Object()) {
   const added = numstat.reduce((sum, item) => sum + item.added, 0);
   const removed = numstat.reduce((sum, item) => sum + item.removed, 0);
   const total = added + removed;
+  // M2: profile-calibrated default budgets. Mechanical fixes stay tight; larger
+  // profiles get proportionally looser defaults. A task-level quality_budget
+  // always overrides these.
+  const PROFILE_BUDGETS: Record<string, { max_files: number; max_added_lines: number; max_removed_lines: number; max_total_lines: number }> = {
+    single_line_mechanical: { max_files: 1, max_added_lines: 8, max_removed_lines: 8, max_total_lines: 20 },
+    deterministic_check: { max_files: 3, max_added_lines: 40, max_removed_lines: 40, max_total_lines: 80 },
+    deterministic_recipe: { max_files: 4, max_added_lines: 80, max_removed_lines: 80, max_total_lines: 160 },
+    structural_refactor: { max_files: 8, max_added_lines: 200, max_removed_lines: 200, max_total_lines: 400 },
+    default: { max_files: 4, max_added_lines: 60, max_removed_lines: 60, max_total_lines: 120 },
+  };
+  const profileDefault = PROFILE_BUDGETS[route.quality_profile] || PROFILE_BUDGETS.default;
   const budget = {
-    max_files: task.quality_budget?.max_files ?? 1,
-    max_added_lines: task.quality_budget?.max_added_lines ?? 8,
-    max_removed_lines: task.quality_budget?.max_removed_lines ?? 8,
-    max_total_lines: task.quality_budget?.max_total_lines ?? 20,
+    max_files: task.quality_budget?.max_files ?? profileDefault.max_files,
+    max_added_lines: task.quality_budget?.max_added_lines ?? profileDefault.max_added_lines,
+    max_removed_lines: task.quality_budget?.max_removed_lines ?? profileDefault.max_removed_lines,
+    max_total_lines: task.quality_budget?.max_total_lines ?? profileDefault.max_total_lines,
   };
 
   const failures = [];
@@ -104,7 +111,11 @@ export function validateDiffQuality(task = Object(), options = Object()) {
       detail: `changed files ${changed.length} > ${budget.max_files}: ${changed.join(", ")}`,
     });
   }
-  if (untracked.length > 0) {
+  // M2: new-file detection. A task that explicitly opts in via
+  // scope.allow_new_files (e.g. a fixture/marker task that legitimately creates
+  // a new source file) is allowed to create files; otherwise new files flag.
+  const allowNewFiles = task?.scope?.allow_new_files === true || task?.scope?.allowNewFiles === true;
+  if (untracked.length > 0 && !allowNewFiles) {
     failures.push({
       code: "NEW_FILES_FOR_MECHANICAL_FIX",
       detail: `mechanical single-line fixes cannot create files: ${untracked.join(", ")}`,
