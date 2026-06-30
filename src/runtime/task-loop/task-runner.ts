@@ -100,7 +100,7 @@ export async function runTaskWithRuntime({
     writeTaskResult,
     updatePrdTaskStatus,
     applySplitSuggestionsToPrd,
-    isBusinessFile: (file) => isBusinessFile(file, { config }),
+    isBusinessFile: (file: string) => isBusinessFile(file, { config }),
     logProgress,
     logTaskBash,
     logTaskDone,
@@ -150,7 +150,7 @@ export async function runTaskWithRuntime({
         logTaskBash,
         logProgress,
         logEvent,
-        onWorktreeCreated: (wt) => {
+        onWorktreeCreated: (wt: { path: string; branch: string }) => {
           currentWorktreePath = wt.path;
           currentWorktreeBranch = wt.branch;
         },
