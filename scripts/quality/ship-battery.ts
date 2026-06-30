@@ -9,6 +9,7 @@ import { initLifecycleState } from "../../src/lifecycle/state.js";
 import { writeLifecycleStageReport } from "../../src/lifecycle/progress.js";
 import { runPiRuntime } from "../../src/runtime/pi-runtimes.js";
 import { computeSourceFingerprint } from "../../src/runtime/evidence/source-fingerprint.js";
+import { buildAcceptanceReport } from "../../src/runtime/acceptance/report.js";
 
 type ShipBatteryCase = {
   id: string;
@@ -117,7 +118,104 @@ export async function runShipBattery(): Promise<ShipBatteryResult[]> {
   }
   // CR5 part (b): source mutation between acceptance-freeze and ship must block.
   results.push(await runStaleSourceMutationCase());
+  // CR5 part (a): a real, fully-evidenced acceptance must PASS ship (positive
+  // re-derivation — the audit noted ship only had a negative case).
+  results.push(await runRealEvidenceShipsCase());
   return results;
+}
+
+// CR5 part (a): prove the ship gate ACCEPTS a genuine, fully-evidenced
+// acceptance rather than only blocking forged ones. The acceptance is built
+// from a real PRD + structured run report (run_id + planned/completed/… summary)
+// + review pass + a tracked source target, so buildAcceptanceReport revalidates
+// to pass and the ship gate succeeds. This is the positive counterpart to the
+// forged-acceptance and stale-mutation blockers.
+async function runRealEvidenceShipsCase(): Promise<ShipBatteryResult> {
+  const root = mkdtempSync(join(tmpdir(), "yolo-ship-positive-"));
+  try {
+    execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+    execFileSync("git", ["config", "user.email", "ship-battery@test"], { cwd: root, stdio: "ignore" });
+    execFileSync("git", ["config", "user.name", "ship-battery"], { cwd: root, stdio: "ignore" });
+    const TARGET = "src/service.ts";
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, TARGET), "export const x = 1;\n");
+    writeFileSync(join(root, "README.md"), "# fixture\n");
+    execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+    execFileSync("git", ["commit", "-m", "baseline", "--no-gpg-sign"], { cwd: root, stdio: "ignore" });
+
+    const prdPath = join(root, "specs", "prd.json");
+    const prd = {
+      version: "2.0",
+      id: "PRD-SHIP-POSITIVE",
+      tasks: [{
+        id: "T1",
+        scope: { targets: [{ file: TARGET }] },
+        post_conditions: [{ id: "POST-TARGET", type: "target_file_modified", severity: "FAIL", params: { file: TARGET } }],
+      }],
+    };
+    writeJson(prdPath, prd);
+    const stateRoot = join(root, ".yolo");
+    initLifecycleState({ projectRoot: root });
+    const opt = lifecycleOptions(root);
+
+    // Build a genuine acceptance report over the real PRD + structured run report.
+    const acceptance = buildAcceptanceReport({
+      prd,
+      runReport: { status: "success", run_id: "run-pos-001", summary: { planned: 1, completed: 1, failed: 0, blocked: 0 } },
+      reviewReport: { status: "pass", findings: [] },
+      projectRoot: root,
+      stateRoot,
+    }) as { status?: string };
+
+    // Persist the evidence files the lifecycle reports reference.
+    mkdirSync(join(root, "state"), { recursive: true });
+    writeJson(join(root, "state", "run.json"), { status: "success", run_id: "run-pos-001", summary: { planned: 1, completed: 1, failed: 0, blocked: 0 } });
+    writeJson(join(root, "state", "review.json"), { status: "pass", findings: [] });
+    writeJson(join(root, "state", "acceptance.json"), acceptance);
+
+    // Lifecycle stage reports carry the structured run_id + summary so ship's
+    // acceptance revalidation (buildAcceptanceReport) sees valid run evidence.
+    // The structured summary (planned/completed/…) is what the revalidator reads
+    // via runEvidencePayload; the textual summary is kept separately.
+    writeLifecycleStageReport("run", {
+      status: "success",
+      summary: { planned: 1, completed: 1, failed: 0, blocked: 0 },
+      prd_path: prdPath,
+      run_id: "run-pos-001",
+      evidence: [{ path: "state/run.json" }],
+    }, opt);
+    writeLifecycleStageReport("review-fix", {
+      status: "success",
+      summary: "review passed",
+      findings: [],
+      prd_path: prdPath,
+      evidence: [{ path: "state/review.json" }],
+    }, opt);
+    writeLifecycleStageReport("acceptance", {
+      status: "pass",
+      summary: "acceptance passed",
+      prd_path: prdPath,
+      evidence: [{ path: "state/acceptance.json" }],
+    }, opt);
+
+    const result = await runPiRuntime("ship", {
+      prdPath,
+      projectRoot: root,
+      stateRoot,
+      writeLifecycle: false,
+    }) as { status?: string };
+    const status = result.status === "success" ? "pass" : "blocked";
+    return {
+      id: "real_evidence_ships",
+      category: "ship_gate_robustness",
+      expect: "pass",
+      actualExit: status === "pass" ? 0 : 1,
+      actualStatus: status,
+      correct: status === "pass",
+    };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
 
 // CR5 part (b): freeze an acceptance report whose source_fingerprint covers a
