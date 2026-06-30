@@ -389,6 +389,23 @@ export function getSseClientCount(): number { return sseClients.size; }
 export function resetSseClientsForTest() {
   for (const client of [...sseClients]) closeSseClient(client);
 }
+
+// L7: graceful shutdown — close SSE clients and file watchers before exiting so
+// the self-restart path and signals don't leak resources or drop clients mid-
+// event. Previously process.exit(0) in the self-watcher bypassed all cleanup.
+let shutdownStarted = false;
+export function gracefulShutdownProgressServer(reason: string, exitCode = 0): void {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  try {
+    for (const client of [...sseClients]) closeSseClient(client);
+  } catch { /* best-effort */ }
+  for (const watcher of [taskLogsWatcher, currentRunWatcher, reviewLogWatcher, selfWatcher]) {
+    try { watcher?.close(); } catch { /* best-effort */ }
+  }
+  if (reason) process.stderr.write(`[progress-server] shutting down (${reason})\n`);
+  process.exit(exitCode);
+}
 let taskLogsWatcher = null;
 let currentRunWatcher = null;
 let reviewLogWatcher = null;
@@ -684,8 +701,8 @@ function startSelfWatcher() {
     selfWatcher = watch(SELF_FILE_PATH, (eventType, filename) => {
       clearTimeout(selfRestartDebounceTimer);
       selfRestartDebounceTimer = setTimeout(() => {
-        process.stderr.write('[self-restart] 检测到文件变化，正在重启...\n');
-        process.exit(0);
+        // L7: route through graceful shutdown so SSE clients/watchers are cleaned up.
+        gracefulShutdownProgressServer('self-restart (file change detected)', 0);
       }, 500);
     });
   } catch (e) {

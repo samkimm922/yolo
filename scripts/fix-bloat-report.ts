@@ -53,11 +53,22 @@ const GATE = {
   functionLines: 120,
 };
 
+// L4: a git failure must NOT be swallowed into a false-zero bloat report in
+// --gate mode (that would let an unattended merge pass on an unverified diff).
+// In gate mode, surface the failure and exit 1 (matching gateGit). In advisory
+// mode, fall back to empty output but emit a warning so the operator notices.
 function git(args: string[]): string {
   try {
     return execFileSync("git", args, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
   } catch (error) {
-    return String((error as { stdout?: string }).stdout || "").trim();
+    const stderr = String((error as { stderr?: string }).stderr || "").trim();
+    if (HARD_GATE) {
+      console.error(`[fix-bloat] GATE FAILED — git ${args.join(" ")} failed.`);
+      if (stderr) console.error(stderr);
+      process.exit(1);
+    }
+    console.error(`[fix-bloat] WARNING — git ${args.join(" ")} failed; bloat analysis may be incomplete.`);
+    return "";
   }
 }
 
