@@ -144,7 +144,7 @@ if (result.error) {
     console.log('[]');
     process.exit(2);
   }
-  console.error(`[yolo-review] claude 调用失败: ${spawnError.message}`);
+  console.error(`[yolo-review] claude 调用失败: ${redact(spawnError.message)}`);
   console.log('[]');
   process.exit(1);
 }
