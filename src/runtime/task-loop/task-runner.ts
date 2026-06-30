@@ -47,9 +47,19 @@ export async function runTaskWithRuntime({
 } = Object()) {
   const defaultMaxRetry = config.runner.max_retries;
   const taskMaxRetry = task.retry?.max_retries;
-  const maxRetry = taskMaxRetry != null
-    ? { 1: taskMaxRetry, 2: Math.max(1, Math.floor(taskMaxRetry / 3)) }
+  // M14: enforce a lower bound on taskMaxRetry so a PRD cannot disable retries
+  // (max_retries: 0) and silently turn a flaky/broken task into a one-shot pass.
+  const boundedTaskMaxRetry = taskMaxRetry != null ? Math.max(1, Math.floor(taskMaxRetry)) : null;
+  const maxRetry = boundedTaskMaxRetry != null
+    ? { 1: boundedTaskMaxRetry, 2: Math.max(1, Math.floor(boundedTaskMaxRetry / 3)) }
     : defaultMaxRetry;
+  // M14: global attempt ceiling so a degenerate retry loop (no return path
+  // reached) cannot spin forever. Default 20; configurable via
+  // config.runner.global_attempt_ceiling (also lower-bounded to >= the per-task
+  // max retry so legitimate retries are never pre-empted).
+  const rawCeiling = config.runner?.global_attempt_ceiling;
+  const configuredCeiling = typeof rawCeiling === "number" && Number.isFinite(rawCeiling) && rawCeiling > 0 ? Math.floor(rawCeiling) : 20;
+  const globalAttemptCeiling = Math.max(configuredCeiling, (maxRetry?.[1] ?? 0) + 5);
   let attempt = 0;
   let lastGateError = "";
   const history = [];
@@ -107,6 +117,19 @@ export async function runTaskWithRuntime({
     currentWorktreePath = null;
     currentWorktreeBranch = null;
     attempt++;
+    // M14: global attempt ceiling — abort if the loop has run far beyond any
+    // legitimate retry budget (degenerate/no-exit retry loop).
+    if (attempt > globalAttemptCeiling) {
+      logProgress(task.id, "!!", `global attempt ceiling reached (${globalAttemptCeiling}); aborting task`);
+      logTaskError(task.id, `Task aborted after exceeding the global attempt ceiling (${globalAttemptCeiling}).`);
+      return {
+        task_id: task.id,
+        status: "error",
+        attempt,
+        reason: "GLOBAL_ATTEMPT_CEILING_EXCEEDED",
+        summary: `Task exceeded the global attempt ceiling (${globalAttemptCeiling}).`,
+      };
+    }
     try {
       const session = await prepareProviderSession({
         task,

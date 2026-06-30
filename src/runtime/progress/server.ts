@@ -65,8 +65,15 @@ function findLatestPrd() {
   return null;
 }
 
+// M12: when current-run.json is corrupt/unreadable, the dashboard previously
+// swallowed the error (empty catch) and reported idle. Surface a warning so the
+// operator knows the run state is unverifiable rather than genuinely idle.
+let currentRunWarning: string | null = null;
+export function getCurrentRunWarning(): string | null { return currentRunWarning; }
+
 // 优先从 current-run.json 读取当前 PRD
 function resolvePrdFromCurrentRun() {
+  currentRunWarning = null;
   try {
     if (existsSync(CURRENT_RUN_FILE)) {
       const run = JSON.parse(readFileSync(CURRENT_RUN_FILE, "utf8"));
@@ -82,7 +89,10 @@ function resolvePrdFromCurrentRun() {
         if (existsSync(dataPath)) return dataPath;
       }
     }
-  } catch {}
+  } catch (error) {
+    // M12: surface the corrupt-read as a warning instead of silently reporting idle.
+    currentRunWarning = `current-run.json is present but could not be parsed: ${error instanceof Error ? error.message : String(error)}`;
+  }
   return null;
 }
 

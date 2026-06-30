@@ -1,18 +1,34 @@
+import { mkdirSync, writeFileSync } from "node:fs";
 import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
 import { killActiveProviderProcesses as defaultKillActiveProviderProcesses } from "../execution/provider-adapter.js";
 
 const GIT_CLEANUP_EXEC_OPTIONS = { timeout: 15000, maxBuffer: 1024 * 1024 };
 
-export function writeRunEndOnCrashEvent(result = Object(), { logRun, startTimeMs, nowMs = Date.now } = Object()) {
+export function writeRunEndOnCrashEvent(result = Object(), { logRun, startTimeMs, nowMs = Date.now, stateDir } = Object()) {
+  const payload = {
+    prd: result.prd || "unknown",
+    passed: result.passed || 0,
+    failed: result.failed || 0,
+    duration_sec: result.durationSec || ((nowMs() - startTimeMs) / 1000).toFixed(1),
+    exit_reason: result.reason || "signal",
+  };
   try {
-    logRun("run_end", {
-      prd: result.prd || "unknown",
-      passed: result.passed || 0,
-      failed: result.failed || 0,
-      duration_sec: result.durationSec || ((nowMs() - startTimeMs) / 1000).toFixed(1),
-      exit_reason: result.reason || "signal",
-    });
-  } catch {}
+    logRun("run_end", payload);
+    return;
+  } catch (error) {
+    // M13: logRun failed (e.g. ledger write error). Previously this empty catch
+    // silently dropped the crash event — losing the audit trail for the crash.
+    // Persist the event to a fallback archive file so it can be recovered.
+    try {
+      const archiveDir = stateDir ? `${stateDir}/runtime` : `${process.cwd()}/.yolo/state/runtime`;
+      mkdirSync(archiveDir, { recursive: true });
+      const archivePath = `${archiveDir}/crash-run-end-${nowMs()}.json`;
+      writeFileSync(archivePath, `${JSON.stringify({ event: "run_end", ...payload, log_error: error instanceof Error ? error.message : String(error) }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    } catch {
+      // last-resort: the archive write itself failed; nothing more we can do
+      // synchronously on a crash path without risking recursion.
+    }
+  }
 }
 
 export function saveRunnerProgressSnapshot({ stateDir, completedIds, failedIds, writeProgressSnapshot }) {
