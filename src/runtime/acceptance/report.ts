@@ -14,6 +14,7 @@ import {
 import { runAdapterEvidenceCollector } from "../adapters/evidence-collector.js";
 import { verifyArtifactIntegrity } from "../evidence/artifact-integrity.js";
 import type { ArtifactIntegrityRecord } from "../evidence/artifact-integrity.js";
+import { computeSourceFingerprint } from "../evidence/source-fingerprint.js";
 import { isWithin } from "../../lib/security/path-guard.js";
 import { verifyApprovalSignature, approvalSignablePayload } from "../../lib/security/approval-signing.js";
 import { resolveManualAcceptancePublicKey } from "../../lifecycle/manual-acceptance-keys.js";
@@ -377,6 +378,9 @@ export interface AcceptanceReport extends AcceptanceRecord {
   ui: { ui_task_count: number };
   artifact_integrity: ArtifactIntegrityResult;
   artifacts: string[];
+  // CR5 part (b): freeze digest of the project's tracked source files. The ship
+  // gate recomputes this over the current source and blocks on any mutation.
+  source_fingerprint: AcceptanceRecord;
   next_actions: string[];
   lifecycle_write?: AcceptanceRecord;
 }
@@ -1198,6 +1202,7 @@ export function buildAcceptanceReport(input: AcceptanceInput = Object(), options
     ui,
     artifact_integrity: artifactIntegrity,
     artifacts: artifactIntegrity.artifacts.filter((artifact) => artifact.exists).map((artifact) => artifact.absolute_path),
+    source_fingerprint: computeSourceFingerprint(projectRoot) as AcceptanceRecord,
     next_actions: status === "blocked"
       ? ["Fix P0/P1 acceptance blockers, then rerun /yolo-accept.", "Do not ship until acceptance report is pass or approved with documented human review."]
       : status === "warning"

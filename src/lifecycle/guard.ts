@@ -4,6 +4,7 @@ import { LIFECYCLE_STAGES, getLifecycleStage, lifecycleStageForCommand, validate
 import { lifecycleArtifactPath, lifecycleStatusPath, resolveLifecycleStateRoot } from "./state.js";
 import { inspectWorktreeDrift } from "./source-snapshot.js";
 import { isStructuredManualAcceptanceEvidence } from "./manual-acceptance.js";
+import { compareSourceFingerprint } from "../runtime/evidence/source-fingerprint.js";
 
 export const LIFECYCLE_GUARD_SCHEMA_VERSION = "1.0";
 export const LIFECYCLE_GUARD_SCHEMA = "yolo.lifecycle.guard.v1";
@@ -487,9 +488,36 @@ function deliveryHardGateBlockers(stateRoot: string, projectRoot: string): Guard
         "Acceptance evidence contains manual (unverified) acceptance criteria. Each criterion needs either a passing verify command or explicit human acceptance evidence.",
       ));
     }
+    // CR5 part (b): re-check the acceptance-freeze source fingerprint against the
+    // current source on disk. The lifecycle stage report wraps the acceptance
+    // report in `.report`; the captured fingerprint lives at either nesting.
+    blockers.push(...sourceFingerprintBlockers(acceptance.report, projectRoot));
   }
 
   return blockers;
+}
+
+// CR5 part (b): re-validate the source fingerprint captured at acceptance time
+// against the current source on disk. The lifecycle stage report nests the
+// acceptance report under `.report`, so the fingerprint may live at either
+// level. A changed or missing tracked file is fail-closed. If no fingerprint
+// was recorded (e.g. a hand-authored acceptance report) there is no contract to
+// enforce and we do not block here — other gates cover fabricated evidence.
+function sourceFingerprintBlockers(stageReport: GuardRecord, projectRoot: string): GuardBlocker[] {
+  const nested = stageReport.report as GuardRecord | undefined;
+  const fingerprint = (nested?.source_fingerprint || stageReport.source_fingerprint) as
+    | { [relPath: string]: string }
+    | undefined;
+  if (!fingerprint || typeof fingerprint !== "object" || Array.isArray(fingerprint)) return [];
+  const keys = Object.keys(fingerprint);
+  if (keys.length === 0) return [];
+  const comparison = compareSourceFingerprint(fingerprint, projectRoot);
+  if (comparison.ok) return [];
+  return [makeBlocker(
+    "ACCEPTANCE_SOURCE_FINGERPRINT_STALE",
+    "acceptance",
+    "Source files changed between acceptance and ship; rerun acceptance.",
+  )];
 }
 
 function requiredStagesFor(command: string, input: GuardInput = Object()): StageRequirement[] {
