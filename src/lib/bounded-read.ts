@@ -44,7 +44,7 @@ export interface BoundedReadMeta {
 export interface JsonlTailResult {
   /** Parsed JSON entries from the last lines (oldest → newest). Typed `any`
    *  to match the prior `JSON.parse` ergonomics so callers can access fields
-   *  without per-site casts. */
+   *  without per-site cast. */
   entries: any[];
   meta: BoundedReadMeta;
 }
@@ -52,7 +52,7 @@ export interface JsonlTailResult {
 /** Result of an incremental JSONL read keyed on a byte offset. */
 export interface JsonlSinceResult {
   /** New entries appended after `sinceByte` (oldest → newest). Typed `any` to
-   *  match prior `JSON.parse` ergonomics. */
+   * match prior `JSON.parse` ergonomics. */
   entries: any[];
   /** New byte offset to pass on the next call (end-of-file). */
   nextOffset: number;
