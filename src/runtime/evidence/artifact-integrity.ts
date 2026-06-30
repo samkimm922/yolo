@@ -12,6 +12,12 @@ interface ArtifactIntegrityOptions {
   expected_sha256?: unknown;
   expectedSha256ByPath?: unknown;
   expected_sha256_by_path?: unknown;
+  // M9: when true (release/ship mode), an existing artifact with NO pre-
+  // registered expected digest is treated as a mismatch (unverified post-hoc
+  // artifact) rather than ignored. Default false (accept-mode tolerates
+  // runtime-collected artifacts that have no pre-registered digest).
+  requireExpectedDigest?: unknown;
+  require_expected_digest?: unknown;
 }
 
 export interface ArtifactIntegrityRecord extends Record<string, unknown> {
@@ -118,7 +124,18 @@ export function verifyArtifactIntegrity(paths: unknown[] = [], options: Artifact
   const uniquePaths = [...new Set(asArray(paths).map(clean).filter(Boolean))];
   const artifacts = uniquePaths.map((path) => artifactIntegrityRecord(path, options));
   const missing = artifacts.filter((artifact) => artifact.exists !== true);
-  const digestMismatches = artifacts.filter((artifact) => artifact.exists === true && artifact.digest_match === false);
+  // M9: in release/ship mode (requireExpectedDigest), an existing SOURCE artifact
+  // with no pre-registered digest (digest_match === null) is unverified (potential
+  // post-hoc append) and must fail. State/approval JSON files are not delivered
+  // source, so they remain tolerated even in release mode.
+  const requireExpectedDigest = options.requireExpectedDigest === true || options.require_expected_digest === true;
+  const SOURCE_EXT = /\.(mjs|cjs|js|jsx|ts|tsx|py|go|rs|java|rb|php|vue|svelte)$/i;
+  const digestMismatches = artifacts.filter((artifact) => {
+    if (artifact.exists !== true) return false;
+    if (artifact.digest_match === false) return true;
+    // M9: a source file with no pre-registered digest in release mode is unverified.
+    return requireExpectedDigest && artifact.digest_match === null && SOURCE_EXT.test(String(artifact.path || artifact.absolute_path || ""));
+  });
   return {
     status: missing.length > 0 || digestMismatches.length > 0 ? "fail" : "pass",
     checked_count: artifacts.length,
