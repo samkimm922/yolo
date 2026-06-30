@@ -100,7 +100,7 @@ describe("pre-tool-lifecycle-gate hook", () => {
       makeSourceTree(root);
       const stages = checkStages("warning");
       // Mark the check stage with an explicit operator approval stamp.
-      const checkStage = stages.find((s) => s.id === "check");
+      const checkStage = stages.find((s) => s.id === "check") as Record<string, unknown> | undefined;
       if (checkStage) checkStage.warning_approved = true;
       writeStatus(root, stages);
       const result = runHook(root, {
