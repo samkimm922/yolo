@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { counterLabel } from "../src/counter.js";
+import { counterLabel } from "../src/counter.ts";
 
 test("counterLabel formats the count", () => {
   assert.equal(counterLabel(3), "Count: 3");

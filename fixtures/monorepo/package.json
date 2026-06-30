@@ -7,6 +7,6 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "node --test packages/app/test.ts"
+    "test": "node --experimental-strip-types --test packages/app/test.ts"
   }
 }
