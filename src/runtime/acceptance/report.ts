@@ -14,6 +14,7 @@ import {
 import { runAdapterEvidenceCollector } from "../adapters/evidence-collector.js";
 import { verifyArtifactIntegrity } from "../evidence/artifact-integrity.js";
 import type { ArtifactIntegrityRecord } from "../evidence/artifact-integrity.js";
+import { computeSourceFingerprint } from "../evidence/source-fingerprint.js";
 import { isWithin } from "../../lib/security/path-guard.js";
 import { verifyApprovalSignature, approvalSignablePayload } from "../../lib/security/approval-signing.js";
 import { resolveManualAcceptancePublicKey } from "../../lifecycle/manual-acceptance-keys.js";
@@ -377,6 +378,9 @@ export interface AcceptanceReport extends AcceptanceRecord {
   ui: { ui_task_count: number };
   artifact_integrity: ArtifactIntegrityResult;
   artifacts: string[];
+  // CR5 part (b): freeze digest of the project's tracked source files. The ship
+  // gate recomputes this over the current source and blocks on any mutation.
+  source_fingerprint: AcceptanceRecord;
   next_actions: string[];
   lifecycle_write?: AcceptanceRecord;
 }
@@ -1059,6 +1063,39 @@ function uiEvidenceIssues({ prd, uiEvidence, resolver }: { prd: Prd | null; uiEv
   return { ui_task_count: tasks.length };
 }
 
+// CR5 part (b): collect the delivered source-file paths declared by the PRD —
+// scope.targets[].file plus target_file_modified post-condition params.file.
+// These are the files whose integrity the source fingerprint freezes; scoping
+// to them (rather than the whole git tree) keeps the freeze stable across a
+// single-stage run while still catching tampering of delivered files.
+function prdTargetFiles(prd: unknown): string[] {
+  if (!prd || typeof prd !== "object") return [];
+  const record = prd as Record<string, unknown>;
+  const tasks = Array.isArray(record.tasks) ? record.tasks : [];
+  const files = new Set<string>();
+  for (const task of tasks) {
+    if (!task || typeof task !== "object") continue;
+    const taskRecord = task as Record<string, unknown>;
+    const scope = taskRecord.scope as Record<string, unknown> | undefined;
+    const targets = Array.isArray(scope?.targets) ? scope.targets : [];
+    for (const target of targets) {
+      if (target && typeof target === "object") {
+        const file = (target as Record<string, unknown>).file;
+        if (typeof file === "string" && file.trim()) files.add(file.trim());
+      }
+    }
+    const postConditions = Array.isArray(taskRecord.post_conditions) ? taskRecord.post_conditions : [];
+    for (const condition of postConditions) {
+      if (!condition || typeof condition !== "object") continue;
+      const conditionRecord = condition as Record<string, unknown>;
+      if (conditionRecord.type !== "target_file_modified") continue;
+      const file = (conditionRecord.params as Record<string, unknown> | undefined)?.file;
+      if (typeof file === "string" && file.trim()) files.add(file.trim());
+    }
+  }
+  return [...files];
+}
+
 export function buildAcceptanceReport(input: AcceptanceInput = Object(), options: AcceptanceOptions = Object()): AcceptanceReport {
   const prdPath = String(input.prdPath || input.prd_path || options.prdPath || options.prd_path || "");
   const prd = loadPrd({ ...options, ...input });
@@ -1198,6 +1235,14 @@ export function buildAcceptanceReport(input: AcceptanceInput = Object(), options
     ui,
     artifact_integrity: artifactIntegrity,
     artifacts: artifactIntegrity.artifacts.filter((artifact) => artifact.exists).map((artifact) => artifact.absolute_path),
+    // CR5 part (b): fingerprint the DELIVERED source targets (the contract), not
+    // the whole git-tracked tree. Scoping to the PRD's scope.targets +
+    // target_file_modified post-condition files keeps the freeze stable across
+    // a single-stage run (where the broader workspace evolves between accept
+    // and ship) while still catching tampering of the files actually under
+    // delivery. Falls back to the full git-tracked set only when no PRD targets
+    // are declared.
+    source_fingerprint: computeSourceFingerprint(projectRoot, prdTargetFiles(prd)) as AcceptanceRecord,
     next_actions: status === "blocked"
       ? ["Fix P0/P1 acceptance blockers, then rerun /yolo-accept.", "Do not ship until acceptance report is pass or approved with documented human review."]
       : status === "warning"

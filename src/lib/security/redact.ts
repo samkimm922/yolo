@@ -44,14 +44,26 @@ export function redact(text: unknown): string {
 /**
  * Redact secrets in an arbitrary JSON-serializable value (object/array/string).
  * Returns a new value with all string fields redacted.
+ *
+ * Integrity fields (content hashes / digests / fingerprints that the project
+ * owner controls and that must round-trip byte-identically for re-verification)
+ * are NOT redacted: a 64-char sha256 is indistinguishable from a high-entropy
+ * secret to the hex-token pattern, but redacting it would void every signature
+ * / integrity re-check (e.g. CR5's source_fingerprint recompute at ship).
  */
+const INTEGRITY_KEY_RE = /(?:^|_)(?:hash|digest|fingerprint|sha256|sha512|md5)(?:_|$)|^source_fingerprint$|^record_hash$|^artifact_digest$|^prev_hash$/i;
+function isIntegrityKey(key: string): boolean {
+  return INTEGRITY_KEY_RE.test(key);
+}
+
 export function redactDeep<T>(value: T): T {
   if (typeof value === "string") return redact(value) as unknown as T;
   if (Array.isArray(value)) return value.map(redactDeep) as unknown as T;
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = redactDeep(v);
+      // Preserve integrity digests/hashes verbatim so re-verification works.
+      out[k] = isIntegrityKey(k) ? v : redactDeep(v);
     }
     return out as unknown as T;
   }
