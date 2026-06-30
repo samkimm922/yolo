@@ -6,8 +6,20 @@
 // Scope: only the .yolo directory under the current project root (process.cwd()).
 // External .yolo paths such as /tmp/.yolo are not project state and are allowed.
 
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
 import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+// CR4.2: the canonical install root for this hook. The yolo CLI/scripts live
+// alongside the hook (in dist/bin/, dist/, or hooks/). A `yolo`/`node yolo.ts`
+// invocation is only trusted if its script resolves under THIS install root —
+// not merely because its basename is `yolo.ts` (the old check allowed any
+// on-disk file named yolo.ts, e.g. `node scratch/yolo.ts`).
+const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
+function installRoot(): string {
+  // hooks/ sits at the repo/install root; canonicalize so comparisons are stable.
+  return canonicalizePath(resolve(HOOK_DIR, ".."));
+}
 
 // PreToolUse payload shape consumed by this hook. The hook is fail-closed
 // (invalid JSON → block), so unknown fields are tolerated via Record.
@@ -138,6 +150,12 @@ function commandTouchesYoloState(command: string) {
     if (!trimmed) continue;
     if (isYoloCliInvocation(trimmed)) continue;
     if (subcommandTouchesProjectYolo(trimmed)) return true;
+    // CR4.4: deny-by-default for bash that cannot be statically resolved.
+    // Variable assignment/expansion and quote-concatenation can hide `.yolo`
+    // (e.g. D=".yo""lo"; cat $D/state). If a subcommand uses shell variables or
+    // quote-concatenation AND looks state-adjacent, block rather than risk the
+    // literal-token regex missing an evaded `.yolo`.
+    if (commandEvadesLiteralYoloDetection(trimmed)) return true;
   }
   return false;
 }
@@ -149,8 +167,27 @@ function subcommandTouchesProjectYolo(command: string) {
     for (const candidate of extractYoloPaths(stripped)) {
       if (isUnderProjectStateRoot(candidate)) return true;
     }
+    // CR4.4: also test the quote-stripped form so `".yo""lo"` -> `.yolo` is seen.
+    for (const candidate of extractYoloPaths(stripped.replace(/"/g, ""))) {
+      if (isUnderProjectStateRoot(candidate)) return true;
+    }
   }
   return false;
+}
+
+// CR4.4: detect bash that can evade the literal `.yolo` token regex. We cannot
+// statically expand variables or quote-concatenation, so if a subcommand uses
+// either AND touches a path-like token that looks state-adjacent, deny.
+function commandEvadesLiteralYoloDetection(command: string): boolean {
+  // Variable assignment (FOO=…) or expansion ($FOO / ${FOO}) that we can't resolve.
+  const usesVariables = /(^|\s|[;&|])([A-Za-z_][A-Za-z0-9_]*)=|\$\{?[A-Za-z_]/.test(command);
+  // Quote-concatenation: adjacent string fragments like ".yo""lo" or '.yo'lo.
+  const usesQuoteConcatenation = /""|''|"\s*"|'\s*'/.test(command) && /\.yo|\.yolo/i.test(command);
+  if (!usesVariables && !usesQuoteConcatenation) return false;
+  // Only deny if the command is plausibly aiming at state (a `.yo`-ish fragment
+  // or a variable that could hold it). Bare variable use elsewhere is common and
+  // benign, so require a state-adjacency signal.
+  return /\.yo/i.test(command) || /\.(yo|yolo)/i.test(command.replace(/['"]/g, ""));
 }
 
 function extractYoloPaths(str: string): string[] {
@@ -202,11 +239,66 @@ function splitSubcommands(command: string): string[] {
         current = "";
         continue;
       }
+      // CR4.3: descend into $(…) command substitutions so a hidden subshell
+      // command is also checked. `yolo state read $(rm -rf .yolo)` must NOT be
+      // trusted as a whole just because the outer command is a yolo CLI call.
+      if (ch === "$" && next === "(") {
+        const inner = captureBalanced(command, i + 2, "(", ")");
+        if (inner !== null) {
+          // The subshell content is its own command(s) — recurse so its own
+          // subcommands/pipes are split and inspected.
+          for (const sub of splitSubcommands(inner)) subs.push(sub);
+          i += inner.length + 2; // skip past "$(…)"
+          continue;
+        }
+      }
+      // CR4.3: descend into backtick command substitutions too.
+      if (ch === "`") {
+        const inner = captureUntilBacktick(command, i + 1);
+        if (inner !== null) {
+          for (const sub of splitSubcommands(inner)) subs.push(sub);
+          i += inner.length + 1; // skip past "…`"
+          continue;
+        }
+      }
     }
     current += ch;
   }
   if (current.trim()) subs.push(current.trim());
   return subs.length > 0 ? subs : [command.trim()];
+}
+
+// Capture the content of a $(…) group starting just after the opening "(" at
+// `start`, honoring nested parens and quotes. Returns null if unbalanced.
+function captureBalanced(str: string, start: number, open: string, close: string): string | null {
+  let depth = 1;
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = start; i < str.length; i += 1) {
+    const ch = str[i];
+    if (ch === "'" && !inDouble) { inSingle = !inSingle; continue; }
+    if (ch === '"' && !inSingle) { inDouble = !inDouble; continue; }
+    if (inSingle || inDouble) continue;
+    if (ch === open) depth += 1;
+    else if (ch === close) {
+      depth -= 1;
+      if (depth === 0) return str.slice(start, i);
+    }
+  }
+  return null; // unbalanced — caller treats the token literally (safer to not trust)
+}
+
+function captureUntilBacktick(str: string, start: number): string | null {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = start; i < str.length; i += 1) {
+    const ch = str[i];
+    if (ch === "'" && !inDouble) { inSingle = !inSingle; continue; }
+    if (ch === '"' && !inSingle) { inDouble = !inDouble; continue; }
+    if (inSingle || inDouble) continue;
+    if (ch === "`") return str.slice(start, i);
+  }
+  return null;
 }
 
 // Whitelist: only direct yolo CLI entrypoints and `node … <yolo-script>` are allowed
@@ -252,10 +344,23 @@ const NODE_VALUE_FLAGS = new Set([
   "--input-type",
 ]);
 
+// CR4.2: a token is a trusted yolo script only if its basename is yolo(.js/…)
+// AND it resolves under the canonical install root. The basename-only check let
+// any on-disk file named yolo.ts masquerade as the trusted CLI
+// (e.g. `node scratch/yolo.ts` -> allowed).
 function isYoloScriptPath(token: unknown) {
-  const segments = String(token || "").split("/").filter(Boolean);
+  const raw = String(token || "").trim();
+  if (!raw) return false;
+  const segments = raw.split("/").filter(Boolean);
   const last = segments[segments.length - 1] || "";
-  return /^yolo(\.js|\.mjs|\.cjs|\.ts|\.tsx)?$/.test(last);
+  if (!/^yolo(\.js|\.mjs|\.cjs|\.ts|\.tsx)?$/.test(last)) return false;
+  // Bare `yolo` (no path) resolves via PATH to the installed bin — trust it.
+  if (segments.length === 1 && !raw.includes("/")) return true;
+  // A path-prefixed token must resolve under the install root.
+  const resolved = canonicalizePath(raw);
+  if (!resolved) return false;
+  const root = installRoot();
+  return resolved === root || resolved.startsWith(`${root}/`);
 }
 
 function splitShellTokens(command: string): string[] {

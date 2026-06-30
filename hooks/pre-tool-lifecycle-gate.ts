@@ -151,8 +151,32 @@ function pathSegments(filePath: unknown): string[] {
   return String(filePath || "").replace(/\\/g, "/").split("/").filter(Boolean);
 }
 
+// CR4.1: lexically collapse "." and ".." segments BEFORE checking excluded
+// directories. The previous naive split("/") let `.yolo/../src/x.ts` match the
+// `.yolo` exclude segment and early-exit(0) (allowing the write) even though the
+// resolved target is a real source file. A proper stack-based collapse cancels
+// `.yolo` against the following `..`, so the exclude check sees the real target
+// (`src/x.ts`). A leading `..` (escaping above root) is preserved so callers
+// can detect the escape.
+function collapseDots(segments: string[]): string[] {
+  const out: string[] = [];
+  for (const segment of segments) {
+    if (segment === ".") continue;
+    if (segment === "..") {
+      if (out.length > 0 && out[out.length - 1] !== "..") {
+        out.pop(); // cancel the previous segment (e.g. .yolo/.. -> nothing)
+      } else {
+        out.push(".."); // escape above root — preserve for escape detection
+      }
+      continue;
+    }
+    out.push(segment);
+  }
+  return out;
+}
+
 function pathUnderExcludedDir(filePath: unknown) {
-  const segments = pathSegments(filePath);
+  const segments = collapseDots(pathSegments(filePath));
   return segments.some((segment) => EXCLUDE_DIR_SEGMENTS.has(segment));
 }
 
