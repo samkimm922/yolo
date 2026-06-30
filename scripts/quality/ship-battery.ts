@@ -2,11 +2,13 @@
 // report that only claims status=pass.
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { initLifecycleState } from "../../src/lifecycle/state.js";
 import { writeLifecycleStageReport } from "../../src/lifecycle/progress.js";
 import { runPiRuntime } from "../../src/runtime/pi-runtimes.js";
+import { computeSourceFingerprint } from "../../src/runtime/evidence/source-fingerprint.js";
 
 type ShipBatteryCase = {
   id: string;
@@ -113,5 +115,59 @@ export async function runShipBattery(): Promise<ShipBatteryResult[]> {
       rmSync(root, { recursive: true, force: true });
     }
   }
+  // CR5 part (b): source mutation between acceptance-freeze and ship must block.
+  results.push(await runStaleSourceMutationCase());
   return results;
+}
+
+// CR5 part (b): freeze an acceptance report whose source_fingerprint covers a
+// real tracked source file, then mutate that file, then ship. The ship gate must
+// recompute the fingerprint, detect the mutation, and block.
+async function runStaleSourceMutationCase(): Promise<ShipBatteryResult> {
+  const root = mkdtempSync(join(tmpdir(), "yolo-ship-stale-"));
+  try {
+    // A real git repo so gitTrackedSourceFiles resolves the source set.
+    execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+    execFileSync("git", ["config", "user.email", "ship-battery@test"], { cwd: root, stdio: "ignore" });
+    execFileSync("git", ["config", "user.name", "ship-battery"], { cwd: root, stdio: "ignore" });
+    // A tracked source file that the fingerprint will cover.
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "service.ts"), "export const x = 1;\n", "utf8");
+    execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+    execFileSync("git", ["commit", "-m", "baseline", "--no-gpg-sign"], { cwd: root, stdio: "ignore" });
+
+    const prdPath = join(root, "specs", "prd.json");
+    writeJson(prdPath, { version: "2.0", id: "PRD-SHIP-STALE", tasks: [] });
+    setupShipReadyLifecycle(root, prdPath);
+    // Freeze acceptance WITH a real source fingerprint over the current source.
+    const fingerprint = computeSourceFingerprint(root);
+    writeLifecycleStageReport("acceptance", {
+      status: "pass",
+      summary: "acceptance frozen with source fingerprint",
+      prd_path: prdPath,
+      evidence: [{ path: "state/acceptance/evidence.json" }],
+      source_fingerprint: fingerprint,
+    }, lifecycleOptions(root));
+
+    // Mutate the tracked source AFTER acceptance-freeze.
+    writeFileSync(join(root, "src", "service.ts"), "export const x = 2; // TAMPERED\n", "utf8");
+
+    const result = await runPiRuntime("ship", {
+      prdPath,
+      projectRoot: root,
+      stateRoot: join(root, ".yolo"),
+      writeLifecycle: false,
+    }) as { status?: string };
+    const status = result.status === "success" ? "pass" : "blocked";
+    return {
+      id: "stale_acceptance_after_source_mutation_blocks_ship",
+      category: "ship_gate_robustness",
+      expect: "blocked",
+      actualExit: status === "pass" ? 0 : 1,
+      actualStatus: status,
+      correct: status === "blocked",
+    };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
