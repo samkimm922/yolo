@@ -651,6 +651,9 @@ function startFileWatchers() {
       }
     } catch { /* best-effort resync */ }
   }, 5000);
+  // L5: unref so the polling interval does not keep the Node process (or tests)
+  // alive on its own — it only fires while the server is running.
+  if (taskLogsPollInterval && typeof taskLogsPollInterval.unref === "function") taskLogsPollInterval.unref();
 
   // 监听 current-run.json 变化（用 watchFile 做轮询式监听，更可靠）
   if (existsSync(CURRENT_RUN_FILE)) {
