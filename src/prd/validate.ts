@@ -45,6 +45,9 @@ function isAjvConstructor(value: unknown): value is AjvRuntimeConstructor {
 type ValidateOptions = UnknownRecord & {
   ajv?: AjvInstance;
   schema?: JsonSchema;
+  // When true, unknown condition types (misspelled evaluators that pass
+  // validation but FAIL at runtime) are promoted from warnings to errors.
+  strict?: boolean;
 };
 
 type ValidationErrorDetail = {
@@ -256,6 +259,16 @@ export function validatePrdDocument(prd: unknown, schema: JsonSchema, ajv: AjvIn
     for (const condValue of allConds) {
       const cond = asRecord(condValue);
       if (typeof cond.type === "string" && !knownEvaluatorTypes.includes(cond.type)) {
+        // prd-validate: a misspelled/unknown condition type passes validation
+        // but FAILS at runtime (contract.ts treats it as FAIL). In strict mode
+        // promote it to an error so the PRD is rejected up front; otherwise keep
+        // it as a warning for backward compatibility.
+        if (options.strict === true) {
+          return {
+            ok: false,
+            error: `${task.id}: 未知条件类型 "${cond.type}" (strict 模式下视为错误；contract 运行时会 FAIL)`,
+          };
+        }
         warnings.push(`${task.id}: 未知条件类型 "${cond.type}"，将静默通过`);
       }
     }

@@ -463,12 +463,18 @@ function writeFilesystemLineBaseline({
     }
   };
   walk("");
+  // M11: a baseline write failure must NOT be swallowed. The baseline is the
+  // tamper-audit contract for the worktree; losing it silently means merge-time
+  // verification can't detect source mutation. Fail the worktree creation so
+  // the task blocks rather than proceeding with an unverifiable baseline.
   try {
     writeFileSync(join(wtPath, ".yolo-worktree-baseline.json"), JSON.stringify({
       line_counts: lineCounts,
       hashes,
     }, null, 2), "utf8");
-  } catch {}
+  } catch (error) {
+    throw new Error(`worktree baseline write failed (${wtPath}): ${error instanceof Error ? error.message : String(error)}; cannot proceed without a tamper-audit baseline`);
+  }
 }
 
 function gitHeadCommit(rootDir, { execSync = defaultExecSync } = Object()) {
