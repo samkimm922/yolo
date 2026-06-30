@@ -149,6 +149,47 @@ describe("run lifecycle shutdown helpers", () => {
     assert.deepEqual(calls.at(-1), ["exit", 1]);
   });
 
+  test("H7: fatal error handler kills active provider processes before exit", () => {
+    const calls = [];
+    handleRunnerFatalError({
+      reason: new Error("boom"),
+      exitReason: "uncaughtException",
+      runResultsTracker: { completed: new Set(), failed: [] },
+      state: makeState(),
+      startTimeMs: 0,
+      logRun: () => {},
+      writeProgressSnapshot: () => {},
+      cleanupRuntimeStateFiles: () => {},
+      execFileSync: () => {},
+      killActiveProviderProcesses: (opts) => calls.push(["kill", opts]),
+      error: () => {},
+      exit: (code) => calls.push(["exit", code]),
+    });
+    assert.ok(calls.some((call) => call[0] === "kill"), "fatal path must call killActiveProviderProcesses");
+    assert.deepEqual(calls.at(-1), ["exit", 1]);
+  });
+
+  test("H7: global timeout handler kills active provider processes before exit", () => {
+    const calls = [];
+    const controller = createRunnerTimeoutController({
+      initialTimeoutMs: 1000,
+      startTimeMs: 0,
+      runResultsTracker: { completed: new Set(), failed: [] },
+      state: makeState(),
+      logRun: () => {},
+      writeProgressSnapshot: () => {},
+      archiveCurrentRunFile: () => {},
+      cleanupRuntimeStateFiles: () => {},
+      execFileSync: () => {},
+      killActiveProviderProcesses: (opts) => calls.push(["kill", opts]),
+      log: () => {},
+      exit: (code) => calls.push(["exit", code]),
+    });
+    controller.handleGlobalTimeout();
+    assert.ok(calls.some((call) => call[0] === "kill"), "timeout path must call killActiveProviderProcesses");
+    assert.deepEqual(calls.at(-1), ["exit", 2]);
+  });
+
   test("fatal error handler cleans up the active worktree and branch like graceful shutdown", () => {
     const calls = [];
     handleRunnerFatalError({

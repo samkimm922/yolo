@@ -317,7 +317,7 @@ export function readLedgerJsonl(filePath: string, options: LedgerOptions = Objec
   return readJsonlRecords(filePath, options) as LedgerRecord[];
 }
 
-function withLedgerAppendLock<T>(filePath: string, options: LedgerOptions, append: () => T): T {
+export function withLedgerAppendLock<T>(filePath: string, options: LedgerOptions, append: () => T): T {
   let release: (() => void) | undefined;
   let appendError: unknown;
   try {

@@ -67,6 +67,7 @@ export function createRunnerTimeoutController({
   archiveCurrentRunFile,
   cleanupRuntimeStateFiles,
   execFileSync = defaultExecFileSync,
+  killActiveProviderProcesses = defaultKillActiveProviderProcesses,
   log = console.log,
   exit = process.exit,
   setTimeoutFn = setTimeout,
@@ -80,6 +81,9 @@ export function createRunnerTimeoutController({
     const durH = (timeoutMs / 3600000).toFixed(1);
     log(`[yolo-runner] 全局超时（${durH} 小时）`);
     try {
+      // H7: kill provider children on the timeout path too (previously only
+      // gracefulShutdown did), or they orphan and outlive the runner.
+      killActiveProviderProcesses({ log });
       logRun("run_end", {
         prd: "unknown",
         exit_reason: "timeout",
@@ -180,11 +184,15 @@ export function handleRunnerFatalError({
   writeProgressSnapshot,
   cleanupRuntimeStateFiles,
   execFileSync = defaultExecFileSync,
+  killActiveProviderProcesses = defaultKillActiveProviderProcesses,
   error = console.error,
   exit = process.exit,
 } = Object()) {
   error("[yolo-runner] 未捕获的异常:", reason);
   try {
+    // H7: kill provider children on the fatal path too (previously only
+    // gracefulShutdown did), or they orphan and outlive the runner.
+    killActiveProviderProcesses({ log: error });
     writeRunEndOnCrashEvent({ reason: exitReason }, { logRun, startTimeMs });
     saveRunnerProgressSnapshot({
       stateDir: state.stateDir(),
