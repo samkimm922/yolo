@@ -431,7 +431,7 @@ function interpreterEvalWritesToSource(command: unknown): boolean {
   // `compacted` strips quote-concat (`'a'+'b'`) and all whitespace, so the
   // osascript delegation `do shell script "..."` is matched as `doshellscript`.
   const compacted = text.replace(/['"]\s*\+\s*['"]/g, "").replace(/\s+/g, "");
-  const writeSurface = /\b(writeFileSync|appendFileSync|createWriteStream|rmSync|unlinkSync|mkdirSync|open|write_text|unlink|remove|rmtree|promises\.writeFile|promises\.appendFile|Set-Content|Add-Content|Out-File|doshellscript|File\.write)\b/i.test(compacted);
+  const writeSurface = /\b(writeFileSync|appendFileSync|createWriteStream|rmSync|unlinkSync|mkdirSync|open|write_text|unlink|remove|rmtree|promises\.writeFile|promises\.appendFile|Set-Content|Add-Content|Out-File|doshellscript|File\.write|file_put_contents|fwrite)\b/i.test(compacted);
   if (!writeSurface) return false;
   return commandMentionsSourcePath(command);
 }
