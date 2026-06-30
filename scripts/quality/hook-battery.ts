@@ -59,6 +59,47 @@ const WRITE_CASES = [
     id: "bash_rm_write_to_source_blocks",
     command: "rm src/p.ts",
   },
+  // H5: expanded bash write-detection surface — each class must block.
+  {
+    id: "bash_ruby_eval_write_to_source_blocks",
+    command: "ruby -e \"File.write('src/p.ts', 'x')\"",
+  },
+  {
+    id: "bash_perl_eval_write_to_source_blocks",
+    command: "perl -e \"open(F, '>src/p.ts'); print F 'x'\"",
+  },
+  {
+    id: "bash_php_eval_write_to_source_blocks",
+    command: "php -r 'file_put_contents(\"src/p.ts\", \"x\");'",
+  },
+  {
+    id: "bash_node_promises_write_to_source_blocks",
+    command: "node -e \"require('fs').promises.writeFile('src/p.ts', 'x')\"",
+  },
+  {
+    id: "bash_ln_sf_write_to_source_blocks",
+    command: "ln -sf /etc/hosts src/p.ts",
+  },
+  {
+    id: "bash_install_write_to_source_blocks",
+    command: "install -m 644 README.md src/p.ts",
+  },
+  {
+    id: "bash_patch_write_to_source_blocks",
+    command: "patch src/p.ts < /tmp/x.patch",
+  },
+  {
+    id: "bash_git_apply_write_to_source_blocks",
+    command: "git apply src/p.ts /tmp/x.diff",
+  },
+  {
+    id: "bash_git_checkout_write_to_source_blocks",
+    command: "git checkout -- src/p.ts",
+  },
+  {
+    id: "bash_git_restore_write_to_source_blocks",
+    command: "git restore src/p.ts",
+  },
 ];
 
 function runWriteCase(testCase: { id: string; command: string }): HookBatteryResult {

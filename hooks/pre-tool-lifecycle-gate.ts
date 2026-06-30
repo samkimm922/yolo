@@ -240,9 +240,10 @@ function bashWritesToSource(command: unknown) {
   // In-place edit commands targeting source files.
   if (/\b(?:sed|perl|awk|ruby)\b(?:\s+\S+)*\s+-i\b/.test(trimmed)) return true;
 
-  // tee to a source path.
-  const teeMatch = trimmed.match(/\btee\s+(?:(?:-[a-zA-Z]+)\s+)*(\S+)/);
-  if (teeMatch && isProjectSourceFile(teeMatch[1]) && !pathUnderExcludedDir(teeMatch[1])) return true;
+  // tee to source path(s): handle multiple targets, e.g. `echo x | tee a.ts b.ts`
+  // — the SECOND target must not escape detection (the old single-capture regex
+  // only inspected the first operand).
+  if (teeWritesToSource(trimmed)) return true;
 
   if (interpreterEvalWritesToSource(trimmed)) return true;
   if (fileCommandWritesToSource(trimmed)) return true;
@@ -302,6 +303,19 @@ function sourcePathFromToken(token: unknown): boolean {
   return isProjectSourceFile(value);
 }
 
+// H5: tee can fan out to multiple targets (`echo x | tee a.ts b.ts` / `-a`).
+// Capture EVERY operand path, not just the first, and block if any targets a
+// project source file. Skips `tee` option flags (-a, -i, -p) and `-`.
+function teeWritesToSource(command: unknown): boolean {
+  const tokens = shellWords(command);
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (commandBaseName(tokens[index]) !== "tee") continue;
+    const operands = nonOptionOperands(tokens.slice(index + 1).filter((token) => token !== "|"));
+    if (operands.some(sourcePathFromToken)) return true;
+  }
+  return false;
+}
+
 function fileCommandWritesToSource(command: unknown): boolean {
   const tokens = shellWords(command);
   let index = 0;
@@ -320,6 +334,56 @@ function fileCommandWritesToSource(command: unknown): boolean {
   }
   if (executable === "touch" || executable === "rm") {
     return nonOptionOperands(args).some(sourcePathFromToken);
+  }
+  // H5: `ln -sf TARGET LINK` writes the link operand (last). Same target rule
+  // as cp/mv: the destination operand is what mutates a source file.
+  if (executable === "ln") {
+    const operands = nonOptionOperands(args);
+    const target = operands[operands.length - 1];
+    return sourcePathFromToken(target);
+  }
+  // H5: `install -m 644 SRC DST` copies SRC→DST; dst (last operand) is the write.
+  if (executable === "install") {
+    const operands = nonOptionOperands(args);
+    const target = operands[operands.length - 1];
+    return sourcePathFromToken(target);
+  }
+  // H5: rsync writes destination path(s) (the trailing operand without a
+  // trailing slash). rsync has many option forms; treat the last non-option
+  // operand as the destination.
+  if (executable === "rsync") {
+    const operands = nonOptionOperands(args);
+    const target = operands[operands.length - 1];
+    return sourcePathFromToken(target);
+  }
+  // H5: patch mutates files in place. Operands may be the target file or a
+  // patch; treat a source-path operand as a write surface.
+  if (executable === "patch") {
+    return nonOptionOperands(args).some(sourcePathFromToken);
+  }
+  // H5: git subcommands that write to working-tree source: apply, checkout --,
+  // restore. These overwrite/modify tracked source files.
+  if (executable === "git") {
+    return gitWritesToSource(args);
+  }
+  return false;
+}
+
+// H5: `git apply`, `git checkout -- <path>`, `git restore <path>` overwrite
+// working-tree files. `git checkout`/`git restore` with no path or a branch
+// operand are NOT writes. We require a `--` or a source-path operand to the
+// known write subcommands.
+function gitWritesToSource(args: string[]): boolean {
+  const subcommand = args.find((arg) => !String(arg).startsWith("-"));
+  const rest = args.slice(args.indexOf(subcommand || "") + 1);
+  const pathArgs = rest.filter((arg) => !String(arg).startsWith("-") && arg !== "--");
+  const mentionsSource = pathArgs.some(sourcePathFromToken);
+  if (subcommand === "apply") return mentionsSource;
+  if (subcommand === "restore") return mentionsSource;
+  if (subcommand === "checkout") {
+    // checkout restores files only when `--` is present (disambiguating from
+    // branch switching) or a source path is named.
+    return rest.includes("--") || mentionsSource;
   }
   return false;
 }
@@ -349,14 +413,26 @@ function interpreterEvalWritesToSource(command: unknown): boolean {
   while (index < tokens.length && /^[A-Z_][A-Z0-9_]*=/.test(tokens[index])) index += 1;
   const executable = commandBaseName(tokens[index]);
   const args = tokens.slice(index + 1);
+  // H5: cover all eval-capable interpreters, not just node/python. Adding
+  // ruby -e, perl -e, php -r, pwsh/powershell -c/-Command, and osascript.
   const isEvalInterpreter = (
     (["node", "nodejs", "bun", "deno"].includes(executable) && args.some((arg) => arg === "-e" || arg === "--eval"))
     || (/^python(?:\d+(?:\.\d+)?)?$/.test(executable) && args.includes("-c"))
+    || (executable === "ruby" && args.some((arg) => arg === "-e"))
+    || (executable === "perl" && args.some((arg) => arg === "-e"))
+    || (executable === "php" && args.some((arg) => arg === "-r"))
+    || ((executable === "pwsh" || executable === "powershell") && args.some((arg) => arg === "-c" || arg === "-command"))
+    || (executable === "osascript")
   );
   if (!isEvalInterpreter) return false;
-  if (!/\b(writeFileSync|appendFileSync|createWriteStream|rmSync|unlinkSync|mkdirSync|open|write_text|unlink|remove|rmtree)\b/.test(String(command || ""))) {
-    return false;
-  }
+  const text = String(command || "");
+  // H5: detect write/remove surfaces including fs.promises.writeFile and
+  // dynamically constructed names like 'write'+'FileSync' or "write"+"File".
+  // `compacted` strips quote-concat (`'a'+'b'`) and all whitespace, so the
+  // osascript delegation `do shell script "..."` is matched as `doshellscript`.
+  const compacted = text.replace(/['"]\s*\+\s*['"]/g, "").replace(/\s+/g, "");
+  const writeSurface = /\b(writeFileSync|appendFileSync|createWriteStream|rmSync|unlinkSync|mkdirSync|open|write_text|unlink|remove|rmtree|promises\.writeFile|promises\.appendFile|Set-Content|Add-Content|Out-File|doshellscript|File\.write|file_put_contents|fwrite)\b/i.test(compacted);
+  if (!writeSurface) return false;
   return commandMentionsSourcePath(command);
 }
 
