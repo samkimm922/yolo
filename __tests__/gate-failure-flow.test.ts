@@ -37,7 +37,7 @@ function baseOptions(record, overrides = {}) {
     runtimeDir: "/tmp/runtime",
     yoloRoot: "/tmp/yolo",
     projectRoot: "/repo",
-    analyzeFromGateLog: () => null,
+    analyzeFromGateLog: () => ({ failures: null, unreadable: false }),
     analyzeOutput: () => [{ type: "eslint", detail: "unused", code: "no-unused-vars" }],
     summarizeFailures: () => ({
       failedSummary: "eslint: unused",

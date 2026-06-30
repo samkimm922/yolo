@@ -102,8 +102,14 @@ export function validateTestGeneration(task, options = Object()) {
   const cwd = options.cwd || process.cwd();
   const policy = task?.test_generation || {};
   const mode = policy.mode || DEFAULT_MODE;
-  const changedProbe = Object.assign(Object(), Object.prototype.hasOwnProperty.call(options, "changedFiles")
-    ? { ok: true, files: options.changedFiles || [] }
+  // M4: a caller-supplied changedFiles=[] used to short-circuit the git check
+  // (hasOwnProperty treated presence as authoritative). An empty array must NOT
+  // bypass git inspection — only a non-empty caller-supplied list is trusted.
+  const callerChangedFiles = Object.prototype.hasOwnProperty.call(options, "changedFiles")
+    ? (options.changedFiles || [])
+    : null;
+  const changedProbe = Object.assign(Object(), callerChangedFiles && callerChangedFiles.length > 0
+    ? { ok: true, files: callerChangedFiles }
     : inspectChangedFiles(cwd));
   const changedFiles = changedProbe.files || [];
   const failures = [];

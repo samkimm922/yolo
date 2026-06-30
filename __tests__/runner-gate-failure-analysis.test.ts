@@ -25,8 +25,10 @@ describe("runner gate failure analysis", () => {
         ],
       }), "utf8");
 
-      const failures = analyzeFailureFromGateLog("FIX-001", logDir);
+      const result = analyzeFailureFromGateLog("FIX-001", logDir);
+      const failures = result.failures;
 
+      assert.equal(result.unreadable, false);
       assert.deepEqual(failures, [{
         id: "POST-CODE",
         type: "code_contains",
