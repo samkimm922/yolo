@@ -253,12 +253,33 @@ function previousRecordHash(filePath: string): unknown {
   return null;
 }
 
+// H3: resolve an optional project-rooted HMAC key for ledger record signing.
+// The key lives at <stateRoot>/keys/ledger.hmac (project-rooted, optional). When
+// present, appended records carry a record_sig computed with this key, so
+// append-only write access alone cannot forge a valid chain. Returns undefined
+// when no key is configured (backward-compatible with existing unsigned chains).
+export const LEDGER_HMAC_KEY_REL = "keys/ledger.hmac";
+export function resolveLedgerHmacKey(stateRoot?: string): string | undefined {
+  if (!stateRoot) return undefined;
+  const keyPath = join(stateRoot, LEDGER_HMAC_KEY_REL);
+  if (!existsSync(keyPath)) return undefined;
+  try {
+    const key = readFileSync(keyPath, "utf8").trim();
+    return key.length > 0 ? key : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function validateLedgerChain(records: unknown[] = [], options: LedgerOptions = Object()) {
   const errors: LedgerChainError[] = [];
   const allowExternalHead = options.allowExternalHead === true || options.allow_external_head === true;
+  // H3: HMAC key for record_sig verification (project-rooted, optional). When
+  // present, every record's record_sig is verified; a forged append fails closed.
+  const hmacKey = typeof options.hmacKey === "string" ? options.hmacKey : (typeof options.hmac_key === "string" ? options.hmac_key : undefined);
   let previousHash = allowExternalHead && isRecord(records[0]) && records[0].prev_hash ? records[0].prev_hash : null;
   records.forEach((record, index) => {
-    const validation = validateLedgerRecord(record);
+    const validation = validateLedgerRecord(record, hmacKey ? { hmacKey } : Object());
     for (const error of validation.errors) {
       errors.push({ index, code: "LEDGER_RECORD_INVALID", message: error });
     }
@@ -328,13 +349,20 @@ export function appendJsonlRecord<TRecord extends LedgerRecord>(filePath: string
     // computes record_hash) so the hash is self-consistent with the redacted
     // payload. Readers see only redacted data; the chain integrity is preserved.
     const safeRecord = redactDeep(record || Object());
+    // H3: resolve the project HMAC key (from explicit option or stateRoot) so
+    // the appended record carries a record_sig when the project has committed
+    // to HMAC-signed ledger chains.
+    const hmacKey = typeof options.hmacKey === "string" ? options.hmacKey
+      : typeof options.hmac_key === "string" ? options.hmac_key
+      : resolveLedgerHmacKey(typeof options.stateRoot === "string" ? options.stateRoot : (typeof options.state_root === "string" ? options.state_root : undefined));
     const payload = buildLedgerRecord(safeRecord?.event, safeRecord, {
       ...options,
       now,
       ledger: safeRecord?.ledger || options.ledger,
       prevHash: options.prevHash ?? options.prev_hash ?? safeRecord?.prev_hash ?? previousRecordHash(filePath),
+      hmacKey,
     });
-    const validation = validateLedgerRecord(payload);
+    const validation = validateLedgerRecord(payload, hmacKey ? { hmacKey } : Object());
     if (!validation.ok) {
       throw ledgerAppendError("LEDGER_APPEND_RECORD_INVALID", `Invalid evidence ledger record: ${validation.errors.join("; ")}`, {
         ledger_path: filePath,

@@ -71,7 +71,7 @@ export const EVIDENCE_BATTERY: EvidenceBatteryCase[] = [
 ];
 
 export function runEvidenceBattery(): EvidenceBatteryResult[] {
-  const demandResults = EVIDENCE_BATTERY.map((testCase) => {
+  const demandResults: EvidenceBatteryResult[] = EVIDENCE_BATTERY.map((testCase) => {
     const stateDir = mkdtempSync(join(tmpdir(), "yolo-evidence-battery-"));
     try {
       testCase.seed(stateDir);
@@ -155,6 +155,42 @@ export function runEvidenceBattery(): EvidenceBatteryResult[] {
     });
   } finally {
     rmSync(lockRoot, { recursive: true, force: true });
+  }
+  // H3: HMAC-signed ledger chain. A forged record_sig (an attacker who can
+  // appendFileSync but lacks the project HMAC key) must fail chain validation.
+  const hmacRoot = mkdtempSync(join(tmpdir(), "yolo-ledger-hmac-battery-"));
+  try {
+    const stateDir = hmacRoot;
+    mkdirSync(join(stateDir, "keys"), { recursive: true });
+    writeFileSync(join(stateDir, "keys", "ledger.hmac"), "battery-hmac-key", "utf8");
+    const ledgerPath = join(stateDir, "events.jsonl");
+    appendJsonlRecord(ledgerPath, { event: "signed-1", ledger: "state" }, { stateRoot: stateDir });
+    const records = readLedgerJsonl(ledgerPath);
+    // Positive: forged sig (valid hash, bogus sig) -> blocked.
+    const forged = [{ ...records[0], record_sig: "f".repeat(64) }];
+    const forgedResult = validateLedgerChain(forged, { hmacKey: "battery-hmac-key" });
+    const forgedStatus = forgedResult.status === "fail" ? "blocked" : "pass";
+    demandResults.push({
+      id: "unsigned_appended_record_blocks_chain_validation",
+      category: "evidence_gate_robustness",
+      expect: "blocked",
+      actualExit: forgedStatus === "pass" ? 0 : 1,
+      actualStatus: forgedStatus,
+      correct: forgedStatus === "blocked",
+    });
+    // Negative: the legitimately-signed chain validates.
+    const validResult = validateLedgerChain(records, { hmacKey: "battery-hmac-key" });
+    const validStatus = validResult.status === "pass" ? "pass" : "blocked";
+    demandResults.push({
+      id: "hmac_signed_chain_validates",
+      category: "evidence_gate_robustness",
+      expect: "pass",
+      actualExit: validStatus === "pass" ? 0 : 1,
+      actualStatus: validStatus,
+      correct: validStatus === "pass",
+    });
+  } finally {
+    rmSync(hmacRoot, { recursive: true, force: true });
   }
   return demandResults;
 }
