@@ -16,6 +16,7 @@ type HookBatteryResult = {
 const require = createRequire(import.meta.url);
 const TSX_LOADER = require.resolve("tsx");
 const HOOK = join(process.cwd(), "hooks", "pre-tool-lifecycle-gate.ts");
+const YOLO_WRITE_HOOK = join(process.cwd(), "hooks", "pre-tool-block-yolo-write.ts");
 
 function writeBlockedStatus(root: string) {
   const dir = join(root, ".yolo", "lifecycle");
@@ -83,5 +84,98 @@ function runWriteCase(testCase: { id: string; command: string }): HookBatteryRes
 }
 
 export function runHookBattery(): HookBatteryResult[] {
-  return WRITE_CASES.map(runWriteCase);
+  const results = WRITE_CASES.map(runWriteCase);
+  // CR4: four confirmed hook bypasses — each must block; negatives must allow.
+  results.push(...runCr4BypassCases());
+  return results;
+}
+
+// CR4: exercise the two hooks that the four bypasses target.
+// CR4.1 (path traversal) -> pre-tool-lifecycle-gate (Edit/Write file_path).
+// CR4.2/3/4 (basename allowlist / $() descent / variable expansion) ->
+//   pre-tool-block-yolo-write (Bash command touching .yolo state).
+function runHookInput(root: string, hook: string, payload: unknown) {
+  return spawnSync(process.execPath, ["--import", TSX_LOADER, hook], {
+    cwd: root,
+    input: JSON.stringify(payload),
+    encoding: "utf8",
+  });
+}
+
+function cr4Result(id: string, exitCode: number | null, expectBlocked: boolean): HookBatteryResult {
+  const status = exitCode === 2 ? "blocked" : "allowed";
+  const correct = expectBlocked ? status === "blocked" : status === "allowed";
+  return {
+    id,
+    category: "lifecycle_hook_safety",
+    expect: expectBlocked ? "blocked" : "allowed",
+    actualExit: exitCode ?? 1,
+    actualStatus: status,
+    correct,
+  };
+}
+
+function runCr4BypassCases(): HookBatteryResult[] {
+  const out: HookBatteryResult[] = [];
+  const root = mkdtempSync(join(tmpdir(), "yolo-cr4-bypass-"));
+  try {
+    mkdirSync(join(root, "src"), { recursive: true });
+    mkdirSync(join(root, "scratch"), { recursive: true });
+    mkdirSync(join(root, ".yolo", "state"), { recursive: true });
+    mkdirSync(join(root, ".yolo", "lifecycle"), { recursive: true });
+    writeFileSync(join(root, ".yolo", "state", "events.jsonl"), "{}\n", "utf8");
+    writeBlockedStatus(root);
+
+    // CR4.1: `.yolo/../src/x.ts` must collapse to src/x.ts and be gated (not
+    // early-exit-allowed by the `.yolo` exclude segment).
+    out.push(cr4Result(
+      "cr4_traversal_dotdot_collapses_before_exclude_blocks",
+      runHookInput(root, HOOK, { tool_name: "Edit", tool_input: { file_path: ".yolo/../src/x.ts" } }).status,
+      true,
+    ));
+    // CR4.1 negative: a legit excluded-dir path is still early-exit-allowed.
+    out.push(cr4Result(
+      "cr4_traversal_legit_excluded_dir_allows",
+      runHookInput(root, HOOK, { tool_name: "Edit", tool_input: { file_path: ".yolo/config.json" } }).status,
+      false,
+    ));
+
+    // CR4.2: a disk file named yolo.ts but NOT under the install root must not
+    // be allowlisted (`node scratch/yolo.ts …`).
+    out.push(cr4Result(
+      "cr4_basename_scratch_yolo_script_blocks",
+      runHookInput(root, YOLO_WRITE_HOOK, { tool_name: "Bash", tool_input: { command: "node scratch/yolo.ts read .yolo/state/events.jsonl" } }).status,
+      true,
+    ));
+
+    // CR4.3: `$(…)` subshell content must be descended into.
+    out.push(cr4Result(
+      "cr4_subshell_descent_blocks",
+      runHookInput(root, YOLO_WRITE_HOOK, { tool_name: "Bash", tool_input: { command: "yolo state read $(rm -rf .yolo)" } }).status,
+      true,
+    ));
+
+    // CR4.4: variable/quote-concatenation that can hide `.yolo` is deny-by-default.
+    out.push(cr4Result(
+      "cr4_variable_concatenation_blocks",
+      runHookInput(root, YOLO_WRITE_HOOK, { tool_name: "Bash", tool_input: { command: 'D=".yo""lo"; cat $D/state/events.jsonl' } }).status,
+      true,
+    ));
+
+    // CR4 negatives: legit yolo CLI and an unrelated command must still be allowed.
+    out.push(cr4Result(
+      "cr4_legit_yolo_cli_allows",
+      runHookInput(root, YOLO_WRITE_HOOK, { tool_name: "Bash", tool_input: { command: "yolo check" } }).status,
+      false,
+    ));
+    out.push(cr4Result(
+      "cr4_unrelated_command_allows",
+      runHookInput(root, YOLO_WRITE_HOOK, { tool_name: "Bash", tool_input: { command: "ls -la" } }).status,
+      false,
+    ));
+
+    return out;
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
