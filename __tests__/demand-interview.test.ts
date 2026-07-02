@@ -156,6 +156,96 @@ describe("demand interview", () => {
     assert.equal(coverage.quality.level, "sufficient");
   }));
 
+  test("accepts concrete CLI success criteria without vocabulary-whitelist wording", () => withRoot((root) => {
+    const dogfoodCriteria = [
+      "成功标准：CLI 必须输出 Markdown；包含总 commit 数、总新增/删除行数、按作者分组的 commit 列表，以及 feat/fix/chore/docs/refactor/test 六类计数；--output 必须写文件；错误输入必须非零退出。",
+      "用户看得到的 Markdown 至少包含标题 Git Weekly Report、Summary 区块、Type Statistics 表、Commits by Author 区块；fixture 中 Alice/Bob 的提交主题和精确计数必须可断言。",
+      "完成定义：测试 fixture 有 6 个指定提交时，stdout 必须精确包含 Total commits: 6、Lines added: 10、Lines deleted: 2、feat: 1、fix: 1、chore: 1、docs: 1、refactor: 1、test: 1，以及 Alice 和 Bob 分组标题。",
+    ];
+
+    for (const criterion of dogfoodCriteria) {
+      const session = newSession(root);
+      answer(session, "success_criteria", criterion);
+
+      assert.equal(session.answers.success_criteria.quality.level, "sufficient");
+      assert.deepEqual(session.answers.success_criteria.quality.follow_up_questions, []);
+      assert.equal(
+        inspectDemandInterviewCoverage(session).follow_up_questions.some((question) => question.slot === "success_criteria"),
+        false,
+      );
+    }
+  }));
+
+  test("keeps empty feel-good answers behind a follow-up", () => withRoot((root) => {
+    for (const vagueAnswer of ["做好一点", "让用户满意就行", "尽快完成"]) {
+      const session = newSession(root);
+
+      answer(session, "success_criteria", vagueAnswer);
+
+      assert.equal(session.answers.success_criteria.quality.level, "needs_follow_up");
+      assert.ok(session.answers.success_criteria.quality.reasons.includes("vague"));
+      assert.equal(session.follow_up_questions[0].slot, "success_criteria");
+    }
+  }));
+
+  test("caps missing-detail follow-ups and records an accepted assumption", () => withRoot((root) => {
+    const session = newSession(root);
+
+    answer(session, "success_criteria", "做好一点");
+    assert.equal(session.answers.success_criteria.quality.level, "needs_follow_up");
+    assert.equal(session.follow_up_counts.success_criteria.count, 1);
+
+    answer(session, "success_criteria", "做好一点");
+    assert.equal(session.answers.success_criteria.quality.level, "needs_follow_up");
+    assert.equal(session.follow_up_counts.success_criteria.count, 2);
+
+    answer(session, "success_criteria", "做好一点");
+    assert.equal(session.answers.success_criteria.quality.level, "accepted_with_assumption");
+    assert.ok(session.answers.success_criteria.quality.reasons.includes("vague"));
+    assert.deepEqual(session.answers.success_criteria.quality.follow_up_questions, []);
+    assert.equal(session.follow_up_counts.success_criteria.count, 3);
+    assert.equal(session.accepted_assumptions.length, 1);
+    assert.equal(session.accepted_assumptions[0].slot, "success_criteria");
+    assert.match(session.accepted_assumptions[0].message, /以原文接受，未通过结构判定/);
+    assert.equal(session.follow_up_plan.status, "clear");
+  }));
+
+  test("follow-up prompts disclose concrete missing signal categories", () => withRoot((root) => {
+    const session = newSession(root);
+
+    answer(session, "success_criteria", "做好一点");
+
+    const prompt = session.follow_up_questions[0].plain_language_prompt;
+    assert.match(prompt, /具体数量\/日期/);
+    assert.match(prompt, /可执行的命令或产物名/);
+    assert.match(prompt, /当…时…/);
+    assert.doesNotMatch(prompt, /请补充更具体的回答/);
+  }));
+
+  test("accepted assumptions pass through demand artifacts without blocking interview completion", () => withRoot((root) => {
+    const session = answerAllRequired(newSession(root));
+    answer(session, "success_criteria", "做好一点");
+    answer(session, "success_criteria", "做好一点");
+    answer(session, "success_criteria", "做好一点");
+    answer(session, "execution_approval", true);
+
+    const coverage = inspectDemandInterviewCoverage(session);
+    assert.equal(coverage.ready_for_prd_intake, true);
+    assert.equal(coverage.assumptions.length, 1);
+    assert.equal(coverage.follow_up_plan.status, "clear");
+
+    const input = demandInterviewToDemandInput(session);
+    assert.ok(Array.isArray(input.assumptions));
+    assert.ok(input.assumptions.some((item) => /success_criteria 以原文接受，未通过结构判定/.test(item)));
+    assert.equal(input.open_questions.length, 0);
+    const interviewCoverage = input.interview.coverage as { assumptions?: unknown[] };
+    assert.equal(interviewCoverage.assumptions?.length, 1);
+
+    const demandSession = buildDemandSession(input, { now: "2026-05-29T13:00:00.000Z" });
+    assert.ok(demandSession.project_facts.assumptions.some((item) => /success_criteria 以原文接受/.test(item.text)));
+    assert.equal(demandSession.interview.coverage.assumptions.length, 1);
+  }));
+
   test("does not mark detailed MVP tradeoffs vague only because they mention automation", () => withRoot((root) => {
     const session = newSession(root);
 
