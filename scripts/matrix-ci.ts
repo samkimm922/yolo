@@ -609,7 +609,7 @@ async function runL1(tempRoot: string) {
 function interviewAnswers(title: string, targetFile: string) {
   return [
     ["target_users", `A release operations manager uses ${title} daily on every pull request and is responsible for the merge/no-merge decision, failed-cell triage, and review signoff.`],
-    ["status_quo", "The coverage matrix is currently checked manually through soak runs, so regressions can be missed between manual runs."],
+    ["status_quo", "The coverage matrix is currently checked manually with `npm run soak` once per week, so regressions can be missed between manual runs."],
     ["pain_points", "Manual soak takes about 20 minutes of release-maintainer time, is skipped under deadline pressure, and lets a CLI, HTTP, or monorepo fixture regression reach main while ordinary unit tests still pass."],
     ["desired_outcome", `CI produces a fixed executable PRD for ${targetFile} and fails when the readiness check regresses.`],
     ["success_criteria", `The CI log shows exit 0, a concrete prd.json path, and a check-report.json whose JSON status is pass for ${targetFile}; any missing artifact or non-pass status turns the PR red.`],

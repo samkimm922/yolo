@@ -225,7 +225,8 @@ describe("yolo interview CLI", () => {
       assert.equal(result.coverage_detail.readiness.status, "needs_follow_up");
       assert.equal(result.next_question.id, "desired_outcome");
       assert.equal(result.next_question.follow_up, true);
-      assert.match(result.next_question.text, /用户|业务|能做什么/);
+      assert.match(result.next_question.text, /具体数量\/日期/);
+      assert.match(result.next_question.text, /当…时…/);
       assert.equal(result.coverage_detail.follow_up_questions[0].slot, "desired_outcome");
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -251,6 +252,38 @@ describe("yolo interview CLI", () => {
       assert.match(out.text(), /answer_quality:/);
       assert.match(out.text(), /follow_up:/);
       assert.match(out.text(), /角色|频率|负责/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("text output shows capped follow-up assumptions", async () => {
+    const root = tempProject();
+    try {
+      const started = await startInterview(root);
+      await answer(root, started.session_path, "success_criteria", "做好一点");
+      await answer(root, started.session_path, "success_criteria", "做好一点");
+
+      const out = capture();
+      const exitCode = await runYoloInterviewCli([
+        "answer",
+        "--session",
+        started.session_path,
+        "--question",
+        "success_criteria",
+        "--answer",
+        "做好一点",
+      ], { cwd: root, stdout: out.stream });
+
+      assert.equal(exitCode, 0);
+      assert.match(out.text(), /assumptions:/);
+      assert.match(out.text(), /success_criteria 以原文接受，未通过结构判定/);
+      assert.doesNotMatch(out.text(), /follow_up:/);
+
+      const saved = JSON.parse(readFileSync(started.session_path, "utf8"));
+      assert.equal(saved.answers.success_criteria.quality.level, "accepted_with_assumption");
+      assert.equal(saved.follow_up_counts.success_criteria.count, 3);
+      assert.equal(saved.accepted_assumptions.length, 1);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

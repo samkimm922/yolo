@@ -45,11 +45,30 @@ export interface DemandInterviewFollowUpQuestion extends DemandRecord {
   message?: string;
 }
 
+export interface DemandInterviewFollowUpCounter extends DemandRecord {
+  slot: string;
+  count: number;
+  reasons: string[];
+  updated_at?: string | null;
+}
+
+export interface DemandInterviewAcceptedAssumption extends DemandRecord {
+  slot: string;
+  question_id: string;
+  answer: string;
+  reasons: string[];
+  message: string;
+  follow_up_count: number;
+  accepted_at?: string | null;
+}
+
 export interface DemandInterviewAnswerQuality extends DemandRecord {
   score: number;
   level: string;
   reasons: string[];
   follow_up_questions: DemandInterviewFollowUpQuestion[];
+  original_score?: number;
+  assumption?: DemandInterviewAcceptedAssumption | null;
 }
 
 export interface DemandInterviewAnswerRecord extends DemandRecord {
@@ -90,6 +109,7 @@ export interface DemandInterviewQualitySummary extends DemandRecord {
   level: string;
   checked_slots: string[];
   low_quality_slots: string[];
+  accepted_with_assumption_slots?: string[];
 }
 
 export interface DemandInterviewApprovalState extends DemandRecord {
@@ -110,6 +130,7 @@ export interface DemandInterviewReadiness extends DemandRecord {
   warnings: DemandRecord[];
   follow_up_questions: DemandInterviewFollowUpQuestion[];
   follow_up_plan: DemandInterviewFollowUpPlan;
+  assumptions: DemandInterviewAcceptedAssumption[];
   next_actions: string[];
 }
 
@@ -122,6 +143,7 @@ export interface DemandInterviewCoverage extends DemandRecord {
   answered_slots: string[];
   quality: DemandInterviewQualitySummary;
   answer_quality: DemandRecord[];
+  assumptions: DemandInterviewAcceptedAssumption[];
   approval: DemandInterviewApprovalState;
   ready_for_discuss: boolean;
   ready_for_prd_intake: boolean;
@@ -156,6 +178,8 @@ export interface DemandInterviewSession extends Omit<DemandRuntimeInput, "answer
   readiness?: DemandInterviewReadiness;
   follow_up_questions?: DemandInterviewFollowUpQuestion[];
   follow_up_plan?: DemandInterviewFollowUpPlan;
+  follow_up_counts?: Record<string, DemandInterviewFollowUpCounter>;
+  accepted_assumptions?: DemandInterviewAcceptedAssumption[];
   next_question?: DemandInterviewQuestion | null;
   ledgers?: DemandInterviewLedgers;
 }
@@ -411,7 +435,9 @@ function compactReasons(reasons: Array<string | null | undefined> = []): string[
 
 const VAGUE_PATTERNS = [
   /^(users?|admins?|customers?|staff|operator|manager|system|平台|用户|客户|管理员|人员|业务|系统)$/i,
+  /^(做好一点|做得更好|让用户满意就行|用户满意就行|尽快完成|越快越好|差不多就行)$/i,
   /(etc\.?|等等|之类|相关|一些|某些|各种|多种|优化|提升|改善|更好|方便|智能|自动化|看情况)/i,
+  /(满意|尽快|差不多|随便|都可以|不确定|先这样|越快越好)/i,
   /(better|improve|optimi[sz]e|nice|easy|fast|smart|automation|dashboard|tooling)/i,
 ];
 
@@ -467,52 +493,164 @@ function technicalOnly(text: unknown): boolean {
   return technicalHits > 0 && technicalHits / Math.max(chunks.length, technicalHits) >= 0.5 && !hasBusinessSignal;
 }
 
+type DetailSignal = "quantified" | "artifact" | "assertion" | "causal" | "role_context" | "explicit_none";
+
+const SLOT_DETAIL_SIGNALS: Record<string, DetailSignal[]> = {
+  target_users: ["role_context"],
+  status_quo: ["quantified", "artifact", "assertion"],
+  pain_points: ["quantified", "artifact", "assertion", "causal"],
+  desired_outcome: ["quantified", "artifact", "assertion"],
+  success_criteria: ["quantified", "artifact", "assertion"],
+  success_proof: ["quantified", "artifact", "assertion"],
+  scope_boundaries: ["artifact", "assertion"],
+  exceptions: ["explicit_none", "quantified", "artifact", "assertion", "causal"],
+  mvp_priority: ["quantified", "artifact", "assertion"],
+};
+
+const DETAIL_SIGNAL_GUIDANCE: Record<DetailSignal, string> = {
+  quantified: "具体数量/日期/百分比/时长",
+  artifact: "可执行的命令或产物名",
+  assertion: "“当…时…”或“必须…”式可观察结果",
+  causal: "“因为/导致/造成/后果”式影响说明",
+  role_context: "角色名词加具体场景描述",
+  explicit_none: "明确写“没有特殊情况”",
+};
+
+function hasQuantifiedSignal(text: string): boolean {
+  const value = clean(text);
+  return hasPattern(value, [
+    /\d/u,
+    /\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/u,
+    /[零一二两三四五六七八九十百千万\d]+(?:个|次|天|周|月|年|小时|分钟|秒|行|条|件|类|名|位|份|组|列|项|轮|版|步|种|%)/u,
+    /(?:每天|每日|每周|每月|每年|每次|每当|每[天日周月年次])/u,
+    /\b(?:daily|weekly|monthly|hourly|each|every|once|twice|at least|at most|counts?|counted|counting|totals?)\b/i,
+  ]);
+}
+
+function hasArtifactSignal(text: string): boolean {
+  const value = clean(text);
+  return hasPattern(value, [
+    CLI_COMMAND_START,
+    CODE_STYLE_SIGNAL,
+    COMMAND_VERB_START,
+    /https?:\/\/\S+|www\.\S+/i,
+    /(?:^|\s)(?:\.{1,2}\/|\/[\w.-]+\/|[A-Za-z]:\\|[\w.-]+\/[\w./-]+)/u,
+    /--[A-Za-z0-9][\w-]*/u,
+    /`[^`]+`|"[^"]+"|'[^']+'|“[^”]+”|‘[^’]+’/u,
+    /\b[A-Z]{2,}s?\b/u,
+    /\b[A-Z][A-Z0-9_]{1,}\b/u,
+    /\b[A-Z][a-z]+\/[A-Z][a-z]+\b/u,
+    /\b[A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+)+\b/u,
+    /\b[A-Z][A-Za-z0-9]+(?:\s+[A-Za-z0-9]+){0,3}\s*:/u,
+  ]);
+}
+
+function hasAssertionSignal(text: string): boolean {
+  const value = clean(text);
+  return hasPattern(value, [
+    /(?:必须|应当|不得|需要|不能|不应|禁止|至少|至多|确保|保证)[^。；;]{2,}/u,
+    /(?:当|如果|若|每当|一旦)[^。；;]{2,}/u,
+    /[^。；;，,]{2,40}时[，,]?\S{2,}/u,
+    /(?:不做|不改|不碰|不包含|不要|不允许|不暴露|只做|仅覆盖|仅支持|排除)[^。；;]{2,}/u,
+    /\b(?:must|should|shall|need(?:s)? to|has to|cannot|can't|do not|don't|does not|doesn't|only|without|exclude)\b.{2,}/i,
+    /\b(?:when|if|whenever|once|after|before|during|while)\b.{2,}/i,
+  ]);
+}
+
+function hasCausalSignal(text: string): boolean {
+  const value = clean(text);
+  return hasPattern(value, [
+    /(?:因为|导致|造成|后果|影响|使得|以免|避免|返工|风险|太[慢晚贵长高低]|过[慢晚长高低])[^。；;]*/u,
+    /\b(?:because|caus(?:e|es|ed|ing)|so that|therefore|leads? to|results? in|impact|risk|prevents?|avoid|after|too\s+\w+)\b/i,
+  ]);
+}
+
+function hasExplicitNoExceptionSignal(text: string): boolean {
+  return hasPattern(clean(text), [
+    /^(?:没有|无|暂无|没有特殊情况|无特殊情况|没有异常|无异常)[。.!！\s]*$/u,
+    /^(?:none|no special cases?|no exceptions?|n\/a)[.! \t]*$/i,
+  ]);
+}
+
+function hasRoleContextSignal(text: string): boolean {
+  const value = clean(text);
+  const tokens = wordTokens(value);
+  const hasChineseRole = /[\u4e00-\u9fff]{2,}(?:员|师|官|经理|主管|负责人|编辑|审核|维护者|管理员|用户|客户|团队|小组|角色)/u.test(value);
+  const hasEnglishRole = /\b[A-Za-z][A-Za-z-]+(?:\s+[A-Za-z][A-Za-z-]+){0,3}\s+(?:managers?|owners?|operators?|editors?|reviewers?|maintainers?|analysts?|admins?|users?|customers?|leads?|teams?|staff|engineers?)\b/i.test(value)
+    || /\b[A-Za-z][A-Za-z-]*(?:ers|ors|ists|ants|ees)\b/i.test(value);
+  const hasContext = hasQuantifiedSignal(value)
+    || hasAssertionSignal(value)
+    || /\b(?:who|that|during|while|responsible for|need(?:s)? to|review(?:s)?|check(?:s)?|confirm(?:s)?)\b/i.test(value)
+    || /(?:负责|需要|用于|用来|查看|确认|处理|审核|维护|在.+时)/u.test(value)
+    || tokens.length >= 7;
+  return (hasChineseRole || hasEnglishRole) && hasContext;
+}
+
+function signalMatches(signal: DetailSignal, text: string): boolean {
+  if (signal === "quantified") return hasQuantifiedSignal(text);
+  if (signal === "artifact") return hasArtifactSignal(text);
+  if (signal === "assertion") return hasAssertionSignal(text);
+  if (signal === "causal") return hasCausalSignal(text);
+  if (signal === "role_context") return hasRoleContextSignal(text);
+  if (signal === "explicit_none") return hasExplicitNoExceptionSignal(text);
+  return false;
+}
+
+function hasSlotDetail(slot: string, text: string): boolean {
+  const signals = SLOT_DETAIL_SIGNALS[slot] || ["quantified", "artifact", "assertion"];
+  return signals.some((signal) => signalMatches(signal, text));
+}
+
+function shortAnswerAllowed(slot: string, text: string): boolean {
+  return slot === "exceptions" && hasExplicitNoExceptionSignal(text);
+}
+
 const SLOT_FOLLOW_UPS: Record<string, Record<string, string>> = {
   target_users: {
-    missing_detail: "请补充具体业务角色、他们多久遇到一次这个场景，以及他们负责处理什么结果。",
-    technical_only: "先不用写技术组件，请换成真实使用或负责的人：是什么角色、在什么频率下用、要负责什么。",
-    not_role: "这看起来像功能或命令，不像业务角色。请改写成真实使用或负责的人：是什么角色、使用频率、负责什么结果。",
-    vague: "“用户”还不够具体，请写出角色名称、使用频率和责任，比如谁每天/每周要靠它完成什么。",
+    missing_detail: "还缺以下任一种：角色名词加具体场景描述、具体数量/日期、或“当…时…”/“必须…”式可观察结果。",
+    technical_only: "还缺真实使用或负责的人：请写角色名词、具体场景描述，或补充具体数量/日期。",
+    not_role: "还缺真实角色：当前像命令或功能名，请改成角色名词加具体场景描述。",
+    vague: "还缺以下任一种：角色名词加具体场景描述、具体数量/日期、或“当…时…”/“必须…”式可观察结果。",
   },
   status_quo: {
-    missing_detail: "请描述现在实际怎么处理：谁在做、用什么表格/系统/人工办法、卡在哪里。",
-    technical_only: "请先写业务现场流程，而不是技术实现：现在谁怎么处理这个问题？",
-    vague: "请把现状说成一个真实流程：从发现问题到处理完，中间现在怎么走。",
+    missing_detail: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”/“必须…”式可观察结果。",
+    technical_only: "还缺当前流程的可观察结果：请补具体数量/日期、产物名，或“当…时…”式描述。",
+    vague: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”式当前流程。",
   },
   pain_points: {
-    missing_detail: "请补充最耽误时间、最容易出错或最影响业务的具体痛点，以及它造成的后果。",
-    technical_only: "请把技术问题翻译成业务痛点：它让谁多花时间、错过什么或承担什么风险？",
-    vague: "请写一个具体困扰，不要只写“效率低”或“体验不好”：哪里慢、哪里错、影响谁。",
+    missing_detail: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、“当…时…”式场景，或“因为/导致/造成/后果”式影响说明。",
+    technical_only: "还缺痛点影响：请补具体数量/日期，或写清“因为/导致/造成/后果”。",
+    vague: "还缺以下任一种：具体数量/日期、“当…时…”式场景，或“因为/导致/造成/后果”式影响说明。",
   },
   desired_outcome: {
-    missing_detail: "请补充做好后用户能完成的动作，或业务状态会变成什么样。",
-    technical_only: "请先不写技术方案，改写成用户或业务结果：谁能做什么，结果怎么变好。",
-    vague: "目标需要更具体：用户看到什么、能做什么、业务上减少什么问题。",
+    missing_detail: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”/“必须…”式可观察结果。",
+    technical_only: "还缺可观察结果：请补具体数量/日期、产物名，或“当…时…”式结果。",
+    vague: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”式目标结果。",
   },
   success_criteria: {
-    missing_detail: "请补充可验收标准：用户看得到什么，或业务能用什么结果判断已经完成。",
-    technical_only: "请把技术交付物换成验收现象：页面、流程或数据上要看到什么才算成功。",
-    vague: "“更好/更快”还不能验收，请写成可观察的通过条件。",
+    missing_detail: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”/“必须…”式可观察结果。",
+    technical_only: "还缺可验收的观察点：请补具体数量/日期、产物名，或“当…时…”/“必须…”式结果。",
+    vague: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”/“必须…”式可观察结果。",
   },
   success_proof: {
-    missing_detail: "请说明现场怎么证明：用什么样例、页面检查、指标或人工验收步骤来确认它真的有效。",
-    technical_only: "请把技术验证换成现场证明方式：验收时怎么操作、看什么结果。",
-    vague: "证明方式需要能执行：谁拿什么数据或样例，在哪里看到什么结果，才算通过。",
+    missing_detail: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”/“必须…”式可观察结果。",
+    technical_only: "还缺证明动作和结果：请补具体数量/日期、产物名，或“当…时…”式检查结果。",
+    vague: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“当…时…”式证明步骤。",
   },
   scope_boundaries: {
-    missing_detail: "请明确这次不做什么、不碰哪些流程/渠道/用户/数据，避免范围扩大。",
-    technical_only: "请把技术边界换成业务边界：哪些流程、数据、渠道或用户这次不要改。",
-    vague: "边界需要直接写“不做/不改/不覆盖”：这次哪些事情先排除。",
+    missing_detail: "还缺以下任一种：明确“不做/不改/不碰/只做”的可观察边界、具体数量/日期、或产物名。",
+    technical_only: "还缺范围边界：请写明确“不做/不改/不碰/只做”的可观察边界。",
+    vague: "还缺以下任一种：明确“不做/不改/不碰/只做”的可观察边界、具体数量/日期、或产物名。",
   },
   exceptions: {
-    missing_detail: "请补充至少一个特殊情况，或明确写“没有特殊情况”。",
-    technical_only: "请换成用户会遇到的异常场景：哪些情况如果没处理好会让结果不可信。",
-    vague: "异常需要具体一点：什么数据缺失、状态冲突或边界场景要特别处理。",
+    missing_detail: "还缺以下任一种：明确写“没有特殊情况”、具体数量/日期、产物名、“当…时…”式边界，或“因为/导致/造成/后果”式影响说明。",
+    technical_only: "还缺异常条件和可观察结果：请补具体数量/日期、产物名，或“当…时…”式边界。",
+    vague: "还缺以下任一种：明确写“没有特殊情况”、具体数量/日期，或“当…时…”式边界。",
   },
   mvp_priority: {
-    missing_detail: "请拆成第一版必须有的内容，以及可以后做的内容。",
-    technical_only: "请用业务优先级表达：第一版必须支撑哪条流程，哪些技术或能力可以后做。",
-    vague: "MVP 需要有取舍：第一版保留什么、暂缓什么。",
+    missing_detail: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“必须/后续/暂缓”式可观察取舍。",
+    technical_only: "还缺第一版取舍：请补具体数量/日期、产物名，或“必须/后续/暂缓”式边界。",
+    vague: "还缺以下任一种：具体数量/日期、可执行的命令或产物名、或“必须/后续/暂缓”式可观察取舍。",
   },
   execution_approval: {
     missing_detail: "请明确回答“批准”或“暂不批准”，如果暂不批准请说明还缺什么。",
@@ -521,76 +659,22 @@ const SLOT_FOLLOW_UPS: Record<string, Record<string, string>> = {
   },
 };
 
-const SLOT_QUALITY_RULES: Record<string, { detail?: RegExp[] }> = {
-  target_users: {
-    detail: [
-      /manager|customer|support|sales|ops|operator|user|store|admin|owner|analyst|店长|客服|主管|运营|销售|财务|法务|用户|客户|门店|仓库|负责人|审核/,
-      /daily|weekly|monthly|morning|每[天周月]|每天|每周|每月|早上|上线后|负责|处理|查看|审核|安排|确认/,
-    ],
-  },
-  status_quo: {
-    detail: [
-      /now|today|currently|manual|spreadsheet|export|email|system|后台|表格|导出|人工|现在|目前|临时|流程|系统/,
-      /use|check|scan|copy|send|处理|查看|筛选|复制|发送|登记|来回|靠/,
-    ],
-  },
-  pain_points: {
-    detail: [
-      /late|slow|error|miss|complain|risk|delay|duplicate|manual|too long|太晚|太慢|出错|遗漏|投诉|风险|耽误|重复|人工/,
-      /because|when|after|导致|因为|客户|损失|违约|返工|补救/,
-    ],
-  },
-  desired_outcome: {
-    detail: [
-      /can|able|before|without|reduce|see|know|finish|complete|能|可以|提前|减少|看到|完成|避免|优先/,
-      /manager|customer|user|业务|用户|客户|主管|店长|客服|运营|工单|库存|订单/,
-    ],
-  },
-  success_criteria: {
-    detail: [
-      /show|display|filter|sort|alert|badge|status|metric|count|rate|list|visible|显示|看到|筛选|提醒|标记|状态|指标|数量|比例/,
-      /when|if|below|above|less|more|before|after|当|如果|低于|高于|达到|之前|之后/,
-    ],
-  },
-  success_proof: {
-    detail: [
-      /test|create|verify|confirm|check|measure|compare|report|metric|验收|新建|验证|确认|检查|对比|指标|报表|现场|证明/,
-      /see|show|display|record|log|drop|increase|pass|看到|显示|记录|下降|提升|通过/,
-    ],
-  },
-  scope_boundaries: {
-    detail: [
-      /do not|don't|doesn't|not |only|exclude|out of scope|without|不做|不改|不碰|不包含|不要|只做|仅|排除|范围外/,
-      /supplier|mobile|import|channel|data|role|workflow|供应商|移动端|导入|渠道|数据|角色|流程|权限/,
-    ],
-  },
-  exceptions: {
-    detail: [
-      /none|no special|empty|missing|failed|offline|duplicate|edge|hidden|deleted|without|should not|default|history|没有|无|缺失|失败|离线|重复|特殊|异常|边界|隐藏|删除|默认|历史/,
-    ],
-  },
-  mvp_priority: {
-    detail: [
-      /mvp|first|later|phase|must|defer|next|第一版|先|后续|以后|暂缓|必须|优先|阶段/,
-      /include|only|support|包含|只做|支持|上线|版本/,
-    ],
-  },
-};
-
-function hasSlotDetail(slot: string, text: string): boolean {
-  const rules = SLOT_QUALITY_RULES[slot]?.detail || [];
-  return rules.length === 0 || rules.some((pattern) => pattern.test(text));
-}
-
 function followUpFor(slot: string, reason: string): string {
   const slotPrompts = SLOT_FOLLOW_UPS[slot] || {};
-  return slotPrompts[reason] || slotPrompts.missing_detail || "请补充一个更具体、可被业务现场确认的回答。";
+  if (slotPrompts[reason]) return slotPrompts[reason];
+  if (slotPrompts.missing_detail) return slotPrompts.missing_detail;
+  const signals = (SLOT_DETAIL_SIGNALS[slot] || ["quantified", "artifact", "assertion"])
+    .map((signal) => DETAIL_SIGNAL_GUIDANCE[signal])
+    .filter(Boolean);
+  return `还缺以下任一种：${signals.join("、")}。`;
 }
+
+const MAX_GUIDED_FOLLOW_UPS_PER_SLOT = 2;
+const CAPPED_FOLLOW_UP_REASONS = new Set(["missing_detail", "vague"]);
 
 function answerQualityFor(question: DemandInterviewQuestion, answer: unknown): DemandInterviewAnswerQuality {
   const text = textFromValue(answer);
   const normalized = clean(text);
-  const lower = normalized.toLowerCase();
   if (!normalized) {
     return {
       score: 0,
@@ -603,9 +687,11 @@ function answerQualityFor(question: DemandInterviewQuestion, answer: unknown): D
   const tokens = wordTokens(normalized);
   const approvalClear = question.slot === "execution_approval"
     && (parseApproval(answer) || /(暂不|不批准|否|no|false|not approved|do not|don't)/i.test(normalized));
-  const hasDetail = question.slot !== "execution_approval" && hasSlotDetail(question.slot, lower);
-  const tooShort = !approvalClear && (normalized.length < 14 || tokens.length <= 2);
-  const vague = hasPattern(normalized, VAGUE_PATTERNS) && !hasDetail;
+  const hasDetail = question.slot !== "execution_approval" && hasSlotDetail(question.slot, normalized);
+  const tooShort = !approvalClear
+    && !shortAnswerAllowed(question.slot, normalized)
+    && (normalized.length < 14 || tokens.length <= 2);
+  const vague = hasPattern(normalized, VAGUE_PATTERNS) && (!hasDetail || normalized.length < 18 || tokens.length <= 3);
   const techOnly = technicalOnly(normalized);
   const commandOrFeatureAsRole = question.slot === "target_users" && isCommandOrCodeLikeTargetUser(normalized);
   const missingDetail = question.slot !== "execution_approval" && !hasDetail;
@@ -645,6 +731,53 @@ function answerQualityFor(question: DemandInterviewQuestion, answer: unknown): D
     level: needsFollowUp ? "needs_follow_up" : "sufficient",
     reasons,
     follow_up_questions: followUps,
+  };
+}
+
+function followUpCountRecords(value: unknown): Record<string, DemandInterviewFollowUpCounter> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value as Record<string, DemandInterviewFollowUpCounter>)
+    .map(([slot, record]) => [slot, {
+      slot: clean(record?.slot || slot),
+      count: Number(record?.count || 0),
+      reasons: compactReasons(record?.reasons || []),
+      updated_at: clean(record?.updated_at) || null,
+    }]));
+}
+
+function cappedFollowUpReason(quality: DemandInterviewAnswerQuality): string {
+  const reason = clean(quality.follow_up_questions?.[0]?.reason);
+  return CAPPED_FOLLOW_UP_REASONS.has(reason) ? reason : "";
+}
+
+function assumptionMessage(slot: string, answer: string): string {
+  return `${slot} 以原文接受，未通过结构判定：${answer}`;
+}
+
+function acceptWithAssumption(
+  question: DemandInterviewQuestion,
+  answer: unknown,
+  quality: DemandInterviewAnswerQuality,
+  counter: DemandInterviewFollowUpCounter,
+  acceptedAt: string,
+): DemandInterviewAnswerQuality {
+  const answerText = textFromValue(answer);
+  const assumption = {
+    slot: clean(question.slot || question.id),
+    question_id: clean(question.id || question.question_id || question.slot),
+    answer: answerText,
+    reasons: quality.reasons,
+    message: assumptionMessage(clean(question.slot || question.id), answerText),
+    follow_up_count: counter.count,
+    accepted_at: acceptedAt,
+  };
+  return {
+    ...quality,
+    original_score: quality.original_score || quality.score,
+    score: Math.max(75, quality.score),
+    level: "accepted_with_assumption",
+    follow_up_questions: [],
+    assumption,
   };
 }
 
@@ -757,6 +890,10 @@ function qualityForAnsweredRecord(question?: DemandInterviewQuestion, record?: D
       level: clean(stored.level || (Number(stored.score) >= 75 ? "sufficient" : "needs_follow_up")),
       reasons: compactReasons(stored.reasons || []),
       follow_up_questions: asArray(stored.follow_up_questions).filter(Boolean),
+      original_score: Number.isFinite(Number(stored.original_score)) ? Number(stored.original_score) : undefined,
+      assumption: stored.assumption && typeof stored.assumption === "object"
+        ? stored.assumption as DemandInterviewAcceptedAssumption
+        : null,
     };
   }
   return answerQualityFor(question, record.answer);
@@ -777,6 +914,7 @@ function answeredQualityItems(session: DemandInterviewSessionInput = Object(), q
         level: quality.level,
         reasons: quality.reasons,
         follow_up_questions: quality.follow_up_questions,
+        assumption: quality.assumption || null,
       };
     })
     .filter(Boolean);
@@ -802,6 +940,16 @@ function followUpPlanForQuality(items: ReturnType<typeof answeredQualityItems> =
   };
 }
 
+function acceptedAssumptionsFromQuality(items: ReturnType<typeof answeredQualityItems> = []): DemandInterviewAcceptedAssumption[] {
+  return items
+    .map((item) => item.assumption)
+    .filter((item): item is DemandInterviewAcceptedAssumption => Boolean(item && typeof item === "object"));
+}
+
+function acceptedAssumptionMessages(items: DemandInterviewAcceptedAssumption[] = []): string[] {
+  return items.map((item) => clean(item.message)).filter(Boolean);
+}
+
 function qualitySummary(items: ReturnType<typeof answeredQualityItems> = []) {
   if (items.length === 0) {
     return {
@@ -809,15 +957,18 @@ function qualitySummary(items: ReturnType<typeof answeredQualityItems> = []) {
       level: "missing",
       checked_slots: [],
       low_quality_slots: [],
+      accepted_with_assumption_slots: [],
     };
   }
   const score = Math.round(items.reduce((total, item) => total + Number(item.score || 0), 0) / items.length);
-  const lowQuality = items.filter((item) => Number(item.score || 0) < 75 || item.level === "needs_follow_up");
+  const lowQuality = items.filter((item) => item.level === "needs_follow_up" || item.level === "missing");
+  const acceptedWithAssumption = items.filter((item) => item.level === "accepted_with_assumption");
   return {
     score,
-    level: lowQuality.length ? "needs_follow_up" : "sufficient",
+    level: lowQuality.length ? "needs_follow_up" : acceptedWithAssumption.length ? "accepted_with_assumption" : "sufficient",
     checked_slots: items.map((item) => item.slot),
     low_quality_slots: lowQuality.map((item) => item.slot),
+    accepted_with_assumption_slots: acceptedWithAssumption.map((item) => item.slot),
   };
 }
 
@@ -905,6 +1056,7 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
   const quality = qualitySummary(answerQuality);
   const followUpPlan = followUpPlanForQuality(answerQuality);
   const followUpQuestions = followUpPlan.follow_up_questions;
+  const acceptedAssumptions = acceptedAssumptionsFromQuality(answerQuality);
   const hasFollowUps = followUpQuestions.length > 0;
   const discussFollowUps = followUpQuestions.filter((question) => DISCUSS_REQUIRED_SLOTS.includes(question.slot));
 
@@ -968,6 +1120,7 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
     quality,
     follow_up_questions: followUpQuestions,
     follow_up_plan: followUpPlan,
+    assumptions: acceptedAssumptions,
     missing,
     missing_slots: missing.map((item) => item.slot),
     approval,
@@ -984,6 +1137,7 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
       warnings,
       follow_up_questions: followUpQuestions,
       follow_up_plan: followUpPlan,
+      assumptions: acceptedAssumptions,
       next_actions: [nextActionPrompt].filter(Boolean),
     },
   };
@@ -992,6 +1146,8 @@ export function inspectDemandInterviewCoverage(session: DemandInterviewSessionIn
 function refreshSession(session: DemandInterviewSession): DemandInterviewSession {
   session.questions = decorateQuestions(session.questions || DEMAND_INTERVIEW_QUESTION_BANK, session.answers || {});
   const coverage = inspectDemandInterviewCoverage(session);
+  session.accepted_assumptions = coverage.assumptions;
+  session.assumptions = acceptedAssumptionMessages(coverage.assumptions);
   session.coverage = coverage;
   session.readiness = coverage.readiness;
   session.follow_up_questions = coverage.follow_up_questions;
@@ -1023,6 +1179,8 @@ export function createDemandInterviewSession(input: DemandRuntimeInput = Object(
     state_root: stateRoot,
     questions: decorateQuestions(DEMAND_INTERVIEW_QUESTION_BANK, {}),
     answers: {},
+    follow_up_counts: {},
+    accepted_assumptions: [],
     ledgers: ledgerInfo({ id, demandId, projectRoot, stateRoot }),
   };
   return refreshSession(session);
@@ -1037,6 +1195,30 @@ export function answerDemandInterviewQuestion(
     throw new Error(`Unknown demand interview question: ${questionId}`);
   }
   const answeredAt = clean(now) || new Date().toISOString();
+  const baseQuality = answerQualityFor(question, answer);
+  const followUpReason = cappedFollowUpReason(baseQuality);
+  const followUpCounts = followUpCountRecords(session.follow_up_counts);
+  let quality = baseQuality;
+  if (followUpReason) {
+    const slot = clean(question.slot || question.id);
+    const current = followUpCounts[slot] || {
+      slot,
+      count: 0,
+      reasons: [],
+      updated_at: null,
+    };
+    const nextCounter = {
+      slot,
+      count: current.count + 1,
+      reasons: compactReasons([...current.reasons, followUpReason]),
+      updated_at: answeredAt,
+    };
+    followUpCounts[slot] = nextCounter;
+    if (nextCounter.count > MAX_GUIDED_FOLLOW_UPS_PER_SLOT) {
+      quality = acceptWithAssumption(question, answer, baseQuality, nextCounter, answeredAt);
+    }
+  }
+  session.follow_up_counts = followUpCounts;
   session.answers = {
     ...answerRecords(session.answers),
     [question.id]: {
@@ -1045,7 +1227,7 @@ export function answerDemandInterviewQuestion(
       category: question.category,
       answer,
       normalized: normalizeAnswer(question, answer),
-      quality: answerQualityFor(question, answer),
+      quality,
       answered_at: answeredAt,
     },
   };
@@ -1101,6 +1283,7 @@ export function demandInterviewToDemandInput(session: DemandInterviewSessionInpu
   const followUpPrompts = (coverage.follow_up_questions || [])
     .map((item) => item.plain_language_prompt)
     .filter(Boolean);
+  const acceptedAssumptionMessagesForDemand = acceptedAssumptionMessages(coverage.assumptions);
   const targetUsers = itemsForSlot(session, "target_users");
   const statusQuo = itemsForSlot(session, "status_quo");
   const painPoints = itemsForSlot(session, "pain_points");
@@ -1143,6 +1326,7 @@ export function demandInterviewToDemandInput(session: DemandInterviewSessionInpu
     approval_note: textFromValue(approval.answer),
     assumptions: [
       "Interview answers are user-provided and should be validated against product or operational evidence before implementation.",
+      ...acceptedAssumptionMessagesForDemand,
     ],
     followups: followUpPrompts,
     open_questions: coverage.ready_for_prd_intake
@@ -1164,8 +1348,10 @@ export function demandInterviewToDemandInput(session: DemandInterviewSessionInpu
         answer_quality: coverage.answer_quality,
         follow_up_questions: coverage.follow_up_questions,
         follow_up_plan: coverage.follow_up_plan,
+        assumptions: coverage.assumptions,
         warnings: coverage.readiness.warnings,
       },
+      accepted_assumptions: coverage.assumptions,
     },
     ledgers: session.ledgers && typeof session.ledgers === "object" ? session.ledgers as DemandRecord : undefined,
     playback: session.playback && typeof session.playback === "object" ? session.playback as DemandRecord : null,
