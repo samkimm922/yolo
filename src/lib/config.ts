@@ -69,16 +69,20 @@ const DEFAULTS = {
 
   build: {
     business_globs: [] as string[],
-    type_check: 'npx tsc --noEmit',
+    type_check: '',
     lint: '',
-    test: 'node --import tsx --test __tests__/*.test.ts',
-    build: 'npm run build --silent',
+    test: '',
+    build: '',
+  },
+
+  executor: {
+    timeout_ms: 600000,
   },
 
   ai: {
     executor: 'claude',
     model: 'claude-sonnet-4-6',
-    timeout_ms: 480000,
+    timeout_ms: 600000,
     settings: 'settings-minimal.json',
     claude_permission_mode: 'acceptEdits',
   },
@@ -434,6 +438,7 @@ const RECOGNIZED_CONFIG_KEYS = new Set([
   'paths',
   'policy',
   'build',
+  'executor',
   'ai',
   'gate',
   'runner',

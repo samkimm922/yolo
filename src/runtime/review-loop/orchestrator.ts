@@ -34,6 +34,7 @@ import {
   reviewTaskIdSet,
   shouldBlockReviewTaskLimit,
 } from "./task-application.js";
+import { resolveExecutorTimeoutMs } from "../../lib/toolchain.js";
 
 type Prd = Record<string, unknown>;
 type Task = Record<string, unknown>;
@@ -236,6 +237,7 @@ export async function runReviewLoop({
   maxReviewRounds = 5,
   maxReviewTasksPerRound = 5,
   maxPersistentFindingRounds = 2,
+  config = Object(),
   execFileSync,
   processExecPath = process.execPath,
   logProgress = noop as LogProgressFn,
@@ -260,6 +262,7 @@ export async function runReviewLoop({
   maxReviewRounds?: number;
   maxReviewTasksPerRound?: number;
   maxPersistentFindingRounds?: number;
+  config?: Record<string, unknown>;
   execFileSync?: (file: string, args: string[], options: Record<string, unknown>) => string;
   processExecPath?: string;
   logProgress?: LogProgressFn;
@@ -332,7 +335,7 @@ export async function runReviewLoop({
         scanResult = execFileSync(
           processExecPath,
           scanArgs,
-          { cwd: rootDir, timeout: 120000, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+          { cwd: rootDir, timeout: resolveExecutorTimeoutMs(config), encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
         );
       } catch (e) {
         const diagnostic = scannerFailureDiagnostic(e as Record<string, unknown> | null | undefined);

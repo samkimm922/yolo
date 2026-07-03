@@ -18,6 +18,7 @@ import { delimiter, dirname, isAbsolute, join, relative, resolve } from "node:pa
 import { isSafePathComponent, resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { safeExecFileSync as defaultExecFileSync, safeExecSync as defaultExecSync } from "../../lib/security/safe-exec.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
+import { resolveBuildCommand, resolveGateTimeout } from "../../lib/toolchain.js";
 import {
   buildBaselineArtifact,
   parseEslintBaselineKeys,
@@ -680,12 +681,13 @@ function writeWorktreeBaselines({
     }
   };
   try {
-    const result = run(config.build?.type_check || "", 120000);
+    const command = resolveBuildCommand("type_check", config, wtPath);
+    const result = run(command, resolveGateTimeout("type_check", config));
     const keys = parseTscBaselineKeys(result.output);
     writeFileSync(join(wtBaselineDir, "tsc-baseline.json"), JSON.stringify(buildBaselineArtifact({
       tool: "tsc",
       keys,
-      command: config.build?.type_check || "",
+      command,
       exitCode: result.exitCode,
       stdout: result.output,
       stderr: result.stderr,
@@ -695,12 +697,13 @@ function writeWorktreeBaselines({
     }), null, 2), "utf8");
   } catch {}
   try {
-    const result = run(config.build?.lint || "", 90000);
+    const command = resolveBuildCommand("lint", config, wtPath);
+    const result = run(command, resolveGateTimeout("lint", config));
     writeFileSync(join(wtBaselineDir, "eslint-baseline.json"), JSON.stringify({
       ...buildBaselineArtifact({
         tool: "eslint",
         keys: parseEslintBaselineKeys(result.output, wtPath),
-        command: config.build?.lint || "",
+        command,
         exitCode: result.exitCode,
         stdout: result.output,
         stderr: result.stderr,

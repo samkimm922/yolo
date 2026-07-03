@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { inspectDiscoveryReadiness } from "../discovery/gate.js";
 import { createLifecycleStateSnapshot } from "../lifecycle/schema.js";
 import { inspectLifecycleGuard } from "../lifecycle/guard.js";
+import { DEFAULT_EXECUTOR_TIMEOUT_MS } from "../lib/toolchain.js";
 import { buildTeamDispatchPlan } from "./team-contracts.js";
 
 const DEFAULT_YOLO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -155,7 +156,7 @@ function commandAction({
   cwd,
   stdin,
   creates = [],
-  timeout_ms = 120000,
+  timeout_ms = DEFAULT_EXECUTOR_TIMEOUT_MS,
 }: PiCommandActionInput): PiAction {
   return {
     id,
@@ -168,7 +169,7 @@ function commandAction({
     cwd: cwd === undefined ? undefined : String(cwd),
     stdin: stdin === undefined ? undefined : String(stdin),
     creates: (creates as string[]) || [],
-    timeout_ms: timeout_ms === undefined ? 120000 : Number(timeout_ms),
+    timeout_ms: timeout_ms === undefined ? DEFAULT_EXECUTOR_TIMEOUT_MS : Number(timeout_ms),
   };
 }
 
@@ -178,7 +179,7 @@ function runtimeAction({
   summary,
   runtime,
   params = {},
-  timeout_ms = 120000,
+  timeout_ms = DEFAULT_EXECUTOR_TIMEOUT_MS,
 }: PiRuntimeActionInput): PiAction {
   return {
     id,
@@ -190,7 +191,7 @@ function runtimeAction({
     params: (params as PiParams) || {},
     artifacts: [],
     next_actions: [],
-    timeout_ms: timeout_ms === undefined ? 120000 : Number(timeout_ms),
+    timeout_ms: timeout_ms === undefined ? DEFAULT_EXECUTOR_TIMEOUT_MS : Number(timeout_ms),
   };
 }
 
@@ -421,7 +422,7 @@ export function createPiRunPlan(input: PiInput = {}, context: PiContext = {}) {
         stateRoot: artifacts.stateRoot,
         writeLifecycle: true,
       },
-      timeout_ms: context.prdTimeoutMs || 120000,
+      timeout_ms: context.prdTimeoutMs || DEFAULT_EXECUTOR_TIMEOUT_MS,
     }));
   }
 
@@ -464,7 +465,7 @@ export function createPiRunPlan(input: PiInput = {}, context: PiContext = {}) {
         stateRoot: artifacts.stateRoot,
         writeLifecycle: true,
       },
-      timeout_ms: context.reviewTimeoutMs || 120000,
+      timeout_ms: context.reviewTimeoutMs || DEFAULT_EXECUTOR_TIMEOUT_MS,
     }),
     runtimeAction({
       id: "pi.final.schema_gate",
@@ -486,7 +487,7 @@ export function createPiRunPlan(input: PiInput = {}, context: PiContext = {}) {
         writeLifecycle: true,
         ...adapterEvidenceConfig,
       },
-      timeout_ms: context.acceptanceTimeoutMs || 120000,
+      timeout_ms: context.acceptanceTimeoutMs || DEFAULT_EXECUTOR_TIMEOUT_MS,
     }),
     runtimeAction({
       id: "pi.delivery.ship",

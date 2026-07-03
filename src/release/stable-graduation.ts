@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { inspectPublicBetaReadiness } from "./readiness.js";
 import { runPostReleaseAuditGate } from "./post-release-audit.js";
 import { inspectRunnerRuntimeApiFreeze } from "../runtime/run-lifecycle/runtime-api-freeze.js";
+import { DEFAULT_EXECUTOR_TIMEOUT_MS } from "../lib/toolchain.js";
 import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const STABLE_GRADUATION_SCHEMA_VERSION = "1.0";
@@ -163,7 +164,7 @@ export function runStableGraduationGate(options: StableGraduationOptions = Objec
   });
   const postReleaseAudit = (options.postReleaseAudit || options.post_release_audit || (options.runPostReleaseAuditGate || runPostReleaseAuditGate)({
     yoloRoot,
-    timeout_ms: options.timeout_ms || 120000,
+    timeout_ms: options.timeout_ms || DEFAULT_EXECUTOR_TIMEOUT_MS,
     commandExists: options.commandExists,
     now: options.now,
     random: options.random,

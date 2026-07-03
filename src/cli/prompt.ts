@@ -18,10 +18,11 @@
 import { readFileSync, existsSync, statSync, readdirSync } from "fs";
 import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { execSync } from "child_process";
 import { buildExperiencePackText } from "../runtime/learning/center.js";
 import { loadConfig } from "../lib/config.js";
 import { readJsonFileBounded } from "../lib/bounded-read.js";
+import { execCommand } from "../lib/security/safe-exec.js";
+import { buildCommandEnv, resolveBuildCommand, resolveGateTimeout } from "../lib/toolchain.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "..", "..");
@@ -707,8 +708,8 @@ const FRONTEND_RULES = taskId.startsWith("FE-") ? [
   "1. 所有 import 必须使用 ES6 语法（`import x from '...'`），禁止使用 `require()`",
   "2. import 路径必须使用正确的相对路径（`../../` / `../` / `./`）或 `@/` 别名",
   "3. 创建新文件后，必须确认 import 的路径指向真实存在的文件",
-  "4. 代码写完后，先运行 `pnpm tsc --noEmit` 检查新文件是否有 TS 错误，有错误先修复再结束",
-  "5. 再运行 `pnpm eslint --fix` 检查 lint 错误，有错误先修复再结束",
+  "4. 代码写完后，先运行项目配置的 typecheck 命令检查新文件是否有 TS 错误，有错误先修复再结束",
+  "5. 再运行项目配置的 lint/fix 命令检查 lint 错误，有错误先修复再结束",
   "",
 ] : [];
 
@@ -738,10 +739,31 @@ parts.push(
 const tscTargetFiles = scopedTargetFiles.filter(f => f.endsWith('.ts') || f.endsWith('.tsx'));
 if (includeTscContext && tscTargetFiles.length > 0) {
   try {
-    const tscOut = execSync('pnpm exec tsc --noEmit 2>&1', {
-      cwd: ROOT, encoding: 'utf8', timeout: 120000, stdio: ['pipe', 'pipe', 'pipe'],
+    const typeCheckCommand = resolveBuildCommand("type_check", promptConfig, ROOT);
+    const result = execCommand(typeCheckCommand, {
+      cwd: ROOT,
+      encoding: "utf8",
+      timeout: resolveGateTimeout("type_check", promptConfig),
+      stdio: ["pipe", "pipe", "pipe"],
+      env: buildCommandEnv(ROOT),
     });
-    // tsc 无错误 → 不注入
+    if (result.ok) {
+      // no type errors to inject
+    } else {
+      const output = (result.stdout || '') + (result.stderr || '');
+      const relevantErrors = output.split('\n').filter(l => {
+        if (!/error TS\d+:/.test(l)) return false;
+        return tscTargetFiles.some(tf => l.includes(tf.replace(/^\.\//, '')));
+      });
+      if (relevantErrors.length > 0) {
+        parts.push("", "## 🔴 目标文件的 TSC 编译错误（必须全部修复）", "");
+        parts.push(`以下 ${relevantErrors.length} 条 TSC 错误涉及你的目标文件，修复时必须同时解决：`);
+        parts.push("```");
+        parts.push(...relevantErrors.slice(0, 30)); // 最多显示 30 条
+        if (relevantErrors.length > 30) parts.push(`... 共 ${relevantErrors.length} 条错误`);
+        parts.push("```", "");
+      }
+    }
   } catch (e) {
     const err = e as { stdout?: string; stderr?: string };
     const output = (err.stdout || '') + (err.stderr || '');

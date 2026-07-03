@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -77,6 +77,60 @@ export function isSourceGrepOnly(block: { body: string }) {
 
 const SCRIPT_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(SCRIPT_FILE);
+const TOOLCHAIN_DRIFT_ALLOW = "source-grep-allow toolchain-drift";
+const TOOLCHAIN_DRIFT_EXCLUDED_FILES = new Set([
+  "src/lib/toolchain.ts",
+]);
+
+type ToolchainDriftFinding = {
+  file: string;
+  line: number;
+  pattern: string;
+  detail: string;
+};
+
+function walkFiles(root: string, relativeDir: string): string[] {
+  const dir = resolve(root, relativeDir);
+  if (!existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const rel = `${relativeDir}/${entry}`;
+    if (rel.includes("/node_modules/") || rel.includes("/dist/") || rel.includes("/.git/")) continue;
+    if (rel.startsWith("__tests__/fixtures/")) continue;
+    const abs = resolve(root, rel);
+    const stat = statSync(abs);
+    if (stat.isDirectory()) out.push(...walkFiles(root, rel));
+    else if (/\.(?:[cm]?ts|[cm]?js|tsx|jsx)$/.test(entry)) out.push(rel);
+  }
+  return out;
+}
+
+function hasToolchainDriftAllow(lines: string[], index: number): boolean {
+  return lines[index]?.includes(TOOLCHAIN_DRIFT_ALLOW) || lines[index - 1]?.includes(TOOLCHAIN_DRIFT_ALLOW);
+}
+
+function scanToolchainDrift(root: string): ToolchainDriftFinding[] {
+  const findings: ToolchainDriftFinding[] = [];
+  const files = walkFiles(root, "src")
+    .filter((file) => !TOOLCHAIN_DRIFT_EXCLUDED_FILES.has(file) && !file.startsWith("__tests__/fixtures/"));
+  for (const file of files) {
+    const lines = read(root, file).split("\n");
+    lines.forEach((line, index) => {
+      if (hasToolchainDriftAllow(lines, index)) return;
+      const checks: Array<{ pattern: string; detail: string; matched: boolean }> = [
+        { pattern: "npm test", detail: "use resolveBuildCommand('test', config, projectRoot)", matched: line.includes('"npm test"') || line.includes("'npm test'") || line.includes("`npm test`") },
+        { pattern: "npm run ", detail: "use resolveBuildCommand(kind, config, projectRoot)", matched: line.includes('"npm run ') || line.includes("'npm run ") || line.includes("`npm run ") },
+        { pattern: "pnpm exec", detail: "use resolveBuildCommand(kind, config, projectRoot)", matched: line.includes("pnpm exec") || /["']pnpm["']\s*,\s*\[\s*["']exec["']/.test(line) || /\[\s*["']pnpm["']\s*,\s*["']exec["']/.test(line) },
+        { pattern: "execFileSync direct tool", detail: "route tsc/eslint/vitest through src/lib/toolchain.ts", matched: /\bexecFileSync\(\s*["'](?:tsc|eslint|vitest)["']/.test(line) },
+        { pattern: "execArgv direct tool", detail: "route tsc/eslint/vitest through src/lib/toolchain.ts", matched: /\bexecArgv\(\s*\[\s*["'](?:tsc|eslint|vitest)["']/.test(line) },
+      ];
+      for (const check of checks) {
+        if (check.matched) findings.push({ file, line: index + 1, pattern: check.pattern, detail: check.detail });
+      }
+    });
+  }
+  return findings;
+}
 
 export function scanSourceGrepMeta(root = resolve(SCRIPT_DIR, "..")) {
   const missing = CRITICAL_TEST_FILES.filter((file) => !existsSync(resolve(root, file)));
@@ -99,7 +153,8 @@ export function scanSourceGrepMeta(root = resolve(SCRIPT_DIR, "..")) {
       }
     }
   }
-  const status = missing.length || unexpected.length || staleAllowlist.length || missingPairedTests.length ? "fail" : "pass";
+  const toolchainDrift = scanToolchainDrift(root);
+  const status = missing.length || unexpected.length || staleAllowlist.length || missingPairedTests.length || toolchainDrift.length ? "fail" : "pass";
   return {
     status,
     critical_test_files: CRITICAL_TEST_FILES,
@@ -109,6 +164,7 @@ export function scanSourceGrepMeta(root = resolve(SCRIPT_DIR, "..")) {
     unexpected,
     stale_allowlist: staleAllowlist,
     missing_paired_tests: missingPairedTests,
+    toolchain_drift: toolchainDrift,
   };
 }
 

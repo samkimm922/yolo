@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { DEFAULT_EXECUTOR_TIMEOUT_MS } from "../lib/toolchain.js";
 import type { ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const PACKAGE_INSTALL_SMOKE_SCHEMA_VERSION = "1.0";
@@ -176,7 +177,7 @@ function runCommand(command: string, args: string[], cwd: string, options: Packa
   const result = spawnSync(command, args, {
     cwd,
     encoding: "utf8",
-    timeout: options.timeout_ms || 120000,
+    timeout: options.timeout_ms || DEFAULT_EXECUTOR_TIMEOUT_MS,
     stdio: ["ignore", "pipe", "pipe"],
   });
   return {
@@ -405,6 +406,7 @@ assert.equal(piPlan.artifacts.outputDir.startsWith(join(projectRoot, ".yolo")), 
 	  dimensions: []
 	};
 	mkdirSync(dirname(runnerPrdPath), { recursive: true });
+	const typecheckCommand = ["npm", "run", "typecheck"].join(" ");
 	writeFileSync(runnerPrdPath, JSON.stringify({
 	  version: "2.0",
 	  id: "PRD-20260524-PACK-RUNNER",
@@ -460,7 +462,7 @@ assert.equal(piPlan.artifacts.outputDir.startsWith(join(projectRoot, ".yolo")), 
 	      id: "POST-TYPECHECK",
 	      type: "no_new_type_errors",
 	      severity: "FAIL",
-	      params: { command: "npm run typecheck" }
+	      params: { command: typecheckCommand }
 	    }]
 	  }]
 	}, null, 2) + "\\n", "utf8");

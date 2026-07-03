@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { runOperatorReleaseStateMutation } from "./operator-state.js";
+import { DEFAULT_EXECUTOR_TIMEOUT_MS } from "../lib/toolchain.js";
 import type { ReleaseCheck, ReleaseRecord } from "./readiness.js";
 
 export const OPERATOR_RELEASE_RUNBOOK_SCHEMA_VERSION = "1.0";
@@ -233,7 +234,7 @@ export function runOperatorReleaseRunbookGate(options: OperatorRunbookOptions = 
     yoloRoot,
     decision: options.decision,
     requestedActions: ["remove_private", "publish_public_beta"],
-    timeout_ms: options.timeout_ms || 120000,
+    timeout_ms: options.timeout_ms || DEFAULT_EXECUTOR_TIMEOUT_MS,
     commandExists: options.commandExists,
     now: options.now,
     random: options.random,

@@ -282,6 +282,7 @@ export function buildCleanEnvironmentVerifyPlan(options: CleanEnvironmentOptions
         candidate_commands: ["npm ci", "npm install"],
         fallback_policy: "use npm install when npm ci lockfile is unavailable",
       }),
+      // source-grep-allow toolchain-drift: clean release recipe records YOLO's verify script.
       step("verify", "run full project verification in clean worktree", "npm run verify"),
       step("pack", "pack package into isolated destination without scripts", `npm pack --json --ignore-scripts --pack-destination ${packDestination}`, {
         requires: ["--ignore-scripts", "isolated pack destination"],

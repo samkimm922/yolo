@@ -6,15 +6,23 @@
  * 退出码: 0=通过/需要修复, 1=参数错误/文件不存在, 2=已跳过(无需处理)
  */
 
-import { execArgv } from "../../lib/security/safe-exec.js";
+import { execCommand } from "../../lib/security/safe-exec.js";
 import { resolve } from "node:path";
 import { evaluatePreConditions, setContractRoot } from "../../prd/contract.js";
 import { getArg } from "../../lib/cli-utils.js";
 import { readJsonFileBounded } from "../../lib/bounded-read.js";
+import {
+  assertBuildCommandAvailable,
+  buildCommandEnv,
+  loadProjectToolchainConfig,
+  resolveBuildCommand,
+  resolveGateTimeout,
+} from "../../lib/toolchain.js";
 
 const taskId = getArg("--task=");
 const prdPath = getArg("--prd=");
 const ROOT = resolve(getArg("--cwd=") || process.cwd());
+const toolchainConfig = loadProjectToolchainConfig(ROOT, { configPath: getArg("--config=") });
 setContractRoot(ROOT);
 
 if (!taskId || !prdPath) {
@@ -69,9 +77,18 @@ if (!result.allPass) {
   // 验证 tsc 是否仍对目标文件报错，若无错则跳过（无需重复修复）。
   const targets = (task.scope?.targets || []).map(t => t.file).filter(Boolean);
   if (targets.length > 0) {
-    const TSC_TIMEOUT = 30000;
-    // P12.I1: literal pnpm+tsc argv via safe-exec (no shell, no injection surface).
-    const ran = execArgv(["pnpm", "exec", "tsc", "--noEmit"], { cwd: ROOT, timeout: TSC_TIMEOUT });
+    const typeCheckCommand = resolveBuildCommand("type_check", toolchainConfig, ROOT);
+    const availability = assertBuildCommandAvailable("type_check", toolchainConfig, ROOT);
+    if (!availability.ok) {
+      console.log(`PRE-CHECK: ${taskId} — ${availability.message}，继续执行修复`);
+      console.log(`PRE-CHECK: ${taskId} — ${preConditions.length} 个 pre_conditions 全部通过，需要修复`);
+      process.exit(0);
+    }
+    const ran = execCommand(typeCheckCommand, {
+      cwd: ROOT,
+      timeout: resolveGateTimeout("type_check", toolchainConfig),
+      env: buildCommandEnv(ROOT),
+    });
     if (ran.ok) {
       const hasTargetErrors = targets.some(t => ran.stdout.includes(t));
       if (!hasTargetErrors) {

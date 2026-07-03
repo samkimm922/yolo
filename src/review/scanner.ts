@@ -12,6 +12,7 @@ import type { NormalizedReviewFinding, ReviewFindingInput, ReviewFixType, Review
 import { redact } from "../lib/security/redact.js";
 import { execCommand } from "../lib/security/safe-exec.js";
 import type { ExecCommandResult } from "../lib/security/safe-exec.js";
+import { resolveGateTimeout } from "../lib/toolchain.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -648,7 +649,7 @@ export function scanProject(options: ScannerOptions = Object()): ReviewScannerRe
   if (settings.includeExternalChecks && settings.config.build.type_check) {
     // P12.I1: route config-supplied type_check through safe-exec.
     const tscResult: ExecCommandResult = execCommand(settings.config.build.type_check, {
-      cwd: settings.root, timeout: settings.config.gate?.timeout?.type_check || 120000,
+      cwd: settings.root, timeout: resolveGateTimeout("type_check", settings.config),
     });
     if (!tscResult.ok) {
       const tscOutput = `${tscResult.stdout || ""}${tscResult.stderr || ""}`;

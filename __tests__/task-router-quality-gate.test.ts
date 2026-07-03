@@ -113,6 +113,7 @@ describe("auto-fix recipes", () => {
         fix_findings: [{ scanner_id: "R6-as-unknown-as", file, line: 4 }],
       }], root, {
         execFileSync: () => "",
+        config: { build: { type_check: "node --version", lint: "node --version" } },
       });
 
       assert.equal(result.success, true);

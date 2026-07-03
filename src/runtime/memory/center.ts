@@ -774,7 +774,7 @@ export function buildCurrentHandoffMarkdown(options = Object()) {
     "",
     "- Review `docs/memory/MEMORY_AUDIT.md` before deleting any legacy/scratch document.",
     "- Keep `docs/yolo-public-sdk-progress.md` as the roadmap/progress source; mirror only summaries into memory docs.",
-    "- Run `npm test` after memory center changes, because hooks, package smoke, bootstrap, and legacy-boundary tests all guard this area.",
+    "- Run the configured project test command after memory center changes, because hooks, package smoke, bootstrap, and legacy-boundary tests all guard this area.",
     "",
     "## Key Paths",
     "",

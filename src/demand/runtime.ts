@@ -11,6 +11,7 @@ import { lifecycleArtifactPath } from "../lifecycle/state.js";
 import { preflightPrdDocument } from "../prd/preflight.js";
 import { appendJsonlRecord } from "../runtime/evidence/ledger.js";
 import { parseCommandToArgv } from "../lib/security/command-guard.js";
+import { loadProjectToolchainConfig, resolveBuildCommand, resolveGateTimeout } from "../lib/toolchain.js";
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -1082,22 +1083,35 @@ function acceptanceCondition(taskId, index, scenario) {
   };
 }
 
-function testsPassCondition(taskId) {
+function toolchainContext(input = Object(), options = Object()) {
+  const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
+  const config = loadProjectToolchainConfig(projectRoot, {
+    config: input.config || options.config,
+    configPath: input.configPath || input.config_path || options.configPath || options.config_path,
+  });
+  return { projectRoot, config };
+}
+
+function testsPassCondition(taskId, context = Object()) {
+  const projectRoot = context.projectRoot || process.cwd();
+  const config = context.config || Object();
   return {
     id: `POST-${taskId}-TESTS`,
     type: "tests_pass",
     severity: "FAIL",
-    params: { command: "npm test", timeout_ms: 120000 },
+    params: { command: resolveBuildCommand("test", config, projectRoot), timeout_ms: resolveGateTimeout("test", config) },
     message: "Project tests must pass after this task.",
   };
 }
 
-function typecheckCondition(taskId) {
+function typecheckCondition(taskId, context = Object()) {
+  const projectRoot = context.projectRoot || process.cwd();
+  const config = context.config || Object();
   return {
     id: `POST-${taskId}-TYPECHECK`,
     type: "no_new_type_errors",
     severity: "FAIL",
-    params: { command: "npm run typecheck" },
+    params: { command: resolveBuildCommand("type_check", config, projectRoot) },
     message: "Project typecheck must pass after this task.",
   };
 }
@@ -1188,6 +1202,7 @@ function deriveFileDependencies(tasks = []) {
 }
 
 function buildAtomicDemandTasks(session = Object(), input = Object(), options = Object()) {
+  const buildContext = toolchainContext(input, options);
   const requirements = requirementById(session);
   const scenarios = scenarioMatrix(session).length ? scenarioMatrix(session) : fallbackScenarios(session);
   const allFiles = targetFiles(session);
@@ -1388,8 +1403,8 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
             ...files.map((file, fileIndex) => modifiedFileCondition(taskId, fileIndex, file)),
             ...behaviorCodeConditions(taskId, files, behaviorText, uiTask),
             acceptanceCondition(taskId, 0, { then: proof || description, verify_command: scenario.verify_command || scenario.verifyCommand }),
-            typecheckCondition(taskId),
-            ...(files.some((file) => fileKind(file) === "test") ? [testsPassCondition(taskId)] : []),
+            typecheckCondition(taskId, buildContext),
+            ...(files.some((file) => fileKind(file) === "test") ? [testsPassCondition(taskId, buildContext)] : []),
           ],
           trace: {
             demand_id: session.id,

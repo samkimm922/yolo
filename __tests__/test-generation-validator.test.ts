@@ -111,7 +111,7 @@ describe("test generation validator", () => {
 
   test("repeated test failures block loops", () => {
     const result = validateTestGeneration({ test_generation: { mode: "reuse_existing", failure_policy: { same_failure_limit: 2 } } }, {
-      changedFiles: [],
+      changedFiles: [{ file: "src/app.ts", status: " M", isNew: false }],
       failureHistory: [
         { kind: "test_compile_error", key: "__tests__/a.test.js:TS1005" },
         { kind: "test_compile_error", key: "__tests__/a.test.js:TS1005" },

@@ -7,6 +7,7 @@ import { execCommand } from "../security/safe-exec.js";
 import { safeRegExp, validateRegexPattern } from "../security/regex-guard.js";
 import { config } from "../config.js";
 import type { EvalParams, EvalResult, ExecFn, ForbiddenPattern, TaskScope } from "./types.js";
+import { commandUnavailableDetail, resolveBuildCommand, resolveGateTimeout } from "../toolchain.js";
 
 type BuildCommandKey = "type_check" | "lint" | "dead_code";
 
@@ -32,8 +33,8 @@ type KnipIssue = {
   types?: Array<{ name: string }>;
 };
 
-function configuredCommand(params: EvalParams = {}, key: BuildCommandKey): string {
-  return params.command || (config.build?.[key] as string | undefined) || "";
+function configuredCommand(params: EvalParams = {}, key: BuildCommandKey, ROOT: string): string {
+  return String(params.command || resolveBuildCommand(key, config, ROOT));
 }
 
 function normalizeDiagnosticFilePath(filePath: unknown, ROOT: string): string {
@@ -229,13 +230,13 @@ export function evalNoNewTypeErrors(params: EvalParams = {}, _taskScope: TaskSco
     } catch {}
   }
 
-  const command = configuredCommand(params, "type_check");
+  const command = configuredCommand(params, "type_check", ROOT);
   if (!command) {
     return { passed: false, detail: "未配置 type_check 命令，无法验证 no_new_type_errors", type: "no_new_type_errors" };
   }
-  const tsc = exec(`${command} 2>&1`, { timeout: params.timeout_ms || config.gate?.timeout?.type_check || 120000 });
+  const tsc = exec(`${command} 2>&1`, { timeout: params.timeout_ms || resolveGateTimeout("type_check", config) });
   if (tsc.commandNotFound) {
-    return { passed: false, detail: "tsc 或 pnpm 命令不可用，类型检查无法执行", type: "no_new_type_errors" };
+    return { passed: false, detail: commandUnavailableDetail("type_check", command, ROOT), type: "no_new_type_errors" };
   }
   const tscOut = tsc.ok ? tsc.out : (tsc.out || "") + (tsc.err || "");
 
@@ -299,10 +300,10 @@ export function evalNoNewTypeErrors(params: EvalParams = {}, _taskScope: TaskSco
 }
 
 export function evalTypeErrorsContain(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string, exec: ExecFn): EvalResult {
-  const command = configuredCommand(params, "type_check");
+  const command = configuredCommand(params, "type_check", ROOT);
   if (!command) return { passed: false, detail: "未配置 type_check 命令，无法验证 type_errors_contain", type: "type_errors_contain" };
 
-  const result = exec(`${command} 2>&1`, { timeout: params.timeout_ms || config.gate?.timeout?.type_check || 120000 });
+  const result = exec(`${command} 2>&1`, { timeout: params.timeout_ms || resolveGateTimeout("type_check", config) });
   const output = result.ok ? result.out : `${result.out || ""}${result.err || ""}`;
   const needle = params.text || params.pattern || params.code;
   if (!needle) return { passed: false, detail: "缺少 text/pattern/code 参数", type: "type_errors_contain" };
@@ -356,13 +357,13 @@ export function evalNoNewLintErrors(params: EvalParams = {}, _taskScope: TaskSco
     }
   }
 
-  const command = configuredCommand(params, "lint");
+  const command = configuredCommand(params, "lint", ROOT);
   if (!command) {
     return { passed: false, detail: "未配置 lint 命令，无法验证 no_new_lint_errors", type: "no_new_lint_errors" };
   }
-  const eslint = exec(`${command} 2>&1`, { timeout: params.timeout_ms || config.gate?.timeout?.lint || 90000 });
+  const eslint = exec(`${command} 2>&1`, { timeout: params.timeout_ms || resolveGateTimeout("lint", config) });
   if (eslint.commandNotFound) {
-    return { passed: false, detail: "eslint 或 pnpm 命令不可用，lint 检查无法执行", type: "no_new_lint_errors" };
+    return { passed: false, detail: commandUnavailableDetail("lint", command, ROOT), type: "no_new_lint_errors" };
   }
   let issues: EslintIssue[] = [];
   try {
@@ -437,7 +438,7 @@ export function evalNoNewDeadCode(params: EvalParams = {}, _taskScope: TaskScope
     }
   }
   try {
-    const command = configuredCommand(params, "dead_code");
+    const command = configuredCommand(params, "dead_code", ROOT);
     if (!command) {
       return { passed: false, detail: "未配置 dead_code 命令，无法验证 no_new_dead_code", type: "no_new_dead_code" };
     }

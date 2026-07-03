@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { DOGFOOD_MATRIX_SCENARIO_IDS, listDogfoodMatrixScenarios } from "./dogfood-matrix.js";
 import { runPublicBetaHardeningDrill } from "./hardening-drill.js";
 import { verifyArtifactIntegrity } from "../runtime/evidence/artifact-integrity.js";
+import { DEFAULT_EXECUTOR_TIMEOUT_MS } from "../lib/toolchain.js";
 import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const CONTROLLED_BETA_RELEASE_DECISION_SCHEMA_VERSION = "1.0";
@@ -782,7 +783,7 @@ export function runControlledBetaReleaseDecisionGate(options: DecisionGateOption
   const releaseScope = plan.release_scope || DEFAULT_RELEASE_SCOPE;
   const hardeningDrill: HardeningDrillResult = options.hardeningDrill || (options.runPublicBetaHardeningDrill || runPublicBetaHardeningDrill)({
     yoloRoot,
-    timeout_ms: options.timeout_ms || 120000,
+    timeout_ms: options.timeout_ms || DEFAULT_EXECUTOR_TIMEOUT_MS,
     keepWorkspace: options.keepWorkspace === true,
     commandExists: options.commandExists,
     now: options.now,

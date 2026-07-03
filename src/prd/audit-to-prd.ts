@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import { isBusinessFile } from "../runtime/execution/change-set.js";
 import { readJsonFileBounded } from "../lib/bounded-read.js";
+import { loadProjectToolchainConfig, resolveBuildCommand } from "../lib/toolchain.js";
 import {
   asRecord,
   errorMessage,
@@ -244,15 +245,21 @@ function withTargetCoverageConditions(conditions: PrdCondition[], targetFiles: r
   return next;
 }
 
-function withBehaviorVerificationConditions(conditions: PrdCondition[], taskId: string): PrdCondition[] {
+function withBehaviorVerificationConditions(
+  conditions: PrdCondition[],
+  taskId: string,
+  context: { config?: Record<string, unknown>; projectRoot?: string } = {},
+): PrdCondition[] {
   if (hasBehaviorVerificationCondition(conditions)) return conditions;
+  const projectRoot = context.projectRoot || process.cwd();
+  const config = context.config || Object();
   return [
     ...conditions,
     {
       id: `POST-${taskId}-TYPECHECK`,
       type: "no_new_type_errors",
       severity: "FAIL",
-      params: { command: "npm run typecheck" },
+      params: { command: resolveBuildCommand("type_check", config, projectRoot) },
       message: "项目 typecheck 必须通过。",
     },
   ];
@@ -398,6 +405,11 @@ function groupFindings(findings: readonly AuditFinding[]): FindingGroups {
 }
 
 function buildTask(kind: FindingKind, findingsList: AuditFinding[], index: number, options: AuditToPrdOptions = {}): PrdTask {
+  const projectRoot = resolve(String(options.cwd || process.cwd()));
+  const config = loadProjectToolchainConfig(projectRoot, {
+    config: options.config,
+    configPath: typeof options.configPath === "string" ? options.configPath : undefined,
+  });
   const id = makeTaskId(kind === "mechanical" ? "MECH" : kind === "atomic_fix" ? "FIX" : "FEAT", index);
   const allFiles = [...new Set(findingsList.flatMap((finding) => finding.files || []))];
   const highestSev = findingsList.reduce<string>((worst, finding) => {
@@ -432,6 +444,7 @@ function buildTask(kind: FindingKind, findingsList: AuditFinding[], index: numbe
       kind,
     ),
     id,
+    { config, projectRoot },
   );
 
   return {

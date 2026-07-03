@@ -4,9 +4,10 @@ import {
   writeFileSync as defaultWriteFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { safeExecSync as defaultExecSync, safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
+import { buildCommandEnv, commandUnavailableDetail, resolveBuildCommand, resolveGateTimeout } from "../../lib/toolchain.js";
 
 export const BASELINE_TOOLS = ["tsc", "eslint"];
 export const BASELINE_FILE_NAMES = {
@@ -149,11 +150,7 @@ function currentCommit(rootDir, execSync = defaultExecSync) {
 }
 
 function baselineCommandEnv(rootDir) {
-  const localBin = join(rootDir, "node_modules", ".bin");
-  return {
-    ...process.env,
-    PATH: [localBin, process.env.PATH || ""].filter(Boolean).join(delimiter),
-  };
+  return buildCommandEnv(rootDir);
 }
 
 export function baselineArtifactHash(baseline = Object()) {
@@ -300,12 +297,13 @@ export function restoreDirtyWorktreeSnapshot(stashRef, { rootDir, execSync = def
 export function captureTscBaseline({
   rootDir,
   command,
+  timeout = 60000,
   baselinePath,
   execSync = defaultExecSync,
   writeFileSync = defaultWriteFileSync,
   nowIso = () => new Date().toISOString(),
 } = Object()) {
-  const run = runBaselineCommand({ rootDir, command, execSync, timeout: 60000 });
+  const run = runBaselineCommand({ rootDir, command, execSync, timeout });
   let keys = [];
   let status = run.status;
   let reason = run.reason;
@@ -335,12 +333,13 @@ export function captureTscBaseline({
 export function captureEslintBaseline({
   rootDir,
   command,
+  timeout = 60000,
   baselinePath,
   execSync = defaultExecSync,
   writeFileSync = defaultWriteFileSync,
   nowIso = () => new Date().toISOString(),
 } = Object()) {
-  const run = runBaselineCommand({ rootDir, command, execSync, timeout: 60000 });
+  const run = runBaselineCommand({ rootDir, command, execSync, timeout });
   let keys = [];
   let status = run.status;
   let reason = run.reason;
@@ -377,9 +376,12 @@ export function captureExecutionBaselines({
   nowIso = () => new Date().toISOString(),
 } = Object()) {
   const stashRef = createDirtyWorktreeSnapshot({ rootDir, execSync });
+  const typeCheckCommand = resolveBuildCommand("type_check", config, rootDir);
+  const lintCommand = resolveBuildCommand("lint", config, rootDir);
   const tscBaseline = captureTscBaseline({
     rootDir,
-    command: config.build?.type_check || "",
+    command: typeCheckCommand,
+    timeout: resolveGateTimeout("type_check", config),
     baselinePath: tscBaselinePath,
     execSync,
     writeFileSync,
@@ -387,7 +389,8 @@ export function captureExecutionBaselines({
   });
   const eslintBaseline = captureEslintBaseline({
     rootDir,
-    command: config.build?.lint || "",
+    command: lintCommand,
+    timeout: resolveGateTimeout("lint", config),
     baselinePath: eslintBaselinePath,
     execSync,
     writeFileSync,
@@ -437,9 +440,8 @@ export function refreshBaselineAfterCommit({
       continue;
     }
     try {
-      const command = tool === "tsc"
-        ? config.build?.type_check || ""
-        : config.build?.lint || "";
+      const kind = tool === "tsc" ? "type_check" : "lint";
+      const command = resolveBuildCommand(kind, config, rootDir);
       if (!String(command).trim()) {
         results.push({ tool, skipped: true, reason: "baseline_command_not_configured" });
         continue;
@@ -460,7 +462,7 @@ export function refreshBaselineAfterCommit({
           const stdout = execFileSync(argv[0], argv.slice(1), {
             cwd: rootDir,
             encoding: "utf8",
-            timeout: 120000,
+            timeout: resolveGateTimeout(kind, config),
             env: baselineCommandEnv(rootDir),
           });
           output = String(stdout || "");
@@ -479,6 +481,7 @@ export function refreshBaselineAfterCommit({
           skipped: true,
           reason: "refresh_failed",
           exit_code: exitCode,
+          message: commandUnavailableDetail(kind, command, rootDir),
           error: `baseline refresh 工具失败 (exit ${exitCode})，保留旧 baseline 不清零`,
         });
         continue;

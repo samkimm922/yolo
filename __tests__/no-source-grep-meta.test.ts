@@ -1,5 +1,8 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import {
   CRITICAL_TEST_FILES,
   scanSourceGrepMeta,
@@ -34,5 +37,20 @@ describe("meta gate: critical tests are not source-grep theater", () => {
       assert.equal(CRITICAL_TEST_FILES.includes(file), true, `${file} must stay in source-grep meta coverage`);
     }
     assert.ok(SOURCE_ONLY_ALLOWLIST.every((item) => item.pairedWith.length > 0));
+  });
+
+  test("toolchain drift scan blocks direct pnpm exec in src files", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-source-grep-toolchain-"));
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src", "bad.ts"), "export const command = 'pnpm exec tsc --noEmit';\n", "utf8");
+
+      const result = scanSourceGrepMeta(root);
+
+      assert.equal(result.status, "fail");
+      assert.ok(result.toolchain_drift.some((item) => item.file === "src/bad.ts" && item.pattern === "pnpm exec"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

@@ -188,7 +188,7 @@ ${requirement}
           "id": "POST-TSC",
           "type": "no_new_type_errors",
           "severity": "FAIL",
-          "params": { "command": "npm run typecheck" }
+          "params": { "command": "<configured typecheck command>" }
         }
       ]
     }

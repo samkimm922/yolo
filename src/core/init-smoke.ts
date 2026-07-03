@@ -10,6 +10,7 @@ import { preflightPrd } from "../prd/preflight.js";
 import { runRunnerRuntime } from "../runtime/runner-runtime.js";
 import { inspectYoloCheck } from "../runtime/gates/check-report.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
+import { loadProjectToolchainConfig, resolveBuildCommand } from "../lib/toolchain.js";
 
 export const INIT_TO_FIRST_PRD_SMOKE_SCHEMA_VERSION = "1.0";
 
@@ -121,6 +122,11 @@ function demandFieldsForSmoke(prd: SmokePrd, targetFile: string) {
 }
 
 function defaultSmokeSpec(options: InitToFirstPrdSmokeOptions = Object()) {
+  const projectRoot = resolve(options.projectRoot || options.cwd || process.cwd());
+  const buildConfig = loadProjectToolchainConfig(projectRoot, {
+    config: (options as Record<string, unknown>).config,
+    configPath: (options as Record<string, unknown>).configPath as string | undefined,
+  });
   const targetFile = cleanString(options.targetFile || options.target_file, "specs/tasks.md");
   return buildSpecLifecyclePackage({
     id: cleanString(options.specId || options.spec_id, "SPEC-FIRST-PRD-SMOKE"),
@@ -166,7 +172,7 @@ function defaultSmokeSpec(options: InitToFirstPrdSmokeOptions = Object()) {
         id: "POST-SMOKE-TYPECHECK",
         type: "no_new_type_errors",
         severity: "FAIL",
-        params: { command: "npm run typecheck" },
+        params: { command: resolveBuildCommand("type_check", buildConfig, projectRoot) },
       }],
       acceptance_criteria: [
         "PRD schema validation passes.",

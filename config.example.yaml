@@ -21,16 +21,23 @@ build:
   # Optional inclusion globs for business code classification.
   # Empty/default uses source file extensions plus metadata directory excludes.
   business_globs: []
+  # Optional command overrides. When omitted, YOLO detects package manager from
+  # lockfiles (pnpm-lock.yaml -> pnpm, yarn.lock -> yarn, otherwise npm).
   type_check: "npm run typecheck"
   lint: "npm run lint"
   dead_code: ""
   test: "npm test"
   build: "npm run build"
 
+executor:
+  # Default executor/provider invocation timeout. Override for slower agents.
+  timeout_ms: 600000
+
 ai:
   executor: "claude"
   model: "claude-sonnet-4-6"
-  timeout_ms: 480000
+  # Deprecated alias; executor.timeout_ms takes precedence.
+  timeout_ms: 600000
   settings: ""
   claude_permission_mode: "acceptEdits"
 

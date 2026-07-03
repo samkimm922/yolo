@@ -2,6 +2,7 @@ import { normalizeReviewFinding, normalizeReviewFindings } from "../../review/fi
 import type { NormalizedReviewFinding, ReviewFindingInput } from "../../review/findings.js";
 import { reviewFindingsToPrdTasks } from "../../review/findings-to-tasks.js";
 import type { ReviewPrdTask } from "../../review/findings-to-tasks.js";
+import { loadProjectToolchainConfig, resolveBuildCommand } from "../../lib/toolchain.js";
 
 type Prd = Record<string, unknown>;
 type Task = Record<string, unknown>;
@@ -145,7 +146,7 @@ export function reviewIssueLogInput(finding: ReviewFindingInput = Object()) {
   };
 }
 
-export function ensureReviewTaskShape(task: Task): Task {
+export function ensureReviewTaskShape(task: Task, context: { config?: Record<string, unknown>; projectRoot?: string } = Object()): Task {
   if (!task.scope) task.scope = { targets: [] };
   if (!task.pre_conditions) task.pre_conditions = [];
   if (!task.post_conditions) task.post_conditions = [];
@@ -196,11 +197,13 @@ export function ensureReviewTaskShape(task: Task): Task {
           });
         }
       }
+      const projectRoot = context.projectRoot || process.cwd();
+      const buildConfig = context.config || loadProjectToolchainConfig(projectRoot);
       postConditions.push({
         id: `POST-${task.id || "REVIEW"}-TYPECHECK`,
         type: "no_new_type_errors",
         severity: "FAIL",
-        params: { command: "npm run typecheck" },
+        params: { command: resolveBuildCommand("type_check", buildConfig, projectRoot) },
         message: "project typecheck must pass after the review fix",
       });
     }

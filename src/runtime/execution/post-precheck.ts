@@ -6,6 +6,12 @@ import { safeExecSync as defaultExecSync } from "../../lib/security/safe-exec.js
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 import { resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { skipTaskTransition } from "../task-state/transitions.js";
+import {
+  assertBuildCommandAvailable,
+  buildCommandEnv,
+  resolveBuildCommand,
+  resolveGateTimeout,
+} from "../../lib/toolchain.js";
 
 export function taskForValidSkipPostconditions(task = Object()) {
   return {
@@ -80,6 +86,7 @@ export function inspectPostPrecheckSkip({
   task = Object(),
   rootDir,
   typeCheckCommand,
+  config = Object(),
   existsSync = defaultExistsSync,
   readFileSync = defaultReadFileSync,
   execSync = defaultExecSync,
@@ -95,12 +102,13 @@ export function inspectPostPrecheckSkip({
   }
 
   const targetFiles = (task.scope?.targets || []).map((target) => target.file).filter(Boolean);
-  if (targetFiles.length > 0 && typeCheckCommand) {
+  const command = typeCheckCommand || resolveBuildCommand("type_check", config, rootDir);
+  if (targetFiles.length > 0 && command) {
     // P12.I1: default executor is safeExecSync (argv parse, reject shell metacharacters,
     // no shell). Tests may inject a mock execSync for unit control.
     // Defense-in-depth: pre-validate command string — reject shell metacharacters
     // before any executor sees the command, regardless of DI override.
-    const parsed = parseCommandToArgv(typeCheckCommand);
+    const parsed = parseCommandToArgv(command);
     if (!parsed.ok) {
       return {
         shouldSkip: false,
@@ -108,8 +116,23 @@ export function inspectPostPrecheckSkip({
         logMessage: `[precheck] 类型检查命令包含不合法内容（${parsed.detail}），跳过预检`,
       };
     }
+    const build = config?.build && typeof config.build === "object" ? config.build : Object();
+    const commandConfig = { ...config, build: { ...build, type_check: command } };
+    const available = assertBuildCommandAvailable("type_check", commandConfig, rootDir);
+    if (!available.ok) {
+      return {
+        shouldSkip: false,
+        reason: "command_unavailable",
+        logMessage: `[precheck] ${available.message}`,
+      };
+    }
     try {
-      execSync(typeCheckCommand, { cwd: rootDir, encoding: "utf8", timeout: 120000 });
+      execSync(command, {
+        cwd: rootDir,
+        encoding: "utf8",
+        timeout: resolveGateTimeout("type_check", config),
+        env: buildCommandEnv(rootDir),
+      });
     } catch (error) {
       const tscOutput = `${String(error?.stdout || "")}${String(error?.stderr || "")}`;
       const { errorLines, files } = parseTscErrorFiles(tscOutput);

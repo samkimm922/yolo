@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { runPublicBetaHardeningDrill } from "./hardening-drill.js";
 import { runOperatorReleaseRunbookGate } from "./operator-runbook.js";
+import { DEFAULT_EXECUTOR_TIMEOUT_MS } from "../lib/toolchain.js";
 import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const POST_RELEASE_AUDIT_SCHEMA_VERSION = "1.0";
@@ -169,7 +170,7 @@ export function runPostReleaseAuditGate(options: PostReleaseAuditOptions = Objec
   const manualReleaseRecord = options.manualReleaseRecord || options.manual_release_record || null;
   const operatorRunbook = options.operatorRunbook || options.operator_runbook || (options.runOperatorReleaseRunbookGate || runOperatorReleaseRunbookGate)({
     yoloRoot,
-    timeout_ms: options.timeout_ms || 120000,
+    timeout_ms: options.timeout_ms || DEFAULT_EXECUTOR_TIMEOUT_MS,
     commandExists: options.commandExists,
     now: options.now,
     random: options.random,
@@ -177,7 +178,7 @@ export function runPostReleaseAuditGate(options: PostReleaseAuditOptions = Objec
   });
   const hardeningDrill = options.hardeningDrill || options.hardening_drill || (options.runPublicBetaHardeningDrill || runPublicBetaHardeningDrill)({
     yoloRoot,
-    timeout_ms: options.timeout_ms || 120000,
+    timeout_ms: options.timeout_ms || DEFAULT_EXECUTOR_TIMEOUT_MS,
     keepWorkspace: options.keepWorkspace === true,
     commandExists: options.commandExists,
     now: options.now,
