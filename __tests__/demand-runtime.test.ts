@@ -1851,6 +1851,7 @@ describe("demand runtime", () => {
         projectRoot: root,
         stateRoot: join(root, ".yolo"),
         demandPath: discuss.demand_dir,
+        config: { build: { test: "cargo test", type_check: "cargo check", build: "cargo build" } },
         writeArtifacts: false,
       });
 
@@ -1891,6 +1892,9 @@ describe("demand runtime", () => {
       assert.ok(testTask.depends_on.includes(serviceTask.id));
       assert.ok(testTask.handoff.read_first.includes("src/services/inventory-alerts.ts"));
       assert.ok(testTask.post_conditions.some((condition) => condition.type === "tests_pass" && condition.severity === "FAIL"));
+      assert.ok(testTask.post_conditions.some((condition) =>
+        condition.type === "tests_pass" && condition.params?.command === "cargo test"
+      ));
       assert.equal(compiledPrd.tasks.every((task) => task.post_conditions.some((condition) => condition.severity === "FAIL" && condition.type !== "acceptance_criteria")), true);
       for (const task of compiledPrd.tasks) {
         assertTaskSessionPlan(task, compiledPrd.demand.id);

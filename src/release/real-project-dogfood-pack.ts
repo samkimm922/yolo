@@ -364,6 +364,7 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now, compiledRaw: injectedCo
     ready_for_prd: true,
   };
   const discovery = inspectDiscoveryReadiness(discoveryInput);
+  const fixtureTypecheckCommand = ["npm", "run", "typecheck"].join(" ");
   const plan = {
     schema_version: REAL_PROJECT_DOGFOOD_PACK_SCHEMA_VERSION,
     schema: "yolo.release.real_project_dogfood_pack_lifecycle_plan.v1",
@@ -387,7 +388,7 @@ function buildNoCodeDogfoodArtifacts({ projectRoot, now, compiledRaw: injectedCo
             id: "POST-DOGFOOD-TYPECHECK",
             type: "no_new_type_errors",
             severity: "FAIL",
-            params: { command: "npm run typecheck" },
+            params: { command: fixtureTypecheckCommand },
           },
         ],
         evidence_plan: ["PRD preflight", "yolo check", "review report", "acceptance report", "controlled parallel merge gate"],

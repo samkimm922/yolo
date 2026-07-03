@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { normalizeReviewFinding } from "./findings.js";
 import type { NormalizedReviewFinding, ReviewFindingInput } from "./findings.js";
 import { severityToPriority } from "../lib/severity-priority.js";
+import { loadProjectToolchainConfig, resolveBuildCommand } from "../lib/toolchain.js";
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 
@@ -55,6 +56,9 @@ export type ReviewFindingsToPrdTasksOptions = {
   [key: string]: unknown;
   round?: number;
   existingTasks?: ExistingTask[];
+  config?: Record<string, unknown>;
+  projectRoot?: string;
+  project_root?: string;
 };
 
 type ReviewConversionOmitted = Array<{
@@ -166,12 +170,14 @@ function targetConditions(taskId: string, files: string[]): ReviewTaskCondition[
   }));
 }
 
-function typecheckCondition(taskId: string): ReviewTaskCondition {
+function typecheckCondition(taskId: string, context: { config?: Record<string, unknown>; projectRoot?: string } = {}): ReviewTaskCondition {
+  const projectRoot = context.projectRoot || process.cwd();
+  const config = context.config || Object();
   return {
     id: `POST-${taskId}-TYPECHECK`,
     type: "no_new_type_errors",
     severity: "FAIL",
-    params: { command: "npm run typecheck" },
+    params: { command: resolveBuildCommand("type_check", config, projectRoot) },
     message: "project typecheck must pass after the review fix",
   };
 }
@@ -216,6 +222,11 @@ export function reviewFindingsToPrdTasks(
 ): ReviewFindingsToPrdTasksResult {
   const round = typeof options.round === "number" && Number.isInteger(options.round) ? options.round : 1;
   const existingIds = existingTaskIds(options.existingTasks || []);
+  const projectRoot = resolve(String(options.projectRoot || options.project_root || process.cwd()));
+  const buildConfig = loadProjectToolchainConfig(projectRoot, {
+    config: options.config,
+    configPath: typeof options.configPath === "string" ? options.configPath : undefined,
+  });
   const tasks: ReviewPrdTask[] = [];
   const skipped: ReviewConversionOmitted = [];
   let taskIndex = 0;
@@ -260,7 +271,7 @@ export function reviewFindingsToPrdTasks(
       post_conditions: [
         ...targetConditions(taskId, files),
         ...absenceCondition(taskId, finding, files, sourceFindingId),
-        typecheckCondition(taskId),
+        typecheckCondition(taskId, { config: buildConfig, projectRoot }),
       ],
       acceptance_criteria: [
         description,

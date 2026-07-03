@@ -2,6 +2,7 @@ import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { inspectPublicBetaReadiness } from "./readiness.js";
 import { runControlledBetaReleaseDecisionGate } from "./decision-gate.js";
+import { DEFAULT_EXECUTOR_TIMEOUT_MS } from "../lib/toolchain.js";
 import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const OPERATOR_RELEASE_STATE_SCHEMA_VERSION = "1.0";
@@ -156,7 +157,7 @@ export function runOperatorReleaseStateMutation(options: OperatorReleaseStateOpt
     decision: options.decision,
     requestedActions,
     releaseScope: plan.release_scope,
-    timeout_ms: options.timeout_ms || 120000,
+    timeout_ms: options.timeout_ms || DEFAULT_EXECUTOR_TIMEOUT_MS,
     commandExists: options.commandExists,
     now: options.now,
     random: options.random,

@@ -7,6 +7,7 @@ import { inspectProviderCliDryRunMatrix } from "../runtime/adapters/provider-run
 import { runWorkflowSkillTargetSmoke } from "../workflows/install.js";
 import { runPackageInstallSmoke } from "./pack-smoke.js";
 import { inspectPublicBetaReadiness } from "./readiness.js";
+import { DEFAULT_EXECUTOR_TIMEOUT_MS } from "../lib/toolchain.js";
 import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const PUBLIC_BETA_HARDENING_DRILL_SCHEMA_VERSION = "1.0";
@@ -210,7 +211,7 @@ export function runPublicBetaHardeningDrill(options: PublicBetaHardeningOptions 
     ? { status: "skipped", dry_run: true, summary: "package install smoke skipped by caller" }
     : (options.runPackageInstallSmoke || runPackageInstallSmoke)({
         yoloRoot,
-        timeout_ms: options.timeout_ms || 120000,
+        timeout_ms: options.timeout_ms || DEFAULT_EXECUTOR_TIMEOUT_MS,
         keepWorkspace: options.keepWorkspace === true,
       });
   const fixtureRegistry = (options.inspectFixtureRegistry || inspectFixtureRegistry)({ yoloRoot });

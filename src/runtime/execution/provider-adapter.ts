@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { inspectAgentAdapterContract, normalizeAgentProvider } from "../adapters/agent-contract.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 import { commandExistsSync } from "../../lib/security/safe-exec.js";
+import { DEFAULT_EXECUTOR_TIMEOUT_MS, resolveExecutorTimeoutMs } from "../../lib/toolchain.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -29,7 +30,7 @@ export const YOLO_PACKAGE_ROOT = findPackageRoot(MODULE_DIR);
 export const DEFAULT_CLAUDE_SETTINGS_FILE = "settings-minimal.json";
 export const DEFAULT_CLAUDE_SETTINGS_PATH = resolve(YOLO_PACKAGE_ROOT, DEFAULT_CLAUDE_SETTINGS_FILE);
 export const DEFAULT_CLAUDE_PERMISSION_MODE = "acceptEdits";
-const DEFAULT_PROVIDER_TIMEOUT_MS = 480000;
+const DEFAULT_PROVIDER_TIMEOUT_MS = DEFAULT_EXECUTOR_TIMEOUT_MS;
 // Provider stdout/stderr are collected into memory for the run result. Without a cap a
 // runaway provider (infinite logging, binary dump, loop) can grow the buffer without bound
 // and OOM or stall the runner. These defaults bound each stream at 10MB; reaching the hard
@@ -696,7 +697,7 @@ export function buildProviderInvocation({
 }
 
 export function spawnProviderPrompt(prompt, {
-  timeout = DEFAULT_PROVIDER_TIMEOUT_MS,
+  timeout,
   cwd,
   config,
   rootDir,
@@ -714,13 +715,14 @@ export function spawnProviderPrompt(prompt, {
   if (!config?.ai) throw new Error("spawnProviderPrompt requires config.ai");
   if (!rootDir) throw new Error("spawnProviderPrompt requires rootDir");
   if (!runtimeDir) throw new Error("spawnProviderPrompt requires runtimeDir");
-  if (!Number.isFinite(timeout) || timeout <= 0) {
+  const effectiveTimeout = timeout === undefined ? resolveExecutorTimeoutMs(config, DEFAULT_PROVIDER_TIMEOUT_MS) : Number(timeout);
+  if (!Number.isFinite(effectiveTimeout) || effectiveTimeout <= 0) {
     return Promise.resolve(blockedProviderRun({
       provider: "unknown",
       command: null,
       blockers: [{
         code: "PROVIDER_TIMEOUT_INVALID",
-        message: `Provider timeout must be a positive finite number (got ${timeout})`,
+        message: `Provider timeout must be a positive finite number (got ${effectiveTimeout})`,
       }],
       inspection: null,
       preflight: {
@@ -728,7 +730,7 @@ export function spawnProviderPrompt(prompt, {
         blocks_execution: true,
         blockers: [{
           code: "PROVIDER_TIMEOUT_INVALID",
-          message: `Provider timeout must be a positive finite number (got ${timeout})`,
+          message: `Provider timeout must be a positive finite number (got ${effectiveTimeout})`,
         }],
         warnings: [],
       },
@@ -769,7 +771,7 @@ export function spawnProviderPrompt(prompt, {
     }));
   }
   const inspection = stubEnabled
-    ? providerStubInspection(invocation, { rootDir, workDir, runtimeDir, timeout })
+    ? providerStubInspection(invocation, { rootDir, workDir, runtimeDir, timeout: effectiveTimeout })
     : inspectAgentAdapterContract({
         config,
         provider,
@@ -778,7 +780,7 @@ export function spawnProviderPrompt(prompt, {
         rootDir,
         workDir,
         runtimeDir,
-        timeoutMs: timeout,
+        timeoutMs: effectiveTimeout,
       });
   const preflight = stubEnabled
     ? inspectProviderStubPreflight(invocation, { existsSync, commandExists })
@@ -869,7 +871,7 @@ export function spawnProviderPrompt(prompt, {
       };
     };
 
-    const timer = timeout > 0
+    const timer = effectiveTimeout > 0
       ? setTimeout(() => {
           timeoutTriggered = true;
           if (killTree) killTree(child.pid);
@@ -890,7 +892,7 @@ export function spawnProviderPrompt(prompt, {
               }), invocation));
             }
           }, 5000);
-        }, timeout)
+        }, effectiveTimeout)
       : null;
 
     const finish = (success, stdout, stderr, terminal = Object()) => {

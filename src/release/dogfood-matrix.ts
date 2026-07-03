@@ -195,6 +195,7 @@ export const GENERIC_DOGFOOD_MATRIX: DogfoodScenario[] = [
   passExpected({
     id: "node-basic",
     label: "Node basic",
+    // source-grep-allow toolchain-drift: fixture contract intentionally uses npm.
     fixtureCommand: "npm test",
     projectShape: {
       fixture: "fixtures/node-basic",
@@ -208,6 +209,7 @@ export const GENERIC_DOGFOOD_MATRIX: DogfoodScenario[] = [
   passExpected({
     id: "frontend-vite",
     label: "Frontend Vite",
+    // source-grep-allow toolchain-drift: fixture contract intentionally uses npm.
     fixtureCommand: "npm test",
     projectShape: {
       fixture: "fixtures/frontend-vite",
@@ -222,6 +224,7 @@ export const GENERIC_DOGFOOD_MATRIX: DogfoodScenario[] = [
   passExpected({
     id: "backend-api",
     label: "Backend API",
+    // source-grep-allow toolchain-drift: fixture contract intentionally uses npm.
     fixtureCommand: "npm test",
     projectShape: {
       fixture: "fixtures/backend-api",

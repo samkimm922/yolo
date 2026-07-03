@@ -5,6 +5,13 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve, relative, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
+import { parseCommandToArgv } from "./security/command-guard.js";
+import {
+  assertBuildCommandAvailable,
+  buildCommandEnv,
+  resolveBuildCommand,
+  resolveGateTimeout,
+} from "./toolchain.js";
 
 // ══════════════════════════════════════════════════════════════════════
 // 内部类型
@@ -69,8 +76,10 @@ interface LintError {
 type ExecFileSyncLike = (
   cmd: string,
   args: readonly string[],
-  options?: { cwd?: string; encoding?: string; timeout?: number; stdio?: Array<"pipe" | "ignore" | "inherit" | null>; maxBuffer?: number },
+  options?: { cwd?: string; encoding?: string; timeout?: number; env?: NodeJS.ProcessEnv; stdio?: Array<"pipe" | "ignore" | "inherit" | null>; maxBuffer?: number },
 ) => string | Buffer;
+
+type AutoFixConfig = Record<string, unknown>;
 
 // ══════════════════════════════════════════════════════════════════════
 // 工具函数
@@ -147,6 +156,52 @@ function diffNewErrors(baselineErrors: LintError[], currentErrors: LintError[], 
   return currentErrors.filter((e) => {
     if (!fileSet.has(e.file)) return false;
     return !baselineSet.has(`${e.file}:${e.line}:${e.code}`);
+  });
+}
+
+function appendToolArgs(argv: string[], extraArgs: string[]): string[] {
+  if (extraArgs.length === 0) return argv;
+  const [bin, subcommand] = argv;
+  if ((bin === "npm" || bin === "pnpm" || bin === "yarn") && subcommand === "run") {
+    return [...argv, "--", ...extraArgs];
+  }
+  return [...argv, ...extraArgs];
+}
+
+function execConfiguredBuildCommand(
+  efs: ExecFileSyncLike,
+  kind: "type_check" | "lint",
+  config: AutoFixConfig,
+  rootDir: string,
+  extraArgs: string[],
+  timeout: number,
+): string | Buffer {
+  const command = resolveBuildCommand(kind, config, rootDir);
+  const availability = assertBuildCommandAvailable(kind, config, rootDir);
+  if (!availability.ok) {
+    const error = Object.assign(new Error(availability.message), {
+      status: 127,
+      stdout: "",
+      stderr: availability.message,
+    });
+    throw error;
+  }
+  const parsed = parseCommandToArgv(command);
+  if (!parsed.ok || !parsed.argv?.length) {
+    const error = Object.assign(new Error(parsed.ok ? "empty command" : parsed.detail), {
+      status: 127,
+      stdout: "",
+      stderr: parsed.ok ? "empty command" : parsed.detail,
+    });
+    throw error;
+  }
+  const argv = appendToolArgs(parsed.argv, extraArgs);
+  return efs(argv[0], argv.slice(1), {
+    cwd: rootDir,
+    encoding: "utf8",
+    timeout,
+    stdio: ["pipe", "pipe", "pipe"],
+    env: buildCommandEnv(rootDir),
   });
 }
 
@@ -502,7 +557,7 @@ function applyFixesToFile(filePath: string, findings: AutoFixFinding[], rootDir:
  * @param _efSync - 可注入的 execFileSync
  * @returns {passed, errors} errors 为新增的 tsc/eslint 错误（带 source）
  */
-async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecFileSyncLike): Promise<{ passed: boolean; errors: LintError[] }> {
+async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecFileSyncLike, config: AutoFixConfig = Object()): Promise<{ passed: boolean; errors: LintError[] }> {
   const efs = _efSync || execFileSync;
   const absFiles = files.map((f) => resolve(rootDir, f).replace(/\\/g, "/"));
   const relFiles = files.map((f) => f.replace(/\\/g, "/"));
@@ -519,20 +574,14 @@ async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecF
 
     // 基线 TSC
     try {
-      efs("pnpm", ["exec", "tsc", "--noEmit"], {
-        cwd: rootDir, encoding: "utf8", timeout: 60000,
-        stdio: ["pipe", "pipe", "pipe"],
-      });
+      execConfiguredBuildCommand(efs, "type_check", config, rootDir, [], resolveGateTimeout("type_check", config));
     } catch (e) {
       baselineTscErrors = parseTscErrors((e as { stdout?: string }).stdout || "", rootDir);
     }
 
     // 基线 ESLint
     try {
-      const out = String(efs("pnpm", ["exec", "eslint", ...relFiles, "--format", "json"], {
-        cwd: rootDir, encoding: "utf8", timeout: 30000,
-        stdio: ["pipe", "pipe", "pipe"],
-      }));
+      const out = String(execConfiguredBuildCommand(efs, "lint", config, rootDir, [...relFiles, "--format", "json"], resolveGateTimeout("lint", config)));
       baselineEslintErrors = flattenEslintErrors(JSON.parse(out.trim() || "[]"), rootDir);
     } catch (e) {
       try {
@@ -558,26 +607,43 @@ async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecF
   // 2. 当前状态 TSC
   let currentTscErrors: LintError[] = [];
   try {
-    efs("pnpm", ["exec", "tsc", "--noEmit"], {
-      cwd: rootDir, encoding: "utf8", timeout: 60000,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    execConfiguredBuildCommand(efs, "type_check", config, rootDir, [], resolveGateTimeout("type_check", config));
   } catch (e) {
-    currentTscErrors = parseTscErrors((e as { stdout?: string }).stdout || "", rootDir);
+    const error = e as { status?: number; stdout?: string; stderr?: string; message?: string };
+    if (error.status === 127) {
+      currentTscErrors = [{
+        file: "",
+        line: 0,
+        code: "COMMAND_UNAVAILABLE",
+        message: String(error.stderr || error.message || "typecheck command unavailable"),
+      }];
+    } else {
+      currentTscErrors = parseTscErrors(error.stdout || "", rootDir);
+    }
   }
 
   // 3. 当前状态 ESLint
   let currentEslintErrors: LintError[] = [];
   try {
-    const out = String(efs("pnpm", ["exec", "eslint", ...relFiles, "--format", "json"], {
-      cwd: rootDir, encoding: "utf8", timeout: 30000,
-      stdio: ["pipe", "pipe", "pipe"],
-    }));
+    const out = String(execConfiguredBuildCommand(efs, "lint", config, rootDir, [...relFiles, "--format", "json"], resolveGateTimeout("lint", config)));
     currentEslintErrors = flattenEslintErrors(JSON.parse(out.trim() || "[]"), rootDir);
   } catch (e) {
     // H12: eslint output must be parseable. A parse failure on non-empty output
     // is fail-open if swallowed ("assume clean"); instead hard-block validation.
     const rawOut = (e as { stdout?: string }).stdout?.trim() || "";
+    const commandError = e as { status?: number; stderr?: string; message?: string };
+    if (commandError.status === 127) {
+      return {
+        passed: false,
+        errors: [{
+          file: "",
+          line: 0,
+          code: "COMMAND_UNAVAILABLE",
+          message: String(commandError.stderr || commandError.message || "lint command unavailable"),
+          source: "eslint",
+        }],
+      };
+    }
     try {
       if (rawOut) {
         currentEslintErrors = flattenEslintErrors(JSON.parse(rawOut), rootDir);
@@ -619,17 +685,29 @@ async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecF
  * @param _efSync - 可注入的 execFileSync
  * @returns {success, escalatedTasks?, modifiedFiles?}
  */
-async function handleEslintFix(task: AutoFixTask, rootDir: string, _efSync?: ExecFileSyncLike): Promise<{ success: boolean; escalatedTasks?: AutoFixFinding[]; modifiedFiles?: string[] }> {
+async function handleEslintFix(task: AutoFixTask, rootDir: string, _efSync?: ExecFileSyncLike, config: AutoFixConfig = Object()): Promise<{ success: boolean; escalatedTasks?: AutoFixFinding[]; modifiedFiles?: string[] }> {
   const efs = _efSync || execFileSync;
   const files = (task.scope?.targets || []).map((t) => t.file).filter(Boolean) as string[];
   if (files.length === 0) return { success: true };
 
   try {
-    efs("pnpm", ["exec", "eslint", "--fix", ...files], {
-      cwd: rootDir, encoding: "utf8", timeout: 30000,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    execConfiguredBuildCommand(efs, "lint", config, rootDir, ["--fix", ...files], resolveGateTimeout("lint", config));
   } catch (e) {
+    const commandError = e as { status?: number; stderr?: string; message?: string };
+    if (commandError.status === 127) {
+      return {
+        success: false,
+        escalatedTasks: [{
+          file: "",
+          scanner_id: "eslint-COMMAND_UNAVAILABLE",
+          severity: "HIGH",
+          line: 0,
+          description: String(commandError.stderr || commandError.message || "lint command unavailable"),
+          match: "COMMAND_UNAVAILABLE",
+          fix_type: "CLAUDE_FIX",
+        }],
+      };
+    }
     // eslint 在残留不可自动修复的错误时退出非零 — 检查剩余错误
     try {
       const stdout = (e as { stdout?: string }).stdout || "";
@@ -708,6 +786,7 @@ interface ApplyAutoFixTasksOptions {
   logP?: (scope: string, level: string, message: string) => void;
   prdPath?: string;
   execFileSync?: ExecFileSyncLike;
+  config?: AutoFixConfig;
   readFileSync?: (path: string, encoding: string) => string;
   writeFileSync?: (path: string, data: string, encoding: string) => void;
   existsSync?: (path: string) => boolean;
@@ -723,6 +802,7 @@ export async function applyAutoFixTasks(
     logP,
     prdPath,
     execFileSync: injectedExec,
+    config = Object(),
     readFileSync: injectedRead,
     writeFileSync: injectedWrite,
     existsSync: injectedExists,
@@ -743,7 +823,7 @@ export async function applyAutoFixTasks(
 
     // ── ESLint 自动修复（特殊通道） ──
     if (scannerId?.startsWith("eslint-")) {
-      const result = await handleEslintFix(task, rootDir, efs);
+      const result = await handleEslintFix(task, rootDir, efs, config);
       if (result.success) {
         stats.fixed++;
         hasAnyFix = true;
@@ -854,7 +934,7 @@ export async function applyAutoFixTasks(
 
     // ── 校验 & 提交 ──
     if (modifiedFiles.length > 0) {
-      const validation = await validateAutoFix(modifiedFiles, rootDir, efs);
+      const validation = await validateAutoFix(modifiedFiles, rootDir, efs, config);
 
       if (validation.passed) {
         stats.fixed++;

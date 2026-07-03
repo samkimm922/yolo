@@ -4,6 +4,7 @@ import { type Dirent, existsSync, lstatSync, mkdirSync, readdirSync, readFileSyn
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { loadConfig } from "../core/config.js";
 import { spawnProviderPrompt as defaultSpawnProviderPrompt } from "../runtime/execution/provider-adapter.js";
+import { resolveExecutorTimeoutMs } from "../lib/toolchain.js";
 import {
   buildDemandSessionState,
   DEMAND_EVIDENCE_RESULT_SCHEMA,
@@ -909,7 +910,7 @@ export async function runDemandEvidenceDispatchRuntime(
   const spawnProviderPrompt: DemandEvidenceSpawnProviderPrompt = options.spawnProviderPrompt
     || defaultSpawnProviderPrompt as DemandEvidenceSpawnProviderPrompt;
   const config = executionConfig(input, options);
-  const timeout = Number(input.timeout_ms || input.timeoutMs || options.timeout_ms || options.timeoutMs || config.ai?.timeout_ms || 480000);
+  const timeout = Number(input.timeout_ms || input.timeoutMs || options.timeout_ms || options.timeoutMs || resolveExecutorTimeoutMs(config));
   mkdirSync(plan.output_dir, { recursive: true });
   const boundaryBefore = buildBoundarySnapshot(plan.project_root, [plan.output_dir]);
 

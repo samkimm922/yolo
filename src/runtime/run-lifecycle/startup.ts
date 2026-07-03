@@ -25,6 +25,7 @@ import { trimJsonlWithArchive } from "../memory/retention.js";
 import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe-exec.js";
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 import { readJsonFileBounded } from "../../lib/bounded-read.js";
+import { resolveBuildCommand, resolveGateTimeout } from "../../lib/toolchain.js";
 
 export function createRunnerError(message, exitCode = 1, details = Object()) {
   const error = Object.assign(new Error(message), { exitCode }, details);
@@ -312,7 +313,8 @@ export function initializeMissingBaselines({
     if (existsSync(baselinePath)) continue;
     log("BASELINE", "init", `初始化 ${tool} baseline...`);
     try {
-      const rawCommand = String(tool === "tsc" ? config.build?.type_check || "" : config.build?.lint || "").trim();
+      const kind = tool === "tsc" ? "type_check" : "lint";
+      const rawCommand = resolveBuildCommand(kind, config, rootDir);
       if (!rawCommand) {
         const createdAt = nowIso();
         const baseline = buildBaselineArtifact({
@@ -352,7 +354,7 @@ export function initializeMissingBaselines({
           const stdout = execFileSync(argv[0], argv.slice(1), {
             cwd: rootDir,
             encoding: "utf8",
-            timeout: 120000,
+            timeout: resolveGateTimeout(kind, config),
             env: baselineCommandEnv(rootDir),
           });
           output = String(stdout || "");

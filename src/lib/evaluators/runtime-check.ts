@@ -1,6 +1,5 @@
 // evaluators/runtime-check.js — evalTestsPass / evalBuildPass / evalBusinessCodeMin
 
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
@@ -9,6 +8,13 @@ import { config } from "../config.js";
 import { execCommand } from "../security/safe-exec.js";
 import { businessFilePolicyDescription, isBusinessFile } from "../../runtime/execution/change-set.js";
 import type { EvalParams, EvalResult, EvaluatorOptions, ExecFn, TaskScope } from "./types.js";
+import {
+  assertBuildCommandAvailable,
+  buildCommandEnv,
+  commandUnavailableDetail,
+  resolveBuildCommand,
+  resolveGateTimeout,
+} from "../toolchain.js";
 
 type CommandRunResult = {
   ok: boolean;
@@ -16,20 +22,14 @@ type CommandRunResult = {
   message: string;
 };
 
-function errorRecord(error: unknown): { stdout?: unknown; stderr?: unknown; message?: unknown } {
-  return typeof error === "object" && error !== null
-    ? error as { stdout?: unknown; stderr?: unknown; message?: unknown }
-    : {};
-}
-
 function targetFilesFromScope(taskScope: TaskScope): string[] {
   return (taskScope.targets || []).map((target) => target.file).filter((file): file is string => Boolean(file));
 }
 
-function runCommand(command: string, ROOT: string, timeout: number): CommandRunResult {
+function runCommand(command: string, ROOT: string, timeout: number, kind: "test" | "build"): CommandRunResult {
   // P12.I1: route through safe-exec — untrusted command strings parsed to argv
   // and rejected if they contain shell metacharacters; spawn without shell.
-  const result = execCommand(command, { cwd: ROOT, timeout });
+  const result = execCommand(command, { cwd: ROOT, timeout, env: buildCommandEnv(ROOT) });
   if (result.rejected) {
     return {
       ok: false,
@@ -40,80 +40,39 @@ function runCommand(command: string, ROOT: string, timeout: number): CommandRunR
   return {
     ok: result.ok,
     out: result.stdout,
-    message: result.ok ? "" : (result.stderr || result.error || ""),
+    message: result.ok ? "" : (result.command_not_found ? commandUnavailableDetail(kind, command, ROOT) : (result.stderr || result.error || "")),
   };
 }
 
-export function evalTestsPass(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string): EvalResult {
-  const command = params.command || config.build?.test || "";
-  if (command) {
-    const file = params.file || params.test_file;
-    const commandWithFile = file && command.includes("{file}") ? command.replaceAll("{file}", file) : command;
-    const result = runCommand(commandWithFile, ROOT, params.timeout_ms || config.gate?.timeout?.test || 120000);
-    return {
-      passed: result.ok,
-      detail: result.ok ? `测试命令通过: ${commandWithFile}` : `测试命令失败: ${result.message.slice(0, 200)}`,
-      type: "tests_pass",
-    };
-  }
+function commandConfig(kind: "test" | "build", command: string): Record<string, unknown> {
+  const build = config.build && typeof config.build === "object" ? config.build as Record<string, unknown> : Object();
+  return { ...config, build: { ...build, [kind]: command } };
+}
 
-  try {
-    const out = execFileSync("pnpm", ["exec", "vitest", "run", "--reporter", "json"], {
-      cwd: ROOT, encoding: "utf8", timeout: 120000, stdio: ["pipe", "pipe", "pipe"],
-    });
-    const s = out.indexOf("{");
-    if (s < 0) {
-      return { passed: false, detail: "vitest 未输出 JSON 测试结果，无法确认测试通过", type: "tests_pass" };
-    }
-    const data = JSON.parse(out.slice(s));
-    if (!data || typeof data.numFailedTests !== "number") {
-      return { passed: false, detail: "vitest JSON 缺少 numFailedTests，测试结果不可信", type: "tests_pass" };
-    }
-    if ((data.numFailedTests || 0) > 0) return { passed: false, detail: data.numFailedTests + " 个测试失败", found: data.numFailedTests };
-    return { passed: true, detail: "全部测试通过", type: "tests_pass" };
-  } catch (e) {
-    const caught = errorRecord(e);
-    const s = String(caught.stdout || "") + String(caught.stderr || "");
-    try {
-      const start = s.indexOf("{");
-      if (start >= 0) {
-        const json = JSON.parse(s.slice(start));
-        if (json && typeof json.numFailedTests === "number") {
-          return {
-            passed: json.numFailedTests === 0,
-            detail: json.numFailedTests === 0 ? "所有测试通过" : `${json.numFailedTests} 个测试失败`,
-            type: "tests_pass"
-          };
-        }
-      }
-    } catch {
-      // H12: vitest produced no parseable JSON result — fail-closed with a
-      // structured code rather than an empty/indeterminate result.
-    }
-    return { passed: false, detail: `vitest 执行异常：${String(caught.message || caught.stderr || "").slice(0, 200)}`, code: "OUTPUT_UNPARSEABLE", type: "tests_pass" };
-  }
+export function evalTestsPass(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string): EvalResult {
+  const baseCommand = String(params.command || resolveBuildCommand("test", config, ROOT));
+  const file = params.file || params.test_file;
+  const commandWithFile = file && baseCommand.includes("{file}") ? baseCommand.replaceAll("{file}", file) : baseCommand;
+  const availability = assertBuildCommandAvailable("test", commandConfig("test", commandWithFile), ROOT);
+  if (!availability.ok) return { passed: false, detail: availability.message, type: "tests_pass" };
+  const result = runCommand(commandWithFile, ROOT, params.timeout_ms || resolveGateTimeout("test", config), "test");
+  return {
+    passed: result.ok,
+    detail: result.ok ? `测试命令通过: ${commandWithFile}` : `测试命令失败: ${result.message.slice(0, 200)}`,
+    type: "tests_pass",
+  };
 }
 
 export function evalBuildPass(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string): EvalResult {
-  const command = params.command || config.build?.build || "";
-  if (command) {
-    const result = runCommand(command, ROOT, params.timeout_ms || config.gate?.timeout?.build || 240000);
-    return {
-      passed: result.ok,
-      detail: result.ok ? `构建命令通过: ${command}` : `构建命令失败: ${result.message.slice(0, 200)}`,
-      type: "build_pass",
-    };
-  }
-
-  try {
-    execFileSync("pnpm", ["run", "build:weapp"], {
-      cwd: ROOT, encoding: "utf8", timeout: 240000, stdio: ["pipe", "pipe", "pipe"],
-    });
-    return { passed: true, detail: "构建通过 (weapp)" };
-  } catch (e) {
-    const caught = errorRecord(e);
-    return { passed: false, detail: "构建失败: " + String(caught.message || "").slice(0, 80) };
-  }
+  const command = String(params.command || resolveBuildCommand("build", config, ROOT));
+  const availability = assertBuildCommandAvailable("build", commandConfig("build", command), ROOT);
+  if (!availability.ok) return { passed: false, detail: availability.message, type: "build_pass" };
+  const result = runCommand(command, ROOT, params.timeout_ms || resolveGateTimeout("build", config), "build");
+  return {
+    passed: result.ok,
+    detail: result.ok ? `构建命令通过: ${command}` : `构建命令失败: ${result.message.slice(0, 200)}`,
+    type: "build_pass",
+  };
 }
 
 function hashFile(path: string): string {

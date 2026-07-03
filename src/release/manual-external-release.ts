@@ -6,6 +6,7 @@ import {
 } from "./operator-runbook.js";
 import { runPostReleaseAuditGate } from "./post-release-audit.js";
 import { runStableGraduationGate } from "./stable-graduation.js";
+import { DEFAULT_EXECUTOR_TIMEOUT_MS } from "../lib/toolchain.js";
 import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const MANUAL_EXTERNAL_RELEASE_SCHEMA_VERSION = "1.0";
@@ -292,7 +293,7 @@ export function runManualExternalReleaseGate(options: ManualExternalReleaseOptio
     requestedOperations,
     dogfoodReport: dogfoodPublicationEvidence,
     providerCommand: options.providerCommand || options.provider_command,
-    timeout_ms: options.timeout_ms || 120000,
+    timeout_ms: options.timeout_ms || DEFAULT_EXECUTOR_TIMEOUT_MS,
     commandExists: options.commandExists,
     now: options.now,
     random: options.random,
@@ -306,7 +307,7 @@ export function runManualExternalReleaseGate(options: ManualExternalReleaseOptio
     dogfoodAudit: dogfoodPublicationEvidence,
     hardeningDrill: options.hardeningDrill || options.hardening_drill,
     postReleaseChecks: options.postReleaseChecks || options.post_release_checks,
-    timeout_ms: options.timeout_ms || 120000,
+    timeout_ms: options.timeout_ms || DEFAULT_EXECUTOR_TIMEOUT_MS,
     commandExists: options.commandExists,
     now: options.now,
     random: options.random,
@@ -321,7 +322,7 @@ export function runManualExternalReleaseGate(options: ManualExternalReleaseOptio
     runnerRuntimeApiFrozen: options.runnerRuntimeApiFrozen || options.runner_runtime_api_frozen,
     rootEntrypointCount: options.rootEntrypointCount ?? options.root_entrypoint_count,
     maxRootEntrypoints: options.maxRootEntrypoints || options.max_root_entrypoints,
-    timeout_ms: options.timeout_ms || 120000,
+    timeout_ms: options.timeout_ms || DEFAULT_EXECUTOR_TIMEOUT_MS,
     commandExists: options.commandExists,
     now: options.now,
     random: options.random,

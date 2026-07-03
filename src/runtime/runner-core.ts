@@ -193,7 +193,7 @@ function applySplitSuggestionsToPrd(prdPath, parentTask, doctor) {
   });
 }
 
-function spawnProvider(prompt, timeout = runtimeConfig.ai.timeout_ms, { cwd: cwdPath } = Object()) {
+function spawnProvider(prompt, timeout = undefined, { cwd: cwdPath } = Object()) {
   return spawnProviderPrompt(prompt, {
     timeout,
     cwd: cwdPath || ROOT,
@@ -206,7 +206,6 @@ function spawnProvider(prompt, timeout = runtimeConfig.ai.timeout_ms, { cwd: cwd
 }
 
 // ── Worktree 管理 ──────────────────────────────────────────────────
-
 function createWorktree(taskId) {
   return runnerWorktreeHandlers.createWorktree(taskId);
 }
@@ -215,7 +214,7 @@ function cleanupWorktree(wtPath, wtBranch, mergeToMain = false, allowedScope = [
   return runnerWorktreeHandlers.cleanupWorktree(wtPath, wtBranch, mergeToMain, allowedScope, baseRef);
 }
 
-function spawnClaudeInWorktree(prompt, wtPath, timeout = runtimeConfig.ai.timeout_ms) {
+function spawnClaudeInWorktree(prompt, wtPath, timeout = undefined) {
   return spawnProvider(prompt, timeout, { cwd: wtPath });
 }
 
@@ -545,6 +544,7 @@ export async function run(prdPath, options = Object()) {
       runtimeDir: RUNTIME_DIR,
       expandedTasksFile: EXPANDED_TASKS_FILE,
       progress,
+      config: runtimeConfig,
       startTimeMs: startTime,
       progressServerProc,
       loadPRD,

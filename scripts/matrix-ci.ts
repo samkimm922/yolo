@@ -286,7 +286,7 @@ function initGitRepository(cell: string, projectRoot: string) {
   return runGit(cell, projectRoot, ["rev-parse", "HEAD"]).stdout.trim();
 }
 
-function matrixConfig(projectName: string, businessGlobs: string[]) {
+function matrixConfig(projectName: string, businessGlobs: string[], typeCheckCommand = "") {
   return {
     version: "2.0",
     project: {
@@ -299,7 +299,7 @@ function matrixConfig(projectName: string, businessGlobs: string[]) {
     },
     build: {
       business_globs: businessGlobs,
-      type_check: "",
+      type_check: typeCheckCommand,
       lint: "",
       test: "",
       build: "",
@@ -768,6 +768,7 @@ type L3Domain = {
   projectName: string;
   framework: string;
   targetFile: string;
+  typeCheckCommand: string;
   businessGlobs: string[];
   requiredFiles: string[];
   requiredText?: Record<string, string>;
@@ -781,6 +782,7 @@ const L3_DOMAINS: L3Domain[] = [
     projectName: "matrix-cli-clean",
     framework: "node-cli",
     targetFile: "src/matrix-ci-stub.ts",
+    typeCheckCommand: "node --experimental-strip-types --check src/index.ts",
     businessGlobs: ["src/**/*.ts"],
     requiredFiles: ["src/index.ts", "package.json"],
     requiredText: { "src/index.ts": "export function add" },
@@ -792,6 +794,7 @@ const L3_DOMAINS: L3Domain[] = [
     projectName: "matrix-http-api",
     framework: "node-http",
     targetFile: "src/matrix-ci-stub.ts",
+    typeCheckCommand: "node --experimental-strip-types --check src/server.ts",
     businessGlobs: ["src/**/*.ts"],
     requiredFiles: ["src/server.ts", "test/server.test.ts"],
     requiredText: { "src/server.ts": "routeApiRequest" },
@@ -803,6 +806,7 @@ const L3_DOMAINS: L3Domain[] = [
     projectName: "matrix-monorepo",
     framework: "monorepo",
     targetFile: "packages/app/src/matrix-ci-stub.ts",
+    typeCheckCommand: "node --experimental-strip-types --check packages/app/src/index.ts",
     businessGlobs: ["packages/**/*.ts"],
     requiredFiles: ["packages/app/src/index.ts", "packages/utils/src/math.ts", "packages/app/test.ts"],
     requiredText: { "packages/utils/src/math.ts": "export function add" },
@@ -818,7 +822,7 @@ async function runL3Domain(tempRoot: string, domain: L3Domain) {
       expectedStatus: ["success"],
       runtime: "dist",
     });
-    writeJson(join(projectRoot, ".yolo", "config.json"), matrixConfig(domain.projectName, domain.businessGlobs));
+    writeJson(join(projectRoot, ".yolo", "config.json"), matrixConfig(domain.projectName, domain.businessGlobs, domain.typeCheckCommand));
     writeVerifierScript(projectRoot, {
       targetFile: domain.targetFile,
       requiredFiles: domain.requiredFiles,

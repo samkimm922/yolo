@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { config as loadedConfig } from "../lib/config.js";
 import { resolveWithinRoot } from "../lib/security/path-guard.js";
 import { readJsonFileBounded } from "../lib/bounded-read.js";
+import { DEFAULT_EXECUTOR_TIMEOUT_MS } from "../lib/toolchain.js";
 
 const TASK_TIMEOUT_MS_PER_LINE = 2500;
 const DEFAULT_TASK_TIMEOUT_FLOOR_SECONDS = 120;
@@ -75,7 +76,7 @@ export function computeTaskTimeout(targets, { rootDir, config = loadedConfig } =
   return Math.max(floorMs, Math.min(scaledMs, capMs));
 }
 
-export function execNodeScript(script, args = [], { toolsRoot, cwd, timeout = 120000 } = Object()) {
+export function execNodeScript(script, args = [], { toolsRoot, cwd, timeout = DEFAULT_EXECUTOR_TIMEOUT_MS } = Object()) {
   const scriptPath = resolve(toolsRoot, script);
   if (!existsSync(scriptPath)) {
     const message = `helper 脚本 ${script} 在 toolsRoot=${toolsRoot} 不存在 (helper script not found; 可能 dist 未构建)`;
@@ -95,7 +96,7 @@ export function execNodeScript(script, args = [], { toolsRoot, cwd, timeout = 12
       stdout: execFileSync("node", [scriptPath, ...args], {
         cwd,
         encoding: "utf8",
-        timeout: timeout || 120000,
+        timeout: timeout || DEFAULT_EXECUTOR_TIMEOUT_MS,
         stdio: ["pipe", "pipe", "pipe"],
       }).trim(),
       stderr: "",

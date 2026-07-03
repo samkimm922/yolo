@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { inspectFixtureRegistry } from "../fixtures/registry.js";
 import { inspectRunnerRuntimeApiFreeze } from "../runtime/run-lifecycle/runtime-api-freeze.js";
 import { runPublicBetaHardeningDrill } from "./hardening-drill.js";
+import { DEFAULT_EXECUTOR_TIMEOUT_MS } from "../lib/toolchain.js";
 import type { ReleaseCheck, ReleaseIssue, ReleaseRecord } from "./readiness.js";
 
 export const LOCAL_DOGFOOD_EVIDENCE_SCHEMA_VERSION = "1.0";
@@ -104,7 +105,7 @@ export function runLocalDogfoodEvidenceDrill(options: LocalDogfoodOptions = Obje
   const plan = options.plan || buildLocalDogfoodEvidencePlan({ yoloRoot });
   const hardeningDrill = options.hardeningDrill || options.hardening_drill || (options.runPublicBetaHardeningDrill || runPublicBetaHardeningDrill)({
     yoloRoot,
-    timeout_ms: options.timeout_ms || 120000,
+    timeout_ms: options.timeout_ms || DEFAULT_EXECUTOR_TIMEOUT_MS,
     keepWorkspace: options.keepWorkspace === true,
     commandExists: options.commandExists,
     now: options.now,

@@ -454,7 +454,7 @@ describe("run lifecycle startup helpers", () => {
     assert.equal(baseline.meta.artifact_hash, baselineArtifactHash(baseline));
   });
 
-  test("initializeMissingBaselines uses npx-form typecheck and skips unconfigured lint", () => {
+  test("initializeMissingBaselines uses configured typecheck and skips unconfigured lint", () => {
     const writes = new Map();
     const calls = [];
     const result = initializeMissingBaselines({

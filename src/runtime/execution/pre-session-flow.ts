@@ -171,6 +171,7 @@ export async function handlePreSessionFlow({
       task,
       rootDir: projectRoot,
       typeCheckCommand: config.build?.type_check,
+      config,
       execSync,
     });
     if (postPrecheck.logMessage) {

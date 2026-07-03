@@ -8,6 +8,7 @@ import {
   MANUAL_ONLY_CONDITION_TYPES as MANUAL_ONLY_CONDITION_TYPE_LIST,
   TARGET_COVERAGE_CONDITION_TYPES as TARGET_COVERAGE_CONDITION_TYPE_LIST,
 } from "../../prd/condition-catalog.js";
+import { loadProjectToolchainConfig, resolveBuildCommand } from "../../lib/toolchain.js";
 import { inspectAtomicTask } from "../execution/atomic-task-doctor.js";
 import { orderTasksByDependencies } from "../task-loop/expansion.js";
 
@@ -270,6 +271,13 @@ export function inspectPrdContract(prd, options = Object()) {
   const seenTaskIds = new Set();
   const strictExecution = strictExecutionPolicy(prd, options);
   const projectRoot = resolve(options.projectRoot || options.project_root || process.cwd());
+  const buildConfig = loadProjectToolchainConfig(projectRoot, {
+    config: options.config,
+    configPath: options.configPath || options.config_path,
+  });
+  const typecheckCommand = resolveBuildCommand("type_check", buildConfig, projectRoot);
+  const testCommand = resolveBuildCommand("test", buildConfig, projectRoot);
+  const buildCommand = resolveBuildCommand("build", buildConfig, projectRoot);
 
   for (const task of tasks) {
     const id = cleanString(task?.id);
@@ -602,8 +610,8 @@ export function inspectPrdContract(prd, options = Object()) {
           suggestion: {
             post_condition_examples: [
               { id: "POST-FILE", type: "file_exists", severity: "FAIL", params: { file: targets[0]?.file || "src/path/to/file.ts" } },
-              { id: "POST-TSC", type: "no_new_type_errors", severity: "FAIL", params: { command: "npm run typecheck" } },
-              { id: "POST-TESTS", type: "tests_pass", severity: "FAIL", params: { command: "npm test" } },
+              { id: "POST-TSC", type: "no_new_type_errors", severity: "FAIL", params: { command: typecheckCommand } },
+              { id: "POST-TESTS", type: "tests_pass", severity: "FAIL", params: { command: testCommand } },
             ],
           },
         },
@@ -620,9 +628,9 @@ export function inspectPrdContract(prd, options = Object()) {
         {
           suggestion: {
             post_condition_examples: [
-              { id: "POST-TESTS", type: "tests_pass", severity: "FAIL", params: { command: "npm test" } },
-              { id: "POST-BUILD", type: "build_pass", severity: "FAIL", params: { command: "npm run build" } },
-              { id: "POST-TYPECHECK", type: "no_new_type_errors", severity: "FAIL", params: { command: "npm run typecheck" } },
+              { id: "POST-TESTS", type: "tests_pass", severity: "FAIL", params: { command: testCommand } },
+              { id: "POST-BUILD", type: "build_pass", severity: "FAIL", params: { command: buildCommand } },
+              { id: "POST-TYPECHECK", type: "no_new_type_errors", severity: "FAIL", params: { command: typecheckCommand } },
             ],
           },
         },

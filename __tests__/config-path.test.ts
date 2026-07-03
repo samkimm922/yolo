@@ -156,7 +156,8 @@ describe("CONFIG_PATH resolution", () => {
 
       const cfg = loadConfig({ path: configPath, forceReload: true });
 
-      assert.equal(cfg.build.type_check, "npx tsc --noEmit");
+      assert.equal(cfg.build.type_check, "");
+      assert.equal(cfg.executor.timeout_ms, 600000);
       assert.match(warnings.join("\n"), /配置解析失败\/为空/);
       assert.match(warnings.join("\n"), /回退默认/);
     } finally {

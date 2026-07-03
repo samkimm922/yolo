@@ -11,6 +11,7 @@ import {
   passTaskTransition,
 } from "../task-state/transitions.js";
 import { safeExecFileSync } from "../../lib/security/safe-exec.js";
+import { resolveExecutorTimeoutMs } from "../../lib/toolchain.js";
 
 export function dryRunArtifactTarget(task = Object()) {
   return task.scope?.targets?.[0]?.file || "";
@@ -18,7 +19,8 @@ export function dryRunArtifactTarget(task = Object()) {
 
 export function runDryRunCommand(command, {
   cwd,
-  timeout = 120000,
+  timeout,
+  config = Object(),
   execFileSync = safeExecFileSync,
 } = Object()) {
   // P12.I1: default executor is safeExecFileSync (routes through execArgv, no shell).
@@ -27,7 +29,7 @@ export function runDryRunCommand(command, {
     const stdout = execFileSync(command, [], {
       cwd,
       encoding: "utf8",
-      timeout,
+      timeout: timeout ?? resolveExecutorTimeoutMs(config),
     });
     return { command, exit_code: 0, stdout: stdout.trim().slice(0, 4000), stderr: "" };
   } catch (error) {
@@ -47,8 +49,9 @@ function prdDisplayPath(prdPath, yoloRoot) {
 export function renderDryRunArtifact(task, prdPath, {
   yoloRoot,
   projectRoot,
+  config = Object(),
   now = new Date().toISOString(),
-  runCommand = (command) => runDryRunCommand(command, { cwd: yoloRoot }),
+  runCommand = (command) => runDryRunCommand(command, { cwd: yoloRoot, config }),
 } = Object()) {
   const commands = task.test_generation?.required_commands || [];
   const commandResults = commands.map((command) => runCommand(command));
@@ -120,6 +123,7 @@ export function completeDryRunArtifactTask({
   recordTaskTransition,
   logTaskDone = (..._args) => {},
   logProgress = (..._args) => {},
+  config = Object(),
 } = Object()) {
   const target = dryRunArtifactTarget(task);
   if (!target) return { status: "failed", reason: "dry_run_artifact missing scope target" };
@@ -138,7 +142,7 @@ export function completeDryRunArtifactTask({
   }
   const artifactPath = guardResult.path;
   mkdirSync(dirname(artifactPath), { recursive: true });
-  writeFileSync(artifactPath, renderDryRunArtifact(task, prdPath, { yoloRoot, projectRoot }), "utf8");
+  writeFileSync(artifactPath, renderDryRunArtifact(task, prdPath, { yoloRoot, projectRoot, config }), "utf8");
 
   const prdForCheck = loadPRD(prdPath);
   const post = taskPostconditionsPass(task, prdForCheck);
