@@ -1,6 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  allowsMetadataOnlyCompletion,
   buildPostCommitOutcome,
   shouldRunPostCommitPostconditions,
 } from "../src/runtime/execution/post-commit-outcome.js";
@@ -129,6 +130,45 @@ describe("post commit outcome helpers", () => {
       status: "failed_no_code",
       failReason: "0 业务代码改动",
     });
+  });
+
+  test("metadata-only completion is limited to scaffold/config targets", () => {
+    const metadata = {
+      scope_targets_touched: ["package.json"],
+      metadataFiles: ["package.json"],
+    };
+    assert.equal(allowsMetadataOnlyCompletion({
+      id: "CFG-1",
+      scope: { targets: [{ file: "package.json" }] },
+    }, metadata), true);
+    assert.equal(allowsMetadataOnlyCompletion({
+      id: "BUSINESS-1",
+      scope: { targets: [{ file: "src/app.ts" }] },
+    }, { scope_targets_touched: ["src/app.ts"], metadataFiles: ["src/app.ts"] }), false);
+
+    const outcome = buildPostCommitOutcome({
+      task: {
+        id: "SCAFFOLD-1",
+        task_kind: "greenfield_scaffold",
+        scope: { targets: [{ file: "package.json" }] },
+      },
+      commitResult: {
+        committed: false,
+        hasRealCode: false,
+        metadataFiles: ["package.json"],
+      },
+      baseRecord: {
+        ...metadata,
+        id: "SCAFFOLD-1",
+        files_changed_total: 1,
+        files_changed_business: 0,
+        files_changed_metadata: 1,
+      },
+    });
+
+    assert.equal(outcome.status, "completed");
+    assert.equal(outcome.transition.result.status, "PASS");
+    assert.equal(outcome.transition.result.metadata_only_completion, true);
   });
 
   test("blocking commit failures produce a generic failure transition", () => {

@@ -26,6 +26,7 @@ import { safeExecFileSync as defaultExecFileSync } from "../../lib/security/safe
 import { parseCommandToArgv } from "../../lib/security/command-guard.js";
 import { readJsonFileBounded } from "../../lib/bounded-read.js";
 import { resolveBuildCommand, resolveGateTimeout } from "../../lib/toolchain.js";
+import { writeLifecycleStageReport } from "../../lifecycle/progress.js";
 
 export function createRunnerError(message, exitCode = 1, details = Object()) {
   const error = Object.assign(new Error(message), { exitCode }, details);
@@ -33,6 +34,7 @@ export function createRunnerError(message, exitCode = 1, details = Object()) {
 }
 
 export const RUN_INITIAL_COMMIT_MESSAGE = "chore(yolo): initial commit for run baseline";
+export const RUNNER_BASELINE_SOURCE = "runner-baseline";
 
 function describeCommandFailure(error) {
   const stderr = String(error?.stderr || "").trim();
@@ -108,6 +110,71 @@ export function ensureRunGitBaseline({
   const commit = runGit(rootDir, ["rev-parse", "--verify", "HEAD"], { execFileSync });
   consoleLog(`[yolo-runner] yolo 已创建初始 commit ${commit.slice(0, 12)}: ${commitMessage}`);
   return { status: "created", commit, message: commitMessage };
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+export function refreshCheckSnapshotAfterRunnerBaseline({
+  rootDir,
+  stateRoot,
+  commit,
+  commitMessage = RUN_INITIAL_COMMIT_MESSAGE,
+  existsSync = defaultExistsSync,
+  readFileSync = defaultReadFileSync,
+  writeStageReport = writeLifecycleStageReport,
+  now = () => new Date().toISOString(),
+  consoleLog = (...args) => console.log(...args),
+} = Object()) {
+  const commitHash = String(commit || "").trim();
+  if (!commitHash) return { status: "not_applicable", reason: "missing_commit" };
+  const checkReportPath = join(stateRoot, "lifecycle", "check-report.json");
+  if (!existsSync(checkReportPath)) return { status: "not_applicable", reason: "missing_check_report", commit: commitHash };
+
+  let artifact;
+  try {
+    artifact = JSON.parse(readFileSync(checkReportPath, "utf8"));
+  } catch (error) {
+    return {
+      status: "not_applicable",
+      reason: "unreadable_check_report",
+      commit: commitHash,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  const rawReport = artifact?.report && typeof artifact.report === "object" && !Array.isArray(artifact.report)
+    ? artifact.report
+    : artifact;
+  const refreshedAt = now();
+  const report = {
+    ...cloneJson(rawReport || {}),
+    runner_baseline_commit_hash: commitHash,
+    runner_baseline_transition: {
+      source: RUNNER_BASELINE_SOURCE,
+      commit_hash: commitHash,
+      message: commitMessage,
+      refreshed_at: refreshedAt,
+    },
+  };
+
+  const write = writeStageReport("check", report, {
+    projectRoot: rootDir,
+    stateRoot,
+    source: RUNNER_BASELINE_SOURCE,
+    runnerBaselineCommit: commitHash,
+    writeSessionMemory: false,
+    skipSequenceCheck: true,
+    now: refreshedAt,
+  });
+  consoleLog(`[yolo-runner] 已刷新 check source snapshot for baseline ${commitHash.slice(0, 12)}`);
+  return {
+    status: "refreshed",
+    commit: commitHash,
+    check_report_path: write.artifact_path,
+    source_snapshot: write.source_snapshot,
+  };
 }
 
 function baselineCommandEnv(rootDir) {
@@ -568,7 +635,16 @@ export function prepareRunStartup({
   processKill = process.kill,
   processExit = process.exit,
 } = Object()) {
-  ensureRunGitBaseline({ rootDir, execFileSync, consoleLog, runnerError });
+  const gitBaseline = ensureRunGitBaseline({ rootDir, execFileSync, consoleLog, runnerError });
+  if (gitBaseline.status === "created") {
+    refreshCheckSnapshotAfterRunnerBaseline({
+      rootDir,
+      stateRoot: yoloRoot,
+      commit: gitBaseline.commit,
+      commitMessage: gitBaseline.message,
+      consoleLog,
+    });
+  }
   acquireRunnerPidLock({
     pidFile: join(paths.stateDir, "runner.pid"),
     pid,

@@ -18,7 +18,7 @@
 //   - commandExistsSync walks PATH via fs.accessSync, no `sh -c "command -v"`
 
 import { spawnSync } from "node:child_process";
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, statSync } from "node:fs";
 import { delimiter, join, isAbsolute } from "node:path";
 import { parseCommandToArgv } from "./command-guard.js";
 
@@ -49,8 +49,6 @@ export interface ExecCommandResult extends SafeExecResult {
   reject_reason?: string;
   reject_detail?: string;
 }
-
-const NOT_FOUND_RE = /\b(command not found|no such file or directory|is not recognized)\b|\benoent\b/i;
 
 function normalizeOptions(opts: SafeExecOptions): {
   cwd: string;
@@ -90,6 +88,31 @@ function argvEmpty(): SafeExecResult {
   };
 }
 
+function cwdFailure(argv: string[], cwd: string, detail: string): SafeExecResult {
+  return {
+    command: argv.join(" "),
+    argv,
+    exit_code: null,
+    signal: null,
+    stdout: "",
+    stderr: `safe-exec: working directory does not exist or is not a directory: ${cwd}${detail ? ` (${detail})` : ""}`,
+    ok: false,
+    timed_out: false,
+    command_not_found: false,
+    error: "cwd_not_found",
+  };
+}
+
+function validateCwd(argv: string[], cwd: string): SafeExecResult | null {
+  try {
+    if (!statSync(cwd).isDirectory()) return cwdFailure(argv, cwd, "not a directory");
+    return null;
+  } catch (error) {
+    const code = (error as { code?: string } | undefined)?.code;
+    return cwdFailure(argv, cwd, code || (error instanceof Error ? error.message : String(error)));
+  }
+}
+
 function buildResult(
   argv: string[],
   result: ReturnType<typeof spawnSync> | null,
@@ -99,11 +122,10 @@ function buildResult(
   const stderr = toStr(result?.stderr as string | Buffer | undefined) || toStr(error?.stderr as string | Buffer | undefined);
   const exitCode = Number.isInteger(result?.status) ? (result?.status as number) : (Number.isInteger(error?.status) ? (error!.status as number) : null);
   const signal = (result?.signal as NodeJS.Signals | null) || (error?.signal as NodeJS.Signals | null) || null;
-  const output = `${stdout}\n${stderr}`;
   // spawnSync puts ENOENT on result.error.code (not thrown); catch'd error.code is for thrown cases.
   const errCode = (result?.error as { code?: string } | undefined)?.code || error?.code;
   const errMsg = (result?.error as { message?: string } | undefined)?.message || error?.message;
-  const commandNotFound = errCode === "ENOENT" || NOT_FOUND_RE.test(stderr) || NOT_FOUND_RE.test(output);
+  const commandNotFound = errCode === "ENOENT";
   return {
     command: argv.join(" "),
     argv,
@@ -125,6 +147,8 @@ function buildResult(
 export function execArgv(argv: string[], opts: SafeExecOptions = {}): SafeExecResult {
   if (!Array.isArray(argv) || argv.length === 0) return argvEmpty();
   const norm = normalizeOptions(opts);
+  const cwdError = validateCwd(argv, norm.cwd);
+  if (cwdError) return cwdError;
   try {
     const result = spawnSync(argv[0], argv.slice(1), {
       cwd: norm.cwd,

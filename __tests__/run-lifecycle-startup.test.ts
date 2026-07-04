@@ -18,6 +18,9 @@ import {
   truncateJsonlFile,
 } from "../src/runtime/run-lifecycle/startup.js";
 import { baselineArtifactHash } from "../src/runtime/execution/baselines.js";
+import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+import { inspectLifecycleGuard } from "../src/lifecycle/guard.js";
+import { readSourceSnapshot, writeSourceSnapshot } from "../src/lifecycle/source-snapshot.js";
 
 function tempDir() {
   return mkdtempSync(join(tmpdir(), "yolo-run-startup-"));
@@ -29,6 +32,38 @@ function git(root, args) {
     encoding: "utf8",
     stdio: ["pipe", "pipe", "pipe"],
   }).trim();
+}
+
+function baseStartupOptions({
+  root,
+  stateRoot,
+  stateDir,
+  runtimeDir,
+  expandedTasksFile,
+  resultsFile,
+  prdPath,
+  logs,
+}) {
+  return {
+    runId: "run-unborn",
+    prdPath,
+    paths: { stateDir, runtimeDir, expandedTasksFile, resultsFile },
+    config: {
+      progress_server: { port: 0 },
+      state: { max_events: 100, max_changes: 100, max_runs: 100, max_learning: 100, max_session_memory: 100 },
+    },
+    rootDir: root,
+    yoloRoot: stateRoot,
+    exitOnComplete: false,
+    taskCountsAsCompleted: (task) => task.status === "done",
+    initTaskLogs: () => {},
+    writeCurrentRun: () => {},
+    startProgressApiServer: () => null,
+    setProgressServerProc: () => {},
+    initializeBaselines: false,
+    logProgress: () => {},
+    consoleLog: (message) => logs.push(message),
+  };
 }
 
 describe("run lifecycle startup helpers", () => {
@@ -86,44 +121,61 @@ describe("run lifecycle startup helpers", () => {
     const logs = [];
     try {
       git(root, ["init"]);
+      mkdirSync(join(root, "src"), { recursive: true });
       writeFileSync(join(root, "README.md"), "# startup\n", "utf8");
-      const stateDir = join(root, ".yolo", "state");
+      writeFileSync(join(root, "src/app.js"), "console.log('ready');\n", "utf8");
+      const stateRoot = join(root, ".yolo");
+      const stateDir = join(stateRoot, "state");
       const runtimeDir = join(stateDir, "runtime");
       const expandedTasksFile = join(stateDir, "expanded-tasks.json");
       const resultsFile = join(runtimeDir, "task-results.jsonl");
-      const prdPath = join(root, ".yolo", "data", "prd.json");
-      mkdirSync(join(root, ".yolo", "data"), { recursive: true });
+      const prdPath = join(stateRoot, "data", "prd.json");
+      mkdirSync(join(stateRoot, "data"), { recursive: true });
       mkdirSync(stateDir, { recursive: true });
       writeFileSync(prdPath, JSON.stringify({ tasks: [{ id: "DONE", status: "done" }] }), "utf8");
-
-      const resumeCompleted = prepareRunStartup({
-        runId: "run-unborn",
-        prdPath,
-        paths: { stateDir, runtimeDir, expandedTasksFile, resultsFile },
-        config: {
-          progress_server: { port: 0 },
-          state: { max_events: 100, max_changes: 100, max_runs: 100, max_learning: 100, max_session_memory: 100 },
-        },
-        rootDir: root,
-        yoloRoot: join(root, ".yolo"),
-        exitOnComplete: false,
-        taskCountsAsCompleted: (task) => task.status === "done",
-        initTaskLogs: () => {},
-        writeCurrentRun: () => {},
-        startProgressApiServer: () => null,
-        setProgressServerProc: () => {},
-        initializeBaselines: false,
-        logProgress: () => {},
-        consoleLog: (message) => logs.push(message),
+      for (const stage of ["discovery", "roadmap"]) {
+        writeLifecycleStageReport(stage, { status: "success" }, {
+          projectRoot: root,
+          stateRoot,
+          writeSessionMemory: false,
+          skipSequenceCheck: true,
+        });
+      }
+      writeLifecycleStageReport("check", { status: "pass", prd_path: prdPath }, {
+        projectRoot: root,
+        stateRoot,
+        source: "unit",
+        writeSessionMemory: false,
+        skipSequenceCheck: true,
       });
+      writeSourceSnapshot({ projectRoot: root, stateRoot });
+      assert.equal(inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, stateRoot, prdPath }).status, "pass");
+
+      const resumeCompleted = prepareRunStartup(baseStartupOptions({
+        root,
+        stateRoot,
+        stateDir,
+        runtimeDir,
+        expandedTasksFile,
+        resultsFile,
+        prdPath,
+        logs,
+      }));
 
       const committedFiles = git(root, ["ls-tree", "-r", "--name-only", "HEAD"]).split("\n").sort();
+      const head = git(root, ["rev-parse", "--verify", "HEAD"]);
+      const snapshot = readSourceSnapshot({ projectRoot: root, stateRoot });
+      const checkReport = JSON.parse(readFileSync(join(stateRoot, "lifecycle", "check-report.json"), "utf8"));
       assert.deepEqual([...resumeCompleted], ["DONE"]);
       assert.equal(git(root, ["log", "-1", "--pretty=%s"]), RUN_INITIAL_COMMIT_MESSAGE);
       assert.ok(committedFiles.includes("README.md"));
       assert.ok(committedFiles.includes(".yolo/data/prd.json"));
       assert.equal(committedFiles.includes(".yolo/state/runner.pid"), false);
       assert.equal(committedFiles.some((file) => file.startsWith(".yolo/state/runtime/")), false);
+      assert.equal(inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, stateRoot, prdPath }).status, "pass");
+      assert.equal(snapshot?.git_head, head);
+      assert.equal(checkReport.report.runner_baseline_commit_hash, head);
+      assert.equal(checkReport.report.runner_baseline_transition?.source, "runner-baseline");
       assert.match(logs.join("\n"), /yolo 已创建初始 commit/);
     } finally {
       rmSync(root, { recursive: true, force: true });

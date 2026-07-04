@@ -23,6 +23,7 @@ import { parseCommandToArgv } from "../lib/security/command-guard.js";
 import { execArgv, execCommand } from "../lib/security/safe-exec.js";
 import { resolveWithinRoot } from "../lib/security/path-guard.js";
 import { readJsonFileBounded } from "../lib/bounded-read.js";
+import { isBusinessFile } from "../runtime/execution/change-set.js";
 import type { EvalParams, EvalResult as EvaluatorResult, TaskScope } from "../lib/evaluators/types.js";
 import {
   asRecord,
@@ -138,6 +139,15 @@ function changedFilesFromOptions(options: ContractOptions = {}, root = ROOT): st
   const files = candidates.find((value) => Array.isArray(value));
   if (!Array.isArray(files)) return null;
   return [...new Set(files.map((file) => normalizeRepoFilePath(file, root)).filter(Boolean))];
+}
+
+function declaredTargetFiles(scope: PrdScope = {}, root = ROOT): string[] {
+  const targets = Array.isArray(scope.targets) ? scope.targets : [];
+  return [...new Set(targets.map((target) => normalizeRepoFilePath(target, root)).filter(Boolean))];
+}
+
+function declaresBusinessTarget(scope: PrdScope = {}, options: ContractOptions = {}, root = ROOT): boolean {
+  return declaredTargetFiles(scope, root).some((file) => isBusinessFile(file, { config: options.config }));
 }
 
 function escapeRegExp(value: unknown): string {
@@ -490,6 +500,7 @@ export function evaluatePostConditions(task: unknown, prd: unknown, options: Con
   const taskRecord = asRecord(task) as PrdTask;
   const explicitConditions = asConditions(taskRecord.post_conditions);
   const scope: PrdScope = taskRecord.scope || {};
+  const root = scopedRoot(options);
 
   // 自动追加 forbidden_patterns 检查（如果用户没显式添加）
   const hasForbiddenCheck = explicitConditions.some(
@@ -541,7 +552,7 @@ export function evaluatePostConditions(task: unknown, prd: unknown, options: Con
   // 自动追加 business_code_min(修复 bug #2:0 业务代码不能 PASS)
   // 任务可通过 scope.expected_zero_business_code = true 豁免
   const hasBizMin = allConditions.some((c) => c.type === "business_code_min");
-  if (!hasBizMin) {
+  if (!hasBizMin && declaresBusinessTarget(scope, options, root)) {
     allConditions.push({
       id: "AUTO-business_code_min",
       type: "business_code_min",

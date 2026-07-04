@@ -264,7 +264,13 @@ export function formatYoloNextText(result: TextResult = {}) {
   const lines = [`[yolo next] ${result.status}: ${result.summary}`];
   if (result.current_stage) lines.push(`current_stage: ${result.current_stage}`);
   if (result.recommended_command) lines.push(`recommended: ${result.recommended_command}`);
+  if (result.blocked_recommended_command) lines.push(`blocked_recommended: ${result.blocked_recommended_command}`);
   if (result.reason) lines.push(`reason: ${result.reason}`);
+  const blockers = (Array.isArray(result.guard_blockers) ? result.guard_blockers : result.blockers) as Array<{ code?: string; message?: string }> | undefined;
+  if (Array.isArray(blockers) && blockers.length) {
+    lines.push("blockers:");
+    for (const blocker of blockers) lines.push(`  - ${blocker.code || "BLOCKER"} ${blocker.message || ""}`.trimEnd());
+  }
   const nextActions = stringList(result.next_actions);
   if (nextActions.length) {
     lines.push("next:");

@@ -3,6 +3,7 @@ import {
   failTaskTransition,
   passTaskTransition,
 } from "../task-state/transitions.js";
+import { isBusinessFile } from "./change-set.js";
 
 export function shouldRunPostCommitPostconditions(commitResult = Object()) {
   return commitResult.blocked !== true
@@ -13,6 +14,42 @@ export function shouldRunPostCommitPostconditions(commitResult = Object()) {
 function buildCommitFailureReason(commitResult = Object()) {
   const reason = commitResult.commitFailure || commitResult.reason || commitResult.commitWarning || "commit_failed";
   return reason === "commit_failed" ? "commit 失败" : `commit 失败: ${reason}`;
+}
+
+function targetFiles(task = Object()) {
+  return (Array.isArray(task.scope?.targets) ? task.scope.targets : [])
+    .map((target) => String(typeof target === "string" ? target : target?.file || "").trim())
+    .filter(Boolean);
+}
+
+function isPureConfigTarget(file) {
+  const normalized = String(file || "").replace(/\\/g, "/").replace(/^\.\//, "");
+  return (
+    normalized === "package.json"
+    || normalized === "package-lock.json"
+    || normalized === "pnpm-lock.yaml"
+    || normalized === "yarn.lock"
+    || normalized === "bun.lockb"
+    || normalized === "tsconfig.json"
+    || normalized === "jsconfig.json"
+    || normalized === ".npmrc"
+    || normalized === ".yolo/config.json"
+    || /(^|\/)(eslint|prettier|vitest|vite|jest|tsup|rollup|webpack|babel|postcss|tailwind)\.config\.[cm]?[jt]s$/.test(normalized)
+  );
+}
+
+export function allowsMetadataOnlyCompletion(task = Object(), baseRecord = Object()) {
+  const changed = [
+    ...(Array.isArray(baseRecord.scope_targets_touched) ? baseRecord.scope_targets_touched : []),
+    ...(Array.isArray(baseRecord.metadataFiles) ? baseRecord.metadataFiles : []),
+    ...(Array.isArray(baseRecord.metadata_files) ? baseRecord.metadata_files : []),
+  ].map(String).filter(Boolean);
+  if (changed.length === 0) return false;
+  if (task.task_kind === "greenfield_scaffold") return true;
+  const targets = targetFiles(task);
+  return targets.length > 0
+    && targets.every((file) => !isBusinessFile(file) && isPureConfigTarget(file))
+    && changed.every((file) => targets.includes(file) || isPureConfigTarget(file));
 }
 
 export function buildPostCommitOutcome({
@@ -74,6 +111,24 @@ export function buildPostCommitOutcome({
   }
 
   if (!commitResult.hasRealCode) {
+    if (allowsMetadataOnlyCompletion(task, {
+      ...baseRecord,
+      metadataFiles: commitResult.metadataFiles || commitResult.metadata_files || [],
+    })) {
+      return {
+        status: "completed",
+        reason: undefined,
+        doneStatus: "completed",
+        doneReason: undefined,
+        transition: passTaskTransition({
+          taskId,
+          result: {
+            ...baseRecord,
+            metadata_only_completion: true,
+          },
+        }),
+      };
+    }
     return {
       status: "failed",
       reason: "0 业务代码",

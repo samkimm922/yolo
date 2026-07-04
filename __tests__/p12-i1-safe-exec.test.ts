@@ -44,6 +44,19 @@ describe("P12.I1 execArgv", () => {
     assert.equal(r.command_not_found, true);
   });
 
+  test("missing cwd is reported separately from missing executable", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-p12-missing-cwd-"));
+    const missingCwd = join(root, "missing");
+    try {
+      const r = execArgv([process.execPath, "-e", "process.exit(0)"], { cwd: missingCwd });
+      assert.equal(r.ok, false);
+      assert.equal(r.command_not_found, false);
+      assert.match(r.stderr, /working directory.*does not exist|cwd.*does not exist/i);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("argv with shell metacharacters as ARGV (not parsed) runs literally — proves no shell", () => {
     // When argv is supplied directly, metacharacters are literal args — there is no
     // shell to interpret them. This proves execArgv never invokes sh.
@@ -228,6 +241,21 @@ describe("P12.I1 contract verify_command routes through safe-exec", () => {
     try { rmSync(tmpRoot, { recursive: true, force: true }); } catch {}
   });
 
+  function testsPass(command: string) {
+    const result = engine.evaluatePostConditions({
+      id: "T-R3-TESTS-PASS",
+      scope: { expected_zero_business_code: true },
+      post_conditions: [{
+        id: "POST-R3",
+        type: "tests_pass",
+        severity: "FAIL",
+        params: { command, timeout_ms: 5000 },
+        message: "",
+      }],
+    }, {});
+    return result.results.find((c: any) => c.id === "POST-R3");
+  }
+
   test("happy path: clean verify_command passes", () => {
     const result = engine.evaluatePostConditions({
       id: "T-P12-I1",
@@ -278,5 +306,21 @@ describe("P12.I1 contract verify_command routes through safe-exec", () => {
     const r = result.results.find((c: any) => c.id === "ACC-NL");
     assert.ok(r);
     assert.equal(r.passed, false);
+  });
+
+  test("tests_pass treats ENOENT stderr from a real test process as test failure, not missing command", () => {
+    const r = testsPass(`"${process.execPath}" -e "process.stderr.write('ENOENT: no such file\\\\n'); process.exit(1)"`);
+    assert.ok(r);
+    assert.equal(r.passed, false);
+    assert.match(r.detail, /测试命令失败/);
+    assert.doesNotMatch(r.detail, /缺少命令/);
+  });
+
+  test("tests_pass still reports a real missing binary with config key guidance", () => {
+    const r = testsPass("__yolo_definitely_not_a_real_binary__");
+    assert.ok(r);
+    assert.equal(r.passed, false);
+    assert.match(r.detail, /缺少命令 "__yolo_definitely_not_a_real_binary__"/);
+    assert.match(r.detail, /config\.build\.test/);
   });
 });
