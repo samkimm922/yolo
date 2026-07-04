@@ -235,7 +235,7 @@ describe("pre-execution gates", () => {
     }
   });
 
-  test("blocks contract warnings instead of entering runner execution", () => {
+  test("blocks manual acceptance contract failures instead of entering runner execution", () => {
     const paths = makePaths();
     try {
       const prd = strictPrd();
@@ -256,10 +256,11 @@ describe("pre-execution gates", () => {
 
       assert.equal(result.status, "blocked");
       assert.equal(result.stage, "contract");
-      assert.equal(result.code, "PRD_CONTRACT_WARNING_BLOCKED");
-      assert.equal(result.exit_code, 2);
-      assert.equal(result.contract.status, "warning");
-      assert.ok(result.contract.doctor.warnings.some((warning) => warning.code === "MANUAL_FAIL_CONDITION"));
+      assert.equal(result.code, "PRD_CONTRACT_BLOCKED");
+      assert.equal(result.exit_code, 1);
+      assert.equal(result.contract.status, "blocked");
+      assert.ok(result.contract.doctor.failures.some((failure) => failure.code === "MANUAL_FAIL_CONDITION"));
+      assert.equal(result.contract.doctor.warnings.some((warning) => warning.code === "MANUAL_FAIL_CONDITION"), false);
     } finally {
       rmSync(paths.projectRoot, { recursive: true, force: true });
     }

@@ -164,7 +164,7 @@ describe("yolo check report", () => {
       assert.equal(stderr, "");
       assert.equal(report.status, "blocked");
       assert.equal(report.warning_policy.fail_closed, true);
-      assert.ok(report.blockers.some((blocker) => blocker.code === "MANUAL_FAIL_CONDITION" && blocker.warning_policy === "execution_blocking"));
+      assert.ok(report.blockers.some((blocker) => blocker.code === "MANUAL_FAIL_CONDITION" && blocker.source === "contract"));
       assert.equal(report.warnings.some((warning) => warning.code === "MANUAL_FAIL_CONDITION"), false);
     } finally {
       rmSync(root, { recursive: true, force: true });

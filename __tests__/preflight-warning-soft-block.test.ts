@@ -2,8 +2,9 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { preflightPrdDocument } from "../src/prd/preflight.js";
 
-// PRD with acceptance_criteria post_condition (FAIL severity) → produces MANUAL_FAIL_CONDITION warning
-// in contract doctor. Warnings are now hard-blocked — no ack bypass exists.
+// PRD with acceptance_criteria post_condition (FAIL severity) produces a
+// MANUAL_FAIL_CONDITION contract blocker. The old warning ack bypass remains
+// deleted.
 function prdWithManualFailCondition() {
   return {
     version: "2.0",
@@ -44,12 +45,13 @@ function prdWithManualFailCondition() {
   };
 }
 
-describe("preflight warning hard-block (no ack bypass)", () => {
-  test("warnings block preflight regardless of mode", () => {
+describe("preflight manual contract hard-block (no ack bypass)", () => {
+  test("manual acceptance contract failures block preflight regardless of mode", () => {
     const result = preflightPrdDocument(prdWithManualFailCondition(), { mode: "dev" });
-    assert.equal(result.status, "blocked", "warnings must block in dev mode");
-    assert.equal(result.blocking_warning_count > 0, true, "warnings must be treated as blocking");
-    assert.equal(result.advisory_warning_count, 0, "no advisory warnings — all are blocking");
+    assert.equal(result.status, "blocked", "manual contract failures must block in dev mode");
+    assert.equal(result.blocking_warning_count, 0, "manual contract failures are no longer warnings");
+    assert.equal(result.advisory_warning_count, 0, "no advisory warnings");
+    assert.ok(result.blocked_reasons.some((reason) => reason.code === "MANUAL_FAIL_CONDITION"));
   });
 
   test("ackWarnings option is ignored — cannot bypass warning block", () => {

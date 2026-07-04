@@ -186,6 +186,34 @@ function conditionVerifyCommand(condition = Object()) {
   return cleanString(condition.verify_command || condition.verifyCommand || condition.params?.verify_command || condition.params?.verifyCommand);
 }
 
+function manualAcceptanceDeclaration(value, condition = Object()) {
+  const declarations = [
+    value?.manual_acceptance,
+    value?.manualAcceptance,
+    value?.params?.manual_acceptance,
+    value?.params?.manualAcceptance,
+  ].flatMap(asArray).filter(Boolean);
+  if (declarations.includes(true)) return true;
+  const conditionId = cleanString(condition?.id);
+  return declarations.some((declaration) => {
+    if (!declaration || typeof declaration !== "object" || Array.isArray(declaration)) return false;
+    const enabled = declaration.required === true || declaration.allowed === true || declaration.enabled === true;
+    const evidenceType = cleanString(declaration.evidence_type || declaration.evidenceType || declaration.type).toLowerCase();
+    const signed = declaration.signed_evidence_required === true || declaration.signedEvidenceRequired === true || declaration.signature_required === true;
+    const criteria = asArray(declaration.condition_ids || declaration.conditionIds || declaration.conditions || declaration.criteria)
+      .map(cleanString)
+      .filter(Boolean);
+    const matchesCondition = criteria.length === 0 || !conditionId || criteria.includes(conditionId);
+    return enabled && matchesCondition && (evidenceType === "manual_acceptance" || signed);
+  });
+}
+
+function hasExplicitManualAcceptance(prd, task, condition) {
+  return manualAcceptanceDeclaration(condition, condition)
+    || manualAcceptanceDeclaration(task, condition)
+    || manualAcceptanceDeclaration(prd, condition);
+}
+
 function isBehaviorVerificationGate(condition) {
   const normalized = normalizeCondition(condition);
   if (normalized.severity !== "FAIL" || !SUPPORTED_CONDITION_TYPES.has(normalized.type)) return false;
@@ -682,8 +710,15 @@ export function inspectPrdContract(prd, options = Object()) {
           suggestion: suggestionForUnsupported(condition),
         });
       }
-      if (normalized.severity === "FAIL" && normalized.type === "acceptance_criteria" && !conditionVerifyCommand(condition)) {
-        addFinding(warnings, task, condition, "MANUAL_FAIL_CONDITION", "acceptance_criteria is manual-review only; prefer executable condition for FAIL gates");
+      if (normalized.type === "acceptance_criteria" && !conditionVerifyCommand(condition) && !hasExplicitManualAcceptance(prd, task, condition)) {
+        addFinding(
+          failures,
+          task,
+          condition,
+          "MANUAL_FAIL_CONDITION",
+          "acceptance_criteria without verify_command is manual-review only and will fail runner unless PRD declares manual_acceptance evidence",
+          { human_needed: true },
+        );
       }
     }
   }

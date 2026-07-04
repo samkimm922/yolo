@@ -464,7 +464,21 @@ function taskAcceptanceCriteria(task = Object()) {
 }
 
 function taskHasAcceptanceCondition(task = Object()) {
-  return asArray(task.post_conditions).some((condition) => condition?.type === "acceptance_criteria" && clean(condition.message || condition.params?.text).length > 0);
+  return asArray(task.post_conditions).some((condition) => {
+    if (condition?.type === "acceptance_criteria") {
+      return clean(condition.verify_command || condition.verifyCommand || condition.params?.verify_command || condition.params?.verifyCommand).length > 0
+        || clean(condition.message || condition.params?.text).length > 0;
+    }
+    return [
+      "build_pass",
+      "code_contains",
+      "code_matches",
+      "no_new_lint_errors",
+      "no_new_type_errors",
+      "test_file_passes",
+      "tests_pass",
+    ].includes(clean(condition?.type));
+  });
 }
 
 function handoffPresent(task = Object()) {

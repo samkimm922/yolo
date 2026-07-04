@@ -1083,6 +1083,257 @@ function acceptanceCondition(taskId, index, scenario) {
   };
 }
 
+function demandAutomationText(session = Object()) {
+  return [
+    session.vision?.statement,
+    session.vision?.idea,
+    session.prd_intake?.desired_outcomes,
+    session.prd_intake?.success_proof,
+    session.nontechnical_intake?.desired_outcomes,
+    session.nontechnical_intake?.success_proof,
+    session.success_criteria,
+    session.acceptance_criteria,
+    asArray(session.requirements?.active || session.requirements)
+      .flatMap((requirement) => [
+        requirement?.text,
+        requirement?.acceptance_criteria,
+        asArray(requirement?.acceptance_scenarios || requirement?.scenarios).flatMap((scenario) => [
+          scenario?.then,
+          scenario?.text,
+          scenario?.proof,
+          scenario?.verify_command,
+          scenario?.verifyCommand,
+        ]),
+      ]),
+  ].flatMap((item) => asArray(item)).map(clean).filter(Boolean).join("\n");
+}
+
+function demandRequiresAutomatedAcceptance(session = Object()) {
+  const text = demandAutomationText(session);
+  return /\b(automated|machine[- ]verifiable|executable|assert(?:ion)?|fixture|npm test|pnpm test|yarn test|vitest|jest|playwright|unit test|integration test|verify_command)\b|自动验证|自动验收|可自动验证|机器可执行|断言|测试内置|内置 fixture|不包含 manual|不含 manual|不包含人工|不含人工/i.test(text);
+}
+
+function hasVerifyCommand(condition = Object()) {
+  return Boolean(condition.verify_command || condition.verifyCommand || condition.params?.verify_command || condition.params?.verifyCommand);
+}
+
+function machineAcceptanceConditions(taskId, scenario = Object(), context = Object()) {
+  const verifyCommand = scenario.verify_command || scenario.verifyCommand;
+  if (verifyCommand) return [acceptanceCondition(taskId, 0, scenario)];
+  return [testsPassCondition(taskId, context)];
+}
+
+function buildConfigValue(config = Object(), key = "") {
+  const build = config.build && typeof config.build === "object" && !Array.isArray(config.build)
+    ? config.build
+    : Object();
+  return clean(build[key]);
+}
+
+function taskToolchainKinds(task = Object()) {
+  const kinds = new Set();
+  for (const condition of asArray(task.post_conditions)) {
+    if (condition?.type === "tests_pass" || condition?.type === "test_file_passes") kinds.add("test");
+    if (condition?.type === "no_new_type_errors") kinds.add("type_check");
+    if (condition?.type === "build_pass") kinds.add("build");
+  }
+  return kinds;
+}
+
+function requiresGreenfieldScaffold(tasks = [], context = Object()) {
+  const kinds = new Set<string>(tasks.flatMap((task) => [...taskToolchainKinds(task)].map(String)));
+  if (kinds.size === 0) return false;
+  const projectRoot = context.projectRoot || process.cwd();
+  const hasPackageJson = existsSync(join(projectRoot, "package.json"));
+  if (!hasPackageJson) return true;
+  const config = context.config || Object();
+  return [...kinds].some((kind) => !buildConfigValue(config, kind === "type_check" ? "type_check" : kind));
+}
+
+function scaffoldPostConditions(taskId, context = Object(), needsTypecheck = false) {
+  const conditions: Array<Record<string, unknown>> = [
+    {
+      id: `POST-${taskId}-PACKAGE`,
+      type: "file_exists",
+      severity: "FAIL",
+      params: { file: "package.json" },
+      message: "Greenfield scaffold must create package.json before toolchain gates run.",
+    },
+    {
+      id: `POST-${taskId}-TEST-SCRIPT`,
+      type: "code_contains",
+      severity: "FAIL",
+      params: { file: "package.json", text: "\"test\"" },
+      message: "package.json must expose a test script for config.build.test.",
+    },
+    testsPassCondition(taskId, context),
+  ];
+  if (needsTypecheck) {
+    conditions.splice(2, 0, {
+      id: `POST-${taskId}-TYPECHECK-SCRIPT`,
+      type: "code_contains",
+      severity: "FAIL",
+      params: { file: "package.json", text: "\"typecheck\"" },
+      message: "package.json must expose a typecheck script before type gates run.",
+    });
+    conditions.push(typecheckCondition(taskId, context));
+  }
+  return conditions;
+}
+
+function buildGreenfieldScaffoldTask(session = Object(), tasks = [], context = Object()) {
+  if (!requiresGreenfieldScaffold(tasks, context)) return null;
+  const requirements = asArray(session.requirements?.active || session.requirements);
+  const firstRequirement = requirements[0] || {};
+  const requirementId = firstRequirement.id || tasks[0]?.requirement_ids?.[0] || "REQ-GREENFIELD-SCAFFOLD";
+  const designId = `DES-${requirementId}`;
+  const taskId = "DEMAND-GREENFIELD-SCAFFOLD-001";
+  const needsTypecheck = tasks.some((task) => taskToolchainKinds(task).has("type_check"));
+  const sourceQuestions = uniqueStrings(tasks.flatMap((task) => asArray(task.source_question_ids)));
+  const sessionPlan = buildTaskSessionPlan({
+    demandId: session.id,
+    taskId,
+    requirementId,
+    scenarioId: "SCN-GREENFIELD-SCAFFOLD",
+    surfaceId: "SFC-GREENFIELD-SCAFFOLD",
+  });
+  return {
+    id: taskId,
+    title: "Scaffold greenfield Node toolchain",
+    description: "Create package.json with the project toolchain scripts.",
+    priority: "P0",
+    type: "feature",
+    status: "pending",
+    task_kind: "greenfield_scaffold",
+    requirement_ids: [requirementId].filter(Boolean),
+    design_ids: [designId],
+    source_finding_ids: [requirementId].filter(Boolean),
+    source_question_ids: sourceQuestions,
+    verification_hint: "Run the configured test command after package.json is created.",
+    inputs: [".yolo/config.json"],
+    expected_output: ["package.json"],
+    depends_on: [],
+    handoff: {
+      type: "agent_brief",
+      category: "scaffold",
+      session: sessionPlan,
+      plain_language_goal: "Create package.json with the project toolchain scripts.",
+      user_story: "As the automation runner, I need package.json scripts before downstream tasks run.",
+      source_question_ids: sourceQuestions,
+      current_behavior: "The greenfield target has no package.json, so toolchain gates fail before implementation.",
+      desired_behavior: "package.json contains executable project toolchain scripts.",
+      touchpoint: "project scaffold",
+      trigger: "before any generated task with type/test post_conditions runs",
+      scenario: {
+        id: "SCN-GREENFIELD-SCAFFOLD",
+        actor: "automation runner",
+        touchpoint: "project scaffold",
+        trigger: "toolchain gate setup",
+        current_behavior: "package.json is missing",
+        desired_behavior: "package.json toolchain scripts are available",
+        proof: "The configured test command executes successfully.",
+      },
+      requirement: {
+        id: requirementId,
+        text: firstRequirement.text || "Greenfield project needs an executable scaffold before toolchain gates.",
+      },
+      surface: {
+        id: "SFC-GREENFIELD-SCAFFOLD",
+        kind: "code",
+        label: "Project scaffold",
+        target_files: ["package.json"],
+        readonly_files: [],
+        visual_style_source: [],
+        session_budget: { expected: "single_session", max_files: 1, max_lines_per_file: 120 },
+      },
+      key_interfaces: ["package.json"],
+      read_first: [".yolo/config.json"],
+      acceptance_criteria: ["package.json exists and the configured test command is executable."],
+      proof: "package.json exists and npm test succeeds.",
+      verification_hint: "Run the configured test command after package.json is created.",
+      project_facts: structuredProjectFacts(session),
+      deferred_scope: asArray(session.discussion?.deferred),
+      deferred_scope_confirmation: deferredScopeConfirmation(session),
+      deferred_follow_up: deferredFollowUp(session.discussion?.deferred),
+      out_of_scope: session.requirements?.out_of_scope || [],
+      constraints: session.requirements?.constraints || [],
+      exceptions: [],
+      question_trace: sourceQuestions,
+      evidence_chain: {
+        intake_schema: session.prd_intake?.schema || session.nontechnical_intake?.schema || null,
+        demand_id: session.id,
+        scenario_id: "SCN-GREENFIELD-SCAFFOLD",
+        surface_id: "SFC-GREENFIELD-SCAFFOLD",
+        approval_reason: session.approval_reason || session.approval?.reason || session.approval?.note || "",
+      },
+      must_haves: {
+        truths: ["Greenfield type/test gates require a local executable toolchain before downstream tasks run."],
+        artifacts: [
+          sessionPlan.state_path,
+          sessionPlan.handoff_path,
+          sessionPlan.evidence_path,
+          ...sessionPlan.memory_update_paths,
+        ],
+        key_links: [
+          `demand:${session.id}`,
+          `requirement:${requirementId}`,
+          "scenario:SCN-GREENFIELD-SCAFFOLD",
+          "surface:SFC-GREENFIELD-SCAFFOLD",
+        ],
+      },
+    },
+    scope: {
+      targets: [{ file: "package.json", description: "Minimal greenfield toolchain scaffold" }],
+      readonly_files: [],
+      allow_new_files: true,
+      allow_delete_files: false,
+      max_files: 1,
+      max_lines_per_file: 120,
+    },
+    pre_conditions: [],
+    post_conditions: scaffoldPostConditions(taskId, context, needsTypecheck),
+    trace: {
+      demand_id: session.id,
+      requirement_id: requirementId,
+      scenario_id: "SCN-GREENFIELD-SCAFFOLD",
+      surface_id: "SFC-GREENFIELD-SCAFFOLD",
+      evidence: uniqueStrings(requirements.flatMap((requirement) => requirement.trace?.evidence || [])),
+      decisions: uniqueStrings(requirements.flatMap((requirement) => requirement.trace?.decisions || [])),
+      question_trace: sourceQuestions,
+      source_question_ids: sourceQuestions,
+    },
+    deferred_scope: asArray(session.discussion?.deferred),
+    deferred_scope_confirmation: deferredScopeConfirmation(session),
+    deferred_follow_up: deferredFollowUp(session.discussion?.deferred),
+    atomicity: {
+      expected_session: "single_session",
+      source: "greenfield_toolchain_scaffold",
+    },
+    must_fix_before_ship: true,
+  };
+}
+
+function addScaffoldDependency(tasks = [], scaffold = null) {
+  if (!scaffold) return tasks;
+  for (const task of tasks) {
+    if (taskToolchainKinds(task).size === 0) continue;
+    task.depends_on = [...new Set([...(task.depends_on || []), scaffold.id])];
+  }
+  return [scaffold, ...tasks];
+}
+
+function uniqueConditions(conditions = []) {
+  const seen = new Set();
+  const result = [];
+  for (const condition of conditions.filter(Boolean)) {
+    const key = condition.id || JSON.stringify([condition.type, condition.params || {}, condition.message || ""]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(condition);
+  }
+  return result;
+}
+
 function toolchainContext(input = Object(), options = Object()) {
   const projectRoot = resolveRoot(input.projectRoot || input.project_root || options.projectRoot || options.project_root);
   const config = loadProjectToolchainConfig(projectRoot, {
@@ -1203,6 +1454,7 @@ function deriveFileDependencies(tasks = []) {
 
 function buildAtomicDemandTasks(session = Object(), input = Object(), options = Object()) {
   const buildContext = toolchainContext(input, options);
+  const automatedAcceptanceRequired = demandRequiresAutomatedAcceptance(session);
   const requirements = requirementById(session);
   const scenarios = scenarioMatrix(session).length ? scenarioMatrix(session) : fallbackScenarios(session);
   const allFiles = targetFiles(session);
@@ -1399,13 +1651,17 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
             max_lines_per_file: Number(surface.session_budget?.max_lines_per_file || input.max_lines_per_file || input.maxLinesPerFile || 120),
           },
           pre_conditions: [],
-          post_conditions: [
+          post_conditions: uniqueConditions([
             ...files.map((file, fileIndex) => modifiedFileCondition(taskId, fileIndex, file)),
             ...behaviorCodeConditions(taskId, files, behaviorText, uiTask),
-            acceptanceCondition(taskId, 0, { then: proof || description, verify_command: scenario.verify_command || scenario.verifyCommand }),
+            ...(hasVerifyCommand({ verify_command: scenario.verify_command || scenario.verifyCommand })
+              ? [acceptanceCondition(taskId, 0, { then: proof || description, verify_command: scenario.verify_command || scenario.verifyCommand })]
+              : automatedAcceptanceRequired
+                ? machineAcceptanceConditions(taskId, { then: proof || description }, buildContext)
+                : []),
             typecheckCondition(taskId, buildContext),
             ...(files.some((file) => fileKind(file) === "test") ? [testsPassCondition(taskId, buildContext)] : []),
-          ],
+          ]),
           trace: {
             demand_id: session.id,
             requirement_id: scenario.requirement_id || requirement.id,
@@ -1431,7 +1687,8 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
   }
   addTaskDependencies(tasks);
   deriveFileDependencies(tasks);
-  return { tasks, compileErrors };
+  const scaffold = buildGreenfieldScaffoldTask(session, tasks, buildContext);
+  return { tasks: addScaffoldDependency(tasks, scaffold), compileErrors };
 }
 
 function inspectAtomicity(tasks = [], input = Object(), options = Object()) {
