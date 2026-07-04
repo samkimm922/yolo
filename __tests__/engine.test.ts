@@ -594,16 +594,34 @@ describe("full pipeline", () => {
 // ═══════════════════════════════════════════════════════════════
 describe("auto-conditions structure", () => {
   test("AUTO-files_modified_max + AUTO-business_code_min auto-added", () => {
-    // contract 自动追加: files_modified_max (scope.max_files 存在) + business_code_min (始终)
-    const r = post({ scope: { max_files: 5, check_dead_code: false } });
+    // contract 自动追加: files_modified_max (scope.max_files 存在) + business_code_min (业务 target)
+    const r = post({ scope: { max_files: 5, check_dead_code: false, targets: [{ file: "src/app.ts" }] } });
     expect(r.results.find(c => c.id === "AUTO-files_modified_max")).toBeDefined();
     expect(r.results.find(c => c.id === "AUTO-business_code_min")).toBeDefined();
     // no_new_dead_code is never auto-added; only added via explicit post_conditions
     expect(r.results.find(c => c.id === "AUTO-no_new_dead_code")).toBeUndefined();
   });
 
+  test("scaffold/config targets do not auto-add AUTO-business_code_min", () => {
+    const r = post({ scope: { max_files: 5, check_dead_code: false, targets: [{ file: "package.json" }] } });
+    expect(r.results.find(c => c.id === "AUTO-files_modified_max")).toBeDefined();
+    expect(r.results.find(c => c.id === "AUTO-business_code_min")).toBeUndefined();
+  });
+
+  test("business targets still fail when zero business files changed", () => {
+    const r = engine.evaluatePostConditions({
+      id: "T",
+      scope: { check_dead_code: false, targets: [{ file: "src/app.ts" }] },
+      post_conditions: [],
+    }, {}, { changedFiles: [] });
+    const biz = r.results.find(c => c.id === "AUTO-business_code_min");
+    expect(biz).toBeDefined();
+    expect(biz.passed).toBe(false);
+    expect(r.allPass).toBe(false);
+  });
+
   test("total auto-condition count ≥ 2 for standard scope", () => {
-    const r = post({ scope: { max_files: 5, check_dead_code: false } });
+    const r = post({ scope: { max_files: 5, check_dead_code: false, targets: [{ file: "src/app.ts" }] } });
     const auto = r.results.filter(c => c.id.startsWith("AUTO-"));
     // AUTO-files_modified_max + AUTO-business_code_min
     expect(auto.length).toBeGreaterThanOrEqual(2);
@@ -649,7 +667,7 @@ describe("auto-conditions structure", () => {
   });
 
   test("sanity: engine loads and evaluates correctly", () => {
-    const r = post({ scope: { max_files: 5, check_dead_code: false } });
+    const r = post({ scope: { max_files: 5, check_dead_code: false, targets: [{ file: "src/app.ts" }] } });
     // AUTO-files_modified_max + AUTO-business_code_min = 2 auto-conditions minimum
     expect(r.results.length).toBeGreaterThanOrEqual(2);
     expect(r.results.every(c => typeof c.detail === "string")).toBe(true);

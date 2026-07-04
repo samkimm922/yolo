@@ -320,6 +320,33 @@ export async function runYoloNextCli(argv = [], io = Object()) {
   const projectRoot = resolve(input.cwd || io.cwd || process.cwd());
   const guard = inspectCliGuard("yolo-next", input, options, projectRoot);
   const next = nextLifecycleAction({ projectRoot, stateRoot: join(projectRoot, ".yolo") });
+  const previewCommand = guardCommandForRecommended(next.command);
+  const previewGuard = inspectCliGuard(previewCommand, input, options, projectRoot);
+  if (previewGuard.status !== "pass") {
+    const recoveryCommand = recommendedRecoveryCommand(previewGuard);
+    const result = {
+      status: "blocked",
+      code: "YOLO_NEXT_BLOCKED_BY_GUARD",
+      summary: `Next lifecycle command is blocked by guard: ${next.command}.`,
+      project_root: projectRoot,
+      current_stage: previewGuard.current_stage || guard.current_stage,
+      recommended_command: recoveryCommand,
+      recovery_command: recoveryCommand,
+      blocked_recommended_command: next.command,
+      target_stage: next.stage,
+      reason: next.reason,
+      description: next.description,
+      allowed_commands: [...new Set([recoveryCommand, "yolo status", ...(Array.isArray(previewGuard.allowed_commands) ? previewGuard.allowed_commands : [])])],
+      guard: previewGuard,
+      guard_blockers: previewGuard.blockers || [],
+      next_actions: [
+        `Run ${recoveryCommand} to inspect lifecycle blockers before retrying ${next.command}.`,
+      ],
+    };
+    if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stdout.write(`${formatYoloNextText(result)}\n`);
+    return 2;
+  }
   const result = {
     status: "success",
     code: "YOLO_NEXT_READY",
@@ -330,13 +357,43 @@ export async function runYoloNextCli(argv = [], io = Object()) {
     target_stage: next.stage,
     reason: next.reason,
     description: next.description,
-    allowed_commands: guard.allowed_commands || [],
-    guard,
+    allowed_commands: [...new Set([next.command, ...(Array.isArray(previewGuard.allowed_commands) ? previewGuard.allowed_commands : guard.allowed_commands || [])])],
+    guard: previewGuard,
     next_actions: [`Run ${next.command}: ${next.description}.`],
   };
   if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else stdout.write(`${formatYoloNextText(result)}\n`);
   return 0;
+}
+
+function guardCommandForRecommended(command) {
+  const normalized = cleanCliText(command).replace(/\s+/g, " ");
+  if (normalized.startsWith("yolo spec ")) return "yolo-prd";
+  if (normalized.startsWith("yolo demand --stage interview")) return "yolo-interview";
+  if (normalized.startsWith("yolo demand --stage brainstorm")) return "yolo-brainstorm";
+  if (normalized.startsWith("yolo demand --stage discover")) return "yolo-discover";
+  if (normalized.startsWith("yolo demand --stage discuss")) return "yolo-discuss";
+  const aliases = new Map([
+    ["yolo init", "yolo-init"],
+    ["yolo setup", "yolo-setup"],
+    ["yolo install", "yolo-install"],
+    ["yolo doctor", "yolo-doctor"],
+    ["yolo tasks", "yolo-plan"],
+    ["yolo spec", "yolo-prd"],
+    ["yolo check", "yolo-check"],
+    ["yolo run", "yolo-run"],
+    ["yolo review", "yolo-review"],
+    ["yolo release accept", "yolo-accept"],
+    ["yolo ship", "yolo-ship"],
+    ["yolo learn", "yolo-learn"],
+  ]);
+  return aliases.get(normalized) || normalized.replace(/^yolo\s+/, "yolo-").replace(/\s+/g, "-");
+}
+
+function recommendedRecoveryCommand(guard = Object()) {
+  const allowed = Array.isArray(guard.allowed_commands) ? guard.allowed_commands.map(String) : [];
+  if (allowed.includes("yolo doctor")) return "yolo doctor";
+  return allowed.find((command) => command === "yolo status" || command.startsWith("yolo ")) || "yolo doctor";
 }
 
 export async function runYoloProgressUiEvidenceCli(argv = [], io = Object()) {

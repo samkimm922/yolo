@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { initLifecycleState } from "../src/lifecycle/state.js";
 import { inspectLifecycleGuard, nextLifecycleAction } from "../src/lifecycle/guard.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
+import { writeSourceSnapshot } from "../src/lifecycle/source-snapshot.js";
 import { runYoloCli, KNOWN_YOLO_COMMAND_WORDS } from "../src/cli/yolo.js";
 import { runPiCli } from "../src/cli/pi.js";
 import { runRunnerRuntime } from "../src/runtime/runner-runtime.js";
@@ -815,6 +816,47 @@ describe("lifecycle guard", () => {
         String(status.recommended_command ?? ""),
         "yolo status CLI recommended_command",
       );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("status does not recommend run when guard would block it for source drift", async () => {
+    const root = tempProject();
+    const stateRoot = join(root, ".yolo");
+    const prdPath = join(root, "specs", "prd.json");
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeJson(prdPath, { schema: "test.prd" });
+      writeFileSync(join(root, "src", "app.ts"), "export const value = 1;\n", "utf8");
+      initLifecycleState({ projectRoot: root });
+      writeLifecycleStageReport("discovery", { status: "success" }, lifecycleWriteOptions(root));
+      writeLifecycleStageReport("roadmap", { status: "success" }, lifecycleWriteOptions(root));
+      writeLifecycleStageReport("check", {
+        status: "pass",
+        summary: "check passed",
+        prd_path: prdPath,
+      }, lifecycleWriteOptions(root));
+      writeSourceSnapshot({ projectRoot: root, stateRoot });
+
+      writeFileSync(join(root, "src", "app.ts"), "export const value = 2;\n", "utf8");
+      const guard = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, stateRoot, prdPath });
+      assert.equal(guard.status, "blocked");
+      assert.ok(guard.blockers.some((blocker) => blocker.code === "LIFECYCLE_DRIFT_WORKTREE_DIVERGED"));
+
+      const out = capture();
+      const exit = await runYoloCli(["status", `--cwd=${root}`, "--json"], {
+        cwd: root,
+        stdout: out.stream,
+      });
+      const status = out.json();
+      assert.equal(exit, 2);
+      assert.equal(status.status, "blocked");
+      assert.notEqual(status.recommended_command, "yolo run");
+      assert.equal(status.recommended_command, "yolo doctor");
+      assert.ok(Array.isArray(status.guard_blockers));
+      assert.ok((status.guard_blockers as Array<{ code?: string }>).some((blocker) => blocker.code === "LIFECYCLE_DRIFT_WORKTREE_DIVERGED"));
+      assert.ok((status.next_actions as string[]).every((action) => !action.includes("Run yolo run first")));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

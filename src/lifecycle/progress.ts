@@ -117,9 +117,22 @@ function statusForReport(report: StageReportEntry = Object()): string {
   return "active";
 }
 
-function shouldRefreshSourceSnapshot(stageId: string, stageStatus: string): boolean {
+function shouldRefreshWriteStageSourceSnapshot(stageId: string, stageStatus: string): boolean {
   const stage = getLifecycleStage(stageId);
   return stage.writes_code === true && stageStatus === "completed";
+}
+
+function shouldRefreshRunnerBaselineSourceSnapshot(stageId: string, stageStatus: string, options: ProgressOptions): boolean {
+  const runnerBaselineCommit = clean(options.runnerBaselineCommit || options.runner_baseline_commit);
+  return stageId === "check"
+    && stageStatus === "completed"
+    && clean(options.source) === "runner-baseline"
+    && Boolean(runnerBaselineCommit);
+}
+
+function shouldRefreshSourceSnapshot(stageId: string, stageStatus: string, options: ProgressOptions = Object()): boolean {
+  return shouldRefreshWriteStageSourceSnapshot(stageId, stageStatus)
+    || shouldRefreshRunnerBaselineSourceSnapshot(stageId, stageStatus, options);
 }
 
 function meaningfulEvidenceEntry(entry: unknown): boolean {
@@ -389,7 +402,7 @@ export function writeLifecycleStageReport(stageId: string, report: StageReportEn
   }, { source: options.source || "lifecycle-progress", now });
 
   let source_snapshot = null;
-  if (shouldRefreshSourceSnapshot(stageId, stageStatus)) {
+  if (shouldRefreshSourceSnapshot(stageId, stageStatus, options)) {
     try {
       source_snapshot = writeSourceSnapshot({
         ...options,
