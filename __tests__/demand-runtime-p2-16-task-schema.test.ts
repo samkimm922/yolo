@@ -11,6 +11,10 @@ function isTestFile(file = "") {
   return /(^|\/)(__tests__|tests?|specs?)\//.test(path) || /\.(test|spec)\./.test(path);
 }
 
+function isGreenfieldScaffoldTask(task: { task_kind?: unknown } = {}) {
+  return task.task_kind === "greenfield_scaffold";
+}
+
 function writeProjectFile(root, file, content) {
   const path = join(root, file);
   mkdirSync(join(root, file.split("/").slice(0, -1).join("/") || "."), { recursive: true });
@@ -141,6 +145,7 @@ describe("P2.16 task schema enhancement", () => {
         const bOutputs = new Set((taskB.expected_output || []).filter((f) => !isTestFile(f)));
         for (const taskA of tasks) {
           if (taskA.id === taskB.id) continue;
+          if (isGreenfieldScaffoldTask(taskA)) continue;
           const aOutputs = new Set((taskA.expected_output || []).filter((f) => !isTestFile(f)));
           const bInputs = (taskB.inputs || []).filter((f) => !isTestFile(f));
           const hasOverlap = bInputs.some((input) => aOutputs.has(input) && !bOutputs.has(input));
@@ -331,7 +336,9 @@ describe("P2.16 task schema enhancement", () => {
       const tasks = getTasks(prd);
       assert.ok(tasks.length > 0, `must have tasks (status=${prd.status}, code=${prd.code})`);
 
-      for (const task of tasks) {
+      const businessTasks = tasks.filter((task) => !isGreenfieldScaffoldTask(task));
+      assert.ok(businessTasks.length > 0, "must have business tasks");
+      for (const task of businessTasks) {
         const acceptCond = task.post_conditions.find((c) => c.type === "acceptance_criteria");
         assert.ok(acceptCond, `task ${task.id} must have acceptance_criteria`);
         assert.equal(acceptCond.params.verify_command, "npm test");

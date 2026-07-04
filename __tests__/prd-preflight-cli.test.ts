@@ -145,7 +145,7 @@ describe("prd preflight CLI warning policy", () => {
     }
   });
 
-  test("default verify blocks warning PRDs instead of returning success", () => {
+  test("default verify blocks manual acceptance contract failures instead of returning success", () => {
     const root = tempProject();
     try {
       const prdPath = join(root, "prd.json");
@@ -164,7 +164,7 @@ describe("prd preflight CLI warning policy", () => {
       assert.equal(result.status, 1);
       assert.equal(payload.status, "blocked");
       assert.equal(payload.warning_policy.mode, "verify");
-      assert.equal(payload.blocking_warning_count > 0, true);
+      assert.equal(payload.blocking_warning_count, 0);
       assert.ok(payload.blocked_reasons.some((reason) => reason.code === "MANUAL_FAIL_CONDITION"));
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -207,7 +207,7 @@ describe("prd preflight CLI warning policy", () => {
     }
   });
 
-  test("advisory mode removed — warning PRDs are blocked regardless of mode", () => {
+  test("advisory mode removed — manual contract failures are blocked regardless of mode", () => {
     const root = tempProject();
     let stdout = "";
     let stderr = "";
@@ -228,7 +228,8 @@ describe("prd preflight CLI warning policy", () => {
       assert.equal(direct.stderr, "");
       assert.equal(direct.status, 1);
       assert.equal(directPayload.status, "blocked");
-      assert.equal(directPayload.blocking_warning_count > 0, true);
+      assert.equal(directPayload.blocking_warning_count, 0);
+      assert.ok(directPayload.blocked_reasons.some((reason) => reason.code === "MANUAL_FAIL_CONDITION"));
 
       const wrapperExit = runPrdPreflightCli([prdPath, "--mode=advisory", "--json"], {
         stdout: { write: (chunk) => { stdout += chunk; } },
@@ -239,6 +240,7 @@ describe("prd preflight CLI warning policy", () => {
       assert.equal(stderr, "");
       assert.equal(wrapperExit, 1);
       assert.equal(wrapperPayload.status, "blocked");
+      assert.ok(wrapperPayload.blocked_reasons.some((reason) => reason.code === "MANUAL_FAIL_CONDITION"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

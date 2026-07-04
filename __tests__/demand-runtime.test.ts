@@ -120,6 +120,23 @@ function seedDemandTargetFiles(root: string, files: string[]): void {
   for (const file of files) writeProjectFile(root, file);
 }
 
+function seedDogfoodGitweeklyR2Fixture(root: string): string {
+  const sessionPath = join(process.cwd(), "__tests__/fixtures/dogfood-gitweekly-r2/session.json");
+  const ledgerPath = join(process.cwd(), "__tests__/fixtures/dogfood-gitweekly-r2/state/evidence/ledger.jsonl");
+  const session = JSON.parse(readFileSync(sessionPath, "utf8"));
+  const demandDir = join(root, ".yolo", "demand", session.id);
+  mkdirSync(demandDir, { recursive: true });
+  writeJson(join(demandDir, "session.json"), session);
+  mkdirSync(join(root, ".yolo", "state", "evidence"), { recursive: true });
+  writeFileSync(join(root, ".yolo", "state", "evidence", "ledger.jsonl"), readFileSync(ledgerPath, "utf8"), "utf8");
+  writeJson(join(root, ".yolo", "config.json"), {
+    schema_version: "1.0",
+    project: { name: "dogfood-gitweekly-r2" },
+    paths: { state: ".yolo/state" },
+  });
+  return demandDir;
+}
+
 function duplicateTaskKeys(tasks: DemandTask[] = []): string[] {
   const seen = new Set<string>();
   const duplicates: string[] = [];
@@ -210,6 +227,23 @@ function acceptanceAdapterManifest() {
     capabilities: ["page_reachable", "screenshot", "runtime_errors"],
     applies_to: ["ui", "browser"],
   };
+}
+
+function hasVerifyCommand(condition: DemandRecord = Object()): boolean {
+  const params = isRecord(condition.params) ? condition.params : {};
+  return Boolean(condition.verify_command || condition.verifyCommand || params.verify_command || params.verifyCommand);
+}
+
+function nakedManualAcceptancePostConditions(prd: DemandPrdDocument): DemandRecord[] {
+  return requirePrdTasks(prd).flatMap((task) =>
+    (task.post_conditions || []).filter((condition) =>
+      condition?.type === "acceptance_criteria" && !hasVerifyCommand(condition)
+    )
+  );
+}
+
+function prdTraceEvidenceCount(prd: DemandPrdDocument): number {
+  return requirePrdTasks(prd).reduce((total, task) => total + ((task.trace?.evidence as unknown[]) || []).length, 0);
 }
 
 function taskcliDemandInput(root: string): DemandRuntimeInput {
@@ -617,7 +651,11 @@ describe("demand runtime", () => {
 
       const prd = spec.prd;
       const tasks = requirePrdTasks(prd);
-      const task = tasks[0];
+      assert.equal(tasks[0].task_kind, "greenfield_scaffold");
+      const task = tasks.find((candidate) =>
+        candidate.scope?.targets?.some((target) => target.file === "src/taskcli.ts")
+      );
+      assert.ok(task);
       assert.ok(task.scope?.targets);
       assert.deepEqual(task.scope.targets.map((target) => target.file), ["src/taskcli.ts"]);
       assert.equal(task.scope.allow_new_files, true);
@@ -840,9 +878,11 @@ describe("demand runtime", () => {
       assert.equal(prd.status, "success", JSON.stringify(prd.blockers, null, 2));
       requirePrd(prd);
       assert.deepEqual(duplicateTaskKeys(prd.prd.tasks), []);
-      assert.equal(prd.prd.tasks.filter((task) => task.scope.targets.some((target) => target.file === "src/taskcli.ts")).length, 1);
-      assert.equal(prd.prd.tasks.filter((task) => task.scope.targets.some((target) => target.file === "__tests__/taskcli.test.ts")).length, 1);
-      assert.equal(prd.prd.tasks.length, 2);
+      assert.equal(prd.prd.tasks[0].task_kind, "greenfield_scaffold");
+      const businessTasks = prd.prd.tasks.filter((task) => task.task_kind !== "greenfield_scaffold");
+      assert.equal(businessTasks.filter((task) => task.scope.targets.some((target) => target.file === "src/taskcli.ts")).length, 1);
+      assert.equal(businessTasks.filter((task) => task.scope.targets.some((target) => target.file === "__tests__/taskcli.test.ts")).length, 1);
+      assert.equal(businessTasks.length, 2);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -1873,22 +1913,24 @@ describe("demand runtime", () => {
       assert.equal(check.blockers.some((blocker) => blocker.code === "ATOMICITY_INVESTIGATE_FIRST"), false);
       const compiledPrd = prd.prd;
       assert.equal(compiledPrd.tasks.length >= 3, true);
-      assert.equal(compiledPrd.tasks.every((task) => task.task_kind === "demand_atomic_task"), true);
-      assert.equal(compiledPrd.tasks.every((task) => task.scope.max_files <= 2), true);
-      assert.equal(compiledPrd.tasks.every((task) => Boolean(task.handoff.proof)), true);
+      assert.equal(compiledPrd.tasks[0].task_kind, "greenfield_scaffold");
+      const businessTasks = compiledPrd.tasks.filter((task) => task.task_kind !== "greenfield_scaffold");
+      assert.equal(businessTasks.every((task) => task.task_kind === "demand_atomic_task"), true);
+      assert.equal(businessTasks.every((task) => task.scope.max_files <= 2), true);
+      assert.equal(businessTasks.every((task) => Boolean(task.handoff.proof)), true);
       assert.equal(compiledPrd.demand.approval.approved_at !== null, true);
       assert.ok(compiledPrd.demand.deferred_scope.includes("Forecasting and supplier ordering remain later demands."));
       assert.equal(compiledPrd.demand.deferred_scope_confirmation.confirmed, true);
       assert.equal(compiledPrd.demand.deferred_follow_up.required, true);
       assert.ok(compiledPrd.demand.deferred_follow_up.next_session_prompt.includes("Forecasting and supplier ordering"));
-      assert.ok(compiledPrd.tasks.every((task) => task.handoff.deferred_scope.includes("Forecasting and supplier ordering remain later demands.")));
-      assert.ok(compiledPrd.tasks.every((task) => task.handoff.deferred_scope_confirmation.confirmed === true));
-      assert.ok(compiledPrd.tasks.every((task) => task.handoff.deferred_follow_up.required === true));
-      assert.equal(compiledPrd.tasks.some((task) => task.handoff.surface.kind === "ui"), true);
-      assert.equal(compiledPrd.tasks.some((task) => task.handoff.surface.kind === "service"), true);
-      assert.equal(compiledPrd.tasks.some((task) => task.handoff.surface.kind === "test"), true);
-      const serviceTask = compiledPrd.tasks.find((task) => task.handoff.surface.kind === "service");
-      const testTask = compiledPrd.tasks.find((task) => task.handoff.surface.kind === "test");
+      assert.ok(businessTasks.every((task) => task.handoff.deferred_scope.includes("Forecasting and supplier ordering remain later demands.")));
+      assert.ok(businessTasks.every((task) => task.handoff.deferred_scope_confirmation.confirmed === true));
+      assert.ok(businessTasks.every((task) => task.handoff.deferred_follow_up.required === true));
+      assert.equal(businessTasks.some((task) => task.handoff.surface.kind === "ui"), true);
+      assert.equal(businessTasks.some((task) => task.handoff.surface.kind === "service"), true);
+      assert.equal(businessTasks.some((task) => task.handoff.surface.kind === "test"), true);
+      const serviceTask = businessTasks.find((task) => task.handoff.surface.kind === "service");
+      const testTask = businessTasks.find((task) => task.handoff.surface.kind === "test");
       assert.ok(testTask.depends_on.includes(serviceTask.id));
       assert.ok(testTask.handoff.read_first.includes("src/services/inventory-alerts.ts"));
       assert.ok(testTask.post_conditions.some((condition) => condition.type === "tests_pass" && condition.severity === "FAIL"));
@@ -1911,6 +1953,47 @@ describe("demand runtime", () => {
       assert.equal(handoffStats.memory_update_paths.includes(".yolo/state/session-memory.jsonl"), true);
       assert.equal(handoffStats.progress_update_paths.includes(".yolo/memory/PROGRESS.md"), true);
       assert.deepEqual(compiledPrd.demand.atomicity_contract.session_handoff, handoffStats);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("R2 dogfood demand generates machine-verifiable gates and a greenfield scaffold first task", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-r2-gitweekly-"));
+    try {
+      const demandDir = seedDogfoodGitweeklyR2Fixture(root);
+
+      const result = runDemandPrdRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demandPath: demandDir,
+        writeArtifacts: false,
+      });
+
+      assert.equal(result.status, "success", JSON.stringify(result.blockers, null, 2));
+      requirePrd(result);
+      assert.equal(result.preflight.status, "pass", JSON.stringify(result.preflight.blocked_reasons, null, 2));
+
+      const compiledPrd = result.prd;
+      const tasks = requirePrdTasks(compiledPrd);
+      assert.equal(nakedManualAcceptancePostConditions(compiledPrd).length, 0, "auto-verifiable R2 demand must not emit naked prose acceptance_criteria post_conditions");
+      assert.equal(prdTraceEvidenceCount(compiledPrd) > 0, true, "R2 PRD should retain demand evidence trace");
+
+      const scaffold = tasks[0];
+      assert.equal(scaffold.task_kind, "greenfield_scaffold");
+      assert.equal(scaffold.scope?.targets?.some((target) => target.file === "package.json"), true);
+      assert.ok(scaffold.post_conditions.some((condition) =>
+        condition.type === "file_exists" && condition.params?.file === "package.json"
+      ));
+      assert.ok(scaffold.post_conditions.some((condition) =>
+        condition.type === "tests_pass" && condition.severity === "FAIL"
+      ));
+
+      const downstreamTypeOrTestTasks = tasks.slice(1).filter((task) =>
+        task.post_conditions.some((condition) => ["no_new_type_errors", "tests_pass", "test_file_passes"].includes(String(condition.type)))
+      );
+      assert.equal(downstreamTypeOrTestTasks.length > 0, true);
+      assert.equal(downstreamTypeOrTestTasks.every((task) => task.depends_on.includes(scaffold.id)), true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -2075,7 +2158,9 @@ describe("demand runtime", () => {
       assert.equal(prd.status, "success");
       requirePrd(prd);
       assert.match(prd.prd.id, /^[A-Z]+-[0-9]+-[A-Z0-9-]+$/);
-      assert.equal(prd.prd.tasks[0].handoff.session.state_path, ".yolo/demand/DEMAND-20260529-库存预警/tasks/DEMAND-REQ-001-0010101/session.json");
+      const businessTask = prd.prd.tasks.find((task) => task.task_kind !== "greenfield_scaffold");
+      assert.ok(businessTask);
+      assert.equal(businessTask.handoff.session.state_path, ".yolo/demand/DEMAND-20260529-库存预警/tasks/DEMAND-REQ-001-0010101/session.json");
       assert.ok(prd.prd.execution_readiness.session_handoff.state_paths[0].includes("库存预警"));
     } finally {
       rmSync(root, { recursive: true, force: true });
