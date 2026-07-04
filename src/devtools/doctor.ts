@@ -13,9 +13,11 @@ import {
   YOLO_COMMAND_SURFACE_BUDGET,
 } from "../workflows/command-registry.js";
 import {
+  lifecycleArtifactPath,
   lifecycleStatusPath,
   readLifecycleState,
 } from "../lifecycle/state.js";
+import { inspectWorktreeDrift } from "../lifecycle/source-snapshot.js";
 
 export const YOLO_DOCTOR_SCHEMA_VERSION = "1.0";
 export const YOLO_DOCTOR_SCHEMA = "yolo.doctor.report.v1";
@@ -94,6 +96,50 @@ function artifactStatus(file: Record<string, unknown> = {}) {
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function existingPrdCandidate(projectRoot: string, value: unknown): string {
+  const raw = clean(value);
+  if (!raw || !raw.endsWith(".json")) return "";
+  const absolute = isAbsolute(raw) ? resolve(raw) : resolve(projectRoot, raw);
+  return existsSync(absolute) ? absolute : "";
+}
+
+function prdCandidatesFromLifecycleReport(report: Record<string, unknown> = {}): unknown[] {
+  const nested = asRecord(report.report);
+  return [report.prd_path, report.prdPath, nested.prd_path, nested.prdPath]
+    .concat(Array.isArray(report.artifacts) ? report.artifacts : [])
+    .concat(Array.isArray(nested.artifacts) ? nested.artifacts : []);
+}
+
+function latestCheckedPrdPath(projectRoot: string, stateRoot: string): string {
+  for (const stage of ["check", "prd"]) {
+    const path = lifecycleArtifactPath(stage, { projectRoot, stateRoot });
+    if (!existsSync(path)) continue;
+    const read = readJsonSafe(path);
+    if (!read.ok) continue;
+    for (const candidate of prdCandidatesFromLifecycleReport(asRecord(read.value))) {
+      const prdPath = existingPrdCandidate(projectRoot, candidate);
+      if (prdPath) return prdPath;
+    }
+  }
+  return "";
+}
+
+function worktreeDriftFinding(projectRoot: string, stateRoot: string): DoctorCheck | null {
+  const drift = inspectWorktreeDrift({ projectRoot, stateRoot });
+  if (!drift.has_drift) return null;
+  const prdPath = latestCheckedPrdPath(projectRoot, stateRoot);
+  const fixCommand = prdPath ? `yolo check ${prdPath}` : "yolo check";
+  return check("YOLO_DOCTOR_WORKTREE_DRIFT", "error", false, "Lifecycle check snapshot differs from the current worktree.", {
+    captured_at: drift.captured_at || null,
+    current_difference_file_count: drift.current_difference_file_count ?? null,
+    fix_command: fixCommand,
+  });
+}
+
 function expectedBridgeArtifacts(bridgePlan: AgentBridgeInstallPlan): BridgeArtifact[] {
   return [
     ...bridgePlan.files,
@@ -157,6 +203,7 @@ export function buildYoloDoctorReport(options: BuildDoctorReportOptions = {}) {
   const homeDir = resolve(String(options.homeDir || options.home_dir || homedir()));
   const targets = String(options.targets || options.target || "both");
   const scope = String(options.scope || options.installScope || options.install_scope || "project");
+  const stateRoot = join(projectRoot, ".yolo");
   const configPath = join(projectRoot, ".yolo/config.json");
   const configRead = existsSync(configPath) ? readJsonSafe(configPath) : { ok: false, error: "missing" };
   const lifecycle = lifecycleInspection(projectRoot);
@@ -172,6 +219,7 @@ export function buildYoloDoctorReport(options: BuildDoctorReportOptions = {}) {
   });
   const bridgeArtifacts = expectedBridgeArtifacts(bridgePlan).map(artifactStatus);
   const missingBridgeArtifacts = bridgeArtifacts.filter((artifact) => !artifact.exists || !artifact.non_empty);
+  const driftFinding = worktreeDriftFinding(projectRoot, stateRoot);
 
   const checks = [
     check(
@@ -228,11 +276,14 @@ export function buildYoloDoctorReport(options: BuildDoctorReportOptions = {}) {
         missing_artifacts: missingBridgeArtifacts.slice(0, 20),
       },
     ),
+    ...(driftFinding ? [driftFinding] : []),
   ];
 
   const blockers = checks.filter((item) => item.severity === "error" && item.passed !== true);
   const warnings = checks.filter((item) => item.severity === "warning" && item.passed !== true);
   const status = blockers.length > 0 ? "blocked" : (warnings.length > 0 ? "warning" : "pass");
+  const driftBlocker = blockers.find((item) => item.code === "YOLO_DOCTOR_WORKTREE_DRIFT");
+  const driftFixCommand = typeof driftBlocker?.fix_command === "string" ? driftBlocker.fix_command : "";
 
   return {
     schema_version: YOLO_DOCTOR_SCHEMA_VERSION,
@@ -244,6 +295,7 @@ export function buildYoloDoctorReport(options: BuildDoctorReportOptions = {}) {
     checks,
     blockers,
     warnings,
+    findings: driftFinding ? [driftFinding] : [],
     lifecycle: {
       status_path: lifecycle.path,
       exists: lifecycle.exists,
@@ -270,8 +322,10 @@ export function buildYoloDoctorReport(options: BuildDoctorReportOptions = {}) {
       provider_execution: false,
       billable_provider_execution: false,
     },
-    next_actions: status === "blocked"
-      ? ["Ask the agent to run yolo setup for this project, then run yolo status again."]
+    next_actions: driftFixCommand
+      ? [`Run ${driftFixCommand} to revalidate the drifted worktree and refresh the lifecycle snapshot.`]
+      : status === "blocked"
+        ? ["Ask the agent to run yolo setup for this project, then run yolo status again."]
       : status === "warning"
         ? ["Ask the agent to run yolo install for the desired Codex/Claude scope, then restart or refresh the host."]
         : ["YOLO project lifecycle and agent entrypoints are ready; start with yolo status or yolo demand."],
@@ -287,7 +341,14 @@ export function formatYoloDoctorText(report: ReturnType<typeof buildYoloDoctorRe
   ];
   if (report.blockers?.length) {
     lines.push("blockers:");
-    for (const blocker of report.blockers) lines.push(`  - ${blocker.code}: ${blocker.message}`);
+    for (const blocker of report.blockers) {
+      lines.push(`  - ${blocker.code}: ${blocker.message}`);
+      if (blocker.fix_command) lines.push(`    fix_command: ${blocker.fix_command}`);
+      if (blocker.captured_at) lines.push(`    captured_at: ${blocker.captured_at}`);
+      if (blocker.current_difference_file_count != null) {
+        lines.push(`    current_difference_file_count: ${blocker.current_difference_file_count}`);
+      }
+    }
   }
   if (report.warnings?.length) {
     lines.push("warnings:");

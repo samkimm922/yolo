@@ -296,7 +296,7 @@ export async function runYoloCheckCli(argv = [], io = Object()) {
   }, { learnFailures: true });
   // BUG-C2: stamp the worktree signature whenever the check writes its
   // lifecycle artifact, so the next guard call can detect out-of-band edits.
-  if (options.writeLifecycle && report.status !== "error") {
+  if (options.writeLifecycle && report.status === "pass") {
     try {
       writeSourceSnapshot({ projectRoot, stateRoot: join(projectRoot, ".yolo") });
     } catch {
@@ -392,6 +392,8 @@ function guardCommandForRecommended(command) {
 
 function recommendedRecoveryCommand(guard = Object()) {
   const allowed = Array.isArray(guard.allowed_commands) ? guard.allowed_commands.map(String) : [];
+  const directRecovery = allowed.find((command) => command.startsWith("yolo ") && command !== "yolo status" && command !== "yolo doctor");
+  if (directRecovery) return directRecovery;
   if (allowed.includes("yolo doctor")) return "yolo doctor";
   return allowed.find((command) => command === "yolo status" || command.startsWith("yolo ")) || "yolo doctor";
 }

@@ -183,6 +183,19 @@ export function readSourceSnapshot(options: SnapshotOptions = Object()): SourceS
 export interface WorktreeDriftResult {
   has_drift: boolean;
   reason: string | null;
+  captured_at?: string | null;
+  current_difference_file_count?: number | null;
+}
+
+function inspectWorktreeDifference(options: SnapshotOptions = Object()) {
+  const projectRoot = resolve(String(options.projectRoot || options.project_root || options.cwd || process.cwd()));
+  if (isGitProject(projectRoot)) {
+    const porcelain = gitStatusPorcelain(projectRoot);
+    if (porcelain != null) {
+      return { current_difference_file_count: porcelain.split("\n").filter(Boolean).length };
+    }
+  }
+  return { current_difference_file_count: null };
 }
 
 // Compares the current worktree signature to the stored snapshot.
@@ -195,10 +208,13 @@ export function inspectWorktreeDrift(options: SnapshotOptions = Object()): Workt
   }
   const current = computeWorktreeSignature(projectRoot);
   if (current.signature === snapshot.signature) {
-    return { has_drift: false, reason: null };
+    return { has_drift: false, reason: null, captured_at: clean(snapshot.captured_at) || null, current_difference_file_count: 0 };
   }
+  const difference = inspectWorktreeDifference({ ...options, projectRoot });
   return {
     has_drift: true,
     reason: `working tree changed since last check snapshot (snapshot method: ${snapshot.method}, captured_at: ${snapshot.captured_at || "unknown"})`,
+    captured_at: clean(snapshot.captured_at) || null,
+    current_difference_file_count: difference.current_difference_file_count,
   };
 }

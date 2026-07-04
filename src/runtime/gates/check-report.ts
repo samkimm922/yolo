@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { inspectStoryAtomicityFromPrd } from "../../demand/story-atomicity.js";
 import { inspectDiscoveryReadiness } from "../../discovery/gate.js";
 import { writeLifecycleStageReport } from "../../lifecycle/progress.js";
+import { inspectWorktreeDrift } from "../../lifecycle/source-snapshot.js";
 import { resolveProjectContext } from "../../packs/resolver.js";
 import { preflightPrd } from "../../prd/preflight.js";
 import { inspectAtomicTask } from "../execution/atomic-task-doctor.js";
@@ -397,6 +398,47 @@ function taskPathContainmentBlockers(task, projectRoot) {
       message: `Task target path must stay inside the project root: ${ref.file}`,
       human_needed: true,
     }));
+}
+
+function conditionFileReferences(condition = Object()) {
+  const params = condition.params || {};
+  return ["file", "path", "target", "target_file", "file_path"].flatMap((key) => [...collectPathValues(params[key]), ...collectPathValues(condition[key])]).filter(Boolean);
+}
+
+function targetFileModifiedReferences(task = Object()) {
+  const targets = taskFiles(task);
+  const refs = asArray(task.post_conditions).flatMap((condition) => {
+    if (condition?.type !== "target_file_modified") return [];
+    const files = conditionFileReferences(condition);
+    return files.length ? files : targets.slice(0, 1);
+  });
+  return [...new Set(refs.filter(Boolean))];
+}
+
+function driftRealityReadiness({ prd, projectRoot, stateRoot }) {
+  const drift = inspectWorktreeDrift({ projectRoot, stateRoot });
+  if (!drift.has_drift) return null;
+  const blockers = asArray(prd.tasks).flatMap((task) => (
+    task?.status === "completed" ? [] : targetFileModifiedReferences(task).flatMap((file) => {
+      const absolute = isAbsolute(file) ? resolve(file) : resolve(projectRoot, file);
+      return existsSync(absolute) ? [] : [{
+        code: "DRIFT_TARGET_FILE_MISSING",
+        task_id: task.id || null,
+        path: file,
+        message: `Drift recovery cannot refresh the lifecycle snapshot because target file is missing: ${file}`,
+        human_needed: true,
+      }];
+    })
+  ));
+  const status = blockers.length > 0 ? "blocked" : "pass";
+  return checkRecord("drift_reality", status, status === "pass"
+    ? "Drifted worktree still matches PRD target-file reality."
+    : "Drifted worktree contradicts the PRD target-file contract.", {
+    blockers,
+    warnings: [],
+    captured_at: drift.captured_at || null,
+    current_difference_file_count: drift.current_difference_file_count ?? null,
+  });
 }
 
 function productReadiness({ prd, discovery, projectRoot }) {
@@ -859,6 +901,7 @@ export function inspectYoloCheck(input = Object(), options = Object()) {
   });
   const checks = [
     preflightReadiness(preflight),
+    driftRealityReadiness({ prd, projectRoot, stateRoot }),
     demandContractReadiness({ prd, projectRoot, strictExecution }),
     productReadiness({ prd, discovery, projectRoot }),
     taskDependencyPreflightReadiness({ prd }),
@@ -868,7 +911,8 @@ export function inspectYoloCheck(input = Object(), options = Object()) {
     atomicityReadiness({ prd, projectRoot, strictExecution }),
     adapterReadiness({ prd, acceptanceManifest, options: { ...options, ...input }, resolver }),
     evidencePlanReadiness({ prd }),
-  ].map((check) => applyWarningPolicy(check, { failClosed: failClosedWarnings }))
+  ].filter(Boolean)
+    .map((check) => applyWarningPolicy(check, { failClosed: failClosedWarnings }))
     .sort((a, b) => severity(b.status) - severity(a.status));
   const status = aggregateStatus(checks);
   const blockers = [

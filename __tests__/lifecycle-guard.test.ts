@@ -1,12 +1,12 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { initLifecycleState } from "../src/lifecycle/state.js";
 import { inspectLifecycleGuard, nextLifecycleAction } from "../src/lifecycle/guard.js";
 import { writeLifecycleStageReport } from "../src/lifecycle/progress.js";
-import { writeSourceSnapshot } from "../src/lifecycle/source-snapshot.js";
+import { readSourceSnapshot } from "../src/lifecycle/source-snapshot.js";
 import { runYoloCli, KNOWN_YOLO_COMMAND_WORDS } from "../src/cli/yolo.js";
 import { runPiCli } from "../src/cli/pi.js";
 import { runRunnerRuntime } from "../src/runtime/runner-runtime.js";
@@ -40,6 +40,43 @@ function lifecycleWriteOptions(root) {
     writeSessionMemory: false,
     skipSequenceCheck: true,
   };
+}
+
+function strictPrd(targetFile = "src/a.js") {
+  const quality = { schema_version: "1.0", schema: "yolo.demand.quality.v1", status: "pass", total_score: 100, dimensions: [] };
+  return {
+    version: "2.0", id: "PRD-20260525-DRIFT-001", title: "Drift recovery fixture", project: { name: "test", language: "javascript" },
+    generated_by: "yolo-demand", generated_at: "2026-05-25T00:00:00.000Z", base_commit: "abcdef0", source: "approved_demand", demand_contract_required: true,
+    demand: {
+      id: "DEMAND-DRIFT", approval: { approved: true, effective_for_prd: true },
+      project_facts: { target_files: [{ file: targetFile, status: "verified" }], assumptions: [] }, quality_report: quality,
+    },
+    execution_readiness: { level: "L3", afk_ready: true, quality_status: "pass", quality_report: quality },
+    requirements: [{ id: "REQ-1", text: "For operators, keep a small module update tracked.", demand_trace: { evidence: ["EVID-1"] } }],
+    designs: [{ id: "DES-1", text: "Use target-file evidence." }],
+    tasks: [{
+      id: "FIX-DRIFT-001", title: "Fix small module", priority: "P1", type: "bugfix", task_kind: "atomic_fix",
+      status: "pending", requirement_ids: ["REQ-1"], design_ids: ["DES-1"], scope: { targets: [{ file: targetFile }] }, acceptance_criteria: ["Small module target is modified."],
+      post_conditions: [
+        { id: "POST-TARGET", type: "target_file_modified", severity: "FAIL", params: { file: targetFile } },
+        { id: "POST-TYPECHECK", type: "no_new_type_errors", severity: "FAIL", params: { command: "npm run typecheck" } },
+      ],
+    }],
+  };
+}
+
+function writeRecoveryFixture(root) {
+  const stateRoot = join(root, ".yolo");
+  const prdPath = join(root, "specs", "prd.json");
+  const targetPath = join(root, "src", "a.js");
+  mkdirSync(dirname(targetPath), { recursive: true });
+  writeFileSync(targetPath, "export const value = 1;\n", "utf8");
+  writeJson(prdPath, strictPrd("src/a.js"));
+  initLifecycleState({ projectRoot: root });
+  writeLifecycleStageReport("discovery", { status: "success" }, lifecycleWriteOptions(root));
+  writeLifecycleStageReport("roadmap", { status: "success" }, lifecycleWriteOptions(root));
+  writeLifecycleStageReport("prd", { status: "success", summary: "prd compiled", prd_path: prdPath, artifacts: [prdPath] }, lifecycleWriteOptions(root));
+  return { stateRoot, prdPath, targetPath };
 }
 
 function writeRunPass(root) {
@@ -821,28 +858,64 @@ describe("lifecycle guard", () => {
     }
   });
 
-  test("status does not recommend run when guard would block it for source drift", async () => {
-    const root = tempProject();
-    const stateRoot = join(root, ".yolo");
-    const prdPath = join(root, "specs", "prd.json");
+  test("blocked guard resolution commands stay in allowed_commands", async () => {
+    const roots = [tempProject(), tempProject()];
     try {
-      mkdirSync(join(root, "src"), { recursive: true });
-      writeJson(prdPath, { schema: "test.prd" });
-      writeFileSync(join(root, "src", "app.ts"), "export const value = 1;\n", "utf8");
-      initLifecycleState({ projectRoot: root });
-      writeLifecycleStageReport("discovery", { status: "success" }, lifecycleWriteOptions(root));
-      writeLifecycleStageReport("roadmap", { status: "success" }, lifecycleWriteOptions(root));
-      writeLifecycleStageReport("check", {
-        status: "pass",
-        summary: "check passed",
-        prd_path: prdPath,
-      }, lifecycleWriteOptions(root));
-      writeSourceSnapshot({ projectRoot: root, stateRoot });
+      const cases: Array<[string, ReturnType<typeof inspectLifecycleGuard>]> = [["not initialized", inspectLifecycleGuard({ command: "yolo-run", projectRoot: roots[0] })]];
+      initLifecycleState({ projectRoot: roots[0] });
+      cases.push(["missing stages", inspectLifecycleGuard({ command: "yolo-run", projectRoot: roots[0] })]);
+      const { stateRoot, prdPath, targetPath } = writeRecoveryFixture(roots[1]);
+      cases.push(["check required", inspectLifecycleGuard({ command: "yolo-run", projectRoot: roots[1], stateRoot, prdPath })]);
+      await runYoloCli(["check", prdPath, `--cwd=${roots[1]}`, "--json"], { cwd: roots[1], stdout: { write() {} } });
+      writeFileSync(targetPath, "export const value = 2;\n", "utf8");
+      cases.push(["drift", inspectLifecycleGuard({ command: "yolo-run", projectRoot: roots[1], stateRoot, prdPath })]);
+      for (const [name, guard] of cases) {
+        const allowed = guard.allowed_commands as string[];
+        assert.equal(guard.status, "blocked", name);
+        assert.ok(allowed.includes(String(guard.recommended_command)), `${name} must allow recommended_command`);
+        for (const action of guard.next_actions || []) {
+          if (String(action).startsWith("Run ")) assert.ok(allowed.some((command) => String(action).includes(command)), `${name} must allow next_action: ${action}`);
+        }
+      }
+    } finally {
+      roots.forEach((root) => rmSync(root, { recursive: true, force: true }));
+    }
+  });
 
-      writeFileSync(join(root, "src", "app.ts"), "export const value = 2;\n", "utf8");
+  test("drift recovery path allows only yolo check, refreshes snapshot after pass, and unblocks run dry-run", async () => {
+    const root = tempProject();
+    try {
+      const { stateRoot, prdPath, targetPath } = writeRecoveryFixture(root);
+      const recoveryCommand = `yolo check ${prdPath}`;
+      const missingCheck = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, stateRoot, prdPath });
+      assert.ok(missingCheck.blockers.some((blocker) => blocker.code === "CHECK_REQUIRED"));
+      assert.ok((missingCheck.allowed_commands as string[]).includes(recoveryCommand));
+      assert.equal(inspectLifecycleGuard({ command: "yolo-check", projectRoot: root, stateRoot, prdPath }).status, "pass");
+
+      const firstCheckOut = capture();
+      const firstCheckExit = await runYoloCli(["check", prdPath, `--cwd=${root}`, "--json"], {
+        cwd: root,
+        stdout: firstCheckOut.stream,
+      });
+      assert.equal(firstCheckExit, 0);
+      assert.equal(firstCheckOut.json().status, "pass");
+
+      writeFileSync(targetPath, "export const value = 2;\n", "utf8");
+
       const guard = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, stateRoot, prdPath });
       assert.equal(guard.status, "blocked");
       assert.ok(guard.blockers.some((blocker) => blocker.code === "LIFECYCLE_DRIFT_WORKTREE_DIVERGED"));
+      assert.ok((guard.allowed_commands as string[]).includes(recoveryCommand));
+      assert.equal((guard.allowed_commands as string[]).includes("yolo run"), false);
+      assert.ok((guard.next_actions as string[]).some((action) => action.includes(recoveryCommand)));
+
+      const checkGuard = inspectLifecycleGuard({ command: "yolo-check", projectRoot: root, stateRoot, prdPath });
+      assert.equal(checkGuard.status, "pass");
+
+      const shipGuard = inspectLifecycleGuard({ command: "yolo-ship", projectRoot: root, stateRoot, prdPath });
+      assert.equal(shipGuard.status, "blocked");
+      assert.ok(shipGuard.blockers.some((blocker) => blocker.code === "LIFECYCLE_DRIFT_WORKTREE_DIVERGED"));
+      assert.equal((shipGuard.allowed_commands as string[]).includes("yolo ship"), false);
 
       const out = capture();
       const exit = await runYoloCli(["status", `--cwd=${root}`, "--json"], {
@@ -853,10 +926,48 @@ describe("lifecycle guard", () => {
       assert.equal(exit, 2);
       assert.equal(status.status, "blocked");
       assert.notEqual(status.recommended_command, "yolo run");
-      assert.equal(status.recommended_command, "yolo doctor");
+      assert.equal(status.recommended_command, recoveryCommand);
+      assert.ok((status.allowed_commands as string[]).includes(recoveryCommand));
       assert.ok(Array.isArray(status.guard_blockers));
       assert.ok((status.guard_blockers as Array<{ code?: string }>).some((blocker) => blocker.code === "LIFECYCLE_DRIFT_WORKTREE_DIVERGED"));
       assert.ok((status.next_actions as string[]).every((action) => !action.includes("Run yolo run first")));
+
+      const recoveryOut = capture();
+      const recoveryExit = await runYoloCli(["check", prdPath, `--cwd=${root}`, "--json"], {
+        cwd: root,
+        stdout: recoveryOut.stream,
+      });
+      assert.equal(recoveryExit, 0);
+      assert.equal(recoveryOut.json().status, "pass");
+
+      const allowedRun = inspectLifecycleGuard({ command: "yolo-run", projectRoot: root, stateRoot, prdPath });
+      assert.equal(allowedRun.status, "pass");
+
+      const dryRunOut = capture();
+      const dryRunExit = await runYoloCli(["run", prdPath, `--cwd=${root}`, "--engine-only", "--dry-run", "--json"], {
+        cwd: root,
+        stdout: dryRunOut.stream,
+      });
+      const dryRun = dryRunOut.json();
+      assert.equal(dryRunExit, 0);
+      assert.equal(dryRun.code, "RUNNER_DRY_RUN_READY");
+
+      const beforeSnapshot = readSourceSnapshot({ projectRoot: root, stateRoot });
+      assert.ok(beforeSnapshot?.signature);
+      unlinkSync(targetPath);
+      const blockedOut = capture();
+      const blockedExit = await runYoloCli(["check", prdPath, `--cwd=${root}`, "--json"], {
+        cwd: root,
+        stdout: blockedOut.stream,
+      });
+      const blocked = blockedOut.json();
+
+      assert.equal(blockedExit, 1);
+      assert.equal(blocked.status, "blocked");
+      assert.ok((blocked.blockers as Array<{ code?: string }>).some((blocker) => blocker.code === "DRIFT_TARGET_FILE_MISSING"));
+      const afterSnapshot = readSourceSnapshot({ projectRoot: root, stateRoot });
+      assert.equal(afterSnapshot?.signature, beforeSnapshot.signature);
+      assert.equal(existsSync(targetPath), false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

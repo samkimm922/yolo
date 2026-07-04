@@ -396,6 +396,37 @@ function checkedPrdMatchesInput(projectRoot: string, stateRoot: string, input: G
   }
 }
 
+function checkedPrdPath(projectRoot: string, stateRoot: string): string {
+  const path = lifecycleArtifactPath("check", { stateRoot });
+  if (!existsSync(path)) return "";
+  try {
+    const artifact = readJsonFile(path);
+    const nestedReport = artifact.report as GuardRecord | undefined;
+    const checkedPrd = nestedReport?.prd_path || nestedReport?.prdPath || artifact.prd_path || artifact.prdPath;
+    const normalized = normalizePath(projectRoot, checkedPrd);
+    return normalized && existsSync(normalized) ? normalized : "";
+  } catch {
+    return "";
+  }
+}
+
+function recoveryPrdPath(projectRoot: string, stateRoot: string, input: GuardInput = Object()): string {
+  const inputPath = normalizePath(projectRoot, input.prdPath || input.prd_path || input.prd);
+  return inputPath && existsSync(inputPath) ? inputPath : checkedPrdPath(projectRoot, stateRoot);
+}
+
+const CHECK_RECOVERY_BLOCKER_CODES = new Set(["LIFECYCLE_DRIFT_WORKTREE_DIVERGED", "CHECK_REQUIRED"]);
+
+function checkRecoveryCommand(blockers: GuardBlocker[], projectRoot: string, stateRoot: string, input: GuardInput = Object()): string {
+  if (!blockers.some((blocker) => CHECK_RECOVERY_BLOCKER_CODES.has(blocker.code))) return "";
+  const prdPath = recoveryPrdPath(projectRoot, stateRoot, input);
+  return prdPath ? `yolo check ${prdPath}` : "";
+}
+
+function checkRecoveryOnly(blockers: GuardBlocker[]): boolean {
+  return blockers.length > 0 && blockers.every((blocker) => CHECK_RECOVERY_BLOCKER_CODES.has(blocker.code));
+}
+
 function lifecycleMissingResult({ command, projectRoot, stateRoot, statusPath }: { command: string; projectRoot: string; stateRoot: string; statusPath: string }) {
   return {
     schema_version: LIFECYCLE_GUARD_SCHEMA_VERSION,
@@ -766,6 +797,23 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
     blockers.push(...deliveryHardGateBlockers(stateRoot, projectRoot));
   }
 
+  const recoveryCommand = checkRecoveryCommand(blockers, projectRoot, stateRoot, input);
+  if (command === "yolo-check" && recoveryCommand && checkRecoveryOnly(blockers)) {
+    return {
+      ...base,
+      status: "pass",
+      code: "LIFECYCLE_GUARD_PASS",
+      summary: "yolo-check is allowed to revalidate the drifted or stale check state.",
+      current_stage: state.current_stage,
+      validation,
+      missing_required_stages: [],
+      blockers: [],
+      warnings: validation.warnings,
+      allowed_commands: [recoveryCommand, "yolo status"],
+      next_actions: [`Run ${recoveryCommand} to revalidate the PRD and refresh the lifecycle snapshot if it passes.`],
+    };
+  }
+
   const missing = [...new Set(blockers.map((blocker) => blocker.stage).filter(Boolean))];
   const writeWarning = WRITE_COMMANDS.has(command) && blockers.length === 0
     ? []
@@ -774,21 +822,28 @@ export function inspectLifecycleGuard(input = Object(), options = Object()) {
       : [];
 
   if (blockers.length > 0) {
+    const primaryCommand = recoveryCommand || recommended.command;
     return {
       ...base,
       status: "blocked",
       code: "LIFECYCLE_GUARD_BLOCKED",
       summary: `${command} is blocked by lifecycle prerequisites.`,
+      recommended_command: primaryCommand,
       current_stage: state.current_stage,
       validation,
       missing_required_stages: missing,
       blockers,
       warnings: [...validation.warnings, ...writeWarning],
-      allowed_commands: [recommended.command, "yolo status", "yolo doctor"],
-      next_actions: [
-        `Run ${recommended.command} first.`,
-        "Use `yolo status` when you are unsure which YOLO stage is currently allowed.",
-      ],
+      allowed_commands: [...new Set([primaryCommand, "yolo status", "yolo doctor"])],
+      next_actions: recoveryCommand
+        ? [
+          `Run ${recoveryCommand} first.`,
+          "Use `yolo status` when you are unsure which YOLO stage is currently allowed.",
+        ]
+        : [
+          `Run ${recommended.command} first.`,
+          "Use `yolo status` when you are unsure which YOLO stage is currently allowed.",
+        ],
     };
   }
 
