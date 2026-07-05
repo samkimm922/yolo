@@ -4,10 +4,136 @@ import { readFileSync, rmSync, writeFileSync, mkdirSync, mkdtempSync } from "nod
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { inspectAtomicTask, inspectTaskFromPrd } from "../src/runtime/execution/atomic-task-doctor.js";
+import { runAtomicTaskDoctorGate } from "../src/runtime/execution/session-validation.js";
+import { isAtomicityExempt } from "../src/runtime/gates/readiness-policy.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 
 describe("atomic task doctor", () => {
+  test("R5 greenfield scaffold fixture is exempt in shared predicate, doctor, and run gate", () => {
+    const fixture = JSON.parse(readFileSync(resolve(YOLO_DIR, "__tests__/fixtures/dogfood-gitweekly-r5-scaffold-prd.json"), "utf8"));
+    const task = { ...fixture.tasks[0], status: "pending" };
+
+    assert.equal(isAtomicityExempt(task), true);
+
+    const doctor = inspectAtomicTask(task, { root: YOLO_DIR, projectRoot: YOLO_DIR, writeEvidence: false });
+    assert.equal(doctor.status, "pass");
+    assert.notEqual(doctor.mode, "must_split");
+    assert.equal(doctor.atomicity_exempt?.reason, "greenfield_scaffold");
+    assert.ok(doctor.reasons.some((reason) => reason.id === "ATOMICITY_EXEMPT"));
+
+    const gate = runAtomicTaskDoctorGate({ task, yoloRoot: YOLO_DIR });
+    assert.equal(gate.ok, true);
+    assert.notEqual(gate.result?.mode, "must_split");
+    assert.equal(gate.result?.atomicity_exempt?.reason, "greenfield_scaffold");
+  });
+
+  test("true multi-domain business task still must_split with executable suggestions", () => {
+    const postConditions = Array.from({ length: 10 }, (_, index) => ({
+      id: `POST-BEHAVIOR-${index + 1}`,
+      type: "acceptance_criteria",
+      severity: "FAIL",
+      message: `Behavior ${index + 1} is verified for checkout UI and inventory service consistency.`,
+    }));
+    const result = inspectAtomicTask({
+      id: "FE-GIANT-001",
+      title: "Fix checkout UI and inventory transaction behavior",
+      type: "feature",
+      status: "pending",
+      description: "Update the checkout page selected item state, service transaction writes, inventory quantity, API contract, and tsc compile behavior.",
+      scope: {
+        targets: [
+          { file: "src/pages/checkout.tsx" },
+          { file: "src/components/CartSummary.tsx" },
+          { file: "src/services/inventory.ts" },
+          { file: "src/services/orders.ts" },
+        ],
+        max_files: 4,
+      },
+      post_conditions: postConditions,
+    }, { root: YOLO_DIR, writeEvidence: false });
+
+    assert.equal(result.status, "fail");
+    assert.equal(result.mode, "must_split");
+    assert.ok(result.split_suggestions.length > 0);
+    assert.ok(result.remediation?.split_suggestions?.length > 0);
+  });
+
+  test("environment and artifact postconditions do not count as behavioral", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-atomic-env-"));
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src", "app.ts"), "export const value = 'ok';\n");
+      const result = inspectAtomicTask({
+        id: "FIX-ENV-001",
+        title: "Verify generated artifact",
+        type: "bugfix",
+        status: "pending",
+        scope: { targets: [{ file: "src/app.ts" }], max_files: 1 },
+        post_conditions: [
+          { id: "POST-FILE", type: "file_exists", severity: "FAIL", params: { file: "src/app.ts" } },
+          { id: "POST-CODE", type: "code_contains", severity: "FAIL", params: { file: "src/app.ts", text: "value" } },
+          { id: "POST-CMD", type: "build_command_available", severity: "FAIL", params: { kind: "test", command: "node --test" } },
+        ],
+      }, { root, projectRoot: root, writeEvidence: true });
+
+      assert.equal(result.reasons.some((reason) => reason.id === "BEHAVIORAL_FAIL_POSTCONDITIONS"), false);
+      const evidence = JSON.parse(readFileSync(resolve(root, result.evidence_file), "utf8"));
+      assert.equal(evidence.behavioral_fail_postconditions, 0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("toolchain config files do not create ui_state behavior domains", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-atomic-toolchain-"));
+    try {
+      writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "node --test" } }), "utf8");
+      const result = inspectAtomicTask({
+        id: "FIX-TOOLCHAIN-001",
+        title: "Update package test script",
+        type: "bugfix",
+        status: "pending",
+        scope: { targets: [{ file: "package.json" }], max_files: 1 },
+        post_conditions: [
+          { id: "POST-PKG", type: "code_contains", severity: "FAIL", params: { file: "package.json", text: "\"test\"" } },
+        ],
+      }, { root, projectRoot: root, writeEvidence: true });
+
+      assert.equal(result.status, "pass");
+      const evidence = JSON.parse(readFileSync(resolve(root, result.evidence_file), "utf8"));
+      assert.deepEqual(evidence.behavior_domains, []);
+      assert.equal(evidence.behavior_domains.includes("ui_state"), false);
+      assert.deepEqual(evidence.layers, ["toolchain"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("must_split without executable split suggestions is downgraded instead of hard-failing", () => {
+    const postConditions = Array.from({ length: 10 }, (_, index) => ({
+      id: `POST-BEHAVIOR-${index + 1}`,
+      type: "acceptance_criteria",
+      severity: "FAIL",
+      message: `Behavior ${index + 1} is verified.`,
+    }));
+    const result = inspectAtomicTask({
+      id: "FIX-NO-SPLIT-001",
+      title: "Single utility with too many behavior assertions",
+      type: "bugfix",
+      status: "pending",
+      description: "Update one utility function with many independently verified outcomes.",
+      scope: { targets: [{ file: "src/utils/format.ts" }], max_files: 1 },
+      post_conditions: postConditions,
+    }, { root: YOLO_DIR, writeEvidence: false });
+
+    assert.equal(result.status, "pass");
+    assert.equal(result.mode, "investigate_then_patch");
+    assert.equal(result.no_executable_remediation, true);
+    assert.match(result.remediation?.reason, /doctor 无法给出拆分建议/);
+    assert.equal(result.split_suggestions.length, 0);
+  });
+
   test("classifies P36-003 as must_split with evidence and split suggestions", () => {
     const result = inspectTaskFromPrd("__tests__/fixtures/legacy-cleanup-20260526221343/data/prd/current/prd-yolo-p36-real-task-soak.json", "FIX-P36-003", {
       root: YOLO_DIR,

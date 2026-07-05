@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { inspectYoloCheck, runYoloCheckCli } from "../src/runtime/gates/check-report.js";
 import { runYoloCli } from "../src/cli/yolo.js";
@@ -447,6 +447,35 @@ describe("yolo check report", () => {
       assert.equal(atomicity.status, "blocked");
       assert.ok(report.blockers.some((blocker) => blocker.code === "ATOMICITY_INVESTIGATE_FIRST" && blocker.human_needed === true));
       assert.equal(report.warnings.some((warning) => warning.code === "ATOMICITY_INVESTIGATE_FIRST"), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("atomicity readiness shares the scaffold exemption used by run-side doctor", () => {
+    const root = tempProject();
+    try {
+      const fixture = JSON.parse(readFileSync(resolve("__tests__/fixtures/dogfood-gitweekly-r5-scaffold-prd.json"), "utf8"));
+      const scaffold = { ...fixture.tasks[0], status: "pending" };
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd(scaffold, {
+        requirements: [{ id: "REQ-001-S01", text: "Greenfield scaffold prepares package scripts.", demand_trace: { evidence: ["EVID-1"] } }],
+        designs: [{ id: "DES-REQ-001-S01", text: "Create package.json toolchain scripts." }],
+        demand: {
+          ...strictPrd().demand,
+          project_facts: {
+            target_files: [{ file: "package.json", status: "planned_new_file", allow_new_files: true }],
+            assumptions: [],
+          },
+        },
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+      const atomicity = report.checks.find((check) => check.name === "atomicity");
+
+      assert.equal(atomicity.status, "pass");
+      assert.equal(atomicity.blockers.length, 0);
+      assert.equal(atomicity.inspections.some((inspection) => inspection.task_id === scaffold.id), false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

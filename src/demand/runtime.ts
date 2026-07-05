@@ -6,6 +6,7 @@ import { buildDemandSession, demandMarkdownArtifacts, groundDemandExecutionScope
 import { inspectDemandQuality, inspectDemandReadiness } from "./gate.js";
 import { buildDemandSessionState, demandSessionSchemaError, type DemandSessionStateResult, type DemandTriageResult, type DemandPrdReadinessResult, type DemandBlocker } from "./router.js";
 import { inspectAtomicTask } from "../runtime/execution/atomic-task-doctor.js";
+import { isAtomicityExempt } from "../runtime/gates/readiness-policy.js";
 import { writeLifecycleStageReport } from "../lifecycle/progress.js";
 import { lifecycleArtifactPath } from "../lifecycle/state.js";
 import { preflightPrdDocument } from "../prd/preflight.js";
@@ -1820,7 +1821,7 @@ function inspectAtomicity(tasks = [], input = Object(), options = Object()) {
   const blockers = [];
   const warnings = [];
   for (const task of tasks) {
-    if (task?.task_kind === "greenfield_scaffold") continue;
+    if (isAtomicityExempt(task)) continue;
     try {
       const result = inspectAtomicTask(task, {
         projectRoot,

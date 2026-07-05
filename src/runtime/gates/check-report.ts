@@ -17,6 +17,7 @@ import {
   hasEvidencePlan,
   hasStateMatrix,
   hasTaskAcceptance,
+  isAtomicityExempt,
   selectedAcceptanceAdapter,
   summarizeTaskSurfaces,
   taskFiles,
@@ -713,20 +714,23 @@ function atomicityReadiness({ prd, projectRoot, strictExecution }) {
   const warnings = [];
   for (const task of asArray(prd.tasks)) {
     if (!task?.id) continue;
-    if (task.task_kind === "greenfield_scaffold") continue;
+    if (isAtomicityExempt(task)) continue;
     const inspection = inspectAtomicTask(task, { root: projectRoot, writeEvidence: false });
     inspections.push(inspection);
     if (inspection.mode === "must_split") {
       blockers.push({ code: "ATOMICITY_MUST_SPLIT", task_id: task.id, message: "Task is too broad and must be split before execution.", score: inspection.score });
     } else if (inspection.mode === "investigate_then_patch") {
-      (strictExecution ? blockers : warnings).push({
+      const target = inspection.no_executable_remediation ? warnings : (strictExecution ? blockers : warnings);
+      target.push({
         code: "ATOMICITY_INVESTIGATE_FIRST",
         task_id: task.id,
-        message: strictExecution
+        message: inspection.no_executable_remediation
+          ? "doctor 无法给出拆分建议，任务降级为先调查再执行。"
+          : strictExecution
           ? "Runner/release task requires investigation before patching and cannot continue as a warning."
           : "Task should force investigation before patching.",
         score: inspection.score,
-        human_needed: strictExecution || undefined,
+        human_needed: inspection.no_executable_remediation ? undefined : strictExecution || undefined,
       });
     } else if (inspection.mode === "research_only") {
       blockers.push({
