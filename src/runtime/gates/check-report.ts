@@ -19,8 +19,8 @@ import {
   hasEvidencePlan,
   hasStateMatrix,
   hasTaskAcceptance,
-  isAtomicityExempt,
   selectedAcceptanceAdapter,
+  shouldInspectAtomicity,
   summarizeTaskSurfaces,
   taskFiles,
   uiSurface,
@@ -714,7 +714,7 @@ function atomicityReadiness({ prd, projectRoot, strictExecution }) {
   const warnings = [];
   for (const task of asArray(prd.tasks)) {
     if (!task?.id) continue;
-    if (isAtomicityExempt(task)) continue;
+    if (!shouldInspectAtomicity(task, "check")) continue;
     const inspection = inspectAtomicTask(task, { root: projectRoot, writeEvidence: false });
     inspections.push(inspection);
     if (inspection.mode === "must_split") {

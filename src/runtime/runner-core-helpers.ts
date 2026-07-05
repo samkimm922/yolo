@@ -127,6 +127,8 @@ export function killTree(pid) {
   }
 }
 
+import { RUNNER_TASK_COMPLETED_STATUSES } from "../lib/status-vocab.js";
+
 export function normalizeRepoPath(filePath, { rootDir }) {
   return String(filePath || "").replace(`${rootDir}/`, "").replace(/^\.\//, "");
 }
@@ -144,7 +146,7 @@ export function shouldRunPrecheck(task) {
 
 export function taskCountsAsCompleted(taskOrStatus) {
   const task = typeof taskOrStatus === "string" ? { status: taskOrStatus } : (taskOrStatus || {});
-  if (task.status === "done" || task.status === "completed" || task.status === "merged_into") return true;
+  if (RUNNER_TASK_COMPLETED_STATUSES.has(String(task.status || ""))) return true;
   return task.status === "skipped" && task.skip_kind === "valid_skip_already_satisfied";
 }
 

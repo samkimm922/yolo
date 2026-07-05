@@ -9,6 +9,7 @@ import {
   validateContextPackBeforeSession,
   validateTestGenerationAfterSession,
 } from "../src/runtime/execution/session-validation.js";
+import { shouldInspectAtomicity } from "../src/runtime/gates/readiness-policy.js";
 
 describe("session validation helpers", () => {
   test("validateContextPackBeforeSession writes artifact and passes strict task packs", async () => {
@@ -247,5 +248,62 @@ describe("session validation helpers", () => {
     assert.equal(failed.ok, false);
     assert.equal(failed.result.mode, "research_only");
     assert.equal(failed.result.error, "doctor exploded");
+  });
+
+  test("atomicity inspection policy keeps check and run decisions aligned with explicit phase exceptions", () => {
+    const cases = [
+      {
+        name: "pending supported task",
+        task: { status: "pending", type: "bugfix", scope: { targets: [{ file: "src/a.ts" }, { file: "src/b.ts" }] } },
+        expected: true,
+      },
+      {
+        name: "dry run artifact",
+        task: { status: "pending", task_kind: "dry_run_artifact", type: "bugfix" },
+        expected: false,
+      },
+      {
+        name: "explicit opt-out",
+        task: { status: "pending", atomic_task_doctor: false, type: "bugfix" },
+        expected: false,
+      },
+      {
+        name: "completed task",
+        task: { status: "completed", type: "bugfix" },
+        expected: false,
+      },
+      {
+        name: "done task",
+        task: { status: "done", type: "bugfix" },
+        expected: false,
+      },
+      {
+        name: "unsupported task type",
+        task: { status: "pending", type: "documentation" },
+        expected: false,
+      },
+      {
+        name: "greenfield scaffold",
+        task: { status: "pending", task_kind: "greenfield_scaffold", type: "feature" },
+        expected: false,
+      },
+      {
+        name: "pure config task",
+        task: { status: "pending", type: "cleanup", scope: { targets: [{ file: "package.json" }] } },
+        expected: false,
+      },
+    ];
+
+    for (const item of cases) {
+      assert.equal(shouldInspectAtomicity(item.task, "check"), item.expected, item.name);
+      assert.equal(shouldInspectAtomicity(item.task, "run"), item.expected, item.name);
+      assert.equal(shouldRunAtomicTaskDoctor(item.task), item.expected, item.name);
+    }
+
+    assert.equal(shouldInspectAtomicity({ status: "blocked", type: "bugfix" }, "check"), true);
+    assert.equal(shouldInspectAtomicity({ status: "blocked", type: "bugfix" }, "run"), true);
+    assert.equal(shouldInspectAtomicity({ status: "blocked", type: "bugfix" }, "contract"), false);
+    assert.equal(shouldInspectAtomicity({ status: "pending", type: "bugfix" }, "contract"), true);
+    assert.equal(shouldInspectAtomicity({ status: "pending", type: "bugfix" }, "demand"), true);
   });
 });

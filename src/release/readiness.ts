@@ -2,6 +2,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectFixtureRegistry } from "../fixtures/registry.js";
+import {
+  RELEASE_INCIDENT_PASS_STATUSES,
+  RELEASE_RUN_PASS_OUTCOMES,
+  RELEASE_RUN_PASS_STATUSES,
+} from "../lib/status-vocab.js";
 
 const DEFAULT_YOLO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -148,7 +153,7 @@ function normalizeIncidentEvidence(evidence: ReliabilityEvidence = Object()): No
       return {
         id,
         status: entry.status || (entry.passed === true ? "pass" : entry.passed === false ? "fail" : null),
-        passed: entry.passed === true || ["pass", "passed", "fixed", "closed"].includes(String(entry.status || "").toLowerCase()),
+        passed: entry.passed === true || RELEASE_INCIDENT_PASS_STATUSES.has(String(entry.status || "").toLowerCase()),
         evidence: entry.evidence || entry.evidence_file || entry.artifact || null,
       };
     })
@@ -162,8 +167,7 @@ function cleanStatus(value: unknown): string {
 function claimsPass(report: RunReport = Object()): boolean {
   const status = cleanStatus(report.status);
   const outcome = cleanStatus(report.outcome || report.final_answer?.outcome);
-  return ["pass", "passed", "success", "completed"].includes(status)
-    || ["success", "completed"].includes(outcome);
+  return RELEASE_RUN_PASS_STATUSES.has(status) || RELEASE_RUN_PASS_OUTCOMES.has(outcome);
 }
 
 function numericZero(value: unknown): boolean {

@@ -12,7 +12,7 @@ import { loadProjectToolchainConfig, resolveBuildCommand } from "../../lib/toolc
 import { resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { inspectAtomicTask } from "../execution/atomic-task-doctor.js";
 import { orderTasksByDependencies } from "../task-loop/expansion.js";
-import { isAtomicityExempt } from "./readiness-policy.js";
+import { shouldInspectAtomicity } from "./readiness-policy.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -516,7 +516,7 @@ export function inspectPrdContract(prd, options = Object()) {
       }
     }
 
-    if (strictExecution && task.status === "pending" && !isAtomicityExempt(task)) {
+    if (strictExecution && shouldInspectAtomicity(task, "contract")) {
       const inspection = inspectAtomicTask(task, {
         root: projectRoot,
         projectRoot,

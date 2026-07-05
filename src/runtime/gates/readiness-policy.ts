@@ -55,6 +55,24 @@ export function isAtomicityExempt(task = Object()) {
   return Boolean(atomicityExemptionReason(task));
 }
 
+export const ATOMICITY_INSPECTION_TASK_TYPES = new Set(["bugfix", "feature", "refactor", "cleanup", "security"]);
+
+export function shouldInspectAtomicity(task = Object(), phase = "check") {
+  if (!task) return false;
+  if (isAtomicityExempt(task)) return false;
+  if (clean(task.task_kind) === "dry_run_artifact") return false;
+  if (task.atomic_task_doctor === false) return false;
+  const status = clean(task.status);
+  if (status === "done" || status === "completed") return false;
+
+  // Phase difference is intentionally centralized here: contract doctor only
+  // gates tasks still pending execution, while check/run/demand share the same
+  // task-level exceptions above.
+  if (clean(phase) === "contract" && status !== "pending") return false;
+
+  return ATOMICITY_INSPECTION_TASK_TYPES.has(clean(task.type));
+}
+
 export function taskText(task = Object()) {
   return [
     task.id,

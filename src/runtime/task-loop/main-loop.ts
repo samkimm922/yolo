@@ -82,6 +82,7 @@ export async function runMainLoopWithRuntime({
   let relayText = "";
 
   let lastFailKey = "";
+  let failureHistory = [];
   for (const task of expanded) {
     const preRun = handleTaskPreRun({
       task,
@@ -108,6 +109,7 @@ export async function runMainLoopWithRuntime({
       completedIds,
       childTaskMap,
       lastFailKey,
+      failureHistory,
       loadPrd: () => loadPRD(prdPath),
       skippedTaskPostconditionsPass,
       updateMergedSourceTasks: (item, update) => updateMergedSourceTasks({
@@ -134,6 +136,7 @@ export async function runMainLoopWithRuntime({
       stopForImmediateRemediation: true,
     });
     lastFailKey = outcomeResult.lastFailKey;
+    failureHistory = outcomeResult.failureHistory || failureHistory;
 
     // P2.18: write task-summary with Forward Intelligence after each task
     const summary = buildTaskSummary({

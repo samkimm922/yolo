@@ -26,6 +26,18 @@ describe("runTask exception outcome helpers", () => {
     assert.equal(hasRepeatedExceptionFailure([{ gate: -1, message: "exception:boom" }], "exception:boom"), false);
   });
 
+  test("hasRepeatedExceptionFailure honors configured circuit breaker thresholds", () => {
+    const history = [
+      { gate: -1, message: "exception:boom at provider" },
+      { gate: -1, message: "exception:boom at provider again" },
+    ];
+
+    assert.equal(hasRepeatedExceptionFailure(history, "exception:boom at provider", 3), false);
+    assert.equal(hasRepeatedExceptionFailure([...history, { gate: -1, message: "exception:boom at provider third" }], "exception:boom at provider", 3), true);
+    assert.equal(hasRepeatedExceptionFailure([{ gate: -1, message: "exception:boom at provider" }], "exception:boom at provider", 1), true);
+    assert.equal(hasRepeatedExceptionFailure(history, "exception:boom at provider", "abc"), true);
+  });
+
   test("buildRunTaskExceptionOutcome stops on repeated exceptions", () => {
     const error = new Error("same crash");
     const outcome = buildRunTaskExceptionOutcome({

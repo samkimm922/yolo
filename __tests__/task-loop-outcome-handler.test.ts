@@ -251,6 +251,61 @@ describe("task-loop outcome handler", () => {
     assert.match(callbacks.calls.logs[0][2], /连续 2 个 task 同因失败/);
   });
 
+  test("handleTaskOutcome honors configured circuit breaker thresholds for global failures", () => {
+    const firstState = makeLoopState();
+    const firstCallbacks = makeOutcomeCallbacks();
+
+    const firstResult = handleTaskOutcome({
+      ...firstState,
+      task: { id: "FIX-P36-004A" },
+      outcome: { status: "failed", reason: "same root cause" },
+      lastFailKey: "failed:same root cause",
+      failureHistory: ["failed:same root cause"],
+      circuitBreakerThreshold: 3,
+      ...firstCallbacks,
+    });
+
+    assert.deepEqual(firstResult, {
+      action: "continue",
+      lastFailKey: "failed:same root cause",
+      failureHistory: ["failed:same root cause", "failed:same root cause"],
+    });
+    assert.deepEqual(firstState.results.failed, ["FIX-P36-004A"]);
+
+    const secondState = makeLoopState();
+    const secondCallbacks = makeOutcomeCallbacks();
+    const secondResult = handleTaskOutcome({
+      ...secondState,
+      task: { id: "FIX-P36-004B" },
+      outcome: { status: "failed", reason: "same root cause" },
+      lastFailKey: "failed:same root cause",
+      failureHistory: ["failed:same root cause", "failed:same root cause"],
+      circuitBreakerThreshold: 3,
+      ...secondCallbacks,
+    });
+
+    assert.deepEqual(secondResult, {
+      action: "stop",
+      reason: "repeated_failure_fuse",
+      lastFailKey: "failed:same root cause",
+      failureHistory: ["failed:same root cause", "failed:same root cause", "failed:same root cause"],
+    });
+    assert.match(secondCallbacks.calls.logs[0][2], /连续 3 个 task 同因失败/);
+
+    const immediateState = makeLoopState();
+    const immediateCallbacks = makeOutcomeCallbacks();
+    const immediateResult = handleTaskOutcome({
+      ...immediateState,
+      task: { id: "FIX-P36-004C" },
+      outcome: { status: "failed", reason: "same root cause" },
+      circuitBreakerThreshold: 1,
+      ...immediateCallbacks,
+    });
+
+    assert.equal(immediateResult.action, "stop");
+    assert.equal(immediateResult.reason, "repeated_failure_fuse");
+  });
+
   test("handleTaskOutcome persists a PRD failed transition for terminal failures (prompt/gate/etc.)", () => {
     const state = makeLoopState();
     const callbacks = makeOutcomeCallbacks();

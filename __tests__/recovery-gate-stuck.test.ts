@@ -78,6 +78,19 @@ describe("recovery gate stuck helpers", () => {
     ]), true);
   });
 
+  test("hasRepeatedGateFailure honors configured circuit breaker thresholds", () => {
+    const same = [
+      { gate: 1, fingerprint: "A" },
+      { gate: 1, fingerprint: "A" },
+    ];
+    assert.equal(hasRepeatedGateFailure(same, 3), false);
+    assert.equal(hasRepeatedGateFailure([...same, { gate: 1, fingerprint: "A" }], 3), true);
+    assert.equal(hasRepeatedGateFailure([{ gate: 1, fingerprint: "A" }], 1), true);
+    assert.equal(hasRepeatedGateFailure(same, 0), true);
+    assert.equal(hasRepeatedGateFailure(same, -1), true);
+    assert.equal(hasRepeatedGateFailure(same, "abc"), true);
+  });
+
   test("buildContractSuspectTransition creates blocked contract review transition", () => {
     const transition = buildContractSuspectTransition({
       task: { id: "FIX-P36-001" },

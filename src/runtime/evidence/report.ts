@@ -10,6 +10,10 @@ import {
 } from "./ledger.js";
 import { verifyArtifactIntegrity } from "./artifact-integrity.js";
 import { normalizeReviewFinding } from "../../review/findings.js";
+import {
+  EVIDENCE_RUN_REPORT_PASS_STATUSES,
+  TASK_RESULT_COMPLETED_STATUSES,
+} from "../../lib/status-vocab.js";
 
 type JsonRecord = Record<string, unknown>;
 type SkippedKey = `${"sk"}${"ipped"}`;
@@ -233,8 +237,6 @@ function rate(numerator: number, denominator: number | null): number | null {
 function last<T>(values: T[] = []): T | null {
   return values.length > 0 ? values[values.length - 1] : null;
 }
-
-const RUN_REPORT_PASS_STATUSES = new Set(["pass", "success"]);
 
 function cleanStatus(value: unknown): string {
   return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
@@ -474,10 +476,8 @@ function evidenceFailureCount({
 // Read state/runtime/task-results.jsonl (if present) and bucket each record by
 // its terminal status. Mirrors the shape callers pass via the taskResults
 // argument so buildRunReport can fall back to disk when callers omit it.
-const TASK_RESULT_STATUS_BUCKETS = {
-  PASS: "completed",
-  COMPLETED: "completed",
-  SUCCEEDED: "completed",
+const TASK_RESULT_STATUS_BUCKETS: Record<string, keyof TaskBuckets> = {
+  ...Object.fromEntries([...TASK_RESULT_COMPLETED_STATUSES].map((status) => [status, "completed" as keyof TaskBuckets])),
   MERGED_INTO: "merged_into",
   FAIL: "failed",
   FAILED: "failed",
@@ -485,11 +485,11 @@ const TASK_RESULT_STATUS_BUCKETS = {
   SKIP: "skipped",
   SKIPPED: "skipped",
   BLOCKED: "blocked",
-} satisfies Record<string, keyof TaskBuckets>;
+};
 
 function taskResultBucket(status: string): keyof TaskBuckets | null {
   return Object.prototype.hasOwnProperty.call(TASK_RESULT_STATUS_BUCKETS, status)
-    ? TASK_RESULT_STATUS_BUCKETS[status as keyof typeof TASK_RESULT_STATUS_BUCKETS]
+    ? TASK_RESULT_STATUS_BUCKETS[status]
     : null;
 }
 
@@ -764,7 +764,7 @@ export function buildRunFinalAnswer(report: RunReport = Object(), options: Final
     ? "fail"
     : fixtureStatus || (fixtureRunCount > 0 ? "pass" : "not_run");
   const baseBlockerLines = [
-    ...(!RUN_REPORT_PASS_STATUSES.has(cleanStatus(status)) ? [`run report status is ${status}`] : []),
+    ...(!EVIDENCE_RUN_REPORT_PASS_STATUSES.has(cleanStatus(status)) ? [`run report status is ${status}`] : []),
     ...(planned != null && planned <= 0 ? ["no planned task evidence"] : []),
     ...(planned != null && terminalCount <= 0 ? ["no terminal task evidence"] : []),
     ...(failed.length ? [`failed tasks: ${itemList(failed).join(", ")}`] : []),
@@ -820,7 +820,7 @@ export function buildRunFinalAnswer(report: RunReport = Object(), options: Final
     },
   ];
   const checkBlockers = checks
-    .filter((check) => !RUN_REPORT_PASS_STATUSES.has(cleanStatus(check.status)))
+    .filter((check) => !EVIDENCE_RUN_REPORT_PASS_STATUSES.has(cleanStatus(check.status)))
     .map((check) => `${check.name} check is ${check.status}: ${check.detail}`);
   const blockerLines = unique([...baseBlockerLines, ...checkBlockers]);
 
