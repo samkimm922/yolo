@@ -19,6 +19,42 @@ export function taskFiles(task = Object()) {
   ].filter(Boolean);
 }
 
+export function isPureConfigTarget(file) {
+  const normalized = normalizeFile(file);
+  return (
+    normalized === "package.json"
+    || normalized === "package-lock.json"
+    || normalized === "pnpm-lock.yaml"
+    || normalized === "yarn.lock"
+    || normalized === "bun.lockb"
+    || normalized === "tsconfig.json"
+    || normalized === "tsconfig.build.json"
+    || normalized === "jsconfig.json"
+    || normalized === ".npmrc"
+    || normalized === ".yolo/config.json"
+    || /(^|\/)(eslint|prettier|vitest|vite|jest|tsup|rollup|webpack|babel|postcss|tailwind)\.config\.[cm]?[jt]s$/.test(normalized)
+  );
+}
+
+export function taskTargetFiles(task = Object()) {
+  return taskFiles(task);
+}
+
+export function isPureConfigTask(task = Object()) {
+  const files = taskTargetFiles(task);
+  return files.length > 0 && files.every(isPureConfigTarget);
+}
+
+export function atomicityExemptionReason(task = Object()) {
+  if (clean(task.task_kind) === "greenfield_scaffold") return "greenfield_scaffold";
+  if (isPureConfigTask(task)) return "pure_config";
+  return "";
+}
+
+export function isAtomicityExempt(task = Object()) {
+  return Boolean(atomicityExemptionReason(task));
+}
+
 export function taskText(task = Object()) {
   return [
     task.id,

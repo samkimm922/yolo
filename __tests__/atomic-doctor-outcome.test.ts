@@ -1,6 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  atomicDoctorHasExecutableRemediation,
   atomicDoctorFailureDetail,
   atomicDoctorFailureReason,
   buildAtomicDoctorBlockOutcome,
@@ -12,6 +13,7 @@ describe("atomic doctor outcome helpers", () => {
       mode: "must_split",
       score: 84,
       evidence_file: "state/evidence/FIX-1/investigation.json",
+      split_suggestions: [{ id: "FIX-1A", files: ["src/a.ts"] }],
     };
 
     assert.equal(atomicDoctorFailureReason(doctor), "atomic_task_must_split");
@@ -19,6 +21,42 @@ describe("atomic doctor outcome helpers", () => {
       atomicDoctorFailureDetail(doctor),
       "atomic_task_must_split: score=84, evidence=state/evidence/FIX-1/investigation.json",
     );
+  });
+
+  test("must_split fail exits require executable remediation", () => {
+    const cases = [
+      {
+        name: "with split suggestions",
+        doctor: { mode: "must_split", score: 84, evidence_file: "state/evidence/FIX-1/investigation.json", split_suggestions: [{ id: "FIX-1A", files: ["src/a.ts"] }] },
+        splitResult: { applied: false, childIds: [] },
+        expectedStatus: "blocked",
+        expectedReason: "atomic_task_must_split",
+      },
+      {
+        name: "without split suggestions",
+        doctor: { mode: "must_split", score: 84, evidence_file: "state/evidence/FIX-2/investigation.json", split_suggestions: [] },
+        splitResult: { applied: false, reason: "missing_split_suggestions", childIds: [] },
+        expectedStatus: "ask_human",
+        expectedReason: "doctor 无法给出拆分建议",
+      },
+    ];
+
+    for (const item of cases) {
+      const outcome = buildAtomicDoctorBlockOutcome({
+        task: { id: `FIX-${item.name}` },
+        doctor: item.doctor,
+        splitResult: item.splitResult,
+        now: "2026-05-24T00:00:00.000Z",
+      });
+      assert.equal(outcome.result.status, item.expectedStatus);
+      assert.equal(outcome.result.reason, item.expectedReason);
+      if (atomicDoctorHasExecutableRemediation(item.doctor)) {
+        assert.ok(item.doctor.split_suggestions.length > 0);
+      } else {
+        assert.equal(outcome.result.remediation.action, "ASK_HUMAN");
+        assert.match(outcome.result.remediation.reason, /doctor 无法给出拆分建议/);
+      }
+    }
   });
 
   test("buildAtomicDoctorBlockOutcome skips PRD block update when split was applied", () => {

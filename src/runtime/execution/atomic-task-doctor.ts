@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 import { getArg, hasFlag } from "../../lib/cli-utils.js";
 import { buildEvidenceArtifact, writeJsonArtifact } from "../evidence/ledger.js";
 import { isBusinessFile } from "./change-set.js";
+import {
+  atomicityExemptionReason,
+  isPureConfigTarget,
+} from "../gates/readiness-policy.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const YOLO_ROOT = resolve(__dirname, "../../..");
@@ -17,9 +21,14 @@ const DATA_TERMS = [
 const UI_TERMS = ["ui", "page", "component", "selecteditem", "selector", "onchange", "页面", "组件", "选择", "回调"];
 const HOOK_TERMS = ["hook", "hooks/"];
 const STRUCTURAL_POSTCONDITION_TYPES = new Set([
+  "build_command_available",
+  "code_contains",
+  "code_not_contains",
+  "file_exists",
   "files_modified_max",
   "file_lines_max",
   "no_new_type_errors",
+  "target_file_modified",
   "tests_pass",
   "build_pass",
 ]);
@@ -76,6 +85,7 @@ function taskText(task) {
 
 function fileLayer(file) {
   const f = normalizeFile(file);
+  if (isPureConfigTarget(f)) return "toolchain";
   const parts = f.split("/").filter(Boolean).map((part) => part.toLowerCase());
   if (parts.includes("pages") || parts.includes("views") || parts.includes("screens") || parts.includes("routes") || parts.includes("features")) return "pages";
   if (parts.includes("services") || parts.includes("api") || parts.includes("controllers") || parts.includes("server") || parts.includes("domain")) return "services";
@@ -187,6 +197,17 @@ function includesAny(text, terms) {
   return terms.some((term) => text.includes(term));
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function textHasUiTerm(text, term) {
+  if (/^[a-z0-9_]+$/i.test(term)) {
+    return new RegExp(`\\b${escapeRegExp(term)}\\b`, "i").test(text);
+  }
+  return text.includes(term);
+}
+
 function existingTargets(files, roots = [PROJECT_ROOT, YOLO_ROOT]) {
   const resolvedRoots = unique(roots.map((root) => resolve(String(root)))).map(String);
   return files.map((file) => String(file)).filter((file) => resolvedRoots.some((root) => existsSync(resolve(root, normalizeFile(file)))));
@@ -262,13 +283,63 @@ export function inspectAtomicTask(task, options = Object()) {
   const readonlyFiles = unique(task.scope?.readonly_files || []).map(String);
   const layers = unique(files.map(classify)).map(String);
   const text = taskText(task);
+  const exemptionReason = atomicityExemptionReason(task);
+  if (exemptionReason) {
+    const mode = "direct_patch";
+    const status = "pass";
+    const reasons = [{
+      id: "ATOMICITY_EXEMPT",
+      points: 0,
+      detail: `Atomicity doctor exempted task by shared policy: ${exemptionReason}.`,
+      evidence: { exemption: exemptionReason, files },
+    }];
+    const evidence = buildEvidenceArtifact("task.atomic_investigation", {
+      task_id: task.id,
+      status,
+      mode,
+      score: 0,
+      threshold: { direct_patch_max: 5, must_split_min: 10 },
+      files,
+      readonly_files: readonlyFiles,
+      layers,
+      layer_map: { entries: [...layerMap.layers.entries()].map(([prefix, category]) => ({ prefix, category })), baseDir: layerMap.baseDir },
+      behavior_domains: [],
+      structural_single_file_task: false,
+      fail_postconditions: countFailPostconditions(task),
+      behavioral_fail_postconditions: 0,
+      atomicity_exempt: { reason: exemptionReason },
+      atomic_bundle: null,
+      reasons,
+      split_suggestions: [],
+      next_action: "allow_runner_execution",
+    }, { source: "atomic-task-doctor" });
+
+    const evidenceRoot = resolve(options.root || YOLO_ROOT, "state/evidence", task.id);
+    const evidenceFile = resolve(evidenceRoot, "investigation.json");
+    if (options.writeEvidence !== false) {
+      writeJsonArtifact(evidenceFile, evidence);
+    }
+
+    return {
+      status,
+      mode,
+      task_id: task.id,
+      score: 0,
+      reasons,
+      evidence_file: relative(options.root || YOLO_ROOT, evidenceFile),
+      split_suggestions: [],
+      next_action: evidence.next_action,
+      atomicity_exempt: evidence.atomicity_exempt,
+    };
+  }
   const failPostconditions = countFailPostconditions(task);
   const behavioralFailPostconditions = countBehavioralFailPostconditions(task);
   const structuralSingleFileTask = isStructuralSingleFileTask(task, files, behavioralFailPostconditions);
   const uiOnlyTargets = files.length > 0 && files.every((file) => ["pages", "components", "hooks"].includes(classify(file)));
-  const dataTerms = uiOnlyTargets ? [] : DATA_TERMS.filter((term) => text.includes(term));
-  const uiTerms = UI_TERMS.filter((term) => text.includes(term));
-  const hookTerms = HOOK_TERMS.filter((term) => text.includes(term));
+  const toolchainOnlyTargets = files.length > 0 && files.every(isPureConfigTarget);
+  const dataTerms = uiOnlyTargets || toolchainOnlyTargets ? [] : DATA_TERMS.filter((term) => text.includes(term));
+  const uiTerms = toolchainOnlyTargets ? [] : UI_TERMS.filter((term) => textHasUiTerm(text, term));
+  const hookTerms = toolchainOnlyTargets ? [] : HOOK_TERMS.filter((term) => text.includes(term));
   const crossesPagesServices = layers.includes("pages") && layers.includes("services");
   const businessFileOptions = options.businessFileOptions || options;
   const missingSourceTargets = files.filter((file) =>
@@ -281,7 +352,7 @@ export function inspectAtomicTask(task, options = Object()) {
     uiTerms.length ? "ui_state" : null,
     dataTerms.length ? "data_consistency" : null,
     hookTerms.length ? "hook_api" : null,
-    text.includes("tsc") || text.includes("compile") || text.includes("编译") ? "compile" : null,
+    !toolchainOnlyTargets && (text.includes("tsc") || text.includes("compile") || text.includes("编译")) ? "compile" : null,
   ]);
 
   // BUG-1: atomic_bundle — declarative narrow gate for cohesive/indivisible multi-file tasks.
@@ -298,7 +369,7 @@ export function inspectAtomicTask(task, options = Object()) {
     && allFilesCovered
     && behaviorDomains.length <= 1
     && !crossesPagesServices
-    && failPostconditions <= 7,
+    && behavioralFailPostconditions <= 7,
   );
 
   let score = 0;
@@ -338,7 +409,7 @@ export function inspectAtomicTask(task, options = Object()) {
     crossesPagesServices ||
     (!structuralSingleFileTask && behaviorDomains.includes("ui_state") && behaviorDomains.includes("data_consistency")) ||
     (files.length > 3 && !hasValidAtomicBundle) ||
-    failPostconditions > 7 ||
+    behavioralFailPostconditions > 7 ||
     (hasNewFile && files.length > 1 && behaviorDomains.length > 1);
 
   let mode = "direct_patch";
@@ -351,7 +422,7 @@ export function inspectAtomicTask(task, options = Object()) {
     (isSingleFileSplitChild || (files.length === 1 && task.scope?.max_files === 1)) &&
     !crossesPagesServices &&
     !hasNewFile &&
-    failPostconditions <= 5
+    behavioralFailPostconditions <= 5
   ) {
     mode = "investigate_then_patch";
     reasons.push({
@@ -360,6 +431,25 @@ export function inspectAtomicTask(task, options = Object()) {
       detail: "只有 1 个目标文件且 scope.max_files=1，禁止用拆分替代执行，改为先调查再最小修改。",
       evidence: { parent_task_id: task.parent_task_id || task.split_from || null, files },
     });
+  }
+
+  let splitSuggestions = mode === "must_split" ? buildSplitSuggestions(task, files, layers, text, classify) : [];
+  const warnings = [];
+  let noExecutableRemediation = false;
+  if (mode === "must_split" && splitSuggestions.length === 0) {
+    noExecutableRemediation = true;
+    mode = "investigate_then_patch";
+    warnings.push({
+      code: "ATOMICITY_NO_SPLIT_SUGGESTIONS",
+      message: "doctor 无法给出拆分建议，降级为先调查再执行。",
+    });
+    reasons.push({
+      id: "MUST_SPLIT_WITHOUT_REMEDIATION_DOWNGRADED",
+      points: 0,
+      detail: "doctor 无法给出拆分建议，降级为先调查再执行，禁止硬性 fail 闭环。",
+      evidence: { original_mode: "must_split", files, behavioralFailPostconditions, behaviorDomains },
+    });
+    splitSuggestions = [];
   }
 
   const status = mode === "must_split" ? "fail" : "pass";
@@ -379,7 +469,14 @@ export function inspectAtomicTask(task, options = Object()) {
     behavioral_fail_postconditions: behavioralFailPostconditions,
     atomic_bundle: hasValidAtomicBundle ? { reason: atomicBundle.reason, files: bundleFiles } : null,
     reasons,
-    split_suggestions: mode === "must_split" ? buildSplitSuggestions(task, files, layers, text, classify) : [],
+    warnings,
+    no_executable_remediation: noExecutableRemediation,
+    split_suggestions: splitSuggestions,
+    remediation: mode === "must_split"
+      ? { action: "SPLIT_TASK", split_suggestions: splitSuggestions }
+      : noExecutableRemediation
+        ? { action: "WARN_AND_CONTINUE", reason: "doctor 无法给出拆分建议" }
+        : null,
     next_action: mode === "must_split"
       ? "split_task_before_model_spawn"
       : mode === "investigate_then_patch"
@@ -402,6 +499,9 @@ export function inspectAtomicTask(task, options = Object()) {
     evidence_file: relative(options.root || YOLO_ROOT, evidenceFile),
     split_suggestions: evidence.split_suggestions,
     next_action: evidence.next_action,
+    warnings,
+    no_executable_remediation: noExecutableRemediation,
+    remediation: evidence.remediation,
   };
 }
 

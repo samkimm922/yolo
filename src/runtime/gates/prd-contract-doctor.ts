@@ -11,6 +11,7 @@ import {
 import { loadProjectToolchainConfig, resolveBuildCommand } from "../../lib/toolchain.js";
 import { inspectAtomicTask } from "../execution/atomic-task-doctor.js";
 import { orderTasksByDependencies } from "../task-loop/expansion.js";
+import { isAtomicityExempt } from "./readiness-policy.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -564,7 +565,7 @@ export function inspectPrdContract(prd, options = Object()) {
       }
     }
 
-    if (strictExecution && task.status === "pending" && task.task_kind !== "greenfield_scaffold") {
+    if (strictExecution && task.status === "pending" && !isAtomicityExempt(task)) {
       const inspection = inspectAtomicTask(task, {
         root: projectRoot,
         projectRoot,
@@ -580,14 +581,25 @@ export function inspectPrdContract(prd, options = Object()) {
           { atomicity: inspection },
         );
       } else if (inspection.mode === "investigate_then_patch") {
-        addFinding(
-          failures,
-          task,
-          null,
-          "ATOMICITY_INVESTIGATE_FIRST",
-          "runner/release task requires investigation before patching and cannot run as an automatic warning",
-          { atomicity: inspection, human_needed: true },
-        );
+        if (inspection.no_executable_remediation) {
+          addFinding(
+            warnings,
+            task,
+            null,
+            "ATOMICITY_NO_SPLIT_SUGGESTIONS",
+            "doctor 无法给出拆分建议，任务降级为先调查再执行",
+            { atomicity: inspection, severity: "WARN" },
+          );
+        } else {
+          addFinding(
+            failures,
+            task,
+            null,
+            "ATOMICITY_INVESTIGATE_FIRST",
+            "runner/release task requires investigation before patching and cannot run as an automatic warning",
+            { atomicity: inspection, human_needed: true },
+          );
+        }
       } else if (inspection.mode === "research_only") {
         addFinding(
           failures,

@@ -1,6 +1,7 @@
 import { renameSync, writeFileSync } from "node:fs";
 import { writeSplitAppliedEvidence } from "../evidence/writers.js";
 import { readJsonFileBounded } from "../../lib/bounded-read.js";
+import { isAtomicityExempt } from "../gates/readiness-policy.js";
 
 export function filterConditionsForFiles(conditions = [], files = []) {
   const fileSet = new Set(files.filter(Boolean));
@@ -73,8 +74,17 @@ export function applySplitSuggestionsToPrd({
   projectRoot,
   writeRecoveryCheckpoint,
 } = Object()) {
+  if (isAtomicityExempt(parentTask)) return { applied: false, reason: "atomicity_exempt", childIds: [], hardBlock: false };
   const suggestions = Array.isArray(doctor?.split_suggestions) ? doctor.split_suggestions : [];
-  if (!suggestions.length) return { applied: false, reason: "missing_split_suggestions", childIds: [] };
+  if (!suggestions.length) {
+    return {
+      applied: false,
+      reason: "missing_split_suggestions",
+      childIds: [],
+      hardBlock: false,
+      remediation: { action: "ASK_HUMAN", reason: "doctor 无法给出拆分建议" },
+    };
+  }
   const prd = readJsonFileBounded(prdPath, { errorCode: "PRD_JSON_SIZE_LIMIT_EXCEEDED" });
   const tasks = Array.isArray(prd.tasks) ? prd.tasks : [];
   const parentIndex = tasks.findIndex((task) => task.id === parentTask.id);

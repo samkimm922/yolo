@@ -79,7 +79,7 @@ const INVENTORY = [
   ["src/runtime/gates/check-report.ts", { WARN: 0, warning: 72, "best-effort": 0, skip: 0 }],
   ["src/runtime/gates/failure-analysis.ts", { WARN: 1, warning: 0, "best-effort": 0, skip: 0 }],
   ["src/runtime/gates/prd-contract-doctor-gate.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 0 }],
-  ["src/runtime/gates/prd-contract-doctor.ts", { WARN: 4, warning: 3, "best-effort": 0, skip: 0 }],
+  ["src/runtime/gates/prd-contract-doctor.ts", { WARN: 5, warning: 3, "best-effort": 0, skip: 0 }],
   ["src/runtime/gates/pre-execution-gates.ts", { WARN: 0, warning: 18, "best-effort": 0, skip: 0 }],
   ["src/runtime/gates/provider-capability-gate.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 0 }],
   ["src/runtime/gates/test-generation-validator.ts", { WARN: 0, warning: 2, "best-effort": 0, skip: 0 }],

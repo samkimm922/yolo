@@ -173,7 +173,7 @@ describe("runner review fix execution flow", () => {
   test("buildAtomicDoctorBlockOutcome: must_split with applied split → prdUpdate null", () => {
     const outcome = buildAtomicDoctorBlockOutcome({
       task: { id: "T1" },
-      doctor: { mode: "must_split", score: 0.9, evidence_file: "e.json" },
+      doctor: { mode: "must_split", score: 0.9, evidence_file: "e.json", split_suggestions: [{ id: "T1A", files: ["a.ts"] }] },
       splitResult: { applied: true, childIds: ["T1A"] },
     });
     assert.equal(outcome.taskResult.split_applied, true);

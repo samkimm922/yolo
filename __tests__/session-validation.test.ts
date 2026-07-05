@@ -225,8 +225,18 @@ describe("session validation helpers", () => {
       task: { id: "FIX-SESSION-007", status: "pending", type: "feature" },
       inspectAtomicTask: () => ({ status: "fail", mode: "must_split", score: 90, evidence_file: "evidence.json" }),
     });
-    assert.equal(split.ok, false);
-    assert.equal(split.result.mode, "must_split");
+    assert.equal(split.ok, true);
+    assert.equal(split.result.mode, "investigate_then_patch");
+    assert.equal(split.result.no_executable_remediation, true);
+    assert.match(split.result.remediation.reason, /doctor 无法给出拆分建议/);
+
+    const splitWithSuggestions = runAtomicTaskDoctorGate({
+      task: { id: "FIX-SESSION-007B", status: "pending", type: "feature" },
+      inspectAtomicTask: () => ({ status: "fail", mode: "must_split", score: 90, evidence_file: "evidence.json", split_suggestions: [{ id: "FIX-SESSION-007BA", files: ["src/a.ts"] }] }),
+    });
+    assert.equal(splitWithSuggestions.ok, false);
+    assert.equal(splitWithSuggestions.result.mode, "must_split");
+    assert.ok(splitWithSuggestions.result.split_suggestions.length > 0);
 
     const failed = runAtomicTaskDoctorGate({
       task: { id: "FIX-SESSION-008", status: "pending", type: "security" },
