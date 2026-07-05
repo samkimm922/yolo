@@ -146,6 +146,8 @@ function scaffoldInstructionText(task: DemandTask): string {
 
 function assertNodeScaffoldToolchain(scaffold: DemandTask): void {
   const instructions = scaffoldInstructionText(scaffold);
+  const requiredCapabilities = Array.isArray(scaffold.required_capabilities) ? scaffold.required_capabilities : [];
+  assert.ok(requiredCapabilities.includes("shell"), "scaffold must declare shell capability for install/toolchain commands");
   assert.doesNotMatch(instructions, /\b(?:vitest|jest)\b/i);
   assert.match(instructions, /\bnode --test\b/);
   assert.match(instructions, /npm install --save-dev typescript/);

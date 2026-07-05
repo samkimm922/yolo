@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -76,6 +76,27 @@ function spawnOptions(overrides = {}) {
   };
 }
 
+function claudeSettingsArg(invocation) {
+  const settingsIndex = invocation.args.indexOf("--settings");
+  assert.notEqual(settingsIndex, -1);
+  return invocation.args[settingsIndex + 1];
+}
+
+function defaultSettingsFromInvocation(invocation) {
+  return JSON.parse(claudeSettingsArg(invocation));
+}
+
+function defaultYoloWriteHookCommand(settings) {
+  const entries = settings.hooks?.PreToolUse || [];
+  for (const entry of entries) {
+    if (entry.command?.includes("pre-tool-block-yolo-write")) return entry.command;
+    for (const hook of Array.isArray(entry.hooks) ? entry.hooks : []) {
+      if (hook.command?.includes("pre-tool-block-yolo-write")) return hook.command;
+    }
+  }
+  return "";
+}
+
 describe("provider execution adapter", () => {
   test("buildProviderInvocation creates a claude stdin invocation with budget guard", () => {
     const invocation = buildProviderInvocation({
@@ -114,11 +135,46 @@ describe("provider execution adapter", () => {
 
     assert.equal(invocation.provider, "claude");
     assert.equal(invocation.command, "claude");
-    assert.deepEqual(invocation.args, [
+    assert.deepEqual(invocation.args.slice(0, 5), [
       "-p",
       "--model", "openrouter/deepseek-chat",
       "--permission-mode", DEFAULT_CLAUDE_PERMISSION_MODE,
     ]);
+    assert.notEqual(invocation.args.indexOf("--settings"), -1);
+  });
+
+  test("empty claude settings use the packaged default settings with Bash and the .yolo hook", () => {
+    const invocation: any = buildProviderInvocation({
+      provider: "claude",
+      config: {
+        ai: {
+          model: "claude-sonnet-4",
+          settings: "",
+        },
+      },
+      workDir: "/tmp/yolo-consumer-project",
+      rootDir: "/tmp/yolo-consumer-project",
+      runtimeDir: "/tmp/yolo-consumer-project/.yolo/state/runtime",
+    });
+
+    assert.equal(invocation.settings.default_settings, true);
+    assert.equal(invocation.settings.type, "default");
+    assert.equal(invocation.settings.path, DEFAULT_CLAUDE_SETTINGS_PATH);
+    assert.equal(invocation.settingsFile, null);
+
+    const settings = defaultSettingsFromInvocation(invocation);
+    assert.ok(settings.permissions.allow.includes("Bash"));
+    const matchers = (settings.hooks?.PreToolUse || []).map((entry) => entry.matcher).join("|");
+    assert.match(matchers, /Bash/);
+    const hookCommand = defaultYoloWriteHookCommand(settings);
+    assert.match(hookCommand, /pre-tool-block-yolo-write\.js/);
+    const hookPath = hookCommand.match(/node "([^"]+)"/)?.[1];
+    assert.equal(typeof hookPath, "string");
+    assert.ok(hookPath.startsWith(join(YOLO_PACKAGE_ROOT, "dist", "hooks")));
+    assert.equal(existsSync(hookPath), true, `default settings hook must resolve to the built package hook: ${hookPath}`);
+
+    const sourceSettings = JSON.parse(readFileSync(DEFAULT_CLAUDE_SETTINGS_PATH, "utf8"));
+    assert.ok(sourceSettings.permissions.allow.includes("Bash"));
   });
 
   test("spawnProviderPrompt defaults claude print mode to an editable permission mode", async () => {
@@ -178,9 +234,7 @@ describe("provider execution adapter", () => {
       runtimeDir: join(targetRoot, ".yolo/state/runtime"),
     });
 
-    const settingsIndex = invocation.args.indexOf("--settings");
-    assert.notEqual(settingsIndex, -1);
-    const settingsArg = invocation.args[settingsIndex + 1];
+    const settingsArg = claudeSettingsArg(invocation);
     // Default settings are now inline JSON with absolute hook path
     assert.equal(settingsArg.startsWith("{"), true);
     assert.ok(settingsArg.includes("pre-tool-block-yolo-write.js"));
@@ -203,9 +257,7 @@ describe("provider execution adapter", () => {
       runtimeDir: join(targetRoot, ".yolo/state/runtime"),
     });
 
-    const settingsIndex = invocation.args.indexOf("--settings");
-    assert.notEqual(settingsIndex, -1);
-    const settingsArg = invocation.args[settingsIndex + 1];
+    const settingsArg = claudeSettingsArg(invocation);
     assert.equal(settingsArg.startsWith("{"), true);
     assert.ok(settingsArg.includes("pre-tool-block-yolo-write.js"));
     assert.ok(settingsArg.includes(YOLO_PACKAGE_ROOT));

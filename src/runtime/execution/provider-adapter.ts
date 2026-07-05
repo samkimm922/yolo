@@ -411,21 +411,7 @@ function inlineSettings(settings) {
 
 export function resolveClaudeSettings(rootDir, value, { packageRoot = YOLO_PACKAGE_ROOT } = Object()) {
   const settings = cleanString(value);
-  if (!settings) return {
-    raw: "",
-    value: "",
-    type: "none",
-    path: null,
-    default_settings: false,
-  };
-  if (inlineSettings(settings)) return {
-    raw: settings,
-    value: settings,
-    type: "inline",
-    path: null,
-    default_settings: false,
-  };
-  const isDefaultSettings = settings === DEFAULT_CLAUDE_SETTINGS_FILE;
+  const isDefaultSettings = !settings || settings === DEFAULT_CLAUDE_SETTINGS_FILE;
   if (isDefaultSettings) {
     // Dynamically generate settings with absolute hook path so the hook
     // works regardless of the target project's cwd or tsx availability.
@@ -437,16 +423,28 @@ export function resolveClaudeSettings(rootDir, value, { packageRoot = YOLO_PACKA
         if (hook.command && hook.command.includes("pre-tool-block-yolo-write")) {
           hook.command = `node "${hookJs}"`;
         }
+        for (const nestedHook of Array.isArray(hook.hooks) ? hook.hooks : []) {
+          if (nestedHook.command && nestedHook.command.includes("pre-tool-block-yolo-write")) {
+            nestedHook.command = `node "${hookJs}"`;
+          }
+        }
       }
     }
     return {
       raw: settings,
       value: JSON.stringify(template),
-      type: "inline",
-      path: null,
+      type: "default",
+      path: templatePath,
       default_settings: true,
     };
   }
+  if (inlineSettings(settings)) return {
+    raw: settings,
+    value: settings,
+    type: "inline",
+    path: null,
+    default_settings: false,
+  };
   const settingsPath = isAbsolute(settings) ? settings : resolve(rootDir, settings);
   return {
     raw: settings,
@@ -455,10 +453,6 @@ export function resolveClaudeSettings(rootDir, value, { packageRoot = YOLO_PACKA
     path: settingsPath,
     default_settings: false,
   };
-}
-
-function settingsValue(rootDir, value, options = Object()) {
-  return resolveClaudeSettings(rootDir, value, options).value;
 }
 
 export function inspectProviderInvocationPreflight(invocation = Object(), {
@@ -664,8 +658,8 @@ export function buildProviderInvocation({
   if (claudeModel) args.push("--model", claudeModel);
   args.push("--permission-mode", cleanString(ai.claude_permission_mode) || DEFAULT_CLAUDE_PERMISSION_MODE);
   const claudeSettings = resolveClaudeSettings(rootDir, ai.settings, { packageRoot });
-  if (cleanString(ai.settings)) {
-    args.push("--settings", settingsValue(rootDir, ai.settings, { packageRoot }));
+  if (cleanString(claudeSettings.value)) {
+    args.push("--settings", claudeSettings.value);
   }
   if (cleanString(ai.claude_tools)) {
     args.push("--tools", cleanString(ai.claude_tools));
