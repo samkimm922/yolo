@@ -284,6 +284,9 @@ export async function runRunnerRuntime(input = Object(), options = Object()) {
       projectRoot,
       stateRoot,
       writeLifecycle,
+      config: runConfig,
+      executor: input.executor || input.provider || options.executor || options.provider,
+      provider: input.provider || input.executor || options.provider || options.executor,
     }, { learnFailures: true });
     if (check.status !== "pass") {
       return {

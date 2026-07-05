@@ -170,6 +170,9 @@ function runPrdPreflightRuntime(params = Object()) {
       projectRoot: params.projectRoot,
       stateRoot: params.stateRoot,
       writeLifecycle: params.writeLifecycle !== false,
+      config: params.config,
+      executor: params.executor || params.provider,
+      provider: params.provider || params.executor,
     }, { learnFailures: true })
     : null;
   if (!result.runner_readiness.can_execute) {

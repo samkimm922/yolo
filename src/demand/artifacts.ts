@@ -10,6 +10,7 @@ import {
   evidenceRequirementSummary,
 } from "./evidence-requirements.js";
 import { splitGenericStorySlices } from "./story-atomicity.js";
+import { resolveWithinRoot } from "../lib/security/path-guard.js";
 
 export const DEMAND_SESSION_SCHEMA_VERSION = "1.0";
 export const DEMAND_SESSION_SCHEMA = "yolo.demand.session.v1";
@@ -266,9 +267,10 @@ function resolveProjectFile(projectRoot, file) {
 function scopedProjectFile(projectRoot, file) {
   const root = resolve(clean(projectRoot) || process.cwd());
   const declared = clean(file);
-  const absolute = isAbsolute(declared) ? resolve(declared) : resolve(root, declared);
-  const relativePath = relative(root, absolute);
-  const insideRoot = relativePath && !relativePath.startsWith("..") && !isAbsolute(relativePath);
+  const guarded = resolveWithinRoot(root, declared);
+  const absolute = guarded.path || (isAbsolute(declared) ? resolve(declared) : resolve(root, declared));
+  const relativePath = guarded.ok ? relative(root, absolute).replace(/\\/g, "/") : "";
+  const insideRoot = Boolean(relativePath && guarded.ok);
   return {
     declared,
     absolute,
@@ -352,10 +354,10 @@ function cloneDemandObject(value) {
 function repoRelative(projectRoot, file) {
   const root = resolve(clean(projectRoot) || process.cwd());
   const target = clean(file);
-  if (!target || isAbsolute(target)) return "";
-  const absolute = resolve(root, target);
-  const rel = relative(root, absolute).replace(/\\/g, "/");
-  if (!rel || rel === "." || rel.startsWith("../") || rel === ".." || isAbsolute(rel)) return "";
+  const guarded = resolveWithinRoot(root, target);
+  if (!guarded.ok || !guarded.path) return "";
+  const rel = relative(root, guarded.path).replace(/\\/g, "/");
+  if (!rel || rel === ".") return "";
   return rel;
 }
 

@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   buildProviderCapabilityBits,
@@ -11,6 +11,7 @@ import {
 } from "../src/runtime/adapters/provider-capability-bits.js";
 import { inspectProviderCapabilityGate } from "../src/runtime/gates/provider-capability-gate.js";
 import { inspectPreExecutionGates } from "../src/runtime/gates/pre-execution-gates.js";
+import { inspectYoloCheck } from "../src/runtime/gates/check-report.js";
 
 function makePreExecutionPaths() {
   const projectRoot = mkdtempSync(join(tmpdir(), "yolo-provider-capability-"));
@@ -19,6 +20,11 @@ function makePreExecutionPaths() {
     stateDir: join(projectRoot, "state"),
     prdPath: join(projectRoot, "prd.json"),
   };
+}
+
+function writeJson(file, payload) {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(payload, null, 2), "utf8");
 }
 
 describe("provider capability bits and parity matrix", () => {
@@ -156,7 +162,7 @@ describe("provider capability gate", () => {
 function strictPrd(overrides = {}) {
   return {
     version: "2.0",
-    id: "PRD-CAP-GATE",
+    id: "PRD-20260524-CAP-GATE",
     title: "Capability gate fixture",
     project: { name: "test", language: "javascript" },
     generated_by: "yolo-demand",
@@ -231,6 +237,80 @@ describe("pre-execution gates with provider capability", () => {
       assert.equal(result.stage, "ready");
       assert.equal(result.code, "PRE_EXECUTION_GATES_PASS");
       assert.equal(result.capability.status, "pass");
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("check and pre-execution agree when custom provider warnings block execution", () => {
+    const paths = makePreExecutionPaths();
+    try {
+      const prd = strictPrd({ required_capabilities: ["supports_tools"] });
+      const config = { ai: { executor: "custom", capability_overrides: { supports_tools: true } } };
+      writeJson(paths.prdPath, prd);
+
+      const preExecution = inspectPreExecutionGates({
+        prd,
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+        config,
+      });
+      const check = inspectYoloCheck({
+        prdPath: paths.prdPath,
+        projectRoot: paths.projectRoot,
+        stateRoot: join(paths.projectRoot, ".yolo"),
+        mode: "runner",
+        config,
+      });
+      const providerCheck = check.checks.find((item) => item.name === "provider_capability");
+
+      assert.equal(preExecution.status, "blocked");
+      assert.equal(preExecution.stage, "capability");
+      assert.equal(preExecution.code, "PROVIDER_CAPABILITY_WARNING_BLOCKED");
+      assert.equal(preExecution.capability.status, "warning");
+
+      assert.equal(check.status, "blocked");
+      assert.equal(providerCheck.status, "blocked");
+      assert.equal(providerCheck.pre_execution_code, preExecution.code);
+      assert.equal(providerCheck.pre_execution_exit_code, preExecution.exit_code);
+      assert.ok(check.blockers.some((blocker) =>
+        blocker.gate === "provider_capability" &&
+        blocker.code === preExecution.code
+      ));
+      assert.ok(providerCheck.capability.warnings.some((warning) => warning.code === "PROVIDER_CAPABILITY_CUSTOM_UNVERIFIED"));
+    } finally {
+      rmSync(paths.projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("check and pre-execution both pass when required capabilities are satisfied", () => {
+    const paths = makePreExecutionPaths();
+    try {
+      const prd = strictPrd({ required_capabilities: ["supports_tools"] });
+      const config = { ai: { executor: "claude" } };
+      writeJson(paths.prdPath, prd);
+
+      const preExecution = inspectPreExecutionGates({
+        prd,
+        prdPath: paths.prdPath,
+        stateDir: paths.stateDir,
+        projectRoot: paths.projectRoot,
+        config,
+      });
+      const check = inspectYoloCheck({
+        prdPath: paths.prdPath,
+        projectRoot: paths.projectRoot,
+        stateRoot: join(paths.projectRoot, ".yolo"),
+        mode: "runner",
+        config,
+      });
+      const providerCheck = check.checks.find((item) => item.name === "provider_capability");
+
+      assert.equal(preExecution.status, "pass");
+      assert.equal(check.status, "pass");
+      assert.equal(providerCheck.status, "pass");
+      assert.equal(providerCheck.capability.status, "pass");
     } finally {
       rmSync(paths.projectRoot, { recursive: true, force: true });
     }

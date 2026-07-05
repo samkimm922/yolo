@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectStoryAtomicityFromPrd } from "../../demand/story-atomicity.js";
 import { inspectDiscoveryReadiness } from "../../discovery/gate.js";
@@ -8,9 +8,11 @@ import { writeLifecycleStageReport } from "../../lifecycle/progress.js";
 import { inspectWorktreeDrift } from "../../lifecycle/source-snapshot.js";
 import { resolveProjectContext } from "../../packs/resolver.js";
 import { preflightPrd } from "../../prd/preflight.js";
+import { resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { inspectAtomicTask } from "../execution/atomic-task-doctor.js";
 import { orderTasksByDependencies } from "../task-loop/expansion.js";
 import { buildGateRemediationPlan } from "./remediation-plan.js";
+import { inspectProviderCapabilityGate, providerCapabilityExecutionBlock } from "./provider-capability-gate.js";
 import {
   asArray,
   hasAcceptanceAdapter,
@@ -335,13 +337,8 @@ function applyWarningPolicy(check = Object(), context = Object()) {
   };
 }
 
-function pathInsideProject(projectRoot, file) {
-  const root = resolve(projectRoot);
-  const target = cleanString(file);
-  if (!target) return false;
-  const path = isAbsolute(target) ? resolve(target) : resolve(root, target);
-  const rel = relative(root, path);
-  return Boolean(rel && !rel.startsWith("..") && !isAbsolute(rel));
+function isResolvedWithinProject(projectRoot, file) {
+  return resolveWithinRoot(projectRoot, normalizeFileForContainment(file)).ok;
 }
 
 function collectPathValues(value, out = []) {
@@ -389,14 +386,17 @@ function taskPathReferences(task = Object()) {
 
 function taskPathContainmentBlockers(task, projectRoot) {
   return taskPathReferences(task)
-    .filter((ref) => !pathInsideProject(projectRoot, ref.file))
+    .map((ref) => ({ ref, guard: resolveWithinRoot(projectRoot, ref.file) }))
+    .filter(({ guard }) => !guard.ok)
     .map((ref) => ({
       code: "TASK_TARGET_OUTSIDE_ROOT",
       task_id: task.id || null,
-      condition_id: ref.condition_id || null,
-      path: ref.file,
-      source: ref.source,
-      message: `Task target path must stay inside the project root: ${ref.file}`,
+      condition_id: ref.ref.condition_id || null,
+      path: ref.ref.file,
+      source: ref.ref.source,
+      reason: ref.guard.reason || null,
+      detail: ref.guard.detail || null,
+      message: `Task target path must stay inside the project root: ${ref.ref.file}`,
       human_needed: true,
     }));
 }
@@ -624,7 +624,7 @@ function demandContractReadiness({ prd, projectRoot, strictExecution }) {
     } else {
       const unresolvedTargetFacts = asArray(projectFacts.target_files)
         .filter((fact) => ["candidate", "needs_verification", "contradicted", "invalid_scope"].includes(fact?.status)
-          || !pathInsideProject(projectRoot, fact?.file));
+          || !isResolvedWithinProject(projectRoot, fact?.file));
       const unresolvedAssumptions = asArray(projectFacts.assumptions)
         .filter((fact) => ["needs_verification", "contradicted"].includes(fact?.status));
       if (unresolvedTargetFacts.length > 0) {
@@ -893,6 +893,38 @@ function preflightReadiness(preflight) {
   });
 }
 
+function providerCapabilityReadiness({ prd, input = Object(), options = Object() }) {
+  const config = input.config || options.config || {};
+  const provider = input.provider || input.executor || options.provider || options.executor;
+  const capability = inspectProviderCapabilityGate({ prd, config, provider });
+  const block = providerCapabilityExecutionBlock(capability);
+  if (block) {
+    return checkRecord("provider_capability", "blocked", block.message || "Provider capability gate blocked execution.", {
+      blockers: [{
+        code: block.code,
+        source: "provider_capability",
+        provider: capability.provider || null,
+        message: block.message || "Provider capability gate blocked execution.",
+        capability_status: capability.status || null,
+        underlying_blocker_codes: asArray(capability.blockers).map((item) => item.code).filter(Boolean),
+        underlying_warning_codes: asArray(capability.warnings).map((item) => item.code).filter(Boolean),
+        human_needed: true,
+      }],
+      warnings: [],
+      advisories: [],
+      capability,
+      pre_execution_code: block.code,
+      pre_execution_exit_code: block.exit_code,
+    });
+  }
+  return checkRecord("provider_capability", "pass", "Provider capability gate passed.", {
+    blockers: [],
+    warnings: [],
+    advisories: asArray(capability.warnings).map((warning) => ({ ...warning, advisory: true })),
+    capability,
+  });
+}
+
 export function inspectYoloCheck(input = Object(), options = Object()) {
   const explicitPrdPath = input.prdPath || input.prd_path || options.prdPath || options.prd_path;
   const prdPath = explicitPrdPath || inferDefaultYoloCheckPrdPath(input, options);
@@ -972,6 +1004,7 @@ export function inspectYoloCheck(input = Object(), options = Object()) {
   });
   const checks = [
     preflightReadiness(preflight),
+    providerCapabilityReadiness({ prd, input, options }),
     driftRealityReadiness({ prd, projectRoot, stateRoot }),
     demandContractReadiness({ prd, projectRoot, strictExecution }),
     productReadiness({ prd, discovery, projectRoot }),

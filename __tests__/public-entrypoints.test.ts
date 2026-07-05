@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -604,6 +604,68 @@ describe("runner support modules", () => {
     assert.equal(result.blocks_execution, true);
     assert.ok(result.failures.some((failure) => failure.code === "CONTEXT_PACK_UNSAFE_TARGET"));
     assert.ok(result.failures.some((failure) => failure.code === "CONTEXT_PACK_TARGET_READONLY_CONFLICT"));
+  });
+
+  test("context pack validator blocks new targets below a symlink outside root", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-context-pack-root-"));
+    const outside = mkdtempSync(join(tmpdir(), "yolo-context-pack-outside-"));
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      symlinkSync(outside, join(root, "src", "link-out"));
+      const pack = buildContextPackForTask({
+        id: "FIX-PUBLIC-003",
+        type: "bugfix",
+        status: "pending",
+        scope: {
+          targets: [{ file: "src/link-out/new.ts" }],
+        },
+        post_conditions: [{
+          id: "POST-FILE",
+          type: "target_file_modified",
+          severity: "FAIL",
+          params: { file: "src/link-out/new.ts" },
+        }],
+      }, { root, attempt: 1 });
+
+      const result = validateContextPack(pack, { root });
+
+      assert.equal(result.status, "fail");
+      assert.equal(result.blocks_execution, true);
+      assert.ok(result.failures.some((failure) =>
+        failure.code === "CONTEXT_PACK_UNSAFE_TARGET" &&
+        failure.file === "src/link-out/new.ts"
+      ));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("context pack validator allows greenfield targets inside root", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-context-pack-greenfield-"));
+    try {
+      const pack = buildContextPackForTask({
+        id: "FIX-PUBLIC-004",
+        type: "feature",
+        status: "pending",
+        scope: {
+          targets: [{ file: "src/new-file.ts" }],
+        },
+        post_conditions: [{
+          id: "POST-FILE",
+          type: "target_file_modified",
+          severity: "FAIL",
+          params: { file: "src/new-file.ts" },
+        }],
+      }, { root, attempt: 1 });
+
+      const result = validateContextPack(pack, { root });
+
+      assert.equal(result.status, "pass", JSON.stringify(result.failures, null, 2));
+      assert.equal(result.blocks_execution, false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("review findings convert into contract-clean PRD tasks", () => {
