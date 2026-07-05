@@ -564,7 +564,7 @@ export function inspectPrdContract(prd, options = Object()) {
       }
     }
 
-    if (strictExecution && task.status === "pending") {
+    if (strictExecution && task.status === "pending" && task.task_kind !== "greenfield_scaffold") {
       const inspection = inspectAtomicTask(task, {
         root: projectRoot,
         projectRoot,

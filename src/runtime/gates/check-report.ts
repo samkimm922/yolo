@@ -415,11 +415,77 @@ function targetFileModifiedReferences(task = Object()) {
   return [...new Set(refs.filter(Boolean))];
 }
 
+const RUN_COMPLETED_TASK_STATUSES = new Set(["complete", "completed", "done", "pass", "passed", "success", "succeeded"]);
+
+function normalizeRunTaskStatus(value) {
+  return cleanString(value).toLowerCase().replace(/_/g, "-");
+}
+
+function collectRunTaskStatuses(value, statuses) {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectRunTaskStatuses(item, statuses);
+    return;
+  }
+  const record = (item, status) => {
+    const id = typeof item === "string" ? cleanString(item) : cleanString(item?.id || item?.task_id || item?.taskId);
+    if (id) statuses.set(id, normalizeRunTaskStatus(status));
+  };
+  if (value.status != null) record(value, value.status);
+
+  const taskGroups = [value.tasks, value.task_results, value.taskResults, value.results, value.report?.tasks, value.report?.task_results];
+  for (const group of taskGroups) {
+    if (!group || typeof group !== "object" || Array.isArray(group)) continue;
+    for (const [key, status] of [["completed", "completed"], ["passed", "passed"], ["success", "success"], ["failed", "failed"], ["blocked", "blocked"], ["discarded", "failed-and-discarded"]]) {
+      for (const item of asArray(group[key])) record(item, status);
+    }
+  }
+}
+
+function runReportPaths(stateRoot) {
+  const reportsRoot = join(stateRoot, "state", "reports");
+  const archiveRoot = join(stateRoot, "state", "archive");
+  const paths = [
+    ...(existsSync(reportsRoot) ? readdirSync(reportsRoot).filter((name) => name.startsWith("run-")).map((name) => join(reportsRoot, name, "run-report.json")) : []),
+    ...(existsSync(archiveRoot) ? readdirSync(archiveRoot).filter((name) => name.startsWith("run-") && name.endsWith(".json")).map((name) => join(archiveRoot, name)) : []),
+    join(stateRoot, "lifecycle", "run-report.json"),
+  ].filter((path) => existsSync(path));
+  return paths.sort((left, right) => {
+    try {
+      return statSync(left).mtimeMs - statSync(right).mtimeMs || left.localeCompare(right);
+    } catch {
+      return left.localeCompare(right);
+    }
+  });
+}
+
+function readRunTaskStatuses(stateRoot) {
+  const statuses = new Map();
+  for (const path of runReportPaths(stateRoot)) {
+    const report = safeReadJson(path);
+    if (report) collectRunTaskStatuses(report, statuses);
+  }
+  const taskResults = join(stateRoot, "state", "runtime", "task-results.jsonl");
+  try {
+    for (const line of existsSync(taskResults) ? readFileSync(taskResults, "utf8").split("\n").filter(Boolean) : []) {
+      collectRunTaskStatuses(JSON.parse(line), statuses);
+    }
+  } catch {}
+  return statuses;
+}
+
+function taskCompletedInRunState(task, statuses) {
+  const id = cleanString(task?.id);
+  if (!id || !statuses.has(id)) return false;
+  return RUN_COMPLETED_TASK_STATUSES.has(normalizeRunTaskStatus(statuses.get(id)));
+}
+
 function driftRealityReadiness({ prd, projectRoot, stateRoot }) {
   const drift = inspectWorktreeDrift({ projectRoot, stateRoot });
   if (!drift.has_drift) return null;
+  const runTaskStatuses = readRunTaskStatuses(stateRoot);
   const blockers = asArray(prd.tasks).flatMap((task) => (
-    task?.status === "completed" ? [] : targetFileModifiedReferences(task).flatMap((file) => {
+    !taskCompletedInRunState(task, runTaskStatuses) ? [] : targetFileModifiedReferences(task).flatMap((file) => {
       const absolute = isAbsolute(file) ? resolve(file) : resolve(projectRoot, file);
       return existsSync(absolute) ? [] : [{
         code: "DRIFT_TARGET_FILE_MISSING",
@@ -647,6 +713,7 @@ function atomicityReadiness({ prd, projectRoot, strictExecution }) {
   const warnings = [];
   for (const task of asArray(prd.tasks)) {
     if (!task?.id) continue;
+    if (task.task_kind === "greenfield_scaffold") continue;
     const inspection = inspectAtomicTask(task, { root: projectRoot, writeEvidence: false });
     inspections.push(inspection);
     if (inspection.mode === "must_split") {

@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import {
+  assertGeneratedTaskInstructionsSelfConsistent,
   readDemandSession,
   runDemandApprovedRuntime,
   runDemandBrainstormRuntime,
@@ -135,6 +136,29 @@ function seedDogfoodGitweeklyR2Fixture(root: string): string {
     paths: { state: ".yolo/state" },
   });
   return demandDir;
+}
+
+function scaffoldInstructionText(task: DemandTask): string {
+  const value = (task as DemandTask & { instructions?: unknown }).instructions;
+  const values = Array.isArray(value) ? value : [value];
+  return values.map((item) => String(item ?? "")).filter(Boolean).join("\n");
+}
+
+function assertNodeScaffoldToolchain(scaffold: DemandTask): void {
+  const instructions = scaffoldInstructionText(scaffold);
+  assert.doesNotMatch(instructions, /\b(?:vitest|jest)\b/i);
+  assert.match(instructions, /\bnode --test\b/);
+  assert.match(instructions, /npm install --save-dev typescript/);
+  assert.ok(scaffold.post_conditions?.some((condition) =>
+    condition.type === "build_command_available" &&
+    condition.params?.kind === "test" &&
+    condition.params?.command === "node --test"
+  ), "scaffold must verify the node:test command is available");
+  assert.ok(scaffold.post_conditions?.some((condition) =>
+    condition.type === "build_command_available" &&
+    condition.params?.kind === "type_check" &&
+    condition.params?.command === "tsc --noEmit"
+  ), "scaffold must verify the TypeScript command is available when type gates exist");
 }
 
 function duplicateTaskKeys(tasks: DemandTask[] = []): string[] {
@@ -1981,6 +2005,7 @@ describe("demand runtime", () => {
 
       const scaffold = tasks[0];
       assert.equal(scaffold.task_kind, "greenfield_scaffold");
+      assertNodeScaffoldToolchain(scaffold);
       assert.equal(scaffold.scope?.targets?.some((target) => target.file === "package.json"), true);
       assert.ok(scaffold.post_conditions.some((condition) =>
         condition.type === "file_exists" && condition.params?.file === "package.json"
@@ -1997,6 +2022,45 @@ describe("demand runtime", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("R4-shaped git-weekly demand regenerates a self-consistent zero-dependency scaffold", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-r4-gitweekly-"));
+    try {
+      const discuss = runDemandDiscussRuntime({
+        ...taskcliDemandInput(root),
+        demand_id: "DEMAND-R4-GIT-WEEKLY",
+        title: "git-weekly",
+        idea: "Build git-weekly, a local Node.js CLI that summarizes git commits into Markdown.",
+        evidence: ["R4 dogfood showed the scaffold task created a vitest script without installing vitest."],
+        success_criteria: ["npm test verifies stdout markdown and --output file markdown for a deterministic fixture repository."],
+        proof: ["Automated node:test coverage verifies author sections, conventional type counts, commit totals, line stats, and output parity."],
+        non_goals: ["No network calls, no GitHub API, no GUI, and no npm publishing."],
+        decisions: ["Use node:test as the default zero-dependency test runner."],
+      });
+
+      const result = runDemandPrdRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demandPath: discuss.demand_dir,
+        writeArtifacts: false,
+      });
+
+      assert.equal(result.status, "success", JSON.stringify(result.blockers, null, 2));
+      requirePrd(result);
+      const scaffold = requirePrdTasks(result.prd)[0];
+      assert.equal(scaffold.task_kind, "greenfield_scaffold");
+      assertNodeScaffoldToolchain(scaffold);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("generated task instruction assertion rejects uninstalled vitest references", () => {
+    assert.throws(
+      () => assertGeneratedTaskInstructionsSelfConsistent([{ id: "TASK-BAD-VITEST", instructions: ["Create package.json with a test script that runs vitest run."] }]),
+      /vitest/,
+    );
   });
 
   test("approved demand splits compound board-style user stories before task generation", () => {
