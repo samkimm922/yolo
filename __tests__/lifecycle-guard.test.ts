@@ -87,6 +87,12 @@ function writeRunPass(root) {
   }, lifecycleWriteOptions(root));
 }
 
+function appendTaskRunStatus(root, taskId, status) {
+  const file = join(root, ".yolo", "state", "runtime", "task-results.jsonl");
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify({ id: taskId, task_id: taskId, status })}\n`, { encoding: "utf8", flag: "a" });
+}
+
 function writeReviewPass(root, report = {}) {
   return writeLifecycleStageReport("review-fix", {
     status: "success",
@@ -954,7 +960,43 @@ describe("lifecycle guard", () => {
 
       const beforeSnapshot = readSourceSnapshot({ projectRoot: root, stateRoot });
       assert.ok(beforeSnapshot?.signature);
+      appendTaskRunStatus(root, "FIX-DRIFT-001", "failed-and-discarded");
       unlinkSync(targetPath);
+      const recoveredMissingOut = capture();
+      const recoveredMissingExit = await runYoloCli(["check", prdPath, `--cwd=${root}`, "--json"], {
+        cwd: root,
+        stdout: recoveredMissingOut.stream,
+      });
+      const recoveredMissing = recoveredMissingOut.json();
+
+      assert.equal(recoveredMissingExit, 0);
+      assert.equal(recoveredMissing.status, "pass");
+      assert.equal((recoveredMissing.blockers as Array<{ code?: string }>).some((blocker) => blocker.code === "DRIFT_TARGET_FILE_MISSING"), false);
+      const afterSnapshot = readSourceSnapshot({ projectRoot: root, stateRoot });
+      assert.notEqual(afterSnapshot?.signature, beforeSnapshot.signature);
+      assert.equal(existsSync(targetPath), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("drift recovery blocks missing target only for tasks completed by run state", async () => {
+    const root = tempProject();
+    try {
+      const { stateRoot, prdPath, targetPath } = writeRecoveryFixture(root);
+      const firstCheckOut = capture();
+      const firstCheckExit = await runYoloCli(["check", prdPath, `--cwd=${root}`, "--json"], {
+        cwd: root,
+        stdout: firstCheckOut.stream,
+      });
+      assert.equal(firstCheckExit, 0);
+      assert.equal(firstCheckOut.json().status, "pass");
+
+      const beforeSnapshot = readSourceSnapshot({ projectRoot: root, stateRoot });
+      assert.ok(beforeSnapshot?.signature);
+      appendTaskRunStatus(root, "FIX-DRIFT-001", "completed");
+      unlinkSync(targetPath);
+
       const blockedOut = capture();
       const blockedExit = await runYoloCli(["check", prdPath, `--cwd=${root}`, "--json"], {
         cwd: root,
@@ -967,7 +1009,6 @@ describe("lifecycle guard", () => {
       assert.ok((blocked.blockers as Array<{ code?: string }>).some((blocker) => blocker.code === "DRIFT_TARGET_FILE_MISSING"));
       const afterSnapshot = readSourceSnapshot({ projectRoot: root, stateRoot });
       assert.equal(afterSnapshot?.signature, beforeSnapshot.signature);
-      assert.equal(existsSync(targetPath), false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -1150,6 +1150,104 @@ function requiresGreenfieldScaffold(tasks = [], context = Object()) {
   return [...kinds].some((kind) => !buildConfigValue(config, kind === "type_check" ? "type_check" : kind));
 }
 
+const INSTRUCTION_TOOL_PACKAGE_NAMES = new Map([["jest", "jest"], ["tsc", "typescript"], ["typescript", "typescript"], ["vitest", "vitest"]]);
+
+function generatedTaskInstructionsText(task = Object()) {
+  const instructions = task.instructions ?? task.instruction ?? task.handoff?.instructions ?? [];
+  return asArray(instructions)
+    .flatMap((item) => asArray(item))
+    .map(clean)
+    .filter(Boolean)
+    .join("\n");
+}
+
+function collectInstructionToolReferences(text = "") {
+  const tools = new Set<string>();
+  const source = clean(text);
+  for (const tool of INSTRUCTION_TOOL_PACKAGE_NAMES.keys()) {
+    if (new RegExp(`\\b${tool}\\b`, "i").test(source)) tools.add(tool);
+  }
+  const patterns = [/\bnpm\s+(?:exec|x)\s+(@?[A-Za-z0-9._-][A-Za-z0-9._/-]*)/gi, /\bnpx\s+(@?[A-Za-z0-9._-][A-Za-z0-9._/-]*)/gi, /\bpnpm\s+(?!(?:add|install|run|test)\b)(@?[A-Za-z0-9._-][A-Za-z0-9._/-]*)/gi, /\byarn\s+(?!(?:add|install|run|test)\b)(@?[A-Za-z0-9._-][A-Za-z0-9._/-]*)/gi];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      const tool = clean(match[1]).split("/").pop() || clean(match[1]);
+      if (tool && INSTRUCTION_TOOL_PACKAGE_NAMES.has(tool)) tools.add(tool);
+    }
+  }
+  return [...tools];
+}
+
+function instructionInstallsPackage(text = "", packageName = "") {
+  if (!packageName) return false;
+  return new RegExp(`\\b(?:npm\\s+(?:install|i)|pnpm\\s+add|yarn\\s+add)\\b[^\\n;]*\\b${packageName}\\b`, "i").test(text);
+}
+
+function conditionCommandExecutable(condition = Object()) {
+  const command = clean(condition?.params?.command || condition?.command);
+  const parsed = parseCommandToArgv(command);
+  return parsed.ok ? clean(parsed.argv?.[0]) : "";
+}
+
+function taskHasToolAvailabilityGuarantee(task = Object(), tool = "") {
+  const packageName = INSTRUCTION_TOOL_PACKAGE_NAMES.get(tool) || tool;
+  const conditions = [...asArray(task.pre_conditions), ...asArray(task.post_conditions)];
+  return conditions.some((condition) => {
+    if (condition?.type !== "build_command_available") return false;
+    const executable = conditionCommandExecutable(condition);
+    return executable === tool || executable === packageName;
+  });
+}
+
+export function inspectGeneratedTaskInstructionsSelfConsistent(tasks = []) {
+  const blockers = [];
+  for (const task of asArray(tasks)) {
+    const instructions = generatedTaskInstructionsText(task);
+    if (!instructions) continue;
+    for (const tool of collectInstructionToolReferences(instructions)) {
+      const packageName = INSTRUCTION_TOOL_PACKAGE_NAMES.get(tool) || tool;
+      if (instructionInstallsPackage(instructions, packageName) || taskHasToolAvailabilityGuarantee(task, tool)) continue;
+      blockers.push({ code: "TASK_INSTRUCTIONS_TOOL_UNGUARANTEED", task_id: task?.id || null, tool, package: packageName, message: `Task instructions reference "${tool}" without installing "${packageName}" or declaring a command-availability gate.`, suggestion: `Install ${packageName} in the same task instructions or add a build_command_available condition for ${tool}.` });
+    }
+  }
+  return blockers;
+}
+
+export function assertGeneratedTaskInstructionsSelfConsistent(tasks = []) {
+  const blockers = inspectGeneratedTaskInstructionsSelfConsistent(tasks);
+  if (blockers.length > 0) {
+    const error = Object.assign(
+      new Error(`Generated task instructions are not self-consistent: ${blockers.map((blocker) => `${blocker.task_id || "unknown"}:${blocker.tool}`).join(", ")}`),
+      { blockers },
+    );
+    throw error;
+  }
+}
+
+function scaffoldInstructions(needsTypecheck = false) {
+  const steps = [
+    "Create package.json for a minimal Node.js project using built-in Node tooling.",
+    "Set scripts.test to \"node --test\" so the test command uses the node:test runner with zero test-framework dependencies.",
+  ];
+  if (needsTypecheck) {
+    steps.push(
+      "Run npm install --save-dev typescript --package-lock=false so node_modules/.bin/tsc exists for type-check gates.",
+      "Set scripts.typecheck to \"tsc --noEmit\".",
+    );
+  }
+  steps.push("Do not add extra test framework dependencies for this scaffold task.");
+  return steps;
+}
+
+function buildCommandAvailableCondition(taskId, kind, command) {
+  return {
+    id: `POST-${taskId}-${kind === "type_check" ? "TYPECHECK" : kind.toUpperCase()}-COMMAND-AVAILABLE`,
+    type: "build_command_available",
+    severity: "FAIL",
+    params: { kind, command },
+    message: `Configured ${kind} command must be available before downstream gates run.`,
+  };
+}
+
 function scaffoldPostConditions(taskId, context = Object(), needsTypecheck = false) {
   const conditions: Array<Record<string, unknown>> = [
     {
@@ -1166,17 +1264,37 @@ function scaffoldPostConditions(taskId, context = Object(), needsTypecheck = fal
       params: { file: "package.json", text: "\"test\"" },
       message: "package.json must expose a test script for config.build.test.",
     },
+    {
+      id: `POST-${taskId}-NODE-TEST-SCRIPT`,
+      type: "code_contains",
+      severity: "FAIL",
+      params: { file: "package.json", text: "node --test" },
+      message: "package.json test script must use the built-in node:test runner.",
+    },
+    buildCommandAvailableCondition(taskId, "test", "node --test"),
     testsPassCondition(taskId, context),
   ];
   if (needsTypecheck) {
-    conditions.splice(2, 0, {
+    conditions.splice(3, 0, {
       id: `POST-${taskId}-TYPECHECK-SCRIPT`,
       type: "code_contains",
       severity: "FAIL",
       params: { file: "package.json", text: "\"typecheck\"" },
       message: "package.json must expose a typecheck script before type gates run.",
+    }, {
+      id: `POST-${taskId}-TYPECHECK-COMMAND`,
+      type: "code_contains",
+      severity: "FAIL",
+      params: { file: "package.json", text: "tsc --noEmit" },
+      message: "package.json typecheck script must invoke the TypeScript compiler.",
+    }, {
+      id: `POST-${taskId}-TYPESCRIPT-DEVDEP`,
+      type: "code_contains",
+      severity: "FAIL",
+      params: { file: "package.json", text: "\"typescript\"" },
+      message: "package.json must record TypeScript as a dev dependency before type gates run.",
     });
-    conditions.push(typecheckCondition(taskId, context));
+    conditions.push(buildCommandAvailableCondition(taskId, "type_check", "tsc --noEmit"));
   }
   return conditions;
 }
@@ -1210,6 +1328,7 @@ function buildGreenfieldScaffoldTask(session = Object(), tasks = [], context = O
     source_finding_ids: [requirementId].filter(Boolean),
     source_question_ids: sourceQuestions,
     verification_hint: "Run the configured test command after package.json is created.",
+    instructions: scaffoldInstructions(needsTypecheck),
     inputs: [".yolo/config.json"],
     expected_output: ["package.json"],
     depends_on: [],
@@ -1248,9 +1367,10 @@ function buildGreenfieldScaffoldTask(session = Object(), tasks = [], context = O
       },
       key_interfaces: ["package.json"],
       read_first: [".yolo/config.json"],
-      acceptance_criteria: ["package.json exists and the configured test command is executable."],
-      proof: "package.json exists and npm test succeeds.",
-      verification_hint: "Run the configured test command after package.json is created.",
+      acceptance_criteria: ["package.json exposes node --test and TypeScript command availability when type gates are required."],
+      instructions: scaffoldInstructions(needsTypecheck),
+      proof: "package.json exists, npm test succeeds with node --test, and required toolchain commands are available.",
+      verification_hint: "Run npm test after package.json is created; when type gates are required, verify node_modules/.bin/tsc is available.",
       project_facts: structuredProjectFacts(session),
       deferred_scope: asArray(session.discussion?.deferred),
       deferred_scope_confirmation: deferredScopeConfirmation(session),
@@ -1282,6 +1402,7 @@ function buildGreenfieldScaffoldTask(session = Object(), tasks = [], context = O
         ],
       },
     },
+    acceptance_criteria: ["package.json exposes node --test and TypeScript command availability when type gates are required."],
     scope: {
       targets: [{ file: "package.json", description: "Minimal greenfield toolchain scaffold" }],
       readonly_files: [],
@@ -1490,6 +1611,7 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
         if (verifyCommand && !parseCommandToArgv(verifyCommand).ok) {
           const parsed = parseCommandToArgv(verifyCommand);
           compileErrors.push({
+            code: "ILLEGAL_VERIFY_COMMAND",
             task_id: taskId,
             original_command: verifyCommand,
             illegal_chars: parsed.ok ? "" : (parsed.detail.match(/"(.+?)"/)?.[1] || "shell_metachar"),
@@ -1688,7 +1810,8 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
   addTaskDependencies(tasks);
   deriveFileDependencies(tasks);
   const scaffold = buildGreenfieldScaffoldTask(session, tasks, buildContext);
-  return { tasks: addScaffoldDependency(tasks, scaffold), compileErrors };
+  const generatedTasks = addScaffoldDependency(tasks, scaffold);
+  return { tasks: generatedTasks, compileErrors: [...compileErrors, ...inspectGeneratedTaskInstructionsSelfConsistent(generatedTasks)] };
 }
 
 function inspectAtomicity(tasks = [], input = Object(), options = Object()) {
@@ -1697,6 +1820,7 @@ function inspectAtomicity(tasks = [], input = Object(), options = Object()) {
   const blockers = [];
   const warnings = [];
   for (const task of tasks) {
+    if (task?.task_kind === "greenfield_scaffold") continue;
     try {
       const result = inspectAtomicTask(task, {
         projectRoot,
@@ -1791,23 +1915,26 @@ function buildDemandPrd(session = Object(), input = Object(), options = Object()
   const prdId = clean(input.prd_id || input.prdId) || `PRD-${now.slice(0, 10).replace(/-/g, "")}-${asciiIdPart(session.id.replace(/^DEMAND-/, ""), "DEMAND")}`;
   const { tasks, compileErrors } = buildAtomicDemandTasks(session, { ...input, projectRoot: input.projectRoot || input.project_root }, options);
   if (compileErrors.length > 0) {
+    const verifyOnly = compileErrors.every((err) => (err.code || "ILLEGAL_VERIFY_COMMAND") === "ILLEGAL_VERIFY_COMMAND");
     return {
       status: "blocked",
-      code: "DEMAND_VERIFY_COMMAND_BLOCKED",
-      summary: "PRD compilation blocked by illegal verify_command in task acceptance criteria.",
+      code: verifyOnly ? "DEMAND_VERIFY_COMMAND_BLOCKED" : "DEMAND_TASK_INSTRUCTIONS_BLOCKED",
+      summary: verifyOnly
+        ? "PRD compilation blocked by illegal verify_command in task acceptance criteria."
+        : "PRD compilation blocked by generated task instructions that reference unavailable tools.",
       grounding,
       grounded_session: session,
       readiness,
       quality_report: { status: "blocked", warnings: [], blockers: compileErrors.map((err) => err.task_id) } as ReturnType<typeof inspectDemandQuality>,
       blockers: compileErrors.map((err) => ({
-        code: "ILLEGAL_VERIFY_COMMAND",
+        code: err.code || "ILLEGAL_VERIFY_COMMAND",
         task_id: err.task_id,
-        message: `Task ${err.task_id} contains illegal verify_command: "${err.original_command}". Illegal characters: ${err.illegal_chars}. ${err.suggestion}`,
+        message: err.message || `Task ${err.task_id} contains illegal verify_command: "${err.original_command}". Illegal characters: ${err.illegal_chars}. ${err.suggestion}`,
         ...err,
       })),
       warnings: readiness.warnings,
       prd: null,
-      next_actions: compileErrors.map((err) => `Fix verify_command for task ${err.task_id}: ${err.suggestion}`),
+      next_actions: compileErrors.map((err) => err.suggestion || `Fix verify_command for task ${err.task_id}.`),
     };
   }
   const atomicity = inspectAtomicity(tasks, input, options);
@@ -2132,8 +2259,8 @@ export function runDemandTaskRuntime(input = Object(), options = Object()) {
   const atomicity = inspectAtomicity(taskBuild.tasks, input, options);
   const blockers = [
     ...taskBuild.compileErrors.map((error) => ({
-      code: "DEMAND_TASK_VERIFY_COMMAND_UNSAFE",
-      message: `Task ${error.task_id} has an unsafe verify command.`,
+      code: error.code === "TASK_INSTRUCTIONS_TOOL_UNGUARANTEED" ? "DEMAND_TASK_INSTRUCTIONS_TOOL_UNGUARANTEED" : "DEMAND_TASK_VERIFY_COMMAND_UNSAFE",
+      message: error.message || `Task ${error.task_id} has an unsafe verify command.`,
       error,
     })),
     ...(atomicity.status === "blocked" ? atomicity.blockers || [] : []),

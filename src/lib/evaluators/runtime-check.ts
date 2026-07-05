@@ -11,6 +11,7 @@ import type { EvalParams, EvalResult, EvaluatorOptions, ExecFn, TaskScope } from
 import {
   assertBuildCommandAvailable,
   buildCommandEnv,
+  type BuildCommandKind,
   commandUnavailableDetail,
   resolveBuildCommand,
   resolveGateTimeout,
@@ -44,9 +45,37 @@ function runCommand(command: string, ROOT: string, timeout: number, kind: "test"
   };
 }
 
-function commandConfig(kind: "test" | "build", command: string): Record<string, unknown> {
+const BUILD_COMMAND_KINDS = new Set(["test", "type_check", "build", "lint", "dead_code"]);
+
+function commandConfig(kind: BuildCommandKind, command: string): Record<string, unknown> {
   const build = config.build && typeof config.build === "object" ? config.build as Record<string, unknown> : Object();
   return { ...config, build: { ...build, [kind]: command } };
+}
+
+function buildCommandKind(value: unknown): BuildCommandKind | null {
+  const kind = String(value || "").trim();
+  return BUILD_COMMAND_KINDS.has(kind) ? kind as BuildCommandKind : null;
+}
+
+export function evalBuildCommandAvailable(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string): EvalResult {
+  const kind = buildCommandKind(params.kind || params.command_kind);
+  if (!kind) {
+    return {
+      passed: false,
+      detail: "build_command_available requires params.kind: test, type_check, build, lint, or dead_code",
+      type: "build_command_available",
+    };
+  }
+  const command = String(params.command || resolveBuildCommand(kind, config, ROOT));
+  const availability = assertBuildCommandAvailable(kind, commandConfig(kind, command), ROOT);
+  return {
+    passed: availability.ok,
+    detail: availability.ok ? `命令可用: ${command}` : availability.message,
+    type: "build_command_available",
+    command: availability.command,
+    executable: availability.executable,
+    config_key: availability.configKey,
+  };
 }
 
 export function evalTestsPass(params: EvalParams = {}, _taskScope: TaskScope, ROOT: string): EvalResult {

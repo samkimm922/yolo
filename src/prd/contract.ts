@@ -18,7 +18,7 @@ import {
 } from "../lib/evaluators/code-check.js";
 import { evalFileExists, evalFileNotExists, evalDirExists, evalFilesModifiedMax, evalFileLinesMax, evalNoFileOverMaxLines } from "../lib/evaluators/file-check.js";
 import { evalNoForbiddenPatterns, evalNoNewTypeErrors, evalTypeErrorsContain, evalNoNewLintErrors, evalNoNewDeadCode } from "../lib/evaluators/quality-check.js";
-import { evalTestsPass, evalBuildPass, evalBusinessCodeMin } from "../lib/evaluators/runtime-check.js";
+import { evalTestsPass, evalBuildPass, evalBuildCommandAvailable, evalBusinessCodeMin } from "../lib/evaluators/runtime-check.js";
 import { parseCommandToArgv } from "../lib/security/command-guard.js";
 import { execArgv, execCommand } from "../lib/security/safe-exec.js";
 import { resolveWithinRoot } from "../lib/security/path-guard.js";
@@ -205,6 +205,7 @@ function createEvaluators(root: string, options: ContractOptions = {}): Record<s
     no_file_over_max_lines: (params, ts) => evalNoFileOverMaxLines(params, ts, root),
     tests_pass: (params, ts) => evalTestsPass(params, ts, root),
     test_file_passes: (params, ts) => evalTestsPass(params, ts, root),
+    build_command_available: (params, ts) => evalBuildCommandAvailable(params, ts, root),
     build_pass: (params, ts) => evalBuildPass(params, ts, root),
     business_code_min: (params, ts) => evalBusinessCodeMin(params, ts, root, exec, { config: evaluatorConfig, changedFiles: options.changedFiles || options.changed_files }),
     acceptance_criteria: (params, _taskScope) => {

@@ -144,6 +144,7 @@ export const CONDITION_TYPES = [
   "no_new_lint_errors",
   "tests_pass",
   "test_file_passes",
+  "build_command_available",
   "files_modified_max",
   "file_lines_max",
   "target_file_modified",

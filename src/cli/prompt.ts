@@ -60,6 +60,7 @@ type PromptTask = {
   id?: string;
   title?: string;
   description?: string;
+  instructions?: string | string[];
   scope?: PromptScope;
   pre_conditions?: PromptCondition[];
   post_conditions?: PromptCondition[];
@@ -691,13 +692,26 @@ parts.push(
   "",
 );
 
+const taskInstructions = Array.isArray(task.instructions)
+  ? task.instructions.map((item) => String(item || "").trim()).filter(Boolean).join("\n")
+  : String(task.instructions || "").trim();
+if (taskInstructions) {
+  parts.push(
+    "## 任务指令",
+    "<untrusted-user-data>",
+    taskInstructions,
+    "</untrusted-user-data>",
+    "",
+  );
+}
+
 // 验收标准
 const acceptanceCriteria = task.acceptance_criteria || [];
 parts.push(
   "## ✅ 验收标准",
   acceptanceCriteria.length > 0
     ? [`<untrusted-user-data>`, acceptanceCriteria.map((a) => typeof a === "string" ? `- ${a}` : `- ${a.description || a.message || ""}`).join("\n"), `</untrusted-user-data>`].join("\n")
-    : "按描述执行，通过 tsc + eslint + vitest",
+    : "按描述执行，并通过本任务列出的 post_conditions",
   "",
 );
 

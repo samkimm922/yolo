@@ -232,7 +232,7 @@ export function validatePrdDocument(prd: unknown, schema: JsonSchema, ajv: AjvIn
       'code_contains', 'code_not_contains',
       'file_exists', 'file_not_exists',
       'no_new_type_errors', 'no_new_lint_errors',
-      'tests_pass',
+      'tests_pass', 'build_command_available',
       'files_modified_max', 'file_lines_max',
       'no_forbidden_patterns', 'no_new_dead_code',
       'acceptance_criteria',
