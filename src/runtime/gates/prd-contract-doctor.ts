@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   BEHAVIOR_VERIFICATION_CONDITION_TYPES as BEHAVIOR_VERIFICATION_CONDITION_TYPE_LIST,
@@ -9,6 +9,7 @@ import {
   TARGET_COVERAGE_CONDITION_TYPES as TARGET_COVERAGE_CONDITION_TYPE_LIST,
 } from "../../prd/condition-catalog.js";
 import { loadProjectToolchainConfig, resolveBuildCommand } from "../../lib/toolchain.js";
+import { resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { inspectAtomicTask } from "../execution/atomic-task-doctor.js";
 import { orderTasksByDependencies } from "../task-loop/expansion.js";
 import { isAtomicityExempt } from "./readiness-policy.js";
@@ -85,59 +86,6 @@ function normalizeTargetPath(value) {
     .replace(/\\/g, "/")
     .replace(/^\.\//, "")
     .replace(/:\d+(?:-\d+)?$/, "");
-}
-
-function pathExists(path) {
-  try {
-    lstatSync(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isInsideOrSame(root, path) {
-  const rel = relative(root, path);
-  return rel === "" || (!!rel && !rel.startsWith("..") && !isAbsolute(rel));
-}
-
-function isInsideChild(root, path) {
-  const rel = relative(root, path);
-  return Boolean(rel && !rel.startsWith("..") && !isAbsolute(rel));
-}
-
-function nearestExistingAncestor(path) {
-  let current = path;
-  while (!pathExists(current)) {
-    const parent = dirname(current);
-    if (parent === current) return current;
-    current = parent;
-  }
-  return current;
-}
-
-function pathInsideProject(projectRoot, file) {
-  const lexicalRoot = resolve(projectRoot);
-  const target = normalizeTargetPath(file);
-  if (!target || target.includes("\0")) return false;
-  const path = isAbsolute(target) ? resolve(target) : resolve(lexicalRoot, target);
-  if (!isInsideChild(lexicalRoot, path)) return false;
-
-  let realRoot;
-  try {
-    realRoot = realpathSync(lexicalRoot);
-  } catch {
-    return true;
-  }
-
-  try {
-    if (pathExists(path)) {
-      return isInsideChild(realRoot, realpathSync(path));
-    }
-    return isInsideOrSame(realRoot, realpathSync(nearestExistingAncestor(path)));
-  } catch {
-    return false;
-  }
 }
 
 function collectPathValues(value, out = []) {
@@ -524,7 +472,8 @@ export function inspectPrdContract(prd, options = Object()) {
     const postConditions = asArray(task?.post_conditions);
 
     for (const ref of taskPathReferences(targets, postConditions)) {
-      if (!pathInsideProject(projectRoot, ref.file)) {
+      const guarded = resolveWithinRoot(projectRoot, ref.file);
+      if (!guarded.ok) {
         addFinding(
           failures,
           task,
@@ -534,6 +483,8 @@ export function inspectPrdContract(prd, options = Object()) {
           {
             path: ref.file,
             source: ref.source,
+            reason: guarded.reason || null,
+            guard_detail: guarded.detail || null,
             human_needed: true,
           },
         );

@@ -1,6 +1,6 @@
 import { inspectPrdContractDoctorGate } from "./prd-contract-doctor-gate.js";
 import { inspectSpecGovernanceGate } from "./spec-governance-gate.js";
-import { inspectProviderCapabilityGate } from "./provider-capability-gate.js";
+import { inspectProviderCapabilityGate, providerCapabilityExecutionBlock } from "./provider-capability-gate.js";
 
 export function inspectPreExecutionGates({ prd, prdPath, stateDir, projectRoot, config }) {
   const contract = inspectPrdContractDoctorGate({
@@ -41,18 +41,18 @@ export function inspectPreExecutionGates({ prd, prdPath, stateDir, projectRoot, 
   }
 
   const capability = inspectProviderCapabilityGate({ prd, config });
-  if (capability.status !== "pass") {
-    const warning = capability.status === "warning";
+  const capabilityBlock = providerCapabilityExecutionBlock(capability);
+  if (capabilityBlock) {
     return {
       status: "blocked",
-      stage: "capability",
-      code: warning ? "PROVIDER_CAPABILITY_WARNING_BLOCKED" : "PROVIDER_CAPABILITY_BLOCKED",
-      exit_code: warning ? 2 : 1,
-      message: capability.message,
+      stage: capabilityBlock.stage,
+      code: capabilityBlock.code,
+      exit_code: capabilityBlock.exit_code,
+      message: capabilityBlock.message,
       contract,
       spec,
       capability,
-      messages: [`[provider-capability] ${warning ? "warning-blocked" : "blocked"}\n${capability.message}`],
+      messages: capabilityBlock.messages,
     };
   }
 

@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { inspectStoryAtomicityFromDemand } from "./story-atomicity.js";
 import { validateLedgerChain, readLedgerJsonl } from "../runtime/evidence/ledger.js";
+import { resolveWithinRoot } from "../lib/security/path-guard.js";
 import {
   buildEvidenceRequirements,
   detectProjectFactAssumptionSignal,
@@ -172,11 +173,8 @@ function targetFileFactRecords(session = Object()) {
 function scopedProjectPath(projectRoot: unknown, file: unknown): string | null {
   const root = resolve(clean(projectRoot) || process.cwd());
   const target = clean(file);
-  if (!target) return null;
-  const path = isAbsolute(target) ? resolve(target) : resolve(root, target);
-  const relativePath = relative(root, path);
-  if (!relativePath || relativePath.startsWith("..") || isAbsolute(relativePath)) return null;
-  return path;
+  const guarded = resolveWithinRoot(root, target);
+  return guarded.ok ? guarded.path || null : null;
 }
 
 function assumptionFactRecords(session = Object()) {

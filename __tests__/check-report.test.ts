@@ -347,6 +347,7 @@ describe("yolo check report", () => {
         demand_contract_required: undefined,
         demand: undefined,
         execution_readiness: undefined,
+        provider_capability: { opt_out: true },
       }));
 
       const exitCode = runYoloCheckCli([prdPath, "--mode=advisory", "--json", "--no-write"], {
@@ -382,6 +383,7 @@ describe("yolo check report", () => {
         demand_contract_required: undefined,
         demand: undefined,
         execution_readiness: undefined,
+        provider_capability: { opt_out: true },
       }));
 
       const exitCode = await runYoloCli(["check", prdPath, "--mode=advisory", "--cwd", root, "--json", "--no-write"], {
@@ -788,8 +790,15 @@ describe("yolo check report", () => {
       }));
 
       const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+      const pmReadiness = report.checks.find((check) => check.name === "pm_readiness");
 
       assert.equal(report.status, "blocked");
+      assert.equal(pmReadiness.status, "blocked");
+      assert.ok(report.blockers.some((blocker) =>
+        blocker.code === "TASK_TARGET_OUTSIDE_ROOT" &&
+        blocker.gate === "pm_readiness" &&
+        /src\/link-out\.js/.test(blocker.message || "")
+      ));
       assert.ok(report.blockers.some((blocker) =>
         blocker.code === "TASK_TARGET_OUTSIDE_ROOT" &&
         blocker.gate === "prd_preflight" &&
@@ -798,6 +807,39 @@ describe("yolo check report", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("allows greenfield task targets that do not exist yet inside the project root", () => {
+    const root = tempProject();
+    try {
+      const prdPath = join(root, "prd.json");
+      writeJson(prdPath, strictPrd({
+        scope: { targets: [{ file: "src/new-file.ts" }] },
+        post_conditions: [
+          {
+            id: "POST-TARGET",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "src/new-file.ts" },
+          },
+          {
+            id: "POST-TYPECHECK",
+            type: "no_new_type_errors",
+            severity: "FAIL",
+            params: { command: "npm run typecheck" },
+          },
+        ],
+      }));
+
+      const report = inspectYoloCheck({ prdPath, projectRoot: root, mode: "runner" });
+      const pmReadiness = report.checks.find((check) => check.name === "pm_readiness");
+
+      assert.equal(report.status, "pass", JSON.stringify(report.blockers, null, 2));
+      assert.equal(pmReadiness.status, "pass");
+      assert.equal(report.blockers.some((blocker) => blocker.code === "TASK_TARGET_OUTSIDE_ROOT"), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

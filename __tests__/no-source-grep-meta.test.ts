@@ -53,4 +53,31 @@ describe("meta gate: critical tests are not source-grep theater", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("path containment drift scan blocks custom resolve-relative containment in src files", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-source-grep-path-containment-"));
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src", "bad.ts"), [
+        "import { isAbsolute, relative, resolve } from 'node:path';",
+        "export function localContainment(projectRoot: string, file: string) {",
+        "  const root = resolve(projectRoot);",
+        "  const target = resolve(root, file);",
+        "  const rel = relative(root, target);",
+        "  return Boolean(rel && !rel.startsWith('..') && !isAbsolute(rel));",
+        "}",
+        "",
+      ].join("\n"), "utf8");
+
+      const result = scanSourceGrepMeta(root);
+
+      assert.equal(result.status, "fail");
+      assert.ok(result.path_containment_drift.some((item) =>
+        item.file === "src/bad.ts" &&
+        item.pattern === "resolve+relative containment"
+      ));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

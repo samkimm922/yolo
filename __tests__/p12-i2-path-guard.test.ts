@@ -116,4 +116,15 @@ describe("P12.I2 resolveWithinRoot accepts legit paths", () => {
     assert.equal(r.ok, true);
     assert.equal(r.path, "/project/src/my file.ts");
   });
+
+  test("accepts a greenfield file below a missing in-project directory", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-p12-i2-greenfield-"));
+    try {
+      const r = resolveWithinRoot(root, "src/new-file.ts");
+      assert.equal(r.ok, true);
+      assert.equal(r.path, join(root, "src/new-file.ts"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

@@ -81,8 +81,19 @@ const TOOLCHAIN_DRIFT_ALLOW = "source-grep-allow toolchain-drift";
 const TOOLCHAIN_DRIFT_EXCLUDED_FILES = new Set([
   "src/lib/toolchain.ts",
 ]);
+const PATH_CONTAINMENT_DRIFT_ALLOW = "source-grep-allow path-containment-drift";
+const PATH_CONTAINMENT_DRIFT_EXCLUDED_FILES = new Set([
+  "src/lib/security/path-guard.ts",
+]);
 
 type ToolchainDriftFinding = {
+  file: string;
+  line: number;
+  pattern: string;
+  detail: string;
+};
+
+type PathContainmentDriftFinding = {
   file: string;
   line: number;
   pattern: string;
@@ -109,6 +120,10 @@ function hasToolchainDriftAllow(lines: string[], index: number): boolean {
   return lines[index]?.includes(TOOLCHAIN_DRIFT_ALLOW) || lines[index - 1]?.includes(TOOLCHAIN_DRIFT_ALLOW);
 }
 
+function hasPathContainmentDriftAllow(lines: string[], index: number): boolean {
+  return lines[index]?.includes(PATH_CONTAINMENT_DRIFT_ALLOW) || lines[index - 1]?.includes(PATH_CONTAINMENT_DRIFT_ALLOW);
+}
+
 function scanToolchainDrift(root: string): ToolchainDriftFinding[] {
   const findings: ToolchainDriftFinding[] = [];
   const files = walkFiles(root, "src")
@@ -127,6 +142,36 @@ function scanToolchainDrift(root: string): ToolchainDriftFinding[] {
       for (const check of checks) {
         if (check.matched) findings.push({ file, line: index + 1, pattern: check.pattern, detail: check.detail });
       }
+    });
+  }
+  return findings;
+}
+
+function scanPathContainmentDrift(root: string): PathContainmentDriftFinding[] {
+  const findings: PathContainmentDriftFinding[] = [];
+  const files = walkFiles(root, "src")
+    .filter((file) => !PATH_CONTAINMENT_DRIFT_EXCLUDED_FILES.has(file) && !file.startsWith("__tests__/fixtures/"));
+  for (const file of files) {
+    const lines = read(root, file).split("\n");
+    lines.forEach((_line, index) => {
+      if (hasPathContainmentDriftAllow(lines, index)) return;
+      if (!/\brelative\s*\(/.test(lines[index])) return;
+      const window = lines.slice(Math.max(0, index - 3), Math.min(lines.length, index + 4)).join("\n");
+      const resolveIndex = window.search(/\bresolve\s*\(/);
+      const relativeIndex = window.search(/\brelative\s*\(/);
+      const customContainment =
+        resolveIndex >= 0 &&
+        relativeIndex >= 0 &&
+        resolveIndex < relativeIndex &&
+        /\.startsWith\(\s*["']\.\./.test(window) &&
+        /\bisAbsolute\s*\(/.test(window);
+      if (!customContainment) return;
+      findings.push({
+        file,
+        line: index + 1,
+        pattern: "resolve+relative containment",
+        detail: "route project path containment through src/lib/security/path-guard.ts:resolveWithinRoot",
+      });
     });
   }
   return findings;
@@ -154,7 +199,8 @@ export function scanSourceGrepMeta(root = resolve(SCRIPT_DIR, "..")) {
     }
   }
   const toolchainDrift = scanToolchainDrift(root);
-  const status = missing.length || unexpected.length || staleAllowlist.length || missingPairedTests.length || toolchainDrift.length ? "fail" : "pass";
+  const pathContainmentDrift = scanPathContainmentDrift(root);
+  const status = missing.length || unexpected.length || staleAllowlist.length || missingPairedTests.length || toolchainDrift.length || pathContainmentDrift.length ? "fail" : "pass";
   return {
     status,
     critical_test_files: CRITICAL_TEST_FILES,
@@ -165,6 +211,7 @@ export function scanSourceGrepMeta(root = resolve(SCRIPT_DIR, "..")) {
     stale_allowlist: staleAllowlist,
     missing_paired_tests: missingPairedTests,
     toolchain_drift: toolchainDrift,
+    path_containment_drift: pathContainmentDrift,
   };
 }
 

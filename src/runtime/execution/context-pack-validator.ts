@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveWithinRoot } from "../../lib/security/path-guard.js";
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 
@@ -15,14 +16,20 @@ function normalizePath(value) {
     .replace(/:\d+(?:-\d+)?$/, "");
 }
 
-function isUnsafePath(value) {
+function lexicalPrecheck(value) {
   const file = normalizePath(value);
-  return !file ||
+  if (!file) return { ok: false, file, reason: "empty", detail: "path is empty" };
+  if (file.includes("\0")) return { ok: false, file, reason: "null_byte", detail: "path contains null byte" };
+  if (
     file.startsWith("/") ||
     file === ".." ||
     file.startsWith("../") ||
     file.includes("/../") ||
-    file.endsWith("/..");
+    file.endsWith("/..")
+  ) {
+    return { ok: false, file, reason: "path_escape", detail: "path escapes the project root lexically" };
+  }
+  return { ok: true, file, reason: null, detail: null };
 }
 
 function uniqueStrings(values) {
@@ -96,6 +103,17 @@ function addWarning(warnings, code, detail, extra = Object()) {
   warnings.push({ code, detail, ...extra });
 }
 
+function validatePackPath(root, value) {
+  const file = normalizePath(value);
+  if (root) {
+    const guarded = resolveWithinRoot(root, file);
+    return guarded.ok
+      ? { ok: true, file, reason: null, detail: null }
+      : { ok: false, file, reason: guarded.reason || "path_escape", detail: guarded.detail || "path must stay inside root" };
+  }
+  return lexicalPrecheck(file);
+}
+
 export function validateContextPack(pack, options = Object()) {
   const failures = [];
   const warnings = [];
@@ -124,19 +142,25 @@ export function validateContextPack(pack, options = Object()) {
   }
 
   for (const [index, target] of targets.entries()) {
-    if (isUnsafePath(target?.file)) {
+    const guarded = validatePackPath(root, target?.file);
+    if (!guarded.ok) {
       addFailure(failures, "CONTEXT_PACK_UNSAFE_TARGET", `unsafe target path at index ${index}`, {
         target_index: index,
-        file: target?.file || null,
+        file: guarded.file || target?.file || null,
+        reason: guarded.reason || null,
+        guard_detail: guarded.detail || null,
       });
     }
   }
 
   for (const [index, file] of readonlyFiles.entries()) {
-    if (isUnsafePath(file)) {
+    const guarded = validatePackPath(root, file);
+    if (!guarded.ok) {
       addFailure(failures, "CONTEXT_PACK_UNSAFE_READONLY_FILE", `unsafe readonly file path at index ${index}`, {
         readonly_index: index,
-        file,
+        file: guarded.file || file,
+        reason: guarded.reason || null,
+        guard_detail: guarded.detail || null,
       });
     }
   }

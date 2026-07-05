@@ -134,3 +134,17 @@ export function inspectProviderCapabilityGate(options = Object()) {
       : "All required capabilities are supported.",
   };
 }
+
+export function providerCapabilityExecutionBlock(capability = Object()) {
+  if (!capability || capability.status === "pass") return null;
+  const warning = capability.status === "warning";
+  return {
+    status: "blocked",
+    stage: "capability",
+    code: warning ? "PROVIDER_CAPABILITY_WARNING_BLOCKED" : "PROVIDER_CAPABILITY_BLOCKED",
+    exit_code: warning ? 2 : 1,
+    message: capability.message,
+    messages: [`[provider-capability] ${warning ? "warning-blocked" : "blocked"}\n${capability.message}`],
+    warning_blocked: warning,
+  };
+}
