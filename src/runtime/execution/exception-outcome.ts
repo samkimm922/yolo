@@ -1,13 +1,14 @@
 import { failTaskTransition } from "../task-state/transitions.js";
+import { circuitBreakerThreshold, hasRepeatedFailure } from "../recovery/retry-policy.js";
 
 export function exceptionFailureKey(error) {
   return `exception:${(error?.message || "unknown").substring(0, 50)}`;
 }
 
-export function hasRepeatedExceptionFailure(history = [], failKey = "") {
-  if (history.length < 2) return false;
-  const last2 = history.slice(-2);
-  return last2.length >= 2 && last2.every((item) => item.message && item.message.includes(failKey.slice(0, 30)));
+export function hasRepeatedExceptionFailure(history = [], failKey = "", threshold: unknown = circuitBreakerThreshold()) {
+  const keyPrefix = failKey.slice(0, 30);
+  const matchesFailKey = (item) => Boolean(item?.message && item.message.includes(keyPrefix));
+  return hasRepeatedFailure(history, threshold, (item, first) => matchesFailKey(first) && matchesFailKey(item));
 }
 
 export function buildRunTaskExceptionOutcome({

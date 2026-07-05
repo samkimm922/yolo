@@ -15,6 +15,7 @@ import { runAdapterEvidenceCollector } from "../adapters/evidence-collector.js";
 import { verifyArtifactIntegrity } from "../evidence/artifact-integrity.js";
 import type { ArtifactIntegrityRecord } from "../evidence/artifact-integrity.js";
 import { computeSourceFingerprint } from "../evidence/source-fingerprint.js";
+import { ACCEPTANCE_RUN_PASS_STATUSES } from "../../lib/status-vocab.js";
 import { isWithin } from "../../lib/security/path-guard.js";
 import { verifyApprovalSignature, approvalSignablePayload } from "../../lib/security/approval-signing.js";
 import { resolveManualAcceptancePublicKey } from "../../lifecycle/manual-acceptance-keys.js";
@@ -649,7 +650,6 @@ function summarizeIssues(issues: AcceptanceIssue[] = []): IssueSummary {
   };
 }
 
-const RUN_REPORT_PASS_STATUSES = new Set(["pass", "success"]);
 const STATUS_FIELDS = new Set(["status", "verdict", "outcome"]);
 
 function collectReportStatuses(report: unknown, depth = 0, field = "", seen: Set<unknown> = new Set()): StatusEntry[] {
@@ -812,7 +812,7 @@ function runtimeEvidenceIssues(runReport: unknown, issues: AcceptanceIssue[], { 
   runReportSufficiencyIssues(report, issues, { prdPath });
   const status = clean(report.status).toLowerCase();
   const statusEntries = collectReportStatuses(report);
-  const nonPassStatuses = statusEntries.filter((entry) => !RUN_REPORT_PASS_STATUSES.has(entry.status));
+  const nonPassStatuses = statusEntries.filter((entry) => !ACCEPTANCE_RUN_PASS_STATUSES.has(entry.status));
   const dryRunFlags = collectReportFlags(report, ["dry_run", "dryRun"]);
   const failed = Number(report.summary?.failed || asArray(report.failed).length || 0);
   const blocked = Number(report.summary?.blocked || asArray(report.blocked).length || 0);
@@ -838,7 +838,7 @@ function runtimeEvidenceIssues(runReport: unknown, issues: AcceptanceIssue[], { 
     reviewErrors > 0 ||
     fixtureFailures > 0 ||
     fixtureBlocked > 0 ||
-    (fixtureStatus && !RUN_REPORT_PASS_STATUSES.has(fixtureStatus)) ||
+    (fixtureStatus && !ACCEPTANCE_RUN_PASS_STATUSES.has(fixtureStatus)) ||
     specBlocked > 0 ||
     ledgerIntegrityErrors > 0
   ) {
@@ -870,7 +870,7 @@ function runtimeEvidenceIssues(runReport: unknown, issues: AcceptanceIssue[], { 
 function adapterEvidenceIssues(adapterEvidence: AdapterEvidence | null, issues: AcceptanceIssue[]): void {
   if (!adapterEvidence) return;
   const status = clean(adapterEvidence.status).toLowerCase();
-  if (!RUN_REPORT_PASS_STATUSES.has(status)) {
+  if (!ACCEPTANCE_RUN_PASS_STATUSES.has(status)) {
     const issueCode = ["blocked", "failed", "fail", "error"].includes(status) ? "ADAPTER_EVIDENCE_BLOCKED" : "ADAPTER_EVIDENCE_NOT_CLEAN";
     pushIssue(issues, "P1", issueCode, "Adapter evidence must be pass/success before acceptance can pass.", {
       adapter_status: status || null,

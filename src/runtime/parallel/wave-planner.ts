@@ -1,4 +1,5 @@
 import { isSafePathComponent } from "../../lib/security/path-guard.js";
+import { PARALLEL_WAVE_PASS_STATUSES } from "../../lib/status-vocab.js";
 
 export const CONTROLLED_PARALLEL_SCHEMA_VERSION = "1.0";
 export const CONTROLLED_PARALLEL_PLAN_SCHEMA = "yolo.runtime.controlled_parallel_plan.v1";
@@ -192,7 +193,7 @@ function worktreeForTask({ task, waveIndex, worktreeRoot }: { task: Record<strin
 }
 
 function statusIsPass(value: unknown): boolean {
-  return ["pass", "passed", "success", "completed", "done"].includes(clean(value).toLowerCase());
+  return PARALLEL_WAVE_PASS_STATUSES.has(clean(value).toLowerCase());
 }
 
 function passedWaveIdsFromReports(waveReports = []) {

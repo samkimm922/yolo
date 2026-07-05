@@ -1,4 +1,8 @@
 import { blockedTaskTransition, failTaskTransition } from "../task-state/transitions.js";
+import {
+  circuitBreakerThreshold as configuredCircuitBreakerThreshold,
+  hasRepeatedFailure,
+} from "../recovery/retry-policy.js";
 import { dependencyBlockers } from "./status-helpers.js";
 
 const IMMEDIATE_REMEDIATION_ACTIONS = new Set([
@@ -83,6 +87,8 @@ export function handleTaskOutcome({
   completedIds,
   childTaskMap,
   lastFailKey = "",
+  failureHistory = null,
+  circuitBreakerThreshold: repeatedFailureThreshold = configuredCircuitBreakerThreshold(),
   loadPrd,
   skippedTaskPostconditionsPass,
   updateMergedSourceTasks,
@@ -94,6 +100,9 @@ export function handleTaskOutcome({
   now = new Date().toISOString(),
 }) {
   const r = outcome;
+  const tracksFailureHistory = Array.isArray(failureHistory);
+  const withFailureHistory = (result, nextHistory = failureHistory) =>
+    tracksFailureHistory ? { ...result, failureHistory: nextHistory } : result;
   let immediateRemediationRequired = false;
   if (r?.remediation) {
     if (!Array.isArray(results.remediation)) results.remediation = [];
@@ -135,7 +144,7 @@ export function handleTaskOutcome({
     runResultsTracker.completed.add(task.id);
     for (const sourceId of sourceIds) runResultsTracker.completed.add(sourceId);
     progress.done++;
-    return { action: "continue", lastFailKey: "" };
+    return withFailureHistory({ action: "continue", lastFailKey: "" }, []);
   }
 
   if (r.status === "skipped" && r.counts_as_completed === true) {
@@ -164,7 +173,7 @@ export function handleTaskOutcome({
       runResultsTracker.failed.push(task.id);
       progress.failed++;
       log(task.id, "FAIL", reason);
-      return { action: "continue", lastFailKey };
+      return withFailureHistory({ action: "continue", lastFailKey });
     }
 
     completedIds.add(task.id);
@@ -180,7 +189,7 @@ export function handleTaskOutcome({
     results.skipped.push(task.id);
     appendUniqueTaskIds(results.skipped, sourceIds);
     log(task.id, "--", `跳过: ${r.reason}`);
-    return { action: "continue", lastFailKey };
+    return withFailureHistory({ action: "continue", lastFailKey });
   }
 
   if (r.status === "blocked") {
@@ -203,12 +212,14 @@ export function handleTaskOutcome({
     progress.failed++;
     log(task.id, "BLOCKED", r.reason || "blocked");
     if (stopForImmediateRemediation && immediateRemediationRequired) {
-      return { action: "stop", reason: "immediate_remediation_required", lastFailKey };
+      return withFailureHistory({ action: "stop", reason: "immediate_remediation_required", lastFailKey });
     }
-    return { action: "continue", lastFailKey };
+    return withFailureHistory({ action: "continue", lastFailKey });
   }
 
   const failKey = `${r.status}:${(r.reason || "").slice(0, 60)}`;
+  const priorFailureHistory = tracksFailureHistory ? failureHistory : (lastFailKey ? [lastFailKey] : []);
+  const nextFailureHistory = [...priorFailureHistory, failKey];
   // P9.M2: persist the terminal failure to the PRD so task.status agrees with the run report.
   // "failed" is not stale-reset on resume (only "running" is), leaving retry/circuit-breaker intact.
   recordTaskTransition(failTaskTransition({
@@ -220,12 +231,15 @@ export function handleTaskOutcome({
     },
     now,
   }));
-  if (lastFailKey && failKey === lastFailKey) {
-    log("!!", "全局熔断", `连续 2 个 task 同因失败: ${failKey} — 疑似引擎 bug，全部停机`);
+  if (hasRepeatedFailure(nextFailureHistory, repeatedFailureThreshold)) {
+    log("!!", "全局熔断", `连续 ${repeatedFailureThreshold} 个 task 同因失败: ${failKey} — 疑似引擎 bug，全部停机`);
     results.failed.push(task.id);
     runResultsTracker.failed.push(task.id);
     markParentBlockedByChildFailure(task, childTaskMap, r.reason || r.status);
-    return { action: "stop", reason: "repeated_failure_fuse", lastFailKey: failKey };
+    return withFailureHistory(
+      { action: "stop", reason: "repeated_failure_fuse", lastFailKey: failKey },
+      nextFailureHistory,
+    );
   }
 
   markParentBlockedByChildFailure(task, childTaskMap, r.reason || r.status);
@@ -240,7 +254,10 @@ export function handleTaskOutcome({
   appendUniqueTaskIds(results.failed, sourceIds);
   progress.failed++;
   if (stopForImmediateRemediation && immediateRemediationRequired) {
-    return { action: "stop", reason: "immediate_remediation_required", lastFailKey: failKey };
+    return withFailureHistory(
+      { action: "stop", reason: "immediate_remediation_required", lastFailKey: failKey },
+      nextFailureHistory,
+    );
   }
-  return { action: "continue", lastFailKey: failKey };
+  return withFailureHistory({ action: "continue", lastFailKey: failKey }, nextFailureHistory);
 }

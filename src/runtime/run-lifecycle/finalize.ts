@@ -10,6 +10,10 @@ import { spawnSync as defaultSpawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { BASELINE_RUNTIME_FILES } from "../execution/baselines.js";
 import { cleanupProgressServer } from "./shutdown.js";
+import {
+  RUN_LIFECYCLE_CLEAN_FINAL_OUTCOMES,
+  RUN_LIFECYCLE_CLEAN_STATUSES,
+} from "../../lib/status-vocab.js";
 
 const PERSIST_RUNTIME_FILES = new Set([
   "learn-stats.json",
@@ -230,8 +234,6 @@ export function cleanupRunArtifacts({
   return { cleanedCount, worktreeCleanup, rawEvidenceArchive };
 }
 
-const RUN_CLEAN_STATUSES = new Set(["pass", "success"]);
-const RUN_CLEAN_FINAL_OUTCOMES = new Set(["pass", "success"]);
 const RUN_ERROR_STATUSES = new Set(["blocked", "error", "failed", "fail"]);
 const STATUS_FIELDS = new Set(["status", "verdict", "outcome"]);
 
@@ -313,7 +315,7 @@ function reportStatusValues(report = Object()) {
 }
 
 function reportHasNonCleanStatus(report = Object()) {
-  return reportStatusValues(report).some((status) => !RUN_CLEAN_STATUSES.has(status));
+  return reportStatusValues(report).some((status) => !RUN_LIFECYCLE_CLEAN_STATUSES.has(status));
 }
 
 function pathCount(value) {
@@ -323,7 +325,7 @@ function pathCount(value) {
 function collectTaskResultStatusIssues(result = Object()) {
   const issues = [];
   const statusEntries = collectStatusEntries(result);
-  pushIssue(issues, "RUNNER_RESULT_STATUS_ERROR", "runner result status is not clean", statusEntries.filter((entry) => !RUN_CLEAN_STATUSES.has(entry.status)).length);
+  pushIssue(issues, "RUNNER_RESULT_STATUS_ERROR", "runner result status is not clean", statusEntries.filter((entry) => !RUN_LIFECYCLE_CLEAN_STATUSES.has(entry.status)).length);
   pushIssue(issues, "RUNNER_RESULT_DRY_RUN", "runner result contains dry-run evidence", collectDryRunFlags(result).length);
   pushIssue(issues, "RUNNER_RESULT_ERRORS", "runner result contains errors", countItems(result.error) + countItems(result.errors));
   const reviewOutcomeStatus = cleanStatus(result.review_outcome?.status);
@@ -331,7 +333,7 @@ function collectTaskResultStatusIssues(result = Object()) {
     issues,
     "REVIEW_OUTCOME_BLOCKED",
     "review loop outcome blocks finalization",
-    reviewOutcomeStatus && !RUN_CLEAN_STATUSES.has(reviewOutcomeStatus) ? 1 : 0,
+    reviewOutcomeStatus && !RUN_LIFECYCLE_CLEAN_STATUSES.has(reviewOutcomeStatus) ? 1 : 0,
   );
   return issues;
 }
@@ -360,7 +362,7 @@ function collectRunReportIssues(runReportResult = Object(), { requireArtifacts =
 
   if (report) {
     const statusEntries = collectStatusEntries(report);
-    pushIssue(issues, "RUN_REPORT_STATUS_ERROR", "run report status is not clean", statusEntries.filter((entry) => !RUN_CLEAN_STATUSES.has(entry.status)).length);
+    pushIssue(issues, "RUN_REPORT_STATUS_ERROR", "run report status is not clean", statusEntries.filter((entry) => !RUN_LIFECYCLE_CLEAN_STATUSES.has(entry.status)).length);
     pushIssue(issues, "RUN_REPORT_DRY_RUN", "run report contains dry-run evidence", collectDryRunFlags(report).length);
     pushIssue(issues, "RUN_REPORT_ERRORS", "run report contains errors", countItems(report.errors) + countItems(report.error));
     pushIssue(issues, "EVIDENCE_FAILURES", "run report contains evidence failures", positiveNumber(report.summary?.evidence_failures ?? report.evidence_failure_count ?? report.evidence_failures));
@@ -379,16 +381,16 @@ function collectRunReportIssues(runReportResult = Object(), { requireArtifacts =
     const status = cleanStatus(finalAnswer.status);
     const outcome = cleanStatus(finalAnswer.outcome);
     const finalAnswerStatusEntries = collectStatusEntries(finalAnswer);
-    pushIssue(issues, "FINAL_ANSWER_STATUS_ERROR", "final answer status is not clean", status && !RUN_CLEAN_STATUSES.has(status) ? 1 : 0);
-    pushIssue(issues, "FINAL_ANSWER_NEEDS_ATTENTION", "final answer outcome needs attention", outcome && !RUN_CLEAN_FINAL_OUTCOMES.has(outcome) ? 1 : 0);
-    pushIssue(issues, "FINAL_ANSWER_NESTED_STATUS_ERROR", "final answer contains nested non-clean status", finalAnswerStatusEntries.filter((entry) => !RUN_CLEAN_STATUSES.has(entry.status) && entry.field !== "outcome").length);
+    pushIssue(issues, "FINAL_ANSWER_STATUS_ERROR", "final answer status is not clean", status && !RUN_LIFECYCLE_CLEAN_STATUSES.has(status) ? 1 : 0);
+    pushIssue(issues, "FINAL_ANSWER_NEEDS_ATTENTION", "final answer outcome needs attention", outcome && !RUN_LIFECYCLE_CLEAN_FINAL_OUTCOMES.has(outcome) ? 1 : 0);
+    pushIssue(issues, "FINAL_ANSWER_NESTED_STATUS_ERROR", "final answer contains nested non-clean status", finalAnswerStatusEntries.filter((entry) => !RUN_LIFECYCLE_CLEAN_STATUSES.has(entry.status) && entry.field !== "outcome").length);
     pushIssue(issues, "FINAL_ANSWER_DRY_RUN", "final answer contains dry-run evidence", collectDryRunFlags(finalAnswer).length);
     pushIssue(issues, "FINAL_ANSWER_BLOCKERS", "final answer contains blockers", countItems(finalAnswer.blockers));
     pushIssue(
       issues,
       "FINAL_ANSWER_CHECK_FAILURES",
       "final answer contains non-pass checks",
-      asArray(finalAnswer.checks).filter((check) => !RUN_CLEAN_STATUSES.has(cleanStatus(check?.status))).length,
+      asArray(finalAnswer.checks).filter((check) => !RUN_LIFECYCLE_CLEAN_STATUSES.has(cleanStatus(check?.status))).length,
     );
   }
 

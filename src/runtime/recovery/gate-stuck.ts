@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createTaskTransition, failTaskTransition } from "../task-state/transitions.js";
 import { gateFailureFingerprint } from "../gates/failure-analysis.js";
+import { circuitBreakerThreshold, hasRepeatedFailure } from "./retry-policy.js";
 
 /**
  * A single gate failure observation. `failure-analysis` parses gate output
@@ -71,10 +72,10 @@ export function incrementRetryCountFile(retryCountFile: string, taskId: string) 
   }
 }
 
-export function hasRepeatedGateFailure(history: GateFailureHistoryFingerprint[] = []) {
-  const last2 = history.slice(-2);
-  return last2.length >= 2 &&
-    last2.every((failure) => failure.gate === last2[0].gate && failure.fingerprint === last2[0].fingerprint);
+export function hasRepeatedGateFailure(history: GateFailureHistoryFingerprint[] = [], threshold: unknown = circuitBreakerThreshold()) {
+  return hasRepeatedFailure(history, threshold, (failure, first) =>
+    failure.gate === first.gate && failure.fingerprint === first.fingerprint
+  );
 }
 
 export function buildContractSuspectTransition({

@@ -5,6 +5,7 @@ import {
   RuntimeInvariantViolation,
   isRuntimeInvariantViolation,
 } from "../invariants.js";
+import { shouldInspectAtomicity } from "../gates/readiness-policy.js";
 import { inspectAtomicTask as defaultInspectAtomicTask } from "./atomic-task-doctor.js";
 
 function asArray(value) {
@@ -119,10 +120,7 @@ export async function validateTestGenerationAfterSession({
 }
 
 export function shouldRunAtomicTaskDoctor(task) {
-  if (!task || task.status === "done" || task.status === "completed") return false;
-  if (task.task_kind === "dry_run_artifact") return false;
-  if (task.atomic_task_doctor === false) return false;
-  return ["bugfix", "feature", "refactor", "cleanup", "security"].includes(task.type || "");
+  return shouldInspectAtomicity(task, "run");
 }
 
 function doctorCannotRemediateSplit(result = Object()) {

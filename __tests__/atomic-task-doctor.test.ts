@@ -5,7 +5,7 @@ import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { inspectAtomicTask, inspectTaskFromPrd } from "../src/runtime/execution/atomic-task-doctor.js";
 import { runAtomicTaskDoctorGate } from "../src/runtime/execution/session-validation.js";
-import { isAtomicityExempt } from "../src/runtime/gates/readiness-policy.js";
+import { isAtomicityExempt, shouldInspectAtomicity } from "../src/runtime/gates/readiness-policy.js";
 
 const YOLO_DIR = resolve(import.meta.dirname, "..");
 
@@ -15,6 +15,7 @@ describe("atomic task doctor", () => {
     const task = { ...fixture.tasks[0], status: "pending" };
 
     assert.equal(isAtomicityExempt(task), true);
+    assert.equal(shouldInspectAtomicity(task, "run"), false);
 
     const doctor = inspectAtomicTask(task, { root: YOLO_DIR, projectRoot: YOLO_DIR, writeEvidence: false });
     assert.equal(doctor.status, "pass");
@@ -24,8 +25,8 @@ describe("atomic task doctor", () => {
 
     const gate = runAtomicTaskDoctorGate({ task, yoloRoot: YOLO_DIR });
     assert.equal(gate.ok, true);
-    assert.notEqual(gate.result?.mode, "must_split");
-    assert.equal(gate.result?.atomicity_exempt?.reason, "greenfield_scaffold");
+    assert.equal(gate.skipped, true);
+    assert.equal(gate.result, undefined);
   });
 
   test("true multi-domain business task still must_split with executable suggestions", () => {
