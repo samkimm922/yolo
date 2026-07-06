@@ -115,6 +115,11 @@ function reviewScannerArtifactState(scanResult: string): { ok: boolean; detail?:
   };
 }
 
+function defaultReviewReportPath(prdPath: string): string {
+  const normalized = String(prdPath || "").replace(/\\/g, "/");
+  return normalized.includes("/.yolo/") ? ".yolo/lifecycle/review-report.json" : "review-report.json";
+}
+
 function findingFingerprint(finding: Record<string, unknown> = Object()): string {
   return String(
     finding.finding_id ||
@@ -295,6 +300,7 @@ export async function runReviewLoop({
   } | null = null;
   const findingPersistence = new Map<string, { count: number; round: number }>();
   let lastRoundFindings: NormalizedReviewFinding[] = [];
+  const reviewReportPath = defaultReviewReportPath(prdPath);
   const loadLatestPrd = (): Prd => {
     try {
       return prdPath ? loadPRD(prdPath) : (prd as Prd);
@@ -495,12 +501,13 @@ export async function runReviewLoop({
         const scannerToTasks = mod.scannerToTasks as (
           findings: unknown[],
           round?: number,
+          options?: Record<string, unknown>,
         ) => { autoFixTasks: Array<Record<string, unknown>>; claudeFixTasks: Array<Record<string, unknown>>; infoCount: number };
-        classified = scannerToTasks(findings, round);
+        classified = scannerToTasks(findings, round, { reviewReportPath });
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
         logProgress("REVIEW", "", `scanner-to-task 不可用 (${errMsg})，全部转为 CLAUDE_FIX`);
-        classified = fallbackClassifyFindings(findings, round) as typeof classified;
+        classified = fallbackClassifyFindings(findings, round, { reviewReportPath }) as typeof classified;
       }
 
       const { autoFixTasks, claudeFixTasks, infoCount } = classified;

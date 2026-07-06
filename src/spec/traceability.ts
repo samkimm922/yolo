@@ -36,6 +36,10 @@ function optionalField(value: unknown, key: string): unknown {
   return (value as SpecRecord)[key];
 }
 
+function isRecord(value: unknown): value is SpecRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function isTerminalStatus(status: unknown): boolean {
   return typeof status === "string" && TERMINAL_STATUSES.has(status);
 }
@@ -60,6 +64,85 @@ function normalizeRefs(...values: unknown[]): string[] {
 
 function normalizeEvidenceRefs(...values: unknown[]): string[] {
   return normalizeRefs(...values).filter((ref) => ref.length > 0);
+}
+
+function cleanString(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function traceRecord(task: unknown = Object()): SpecRecord {
+  const trace = optionalField(task, "trace");
+  return isRecord(trace) ? trace : {};
+}
+
+function findingRecordIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(isRecord)
+    .flatMap((record) => normalizeRefs(record.finding_id, record.id, record.scanner_id, record.rule_id));
+}
+
+function reviewFindingRecordIds(task: unknown, prdRec: SpecRecord): Set<string> {
+  const taskRec = isRecord(task) ? task : {};
+  return new Set([taskRec.source_findings, taskRec.fix_findings, prdRec.review_findings, optionalField(prdRec.review, "findings"), optionalField(prdRec.review_report, "findings"), optionalField(prdRec.source_review, "findings")]
+    .flatMap(findingRecordIds));
+}
+
+function reviewFindingIds(task: unknown): string[] {
+  const taskRec = isRecord(task) ? task : {};
+  const trace = traceRecord(task);
+  return normalizeRefs(taskRec.source_finding_ids, trace.finding_id, trace.finding_ids, trace.source_finding_id, trace.source_finding_ids);
+}
+
+function reviewFindingReportPath(trace: SpecRecord, evidence: SpecRecord = Object()): string {
+  return cleanString(evidence.report_path || evidence.reportPath || evidence.path || evidence.file || trace.review_report_path || trace.report_path);
+}
+
+function evidenceStringHasReportPath(value: string, findingId: string): boolean {
+  const [pathPart] = value.split("#", 1);
+  return value.includes(findingId) && value.includes("#") && cleanString(pathPart).length > 0;
+}
+
+function hasReviewFindingEvidence(trace: SpecRecord, findingId: string): boolean {
+  const evidenceItems = [
+    ...asArray<unknown>(trace.evidence),
+    ...asArray<unknown>(trace.evidence_files),
+  ];
+  for (const item of evidenceItems) {
+    if (typeof item === "string" && evidenceStringHasReportPath(item, findingId)) return true;
+    if (!isRecord(item)) continue;
+    const evidenceIds = normalizeRefs(item.finding_id, item.id, item.ref, item.key);
+    if (evidenceIds.includes(findingId) && reviewFindingReportPath(trace, item)) return true;
+  }
+  return Boolean(cleanString(trace.review_report_path || trace.report_path));
+}
+
+function reviewFindingIssue(code: string, taskId: string | null, message: string): GovernanceIssue {
+  return { code, task_id: taskId, message };
+}
+
+function reviewFindingTraceIssues(task: unknown, prdRec: SpecRecord, taskId: string | null): GovernanceIssue[] {
+  const trace = traceRecord(task);
+  if (cleanString(trace.source) !== "review_finding") return [];
+  const issues: GovernanceIssue[] = [];
+  const findingIds = reviewFindingIds(task);
+  if (findingIds.length === 0) {
+    issues.push(reviewFindingIssue("MISSING_REVIEW_FINDING_TRACE", taskId, "review_finding trace 缺少 source_finding_ids"));
+    return issues;
+  }
+
+  const knownFindingIds = reviewFindingRecordIds(task, prdRec);
+  const missing = findingIds.filter((id) => !knownFindingIds.has(id));
+  if (missing.length > 0) {
+    issues.push(reviewFindingIssue("INVALID_REVIEW_FINDING_TRACE", taskId, `review_finding trace references missing finding records: ${missing.join(", ")}`));
+  }
+
+  const missingEvidence = findingIds.filter((id) => !hasReviewFindingEvidence(trace, id));
+  if (missingEvidence.length > 0) {
+    issues.push(reviewFindingIssue("MISSING_REVIEW_FINDING_EVIDENCE", taskId, `review_finding trace 缺少 finding id + report path evidence: ${missingEvidence.join(", ")}`));
+  }
+
+  return issues;
 }
 
 function targetFiles(task: unknown = Object()): string[] {
@@ -183,11 +266,13 @@ export function inspectSpecGovernance(prd: unknown = Object(), options: unknown 
     requireDesign: optionsRec.requireDesign === true,
     requireEvidenceForTerminal: optionsRec.requireEvidenceForTerminal === true,
   };
+  const prdRec = prd as SpecRecord;
+  const prdTasks = Array.isArray(prdRec.tasks) ? prdRec.tasks.filter((task: unknown) => task && typeof task === "object") : [];
   const matrix = buildTraceabilityMatrix(prd);
   const blockers: GovernanceIssue[] = [];
   const warnings: GovernanceIssue[] = [];
 
-  for (const task of matrix.tasks) {
+  for (const [index, task] of matrix.tasks.entries()) {
     if (policy.requireRequirements && task.missing.requirements) {
       blockers.push({
         code: "MISSING_REQUIREMENT_TRACE",
@@ -247,6 +332,8 @@ export function inspectSpecGovernance(prd: unknown = Object(), options: unknown 
         message: "terminal task 缺少 evidence trace",
       });
     }
+
+    blockers.push(...reviewFindingTraceIssues(prdTasks[index], prdRec, task.task_id));
   }
 
   return {

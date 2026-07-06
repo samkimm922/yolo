@@ -20,9 +20,10 @@ interface ScannerToTasksResult {
 export function scannerToTasks(
   findings: ReviewFindingInput[] = [],
   round = 1,
+  options: Record<string, unknown> = Object(),
 ): ScannerToTasksResult {
   const infoCount = findings.filter((finding) => finding?.fix_type === "INFO").length;
-  const converted = reviewFindingsToPrdTasks(findings, { round });
+  const converted = reviewFindingsToPrdTasks(findings, { ...options, round });
   const autoFixTasks: ReviewPrdTask[] = [];
   const claudeFixTasks: ReviewPrdTask[] = [];
 
