@@ -205,4 +205,49 @@ describe("test generation validator", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("require_tests task blocks node:test targets without node:test imports", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-test-gen-node-target-"));
+    const task = {
+      scope: { allow_new_files: true, targets: [{ file: "test/git-weekly-cli.test.ts" }] },
+      post_conditions: [{ type: "tests_pass", params: { command: "npm test", require_tests: true } }],
+      test_generation: {
+        mode: "add_minimal",
+        reason: "Synthetic acceptance coverage.",
+        allowed_test_files: ["test/git-weekly-cli.test.ts"],
+        max_new_test_files: 1,
+      },
+    };
+    try {
+      mkdirSync(join(root, "test"), { recursive: true });
+      writeFileSync(join(root, "package.json"), JSON.stringify({
+        type: "module",
+        scripts: { test: "node --test" },
+      }), "utf8");
+      writeFileSync(join(root, "test/git-weekly-cli.test.ts"), [
+        "function test(_name: string, _fn: () => void) {}",
+        "test('fake local helper only', () => {});",
+      ].join("\n"), "utf8");
+
+      let result = validateTestGeneration(task, {
+        cwd: root,
+        changedFiles: [{ file: "test/git-weekly-cli.test.ts", status: "A", isNew: true }],
+      });
+      assert.equal(result.status, "fail");
+      assert.ok(result.failures.some((failure) => failure.code === "TEST_TARGET_NO_NODE_TEST_IMPORT"));
+
+      writeFileSync(join(root, "test/git-weekly-cli.test.ts"), [
+        "import test from 'node:test';",
+        "import assert from 'node:assert/strict';",
+        "test('git-weekly smoke', () => assert.equal(1, 1));",
+      ].join("\n"), "utf8");
+      result = validateTestGeneration(task, {
+        cwd: root,
+        changedFiles: [{ file: "test/git-weekly-cli.test.ts", status: "A", isNew: true }],
+      });
+      assert.equal(result.status, "pass");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

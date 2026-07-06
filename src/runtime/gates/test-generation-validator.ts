@@ -68,6 +68,60 @@ function hasRunnableTestDeclaration(content) {
   return /\b(?:test|it)\s*\(/.test(content) || /\bdescribe\s*\(/.test(content);
 }
 
+function hasNodeTestImport(content) {
+  return /\bfrom\s+['"]node:test['"]/.test(content)
+    || /\brequire\s*\(\s*['"]node:test['"]\s*\)/.test(content)
+    || /\bimport\s*\(\s*['"]node:test['"]\s*\)/.test(content);
+}
+
+function testOutputLooksEmpty(output = "") {
+  const text = String(output || "");
+  return /(?:^|\n)#?\s*tests\s+0(?:\n|$)/i.test(text)
+    || /\b0\s+tests?\b/i.test(text)
+    || /\bno tests? (?:found|run|executed)\b/i.test(text);
+}
+
+function taskUsesNodeTestRunner(task, cwd) {
+  const testCondition = asArray(task?.post_conditions).find((condition) => condition?.type === "tests_pass");
+  const command = String(testCondition?.params?.command || "");
+  if (/\bnode\s+--test\b/.test(command)) return true;
+  if (!/\bnpm\s+(?:run\s+)?test\b/.test(command)) return false;
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(cwd, "package.json"), "utf8"));
+    return /\bnode\s+--test\b/.test(String(pkg?.scripts?.test || ""));
+  } catch {
+    return false;
+  }
+}
+
+function verifyNodeTestTarget(cwd, file) {
+  try {
+    const output = execFileSync(process.execPath, ["--test", file], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 60000,
+      maxBuffer: 1024 * 1024,
+    });
+    if (testOutputLooksEmpty(output)) {
+      return {
+        ok: false,
+        code: "TEST_TARGET_NO_EXECUTED_TESTS",
+        detail: `node --test ${file} 通过但没有执行任何测试。`,
+      };
+    }
+    return { ok: true };
+  } catch (error) {
+    const stderr = error?.stderr?.toString?.().trim();
+    const stdout = error?.stdout?.toString?.().trim();
+    return {
+      ok: false,
+      code: "TEST_TARGET_COMMAND_FAILED",
+      detail: `node --test ${file} 失败: ${(stderr || stdout || error?.message || String(error)).slice(0, 300)}`,
+    };
+  }
+}
+
 function gitErrorDetail(error) {
   const stderr = error?.stderr?.toString?.().trim();
   return stderr || error?.message || String(error || "unknown git error");
@@ -173,6 +227,23 @@ export function validateTestGeneration(task, options = Object()) {
         code: "TEST_TARGET_NO_TEST_DECLARATION",
         detail: `目标测试文件缺少 test()/it()/describe() 声明: ${file}`,
       });
+      continue;
+    }
+    if (taskUsesNodeTestRunner(task, cwd)) {
+      if (!hasNodeTestImport(content)) {
+        failures.push({
+          code: "TEST_TARGET_NO_NODE_TEST_IMPORT",
+          detail: `node --test 项目的目标测试文件必须显式导入 node:test: ${file}`,
+        });
+        continue;
+      }
+      const runnable = verifyNodeTestTarget(cwd, file);
+      if (!runnable.ok) {
+        failures.push({
+          code: runnable.code,
+          detail: runnable.detail,
+        });
+      }
     }
   }
 
