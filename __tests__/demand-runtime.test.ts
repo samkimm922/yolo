@@ -2042,8 +2042,15 @@ describe("demand runtime", () => {
       const machineTestGates = tasks.slice(1).flatMap((task) =>
         task.post_conditions.filter((condition) => condition.type === "tests_pass")
       );
+      const machineTestTasks = tasks.slice(1).filter((task) =>
+        task.post_conditions.some((condition) => condition.type === "tests_pass" && condition.params?.require_tests === true)
+      );
       assert.equal(machineTestGates.length > 0, true);
       assert.equal(machineTestGates.every((condition) => condition.params?.require_tests === true), true, "automated acceptance test gates must reject empty test suites");
+      assert.equal(machineTestTasks.every((task) =>
+        task.scope.targets.some((target) => /(^|\/)tests?\//.test(target.file) || /\.test\./.test(target.file))
+      ), true, "require_tests gates must give the executor an in-scope test file to create or update");
+      assert.equal(machineTestTasks.every((task) => Number(task.scope.max_files || 0) >= task.scope.targets.length), true);
       assert.equal(downstreamTypeOrTestTasks.length > 0, true);
       assert.equal(downstreamTypeOrTestTasks.every((task) => task.depends_on.includes(scaffold.id)), true);
     } finally {
