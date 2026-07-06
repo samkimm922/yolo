@@ -235,3 +235,56 @@
 - Trace note: Round 8 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop8/`; `task-audit.jsonl` was not present in `.yolo/state/runtime/` for this round, but task-results, task-logs, reports, and command output are present.
 - Frozen files touched: none.
 - Exit reason after this round: budget exhausted before first ship pass.
+
+## Resume: Round 6 Recovery Gate
+
+- Resume request: continue `dogfood-to-ship` on cumulative branch `fix/dogfood-loop-to-ship` for up to 6 hours or 4 more rounds.
+- Branch check: `fix/dogfood-loop-to-ship` checked out at `550ace9` before new fixes; PR #254 continues to carry this branch.
+- Pre-run self-check:
+  - `npm run build --silent`: pass
+  - `npm run verify:executor --silent`: pass; `bash_nonce_read`, `bash_npm_ping`, and `.yolo/state` write-block probe all passed
+- Round 6 official recovery attempt:
+  - Project path: `/Users/sippingroom/Developer/dogfood-gitweekly-loop6`
+  - `command -v yolo` returned no executable in this shell, so recovery used `node /Users/sippingroom/Developer/yolo/dist/bin/yolo.js`.
+  - `yolo status --json` in the Round 6 project reported `YOLO_NEXT_READY`, `current_stage: check`, and recommended `yolo check`.
+  - `yolo check .yolo/demand/DEMAND-LOOP6-GIT-WEEKLY/prd.json --json` exited 1 with `YOLO_CHECK_BLOCKED`.
+  - Blockers: `MISSING_REQUIREMENT_TRACE` and `MISSING_DESIGN_TRACE` on `FIX-R1-001`.
+  - Decision: official recovery chain cannot safely resume `run`; no forced rescue was attempted. Continuing in a new dogfood directory is the compliant path.
+- Frozen files touched: none.
+
+## Round 9
+
+- Project path: `/Users/sippingroom/Developer/dogfood-gitweekly-loop9`
+- Dogfood window: approximately 2026-07-06T15:59:00Z to 2026-07-06T16:18:18Z for lifecycle run attempt; fix validation followed immediately after.
+- Pre-run self-check: `npm run build --silent` passed; `npm run verify:executor --silent` passed.
+- Lifecycle preparation:
+  - `yolo check .yolo/demand/DEMAND-LOOP9-GIT-WEEKLY/prd.json --json`: pass.
+  - `yolo run --executor claude`: exited 1 after the first business task entered contract-suspect stop.
+  - Positive carry-forward evidence: the scaffold task completed and the run log showed `MERGE 持久化 node_modules 工具链缓存`, confirming the Round 6 toolchain-cache fix still executes on the real dogfood path.
+- Stop point: review/acceptance/ship were not reached.
+- Result: run report status `error`; completed `DEMAND-GREENFIELD-SCAFFOLD-001`; failed `DEMAND-REQ-001-0010101` and `REVIEW-SCANNER-COVERAGE-INCOMPLETE`; blocked `REVIEW-SCANNER-COVERAGE-INCOMPLETE`; `task_success_rate: 25.0% (1/3)`, `run_success_rate: 33.3% (1/1)`.
+- Immediate blocker: `DEMAND-REQ-001-0010101` repeatedly failed `tests_pass` because `npm test` passed with an empty/0-test suite. When the provider tried to add tests, scope audit rejected them as out of scope (`src/test.ts`, `src/git-weekly-cli.test.ts`, or `test/git-weekly-cli.test.ts`) because the task scope allowed only `src/git-weekly-cli.ts` with `max_files: 1`.
+- Root cause: the Round 8 fix correctly made automated acceptance gates reject empty test suites, but demand PRD generation attached `require_tests: true` to implementation tasks that had no in-scope test target. The generated contract demanded a non-empty test suite while forbidding the executor from creating the test file needed to satisfy it.
+- Fix: demand PRD generation now creates a separate synthetic automated acceptance test task when automated acceptance is required and the generated PRD has no explicit test task. Implementation tasks stay atomic and single-target; the synthetic task owns `test/<source-stem>.test.ts`, depends on implementation tasks, and carries the `tests_pass` gate with `require_tests: true`.
+- Evidence:
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop9/.dogfood-loop9/command-output/run.log`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop9/.dogfood-loop9/commands.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop9/.yolo/state/reports/run-20260706155936/run-report.json`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop9/.yolo/state/reports/run-20260706155936/run-report.md`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop9/.yolo/state/runtime/task-results.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop9/.yolo/state/runtime/task-logs/DEMAND-REQ-001-0010101.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop9/.yolo/demand/DEMAND-LOOP9-GIT-WEEKLY/prd.json`
+  - `src/demand/runtime.ts`
+  - `__tests__/demand-runtime.test.ts`
+- Repro first went red with `node --import tsx --test __tests__/demand-runtime.test.ts --test-name-pattern "R2 dogfood demand generates machine-verifiable gates"`: the test asserted any `require_tests` task must have an in-scope test target, and the generated implementation task did not.
+- Fix commit: `b3c7b4d fix(demand): split automated acceptance test tasks`
+- Validation:
+  - `node --import tsx --test __tests__/demand-runtime.test.ts --test-name-pattern "R2 dogfood demand generates machine-verifiable gates"`: red before fix, pass after fix, 36/36
+  - `node --import tsx --test __tests__/demand-runtime.test.ts __tests__/check-report.test.ts __tests__/prd-contract-doctor-manual-acceptance.test.ts __tests__/pre-execution-gates.test.ts`: pass, 78/78
+  - `npm run typecheck --silent`: pass
+  - `npm run verify --silent`: pass, 2026/2026 plus source-grep, ci guard, and prd-preflight pass
+  - `npm run quality-gate --silent`: pass, Q=1.0000
+  - `npm run build --silent`: pass
+  - `npm run verify:executor --silent`: pass
+- Trace note: Round 9 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop9/`; this round stopped before review/acceptance/ship.
+- Frozen files touched: none.
