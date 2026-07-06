@@ -288,3 +288,49 @@
   - `npm run verify:executor --silent`: pass
 - Trace note: Round 9 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop9/`; this round stopped before review/acceptance/ship.
 - Frozen files touched: none.
+
+## Round 10
+
+- Project path: `/Users/sippingroom/Developer/dogfood-gitweekly-loop10`
+- Dogfood window: approximately 2026-07-06T16:35:00Z to 2026-07-06T16:49:03Z for lifecycle run attempt; fix validation followed immediately after.
+- Pre-run self-check: `npm run build --silent` passed; `npm run verify:executor --silent` passed.
+- Lifecycle preparation:
+  - `yolo check .yolo/demand/DEMAND-LOOP10-GIT-WEEKLY/prd.json --json`: pass.
+  - PRD self-inspection confirmed the Round 9 fix was active: the only automated test task was `DEMAND-AUTOMATED-ACCEPTANCE-TEST-001`, scoped to `test/git-weekly-cli.test.ts` with `max_files: 1`, and it depended on all implementation tasks plus the scaffold.
+  - `yolo run --executor claude`: exited 1 after all demand tasks passed, during review fix handling.
+- Positive carry-forward evidence:
+  - The generated scaffold completed and persisted the project toolchain cache.
+  - All 8 implementation tasks passed.
+  - The synthetic automated acceptance task passed after creating `test/git-weekly-cli.test.ts`; the run log shows `gate PASS` for `DEMAND-AUTOMATED-ACCEPTANCE-TEST-001`.
+- Stop point: review/acceptance/ship were not reached.
+- Result: run report status `error`; summary showed `completed: 10`, `failed: 4`, `blocked: 1`, `task_success_rate: 66.7`, `run_success_rate: 200`. The command log summarized `ok DEMAND-GREENFIELD-SCAFFOLD-001 ... DEMAND-AUTOMATED-ACCEPTANCE-TEST-001` and `FAIL FIX-R1-001+FIX-R1-002, FIX-R1-001, FIX-R1-002, REVIEW-FIX-BLOCKED`.
+- Immediate blocker: review scanner found two `debug-console-log` AUTO_FIX findings, but `runReviewLoop` attempted to import `/Users/sippingroom/Developer/yolo/dist/lib/auto-fix.js` from a built CLI process whose compiled module actually lives under `dist/src/lib/auto-fix.js`. The import failure upgraded both findings to provider fixes.
+- Secondary blocker: after the fallback path tried merged review task `FIX-R1-001+FIX-R1-002`, deterministic auto-fix found the known console-log recipe but failed validation because the greenfield dogfood project had no configured lint command: `[eslint] :0 缺少命令 "eslint"，请在 config.build.lint 配置目标项目可用命令。` Provider prompt generation then failed because merged task id `FIX-R1-001+FIX-R1-002` is not a PRD task.
+- Root cause:
+  - Built-runtime helper imports assumed a single `dist/<relative>` layout and did not search the actual TypeScript emit layout `dist/src/<relative>`.
+  - Console-log auto-fix validation treated an unconfigured lint command like a required unavailable command. For greenfield projects where `config.build.lint` is empty, lint should be skipped while typecheck validation still runs. Explicitly configured but unavailable lint remains fail-closed.
+- Fix: `runReviewLoop` now resolves helper modules from root, `src`, `dist`, and `dist/src` layouts before dynamic import. Deterministic auto-fix now runs ESLint validation only when a lint command is configured/resolved, while preserving existing parse-failure and command-unavailable fail-closed behavior for configured lint.
+- Evidence:
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop10/.dogfood-loop10/command-output/run.log`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop10/.dogfood-loop10/commands.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop10/.yolo/state/reports/run-20260706163604/run-report.json`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop10/.yolo/state/runtime/task-logs/FIX-R1-001+FIX-R1-002.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop10/.yolo/demand/DEMAND-LOOP10-GIT-WEEKLY/prd.json`
+  - `src/runtime/review-loop/orchestrator.ts`
+  - `src/lib/auto-fix.ts`
+  - `__tests__/review-loop-orchestrator.test.ts`
+  - `__tests__/task-router-quality-gate.test.ts`
+- Repro first went red with `node --import tsx --test __tests__/review-loop-orchestrator.test.ts --test-name-pattern "loads auto-fix from dist src layout"`: AUTO_FIX could not load from the built `dist/src` layout and the finding remained failed.
+- Repro first went red with `node --import tsx --test __tests__/task-router-quality-gate.test.ts --test-name-pattern "console auto-fix skips lint validation"`: console-log auto-fix failed when lint was not configured.
+- Fix commit: `5350535 fix(runtime): load review auto-fix from built layout`
+- Validation:
+  - `node --import tsx --test __tests__/review-loop-orchestrator.test.ts --test-name-pattern "loads auto-fix from dist src layout"`: red before fix, pass after fix
+  - `node --import tsx --test __tests__/task-router-quality-gate.test.ts --test-name-pattern "console auto-fix skips lint validation"`: red before fix, pass after fix
+  - `node --import tsx --test __tests__/review-loop-orchestrator.test.ts __tests__/review-loop-execution-helpers.test.ts __tests__/deterministic-auto-fix.test.ts __tests__/task-router-quality-gate.test.ts`: pass, 42/42
+  - `npm run typecheck --silent`: pass
+  - `npm run verify --silent`: pass
+  - `npm run quality-gate --silent`: pass, Q=1.0000
+  - `npm run build --silent`: pass
+  - `npm run verify:executor --silent`: pass
+- Trace note: Round 10 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop10/`; this round stopped in review fix handling before acceptance/ship.
+- Frozen files touched: none.
