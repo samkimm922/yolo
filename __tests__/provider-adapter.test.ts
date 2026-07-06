@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -15,6 +15,7 @@ import {
   classifyProviderFailure,
   DEFAULT_CLAUDE_PERMISSION_MODE,
   DEFAULT_CLAUDE_SETTINGS_PATH,
+  inspectProviderInvocationPreflight,
   spawnProviderPrompt,
   YOLO_PACKAGE_ROOT,
 } from "../src/runtime/execution/provider-adapter.js";
@@ -97,6 +98,21 @@ function defaultYoloWriteHookCommand(settings) {
   return "";
 }
 
+function assertNestedPreToolUseSchema(settings) {
+  const entries = settings.hooks?.PreToolUse || [];
+  assert.ok(entries.length > 0, "settings must include at least one PreToolUse hook entry");
+  for (const entry of entries) {
+    assert.equal(typeof entry.matcher, "string", "PreToolUse entry must have a string matcher");
+    assert.equal(entry.command, undefined, "legacy top-level command must not appear on PreToolUse entries");
+    assert.ok(Array.isArray(entry.hooks), "PreToolUse entry must use nested hooks array");
+    assert.ok(entry.hooks.length > 0, "nested hooks array must be non-empty");
+    for (const hook of entry.hooks) {
+      assert.equal(hook.type, "command", "nested hook type must be command");
+      assert.equal(typeof hook.command, "string", "nested hook command must be a string");
+    }
+  }
+}
+
 describe("provider execution adapter", () => {
   test("buildProviderInvocation creates a claude stdin invocation with budget guard", () => {
     const invocation = buildProviderInvocation({
@@ -164,6 +180,9 @@ describe("provider execution adapter", () => {
 
     const settings = defaultSettingsFromInvocation(invocation);
     assert.ok(settings.permissions.allow.includes("Bash"));
+    assertNestedPreToolUseSchema(settings);
+    const defaultPreflight = inspectProviderInvocationPreflight(invocation, { commandExists: () => true });
+    assert.equal(defaultPreflight.status, "pass");
     const matchers = (settings.hooks?.PreToolUse || []).map((entry) => entry.matcher).join("|");
     assert.match(matchers, /Bash/);
     const hookCommand = defaultYoloWriteHookCommand(settings);
@@ -175,6 +194,7 @@ describe("provider execution adapter", () => {
 
     const sourceSettings = JSON.parse(readFileSync(DEFAULT_CLAUDE_SETTINGS_PATH, "utf8"));
     assert.ok(sourceSettings.permissions.allow.includes("Bash"));
+    assertNestedPreToolUseSchema(sourceSettings);
   });
 
   test("spawnProviderPrompt defaults claude print mode to an editable permission mode", async () => {
@@ -239,6 +259,7 @@ describe("provider execution adapter", () => {
     assert.equal(settingsArg.startsWith("{"), true);
     assert.ok(settingsArg.includes("pre-tool-block-yolo-write.js"));
     assert.ok(settingsArg.includes(YOLO_PACKAGE_ROOT));
+    assertNestedPreToolUseSchema(defaultSettingsFromInvocation(invocation));
     assert.equal(invocation.settingsFile, null);
   });
 
@@ -261,7 +282,103 @@ describe("provider execution adapter", () => {
     assert.equal(settingsArg.startsWith("{"), true);
     assert.ok(settingsArg.includes("pre-tool-block-yolo-write.js"));
     assert.ok(settingsArg.includes(YOLO_PACKAGE_ROOT));
+    assertNestedPreToolUseSchema(defaultSettingsFromInvocation(invocation));
     assert.equal(invocation.settingsFile, null);
+  });
+
+  test("provider preflight blocks legacy flat claude hook schema and accepts nested or absent hooks", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-claude-settings-shape-"));
+    try {
+      const flatPath = join(root, "flat-settings.json");
+      const nestedPath = join(root, "nested-settings.json");
+      const noHooksPath = join(root, "no-hooks-settings.json");
+      writeFileSync(flatPath, JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: "Bash", command: "node hook.js" },
+          ],
+        },
+      }), "utf8");
+      writeFileSync(nestedPath, JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: "Bash", hooks: [{ type: "command", command: "node hook.js" }] },
+          ],
+        },
+      }), "utf8");
+      writeFileSync(noHooksPath, JSON.stringify({
+        permissions: { allow: ["Bash"] },
+      }), "utf8");
+
+      const invocationFor = (settingsPath) => ({
+        provider: "claude",
+        command: "claude",
+        args: ["-p", "--settings", settingsPath],
+        settingsFile: settingsPath,
+        settings: {
+          raw: settingsPath,
+          value: settingsPath,
+          type: "file",
+          path: settingsPath,
+          default_settings: false,
+        },
+      });
+
+      const flat = inspectProviderInvocationPreflight(invocationFor(flatPath), { commandExists: () => true });
+      assert.equal(flat.status, "blocked");
+      assert.equal(flat.blocks_execution, true);
+      assert.ok(flat.blockers.some((blocker) => blocker.code === "CLAUDE_SETTINGS_LEGACY_FLAT_HOOKS"));
+      assert.match(flat.blockers[0].message, /legacy flat hooks schema/i);
+      assert.match(flat.blockers[0].message, /\{ matcher, hooks: \[\{ type: "command", command: "\.\.\." \}\] \}/);
+
+      const nested = inspectProviderInvocationPreflight(invocationFor(nestedPath), { commandExists: () => true });
+      assert.equal(nested.status, "pass");
+      assert.equal(nested.blocks_execution, false);
+
+      const noHooks = inspectProviderInvocationPreflight(invocationFor(noHooksPath), { commandExists: () => true });
+      assert.equal(noHooks.status, "pass");
+      assert.equal(noHooks.blocks_execution, false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("spawnProviderPrompt fails closed before spawning when explicit claude settings use legacy flat hooks", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-claude-flat-settings-"));
+    try {
+      writeFileSync(join(root, "settings.json"), JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: "Bash", command: "node hook.js" },
+          ],
+        },
+      }), "utf8");
+
+      let spawned = false;
+      const run = await spawnProviderPrompt("prompt", {
+        config: {
+          ai: {
+            model: "claude-sonnet-4",
+            settings: "settings.json",
+          },
+        },
+        rootDir: root,
+        runtimeDir: join(root, ".yolo/state/runtime"),
+        commandExists: () => true,
+        spawnImpl: () => {
+          spawned = true;
+          throw new Error("spawn should not be called");
+        },
+      });
+
+      assert.equal(spawned, false);
+      assert.equal(run.success, false);
+      assert.equal(run.status, "blocked");
+      assert.equal(run.reason, "claude_settings_legacy_flat_hooks");
+      assert.match(run.stderr, /legacy flat hooks schema/i);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("spawnProviderPrompt fails closed before spawning when claude settings are missing", async () => {
