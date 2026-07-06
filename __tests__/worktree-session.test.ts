@@ -1,5 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync as realExecFileSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
@@ -273,6 +274,57 @@ describe("worktree execution session helpers", () => {
       assert.equal(readlinkSync(wtBin), "../typescript/bin/tsc");
       assert.equal(existsSync(join(wtPackage, "package.json")), true);
       assert.equal(existsSync(wtBin), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("cleanupTaskWorktree persists scaffold-installed node_modules for later worktrees", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-node-modules-persist-"));
+    const rootDir = join(root, "project");
+    const wtPath = join(root, ".yolo-worktrees", "SCAFFOLD");
+    try {
+      mkdirSync(rootDir, { recursive: true });
+      mkdirSync(join(wtPath, "node_modules", "typescript", "bin"), { recursive: true });
+      mkdirSync(join(wtPath, "node_modules", ".bin"), { recursive: true });
+      writeFileSync(join(wtPath, "package.json"), "{\"scripts\":{\"typecheck\":\"tsc --noEmit\"}}\n", "utf8");
+      writeFileSync(join(wtPath, "node_modules", "typescript", "package.json"), "{\"name\":\"typescript\"}\n", "utf8");
+      writeFileSync(join(wtPath, "node_modules", "typescript", "bin", "tsc"), "#!/usr/bin/env node\n", "utf8");
+      symlinkSync("../typescript/bin/tsc", join(wtPath, "node_modules", ".bin", "tsc"));
+
+      const execSync = (command) => {
+        if (command === "git rev-parse --is-inside-work-tree") return "true\n";
+        return "";
+      };
+      const execFileSync = (command, args, options) => {
+        if (command === "cp" || command === "rm") return realExecFileSync(command, args, options);
+        if (command !== "git") throw new Error(`unexpected command: ${command}`);
+        const joined = args.join("\0");
+        if (joined === ["-C", wtPath, "status", "--porcelain"].join("\0")) return " M package.json\n";
+        if (joined === ["-C", wtPath, "diff", "--name-status", "HEAD~1", "HEAD"].join("\0")) return "";
+        if (joined === ["-C", wtPath, "ls-files", "--others", "--exclude-standard"].join("\0")) return "";
+        if (joined === ["diff", "--name-only", "--", "package.json"].join("\0")) return "package.json\n";
+        if (joined === ["ls-files", "--others", "--exclude-standard", "--", "package.json"].join("\0")) return "";
+        if (joined === ["worktree", "remove", wtPath, "--force"].join("\0")) return "";
+        if (joined === ["branch", "-D", "yolo-SCAFFOLD-1"].join("\0")) return "";
+        throw new Error(`unexpected git args: ${args.join(" ")}`);
+      };
+
+      const copied = cleanupTaskWorktree({
+        wtPath,
+        wtBranch: "yolo-SCAFFOLD-1",
+        rootDir,
+        mergeToMain: true,
+        allowedScope: [{ file: "package.json" }],
+        baseRef: "HEAD~1",
+        execSync,
+        execFileSync,
+      });
+
+      assert.deepEqual([...copied], ["package.json"]);
+      assert.equal(existsSync(join(rootDir, "node_modules", ".bin", "tsc")), true);
+      assert.equal(existsSync(join(rootDir, "node_modules", "typescript", "package.json")), true);
+      assert.equal(existsSync(wtPath), false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
