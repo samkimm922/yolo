@@ -24,6 +24,63 @@ function appendUniqueFallback(target: unknown[], items: unknown[] = []) {
   }
 }
 
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+}
+
+function normalizeFile(value: unknown): string {
+  return String(value || "")
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "")
+    .replace(/:\d+(?:-\d+)?$/, "");
+}
+
+function scopeTargetFiles(task: ReviewTaskShape = Object()): string[] {
+  const scope = task.scope as Record<string, unknown> | undefined;
+  const targets = Array.isArray(scope?.targets) ? scope.targets as Array<Record<string, unknown>> : [];
+  const scoped = targets.map((target) => normalizeFile(target.file)).filter(Boolean);
+  return [...new Set([...scoped, ...stringArray(task.target_files).map(normalizeFile).filter(Boolean)])];
+}
+
+function sourceFindingIds(task: ReviewTaskShape = Object()): string[] {
+  const direct = stringArray(task.source_finding_ids);
+  const sourceFindings = Array.isArray(task.source_findings)
+    ? task.source_findings as Array<Record<string, unknown>>
+    : Array.isArray(task.fix_findings)
+      ? task.fix_findings as Array<Record<string, unknown>>
+      : [];
+  const fromFindings = sourceFindings
+    .map((finding) => finding?.finding_id || finding?.id || finding?.scanner_id || finding?.rule_id)
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+  return [...new Set([...direct, ...fromFindings])];
+}
+
+function inheritReviewTaskTrace(task: ReviewTaskShape, existingTasks: ReviewTaskShape[] = []) {
+  if (task.task_kind !== "review_fix") return;
+  const files = new Set(scopeTargetFiles(task));
+  const related = existingTasks.filter((candidate) => {
+    if (candidate === task || candidate.task_kind === "review_fix") return false;
+    const candidateFiles = scopeTargetFiles(candidate);
+    return candidateFiles.some((file) => files.has(file));
+  });
+  const requirementIds = [...new Set(related.flatMap((candidate) => stringArray(candidate.requirement_ids)))];
+  const designIds = [...new Set(related.flatMap((candidate) => stringArray(candidate.design_ids)))];
+  const evidenceFiles = sourceFindingIds(task);
+
+  if (!Array.isArray(task.requirement_ids) || task.requirement_ids.length === 0) {
+    task.requirement_ids = requirementIds;
+  }
+  if (!Array.isArray(task.design_ids) || task.design_ids.length === 0) {
+    task.design_ids = designIds;
+  }
+  if (!Array.isArray(task.evidence_files) || task.evidence_files.length === 0) {
+    task.evidence_files = evidenceFiles;
+  }
+}
+
 export type ReviewTaskLimitBlock = {
   blockerId: string;
   message: string;
@@ -145,6 +202,7 @@ export function appendReviewTasksToPrd({
   const prdTasks = Array.isArray(prd.tasks) ? (prd.tasks as ReviewTaskShape[]) : ((prd.tasks = []) as ReviewTaskShape[]);
   for (const task of tasks) {
     ensureTaskShape(task);
+    inheritReviewTaskTrace(task, prdTasks);
     prdTasks.push(task);
     if (progress) progress.total++;
     added.push({

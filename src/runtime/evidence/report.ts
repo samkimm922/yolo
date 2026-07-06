@@ -42,6 +42,8 @@ interface ReviewSummary extends JsonRecord {
   error_count: number;
   issues?: JsonRecord[];
   errors?: JsonRecord[];
+  historical_issue_count?: number;
+  historical_issues?: JsonRecord[];
 }
 
 interface FixtureSummary extends JsonRecord {
@@ -242,6 +244,11 @@ function cleanStatus(value: unknown): string {
   return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
 }
 
+function cleanReviewResult(value: unknown): string {
+  const status = cleanStatus(value);
+  return status === "clean" ? "pass" : status;
+}
+
 function stringOrNull(value: unknown): string | null {
   return value == null ? null : String(value);
 }
@@ -260,6 +267,16 @@ function itemList(values: unknown[] = [], limit = 8): unknown[] {
   const items = unique(values).slice(0, limit);
   const remaining = Math.max(0, unique(values).length - items.length);
   return remaining > 0 ? [...items, `+${remaining} more`] : items;
+}
+
+function normalizeTaskBuckets(buckets: TaskBuckets = Object()): TaskBuckets {
+  const completed = unique(buckets.completed || []);
+  const mergedInto = unique(buckets.merged_into || []);
+  const resolved = new Set([...completed, ...mergedInto]);
+  const failed = unique(buckets.failed || []).filter((id) => !resolved.has(id));
+  const blocked = unique(buckets.blocked || []).filter((id) => !resolved.has(id));
+  const skipped = unique(buckets.skipped || []).filter((id) => !resolved.has(id));
+  return { completed, failed, skipped, blocked, merged_into: mergedInto };
 }
 
 function taskId(entry: JsonRecord = Object()): unknown {
@@ -339,11 +356,17 @@ function summarizeReviewEvidence(taskLogEntries: JsonRecord[]): ReviewSummary {
       ts: entry.ts || null,
     }));
   const done = last(reviewEntries.filter((entry) => entry.type === "DONE"));
+  const latestResult = cleanReviewResult(done?.result || done?.status);
+  const latestIssuesFound = asNumber(done?.issues_found);
+  const latestClean = latestResult === "pass" && (latestIssuesFound == null || latestIssuesFound === 0);
+  const activeIssues = latestClean ? [] : issues;
   return {
-    issue_count: issues.length,
+    issue_count: activeIssues.length,
     error_count: errors.length,
-    issues: issues.slice(-20),
+    issues: activeIssues.slice(-20),
     errors: errors.slice(-10),
+    historical_issue_count: issues.length,
+    historical_issues: issues.slice(-20),
     latest_result: done?.result || null,
     latest_issues_found: done?.issues_found ?? null,
     latest_issues_fixed: done?.issues_fixed ?? null,
@@ -599,17 +622,19 @@ export function buildRunReport({
   const buckets: TaskBuckets = hasExplicitBuckets
     ? taskResults
     : readTaskResultsFromDisk(stateDir, runId);
-  const completed = unique(buckets.completed || []);
-  const failed = unique(buckets.failed || []);
-  const skipped = unique(buckets.skipped || []);
-  const blocked = unique(buckets.blocked || []);
-  const mergedInto = unique(buckets.merged_into || []);
+  const normalizedBuckets = normalizeTaskBuckets(buckets);
+  const completed = normalizedBuckets.completed || [];
+  const failed = normalizedBuckets.failed || [];
+  const skipped = normalizedBuckets.skipped || [];
+  const blocked = normalizedBuckets.blocked || [];
+  const mergedInto = normalizedBuckets.merged_into || [];
   // merged_into tasks are terminal-but-satisfied (they were folded into a parent
   // task and count as completed for dependency purposes). Treat them as
   // completed for run-rate accounting but surface them separately so the final
   // answer can distinguish "actually executed" from "folded into another task".
   const terminalCount = completed.length + failed.length + blocked.length + mergedInto.length;
-  const plannedCount = asNumber(progressTotal ?? runStart?.tasks) ?? terminalCount + skipped.length;
+  const rawPlannedCount = asNumber(progressTotal ?? runStart?.tasks);
+  const plannedCount = Math.max(rawPlannedCount ?? 0, terminalCount) || terminalCount + skipped.length;
   const duration = asNumber(durationSec ?? runEnd?.duration_sec);
   const gates = summarizeGateEvidence({ stateEvents, taskLogEntries });
   const remediation = summarizeRemediation({ taskResults, stateEvents });

@@ -63,12 +63,26 @@ describe("review-loop task application helpers", () => {
   });
 
   test("appendReviewTasksToPrd shapes tasks, mutates PRD, and increments progress", () => {
-    const prd: { tasks: Record<string, unknown>[] } = { tasks: [{ id: "DONE" }] };
+    const prd: { tasks: Record<string, unknown>[] } = {
+      tasks: [{
+        id: "DONE",
+        requirement_ids: ["REQ-BASE"],
+        design_ids: ["DES-BASE"],
+        scope: { targets: [{ file: "src/app.ts" }] },
+      }],
+    };
     const progress = { total: 1 };
     const added = appendReviewTasksToPrd({
       prd,
       progress,
-      tasks: [{ id: "FIX-R1-001", priority: "P2", title: "Fix issue" }],
+      tasks: [{
+        id: "FIX-R1-001",
+        priority: "P2",
+        title: "Fix issue",
+        task_kind: "review_fix",
+        scope: { targets: [{ file: "src/app.ts" }] },
+        source_finding_ids: ["REV-1"],
+      }],
       ensureTaskShape: (task: Record<string, unknown>) => {
         task.scope = task.scope || { targets: [] };
         return task;
@@ -77,7 +91,10 @@ describe("review-loop task application helpers", () => {
 
     assert.equal(progress.total, 2);
     assert.equal(prd.tasks.length, 2);
-    assert.deepEqual(prd.tasks[1].scope, { targets: [] });
+    assert.deepEqual(prd.tasks[1].scope, { targets: [{ file: "src/app.ts" }] });
+    assert.deepEqual(prd.tasks[1].requirement_ids, ["REQ-BASE"]);
+    assert.deepEqual(prd.tasks[1].design_ids, ["DES-BASE"]);
+    assert.deepEqual(prd.tasks[1].evidence_files, ["REV-1"]);
     assert.deepEqual(added, [{ id: "FIX-R1-001", priority: "P2", title: "Fix issue" }]);
   });
 
