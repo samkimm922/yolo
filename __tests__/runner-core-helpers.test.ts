@@ -59,6 +59,25 @@ describe("runner core helper execution", () => {
     }
   });
 
+  test("scales timeout for greenfield targets from declared max_lines_per_file", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-timeout-greenfield-"));
+    try {
+      assert.equal(
+        computeTaskTimeout(
+          [{ file: "src/new-cli.ts" }],
+          {
+            rootDir: root,
+            config: { runner: { task_timeout_m: 30, task_timeout_floor_s: 120 } },
+            scope: { max_lines_per_file: 120 },
+          },
+        ),
+        300000,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("allows the task timeout floor to be configured", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-task-timeout-floor-"));
     try {

@@ -190,6 +190,7 @@ describe("session attempt helpers", () => {
         assert.deepEqual(options, {
           rootDir: "/repo",
           config: { build: { type_check: "npm run typecheck" } },
+          scope: { targets: [{ file: "src/a.ts" }] },
         });
         return 12345;
       },
