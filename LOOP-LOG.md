@@ -165,3 +165,40 @@
   - `npm run quality-gate --silent`: pass, Q=1.0000
 - Trace note: Round 6 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop6/`; `run` was interrupted with exit 130 after the repeated official-path blocker, so no final run report/review/acceptance/ship artifacts exist for this round.
 - Frozen files touched: none.
+
+## Round 7
+
+- Project path: `/Users/sippingroom/Developer/dogfood-gitweekly-loop7`
+- Dogfood window: approximately 2026-07-06T14:06:00Z to 2026-07-06T14:28:00Z for lifecycle run attempt; about 32m through fix validation and push.
+- Pre-run self-check: `npm run build --silent` passed; `npm run verify:executor --silent` passed three consecutive times.
+- Stop point: `yolo run --executor claude` exited 1 after all 9 business tasks eventually passed, before review/acceptance/ship.
+- Positive carry-forward evidence: the generated scaffold logged `MERGE 持久化 node_modules 工具链缓存`, confirming the Round 6 fix executed on the real dogfood path.
+- Blocker 1: final reporting still listed retried task `S04` as failed even though its later retry passed.
+- Root cause 1: disk-backed `task-results.jsonl` report reconstruction bucketed every terminal record; it did not collapse multiple records for the same task id to the latest terminal status.
+- Blocker 2: review auto-fix findings were already satisfied after the retry, but deterministic auto-fix returned `null` because it made no file modifications, then provider fallback tried to build a prompt for merged review task `FIX-R1-001+FIX-R1-002`, which was not a PRD task and failed with `prompt 生成失败`.
+- Root cause 2: no-op deterministic auto-fix outcomes were not accepted as completed when postconditions already passed and no escalations remained.
+- Evidence:
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop7/.dogfood-loop7/command-output/run.log`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop7/.dogfood-loop7/commands.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop7/.yolo/state/reports/run-20260706140600/run-report.json`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop7/.yolo/state/reports/run-20260706140600/run-report.md`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop7/.yolo/state/runtime/task-results.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop7/.yolo/state/runtime/task-logs/FIX-R1-001+FIX-R1-002.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop7/.yolo/state/runtime/_review.jsonl`
+  - `src/runtime/evidence/report.ts`
+  - `src/runtime/execution/deterministic-auto-fix.ts`
+- Repro first went red with `node --import tsx --test __tests__/evidence-report.test.ts --test-name-pattern "latest task-results"`: task `T-A` stayed in the failed bucket after a later PASS.
+- Repro first went red with `node --import tsx --test __tests__/deterministic-auto-fix.test.ts --test-name-pattern "already-satisfied no-op"`: `tryDeterministicAutoFixTask` returned `null` instead of completing an already-satisfied no-op review fix.
+- Fix commit: `05b74dc fix(runtime): complete resolved review fixes`
+- Draft PR: `https://github.com/samkimm922/yolo/pull/254` carries this cumulative-branch commit. Attempting a separate Round 7 draft PR failed because GitHub already has a PR for `fix/dogfood-loop-to-ship` into `main`.
+- PR CI status at log time: CI still in progress after the push; `bloat-gate` already reported FAILURE. No bloat ack was added or modified.
+- Validation:
+  - `node --import tsx --test __tests__/deterministic-auto-fix.test.ts --test-name-pattern "already-satisfied no-op"`: red before fix, pass after fix
+  - `node --import tsx --test __tests__/evidence-report.test.ts --test-name-pattern "latest task-results"`: red before fix, pass after fix
+  - `node --import tsx --test __tests__/deterministic-auto-fix.test.ts __tests__/pre-session-flow.test.ts __tests__/review-loop-orchestrator.test.ts __tests__/recovery-retry-round.test.ts __tests__/evidence-report.test.ts`: pass, 56/56
+  - `npm run typecheck --silent`: pass
+  - `npm test --silent`: pass, 2023/2023
+  - `npm run verify --silent`: pass, 2023/2023 plus source-grep, ci guard, and prd-preflight pass
+  - `npm run quality-gate --silent`: pass, Q=1.0000
+- Trace note: Round 7 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop7/`; run exited 1 after review fix finalization, so no acceptance/ship artifacts exist for this round.
+- Frozen files touched: none.
