@@ -116,6 +116,30 @@ describe("task-loop outcome handler", () => {
     assert.equal(callbacks.calls.parentDone[0].taskId, "FIX-P36-003");
   });
 
+  test("handleTaskOutcome completion resolves stale failed and blocked buckets", () => {
+    const state = makeLoopState();
+    state.results.failed.push("FIX-P36-003", "FIX-P36-001", "OTHER");
+    state.results.blocked.push("FIX-P36-003");
+    state.results.contractReview.push("FIX-P36-003");
+    state.runResultsTracker.failed.push("FIX-P36-003", "FIX-P36-001", "OTHER");
+    const callbacks = makeOutcomeCallbacks({ sourceIds: ["FIX-P36-001"] });
+
+    handleTaskOutcome({
+      ...state,
+      task: { id: "FIX-P36-003", merged_from: ["FIX-P36-001"] },
+      outcome: { status: "completed" },
+      lastFailKey: "failed:old",
+      ...callbacks,
+      now: "2026-05-24T15:00:00.000Z",
+    });
+
+    assert.deepEqual(state.results.completed, ["FIX-P36-003", "FIX-P36-001"]);
+    assert.deepEqual(state.results.failed, ["OTHER"]);
+    assert.deepEqual(state.results.blocked, []);
+    assert.deepEqual(state.results.contractReview, []);
+    assert.deepEqual(state.runResultsTracker.failed, ["OTHER"]);
+  });
+
   test("handleTaskOutcome turns invalid valid-skip claims into failed tasks", () => {
     const state = makeLoopState();
     const callbacks = makeOutcomeCallbacks({
