@@ -281,6 +281,17 @@ describe("commit flow helpers", () => {
       outOfScope: [],
     });
 
+    assert.equal(buildCommitSkipDecision({
+      task: {
+        task_kind: "greenfield_scaffold",
+        scope: { targets: [{ file: "package.json" }] },
+      },
+      code: ["package.json"],
+      hasRealCode: false,
+      businessFiles: [],
+      metadataFiles: ["package.json"],
+    }), null);
+
     assert.deepEqual(buildCommitSkipDecision({
       task: { task_kind: "dry_run_artifact" },
       code: ["state/dry-run/report.md"],
@@ -577,6 +588,59 @@ describe("commit flow helpers", () => {
       businessFiles: [],
       metadataFiles: ["package.json"],
       outOfScope: [],
+    });
+  });
+
+  test("runTaskCommitFlow commits greenfield scaffold metadata for downstream worktrees", async () => {
+    const docs = [];
+    const commits = [];
+    const logs = [];
+    let refreshCount = 0;
+    const result = await runTaskCommitFlow({
+      rootDir: "/repo",
+      task: {
+        id: "SCAFFOLD-1",
+        title: "Create package scripts",
+        task_kind: "greenfield_scaffold",
+        scope: { targets: [{ file: "package.json" }] },
+      },
+      code: ["package.json"],
+      hasRealCode: false,
+      businessFiles: [],
+      metadataFiles: ["package.json"],
+      updateDocs: async (payload) => docs.push(payload),
+      commitChanges: (payload) => {
+        commits.push(payload);
+        return { committed: true, retried: false, commit: "abc123" };
+      },
+      log: (id, marker, message) => logs.push({ id, marker, message }),
+      refreshBaselines: () => {
+        refreshCount += 1;
+      },
+    });
+
+    assert.equal(result.status, "committed");
+    assert.equal(result.message, "fix: SCAFFOLD-1 [metadata-only] Create package scripts");
+    assert.deepEqual(docs, [{
+      taskId: "SCAFFOLD-1",
+      taskTitle: "Create package scripts",
+      modifiedFiles: ["package.json"],
+      status: "PASS",
+    }]);
+    assert.deepEqual(commits, [{
+      rootDir: "/repo",
+      files: ["package.json"],
+      message: "fix: SCAFFOLD-1 [metadata-only] Create package scripts",
+    }]);
+    assert.deepEqual(logs, [
+      { id: "", marker: "└─", message: "commit ok (0 biz, 1 meta)" },
+    ]);
+    assert.equal(refreshCount, 1);
+    assert.deepEqual(result.result, {
+      committed: true,
+      hasRealCode: false,
+      businessFiles: [],
+      metadataFiles: ["package.json"],
     });
   });
 
