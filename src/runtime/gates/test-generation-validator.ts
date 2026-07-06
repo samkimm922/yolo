@@ -75,10 +75,12 @@ function hasNodeTestImport(content) {
 }
 
 function testOutputLooksEmpty(output = "") {
-  const text = String(output || "");
-  return /(?:^|\n)#?\s*tests\s+0(?:\n|$)/i.test(text)
-    || /\b0\s+tests?\b/i.test(text)
-    || /\bno tests? (?:found|run|executed)\b/i.test(text);
+  return String(output || "").split(/\r?\n/).some((line) => {
+    const trimmed = line.trim();
+    return /^(?:#|ℹ)?\s*tests\s+0\b/i.test(trimmed)
+      || /^(?:#|ℹ)?\s*0\s+tests?\b(?:\s+(?:found|run|executed|passed|total))?$/i.test(trimmed)
+      || /^no tests? (?:found|run|executed)\b/i.test(trimmed);
+  });
 }
 
 function taskUsesNodeTestRunner(task, cwd) {
