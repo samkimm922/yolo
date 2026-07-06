@@ -202,3 +202,36 @@
   - `npm run quality-gate --silent`: pass, Q=1.0000
 - Trace note: Round 7 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop7/`; run exited 1 after review fix finalization, so no acceptance/ship artifacts exist for this round.
 - Frozen files touched: none.
+
+## Round 8
+
+- Project path: `/Users/sippingroom/Developer/dogfood-gitweekly-loop8`
+- Dogfood window: 2026-07-06T14:43:29Z to 2026-07-06T15:00:32Z for lifecycle run attempt; stop/report work followed immediately after.
+- Pre-run self-check: `npm run build --silent` passed; `npm run verify:executor --silent` passed three consecutive times.
+- Stop point: `yolo run --executor claude` exited 1. `review` scanner ran and found no new findings, but run did not reach acceptance or ship.
+- Result: 8/9 tasks completed. The final task `DEMAND-REQ-002-S07-0080101` failed, so the eighth and final dogfood round did not ship.
+- Immediate blocker: final task for “坏 --repo 返回非零退出码” merged `src/git-weekly-cli.ts` plus out-of-scope `pnpm-lock.yaml`; scope audit failed with `out_of_scope_files: pnpm-lock.yaml`.
+- Retry blocker: after the failed task, retry preflight stopped with `TASK_DEPENDENCY_NO_ROOT: Task dependency graph has no zero-dependency root task; runner cannot start execution.`
+- Additional semantic risk: the failed task provider output claimed the fix changed bad `--repo` handling from `process.exit(1)` to returning an empty string, making bad repos produce “No commits found” instead of a nonzero exit. This is the opposite of the requirement.
+- Root-cause evidence:
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop8/.dogfood-loop8/command-output/run.log`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop8/.dogfood-loop8/commands.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop8/.yolo/state/reports/run-20260706144526/run-report.json`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop8/.yolo/state/reports/run-20260706144526/run-report.md`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop8/.yolo/state/reports/run-20260706144526/final-answer.md`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop8/.yolo/state/runtime/task-results.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop8/.yolo/state/runtime/task-logs/DEMAND-REQ-002-S07-0080101.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop8/.yolo/demand/DEMAND-LOOP8-GIT-WEEKLY/prd.json`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop8/package.json`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop8/src/git-weekly-cli.ts`
+- Diagnostic experiment:
+  - `npm test --silent; printf 'exit=%s\n' $?` in loop8 printed `tests 0` and `exit=0`, proving the generated gate passed with no test files.
+  - `find . -maxdepth 3 -type f -name '*.test.*' -o -name 'test*'` printed no test files.
+  - `git show HEAD:src/git-weekly-cli.ts` showed committed bad repo behavior still used `process.exit(1)`.
+  - The failed worktree merge left the working tree version changing the `getGitLog` catch block to `return ''`, matching the provider's inverted interpretation.
+- Diagnosis: the immediate run blocker is out-of-scope `pnpm-lock.yaml` generated during the final task. The deeper ship risk is that the generated PRD/task gate relied on `npm test` and typecheck, but no test file was generated, so the stated success proof “fixture repo + stdout + --output + bad --repo” was not enforced by tests.
+- Fix: none in this round. The 8-round budget was exhausted, so the loop stops and reports instead of opening a ninth round.
+- PR status: `https://github.com/samkimm922/yolo/pull/254` carries cumulative fixes through Round 7. Latest CI: all checks SUCCESS except `bloat-gate` FAILURE. No bloat ack was added or modified.
+- Trace note: Round 8 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop8/`; `task-audit.jsonl` was not present in `.yolo/state/runtime/` for this round, but task-results, task-logs, reports, and command output are present.
+- Frozen files touched: none.
+- Exit reason after this round: budget exhausted before first ship pass.
