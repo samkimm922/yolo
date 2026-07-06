@@ -37,6 +37,32 @@ function normalizeFile(value: unknown): string {
     .replace(/:\d+(?:-\d+)?$/, "");
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function refString(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (!isRecord(value)) return "";
+  return String(value.id || value.ref || value.key || value.name || "").trim();
+}
+
+function refArray(...values: unknown[]): string[] {
+  const refs: string[] = [];
+  for (const value of values) {
+    const items = Array.isArray(value) ? value : [value];
+    for (const item of items) {
+      const ref = refString(item);
+      if (ref) refs.push(ref);
+    }
+  }
+  return [...new Set(refs)];
+}
+
+function uniqueStrings(values: string[] = []): string[] {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
 function scopeTargetFiles(task: ReviewTaskShape = Object()): string[] {
   const scope = task.scope as Record<string, unknown> | undefined;
   const targets = Array.isArray(scope?.targets) ? scope.targets as Array<Record<string, unknown>> : [];
@@ -58,6 +84,67 @@ function sourceFindingIds(task: ReviewTaskShape = Object()): string[] {
   return [...new Set([...direct, ...fromFindings])];
 }
 
+function taskTrace(task: ReviewTaskShape = Object()): Record<string, unknown> {
+  if (!isRecord(task.trace)) task.trace = {};
+  return task.trace as Record<string, unknown>;
+}
+
+function traceRecord(task: ReviewTaskShape = Object()): Record<string, unknown> {
+  return isRecord(task.trace) ? task.trace as Record<string, unknown> : {};
+}
+
+function taskSpecRefs(task: ReviewTaskShape, keys: string[]): string[] {
+  const trace = traceRecord(task);
+  const traceability = isRecord(task.traceability) ? task.traceability as Record<string, unknown> : {};
+  return refArray(...keys.flatMap((key) => [task[key], trace[key], traceability[key]]));
+}
+
+function taskRequirementIds(task: ReviewTaskShape = Object()): string[] {
+  return taskSpecRefs(task, ["requirement_id", "requirement_ids", "requirements"]);
+}
+
+function taskDesignIds(task: ReviewTaskShape = Object()): string[] {
+  return taskSpecRefs(task, ["design_id", "design_ids", "designs"]);
+}
+
+function reviewReportPathFromTrace(trace: Record<string, unknown> = Object()): string {
+  const direct = String(trace.review_report_path || trace.report_path || "").trim();
+  if (direct) return direct;
+  const item = (Array.isArray(trace.evidence) ? trace.evidence : []).find(isRecord) as Record<string, unknown> | undefined;
+  return item ? String(item.report_path || item.reportPath || item.path || item.file || "").trim() : "";
+}
+
+function evidenceRef(reportPath: string, findingId: string): string {
+  return reportPath ? `${reportPath}#${findingId}` : findingId;
+}
+
+function taskEvidenceRefs(task: ReviewTaskShape = Object()): string[] {
+  const trace = traceRecord(task);
+  const existing = refArray(
+    task.evidence_file,
+    task.evidence_files,
+    trace.evidence_file,
+    trace.evidence_files,
+  );
+  const reportPath = reviewReportPathFromTrace(trace);
+  const fromEvidence = (Array.isArray(trace.evidence) ? trace.evidence as unknown[] : [])
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (!isRecord(item)) return "";
+      const findingId = String(item.finding_id || item.id || item.ref || "").trim();
+      const path = String(item.report_path || item.reportPath || item.path || item.file || "").trim();
+      return findingId ? evidenceRef(path || reportPath, findingId) : refString(item);
+    })
+    .filter(Boolean);
+  const fromFindingIds = sourceFindingIds(task).map((id) => evidenceRef(reportPath, id));
+  return uniqueStrings([...existing, ...fromEvidence, ...fromFindingIds]);
+}
+
+function mergeStringField(record: Record<string, unknown>, key: string, items: string[] = []) {
+  const merged = uniqueStrings([...refArray(record[key]), ...items]);
+  if (merged.length > 0) record[key] = merged;
+}
+
 function inheritReviewTaskTrace(task: ReviewTaskShape, existingTasks: ReviewTaskShape[] = []) {
   if (task.task_kind !== "review_fix") return;
   const files = new Set(scopeTargetFiles(task));
@@ -66,9 +153,13 @@ function inheritReviewTaskTrace(task: ReviewTaskShape, existingTasks: ReviewTask
     const candidateFiles = scopeTargetFiles(candidate);
     return candidateFiles.some((file) => files.has(file));
   });
-  const requirementIds = [...new Set(related.flatMap((candidate) => stringArray(candidate.requirement_ids)))];
-  const designIds = [...new Set(related.flatMap((candidate) => stringArray(candidate.design_ids)))];
-  const evidenceFiles = sourceFindingIds(task);
+  const requirementIds = uniqueStrings(related.flatMap((candidate) => taskRequirementIds(candidate)));
+  const designIds = uniqueStrings(related.flatMap((candidate) => taskDesignIds(candidate)));
+  const relatedTaskIds = uniqueStrings(related.map((candidate) => String(candidate.id || "")));
+  const evidenceFiles = taskEvidenceRefs(task);
+  const sourceIds = sourceFindingIds(task);
+  const trace = taskTrace(task);
+  const reportPath = reviewReportPathFromTrace(trace);
 
   if (!Array.isArray(task.requirement_ids) || task.requirement_ids.length === 0) {
     task.requirement_ids = requirementIds;
@@ -78,6 +169,15 @@ function inheritReviewTaskTrace(task: ReviewTaskShape, existingTasks: ReviewTask
   }
   if (!Array.isArray(task.evidence_files) || task.evidence_files.length === 0) {
     task.evidence_files = evidenceFiles;
+  }
+  trace.source = "review_finding";
+  if (reportPath && !trace.review_report_path) trace.review_report_path = reportPath;
+  mergeStringField(trace, "requirement_ids", refArray(task.requirement_ids, requirementIds));
+  mergeStringField(trace, "design_ids", refArray(task.design_ids, designIds));
+  mergeStringField(trace, "source_finding_ids", sourceIds);
+  mergeStringField(trace, "inherited_from_task_ids", relatedTaskIds);
+  if (!Array.isArray(trace.evidence) || trace.evidence.length === 0) {
+    trace.evidence = sourceIds.map((id) => ({ type: "review_finding", id, finding_id: id, ...(reportPath ? { report_path: reportPath } : {}) }));
   }
 }
 

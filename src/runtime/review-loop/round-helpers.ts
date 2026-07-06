@@ -63,10 +63,11 @@ export type FallbackClassifierResult = {
 export function fallbackClassifyFindings(
   findings: ReviewFindingInput[] = [],
   round?: number,
+  options: Record<string, unknown> = Object(),
 ): FallbackClassifierResult {
   const normalizedFindings = normalizeReviewFindings(findings, { source: "review-classifier" });
   const infoCount = normalizedFindings.filter((finding) => finding.fix_type === "INFO").length;
-  const converted = reviewFindingsToPrdTasks(normalizedFindings, { round });
+  const converted = reviewFindingsToPrdTasks(normalizedFindings, { ...options, round });
   const autoFixTasks: ReviewPrdTask[] = [];
   const claudeFixTasks: ReviewPrdTask[] = [];
   for (const task of converted.tasks) {

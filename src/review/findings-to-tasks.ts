@@ -46,6 +46,8 @@ export type ReviewPrdTask = {
   fix_findings: NormalizedReviewFinding[];
   source_finding_ids: string[];
   source_findings: NormalizedReviewFinding[];
+  evidence_files: string[];
+  trace: Record<string, unknown>;
   dedupe_key: string;
   must_fix_before_ship: boolean;
   requirement_ids?: string[];
@@ -59,6 +61,10 @@ export type ReviewFindingsToPrdTasksOptions = {
   config?: Record<string, unknown>;
   projectRoot?: string;
   project_root?: string;
+  reviewReportPath?: string;
+  review_report_path?: string;
+  reportPath?: string;
+  report_path?: string;
 };
 
 type ReviewConversionOmitted = Array<{
@@ -123,6 +129,47 @@ function truncateText(value: unknown, max = 160): string {
   const text = String(value || "").trim();
   if (text.length <= max) return text;
   return text.slice(0, max);
+}
+
+function cleanString(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function reviewReportPath(options: ReviewFindingsToPrdTasksOptions = Object()): string {
+  return cleanString(
+    options.reviewReportPath ||
+    options.review_report_path ||
+    options.reportPath ||
+    options.report_path,
+  ) || "review-report.json";
+}
+
+function reviewFindingEvidenceRef(reportPath: string, sourceFindingId: string): string {
+  return reportPath ? `${reportPath}#${sourceFindingId}` : sourceFindingId;
+}
+
+function reviewFindingTraceEvidence({
+  finding,
+  sourceFindingId,
+  reportPath,
+  round,
+}: {
+  finding: NormalizedReviewFinding;
+  sourceFindingId: string;
+  reportPath: string;
+  round: number;
+}): Record<string, unknown> {
+  return {
+    type: "review_finding",
+    id: sourceFindingId,
+    finding_id: sourceFindingId,
+    report_path: reportPath,
+    round,
+    scanner_id: cleanString(finding?.scanner_id) || null,
+    rule_id: cleanString(finding?.rule_id) || null,
+    file: cleanString(finding?.file) || null,
+    line: typeof finding?.line === "number" ? finding.line : null,
+  };
 }
 
 function taskIdForFinding(
@@ -227,6 +274,7 @@ export function reviewFindingsToPrdTasks(
     config: options.config,
     configPath: typeof options.configPath === "string" ? options.configPath : undefined,
   });
+  const reportPath = reviewReportPath(options);
   const tasks: ReviewPrdTask[] = [];
   const skipped: ReviewConversionOmitted = [];
   let taskIndex = 0;
@@ -249,6 +297,7 @@ export function reviewFindingsToPrdTasks(
     taskIndex++;
     const description = findingDescription(finding);
     const sourceFindingId = findingId(finding, index);
+    const evidence = reviewFindingTraceEvidence({ finding, sourceFindingId, reportPath, round });
 
     tasks.push({
       id: taskId,
@@ -283,6 +332,14 @@ export function reviewFindingsToPrdTasks(
       fix_findings: [finding],
       source_finding_ids: [sourceFindingId],
       source_findings: [finding],
+      evidence_files: [reviewFindingEvidenceRef(reportPath, sourceFindingId)],
+      trace: {
+        source: "review_finding",
+        review_round: round,
+        review_report_path: reportPath,
+        source_finding_ids: [sourceFindingId],
+        evidence: [evidence],
+      },
       dedupe_key: `review:${sourceFindingId}:${files.join(",")}`,
       must_fix_before_ship: finding?.must_fix_before_ship === true || ["CRITICAL", "HIGH"].includes(String(finding?.severity || "").toUpperCase()),
     });
