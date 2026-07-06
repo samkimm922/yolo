@@ -382,3 +382,93 @@
   - `git diff --check`: pass
 - Trace note: Round 11 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop11/`; this round stopped before acceptance/ship.
 - Frozen files touched: none.
+
+## Round 11 Official Recovery Attempts
+
+- Project path: `/Users/sippingroom/Developer/dogfood-gitweekly-loop11`
+- Recovery window: approximately 2026-07-06T17:40:23Z to 2026-07-06T18:02:58Z.
+- Official path used: after each runtime fix, reran `yolo check .yolo/demand/DEMAND-LOOP11-GIT-WEEKLY/prd.json --json` and then `yolo run .yolo/demand/DEMAND-LOOP11-GIT-WEEKLY/prd.json --executor claude --json` from the existing Round 11 project. Command output was written outside the dogfood project to avoid adding wrapper drift after check.
+- Recovery attempt 1:
+  - `check`: pass.
+  - `run`: still blocked on `DEMAND-AUTOMATED-ACCEPTANCE-TEST-001`; `tests_pass` continued to classify the generated project as an empty/0-test suite.
+  - Evidence: `/Users/sippingroom/Developer/yolo-loop-reports/round11-recovery/check-after-fix.json`, `/Users/sippingroom/Developer/yolo-loop-reports/round11-recovery/run-after-fix.log`, `/Users/sippingroom/Developer/dogfood-gitweekly-loop11/.yolo/state/reports/run-20260706174023/run-report.json`.
+- Recovery attempt 2:
+  - Fix commit before retry: `085493c fix(runtime): verify node test targets`.
+  - Change: the test-generation validator now imports and executes target Node test files when `node:test` is used, so a file with declarations but no runnable tests cannot satisfy `require_tests`.
+  - Validation: `node --import tsx --test __tests__/test-generation-validator.test.ts --test-name-pattern "require_tests task blocks"` passed; affected suite `__tests__/test-generation-validator.test.ts __tests__/demand-runtime.test.ts __tests__/task-router-quality-gate.test.ts __tests__/sdk.test.ts __tests__/review-loop-orchestrator.test.ts __tests__/deterministic-auto-fix.test.ts` passed, 118/118; `npm run typecheck --silent`, `npm run quality-gate --silent`, `npm run build --silent`, and `npm run verify:executor --silent` passed.
+  - `check`: pass.
+  - `run`: still blocked on empty-test detection.
+  - Evidence: `/Users/sippingroom/Developer/yolo-loop-reports/round11-recovery2/check.json`, `/Users/sippingroom/Developer/yolo-loop-reports/round11-recovery2/run.log`, `/Users/sippingroom/Developer/dogfood-gitweekly-loop11/.yolo/state/reports/run-20260706175237/run-report.json`.
+- Recovery attempt 3:
+  - Root cause found: `testOutputLooksEmpty` matched business stdout containing text like `0 tests` in the generated weekly report's conventional-commit type statistics, not only test-runner summaries.
+  - Fix commit before retry: `763e6af fix(runtime): avoid false empty-test matches`.
+  - Change: empty-test detection now only treats anchored runner summary lines as empty-suite evidence.
+  - Validation: `node --import tsx --test __tests__/p10-s1-command-injection.test.ts --test-name-pattern "require_tests"` passed; `node --import tsx --test __tests__/test-generation-validator.test.ts --test-name-pattern "require_tests task blocks"` passed; affected suite `__tests__/p10-s1-command-injection.test.ts __tests__/test-generation-validator.test.ts __tests__/demand-runtime.test.ts __tests__/task-router-quality-gate.test.ts __tests__/sdk.test.ts __tests__/review-loop-orchestrator.test.ts __tests__/deterministic-auto-fix.test.ts` passed, 147/147; `npm run typecheck --silent`, `npm run quality-gate --silent`, `npm run build --silent`, and `npm run verify:executor --silent` passed.
+  - `check`: pass.
+  - `run`: the synthetic acceptance test gate passed and committed `test/git-weekly-cli.test.ts`, but post-commit validation failed because the existing Round 11 project had already been damaged by the earlier over-broad console-log auto-fix: `src/git-weekly-cli.ts` contained an empty `else {}` where `console.log(markdown)` should have remained.
+  - Decision: official recovery could not safely rescue Round 11. Repairing `src/git-weekly-cli.ts` would be a manual out-of-scope edit in the dogfood project, so Round 11 was closed and the next round opened.
+  - Evidence: `/Users/sippingroom/Developer/yolo-loop-reports/round11-recovery3/check.json`, `/Users/sippingroom/Developer/yolo-loop-reports/round11-recovery3/run.log`, `/Users/sippingroom/Developer/dogfood-gitweekly-loop11/.yolo/state/reports/run-20260706180258/run-report.json`.
+- Frozen files touched: none.
+
+## Round 12
+
+- Project path: `/Users/sippingroom/Developer/dogfood-gitweekly-loop12`
+- Dogfood window: approximately 2026-07-06T18:09:00Z to 2026-07-06T18:31:40Z.
+- Pre-run self-check: `npm run build --silent` passed; `npm run verify:executor --silent` passed.
+- Lifecycle preparation:
+  - New greenfield project generated from the same Git weekly CLI demand answers.
+  - `yolo check .yolo/demand/DEMAND-LOOP12-GIT-WEEKLY/prd.json --json`: pass before first run.
+  - PRD self-inspection confirmed the synthetic automated acceptance task had `test_generation.mode: "add_minimal"`, `allowed_test_files: ["test/git-weekly-cli.test.ts"]`, and instructions to create/update exactly the target test file, run `npm test`, and confirm nonzero tests.
+  - `yolo run --executor claude`: exited 1 after review reached clean, due finalization/reporting state.
+- Positive carry-forward evidence:
+  - Scaffold completed and persisted `node_modules` toolchain cache.
+  - All implementation tasks eventually passed; an out-of-scope `tsconfig.json` edit on `DEMAND-REQ-002-S02-0030101` was rejected and retried before passing.
+  - Synthetic automated acceptance task passed after creating `test/git-weekly-cli.test.ts`.
+  - Review loop reached clean after three rounds. One `CLAUDE_FIX` and two `AUTO_FIX` applications completed; Round 3 review emitted `result: pass`, `issues_found: 0`.
+- Stop point: acceptance/ship were not reached.
+- Immediate blocker 1: the runner printed `完成: 11 | 失败: 0` and `task_success_rate: 91.7% (11/11)`, but final report status was `error`; final answer said blocked task `DEMAND-AUTOMATED-ACCEPTANCE-TEST-001` and review issues remained.
+- Root cause 1:
+  - Final report/final answer used cumulative task buckets and cumulative review findings instead of the current recovered state.
+  - A historical dependency-blocked attempt for `DEMAND-AUTOMATED-ACCEPTANCE-TEST-001` remained in `blocked` after the same task later passed.
+  - Historical review findings remained counted even though the latest review `DONE` event was clean.
+  - `progressTotal` was stale at `1`, producing impossible `run_success_rate: 275.0% (11/1)`.
+- Fix commit: `bb9313c fix(runtime): reconcile recovered run state`.
+- Change:
+  - Run reports normalize explicit task buckets so completed/merged tasks remove stale failed/skipped/blocked/contract-review entries.
+  - Finalization uses normalized task results before writing reports, archiving, printing summary, and computing exit code.
+  - Review evidence keeps `historical_issue_count` / `historical_issues`, but current `issue_count` is zero when the latest review result is clean/pass with `issues_found: 0`.
+  - Final verdict ignores audit-only `review.historical_issues.*.status` fields when recursively scanning current status fields.
+  - Planned count is lifted to at least the terminal task count to avoid impossible success rates.
+- Validation for `bb9313c`:
+  - `node --import tsx --test __tests__/evidence-report.test.ts __tests__/run-lifecycle-finalize.test.ts`: pass, 42/42.
+  - `npm run typecheck --silent`: pass.
+  - `node --import tsx --test __tests__/evidence-report.test.ts __tests__/run-lifecycle-finalize.test.ts __tests__/review-loop-task-application.test.ts __tests__/review-loop-orchestrator.test.ts`: pass, 63/63.
+  - `npm run quality-gate --silent`: pass, Q=1.0000.
+  - `npm run build --silent`: pass.
+  - `npm run verify:executor --silent`: pass.
+  - `git diff --check`: pass.
+- Recovery after `bb9313c`:
+  - Official chain required `yolo check` because lifecycle drift correctly detected the prior run changed the worktree.
+  - `yolo check .yolo/demand/DEMAND-LOOP12-GIT-WEEKLY/prd.json --json` exited 1 with `YOLO_CHECK_BLOCKED`.
+  - Immediate blocker 2: completed review-fix task `FIX-R1-001` was missing `requirement_ids`, `design_ids`, and `evidence_files`, producing `MISSING_REQUIREMENT_TRACE`, `MISSING_DESIGN_TRACE`, and `MISSING_TERMINAL_EVIDENCE`.
+  - This reproduces the Round 6 trace blocker on a fresh Round 12 path, now after a successful review loop.
+- Root cause 2: review-fix tasks appended to the PRD did not inherit machine trace from the existing task(s) whose target files they fix, and no review evidence file was recorded in `evidence_files`.
+- Additional fix in `bb9313c`: `appendReviewTasksToPrd` now enriches `review_fix` tasks before PRD insertion by inheriting `requirement_ids` and `design_ids` from existing non-review tasks that target the same file, and records `source_finding_ids` as `evidence_files`. Existing trace fields are preserved.
+- Evidence:
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop12/.dogfood-loop12/command-output/run.log`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop12/.dogfood-loop12/commands.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop12/.yolo/state/reports/run-20260706181008/run-report.json`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop12/.yolo/state/reports/run-20260706181008/final-answer.md`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop12/.yolo/state/runtime/task-results.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop12/.yolo/state/runtime/task-logs/_review.jsonl`
+  - `/Users/sippingroom/Developer/yolo-loop-reports/round12-recovery/check-after-summary-fix.json`
+  - `src/runtime/evidence/report.ts`
+  - `src/runtime/run-lifecycle/finalize.ts`
+  - `src/runtime/review-loop/task-application.ts`
+  - `__tests__/evidence-report.test.ts`
+  - `__tests__/run-lifecycle-finalize.test.ts`
+  - `__tests__/review-loop-task-application.test.ts`
+  - `__tests__/review-loop-orchestrator.test.ts`
+- Decision: Round 12 cannot be safely force-rescued because its existing PRD already contains the malformed completed `FIX-R1-001` task. No manual PRD edit was made. A new round would be required to verify the review-fix trace generation fix end-to-end.
+- Exit reason: resumed-loop budget reached before first ship pass. The remaining blocker is now in future review-fix trace generation, fixed in code but not re-dogfooded through acceptance/ship within the allowed 4-round continuation.
+- Frozen files touched: none.
