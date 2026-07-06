@@ -247,6 +247,30 @@ function asArray(value) {
   return [value];
 }
 
+function uniqueValues(values = []) {
+  return [...new Set(asArray(values).filter(Boolean))];
+}
+
+export function normalizeFinalTaskResults(taskResults = Object()) {
+  const completed = uniqueValues(taskResults.completed);
+  const mergedInto = uniqueValues(taskResults.merged_into || taskResults.mergedInto);
+  const resolved = new Set([...completed, ...mergedInto]);
+  const failed = uniqueValues(taskResults.failed).filter((id) => !resolved.has(id));
+  const blocked = uniqueValues(taskResults.blocked).filter((id) => !resolved.has(id));
+  const skipped = uniqueValues(taskResults.skipped).filter((id) => !resolved.has(id));
+  const contractReview = uniqueValues(taskResults.contractReview || taskResults.contract_review).filter((id) => !resolved.has(id));
+  return {
+    ...taskResults,
+    completed,
+    failed,
+    skipped,
+    blocked,
+    contractReview,
+    contract_review: contractReview,
+    merged_into: mergedInto,
+  };
+}
+
 function countItems(value) {
   if (Array.isArray(value)) return value.filter(Boolean).length;
   if (typeof value === "number") return Number.isFinite(value) && value > 0 ? value : 0;
@@ -277,6 +301,9 @@ function collectStatusEntries(value, field = "", depth = 0, seen = new Set()) {
   const entries = [];
   for (const [key, child] of Object.entries(value)) {
     const nextField = field ? `${field}.${key}` : key;
+    if (nextField.includes("review.historical_issues") || nextField.includes("review.historicalIssues")) {
+      continue;
+    }
     if (STATUS_FIELDS.has(key)) {
       const status = cleanStatus(child);
       const wrapperStatus = key === "status" &&
@@ -426,6 +453,7 @@ export function buildRunFinalVerdict({
   failOnSkippedIssues = false,
   requireRunArtifacts = false,
 } = Object()) {
+  taskResults = normalizeFinalTaskResults(taskResults);
   const issues = [];
   const failedCount = asArray(taskResults.failed).length;
   const blockedCount = asArray(taskResults.blocked).length;
@@ -455,6 +483,7 @@ export function buildRunReturnResult({
   runReportResult,
   normalizeRepoPath = (value) => value,
 } = Object()) {
+  taskResults = normalizeFinalTaskResults(taskResults);
   const finalVerdict = buildRunFinalVerdict({ taskResults, runReportResult, requireRunArtifacts: true });
   const exitCode = finalVerdict.exit_code;
   const contractReview = taskResults.contractReview || taskResults.contract_review || [];
@@ -529,18 +558,19 @@ export async function finalizeRun({
   now = () => new Date(),
 } = Object()) {
   const elapsed = ((Date.now() - startTimeMs) / 1000).toFixed(1);
+  const finalTaskResults = normalizeFinalTaskResults(taskResults);
   logRun("run_end", {
     run_id: runId,
     prd: prdPath || "auto",
-    passed: taskResults.completed.length,
-    failed: taskResults.failed.length,
+    passed: finalTaskResults.completed.length,
+    failed: finalTaskResults.failed.length,
     duration_sec: elapsed,
   });
   const runReportResult = writeRunReport({
     stateDir,
     runId,
     prdPath,
-    taskResults,
+    taskResults: finalTaskResults,
     progressTotal,
     startedAt: new Date(startTimeMs).toISOString(),
     finishedAt: now().toISOString(),
@@ -548,7 +578,7 @@ export async function finalizeRun({
     taskLogsDir: join(runtimeDir, "task-logs"),
   });
   printRunReportSummary({
-    taskResults,
+    taskResults: finalTaskResults,
     progressTotal,
     elapsed,
     reportSummary: runReportResult.report?.summary || {},
@@ -557,10 +587,10 @@ export async function finalizeRun({
     consoleLog,
   });
   writeStateSnapshot("run_end", prdPath);
-  archiveCurrentRun(runId, taskResults);
+  archiveCurrentRun(runId, finalTaskResults);
   logProgress("RUN", runId, "archived");
   await cleanupProgressServer(progressServerProc, { processKill });
-  const result = buildRunReturnResult({ runId, prdPath, taskResults, runReportResult, normalizeRepoPath });
+  const result = buildRunReturnResult({ runId, prdPath, taskResults: finalTaskResults, runReportResult, normalizeRepoPath });
   cleanupRunArtifacts({
     yoloRoot,
     toolsRoot,

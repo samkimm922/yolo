@@ -754,6 +754,78 @@ describe("evidence run report", () => {
     }
   });
 
+  test("buildRunReport treats recovered task buckets and clean review as current success", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", { run_id: "RUN-RECOVERED", prd: "data/prd.json", tasks: 1 }, { now: "2026-05-24T10:00:00.000Z" });
+      appendRunEvent(stateDir, "run_end", { run_id: "RUN-RECOVERED", duration_sec: "5" }, { now: "2026-05-24T10:01:00.000Z" });
+      const taskLogsDir = join(stateDir, "runtime", "task-logs");
+      mkdirSync(taskLogsDir, { recursive: true });
+      writeFileSync(join(taskLogsDir, "_review.jsonl"), [
+        JSON.stringify({
+          ts: "2026-05-24T10:01:10.000Z",
+          run_id: "RUN-RECOVERED",
+          task_id: "_review",
+          type: "REVIEW_ISSUE",
+          severity: "medium",
+          file: "src/a.ts",
+          line: 1,
+          message: "historical issue",
+        }),
+        JSON.stringify({
+          ts: "2026-05-24T10:01:20.000Z",
+          run_id: "RUN-RECOVERED",
+          task_id: "_review",
+          type: "DONE",
+          result: "round_done",
+          issues_found: 1,
+          issues_fixed: 1,
+        }),
+        JSON.stringify({
+          ts: "2026-05-24T10:01:30.000Z",
+          run_id: "RUN-RECOVERED",
+          task_id: "_review",
+          type: "DONE",
+          result: "pass",
+          issues_found: 0,
+          issues_fixed: 0,
+        }),
+      ].join("\n") + "\n", "utf8");
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-RECOVERED",
+        taskResults: {
+          completed: ["TASK-A", "TASK-B"],
+          failed: ["TASK-A"],
+          skipped: ["TASK-A"],
+          blocked: ["TASK-B"],
+        },
+        progressTotal: 1,
+      });
+
+      assert.equal(report.status, "success");
+      assert.equal(report.summary.planned, 2);
+      assert.deepEqual(report.tasks.completed, ["TASK-A", "TASK-B"]);
+      assert.deepEqual(report.tasks.failed, []);
+      assert.deepEqual(report.tasks.skipped, []);
+      assert.deepEqual(report.tasks.blocked, []);
+      assert.equal(report.summary.evidence_failures, 0);
+      assert.equal(report.summary.task_success_rate, 100);
+      assert.equal(report.summary.run_success_rate, 100);
+      assert.equal(report.review.issue_count, 0);
+      assert.equal(report.review.historical_issue_count, 1);
+      assert.equal(report.review.latest_result, "pass");
+
+      const finalAnswer = buildRunFinalAnswer(report);
+      assert.equal(finalAnswer.outcome, "success");
+      assert.deepEqual(finalAnswer.blockers, []);
+      assert.ok(finalAnswer.checks.some((check) => check.name === "review" && check.status === "pass"));
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
   test("P8.M5: explicit taskResults still wins over disk; missing file yields empty buckets", () => {
     const stateDir = tempStateDir();
     try {

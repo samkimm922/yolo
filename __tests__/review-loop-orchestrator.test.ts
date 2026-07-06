@@ -108,6 +108,8 @@ test("runReviewLoop converts one finding into one review_fix task with non-empty
       id: "BASE-1",
       type: "bugfix",
       status: "completed",
+      requirement_ids: ["REQ-BASE-1"],
+      design_ids: ["DES-BASE-1"],
       scope: { targets: [{ file: "src/app.js" }] },
     }],
   };
@@ -154,6 +156,9 @@ test("runReviewLoop converts one finding into one review_fix task with non-empty
     const reviewTasks = written.tasks.filter((task) => task.task_kind === "review_fix");
     assert.equal(reviewTasks.length, 1);
     assert.deepEqual(reviewTasks[0].source_finding_ids, ["REV-ONE"]);
+    assert.deepEqual(reviewTasks[0].requirement_ids, ["REQ-BASE-1"]);
+    assert.deepEqual(reviewTasks[0].design_ids, ["DES-BASE-1"]);
+    assert.deepEqual(reviewTasks[0].evidence_files, ["REV-ONE"]);
     assert.ok(reviewTasks[0].post_conditions.length > 0);
     assert.ok(reviewTasks[0].post_conditions.some((condition) =>
       condition.type === "code_not_contains" &&
