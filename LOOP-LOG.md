@@ -334,3 +334,51 @@
   - `npm run verify:executor --silent`: pass
 - Trace note: Round 10 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop10/`; this round stopped in review fix handling before acceptance/ship.
 - Frozen files touched: none.
+
+## Round 11
+
+- Project path: `/Users/sippingroom/Developer/dogfood-gitweekly-loop11`
+- Dogfood window: approximately 2026-07-06T17:05:56Z to 2026-07-06T17:24:46Z for lifecycle run attempt; fix validation followed immediately after.
+- Pre-run self-check: `npm run build --silent` passed; `npm run verify:executor --silent` passed.
+- Lifecycle preparation:
+  - `yolo check .yolo/demand/DEMAND-LOOP11-GIT-WEEKLY/prd.json --json`: pass.
+  - PRD self-inspection confirmed the Round 9/10 fixes were active: the synthetic automated acceptance task targeted `test/git-weekly-cli.test.ts`.
+  - `yolo run --executor claude`: exited 1 after 9/10 planned tasks completed.
+- Positive carry-forward evidence:
+  - The scaffold task completed and logged `MERGE 持久化 node_modules 工具链缓存`.
+  - All implementation tasks passed; scope audit caught and retried out-of-scope source-file edits in earlier tasks, and skipped an unscoped `pnpm-lock.yaml`.
+  - The Round 10 review auto-fix import fix worked in the real built CLI path: review found 1 `AUTO_FIX`, applied `FIX-R1-001`, and the second review round was clean.
+- Stop point: run stopped before acceptance/ship because `DEMAND-AUTOMATED-ACCEPTANCE-TEST-001` hit the repeated-gate fuse.
+- Result: run report status `error`; summary showed `planned: 10`, `completed: 9`, `blocked: 1`, `task_success_rate: 90`, `run_success_rate: 60`, and `evidence_failures: 5`.
+- Immediate blocker: the synthetic automated acceptance task failed `tests_pass` twice with `测试命令通过但测试套件为空或报告 0 tests: npm test`, then stopped as `contract_suspect`.
+- Root cause 1: the provider claimed it created `test/git-weekly-cli.test.ts` with 4-5 tests, but `diff-quality-gate` recorded `changed_files:["test/git-weekly-cli.test.ts"]` with `added:0`, `removed:0`, `total:0`; `test-generation-validator` passed in `reuse_existing` mode with no changed/new test files, and the main tree had no `test/git-weekly-cli.test.ts`. The validator was not checking that a `require_tests` target file actually existed, was non-empty, and contained a runnable test declaration.
+- Root cause 2: review auto-fix treated a legitimate CLI stdout line `console.log(markdown)` as debug residue and removed it, leaving an empty `else {}` branch in `src/git-weekly-cli.ts`. The Round 10 loader fix succeeded, but the console-log rule was too broad for CLI output.
+- Secondary diagnostic note: the contract-suspect path for a single blocked task reported all dependencies missing because doctor evaluation was scoped to the single task slice. This was not the primary blocker for Round 11 and was left for a later, separately scoped fix.
+- Fix: test-generation validation now requires tasks with `require_tests`/nonzero-test gates to have in-scope target test files that exist, are non-empty, and contain `test()`/`it()`/`describe()` declarations. The synthetic automated acceptance task now carries explicit `add_minimal` test-generation metadata and instructions to create exactly the target test file. Review scanner and deterministic auto-fix now preserve likely CLI stdout `console.log(...)` calls such as `markdown`, `output`, `result`, `stdout`, `json`, and `JSON.stringify(...)`.
+- Evidence:
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop11/.dogfood-loop11/command-output/run.log`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop11/.dogfood-loop11/commands.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop11/.yolo/state/reports/run-20260706170556/run-report.json`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop11/.yolo/state/runtime/task-results.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop11/.yolo/state/runtime/task-logs/DEMAND-AUTOMATED-ACCEPTANCE-TEST-001.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop11/.yolo/state/runtime/task-logs/_review.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop11/src/git-weekly-cli.ts`
+  - `src/runtime/gates/test-generation-validator.ts`
+  - `src/demand/runtime.ts`
+  - `src/review/scanner.ts`
+  - `src/lib/auto-fix.ts`
+- Repro first went red with `node --import tsx --test __tests__/test-generation-validator.test.ts --test-name-pattern "require_tests task blocks"`: missing, empty, or declaration-free target test files were previously not blocked by the validator.
+- Repro first went red with `node --import tsx --test __tests__/sdk.test.ts --test-name-pattern "scanner does not treat CLI stdout"` and `node --import tsx --test __tests__/task-router-quality-gate.test.ts --test-name-pattern "console auto-fix preserves"`: CLI stdout `console.log(markdown)` was previously reported/fixed as debug residue.
+- Fix commit: `152b586 fix(runtime): harden acceptance tests and stdout review`
+- Validation:
+  - `node --import tsx --test __tests__/test-generation-validator.test.ts __tests__/demand-runtime.test.ts __tests__/task-router-quality-gate.test.ts __tests__/sdk.test.ts --test-name-pattern "require_tests task blocks|R2 dogfood demand generates|console auto-fix preserves|scanner does not treat CLI stdout"`: pass, 97/97
+  - `node --import tsx --test __tests__/test-generation-validator.test.ts __tests__/demand-runtime.test.ts __tests__/task-router-quality-gate.test.ts __tests__/sdk.test.ts __tests__/review-loop-orchestrator.test.ts __tests__/deterministic-auto-fix.test.ts`: pass, 117/117
+  - `npm run typecheck --silent`: pass
+  - `npm run verify --silent`: failed once at 2030/2031 due `appendJsonlRecord preserves the hash chain across concurrent processes` timing out on evidence ledger lock acquisition after 1000ms; the failure path is unrelated to the changed files.
+  - `node --import tsx --test __tests__/evidence-ledger.test.ts --test-name-pattern "preserves the hash chain across concurrent processes"`: pass, 16/16 on rerun.
+  - `npm run quality-gate --silent`: pass, Q=1.0000
+  - `npm run build --silent`: pass
+  - `npm run verify:executor --silent`: pass
+  - `git diff --check`: pass
+- Trace note: Round 11 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop11/`; this round stopped before acceptance/ship.
+- Frozen files touched: none.
