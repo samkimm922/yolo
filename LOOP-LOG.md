@@ -133,3 +133,35 @@
   - `npm run quality-gate --silent`: pass, Q=1.0000
 - Trace note: Round 5 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop5/`; run failed after reporting the stale-bucket final verdict, so no review/acceptance/ship artifacts exist for this round.
 - Frozen files touched: none.
+
+## Round 6
+
+- Project path: `/Users/sippingroom/Developer/dogfood-gitweekly-loop6`
+- Dogfood window: approximately 2026-07-06T13:00:00Z to 2026-07-06T13:23:00Z for lifecycle run attempt; about 1h through fix validation and push.
+- Pre-run self-check: `npm run build --silent` passed; `npm run verify:executor --silent` passed three consecutive times.
+- Stop point: `yolo run --executor claude` was stopped after the same blocker exceeded the allowed official-path repetitions; review/acceptance/ship were not reached.
+- Blocker: downstream task worktrees repeatedly failed `no_new_type_errors` because `npm run typecheck` exited 127 with `sh: tsc: command not found`.
+- Root cause: the greenfield scaffold installed `typescript` in the scaffold task worktree, but `cleanupTaskWorktree` intentionally skipped `node_modules` and then removed the worktree. Later task worktrees can only provision `node_modules` from the root project, so they inherited no `node_modules/.bin/tsc` unless a provider happened to reinstall dependencies in that task.
+- Evidence:
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop6/.dogfood-loop6/command-output/run.log`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop6/.dogfood-loop6/commands.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop6/.yolo/state/runtime/task-results.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop6/.yolo/state/runtime/gate-*`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop6/.yolo/state/runtime/task-logs/`
+  - `src/demand/runtime.ts`
+  - `src/runtime/execution/worktree-session.ts`
+- Minimal repro:
+  - In the loop6 project root, `npm run typecheck --silent` failed with `sh: tsc: command not found` and exit 127; `node_modules`, `node_modules/.bin`, and `node_modules/.bin/tsc` did not exist.
+  - The same run log repeated `no_new_type_errors: typecheck 命令异常退出(code 127)` across official retry/review paths until the loop limit was reached.
+- Repro first went red with `node --import tsx --test __tests__/worktree-session.test.ts --test-name-pattern "persists scaffold-installed node_modules"`: after scaffold cleanup, `rootDir/node_modules/.bin/tsc` was missing.
+- Fix commit: `5f2fa1c fix(runtime): persist scaffold toolchain cache`
+- Draft PR: `https://github.com/samkimm922/yolo/pull/254` carries this cumulative-branch commit. Attempting a separate Round 6 draft PR failed because GitHub already has a PR for `fix/dogfood-loop-to-ship` into `main`.
+- Validation:
+  - `node --import tsx --test __tests__/worktree-session.test.ts --test-name-pattern "persists scaffold-installed node_modules"`: red before fix, pass after fix
+  - `node --import tsx --test __tests__/worktree-session.test.ts`: pass, 23/23
+  - `npm run typecheck --silent`: pass
+  - `npm test --silent`: pass, 2021/2021
+  - `npm run verify --silent`: pass, 2021/2021 plus source-grep, ci guard, and prd-preflight pass
+  - `npm run quality-gate --silent`: pass, Q=1.0000
+- Trace note: Round 6 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop6/`; `run` was interrupted with exit 130 after the repeated official-path blocker, so no final run report/review/acceptance/ship artifacts exist for this round.
+- Frozen files touched: none.
