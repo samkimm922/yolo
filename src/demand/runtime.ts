@@ -1257,7 +1257,7 @@ function scaffoldInstructions(needsTypecheck = false) {
     steps.push(
       "Create .npmrc with package-lock=false before installing dependencies so npm install does not create package-lock.json.",
       "Run npm install --save-dev typescript @types/node so node_modules/.bin/tsc exists and Node built-ins typecheck.",
-      "Set scripts.typecheck to \"tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --esModuleInterop --skipLibCheck --types node src/**/*.ts\".",
+      "Set scripts.typecheck to \"tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --esModuleInterop --skipLibCheck --types node src/*.ts\".",
       "Do not create tsconfig.json; keep compiler settings in the typecheck script so this scaffold stays within two files.",
     );
   }

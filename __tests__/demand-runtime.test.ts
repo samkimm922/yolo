@@ -2015,7 +2015,8 @@ describe("demand runtime", () => {
       assert.ok(scaffoldExpectedOutput.includes(".npmrc"));
       assert.match(scaffoldInstructionText(scaffold), /@types\/node/);
       assert.match(scaffoldInstructionText(scaffold), /package-lock=false/);
-      assert.match(scaffoldInstructionText(scaffold), /src\/\*\*\/\*\.ts/);
+      assert.doesNotMatch(scaffoldInstructionText(scaffold), /src\/\*\*\/\*\.ts/);
+      assert.match(scaffoldInstructionText(scaffold), /src\/\*\.ts/);
       assert.ok(scaffold.post_conditions.some((condition) =>
         condition.type === "file_exists" && condition.params?.file === "package.json"
       ));
