@@ -1,11 +1,15 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { gunzipSync } from "node:zlib";
 import { inspectYoloCheck, runYoloCheckCli } from "../src/runtime/gates/check-report.js";
 import { runYoloCli } from "../src/cli/yolo.js";
 import { initLifecycleState } from "../src/lifecycle/state.js";
+
+const R6_DEMAND_PRD_SHA256 = "fd62ceadc9983b9c7e357d8bf871ecc346531da9765d58fe857ca1aec4fd250b";
 
 function tempProject() {
   return mkdtempSync(join(tmpdir(), "yolo-check-report-"));
@@ -14,6 +18,16 @@ function tempProject() {
 function writeJson(file, payload) {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(payload, null, 2), "utf8");
+}
+
+function writeR6DemandPrdFixture(root) {
+  const fixture = readFileSync(resolve("__tests__/fixtures/dogfood-gitweekly-r6-prd.json.gz"));
+  const prdBytes = gunzipSync(fixture);
+  const digest = createHash("sha256").update(prdBytes).digest("hex");
+  assert.equal(digest, R6_DEMAND_PRD_SHA256);
+  const prdPath = join(root, "dogfood-gitweekly-r6-prd.json");
+  writeFileSync(prdPath, prdBytes);
+  return prdPath;
 }
 
 function acceptanceAdapter(id = "local-browser") {
@@ -478,6 +492,45 @@ describe("yolo check report", () => {
       assert.equal(atomicity.status, "pass");
       assert.equal(atomicity.blockers.length, 0);
       assert.equal(atomicity.inspections.some((inspection) => inspection.task_id === scaffold.id), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("R6 scaffold fixture passes with default settings and blocks no-shell executor config at check", () => {
+    const root = tempProject();
+    try {
+      const prdPath = writeR6DemandPrdFixture(root);
+
+      const defaultReport = inspectYoloCheck({
+        prdPath,
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        mode: "runner",
+        config: { ai: { executor: "claude", settings: "" } },
+      });
+      const defaultCapability = defaultReport.checks.find((check) => check.name === "provider_capability");
+      assert.equal(defaultReport.status, "pass", JSON.stringify(defaultReport.blockers, null, 2));
+      assert.equal(defaultCapability.status, "pass");
+      assert.equal(defaultCapability.capability.capabilities.shell, true);
+
+      const noShellReport = inspectYoloCheck({
+        prdPath,
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        mode: "runner",
+        config: { ai: { executor: "claude", settings: "{}", claude_allowed_tools: "Read,Glob,Grep" } },
+      });
+      const noShellCapability = noShellReport.checks.find((check) => check.name === "provider_capability");
+      assert.equal(noShellReport.status, "blocked");
+      assert.equal(noShellCapability.status, "blocked");
+      assert.ok(noShellCapability.capability.required.includes("shell"));
+      assert.ok(noShellReport.blockers.some((blocker) =>
+        blocker.gate === "provider_capability" &&
+        blocker.code === "PROVIDER_CAPABILITY_BLOCKED" &&
+        blocker.message.includes("config.ai.settings") &&
+        blocker.message.includes("config.ai.claude_allowed_tools")
+      ));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

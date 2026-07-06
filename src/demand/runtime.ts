@@ -1162,6 +1162,30 @@ function generatedTaskInstructionsText(task = Object()) {
     .join("\n");
 }
 
+function generatedTaskInstructionsRequireShell(task = Object()) {
+  const source = generatedTaskInstructionsText(task);
+  if (!source) return false;
+  return /\b(?:npm\s+(?:install|i|run|test|exec|x)|npx|pnpm\s+(?:install|add|run|test|exec|x)|yarn\s+(?:install|add|run|test|exec)|bun\s+(?:install|add|run|test|x)|node\s+--test|tsx|tsc|git\s+)\b/i.test(source)
+    || /\b(?:run|execute)\s+(?:the\s+)?(?:shell\s+)?(?:command|script)\b/i.test(source)
+    || /\binstall\s+(?:dependencies|packages?|dev dependencies|toolchain)\b/i.test(source);
+}
+
+function addRequiredCapability(task = Object(), capability = "") {
+  const cap = clean(capability);
+  if (!cap) return task;
+  task.required_capabilities = uniqueStrings([...asArray(task.required_capabilities), cap]);
+  return task;
+}
+
+function annotateGeneratedTaskRequiredCapabilities(tasks = []) {
+  for (const task of asArray(tasks)) {
+    if (clean(task.task_kind) === "greenfield_scaffold" || generatedTaskInstructionsRequireShell(task)) {
+      addRequiredCapability(task, "shell");
+    }
+  }
+  return tasks;
+}
+
 function collectInstructionToolReferences(text = "") {
   const tools = new Set<string>();
   const source = clean(text);
@@ -1812,6 +1836,7 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
   deriveFileDependencies(tasks);
   const scaffold = buildGreenfieldScaffoldTask(session, tasks, buildContext);
   const generatedTasks = addScaffoldDependency(tasks, scaffold);
+  annotateGeneratedTaskRequiredCapabilities(generatedTasks);
   return { tasks: generatedTasks, compileErrors: [...compileErrors, ...inspectGeneratedTaskInstructionsSelfConsistent(generatedTasks)] };
 }
 

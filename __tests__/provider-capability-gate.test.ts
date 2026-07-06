@@ -34,17 +34,20 @@ describe("provider capability bits and parity matrix", () => {
     assert.equal(claude.supports_vision, true);
     assert.equal(claude.supports_streaming, true);
     assert.equal(claude.supports_parallel, false);
+    assert.equal(claude.shell, true);
 
     const codex = buildProviderCapabilityBits("codex");
     assert.equal(codex.supports_tools, true);
     assert.equal(codex.supports_vision, false);
     assert.equal(codex.supports_streaming, true);
     assert.equal(codex.supports_parallel, true);
+    assert.equal(codex.shell, true);
 
     const custom = buildProviderCapabilityBits("custom");
     assert.equal(custom.supports_tools, false);
     assert.equal(custom.supports_vision, false);
     assert.equal(custom.supports_parallel, false);
+    assert.equal(custom.shell, false);
   });
 
   test("buildProviderCapabilityBits accepts overrides", () => {
@@ -52,6 +55,21 @@ describe("provider capability bits and parity matrix", () => {
     assert.equal(bits.supports_tools, true);
     assert.equal(bits.supports_vision, true);
     assert.equal(bits.supports_streaming, false);
+  });
+
+  test("buildProviderCapabilityBits derives shell from executor config", () => {
+    const claudeDefault = buildProviderCapabilityBits("claude", {}, { config: { ai: { executor: "claude", settings: "" } } });
+    assert.equal(claudeDefault.shell, true);
+
+    const claudeNoBash = buildProviderCapabilityBits("claude", {}, {
+      config: { ai: { executor: "claude", settings: "{}", claude_allowed_tools: "Read,Glob,Grep" } },
+    });
+    assert.equal(claudeNoBash.shell, false);
+
+    const codexReadOnly = buildProviderCapabilityBits("codex", {}, {
+      config: { ai: { executor: "codex", codex_sandbox: "read-only" } },
+    });
+    assert.equal(codexReadOnly.shell, false);
   });
 
   test("buildProviderParityMatrix includes all providers and fields", () => {
@@ -132,6 +150,43 @@ describe("provider capability gate", () => {
     assert.equal(result.status, "pass");
     assert.equal(result.blocks_execution, false);
     assert.deepEqual(result.required, ["supports_tools", "supports_streaming"]);
+  });
+
+  test("blocks shell tasks on claude configs that do not allow Bash and names the config keys", () => {
+    const result = inspectProviderCapabilityGate({
+      prd: {
+        tasks: [{
+          id: "T-SCAFFOLD",
+          task_kind: "greenfield_scaffold",
+          instructions: ["Run npm install --save-dev typescript --package-lock=false."],
+        }],
+      },
+      config: { ai: { executor: "claude", settings: "{}", claude_allowed_tools: "Read,Glob,Grep" } },
+    });
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.blocks_execution, true);
+    assert.ok(result.required.includes("shell"));
+    assert.ok(result.message.includes("config.ai.settings"));
+    assert.ok(result.message.includes("config.ai.claude_allowed_tools"));
+  });
+
+  test("passes shell tasks on claude default settings", () => {
+    const result = inspectProviderCapabilityGate({
+      prd: {
+        tasks: [{
+          id: "T-SCAFFOLD",
+          task_kind: "greenfield_scaffold",
+          instructions: ["Run npm install --save-dev typescript --package-lock=false."],
+        }],
+      },
+      config: { ai: { executor: "claude", settings: "" } },
+    });
+
+    assert.equal(result.status, "pass");
+    assert.equal(result.blocks_execution, false);
+    assert.ok(result.required.includes("shell"));
+    assert.equal(result.capabilities.shell, true);
   });
 
   test("reads required capabilities from tasks when not at PRD level", () => {
