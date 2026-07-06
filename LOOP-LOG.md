@@ -48,3 +48,29 @@
   - `npm run quality-gate --silent`: pass, Q=1.0000
 - Trace note: `run` output is present in `command-output/run.log`; `commands.jsonl` lacks the interrupted `run` record because Ctrl-C terminated the wrapper while stopping at the repetition fuse.
 - Frozen files touched: none.
+
+## Round 3
+
+- Project path: `/Users/sippingroom/Developer/dogfood-gitweekly-loop3`
+- Dogfood window: 2026-07-06T10:53:00Z to 2026-07-06T11:08:00Z for lifecycle run attempt; about 33m through fix validation and push.
+- Stop point: `yolo run --executor claude` failed before review/acceptance/ship.
+- Blocker: after the scaffold commit succeeded, downstream business tasks repeatedly touched `package.json`, `package-lock.json`, and `tsconfig.json` outside their task scopes, tripping the global same-failure fuse.
+- Root cause: the generated greenfield scaffold established only a partial Node/TypeScript baseline. It committed `package.json` with `typescript`, but did not include Node types, lockfile suppression, or a compiler configuration that later tasks could reuse. Downstream worktrees then installed/fixed toolchain metadata while implementing business slices, creating out-of-scope metadata churn.
+- Evidence:
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop3/.dogfood-loop3/command-output/run.log`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop3/.yolo/state/runtime/task-results.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop3/.yolo/state/reports/run-20260706110800/run-report.json`
+  - `src/demand/runtime.ts`
+  - `__tests__/demand-runtime.test.ts`
+- Repro first went red with `node --import tsx --test __tests__/demand-runtime.test.ts --test-name-pattern "R2 dogfood demand generates machine-verifiable gates"`: the scaffold task lacked `.npmrc`, `@types/node`, lockfile suppression, and postconditions preventing `package-lock.json` / `tsconfig.json` churn.
+- Fix commit: `3051604 fix(demand): scaffold complete typecheck toolchain`
+- Draft PR: `https://github.com/samkimm922/yolo/pull/254` carries this cumulative-branch commit. Attempting a separate Round 3 draft PR failed because GitHub already has a PR for `fix/dogfood-loop-to-ship` into `main`.
+- Validation:
+  - `node --import tsx --test __tests__/demand-runtime.test.ts --test-name-pattern "R2 dogfood demand generates machine-verifiable gates"`: red before fix, pass after fix
+  - `node --import tsx --test __tests__/check-report.test.ts __tests__/provider-capability-gate.test.ts __tests__/demand-runtime-p2-16-task-schema.test.ts`: pass, 59/59
+  - `npm run typecheck --silent`: pass
+  - `npm test --silent`: pass, 2019/2019
+  - `npm run verify --silent`: pass, 2019/2019 plus source-grep, ci guard, and prd-preflight pass
+  - `npm run quality-gate --silent`: pass, Q=1.0000
+- Trace note: `commands.jsonl` includes the lifecycle commands; the first `interview-start` attempt records a harmless `CLI_UNKNOWN_FLAG` because `--idea` was rejected, then the correct positional command succeeded.
+- Frozen files touched: none.
