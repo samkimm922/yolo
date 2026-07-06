@@ -6,8 +6,12 @@
     "PreToolUse": [
       {
         "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
-        "command": "node --import tsx hooks/pre-tool-block-yolo-write.ts",
-        "description": "Block LLM direct writes to .yolo state directory"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --import tsx hooks/pre-tool-block-yolo-write.ts"
+          }
+        ]
       }
     ]
   }

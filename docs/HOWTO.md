@@ -9,6 +9,8 @@ node dist/src/runtime/progress/server.js # 进度面板 → http://localhost:345
 
 不需要传参数。自动跳过已完成的，自动重置中断的任务。等价的 npm 脚本：`npm run runner`、`npm run progress`。
 
+手动 dogfood 前可运行 `npm run verify:executor`，用真实 Claude CLI 验证默认 executor settings 的 Bash、`npm ping` 和 `.yolo/state` hook 拦截，脚本输出三项 JSON 结果（不在 CI 中运行）。
+
 ## 生成新 PRD
 
 ```bash

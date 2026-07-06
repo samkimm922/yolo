@@ -644,6 +644,10 @@ describe("lazy-agent adversarial suite — 14 audit findings + 2 boundaries", ()
     const matchers = (settings.hooks?.PreToolUse || []).map((entry) => entry.matcher);
     const bashRegistered = matchers.some((matcher) => typeof matcher === "string" && /\bBash\b/.test(matcher));
     assert.ok(bashRegistered, "settings-minimal.json PreToolUse matcher must include Bash");
+    const preEntry = settings.hooks?.PreToolUse?.[0];
+    assert.equal(preEntry?.command, undefined, "settings-minimal.json must not use legacy flat hook command");
+    assert.equal(preEntry?.hooks?.[0]?.type, "command", "settings-minimal.json must use nested command hook schema");
+    assert.equal(typeof preEntry?.hooks?.[0]?.command, "string", "nested hook command must be a string");
   });
 
   test("P6.M1: final answer outcome derives from verifiable fields, not report.status", () => {

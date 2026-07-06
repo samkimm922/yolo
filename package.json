@@ -122,6 +122,7 @@
     "matrix-ci": "node --import tsx scripts/matrix-ci.ts",
     "smoke:packed-external": "node --import tsx scripts/e2e-smoke/packed-external.ts",
     "verify": "npm run typecheck --silent && npm run test --silent && node --import tsx scripts/source-grep-meta.ts && node --import tsx scripts/ci-guard.ts && npm run preflight --silent && node -e \"import {config} from'./dist/src/lib/config.js';process.exit(config.version==='2.0'?0:1)\"",
+    "verify:executor": "npm run build --silent && node --import tsx scripts/verify-executor-permissions.ts",
     "prepack": "npm run build --silent",
     "lint": "node --import tsx scripts/source-grep-meta.ts",
     "clean": "node -e \"const{existsSync,readFileSync,writeFileSync,readdirSync,rmSync,statSync}=require('fs');const{join}=require('path');['.yolo/state/events.jsonl','.yolo/state/changes.jsonl','.yolo/state/runs.jsonl'].forEach(f=>{const p=join(process.cwd(),f);if(existsSync(p)){const c=readFileSync(p,'utf8').split('\\n').filter(Boolean).slice(-50);writeFileSync(p,c.join('\\n')+'\\n')}});const d=join(process.cwd(),'dist');if(existsSync(d)){(function rm(ts){readdirSync(ts).forEach(e=>{const p=join(ts,e);statSync(p).isDirectory()?rm(p):e.endsWith('.d.ts')&&rmSync(p)})})(d);console.log('dist .d.ts cleaned')}else{console.log('state cleaned')}\""

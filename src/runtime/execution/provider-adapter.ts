@@ -226,6 +226,8 @@ function preflightReason(blockers = []) {
   if (codes.includes("AGENT_ALLOWED_ROOTS_MISSING") || codes.includes("AGENT_ROOT_POLICY_MISSING")) return "agent_root_policy_missing";
   if (codes.includes("PROVIDER_INVOCATION_BUILD_FAILED")) return "provider_invocation_build_failed";
   if (codes.includes("PROVIDER_TIMEOUT_INVALID")) return "provider_timeout_invalid";
+  if (codes.includes("CLAUDE_SETTINGS_LEGACY_FLAT_HOOKS")) return "claude_settings_legacy_flat_hooks";
+  if (codes.includes("CLAUDE_SETTINGS_INVALID_JSON")) return "claude_settings_invalid_json";
   if (codes.includes("CUSTOM_COMMAND_UNPARSEABLE")) return "custom_command_unparseable";
   return "provider_preflight_blocked";
 }
@@ -409,6 +411,76 @@ function inlineSettings(settings) {
   return settings.startsWith("{") || settings.startsWith("[");
 }
 
+function objectRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+function hasOwn(value, key) {
+  return Object.prototype.hasOwnProperty.call(Object(value), key);
+}
+
+function claudeSettingsPayloadForPreflight(invocation = Object(), { readFileSync = defaultReadFileSync } = Object()) {
+  const settings = objectRecord(invocation.settings);
+  if (settings) {
+    const type = cleanString(settings.type);
+    const value = cleanString(settings.value);
+    if ((type === "default" || type === "inline") && inlineSettings(value)) {
+      return {
+        source: type === "default" ? "default settings-minimal.json" : "inline config.ai.settings",
+        text: value,
+      };
+    }
+    if (type === "file" && cleanString(settings.path)) {
+      const path = cleanString(settings.path);
+      return {
+        source: path,
+        text: readFileSync(path, "utf8"),
+      };
+    }
+  }
+  if (cleanString(invocation.settingsFile)) {
+    const path = cleanString(invocation.settingsFile);
+    return {
+      source: path,
+      text: readFileSync(path, "utf8"),
+    };
+  }
+  return null;
+}
+
+function inspectClaudeSettingsHookShape(invocation = Object(), { readFileSync = defaultReadFileSync } = Object()) {
+  const payload = claudeSettingsPayloadForPreflight(invocation, { readFileSync });
+  if (!payload) return [];
+  let settings;
+  try {
+    settings = JSON.parse(payload.text);
+  } catch (error) {
+    return [{
+      code: "CLAUDE_SETTINGS_INVALID_JSON",
+      provider: "claude",
+      settings_source: payload.source,
+      message: `Claude settings must be valid JSON before execution. ${payload.source} could not be parsed: ${error?.message || String(error)}`,
+    }];
+  }
+
+  const preToolUse = objectRecord(settings)?.hooks?.PreToolUse;
+  if (!Array.isArray(preToolUse)) return [];
+
+  const legacyEntries = preToolUse
+    .map((entry, index) => ({ entry: objectRecord(entry), index }))
+    .filter(({ entry }) => entry && hasOwn(entry, "command") && !Array.isArray(entry.hooks));
+  if (legacyEntries.length === 0) return [];
+
+  const indexes = legacyEntries.map(({ index }) => index).join(", ");
+  return [{
+    code: "CLAUDE_SETTINGS_LEGACY_FLAT_HOOKS",
+    provider: "claude",
+    settings_source: payload.source,
+    indexes,
+    message: `Claude settings use the legacy flat hooks schema at hooks.PreToolUse[${indexes}]. Claude Code 2.1.92 expects the nested format { matcher, hooks: [{ type: "command", command: "..." }] }; move the top-level command into the nested hooks array. Do not use { matcher, command } because Claude may reject the whole --settings file and silently drop permissions and hooks.`,
+  }];
+}
+
 export function resolveClaudeSettings(rootDir, value, { packageRoot = YOLO_PACKAGE_ROOT } = Object()) {
   const settings = cleanString(value);
   const isDefaultSettings = !settings || settings === DEFAULT_CLAUDE_SETTINGS_FILE;
@@ -458,6 +530,7 @@ export function resolveClaudeSettings(rootDir, value, { packageRoot = YOLO_PACKA
 export function inspectProviderInvocationPreflight(invocation = Object(), {
   existsSync = defaultExistsSync,
   commandExists = null,
+  readFileSync = defaultReadFileSync,
 } = Object()) {
   const blockers = [];
   const warnings = Array.isArray(invocation.warnings) ? [...invocation.warnings] : [];
@@ -489,7 +562,11 @@ export function inspectProviderInvocationPreflight(invocation = Object(), {
         settings_file: invocation.settingsFile,
         message: `Claude settings file not found: ${invocation.settingsFile}`,
       });
+    } else {
+      blockers.push(...inspectClaudeSettingsHookShape(invocation, { readFileSync }));
     }
+  } else if (invocation.provider === "claude") {
+    blockers.push(...inspectClaudeSettingsHookShape(invocation, { readFileSync }));
   }
   return {
     status: blockers.length > 0 ? "blocked" : "pass",
@@ -778,7 +855,7 @@ export function spawnProviderPrompt(prompt, {
       });
   const preflight = stubEnabled
     ? inspectProviderStubPreflight(invocation, { existsSync, commandExists })
-    : inspectProviderInvocationPreflight(invocation, { existsSync, commandExists });
+    : inspectProviderInvocationPreflight(invocation, { existsSync, commandExists, readFileSync });
   const blockers = [
     ...(inspection.blockers || []),
     ...(preflight.blockers || []),
