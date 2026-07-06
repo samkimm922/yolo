@@ -727,6 +727,33 @@ describe("evidence run report", () => {
     }
   });
 
+  test("buildRunReport uses the latest task-results status per task id", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", { run_id: "RUN-LATEST", prd: "data/prd.json", tasks: 2 }, { now: "2026-05-24T10:00:00.000Z" });
+      appendRunEvent(stateDir, "run_end", { run_id: "RUN-LATEST", duration_sec: "5" }, { now: "2026-05-24T10:01:00.000Z" });
+
+      const resultsFile = join(stateDir, "runtime", "task-results.jsonl");
+      mkdirSync(dirname(resultsFile), { recursive: true });
+      const records = [
+        { task_id: "T-A", run_id: "RUN-LATEST", status: "FAIL", attempt_id: "T-A-attempt-0", workspace_root: "/tmp", timestamp: "2026-05-24T10:00:30.000Z" },
+        { task_id: "T-B", run_id: "RUN-LATEST", status: "PASS", attempt_id: "T-B-attempt-0", workspace_root: "/tmp", timestamp: "2026-05-24T10:00:35.000Z" },
+        { task_id: "T-A", run_id: "RUN-LATEST", status: "PASS", attempt_id: "T-A-attempt-1", workspace_root: "/tmp", timestamp: "2026-05-24T10:00:40.000Z" },
+        { task_id: "T-B", run_id: "RUN-LATEST", status: "FAIL", attempt_id: "T-B-attempt-1", workspace_root: "/tmp", timestamp: "2026-05-24T10:00:45.000Z" },
+      ];
+      writeFileSync(resultsFile, records.map((record) => JSON.stringify(record)).join("\n") + "\n", "utf8");
+
+      const report = buildRunReport({ stateDir, runId: "RUN-LATEST" });
+
+      assert.deepEqual(report.tasks.completed, ["T-A"]);
+      assert.deepEqual(report.tasks.failed, ["T-B"]);
+      assert.equal(report.summary.completed, 1);
+      assert.equal(report.summary.failed, 1);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
   test("P8.M5: explicit taskResults still wins over disk; missing file yields empty buckets", () => {
     const stateDir = tempStateDir();
     try {
