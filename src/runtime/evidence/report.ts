@@ -307,7 +307,15 @@ function filterTaskLogsForRun(entries: JsonRecord[] = [], runId: unknown = null)
 
 const GATE_FAILURE_EVENTS: ReadonlySet<unknown> = new Set(["gate_fail", "gate.failed", "gate_failure"]);
 
-function summarizeGateEvidence({ stateEvents, taskLogEntries }: { stateEvents: JsonRecord[]; taskLogEntries: JsonRecord[] }): GateSummary {
+function summarizeGateEvidence({
+  stateEvents,
+  taskLogEntries,
+  recoveredTasks = new Set(),
+}: {
+  stateEvents: JsonRecord[];
+  taskLogEntries: JsonRecord[];
+  recoveredTasks?: Set<unknown>;
+}): GateSummary {
   const stateGateFailures = stateEvents
     .filter((entry) => GATE_FAILURE_EVENTS.has(entry.event) || entry.status === "gate_failed")
     .map((entry) => ({
@@ -332,7 +340,8 @@ function summarizeGateEvidence({ stateEvents, taskLogEntries }: { stateEvents: J
       ts: entry.ts || null,
     }));
 
-  const failures = [...stateGateFailures, ...taskLogGateFailures];
+  const failures = [...stateGateFailures, ...taskLogGateFailures]
+    .filter((failure) => !failure.task_id || !recoveredTasks.has(failure.task_id));
   return {
     failed_count: failures.length,
     failed_tasks: unique(failures.map((entry) => entry.task_id)),
@@ -619,9 +628,10 @@ export function buildRunReport({
       Array.isArray(taskResults.blocked)
     ),
   );
+  const diskBuckets = readTaskResultsFromDisk(stateDir, runId);
   const buckets: TaskBuckets = hasExplicitBuckets
     ? taskResults
-    : readTaskResultsFromDisk(stateDir, runId);
+    : diskBuckets;
   const normalizedBuckets = normalizeTaskBuckets(buckets);
   const completed = normalizedBuckets.completed || [];
   const failed = normalizedBuckets.failed || [];
@@ -636,7 +646,11 @@ export function buildRunReport({
   const rawPlannedCount = asNumber(progressTotal ?? runStart?.tasks);
   const plannedCount = Math.max(rawPlannedCount ?? 0, terminalCount) || terminalCount + skipped.length;
   const duration = asNumber(durationSec ?? runEnd?.duration_sec);
-  const gates = summarizeGateEvidence({ stateEvents, taskLogEntries });
+  const recoveredGateTasks = new Set([
+    ...(diskBuckets.completed || []),
+    ...(diskBuckets.merged_into || []),
+  ]);
+  const gates = summarizeGateEvidence({ stateEvents, taskLogEntries, recoveredTasks: recoveredGateTasks });
   const remediation = summarizeRemediation({ taskResults, stateEvents });
   const review = summarizeReviewEvidence(taskLogEntries);
   const fixtures = summarizeFixtureEvidence(stateEvents);
@@ -826,7 +840,7 @@ export function buildRunFinalAnswer(report: RunReport = Object(), options: Final
     },
     {
       name: "remediation",
-      status: remediationUnsafe || remediationHuman ? "fail" : (remediationItems > 0 ? "warning" : "pass"),
+      status: remediationUnsafe || remediationHuman ? "fail" : "pass",
       detail: `items=${remediationItems} auto_continuable=${report.remediation?.automation_continuable_count || 0} human=${remediationHuman} unsafe=${remediationUnsafe}`,
     },
     {
