@@ -74,3 +74,34 @@
   - `npm run quality-gate --silent`: pass, Q=1.0000
 - Trace note: `commands.jsonl` includes the lifecycle commands; the first `interview-start` attempt records a harmless `CLI_UNKNOWN_FLAG` because `--idea` was rejected, then the correct positional command succeeded.
 - Frozen files touched: none.
+
+## Round 4
+
+- Project path: `/Users/sippingroom/Developer/dogfood-gitweekly-loop4`
+- Dogfood window: 2026-07-06T11:46:00Z to 2026-07-06T12:18:00Z for lifecycle run attempt; about 1h 06m through fix validation and push.
+- Stop point: `yolo run --executor claude` was stopped after the same blocker exceeded the official-path repetition limit; review/acceptance/ship were not reached.
+- Blocker: `DEMAND-REQ-001-0010101` repeatedly failed `no_new_type_errors` with TypeScript exit code 2, then follow-on tasks touched `package.json` and created `tsconfig.json` out of scope.
+- Root cause: the Round 3 scaffold typecheck instruction used `src/**/*.ts`. In the generated npm/shell context that glob was passed literally to `tsc`, which produced `TS6053: File 'src/**/*.ts' not found` when the scaffold contained `src/git-weekly-cli.ts`.
+- Evidence:
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop4/.dogfood-loop4/command-output/run.log`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop4/.yolo/state/runtime/task-results.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop4/.yolo/state/runtime/task-audit.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop4/.yolo/state/runtime/task-logs/`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop4/.yolo/state/runtime/gate-*`
+  - `src/demand/runtime.ts`
+  - `__tests__/demand-runtime.test.ts`
+- Minimal repro:
+  - `tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --esModuleInterop --skipLibCheck --types node 'src/**/*.ts'`: failed with `TS6053` and exit 2.
+  - `tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --esModuleInterop --skipLibCheck --types node src/*.ts`: passed with exit 0.
+- Repro first went red with `node --import tsx --test __tests__/demand-runtime.test.ts --test-name-pattern "R2 dogfood demand generates machine-verifiable gates"`: the test asserted the scaffold must reject `src/**/*.ts` and require `src/*.ts`.
+- Fix commit: `48214f5 fix(demand): use executable scaffold typecheck glob`
+- Draft PR: `https://github.com/samkimm922/yolo/pull/254` carries this cumulative-branch commit. Attempting a separate Round 4 draft PR failed because GitHub already has a PR for `fix/dogfood-loop-to-ship` into `main`.
+- Validation:
+  - `node --import tsx --test __tests__/demand-runtime.test.ts --test-name-pattern "R2 dogfood demand generates machine-verifiable gates"`: red before fix, pass after fix, 36/36
+  - `node --import tsx --test __tests__/check-report.test.ts __tests__/provider-capability-gate.test.ts __tests__/demand-runtime-p2-16-task-schema.test.ts`: pass, 59/59
+  - `npm run typecheck --silent`: pass
+  - `npm test --silent`: pass, 2019/2019
+  - `npm run verify --silent`: pass, 2019/2019 plus source-grep, ci guard, and prd-preflight pass
+  - `npm run quality-gate --silent`: pass, Q=1.0000
+- Trace note: the `run` command wrapper exited 130 because it was manually stopped after the repeated official-path blocker; full run output and task evidence are preserved under `.dogfood-loop4/` and `.yolo/`.
+- Frozen files touched: none.
