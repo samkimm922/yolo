@@ -62,6 +62,34 @@ describe("deterministic auto-fix execution helpers", () => {
     assert.deepEqual(progress[0], ["AUTO-1", "auto", "deterministic auto-fix 未完成，回退 provider: escalated=1"]);
   });
 
+  test("tryDeterministicAutoFixTask completes already-satisfied no-op fixes", async () => {
+    const transitions = [];
+    const done = [];
+    const commits = [];
+    const result = await tryDeterministicAutoFixTask({
+      task: baseTask,
+      prdPath: "prd.json",
+      startedAtMs: 1000,
+      projectRoot: "/repo",
+      applyAutoFixTasks: async () => ({ success: false, modifiedFiles: [], escalatedTasks: [], stats: { unchanged: 1 } }),
+      loadPRD: () => ({ tasks: [baseTask] }),
+      taskPostconditionsPass: () => ({ passed: true, failed: [] }),
+      commitTask: async (...args) => {
+        commits.push(args);
+        return { committed: true };
+      },
+      recordTaskTransition: (prdPath, transition) => transitions.push({ prdPath, transition }),
+      logTaskDone: (...args) => done.push(args),
+    });
+
+    assert.deepEqual(result, { status: "completed", deterministic_auto_fix: true, already_satisfied: true });
+    assert.equal(commits.length, 0);
+    assert.equal(transitions[0].transition.result.status, "PASS");
+    assert.equal(transitions[0].transition.result.already_satisfied, true);
+    assert.equal(transitions[0].transition.prd_update.phaseDetail, "deterministic_auto_fix_already_satisfied");
+    assert.equal(done[0][1], "completed");
+  });
+
   test("tryDeterministicAutoFixTask fails closed when postconditions fail", async () => {
     const transitions = [];
     const result = await tryDeterministicAutoFixTask({

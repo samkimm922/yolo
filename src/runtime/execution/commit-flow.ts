@@ -1,5 +1,6 @@
 import { execFileSync as defaultExecFileSync } from "node:child_process";
 import { appendFileSync as defaultAppendFileSync } from "node:fs";
+import { allowsMetadataOnlyCompletion } from "./post-commit-outcome.js";
 
 export const DEFAULT_DOC_UPDATE_FILES = ["docs/memory/SESSION.md", "docs/memory/SNAPSHOT.md", "docs/memory/DELIVERY_LOG.md"];
 
@@ -176,6 +177,12 @@ export function buildCommitSkipDecision({
     };
   }
   if (!hasRealCode) {
+    if (allowsMetadataOnlyCompletion(task, {
+      scope_targets_touched: metadataFiles,
+      metadataFiles,
+    })) {
+      return null;
+    }
     return {
       reason: "metadata_only",
       log: { id: "", marker: "└─", message: `仅元数据改动 (${metadataFiles.length} 个),无业务代码,跳过 commit` },

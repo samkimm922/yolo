@@ -21,6 +21,18 @@ export function appendUniqueTaskIds(target, items = []) {
   }
 }
 
+function removeTaskIds(target, items = []) {
+  if (!Array.isArray(target) || !items.length) return;
+  const remove = new Set(items);
+  let write = 0;
+  for (const item of target) {
+    if (!remove.has(item)) {
+      target[write++] = item;
+    }
+  }
+  target.length = write;
+}
+
 export function handleTaskPreRun({
   task,
   tasks,
@@ -139,6 +151,11 @@ export function handleTaskOutcome({
     });
     for (const sourceId of sourceIds) completedIds.add(sourceId);
     markParentCompleteIfAllChildrenDone(task, childTaskMap, completedIds);
+    const resolvedIds = [task.id, ...sourceIds];
+    removeTaskIds(results.failed, resolvedIds);
+    removeTaskIds(results.blocked, resolvedIds);
+    removeTaskIds(results.contractReview, resolvedIds);
+    removeTaskIds(runResultsTracker.failed, resolvedIds);
     results.completed.push(task.id);
     appendUniqueTaskIds(results.completed, sourceIds);
     runResultsTracker.completed.add(task.id);
@@ -186,6 +203,11 @@ export function handleTaskOutcome({
     });
     for (const sourceId of sourceIds) completedIds.add(sourceId);
     markParentCompleteIfAllChildrenDone(task, childTaskMap, completedIds);
+    const resolvedIds = [task.id, ...sourceIds];
+    removeTaskIds(results.failed, resolvedIds);
+    removeTaskIds(results.blocked, resolvedIds);
+    removeTaskIds(results.contractReview, resolvedIds);
+    removeTaskIds(runResultsTracker.failed, resolvedIds);
     results.skipped.push(task.id);
     appendUniqueTaskIds(results.skipped, sourceIds);
     log(task.id, "--", `跳过: ${r.reason}`);

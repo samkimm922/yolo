@@ -64,6 +64,33 @@ export async function tryDeterministicAutoFixTask({
   }).slice(0, 500));
 
   if (!result.success || modifiedFiles.length === 0) {
+    const escalatedCount = result.escalatedTasks?.length || 0;
+    if (modifiedFiles.length === 0 && escalatedCount === 0 && typeof loadPRD === "function" && typeof taskPostconditionsPass === "function") {
+      const prdForPostCheck = loadPRD(prdPath);
+      const post = taskPostconditionsPass(task, prdForPostCheck, projectRoot);
+      if (post.passed) {
+        recordTaskTransition(prdPath, passTaskTransition({
+          taskId: task.id,
+          result: {
+            deterministic_auto_fix: true,
+            already_satisfied: true,
+            postcondition_verified: true,
+            files_changed_total: 0,
+            files_changed_business: 0,
+            files_changed_metadata: 0,
+            scope_targets_touched: [],
+            scope_targets_missed: [],
+            out_of_scope_files: [],
+          },
+          prdUpdate: {
+            phaseDetail: "deterministic_auto_fix_already_satisfied",
+            completedAt: new Date().toISOString(),
+          },
+        }));
+        logTaskDone(task.id, "completed", Date.now() - (startedAtMs || Date.now()), "deterministic_auto_fix_already_satisfied");
+        return { status: "completed", deterministic_auto_fix: true, already_satisfied: true };
+      }
+    }
     logProgress(task.id, "auto", `deterministic auto-fix 未完成，回退 provider: escalated=${result.escalatedTasks?.length || 0}`);
     return null;
   }

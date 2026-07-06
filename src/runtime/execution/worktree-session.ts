@@ -385,6 +385,64 @@ export function provisionWorktreeNodeModules({
   return false;
 }
 
+export function persistWorktreeNodeModulesToRoot({
+  wtPath,
+  rootDir,
+  execFileSync = defaultExecFileSync,
+  existsSync = defaultExistsSync,
+  lstatSync = defaultLstatSync,
+  realpathSync = defaultRealpathSync,
+  readdirSync = defaultReaddirSync,
+  mkdirSync = defaultMkdirSync,
+  rmSync = defaultRmSync,
+  platform = process.platform,
+} = Object()) {
+  const wtNodeModules = join(wtPath, "node_modules");
+  const rootNodeModules = join(rootDir, "node_modules");
+  if (existsSync(rootNodeModules) || !existsSync(wtNodeModules)) return false;
+
+  const sourceValidation = validateWorktreeNodeModules(wtPath, { existsSync, lstatSync, realpathSync });
+  if (!sourceValidation.ok) {
+    throw new Error(`worktree node_modules cannot be persisted: ${sourceValidation.reason} ${JSON.stringify(sourceValidation.diagnostic)}`);
+  }
+
+  const cloneArgs = platform === "darwin"
+    ? ["-cR", wtNodeModules, rootNodeModules]
+    : ["-a", "--reflink=auto", wtNodeModules, rootNodeModules];
+  const copyArgs = platform === "darwin"
+    ? ["-pR", wtNodeModules, rootNodeModules]
+    : ["-a", wtNodeModules, rootNodeModules];
+  const attempts = [
+    { executable: "cp", args: cloneArgs, timeout: NODE_MODULES_PROVISION_TIMEOUT_MS },
+    { executable: "cp", args: copyArgs, timeout: NODE_MODULES_PROVISION_TIMEOUT_MS },
+  ];
+
+  for (const [index, attempt] of attempts.entries()) {
+    try {
+      execNodeModulesCommand(execFileSync, attempt.executable, attempt.args, attempt.timeout);
+      materializeExternalPackageSymlinks({
+        rootNodeModules: wtNodeModules,
+        wtNodeModules: rootNodeModules,
+        execFileSync,
+        readdirSync,
+        lstatSync,
+        realpathSync,
+        mkdirSync,
+        rmSync,
+      });
+      const validation = validateWorktreeNodeModules(rootDir, { existsSync, lstatSync, realpathSync });
+      if (!validation.ok) {
+        throw new Error(`persisted node_modules is unusable: ${validation.reason} ${JSON.stringify(validation.diagnostic)}`);
+      }
+      return true;
+    } catch (error) {
+      removePartialWorktreeNodeModules(rootNodeModules, { existsSync, rmSync, execFileSync });
+      if (index === attempts.length - 1) throw error;
+    }
+  }
+  return false;
+}
+
 function normalizedFsPath(path) {
   return resolve(path).replaceAll("\\", "/");
 }
@@ -955,6 +1013,20 @@ export function cleanupTaskWorktree({
         } catch (error) {
           throw new Error(`worktree merge verification failed: ${describeCommandFailure(error)}`);
         }
+      }
+      if (copiedFiles.length > 0) {
+        const persisted = persistWorktreeNodeModulesToRoot({
+          wtPath,
+          rootDir,
+          execFileSync,
+          existsSync,
+          lstatSync: defaultLstatSync,
+          realpathSync: defaultRealpathSync,
+          readdirSync,
+          mkdirSync,
+          rmSync,
+        });
+        if (persisted) log("MERGE", "持久化 node_modules 工具链缓存");
       }
     }
   }

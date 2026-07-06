@@ -61,15 +61,28 @@ function computeTaskTimeoutBounds(runtimeConfig) {
   return { floorMs, capMs };
 }
 
-export function computeTaskTimeout(targets, { rootDir, config = loadedConfig } = Object()) {
+function declaredTargetLineBudget(target, scope = Object()) {
+  return positiveFiniteNumber(target?.max_lines_per_file)
+    ?? positiveFiniteNumber(target?.maxLinesPerFile)
+    ?? positiveFiniteNumber(scope?.max_lines_per_file)
+    ?? positiveFiniteNumber(scope?.maxLinesPerFile)
+    ?? null;
+}
+
+export function computeTaskTimeout(targets, { rootDir, config = loadedConfig, scope = Object() } = Object()) {
   let totalLines = 0;
   for (const target of (targets || [])) {
+    const declaredLines = declaredTargetLineBudget(target, scope);
     try {
       const guarded = resolveWithinRoot(rootDir, target.file);
       if (guarded.ok && guarded.path) {
         totalLines += readFileSync(guarded.path, "utf8").split("\n").length;
+      } else {
+        continue;
       }
-    } catch {}
+    } catch {
+      if (declaredLines) totalLines += declaredLines;
+    }
   }
   const { floorMs, capMs } = computeTaskTimeoutBounds(config);
   const scaledMs = totalLines * TASK_TIMEOUT_MS_PER_LINE;

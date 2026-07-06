@@ -497,14 +497,22 @@ function readTaskResultsFromDisk(stateDir: string, runId: unknown = null): TaskB
   const filePath = join(stateDir, "runtime", "task-results.jsonl");
   const records = readJsonl(filePath);
   const scoped = runId ? records.filter((record) => !record.run_id || record.run_id === runId) : records;
-  const buckets: TaskBuckets = { completed: [], failed: [], skipped: [], blocked: [], merged_into: [] };
+  const latestByTask = new Map<unknown, keyof TaskBuckets>();
+  const taskOrder: unknown[] = [];
   for (const record of scoped) {
     const raw = String(record.status || record.outcome || "").trim().toUpperCase();
     const bucket = taskResultBucket(raw);
     if (!bucket) continue;
     const taskId = record.task_id || record.taskId || record.id;
-    const bucketItems = buckets[bucket];
-    if (taskId && bucketItems) bucketItems.push(taskId);
+    if (!taskId) continue;
+    if (!latestByTask.has(taskId)) taskOrder.push(taskId);
+    latestByTask.set(taskId, bucket);
+  }
+  const buckets: TaskBuckets = { completed: [], failed: [], skipped: [], blocked: [], merged_into: [] };
+  for (const taskId of taskOrder) {
+    const bucket = latestByTask.get(taskId);
+    const bucketItems = bucket ? buckets[bucket] : null;
+    if (bucketItems) bucketItems.push(taskId);
   }
   return buckets;
 }
