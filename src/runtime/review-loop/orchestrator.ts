@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -88,7 +88,14 @@ function appendUniqueDefault(target: unknown[], items: unknown[] = []) {
 }
 
 async function importFromRoot(rootDir: string, relativePath: string): Promise<Record<string, unknown>> {
-  return import(pathToFileURL(join(rootDir, relativePath)).href);
+  const candidates = [
+    join(rootDir, relativePath),
+    join(rootDir, "src", relativePath),
+    join(rootDir, "dist", relativePath),
+    join(rootDir, "dist", "src", relativePath),
+  ];
+  const modulePath = candidates.find((candidate) => existsSync(candidate)) || candidates[0];
+  return import(pathToFileURL(modulePath).href);
 }
 
 function reviewScannerArtifactState(scanResult: string): { ok: boolean; detail?: string } {
