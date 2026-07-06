@@ -105,3 +105,31 @@
   - `npm run quality-gate --silent`: pass, Q=1.0000
 - Trace note: the `run` command wrapper exited 130 because it was manually stopped after the repeated official-path blocker; full run output and task evidence are preserved under `.dogfood-loop4/` and `.yolo/`.
 - Frozen files touched: none.
+
+## Round 5
+
+- Project path: `/Users/sippingroom/Developer/dogfood-gitweekly-loop5`
+- Dogfood window: 2026-07-06T12:13:00Z to 2026-07-06T12:51:00Z for lifecycle run attempt; about 54m through fix validation and push.
+- Stop point: `yolo run --executor claude` exited 1 after producing the final run report; review/acceptance/ship were not reached.
+- Blocker: final run output showed `run_success_rate: 100.0% (10/7)` but reported `status:error` and exit 1 because six retried task IDs still remained in the failed bucket.
+- Root cause: `handleTaskOutcome` appended later completed task IDs, but did not remove the same task or merged source IDs from stale `failed`, `blocked`, `contractReview`, or tracker failed buckets. `buildRunReport` then failed closed because `failed.length > 0` even though later retry evidence for those tasks passed.
+- Evidence:
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop5/.dogfood-loop5/command-output/run.log`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop5/.dogfood-loop5/commands.jsonl`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop5/.yolo/state/reports/run-20260706121333/run-report.json`
+  - `/Users/sippingroom/Developer/dogfood-gitweekly-loop5/.yolo/state/runtime/task-results.jsonl`
+  - `src/runtime/task-loop/outcome-handler.ts`
+  - `src/runtime/evidence/report.ts`
+  - `src/runtime/run-lifecycle/finalize.ts`
+- Repro first went red with `node --import tsx --test __tests__/task-loop-outcome-handler.test.ts --test-name-pattern "completion resolves stale"`: the completed retry left `FIX-P36-003` and `FIX-P36-001` in `results.failed` instead of pruning them.
+- Fix commit: `4025fc0 fix(runtime): resolve stale failed task buckets on completion`
+- Draft PR: `https://github.com/samkimm922/yolo/pull/254` carries this cumulative-branch commit. Attempting a separate Round 5 draft PR failed because GitHub already has a PR for `fix/dogfood-loop-to-ship` into `main`.
+- Validation:
+  - `node --import tsx --test __tests__/task-loop-outcome-handler.test.ts --test-name-pattern "completion resolves stale"`: red before fix, pass after fix
+  - `node --import tsx --test __tests__/task-loop-outcome-handler.test.ts __tests__/recovery-retry-round.test.ts __tests__/evidence-report.test.ts __tests__/run-lifecycle-finalize.test.ts`: pass, 60/60
+  - `npm run typecheck --silent`: pass
+  - `npm test --silent`: pass, 2020/2020
+  - `npm run verify --silent`: pass, 2020/2020 plus source-grep, ci guard, and prd-preflight pass
+  - `npm run quality-gate --silent`: pass, Q=1.0000
+- Trace note: Round 5 lifecycle commands and full stdout/stderr are preserved under `.dogfood-loop5/`; run failed after reporting the stale-bucket final verdict, so no review/acceptance/ship artifacts exist for this round.
+- Frozen files touched: none.
