@@ -2056,6 +2056,24 @@ describe("demand runtime", () => {
       assert.equal(machineTestTasks.every((task) =>
         task.scope.targets.every((target) => testGeneration(task)?.allowed_test_files?.includes(target.file))
       ), true, "synthetic acceptance test tasks must allowlist their target test file");
+      const syntheticAcceptance = machineTestTasks.find((task) => task.id === "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001");
+      assert.ok(syntheticAcceptance, "R2 dogfood PRD must include a synthetic acceptance task");
+      const syntheticAcceptanceText = [
+        scaffoldInstructionText(syntheticAcceptance),
+        JSON.stringify(syntheticAcceptance.handoff || {}),
+      ].join("\n");
+      assert.match(syntheticAcceptanceText, /spawnSync/);
+      assert.match(syntheticAcceptanceText, /git init/);
+      assert.match(syntheticAcceptanceText, /--repo/);
+      assert.match(syntheticAcceptanceText, /--output/);
+      assert.match(syntheticAcceptanceText, /bad repo/i);
+      for (const requiredText of ["spawnSync", "git init", "--repo", "--since", "--until", "--output", "bad repo"]) {
+        assert.ok(syntheticAcceptance.post_conditions.some((condition) =>
+          condition.type === "code_contains" &&
+          condition.params?.file === "test/cli-git-weekly.test.ts" &&
+          condition.params?.text === requiredText
+        ), `synthetic acceptance task must gate test file on ${requiredText}`);
+      }
       assert.equal(downstreamTypeOrTestTasks.length > 0, true);
       assert.equal(downstreamTypeOrTestTasks.every((task) => task.depends_on.includes(scaffold.id)), true);
     } finally {

@@ -754,6 +754,80 @@ describe("evidence run report", () => {
     }
   });
 
+  test("buildRunReport ignores gate failures for tasks recovered by latest task-results", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", { run_id: "RUN-GATE-RECOVERED", prd: "data/prd.json", tasks: 1 }, { now: "2026-05-24T10:00:00.000Z" });
+      appendStateEvent(stateDir, "gate.failed", {
+        run_id: "RUN-GATE-RECOVERED",
+        task_id: "FIX-RECOVERED",
+        status: "fail",
+        reason: "first attempt failed typecheck",
+      }, { now: "2026-05-24T10:00:20.000Z", source: "gate" });
+      appendStateEvent(stateDir, "gate_remediation", {
+        run_id: "RUN-GATE-RECOVERED",
+        task_id: "FIX-RECOVERED",
+        status: "remediation_required",
+        action: "RETRY_WITH_CONTEXT",
+        automation_can_continue: true,
+        requires_human: false,
+        unsafe_stop: false,
+      }, { now: "2026-05-24T10:00:22.000Z", source: "runner-gate" });
+      appendRunEvent(stateDir, "run_end", { run_id: "RUN-GATE-RECOVERED", duration_sec: "5" }, { now: "2026-05-24T10:01:00.000Z" });
+
+      const runtimeDir = join(stateDir, "runtime");
+      const taskLogsDir = join(runtimeDir, "task-logs");
+      mkdirSync(taskLogsDir, { recursive: true });
+      writeFileSync(join(runtimeDir, "task-results.jsonl"), [
+        JSON.stringify({ task_id: "FIX-RECOVERED", run_id: "RUN-GATE-RECOVERED", status: "FAIL", timestamp: "2026-05-24T10:00:25.000Z" }),
+        JSON.stringify({ task_id: "FIX-RECOVERED", run_id: "RUN-GATE-RECOVERED", status: "PASS", timestamp: "2026-05-24T10:00:45.000Z" }),
+      ].join("\n") + "\n", "utf8");
+      writeFileSync(join(taskLogsDir, "FIX-RECOVERED.jsonl"), [
+        JSON.stringify({
+          ts: "2026-05-24T10:00:20.000Z",
+          run_id: "RUN-GATE-RECOVERED",
+          task_id: "FIX-RECOVERED",
+          type: "GATE",
+          check: "post",
+          result: "fail",
+          errors: ["first attempt failed typecheck"],
+        }),
+        JSON.stringify({
+          ts: "2026-05-24T10:00:45.000Z",
+          run_id: "RUN-GATE-RECOVERED",
+          task_id: "FIX-RECOVERED",
+          type: "GATE",
+          check: "post",
+          result: "pass",
+        }),
+      ].join("\n") + "\n", "utf8");
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-GATE-RECOVERED",
+        taskResults: {
+          completed: ["FIX-RECOVERED"],
+          failed: [],
+          skipped: [],
+          blocked: [],
+        },
+        progressTotal: 1,
+      });
+
+      assert.equal(report.status, "success");
+      assert.equal(report.summary.evidence_failures, 0);
+      assert.equal(report.gates.failed_count, 0);
+      assert.deepEqual(report.gates.failed_tasks, []);
+      assert.equal(report.remediation.item_count, 1);
+      const finalAnswer = buildRunFinalAnswer(report);
+      assert.equal(finalAnswer.outcome, "success");
+      assert.deepEqual(finalAnswer.blockers, []);
+      assert.equal(finalAnswer.checks.find((check) => check.name === "remediation")?.status, "pass");
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
   test("buildRunReport treats recovered task buckets and clean review as current success", () => {
     const stateDir = tempStateDir();
     try {

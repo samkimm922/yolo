@@ -30,6 +30,7 @@ state/keys/
 logs/
 tmp/
 *.log
+.dogfood-final-*/
 
 # Local session handoff files (runtime artifacts, not committed).
 docs/memory/
