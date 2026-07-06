@@ -50,6 +50,24 @@ function fileAllowedByTaskScope(file, task) {
   return targets.some((target) => normalized === target || normalized.startsWith(`${dirname(target)}/`));
 }
 
+function taskRequiresNonEmptyTests(task) {
+  return asArray(task?.post_conditions).some((condition) => {
+    if (condition?.type !== "tests_pass") return false;
+    const params = condition.params || {};
+    return params.require_tests === true || params.require_nonzero_tests === true || params.requireNonzeroTests === true;
+  });
+}
+
+function taskTargetTestFiles(task) {
+  return asArray(task?.scope?.targets)
+    .map((target) => normalizePath(target?.file || target))
+    .filter((file) => file && isTestFile(file));
+}
+
+function hasRunnableTestDeclaration(content) {
+  return /\b(?:test|it)\s*\(/.test(content) || /\bdescribe\s*\(/.test(content);
+}
+
 function gitErrorDetail(error) {
   const stderr = error?.stderr?.toString?.().trim();
   return stderr || error?.message || String(error || "unknown git error");
@@ -124,6 +142,39 @@ export function validateTestGeneration(task, options = Object()) {
 
   const changedTests = changedFiles.filter((item) => isTestFile(item.file));
   const newTests = changedTests.filter((item) => item.isNew);
+  const requiredTargetTests = taskRequiresNonEmptyTests(task) ? taskTargetTestFiles(task) : [];
+
+  if (taskRequiresNonEmptyTests(task) && requiredTargetTests.length === 0) {
+    failures.push({
+      code: "TEST_TARGET_SCOPE_MISSING",
+      detail: "require_tests=true 的任务必须在 scope.targets 中声明至少一个测试文件。",
+    });
+  }
+
+  for (const file of requiredTargetTests) {
+    const abs = resolve(cwd, file);
+    if (!existsSync(abs)) {
+      failures.push({
+        code: "TEST_TARGET_MISSING",
+        detail: `require_tests=true 的目标测试文件未创建: ${file}`,
+      });
+      continue;
+    }
+    const content = readFileSync(abs, "utf8");
+    if (!content.trim()) {
+      failures.push({
+        code: "TEST_TARGET_EMPTY",
+        detail: `require_tests=true 的目标测试文件为空: ${file}`,
+      });
+      continue;
+    }
+    if (!hasRunnableTestDeclaration(content)) {
+      failures.push({
+        code: "TEST_TARGET_NO_TEST_DECLARATION",
+        detail: `目标测试文件缺少 test()/it()/describe() 声明: ${file}`,
+      });
+    }
+  }
 
   if (!["none", "reuse_existing", "add_minimal", "forbid"].includes(mode)) {
     failures.push({ code: "INVALID_TEST_GENERATION_MODE", detail: `未知 test_generation.mode: ${mode}` });

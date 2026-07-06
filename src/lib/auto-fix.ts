@@ -223,6 +223,11 @@ function getFixer(scannerId: string): Fixer | null {
 // 修复器: console.log — 移除 console.log(...) 调用行
 // ══════════════════════════════════════════════════════════════════════
 
+function isLikelyCliStdoutConsoleLog(line: string): boolean {
+  const trimmed = line.trim();
+  return /^console\.log\(\s*(markdown|report|output|result|stdout|json|JSON\.stringify\()/i.test(trimmed);
+}
+
 function fixConsoleLog(content: string, findings: AutoFixFinding[], filePath: string, rootDir: string): FixerResult {
   if (!findings || findings.length === 0) return { modified: content, changes: 0 };
 
@@ -237,6 +242,7 @@ function fixConsoleLog(content: string, findings: AutoFixFinding[], filePath: st
     const idx = (f.line ?? 1) - 1;
     const original = lines[idx];
     if (original === undefined) continue;
+    if (isLikelyCliStdoutConsoleLog(original)) continue;
 
     // 删除 console.log(...) — 处理单行调用
     const cleaned = original.replace(/console\.log\s*\([^)]*\)\s*;?/g, "").trimEnd();
