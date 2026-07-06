@@ -1581,6 +1581,89 @@ function taskTargetFiles(task = Object()) {
     .filter(Boolean);
 }
 
+function collectSyntheticAcceptanceProofText(session = Object(), implementationTasks = []) {
+  const values = [];
+  const add = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(add);
+      return;
+    }
+    if (value && typeof value === "object") {
+      [
+        value.text,
+        value.proof,
+        value.acceptance,
+        value.evidence,
+        value.when,
+        value.then,
+        value.trigger,
+        value.current_behavior,
+        value.desired_behavior,
+        value.description,
+      ].forEach(add);
+      return;
+    }
+    const text = clean(value);
+    if (text) values.push(text);
+  };
+
+  add(session.title);
+  add(session.objective);
+  add(session.vision?.statement);
+  add(session.vision?.idea);
+  add(session.prd_intake?.success_proof);
+  add(session.prd_intake?.success_criteria);
+  add(session.prd_intake?.desired_outcomes);
+  add(session.requirements?.active);
+  add(session.requirements?.acceptance_criteria);
+  add(session.scenario_matrix?.scenarios);
+  add(session.context?.current_state);
+  add(session.context?.desired_outcome);
+  add(session.discussion?.decisions);
+
+  for (const task of implementationTasks) {
+    add(task.description);
+    add(task.acceptance_criteria);
+    add(task.handoff?.proof);
+    add(task.handoff?.acceptance_criteria);
+    add(task.handoff?.scenario);
+    add(task.handoff?.requirement);
+  }
+
+  return uniqueStrings(values).join("\n");
+}
+
+function syntheticAcceptanceBehaviorSpec(taskId = "", proofText = "", testFile = "") {
+  const text = clean(proofText);
+  const needsCliFixtureSmoke = /(?:--repo|--output|stdout|stderr|exit code|non[- ]?zero|fixture|git repo|git 仓库|本地 git|非零|CLI|命令行)/i.test(text);
+  if (!needsCliFixtureSmoke) {
+    return { instructions: [], criteria: [], postConditions: [] };
+  }
+
+  const requiredTexts = ["spawnSync", "git init", "--repo", "--since", "--until", "--output", "bad repo"];
+  return {
+    instructions: [
+      "This is behavior acceptance, not helper-unit coverage: import spawnSync from node:child_process and execute the CLI process from the test.",
+      "Create a temporary git fixture repository in the test with git init and dated commits before running the CLI.",
+      "Cover a stdout sample by running the CLI with --repo, --since, and --until, then assert the Markdown includes the report title, authors/commits, conventional type counts, totals, and line stats.",
+      "Cover --output by passing --output and asserting the Markdown file is written.",
+      "Cover bad repo by running a bad repo path and asserting a non-zero exit status.",
+      "Do not duplicate implementation helper functions in the test instead of invoking the CLI.",
+    ],
+    criteria: [
+      "The node:test file executes the CLI process with spawnSync against a git init fixture repository.",
+      "The test asserts stdout Markdown for --repo/--since/--until, --output file writing, and bad repo non-zero exit behavior.",
+    ],
+    postConditions: requiredTexts.map((requiredText, index) => ({
+      id: `POST-${taskId}-BEHAVIOR-${index + 1}`,
+      type: "code_contains",
+      severity: "FAIL",
+      params: { file: testFile, text: requiredText },
+      message: `Synthetic acceptance test must exercise required behavior marker: ${requiredText}`,
+    })),
+  };
+}
+
 function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], context = Object()) {
   const existingTestTask = tasks.some((task) => taskTargetFiles(task).some((file) => fileKind(file) === "test"));
   if (existingTestTask) return null;
@@ -1604,6 +1687,11 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
     scenarioId: "AUTOMATED-ACCEPTANCE",
     surfaceId: "SFC-AUTOMATED-TEST",
   });
+  const behaviorSpec = syntheticAcceptanceBehaviorSpec(
+    taskId,
+    collectSyntheticAcceptanceProofText(session, implementationTasks),
+    testFile,
+  );
 
   return {
     id: taskId,
@@ -1622,6 +1710,7 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
       `Create or update exactly ${testFile} with node:test acceptance coverage.`,
       "The file must contain at least one test(...) declaration that npm test executes.",
       "Run npm test and confirm the output reports at least one executed test.",
+      ...behaviorSpec.instructions,
       `Read ${primarySource} first and do not edit implementation files in this task.`,
     ],
     inputs: sourceFiles,
@@ -1669,9 +1758,18 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
       },
       key_interfaces: [testFile],
       read_first: sourceFiles,
-      acceptance_criteria: ["npm test executes at least one node:test test."],
-      proof: "npm test executes at least one node:test test.",
-      verification_hint: "Use the approved PRD as the source of behavior; npm test must execute at least one node:test test.",
+      acceptance_criteria: [
+        "npm test executes at least one node:test test.",
+        ...behaviorSpec.criteria,
+      ],
+      proof: [
+        "npm test executes at least one node:test test.",
+        ...behaviorSpec.criteria,
+      ].join(" "),
+      verification_hint: [
+        "Use the approved PRD as the source of behavior; npm test must execute at least one node:test test.",
+        ...behaviorSpec.instructions,
+      ].join(" "),
       project_facts: {
         schema: "yolo.demand.task_project_facts.v1",
         structured: structuredProjectFacts(session),
@@ -1728,6 +1826,7 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
       modifiedFileCondition(taskId, 0, testFile),
       testsPassCondition(taskId, context, { requireTests: true }),
       typecheckCondition(taskId, context),
+      ...behaviorSpec.postConditions,
     ]),
     trace: {
       demand_id: session.id,
