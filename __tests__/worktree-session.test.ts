@@ -608,6 +608,41 @@ describe("worktree execution session helpers", () => {
     );
   });
 
+  test("cleanupTaskWorktree skips unscoped package-manager lockfiles without copying or blocking", () => {
+    const copied = [];
+    const execFileSync = (_command, args) => {
+      if (args[0] === "-C" && args[2] === "status") {
+        return [
+          " M src/a.ts",
+          " M pnpm-lock.yaml",
+        ].join("\n");
+      }
+      if (args[0] === "-C" && args[2] === "ls-files") return "";
+      if (args[0] === "diff") return "src/a.ts\n";
+      if (args[0] === "ls-files") return "";
+      return "";
+    };
+
+    const result = cleanupTaskWorktree({
+      wtPath: "/wt/FIX-LOCK",
+      wtBranch: "yolo-FIX-LOCK",
+      rootDir: "/repo",
+      mergeToMain: true,
+      allowedScope: { targets: [{ file: "src/a.ts" }] },
+      execFileSync,
+      execSync: () => "true\n",
+      existsSync: (path) => path === "/wt/FIX-LOCK/src/a.ts",
+      statSync: () => ({ isDirectory: () => false }),
+      mkdirSync: () => {},
+      copyFileSync: (src, dst) => copied.push({ src, dst }),
+    });
+
+    const mergedResult = result as string[] & { outOfScopeSkipped: string[] };
+    assert.deepEqual(result, ["src/a.ts"]);
+    assert.deepEqual(mergedResult.outOfScopeSkipped, []);
+    assert.deepEqual(copied, [{ src: "/wt/FIX-LOCK/src/a.ts", dst: "/repo/src/a.ts" }]);
+  });
+
   test("cleanupTaskWorktree skips layout-independent business source files for commit blocking", () => {
     const copied = [];
     const logs = [];

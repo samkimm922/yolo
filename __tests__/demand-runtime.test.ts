@@ -2039,6 +2039,11 @@ describe("demand runtime", () => {
       const downstreamTypeOrTestTasks = tasks.slice(1).filter((task) =>
         task.post_conditions.some((condition) => ["no_new_type_errors", "tests_pass", "test_file_passes"].includes(String(condition.type)))
       );
+      const machineTestGates = tasks.slice(1).flatMap((task) =>
+        task.post_conditions.filter((condition) => condition.type === "tests_pass")
+      );
+      assert.equal(machineTestGates.length > 0, true);
+      assert.equal(machineTestGates.every((condition) => condition.params?.require_tests === true), true, "automated acceptance test gates must reject empty test suites");
       assert.equal(downstreamTypeOrTestTasks.length > 0, true);
       assert.equal(downstreamTypeOrTestTasks.every((task) => task.depends_on.includes(scaffold.id)), true);
     } finally {

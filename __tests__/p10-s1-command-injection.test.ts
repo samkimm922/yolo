@@ -214,6 +214,16 @@ describe("P10.S1 runtime-check evalTestsPass injection rejection", () => {
     assert.equal(result.passed, true);
   });
 
+  test("require_tests rejects successful empty node:test output", () => {
+    const result = mod.evalTestsPass({
+      command: `"${process.execPath}" -e "console.log('# tests 0')"`,
+      timeout_ms: 5000,
+      require_tests: true,
+    }, {}, tmpRoot);
+    assert.equal(result.passed, false);
+    assert.match(result.detail, /empty test suite|0 tests/i);
+  });
+
   test("rejects $() in params.command", () => {
     const result = mod.evalTestsPass({
       command: 'test "$(printf X)" = X',

@@ -13,7 +13,7 @@ import {
   writeFileSync as defaultWriteFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
-import { delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { isSafePathComponent, resolveWithinRoot } from "../../lib/security/path-guard.js";
 import { safeExecFileSync as defaultExecFileSync, safeExecSync as defaultExecSync } from "../../lib/security/safe-exec.js";
@@ -25,6 +25,15 @@ import {
   parseTscBaselineKeys,
 } from "./baselines.js";
 import { isBusinessFile } from "./change-set.js";
+
+const PACKAGE_MANAGER_LOCKFILES = new Set([
+  "package-lock.json",
+  "npm-shrinkwrap.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "bun.lock",
+  "bun.lockb",
+]);
 
 export function isFileInScopeTargets(filePath, targets = []) {
   return (targets || []).some((target) => {
@@ -49,6 +58,10 @@ export function isFileAllowedByScope(filePath, scopeOrTargets = []) {
 
 export function isBusinessLikeFile(filePath, options = Object()) {
   return isBusinessFile(filePath, options);
+}
+
+function isPackageManagerLockfile(filePath = "") {
+  return PACKAGE_MANAGER_LOCKFILES.has(basename(String(filePath || "")));
 }
 
 function safeMergeRelativePath(filePath) {
@@ -959,6 +972,11 @@ export function cleanupTaskWorktree({
         if (safeFilePath.startsWith("node_modules") || safeFilePath.startsWith(".git") || safeFilePath.startsWith("dist")) continue;
         if (skipPrefixes.some((prefix) => safeFilePath.startsWith(prefix)) && !isFileAllowedByScope(safeFilePath, allowedScope)) {
           filteredCount++;
+          continue;
+        }
+        if (isPackageManagerLockfile(safeFilePath) && !isFileAllowedByScope(safeFilePath, allowedScope)) {
+          filteredCount++;
+          log("SKIP", `跳过未入 scope 的包管理锁文件: ${safeFilePath}`);
           continue;
         }
         if (isBusinessLikeFile(safeFilePath, { config }) && !isFileAllowedByScope(safeFilePath, allowedScope)) {
