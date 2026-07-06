@@ -2051,6 +2051,11 @@ describe("demand runtime", () => {
         task.scope.targets.some((target) => /(^|\/)tests?\//.test(target.file) || /\.test\./.test(target.file))
       ), true, "require_tests gates must give the executor an in-scope test file to create or update");
       assert.equal(machineTestTasks.every((task) => Number(task.scope.max_files || 0) >= task.scope.targets.length), true);
+      const testGeneration = (task) => task.test_generation as { mode?: string; allowed_test_files?: string[] } | undefined;
+      assert.equal(machineTestTasks.every((task) => testGeneration(task)?.mode === "add_minimal"), true);
+      assert.equal(machineTestTasks.every((task) =>
+        task.scope.targets.every((target) => testGeneration(task)?.allowed_test_files?.includes(target.file))
+      ), true, "synthetic acceptance test tasks must allowlist their target test file");
       assert.equal(downstreamTypeOrTestTasks.length > 0, true);
       assert.equal(downstreamTypeOrTestTasks.every((task) => task.depends_on.includes(scaffold.id)), true);
     } finally {

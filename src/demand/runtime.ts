@@ -1618,9 +1618,22 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
     source_finding_ids: requirementIds,
     source_question_ids: uniqueStrings(implementationTasks.flatMap((task) => asArray(task.source_question_ids))),
     verification_hint: "Run npm test and verify node:test executes at least one acceptance test.",
+    instructions: [
+      `Create or update exactly ${testFile} with node:test acceptance coverage.`,
+      "The file must contain at least one test(...) declaration that npm test executes.",
+      "Run npm test and confirm the output reports at least one executed test.",
+      `Read ${primarySource} first and do not edit implementation files in this task.`,
+    ],
     inputs: sourceFiles,
     expected_output: [testFile],
     depends_on: implementationTasks.map((task) => task.id).filter(Boolean),
+    test_generation: {
+      mode: "add_minimal",
+      reason: "Synthetic automated acceptance task must create one runnable node:test file so npm test is non-empty.",
+      allowed_test_files: [testFile],
+      max_new_test_files: 1,
+      max_test_lines_changed: 120,
+    },
     handoff: {
       type: "agent_brief",
       category: "test",

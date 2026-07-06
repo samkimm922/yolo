@@ -1538,6 +1538,32 @@ describe("yolo sdk", () => {
     }
   });
 
+  test("scanner does not treat CLI stdout console.log as debug residue", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-sdk-cli-stdout-"));
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src/cli.ts"), [
+        "function main(markdown: string) {",
+        "  console.log(markdown);",
+        "  console.log('debug');",
+        "}",
+      ].join("\n"), "utf8");
+
+      const result = scanProject({
+        root,
+        sourceRoots: ["src"],
+        framework: "generic",
+        includeExternalChecks: false,
+      });
+
+      const consoleFindings = result.findings.filter((finding) => finding.scanner_id === "debug-console-log");
+      assert.equal(consoleFindings.length, 1);
+      assert.equal(consoleFindings[0].line, 3);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("scanner preserves fix_type and excludes rule literals from tests and scanner definitions", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-sdk-scanner-rules-"));
     try {

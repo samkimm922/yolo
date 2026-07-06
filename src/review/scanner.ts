@@ -185,6 +185,11 @@ function isScannerDefinitionFile(file: string): boolean {
   return file === "src/review/scanner.ts" || file.endsWith("/src/review/scanner.ts");
 }
 
+function isLikelyCliStdoutConsoleLog(line: string): boolean {
+  const trimmed = line.trim();
+  return /^console\.log\(\s*(markdown|report|output|result|stdout|json|JSON\.stringify\()/i.test(trimmed);
+}
+
 // ── 扫描规则定义 ──────────────────────────────────────────────
 
 const RULES: ScannerRule[] = [
@@ -214,6 +219,7 @@ const RULES: ScannerRule[] = [
     description: "调试残留：console.log",
     // 排除测试文件和脚本
     exclude: (file) => isTestFile(file),
+    extraCheck: (line) => !isLikelyCliStdoutConsoleLog(line),
   },
   {
     id: "debug-debugger",
