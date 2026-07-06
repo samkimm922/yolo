@@ -1121,7 +1121,7 @@ function hasVerifyCommand(condition = Object()) {
 function machineAcceptanceConditions(taskId, scenario = Object(), context = Object()) {
   const verifyCommand = scenario.verify_command || scenario.verifyCommand;
   if (verifyCommand) return [acceptanceCondition(taskId, 0, scenario)];
-  return [testsPassCondition(taskId, context)];
+  return [testsPassCondition(taskId, context, { requireTests: true })];
 }
 
 function buildConfigValue(config = Object(), key = "") {
@@ -1534,15 +1534,22 @@ function toolchainContext(input = Object(), options = Object()) {
   return { projectRoot, config };
 }
 
-function testsPassCondition(taskId, context = Object()) {
+function testsPassCondition(taskId, context = Object(), { requireTests = false } = Object()) {
   const projectRoot = context.projectRoot || process.cwd();
   const config = context.config || Object();
+  const params: Record<string, unknown> = {
+    command: resolveBuildCommand("test", config, projectRoot),
+    timeout_ms: resolveGateTimeout("test", config),
+  };
+  if (requireTests) params.require_tests = true;
   return {
     id: `POST-${taskId}-TESTS`,
     type: "tests_pass",
     severity: "FAIL",
-    params: { command: resolveBuildCommand("test", config, projectRoot), timeout_ms: resolveGateTimeout("test", config) },
-    message: "Project tests must pass after this task.",
+    params,
+    message: requireTests
+      ? "Project tests must pass and execute at least one test after this task."
+      : "Project tests must pass after this task.",
   };
 }
 

@@ -81,6 +81,11 @@ export function findRetryTaskById(
     null;
 }
 
+function asIdArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  return value ? [String(value)] : [];
+}
+
 export function prepareRetryTasks({
   failedIds = [],
   prd = {},
@@ -102,7 +107,19 @@ export function prepareRetryTasks({
     })
     .filter(Boolean) as RetryTask[];
 
-  return { retryTasks, missingRetryTaskIds };
+  const retryIds = new Set(retryTasks.map((task) => task.id).filter(Boolean));
+  const pruneDependencies = (task: RetryTask) => {
+    const next = { ...task };
+    if ("depends_on" in next) {
+      next.depends_on = asIdArray(next.depends_on).filter((id) => id !== next.id && retryIds.has(id));
+    }
+    if ("dependencies" in next) {
+      next.dependencies = asIdArray(next.dependencies).filter((id) => id !== next.id && retryIds.has(id));
+    }
+    return next;
+  };
+
+  return { retryTasks: retryTasks.map(pruneDependencies), missingRetryTaskIds };
 }
 
 export function buildRetryPrd({
