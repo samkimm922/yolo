@@ -47,6 +47,19 @@ function runCommand(command: string, ROOT: string, timeout: number, kind: "test"
 
 const BUILD_COMMAND_KINDS = new Set(["test", "type_check", "build", "lint", "dead_code"]);
 
+function requiresNonEmptyTests(params: EvalParams = {}): boolean {
+  return params.require_tests === true || params.require_nonzero_tests === true || params.requireNonzeroTests === true;
+}
+
+function testOutputLooksEmpty(output = ""): boolean {
+  return String(output || "").split(/\r?\n/).some((line) => {
+    const trimmed = line.trim();
+    return /^(?:#|ℹ)?\s*tests\s+0\b/i.test(trimmed)
+      || /^(?:#|ℹ)?\s*0\s+tests?\b(?:\s+(?:found|run|executed|passed|total))?$/i.test(trimmed)
+      || /^no tests? (?:found|run|executed)\b/i.test(trimmed);
+  });
+}
+
 function commandConfig(kind: BuildCommandKind, command: string): Record<string, unknown> {
   const build = config.build && typeof config.build === "object" ? config.build as Record<string, unknown> : Object();
   return { ...config, build: { ...build, [kind]: command } };
@@ -85,6 +98,13 @@ export function evalTestsPass(params: EvalParams = {}, _taskScope: TaskScope, RO
   const availability = assertBuildCommandAvailable("test", commandConfig("test", commandWithFile), ROOT);
   if (!availability.ok) return { passed: false, detail: availability.message, type: "tests_pass" };
   const result = runCommand(commandWithFile, ROOT, params.timeout_ms || resolveGateTimeout("test", config), "test");
+  if (result.ok && requiresNonEmptyTests(params) && testOutputLooksEmpty(result.out)) {
+    return {
+      passed: false,
+      detail: `测试命令通过但测试套件为空或报告 0 tests: ${commandWithFile}`,
+      type: "tests_pass",
+    };
+  }
   return {
     passed: result.ok,
     detail: result.ok ? `测试命令通过: ${commandWithFile}` : `测试命令失败: ${result.message.slice(0, 200)}`,

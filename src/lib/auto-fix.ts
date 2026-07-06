@@ -223,6 +223,11 @@ function getFixer(scannerId: string): Fixer | null {
 // 修复器: console.log — 移除 console.log(...) 调用行
 // ══════════════════════════════════════════════════════════════════════
 
+function isLikelyCliStdoutConsoleLog(line: string): boolean {
+  const trimmed = line.trim();
+  return /^console\.log\(\s*(markdown|report|output|result|stdout|json|JSON\.stringify\()/i.test(trimmed);
+}
+
 function fixConsoleLog(content: string, findings: AutoFixFinding[], filePath: string, rootDir: string): FixerResult {
   if (!findings || findings.length === 0) return { modified: content, changes: 0 };
 
@@ -237,6 +242,7 @@ function fixConsoleLog(content: string, findings: AutoFixFinding[], filePath: st
     const idx = (f.line ?? 1) - 1;
     const original = lines[idx];
     if (original === undefined) continue;
+    if (isLikelyCliStdoutConsoleLog(original)) continue;
 
     // 删除 console.log(...) — 处理单行调用
     const cleaned = original.replace(/console\.log\s*\([^)]*\)\s*;?/g, "").trimEnd();
@@ -561,6 +567,7 @@ async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecF
   const efs = _efSync || execFileSync;
   const absFiles = files.map((f) => resolve(rootDir, f).replace(/\\/g, "/"));
   const relFiles = files.map((f) => f.replace(/\\/g, "/"));
+  const lintCommand = resolveBuildCommand("lint", config, rootDir);
 
   let baselineTscErrors: LintError[] = [];
   let baselineEslintErrors: LintError[] = [];
@@ -580,13 +587,15 @@ async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecF
     }
 
     // 基线 ESLint
-    try {
-      const out = String(execConfiguredBuildCommand(efs, "lint", config, rootDir, [...relFiles, "--format", "json"], resolveGateTimeout("lint", config)));
-      baselineEslintErrors = flattenEslintErrors(JSON.parse(out.trim() || "[]"), rootDir);
-    } catch (e) {
+    if (lintCommand) {
       try {
-        baselineEslintErrors = flattenEslintErrors(JSON.parse((e as { stdout?: string }).stdout?.trim() || "[]"), rootDir);
-      } catch { /* eslint JSON parse failed — assume no baseline errors */ }
+        const out = String(execConfiguredBuildCommand(efs, "lint", config, rootDir, [...relFiles, "--format", "json"], resolveGateTimeout("lint", config)));
+        baselineEslintErrors = flattenEslintErrors(JSON.parse(out.trim() || "[]"), rootDir);
+      } catch (e) {
+        try {
+          baselineEslintErrors = flattenEslintErrors(JSON.parse((e as { stdout?: string }).stdout?.trim() || "[]"), rootDir);
+        } catch { /* eslint JSON parse failed — assume no baseline errors */ }
+      }
     }
 
     // 恢复修改
@@ -624,41 +633,43 @@ async function validateAutoFix(files: string[], rootDir: string, _efSync?: ExecF
 
   // 3. 当前状态 ESLint
   let currentEslintErrors: LintError[] = [];
-  try {
-    const out = String(execConfiguredBuildCommand(efs, "lint", config, rootDir, [...relFiles, "--format", "json"], resolveGateTimeout("lint", config)));
-    currentEslintErrors = flattenEslintErrors(JSON.parse(out.trim() || "[]"), rootDir);
-  } catch (e) {
-    // H12: eslint output must be parseable. A parse failure on non-empty output
-    // is fail-open if swallowed ("assume clean"); instead hard-block validation.
-    const rawOut = (e as { stdout?: string }).stdout?.trim() || "";
-    const commandError = e as { status?: number; stderr?: string; message?: string };
-    if (commandError.status === 127) {
-      return {
-        passed: false,
-        errors: [{
-          file: "",
-          line: 0,
-          code: "COMMAND_UNAVAILABLE",
-          message: String(commandError.stderr || commandError.message || "lint command unavailable"),
-          source: "eslint",
-        }],
-      };
-    }
+  if (lintCommand) {
     try {
-      if (rawOut) {
-        currentEslintErrors = flattenEslintErrors(JSON.parse(rawOut), rootDir);
+      const out = String(execConfiguredBuildCommand(efs, "lint", config, rootDir, [...relFiles, "--format", "json"], resolveGateTimeout("lint", config)));
+      currentEslintErrors = flattenEslintErrors(JSON.parse(out.trim() || "[]"), rootDir);
+    } catch (e) {
+      // H12: eslint output must be parseable. A parse failure on non-empty output
+      // is fail-open if swallowed ("assume clean"); instead hard-block validation.
+      const rawOut = (e as { stdout?: string }).stdout?.trim() || "";
+      const commandError = e as { status?: number; stderr?: string; message?: string };
+      if (commandError.status === 127) {
+        return {
+          passed: false,
+          errors: [{
+            file: "",
+            line: 0,
+            code: "COMMAND_UNAVAILABLE",
+            message: String(commandError.stderr || commandError.message || "lint command unavailable"),
+            source: "eslint",
+          }],
+        };
       }
-    } catch {
-      return {
-        passed: false,
-        errors: [{
-          file: "",
-          line: 0,
-          code: "OUTPUT_UNPARSEABLE",
-          message: "eslint 输出无法解析为 JSON，无法确认是否引入新错误",
-          source: "eslint",
-        }],
-      };
+      try {
+        if (rawOut) {
+          currentEslintErrors = flattenEslintErrors(JSON.parse(rawOut), rootDir);
+        }
+      } catch {
+        return {
+          passed: false,
+          errors: [{
+            file: "",
+            line: 0,
+            code: "OUTPUT_UNPARSEABLE",
+            message: "eslint 输出无法解析为 JSON，无法确认是否引入新错误",
+            source: "eslint",
+          }],
+        };
+      }
     }
   }
 

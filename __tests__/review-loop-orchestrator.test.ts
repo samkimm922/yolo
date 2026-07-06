@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { runReviewLoop } from "../src/runtime/review-loop/orchestrator.js";
@@ -108,6 +108,8 @@ test("runReviewLoop converts one finding into one review_fix task with non-empty
       id: "BASE-1",
       type: "bugfix",
       status: "completed",
+      requirement_ids: ["REQ-BASE-1"],
+      design_ids: ["DES-BASE-1"],
       scope: { targets: [{ file: "src/app.js" }] },
     }],
   };
@@ -154,6 +156,9 @@ test("runReviewLoop converts one finding into one review_fix task with non-empty
     const reviewTasks = written.tasks.filter((task) => task.task_kind === "review_fix");
     assert.equal(reviewTasks.length, 1);
     assert.deepEqual(reviewTasks[0].source_finding_ids, ["REV-ONE"]);
+    assert.deepEqual(reviewTasks[0].requirement_ids, ["REQ-BASE-1"]);
+    assert.deepEqual(reviewTasks[0].design_ids, ["DES-BASE-1"]);
+    assert.deepEqual(reviewTasks[0].evidence_files, ["REV-ONE"]);
     assert.ok(reviewTasks[0].post_conditions.length > 0);
     assert.ok(reviewTasks[0].post_conditions.some((condition) =>
       condition.type === "code_not_contains" &&
@@ -519,6 +524,72 @@ test("runReviewLoop fallback classifier still writes canonical review_fix tasks 
     ));
     assert.deepEqual(result.failed, ["REVIEW-FIX-BLOCKED"]);
     assert.equal(result.review_outcome.reason, "review_fix_blocked");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runReviewLoop loads auto-fix from dist src layout", async () => {
+  const root = mkdtempSync(resolve(tmpdir(), "yolo-review-autofix-dist-src-"));
+  const fakeYoloRoot = resolve(root, "fake-dist");
+  const prdPath = resolve(root, "prd.json");
+  const reviewErrors = [];
+  const prd = {
+    id: "PRD-REVIEW-AUTOFIX-DIST-SRC",
+    tasks: [{
+      id: "BASE-1",
+      type: "bugfix",
+      status: "completed",
+      scope: { targets: [{ file: "src/app.js" }] },
+    }],
+  };
+  const finding = {
+    finding_id: "REV-AUTO",
+    scanner_id: "R-console-log",
+    severity: "LOW",
+    fix_type: "AUTO_FIX",
+    dimension: "code",
+    file: "src/app.js",
+    line: 1,
+    match: "console.log",
+    description: "Remove console.log",
+  };
+  let scanRuns = 0;
+
+  try {
+    mkdirSync(resolve(fakeYoloRoot, "src/lib"), { recursive: true });
+    writeFileSync(resolve(fakeYoloRoot, "src/lib/auto-fix.js"), `
+      export async function applyAutoFixTasks() {
+        return { stats: { fixed: 1 }, escalatedTasks: [], modifiedFiles: ["src/app.js"] };
+      }
+    `, "utf8");
+    writeFileSync(prdPath, JSON.stringify(prd, null, 2), "utf8");
+
+    const result = await runReviewLoop({
+      prd,
+      prdPath,
+      taskResults: emptyTaskResults(),
+      runId: "run-test",
+      yoloRoot: fakeYoloRoot,
+      rootDir: root,
+      progress: { total: 1, done: 0, failed: 0 },
+      maxReviewRounds: 2,
+      maxReviewTasksPerRound: 5,
+      execFileSync: () => {
+        scanRuns++;
+        return scanRuns === 1 ? coveredScan([finding]) : emptyCoveredScan();
+      },
+      mainLoop: async () => {
+        throw new Error("mainLoop should not run after AUTO_FIX succeeds");
+      },
+      loadPRD: (path) => JSON.parse(readFileSync(path, "utf8")),
+      normalizeRepoPath: (value) => value,
+      logReviewError: (...args) => reviewErrors.push(args),
+    });
+
+    assert.equal(scanRuns, 2);
+    assert.deepEqual(result.failed, []);
+    assert.equal(reviewErrors.some(([title]) => title === "AUTO_FIX 异常"), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

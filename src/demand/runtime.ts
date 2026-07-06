@@ -740,6 +740,16 @@ function fileKind(file = "") {
   return "code";
 }
 
+function testTargetForSourceFile(file = "") {
+  const normalized = clean(file).replace(/\\/g, "/");
+  const name = normalized.split("/").filter(Boolean).pop() || "behavior.ts";
+  const stem = name
+    .replace(/\.(?:[cm]?[jt]sx?|tsx?)$/i, "")
+    .replace(/\.(?:test|spec)$/i, "")
+    || "behavior";
+  return `test/${stem}.test.ts`;
+}
+
 function surfaceTitle(surface = Object()) {
   return clean(surface.label) || clean(surface.kind) || "Implementation surface";
 }
@@ -1121,7 +1131,7 @@ function hasVerifyCommand(condition = Object()) {
 function machineAcceptanceConditions(taskId, scenario = Object(), context = Object()) {
   const verifyCommand = scenario.verify_command || scenario.verifyCommand;
   if (verifyCommand) return [acceptanceCondition(taskId, 0, scenario)];
-  return [testsPassCondition(taskId, context)];
+  return [testsPassCondition(taskId, context, { requireTests: true })];
 }
 
 function buildConfigValue(config = Object(), key = "") {
@@ -1534,15 +1544,22 @@ function toolchainContext(input = Object(), options = Object()) {
   return { projectRoot, config };
 }
 
-function testsPassCondition(taskId, context = Object()) {
+function testsPassCondition(taskId, context = Object(), { requireTests = false } = Object()) {
   const projectRoot = context.projectRoot || process.cwd();
   const config = context.config || Object();
+  const params: Record<string, unknown> = {
+    command: resolveBuildCommand("test", config, projectRoot),
+    timeout_ms: resolveGateTimeout("test", config),
+  };
+  if (requireTests) params.require_tests = true;
   return {
     id: `POST-${taskId}-TESTS`,
     type: "tests_pass",
     severity: "FAIL",
-    params: { command: resolveBuildCommand("test", config, projectRoot), timeout_ms: resolveGateTimeout("test", config) },
-    message: "Project tests must pass after this task.",
+    params,
+    message: requireTests
+      ? "Project tests must pass and execute at least one test after this task."
+      : "Project tests must pass after this task.",
   };
 }
 
@@ -1555,6 +1572,181 @@ function typecheckCondition(taskId, context = Object()) {
     severity: "FAIL",
     params: { command: resolveBuildCommand("type_check", config, projectRoot) },
     message: "Project typecheck must pass after this task.",
+  };
+}
+
+function taskTargetFiles(task = Object()) {
+  return asArray(task.scope?.targets)
+    .map((target) => clean(typeof target === "string" ? target : target?.file || target))
+    .filter(Boolean);
+}
+
+function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], context = Object()) {
+  const existingTestTask = tasks.some((task) => taskTargetFiles(task).some((file) => fileKind(file) === "test"));
+  if (existingTestTask) return null;
+  const implementationTasks = tasks.filter((task) => task?.task_kind !== "greenfield_scaffold");
+  if (implementationTasks.length === 0) return null;
+  const sourceFiles = uniqueStrings(implementationTasks
+    .flatMap((task) => taskTargetFiles(task))
+    .filter((file) => !["test", "doc"].includes(fileKind(file))));
+  const primarySource = sourceFiles[0];
+  if (!primarySource) return null;
+
+  const taskId = "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001";
+  const testFile = testTargetForSourceFile(primarySource);
+  const requirementIds = uniqueStrings(implementationTasks.flatMap((task) => asArray(task.requirement_ids || task.trace?.requirement_id)));
+  const designIds = uniqueStrings(implementationTasks.flatMap((task) => asArray(task.design_ids)));
+  const description = "Add one node:test acceptance test file for the approved PRD.";
+  const sessionPlan = buildTaskSessionPlan({
+    demandId: session.id,
+    taskId,
+    requirementId: requirementIds[0] || "AUTOMATED-ACCEPTANCE",
+    scenarioId: "AUTOMATED-ACCEPTANCE",
+    surfaceId: "SFC-AUTOMATED-TEST",
+  });
+
+  return {
+    id: taskId,
+    title: "测试/验证: automated acceptance coverage",
+    description,
+    priority: "P1",
+    type: "cleanup",
+    status: "pending",
+    task_kind: "demand_atomic_task",
+    requirement_ids: requirementIds,
+    design_ids: designIds,
+    source_finding_ids: requirementIds,
+    source_question_ids: uniqueStrings(implementationTasks.flatMap((task) => asArray(task.source_question_ids))),
+    verification_hint: "Run npm test and verify node:test executes at least one acceptance test.",
+    instructions: [
+      `Create or update exactly ${testFile} with node:test acceptance coverage.`,
+      "The file must contain at least one test(...) declaration that npm test executes.",
+      "Run npm test and confirm the output reports at least one executed test.",
+      `Read ${primarySource} first and do not edit implementation files in this task.`,
+    ],
+    inputs: sourceFiles,
+    expected_output: [testFile],
+    depends_on: implementationTasks.map((task) => task.id).filter(Boolean),
+    test_generation: {
+      mode: "add_minimal",
+      reason: "Synthetic automated acceptance task must create one runnable node:test file so npm test is non-empty.",
+      allowed_test_files: [testFile],
+      max_new_test_files: 1,
+      max_test_lines_changed: 120,
+    },
+    handoff: {
+      type: "agent_brief",
+      category: "test",
+      session: sessionPlan,
+      plain_language_goal: description,
+      user_story: "As the delivery team, I want one automated acceptance test file, so that npm test is non-empty.",
+      source_question_ids: uniqueStrings(implementationTasks.flatMap((task) => asArray(task.source_question_ids))),
+      current_behavior: "The implementation tasks may pass typecheck before any test file exists.",
+      desired_behavior: "npm test executes one non-empty node:test acceptance suite.",
+      touchpoint: "automated acceptance test suite",
+      trigger: "delivery verification runs npm test",
+      scenario: {
+        id: "AUTOMATED-ACCEPTANCE",
+        actor: "delivery team",
+        touchpoint: "automated acceptance test suite",
+        trigger: "npm test runs",
+        current_behavior: "No test file is guaranteed before this task.",
+        desired_behavior: "node:test executes automated acceptance coverage.",
+        proof: "npm test executes at least one node:test test.",
+      },
+      requirement: {
+        id: requirementIds[0] || null,
+        text: "The approved PRD has automated acceptance coverage.",
+      },
+      surface: {
+        id: "SFC-AUTOMATED-TEST",
+        kind: "test",
+        label: "测试/验证",
+        target_files: [testFile],
+        readonly_files: sourceFiles,
+        visual_style_source: [],
+        session_budget: { expected: "single_session", max_files: 1, max_lines_per_file: 120 },
+      },
+      key_interfaces: [testFile],
+      read_first: sourceFiles,
+      acceptance_criteria: ["npm test executes at least one node:test test."],
+      proof: "npm test executes at least one node:test test.",
+      verification_hint: "Use the approved PRD as the source of behavior; npm test must execute at least one node:test test.",
+      project_facts: {
+        schema: "yolo.demand.task_project_facts.v1",
+        structured: structuredProjectFacts(session),
+        target_files: asArray(session.project_facts?.target_files),
+        candidate_target_files: asArray(session.project_facts?.candidate_target_files || session.project?.candidate_target_files),
+        current_state: asArray(session.context?.current_state || session.vision?.status_quo),
+        evidence: asArray(session.investigation?.evidence).map((item) => item.text || item).filter(Boolean),
+        assumptions: asArray(session.project_facts?.assumptions || session.reflection?.assumption_records || session.reflection?.assumptions || session.assumptions),
+        decisions: asArray(session.discussion?.decisions).map((item) => item.text || item).filter(Boolean),
+        constraints: asArray(session.requirements?.constraints),
+        out_of_scope: asArray(session.requirements?.out_of_scope),
+        deferred_scope: asArray(session.discussion?.deferred),
+        deferred_scope_confirmation: deferredScopeConfirmation(session),
+      },
+      deferred_scope: asArray(session.discussion?.deferred),
+      deferred_scope_confirmation: deferredScopeConfirmation(session),
+      deferred_follow_up: deferredFollowUp(session.discussion?.deferred),
+      out_of_scope: session.requirements?.out_of_scope || [],
+      constraints: session.requirements?.constraints || [],
+      exceptions: [],
+      question_trace: [],
+      evidence_chain: {
+        intake_schema: session.prd_intake?.schema || session.nontechnical_intake?.schema || null,
+        demand_id: session.id,
+        scenario_id: "AUTOMATED-ACCEPTANCE",
+        surface_id: "SFC-AUTOMATED-TEST",
+        approval_reason: session.approval_reason || session.approval?.reason || session.approval?.note || "",
+      },
+      must_haves: {
+        truths: ["npm test must execute at least one automated acceptance test."],
+        artifacts: [
+          sessionPlan.state_path,
+          sessionPlan.handoff_path,
+          sessionPlan.evidence_path,
+          ...sessionPlan.memory_update_paths,
+        ],
+        key_links: [
+          `demand:${session.id}`,
+          "scenario:AUTOMATED-ACCEPTANCE",
+          "surface:SFC-AUTOMATED-TEST",
+        ],
+      },
+    },
+    scope: {
+      targets: [{ file: testFile, description: `Automated node:test coverage for ${primarySource}` }],
+      readonly_files: sourceFiles,
+      allow_new_files: true,
+      allow_delete_files: false,
+      max_files: 1,
+      max_lines_per_file: 120,
+    },
+    pre_conditions: [],
+    post_conditions: uniqueConditions([
+      modifiedFileCondition(taskId, 0, testFile),
+      testsPassCondition(taskId, context, { requireTests: true }),
+      typecheckCondition(taskId, context),
+    ]),
+    trace: {
+      demand_id: session.id,
+      requirement_id: requirementIds[0] || null,
+      scenario_id: "AUTOMATED-ACCEPTANCE",
+      surface_id: "SFC-AUTOMATED-TEST",
+      evidence: [],
+      decisions: [],
+      question_trace: [],
+      source_question_ids: uniqueStrings(implementationTasks.flatMap((task) => asArray(task.source_question_ids))),
+    },
+    deferred_scope: asArray(session.discussion?.deferred),
+    deferred_scope_confirmation: deferredScopeConfirmation(session),
+    deferred_follow_up: deferredFollowUp(session.discussion?.deferred),
+    atomicity: {
+      expected_session: "single_session",
+      source: "synthetic_automated_acceptance",
+    },
+    must_fix_before_ship: true,
   };
 }
 
@@ -1666,6 +1858,7 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
       for (const [chunkIndex, files] of fileChunks.entries()) {
         const taskTitle = `${surfaceTitle(surface)}: ${scenario.requirement_id || requirement.id || scenario.id || "DEMAND"}`;
         const taskKind = clean(surface.kind).toLowerCase() || fileKind(files[0]) || "code";
+        const filesContainTest = files.some((file) => fileKind(file) === "test");
         const dedupKey = scenarioTaskDedupKey({ files, kind: taskKind, title: taskTitle });
         if (scenarioTaskKeys.has(dedupKey)) continue;
         scenarioTaskKeys.add(dedupKey);
@@ -1848,11 +2041,11 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
             ...behaviorCodeConditions(taskId, files, behaviorText, uiTask),
             ...(hasVerifyCommand({ verify_command: scenario.verify_command || scenario.verifyCommand })
               ? [acceptanceCondition(taskId, 0, { then: proof || description, verify_command: scenario.verify_command || scenario.verifyCommand })]
-              : automatedAcceptanceRequired
+              : automatedAcceptanceRequired && filesContainTest
                 ? machineAcceptanceConditions(taskId, { then: proof || description }, buildContext)
                 : []),
             typecheckCondition(taskId, buildContext),
-            ...(files.some((file) => fileKind(file) === "test") ? [testsPassCondition(taskId, buildContext)] : []),
+            ...(filesContainTest ? [testsPassCondition(taskId, buildContext)] : []),
           ]),
           trace: {
             demand_id: session.id,
@@ -1876,6 +2069,10 @@ function buildAtomicDemandTasks(session = Object(), input = Object(), options = 
         taskConceptsByScope.set(scopeKey, [...seenConcepts, concept]);
       }
     }
+  }
+  if (automatedAcceptanceRequired) {
+    const syntheticTestTask = buildSyntheticAutomatedAcceptanceTask(session, tasks, buildContext);
+    if (syntheticTestTask) tasks.push(syntheticTestTask);
   }
   addTaskDependencies(tasks);
   deriveFileDependencies(tasks);

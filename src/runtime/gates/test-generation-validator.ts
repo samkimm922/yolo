@@ -50,6 +50,80 @@ function fileAllowedByTaskScope(file, task) {
   return targets.some((target) => normalized === target || normalized.startsWith(`${dirname(target)}/`));
 }
 
+function taskRequiresNonEmptyTests(task) {
+  return asArray(task?.post_conditions).some((condition) => {
+    if (condition?.type !== "tests_pass") return false;
+    const params = condition.params || {};
+    return params.require_tests === true || params.require_nonzero_tests === true || params.requireNonzeroTests === true;
+  });
+}
+
+function taskTargetTestFiles(task) {
+  return asArray(task?.scope?.targets)
+    .map((target) => normalizePath(target?.file || target))
+    .filter((file) => file && isTestFile(file));
+}
+
+function hasRunnableTestDeclaration(content) {
+  return /\b(?:test|it)\s*\(/.test(content) || /\bdescribe\s*\(/.test(content);
+}
+
+function hasNodeTestImport(content) {
+  return /\bfrom\s+['"]node:test['"]/.test(content)
+    || /\brequire\s*\(\s*['"]node:test['"]\s*\)/.test(content)
+    || /\bimport\s*\(\s*['"]node:test['"]\s*\)/.test(content);
+}
+
+function testOutputLooksEmpty(output = "") {
+  return String(output || "").split(/\r?\n/).some((line) => {
+    const trimmed = line.trim();
+    return /^(?:#|ℹ)?\s*tests\s+0\b/i.test(trimmed)
+      || /^(?:#|ℹ)?\s*0\s+tests?\b(?:\s+(?:found|run|executed|passed|total))?$/i.test(trimmed)
+      || /^no tests? (?:found|run|executed)\b/i.test(trimmed);
+  });
+}
+
+function taskUsesNodeTestRunner(task, cwd) {
+  const testCondition = asArray(task?.post_conditions).find((condition) => condition?.type === "tests_pass");
+  const command = String(testCondition?.params?.command || "");
+  if (/\bnode\s+--test\b/.test(command)) return true;
+  if (!/\bnpm\s+(?:run\s+)?test\b/.test(command)) return false;
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(cwd, "package.json"), "utf8"));
+    return /\bnode\s+--test\b/.test(String(pkg?.scripts?.test || ""));
+  } catch {
+    return false;
+  }
+}
+
+function verifyNodeTestTarget(cwd, file) {
+  try {
+    const output = execFileSync(process.execPath, ["--test", file], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 60000,
+      maxBuffer: 1024 * 1024,
+    });
+    if (testOutputLooksEmpty(output)) {
+      return {
+        ok: false,
+        code: "TEST_TARGET_NO_EXECUTED_TESTS",
+        detail: `node --test ${file} 通过但没有执行任何测试。`,
+      };
+    }
+    return { ok: true };
+  } catch (error) {
+    const stderr = error?.stderr?.toString?.().trim();
+    const stdout = error?.stdout?.toString?.().trim();
+    return {
+      ok: false,
+      code: "TEST_TARGET_COMMAND_FAILED",
+      detail: `node --test ${file} 失败: ${(stderr || stdout || error?.message || String(error)).slice(0, 300)}`,
+    };
+  }
+}
+
 function gitErrorDetail(error) {
   const stderr = error?.stderr?.toString?.().trim();
   return stderr || error?.message || String(error || "unknown git error");
@@ -124,6 +198,56 @@ export function validateTestGeneration(task, options = Object()) {
 
   const changedTests = changedFiles.filter((item) => isTestFile(item.file));
   const newTests = changedTests.filter((item) => item.isNew);
+  const requiredTargetTests = taskRequiresNonEmptyTests(task) ? taskTargetTestFiles(task) : [];
+
+  if (taskRequiresNonEmptyTests(task) && requiredTargetTests.length === 0) {
+    failures.push({
+      code: "TEST_TARGET_SCOPE_MISSING",
+      detail: "require_tests=true 的任务必须在 scope.targets 中声明至少一个测试文件。",
+    });
+  }
+
+  for (const file of requiredTargetTests) {
+    const abs = resolve(cwd, file);
+    if (!existsSync(abs)) {
+      failures.push({
+        code: "TEST_TARGET_MISSING",
+        detail: `require_tests=true 的目标测试文件未创建: ${file}`,
+      });
+      continue;
+    }
+    const content = readFileSync(abs, "utf8");
+    if (!content.trim()) {
+      failures.push({
+        code: "TEST_TARGET_EMPTY",
+        detail: `require_tests=true 的目标测试文件为空: ${file}`,
+      });
+      continue;
+    }
+    if (!hasRunnableTestDeclaration(content)) {
+      failures.push({
+        code: "TEST_TARGET_NO_TEST_DECLARATION",
+        detail: `目标测试文件缺少 test()/it()/describe() 声明: ${file}`,
+      });
+      continue;
+    }
+    if (taskUsesNodeTestRunner(task, cwd)) {
+      if (!hasNodeTestImport(content)) {
+        failures.push({
+          code: "TEST_TARGET_NO_NODE_TEST_IMPORT",
+          detail: `node --test 项目的目标测试文件必须显式导入 node:test: ${file}`,
+        });
+        continue;
+      }
+      const runnable = verifyNodeTestTarget(cwd, file);
+      if (!runnable.ok) {
+        failures.push({
+          code: runnable.code,
+          detail: runnable.detail,
+        });
+      }
+    }
+  }
 
   if (!["none", "reuse_existing", "add_minimal", "forbid"].includes(mode)) {
     failures.push({ code: "INVALID_TEST_GENERATION_MODE", detail: `未知 test_generation.mode: ${mode}` });

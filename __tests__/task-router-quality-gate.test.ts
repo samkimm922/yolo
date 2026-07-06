@@ -149,6 +149,70 @@ describe("auto-fix recipes", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("console auto-fix skips lint validation when lint is not configured", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-console-autofix-no-lint-"));
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      const file = "src/a.ts";
+      writeFileSync(join(root, file), [
+        "export function run() {",
+        "  console.log('debug')",
+        "  return 1",
+        "}",
+      ].join("\n"), "utf8");
+
+      const result = await applyAutoFixTasks([{
+        id: "FIX-CONSOLE",
+        fix_type: "AUTO_FIX",
+        fix_rule: "debug-console-log",
+        scope: { targets: [{ file }] },
+        fix_findings: [{ scanner_id: "debug-console-log", file, line: 2, match: "console.log('debug')" }],
+      }], root, {
+        execFileSync: () => "",
+        config: { build: { type_check: "node --version" } },
+      });
+
+      assert.equal(result.success, true);
+      assert.equal(result.stats.fixed, 1);
+      assert.deepEqual(result.modifiedFiles, [file]);
+      assert.doesNotMatch(readFileSync(join(root, file), "utf8"), /console\.log/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("console auto-fix preserves likely CLI stdout output", async () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-console-autofix-stdout-"));
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      const file = "src/cli.ts";
+      const source = [
+        "export function print(markdown: string) {",
+        "  console.log(markdown)",
+        "}",
+      ].join("\n");
+      writeFileSync(join(root, file), source, "utf8");
+
+      const result = await applyAutoFixTasks([{
+        id: "FIX-STDOUT",
+        fix_type: "AUTO_FIX",
+        fix_rule: "debug-console-log",
+        scope: { targets: [{ file }] },
+        fix_findings: [{ scanner_id: "debug-console-log", file, line: 2, match: "console.log(markdown)" }],
+      }], root, {
+        execFileSync: () => "",
+        config: { build: { type_check: "node --version" } },
+      });
+
+      assert.equal(result.success, false);
+      assert.equal(result.stats.unchanged, 1);
+      assert.equal(result.escalatedTasks, undefined);
+      assert.equal(readFileSync(join(root, file), "utf8"), source);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("diff quality gate", () => {

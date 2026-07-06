@@ -337,6 +337,44 @@ describe("run lifecycle finalization helpers", () => {
     assert.deepEqual(result.final_verdict.issues.map((issue) => issue.code), ["BLOCKED_TASKS"]);
   });
 
+  test("buildRunReturnResult ignores stale blocked buckets for completed tasks", () => {
+    const result = buildRunReturnResult({
+      runId: "run-recovered",
+      prdPath: "/repo/prd.json",
+      taskResults: {
+        completed: ["A", "B"],
+        failed: ["A"],
+        skipped: ["A"],
+        blocked: ["B"],
+        contractReview: ["B"],
+      },
+      runReportResult: {
+        json_path: "/repo/state/report.json",
+        markdown_path: "/repo/state/report.md",
+        final_answer_json_path: "/repo/state/final-answer.json",
+        final_answer_markdown_path: "/repo/state/final-answer.md",
+        report: {
+          status: "success",
+          summary: { failed: 0, blocked: 0, evidence_failures: 0 },
+          review: {
+            issue_count: 0,
+            error_count: 0,
+            historical_issues: [{ finding_id: "OLD", status: "found" }],
+          },
+        },
+        final_answer: { status: "success", outcome: "success", checks: [{ name: "tasks", status: "pass" }], blockers: [] },
+      },
+      normalizeRepoPath: (value) => value.replace("/repo/", ""),
+    });
+
+    assert.equal(result.status, "success");
+    assert.equal(result.exit_code, 0);
+    assert.deepEqual(result.failed, []);
+    assert.deepEqual(result.skipped, []);
+    assert.deepEqual(result.blocked, []);
+    assert.deepEqual(result.contract_review, []);
+  });
+
   test("buildRunReturnResult fails closed for blocked review outcomes even without task arrays", () => {
     const result = buildRunReturnResult({
       runId: "run-review-outcome",

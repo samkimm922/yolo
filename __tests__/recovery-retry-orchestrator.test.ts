@@ -100,3 +100,44 @@ test("runRetryPhase executes retry PRDs, syncs completions, and cleans retry fil
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("runRetryPhase drops dependencies already completed outside the retry PRD", async () => {
+  const root = tempDir();
+  try {
+    const results = taskResults({ completed: ["DONE-ALREADY"], failed: ["FIX-LATE"] });
+    const prd = {
+      id: "PRD",
+      title: "Retry dependency pruning",
+      tasks: [
+        { id: "DONE-ALREADY", status: "done", task_kind: "feature" },
+        { id: "FIX-LATE", status: "failed", task_kind: "feature", depends_on: ["DONE-ALREADY"] },
+      ],
+    };
+
+    await runRetryPhase({
+      prd,
+      prdPath: join(root, "data", "prd.json"),
+      taskResults: results,
+      resumeCompleted: new Set(["DONE-ALREADY"]),
+      runId: "run-parent",
+      yoloRoot: root,
+      expandedTasksFile: join(root, "state", "expanded-tasks.json"),
+      progress: { total: 2, done: 1, failed: 1 },
+      maxRetryRounds: 3,
+      mainLoop: async (filePath) => {
+        const retryPrd = JSON.parse(readFileSync(filePath, "utf8"));
+        assert.deepEqual(retryPrd.tasks, [
+          { id: "FIX-LATE", status: "pending", task_kind: "feature", depends_on: [] },
+        ]);
+        return { completed: ["FIX-LATE"], failed: [], skipped: [], blocked: [], contractReview: [] };
+      },
+      taskPostconditionsPass: () => ({ passed: true, failed: [] }),
+      updateTaskStatus: () => {},
+    });
+
+    assert.deepEqual(results.failed, []);
+    assert.deepEqual(results.completed, ["DONE-ALREADY", "FIX-LATE"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
