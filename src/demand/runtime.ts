@@ -1255,12 +1255,31 @@ function scaffoldInstructions(needsTypecheck = false) {
   ];
   if (needsTypecheck) {
     steps.push(
-      "Run npm install --save-dev typescript --package-lock=false so node_modules/.bin/tsc exists for type-check gates.",
-      "Set scripts.typecheck to \"tsc --noEmit\".",
+      "Create .npmrc with package-lock=false before installing dependencies so npm install does not create package-lock.json.",
+      "Run npm install --save-dev typescript @types/node so node_modules/.bin/tsc exists and Node built-ins typecheck.",
+      "Set scripts.typecheck to \"tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --esModuleInterop --skipLibCheck --types node src/**/*.ts\".",
+      "Do not create tsconfig.json; keep compiler settings in the typecheck script so this scaffold stays within two files.",
     );
   }
-  steps.push("Do not add extra test framework dependencies for this scaffold task.");
+  steps.push("Do not add extra test framework dependencies or create package-lock.json for this scaffold task.");
   return steps;
+}
+
+function scaffoldOutputFiles(needsTypecheck = false) {
+  return needsTypecheck ? ["package.json", ".npmrc"] : ["package.json"];
+}
+
+function scaffoldTargetDescription(file = "") {
+  if (file === "package.json") return "Minimal greenfield toolchain package scripts and dev dependencies";
+  if (file === ".npmrc") return "npm setting that prevents package-lock.json churn in downstream task worktrees";
+  return "Greenfield toolchain scaffold file";
+}
+
+function scaffoldScopeTargets(needsTypecheck = false) {
+  return scaffoldOutputFiles(needsTypecheck).map((file) => ({
+    file,
+    description: scaffoldTargetDescription(file),
+  }));
 }
 
 function buildCommandAvailableCondition(taskId, kind, command) {
@@ -1318,6 +1337,30 @@ function scaffoldPostConditions(taskId, context = Object(), needsTypecheck = fal
       severity: "FAIL",
       params: { file: "package.json", text: "\"typescript\"" },
       message: "package.json must record TypeScript as a dev dependency before type gates run.",
+    }, {
+      id: `POST-${taskId}-NODE-TYPES-DEVDEP`,
+      type: "code_contains",
+      severity: "FAIL",
+      params: { file: "package.json", text: "\"@types/node\"" },
+      message: "package.json must record Node types before Node built-ins can typecheck.",
+    }, {
+      id: `POST-${taskId}-NPMRC-PACKAGE-LOCK-FALSE`,
+      type: "code_contains",
+      severity: "FAIL",
+      params: { file: ".npmrc", text: "package-lock=false" },
+      message: ".npmrc must prevent package-lock.json churn in downstream task worktrees.",
+    }, {
+      id: `POST-${taskId}-NO-PACKAGE-LOCK`,
+      type: "file_not_exists",
+      severity: "FAIL",
+      params: { file: "package-lock.json" },
+      message: "Greenfield scaffold should not create package-lock.json when package-lock=false is configured.",
+    }, {
+      id: `POST-${taskId}-NO-TSCONFIG`,
+      type: "file_not_exists",
+      severity: "FAIL",
+      params: { file: "tsconfig.json" },
+      message: "Greenfield scaffold keeps TypeScript options in package.json to stay within two files.",
     });
     conditions.push(buildCommandAvailableCondition(taskId, "type_check", "tsc --noEmit"));
   }
@@ -1332,6 +1375,8 @@ function buildGreenfieldScaffoldTask(session = Object(), tasks = [], context = O
   const designId = `DES-${requirementId}`;
   const taskId = "DEMAND-GREENFIELD-SCAFFOLD-001";
   const needsTypecheck = tasks.some((task) => taskToolchainKinds(task).has("type_check"));
+  const outputFiles = scaffoldOutputFiles(needsTypecheck);
+  const scopeTargets = scaffoldScopeTargets(needsTypecheck);
   const sourceQuestions = uniqueStrings(tasks.flatMap((task) => asArray(task.source_question_ids)));
   const sessionPlan = buildTaskSessionPlan({
     demandId: session.id,
@@ -1355,7 +1400,7 @@ function buildGreenfieldScaffoldTask(session = Object(), tasks = [], context = O
     verification_hint: "Run the configured test command after package.json is created.",
     instructions: scaffoldInstructions(needsTypecheck),
     inputs: [".yolo/config.json"],
-    expected_output: ["package.json"],
+    expected_output: outputFiles,
     depends_on: [],
     handoff: {
       type: "agent_brief",
@@ -1385,14 +1430,14 @@ function buildGreenfieldScaffoldTask(session = Object(), tasks = [], context = O
         id: "SFC-GREENFIELD-SCAFFOLD",
         kind: "code",
         label: "Project scaffold",
-        target_files: ["package.json"],
+        target_files: outputFiles,
         readonly_files: [],
         visual_style_source: [],
-        session_budget: { expected: "single_session", max_files: 1, max_lines_per_file: 120 },
+        session_budget: { expected: "single_session", max_files: outputFiles.length, max_lines_per_file: 120 },
       },
-      key_interfaces: ["package.json"],
+      key_interfaces: outputFiles,
       read_first: [".yolo/config.json"],
-      acceptance_criteria: ["package.json exposes node --test and TypeScript command availability when type gates are required."],
+      acceptance_criteria: ["package.json and .npmrc expose node --test and TypeScript command availability without package-lock or tsconfig churn."],
       instructions: scaffoldInstructions(needsTypecheck),
       proof: "package.json exists, npm test succeeds with node --test, and required toolchain commands are available.",
       verification_hint: "Run npm test after package.json is created; when type gates are required, verify node_modules/.bin/tsc is available.",
@@ -1429,11 +1474,11 @@ function buildGreenfieldScaffoldTask(session = Object(), tasks = [], context = O
     },
     acceptance_criteria: ["package.json exposes node --test and TypeScript command availability when type gates are required."],
     scope: {
-      targets: [{ file: "package.json", description: "Minimal greenfield toolchain scaffold" }],
+      targets: scopeTargets,
       readonly_files: [],
       allow_new_files: true,
       allow_delete_files: false,
-      max_files: 1,
+      max_files: outputFiles.length,
       max_lines_per_file: 120,
     },
     pre_conditions: [],

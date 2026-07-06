@@ -2006,11 +2006,30 @@ describe("demand runtime", () => {
       assert.equal(prdTraceEvidenceCount(compiledPrd) > 0, true, "R2 PRD should retain demand evidence trace");
 
       const scaffold = tasks[0];
+      const scaffoldExpectedOutput = Array.isArray(scaffold.expected_output) ? scaffold.expected_output : [];
       assert.equal(scaffold.task_kind, "greenfield_scaffold");
       assertNodeScaffoldToolchain(scaffold);
       assert.equal(scaffold.scope?.targets?.some((target) => target.file === "package.json"), true);
+      assert.equal(scaffold.scope?.targets?.some((target) => target.file === ".npmrc"), true);
+      assert.ok((scaffold.scope?.targets?.length || 0) <= 2);
+      assert.ok(scaffoldExpectedOutput.includes(".npmrc"));
+      assert.match(scaffoldInstructionText(scaffold), /@types\/node/);
+      assert.match(scaffoldInstructionText(scaffold), /package-lock=false/);
+      assert.match(scaffoldInstructionText(scaffold), /src\/\*\*\/\*\.ts/);
       assert.ok(scaffold.post_conditions.some((condition) =>
         condition.type === "file_exists" && condition.params?.file === "package.json"
+      ));
+      assert.ok(scaffold.post_conditions.some((condition) =>
+        condition.type === "code_contains" && condition.params?.file === ".npmrc" && condition.params?.text === "package-lock=false"
+      ));
+      assert.ok(scaffold.post_conditions.some((condition) =>
+        condition.type === "code_contains" && condition.params?.file === "package.json" && condition.params?.text === "\"@types/node\""
+      ));
+      assert.ok(scaffold.post_conditions.some((condition) =>
+        condition.type === "file_not_exists" && condition.params?.file === "package-lock.json"
+      ));
+      assert.ok(scaffold.post_conditions.some((condition) =>
+        condition.type === "file_not_exists" && condition.params?.file === "tsconfig.json"
       ));
       assert.ok(scaffold.post_conditions.some((condition) =>
         condition.type === "tests_pass" && condition.severity === "FAIL"
