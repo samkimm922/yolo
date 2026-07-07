@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { readJsonFileBounded } from "../../lib/bounded-read.js";
+import { safeRegExp } from "../../lib/security/regex-guard.js";
 
 const DEFAULT_MODE = "reuse_existing";
 const TEST_FILE_RE = /(^__tests__\/|^tests\/|\/__tests__\/|\.(test|spec)\.[cm]?[jt]sx?$)/i;
@@ -10,6 +11,14 @@ const TEST_FILE_RE = /(^__tests__\/|^tests\/|\/__tests__\/|\.(test|spec)\.[cm]?[
 function asArray(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
   return value ? [value] : [];
+}
+
+function clean(value) {
+  return String(value ?? "").trim();
+}
+
+function isRecord(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 function normalizePath(file) {
@@ -62,6 +71,75 @@ function taskTargetTestFiles(task) {
   return asArray(task?.scope?.targets)
     .map((target) => normalizePath(target?.file || target))
     .filter((file) => file && isTestFile(file));
+}
+
+function declaredTestNames(content) {
+  return [...content.matchAll(/\b(?:test|it)\s*\(\s*(["'`])([\s\S]*?)\1/g)].map((match) => match[2]);
+}
+
+function markerLabel(marker) {
+  return typeof marker === "string" ? marker : isRecord(marker) ? clean(marker.text || marker.pattern || marker.name || marker.reason || JSON.stringify(marker)) : clean(marker);
+}
+
+function markerMatches(content, marker, forbidden = false) {
+  if (!isRecord(marker)) return content.includes(clean(marker));
+  const text = clean(marker.text), pattern = clean(marker.pattern);
+  const textMatched = text ? content.includes(text) : true;
+  const patternMatched = pattern ? Boolean(safeRegExp(pattern)?.test(content)) : true;
+  if (forbidden) return Boolean((text && textMatched) || (pattern && patternMatched));
+  return Boolean((text || pattern) && textMatched && patternMatched);
+}
+
+function addAcceptanceFailure(failures, code, detail) {
+  failures.push({ code, detail });
+}
+
+function validateAcceptanceCoverage(task, cwd, failures) {
+  if (task?.test_generation?.acceptance_coverage_required !== true && task?.atomicity?.source !== "synthetic_automated_acceptance") return;
+  const manifest = task?.test_generation?.acceptance_coverage || task?.acceptance_coverage || null;
+  const criteria = asArray(manifest?.criteria || manifest?.checklist);
+  if (!isRecord(manifest) || criteria.length === 0) {
+    addAcceptanceFailure(failures, "ACCEPTANCE_COVERAGE_MANIFEST_MISSING", "合成验收测试任务必须声明 test_generation.acceptance_coverage 覆盖清单。");
+    return;
+  }
+
+  const targetFile = normalizePath(manifest.required_test_file || asArray(manifest.required_test_files)[0] || taskTargetTestFiles(task)[0]);
+  if (!targetFile) {
+    addAcceptanceFailure(failures, "ACCEPTANCE_COVERAGE_TARGET_MISSING", "acceptance_coverage 必须声明 required_test_file 或在 scope.targets 中声明测试文件。");
+    return;
+  }
+  const abs = resolve(cwd, targetFile);
+  if (!existsSync(abs)) {
+    addAcceptanceFailure(failures, "ACCEPTANCE_COVERAGE_TARGET_MISSING", `acceptance_coverage 指向的测试文件不存在: ${targetFile}`);
+    return;
+  }
+
+  const content = readFileSync(abs, "utf8");
+  const testNames = declaredTestNames(content);
+  for (const criterion of criteria) {
+    const criterionId = clean(criterion?.criterion_id || criterion?.id);
+    if (!criterionId) {
+      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_ID_MISSING", "acceptance_coverage.criteria 中存在缺少 criterion_id 的条目。");
+      continue;
+    }
+    const requiredName = clean(criterion.required_test_name || criterion.test_name);
+    const hasNamedTest = testNames.some((name) => name.includes(criterionId) || (requiredName && name.includes(requiredName)));
+    if (!hasNamedTest) {
+      addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_TEST_MISSING", `缺少覆盖成功标准 ${criterionId} 的命名 test()/it()。测试名必须包含 criterion_id 或 required_test_name。`);
+    }
+
+    for (const marker of asArray(criterion.required_markers || criterion.required_marker)) {
+      if (!markerMatches(content, marker)) {
+        addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_MARKER_MISSING", `成功标准 ${criterionId} 缺少要求的测试标记/断言: ${markerLabel(marker)}`);
+      }
+    }
+
+    for (const marker of asArray(criterion.forbidden_patterns || criterion.forbidden_markers)) {
+      if (markerMatches(content, marker, true)) {
+        addAcceptanceFailure(failures, "ACCEPTANCE_CRITERION_FORBIDDEN_PATTERN", `成功标准 ${criterionId} 出现禁止的测试复算/替代模式: ${markerLabel(marker)}`);
+      }
+    }
+  }
 }
 
 function hasRunnableTestDeclaration(content) {
@@ -259,6 +337,7 @@ export function validateTestGeneration(task, options = Object()) {
       }
     }
   }
+  validateAcceptanceCoverage(task, cwd, failures);
 
   if (!["none", "reuse_existing", "add_minimal", "forbid"].includes(mode)) {
     failures.push({ code: "INVALID_TEST_GENERATION_MODE", detail: `未知 test_generation.mode: ${mode}` });
