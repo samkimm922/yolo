@@ -595,11 +595,11 @@ test("runReviewLoop loads auto-fix from dist src layout", async () => {
   }
 });
 
-test("runReviewLoop blocks when the same completed review finding persists across rounds", async () => {
-  const root = mkdtempSync(resolve(tmpdir(), "yolo-review-persisted-finding-"));
+test("runReviewLoop marks repeated same finding ASK_HUMAN and continues other findings", async () => {
+  const root = mkdtempSync(resolve(tmpdir(), "yolo-review-converge-finding-"));
   const prdPath = resolve(root, "prd.json");
   const prd = {
-    id: "PRD-REVIEW-PERSISTED-FINDING",
+    id: "PRD-REVIEW-CONVERGE-FINDING",
     tasks: [{
       id: "BASE-1",
       type: "bugfix",
@@ -607,8 +607,8 @@ test("runReviewLoop blocks when the same completed review finding persists acros
       scope: { targets: [{ file: "src/app.js" }] },
     }],
   };
-  const finding = {
-    finding_id: "REV-PERSIST",
+  const stubbornFinding = {
+    finding_id: "REV-STUBBORN",
     scanner_id: "R6-as-any",
     severity: "HIGH",
     fix_type: "CLAUDE_FIX",
@@ -617,6 +617,17 @@ test("runReviewLoop blocks when the same completed review finding persists acros
     line: 1,
     match: "as any",
     description: "Avoid as any",
+  };
+  const otherFinding = {
+    finding_id: "REV-OTHER",
+    scanner_id: "xss-innerHTML",
+    severity: "HIGH",
+    fix_type: "CLAUDE_FIX",
+    dimension: "security",
+    file: "src/other.js",
+    line: 2,
+    match: "innerHTML",
+    description: "Avoid innerHTML",
   };
   let scanRuns = 0;
 
@@ -631,29 +642,26 @@ test("runReviewLoop blocks when the same completed review finding persists acros
       yoloRoot: YOLO_DIR,
       rootDir: YOLO_DIR,
       progress: { total: 1, done: 0, failed: 0 },
-      maxReviewRounds: 3,
+      maxReviewRounds: 4,
       maxReviewTasksPerRound: 5,
+      config: { runner: { circuit_breaker: 2 } },
       execFileSync: () => {
         scanRuns++;
-        return JSON.stringify({
-          coverage_artifact: {
-            scanner_version: "test-review-scanner@1",
-            scanned_files: ["src/app.js"],
-            rules: ["R6-as-any"],
-            expected_scope: ["src/app.js"],
-            coverage_status: "complete",
-          },
-          findings: [finding],
-        });
+        if (scanRuns === 3) return coveredScan([stubbornFinding, otherFinding], ["src/app.js", "src/other.js"]);
+        return coveredScan([stubbornFinding], ["src/app.js", "src/other.js"]);
       },
       mainLoop: async () => {
         const latest = JSON.parse(readFileSync(prdPath, "utf8"));
+        const completed = [];
         for (const task of latest.tasks) {
-          if (task.task_kind === "review_fix") task.status = "completed";
+          if (task.task_kind === "review_fix" && task.status === "pending") {
+            task.status = "completed";
+            completed.push(task.id);
+          }
         }
         writeFileSync(prdPath, JSON.stringify(latest, null, 2), "utf8");
         return {
-          completed: ["FIX-R1-001"],
+          completed,
           failed: [],
           skipped: [],
           blocked: [],
@@ -665,13 +673,30 @@ test("runReviewLoop blocks when the same completed review finding persists acros
     });
 
     const written = JSON.parse(readFileSync(prdPath, "utf8"));
-    assert.equal(scanRuns, 2);
-    assert.equal(written.tasks.filter((task) => task.task_kind === "review_fix").length, 1);
-    assert.deepEqual(result.failed, ["REVIEW-FINDINGS-PERSISTED"]);
-    assert.deepEqual(result.blocked, ["REVIEW-FINDINGS-PERSISTED"]);
+    const reviewTasks = written.tasks.filter((task) => task.task_kind === "review_fix");
+    const stubbornTasks = reviewTasks.filter((task) => task.source_finding_ids?.includes("REV-STUBBORN"));
+    const otherTasks = reviewTasks.filter((task) => task.source_finding_ids?.includes("REV-OTHER"));
+
+    assert.equal(scanRuns, 4);
+    assert.equal(reviewTasks.length, 3);
+    assert.deepEqual(stubbornTasks.map((task) => task.id), ["FIX-R1-001", "FIX-R2-001"]);
+    assert.deepEqual(otherTasks.map((task) => task.id), ["FIX-R3-001"]);
+    assert.ok(!reviewTasks.some((task) => task.id.startsWith("FIX-R3") && task.source_finding_ids?.includes("REV-STUBBORN")));
+    assert.deepEqual(result.completed, ["FIX-R1-001", "FIX-R2-001", "FIX-R3-001"]);
+    assert.deepEqual(result.failed, ["REVIEW-FINDINGS-ASK-HUMAN"]);
+    assert.deepEqual(result.blocked, ["REVIEW-FINDINGS-ASK-HUMAN"]);
     assert.equal(result.review_outcome.status, "blocked");
-    assert.equal(result.review_outcome.reason, "review_findings_persisted");
-    assert.equal(result.review_outcome.meta.persisted_findings[0].finding_id, "REV-PERSIST");
+    assert.equal(result.review_outcome.reason, "auto_fix_unresolvable");
+    assert.equal(result.review_human_actions[0].action, "ASK_HUMAN");
+    assert.equal(result.review_unresolvable_findings[0].status, "auto_fix_unresolvable");
+    assert.equal(result.review_unresolvable_findings[0].finding_id, "REV-STUBBORN");
+    assert.deepEqual(
+      result.review_unresolvable_findings[0].fix_history.map((item) => ({ round: item.round, task_ids: item.task_ids })),
+      [
+        { round: 1, task_ids: ["FIX-R1-001"] },
+        { round: 2, task_ids: ["FIX-R2-001"] },
+      ],
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

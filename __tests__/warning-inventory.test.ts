@@ -59,7 +59,8 @@ const INVENTORY = [
   ["src/release/hardening-drill.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 4 }],
   ["src/review/findings-to-tasks.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 3 }],
   ["src/review/fix-loop.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 2 }],
-  ["src/review/scanner.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 2 }],
+  // PR-13: skip count 2 -> 1 after replacing while-no-cursor keyword scanning comments with condition-variable analysis.
+  ["src/review/scanner.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 1 }],
   ["src/runtime/acceptance/report.ts", { WARN: 0, warning: 8, "best-effort": 0, skip: 2 }],
   ["src/runtime/adapters/agent-contract.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 1 }],
   ["src/runtime/adapters/provider-capability-bits.ts", { WARN: 0, warning: 1, "best-effort": 0, skip: 0 }],
@@ -94,7 +95,8 @@ const INVENTORY = [
   ["src/runtime/progress/ui-evidence.ts", { WARN: 0, warning: 3, "best-effort": 0, skip: 4 }],
   ["src/runtime/recovery/retry-orchestrator.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 2 }],
   ["src/runtime/recovery/retry-round.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 9 }],
-  ["src/runtime/review-loop/orchestrator.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 3 }],
+  // PR-13: skip count 3 -> 2 after removing the old whole-loop persisted-finding path in favor of per-finding ASK_HUMAN convergence.
+  ["src/runtime/review-loop/orchestrator.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 2 }],
   ["src/runtime/review-loop/round-helpers.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 4 }],
   ["src/runtime/run-lifecycle/finalize.ts", { WARN: 0, warning: 0, "best-effort": 0, skip: 14 }],
   ["src/runtime/run-lifecycle/pre-execution-outcome.ts", { WARN: 0, warning: 2, "best-effort": 0, skip: 0 }],
