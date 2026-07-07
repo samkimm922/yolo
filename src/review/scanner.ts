@@ -138,6 +138,82 @@ type EslintResult = {
   messages?: EslintMessage[];
 };
 
+type WhileLoopContext = {
+  condition: string;
+  body: string;
+  line: number;
+  header: string;
+};
+
+const JS_KEYWORDS = new Set([
+  "as",
+  "async",
+  "await",
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "default",
+  "delete",
+  "do",
+  "else",
+  "enum",
+  "export",
+  "extends",
+  "false",
+  "finally",
+  "for",
+  "from",
+  "function",
+  "if",
+  "implements",
+  "import",
+  "in",
+  "instanceof",
+  "interface",
+  "let",
+  "new",
+  "null",
+  "of",
+  "private",
+  "protected",
+  "public",
+  "return",
+  "static",
+  "super",
+  "switch",
+  "throw",
+  "true",
+  "try",
+  "type",
+  "typeof",
+  "undefined",
+  "var",
+  "void",
+  "while",
+  "yield",
+]);
+
+const GLOBAL_IDENTIFIERS = new Set([
+  "Array",
+  "Boolean",
+  "Date",
+  "Infinity",
+  "JSON",
+  "Map",
+  "Math",
+  "NaN",
+  "Number",
+  "Object",
+  "Promise",
+  "RegExp",
+  "Set",
+  "String",
+  "Symbol",
+]);
+
 function requiredConfigRoot(root: string | undefined): string {
   if (typeof root === "string") return root;
   throw new TypeError("config.project.root must be a string");
@@ -406,6 +482,246 @@ function getAllSourceFiles(dir: string, settings: ScannerSettings): string[] {
   return files;
 }
 
+function escapedRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function maskedChar(ch: string): string {
+  return ch === "\n" || ch === "\r" ? ch : " ";
+}
+
+function maskStringsAndComments(source: string): string {
+  let result = "";
+  let quote: string | null = null;
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    const next = source[i + 1];
+
+    if (inLineComment) {
+      if (ch === "\n" || ch === "\r") {
+        inLineComment = false;
+        result += ch;
+      } else {
+        result += " ";
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (ch === "*" && next === "/") {
+        result += "  ";
+        i++;
+        inBlockComment = false;
+      } else {
+        result += maskedChar(ch);
+      }
+      continue;
+    }
+
+    if (quote) {
+      result += maskedChar(ch);
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (ch === "/" && next === "/") {
+      result += "  ";
+      i++;
+      inLineComment = true;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      result += "  ";
+      i++;
+      inBlockComment = true;
+      continue;
+    }
+    if (ch === "\"" || ch === "'" || ch === "`") {
+      result += " ";
+      quote = ch;
+      escaped = false;
+      continue;
+    }
+
+    result += ch;
+  }
+
+  return result;
+}
+
+function lineStartsFor(source: string): number[] {
+  const starts = [0];
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === "\n") starts.push(i + 1);
+  }
+  return starts;
+}
+
+function lineNumberAt(index: number, lineStarts: number[]): number {
+  let line = 0;
+  while (line + 1 < lineStarts.length && lineStarts[line + 1] <= index) line++;
+  return line + 1;
+}
+
+function nextNonWhitespaceIndex(source: string, start: number): number {
+  for (let i = start; i < source.length; i++) {
+    if (!/\s/.test(source[i])) return i;
+  }
+  return -1;
+}
+
+function previousNonWhitespaceIndex(source: string, start: number): number {
+  for (let i = start; i >= 0; i--) {
+    if (!/\s/.test(source[i])) return i;
+  }
+  return -1;
+}
+
+function findMatchingDelimiter(source: string, openIndex: number, openCh: string, closeCh: string): number {
+  let depth = 0;
+  for (let i = openIndex; i < source.length; i++) {
+    if (source[i] === openCh) depth++;
+    if (source[i] === closeCh) {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function findMatchingOpenBrace(source: string, closeIndex: number): number {
+  let depth = 0;
+  for (let i = closeIndex; i >= 0; i--) {
+    if (source[i] === "}") depth++;
+    if (source[i] === "{") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function doWhileBodyRange(source: string, whileIndex: number): { start: number; end: number } | null {
+  const closeBrace = previousNonWhitespaceIndex(source, whileIndex - 1);
+  if (closeBrace < 0 || source[closeBrace] !== "}") return null;
+  const openBrace = findMatchingOpenBrace(source, closeBrace);
+  if (openBrace < 0) return null;
+  const beforeOpen = source.slice(Math.max(0, openBrace - 20), openBrace);
+  return /\bdo\s*$/.test(beforeOpen) ? { start: openBrace + 1, end: closeBrace } : null;
+}
+
+function findStatementEnd(source: string, start: number): number {
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+
+  for (let i = start; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === "(") parenDepth++;
+    else if (ch === ")") parenDepth = Math.max(0, parenDepth - 1);
+    else if (ch === "[") bracketDepth++;
+    else if (ch === "]") bracketDepth = Math.max(0, bracketDepth - 1);
+    else if (ch === "{") braceDepth++;
+    else if (ch === "}") {
+      if (braceDepth === 0) return i;
+      braceDepth--;
+    }
+    if (parenDepth === 0 && bracketDepth === 0 && braceDepth === 0 && (ch === ";" || ch === "\n")) {
+      return i + (ch === ";" ? 1 : 0);
+    }
+  }
+
+  return source.length;
+}
+
+function extractWhileLoops(content: string, lines: string[]): WhileLoopContext[] {
+  const masked = maskStringsAndComments(content);
+  const lineStarts = lineStartsFor(content);
+  const loops: WhileLoopContext[] = [];
+  const whilePattern = /\bwhile\s*\(/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = whilePattern.exec(masked)) !== null) {
+    const openParen = masked.indexOf("(", match.index);
+    const closeParen = openParen >= 0 ? findMatchingDelimiter(masked, openParen, "(", ")") : -1;
+    if (openParen < 0 || closeParen < 0) continue;
+
+    const condition = masked.slice(openParen + 1, closeParen);
+    const doWhileRange = doWhileBodyRange(masked, match.index);
+    let body = "";
+    if (doWhileRange) {
+      body = masked.slice(doWhileRange.start, doWhileRange.end);
+    } else {
+      const bodyStart = nextNonWhitespaceIndex(masked, closeParen + 1);
+      if (bodyStart >= 0 && masked[bodyStart] === "{") {
+        const bodyEnd = findMatchingDelimiter(masked, bodyStart, "{", "}");
+        body = bodyEnd >= 0 ? masked.slice(bodyStart + 1, bodyEnd) : masked.slice(bodyStart + 1);
+      } else if (bodyStart >= 0) {
+        body = masked.slice(bodyStart, findStatementEnd(masked, bodyStart));
+      }
+    }
+
+    const line = lineNumberAt(match.index, lineStarts);
+    loops.push({
+      condition,
+      body,
+      line,
+      header: lines[line - 1]?.trim().slice(0, 60) || "while",
+    });
+  }
+
+  return loops;
+}
+
+function extractConditionVariables(condition: string): Set<string> {
+  const variables = new Set<string>();
+  const identifierPattern = /[A-Za-z_$][A-Za-z0-9_$]*/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = identifierPattern.exec(condition)) !== null) {
+    const name = match[0];
+    const previous = previousNonWhitespaceIndex(condition, match.index - 1);
+    if (previous >= 0 && condition[previous] === ".") continue;
+    if (JS_KEYWORDS.has(name) || GLOBAL_IDENTIFIERS.has(name)) continue;
+    variables.add(name);
+  }
+
+  return variables;
+}
+
+function conditionConsumesCursor(condition: string): boolean {
+  return /(?:\+\+|--)/.test(condition)
+    || /(?<![=!<>])=(?![=>])/.test(condition)
+    || /\.(?:shift|pop|splice|next)\s*\(/.test(condition);
+}
+
+function bodyAdvancesConditionVariable(body: string, variable: string): boolean {
+  const token = `(?<![A-Za-z0-9_$])${escapedRegex(variable)}(?![A-Za-z0-9_$])`;
+  const member = `${token}(?:\\s*(?:(?:\\?\\.|\\.)\\s*[A-Za-z_$][A-Za-z0-9_$]*|\\[[^\\]]+\\]))*`;
+  const assignmentOperator = "(?:\\*\\*|&&|\\|\\||[+\\-*/%&|^])?=";
+  const updatePattern = new RegExp(`(?:\\+\\+|--)\\s*${member}|${member}\\s*(?:\\+\\+|--)`);
+  const assignmentPattern = new RegExp(`${member}\\s*${assignmentOperator}(?![=>])`);
+  const consumingCallPattern = new RegExp(`${token}\\s*(?:\\?\\.|\\.)\\s*(?:shift|pop|splice|next)\\s*\\(`);
+  return updatePattern.test(body) || assignmentPattern.test(body) || consumingCallPattern.test(body);
+}
+
+function hasWhileCursorAdvance(condition: string, body: string): boolean {
+  if (conditionConsumesCursor(condition)) return true;
+  const variables = extractConditionVariables(condition);
+  if (variables.size === 0) return false;
+  return [...variables].some((variable) => bodyAdvancesConditionVariable(body, variable));
+}
+
 // ── 扫描单个文件 ──────────────────────────────────────────────
 
 export function scanFile(absPath: string, options: ScannerOptions = Object()): NormalizedReviewFinding[] {
@@ -500,59 +816,22 @@ export function scanFile(absPath: string, options: ScannerOptions = Object()): N
     }
   }
 
-  // while-no-cursor: 检查 while 循环体是否有游标推进（匹配花括号找到完整循环体）
+  // while-no-cursor: 提取条件变量，确认循环体会推进/消费这些变量。
   const whileRule = RULES.find(r => r.id === "while-no-cursor")!;
   if (ruleEnabled(whileRule, settings) && !whileRule.exclude?.(relPath)) {
-    for (let i = 0; i < lineCount; i++) {
-      whileRule.pattern.lastIndex = 0;
-      if (!whileRule.pattern.test(lines[i])) continue;
-      // 提取 while 循环体：从 while 行开始，匹配花括号找到循环结束
-      // 跳过字符串/模板字面量/正则以面量内的花括号
-      let braceCount = 0;
-      let loopBody = "";
-      let started = false;
-      for (let j = i; j < Math.min(lineCount, i + 50); j++) {
-        const line = lines[j];
-        let inString: string | null = null; // '"' | "'" | '`'  | null
-        let inComment = false;
-        for (let ci = 0; ci < line.length; ci++) {
-          const ch = line[ci];
-          const prev = ci > 0 ? line[ci - 1] : '';
-          // 跳过注释
-          if (!inString && ch === '/' && line[ci + 1] === '/') break; // 行注释
-          if (!inString && ch === '/' && line[ci + 1] === '*') { inComment = true; ci++; continue; }
-          if (inComment && ch === '*' && line[ci + 1] === '/') { inComment = false; ci++; continue; }
-          if (inComment) continue;
-          // 字符串/模板字面量
-          if (prev !== '\\' && (ch === '"' || ch === "'" || ch === '`')) {
-            if (!inString) { inString = ch; continue; }
-            else if (inString === ch) { inString = null; continue; }
-          }
-          if (inString) continue;
-          // 只计数代码中的花括号
-          if (ch === '{') { braceCount++; started = true; }
-          if (ch === '}') { braceCount--; if (started && braceCount <= 0) break; }
-        }
-        loopBody += line + "\n";
-        if (started && braceCount <= 0) break;
-      }
-      // 检查循环体内是否有游标推进模式
-      const hasCursorAdvance = /(\+\=\s*\d+|cursor|\.skip\(|\.next\(|offset|processed|last(Id|SaleId|Cursor|_id)|push\()/i.test(loopBody);
-      if (!hasCursorAdvance) {
-        const already = findings.some(f => f.scanner_id === whileRule.id && f.line === i + 1);
-        if (!already) {
-          findings.push({
-            scanner_id: whileRule.id,
-            dimension: whileRule.dimension,
-            severity: whileRule.severity,
-            fix_type: whileRule.fix_type,
-            file: relPath,
-            line: i + 1,
-            match: lines[i].trim().slice(0, 60),
-            description: whileRule.description + "（循环体内未检测到游标推进模式）",
-            context: lines[i].trim().slice(0, 120),
-          });
-        }
+    for (const loop of extractWhileLoops(content, lines)) {
+      if (!hasWhileCursorAdvance(loop.condition, loop.body)) {
+        findings.push({
+          scanner_id: whileRule.id,
+          dimension: whileRule.dimension,
+          severity: whileRule.severity,
+          fix_type: whileRule.fix_type,
+          file: relPath,
+          line: loop.line,
+          match: loop.header,
+          description: whileRule.description + "（条件变量在循环体内未被推进或消费）",
+          context: lines[loop.line - 1]?.trim().slice(0, 120) || loop.header,
+        });
       }
     }
   }

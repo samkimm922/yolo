@@ -35,6 +35,7 @@ import {
   shouldBlockReviewTaskLimit,
 } from "./task-application.js";
 import { resolveExecutorTimeoutMs } from "../../lib/toolchain.js";
+import { circuitBreakerThreshold, hasRepeatedFailure } from "../recovery/retry-policy.js";
 
 type Prd = Record<string, unknown>;
 type Task = Record<string, unknown>;
@@ -120,17 +121,20 @@ function defaultReviewReportPath(prdPath: string): string {
   return normalized.includes("/.yolo/") ? ".yolo/lifecycle/review-report.json" : "review-report.json";
 }
 
+function cleanString(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
 function findingFingerprint(finding: Record<string, unknown> = Object()): string {
-  return String(
-    finding.finding_id ||
-    finding.id ||
-    [
-      finding.scanner_id || finding.rule_id || finding.code || "review",
-      finding.file || finding.path || "",
-      finding.line || "",
-      finding.match || finding.message || finding.description || "",
-    ].join("|"),
-  );
+  return [
+    cleanString(finding.scanner_id || finding.rule_id || finding.code || finding.finding_id || finding.id || "review"),
+    cleanString(finding.file || finding.path || ""),
+    cleanString(finding.line || ""),
+  ].join("|");
+}
+
+function findingSourceId(finding: Record<string, unknown> = Object()): string {
+  return cleanString(finding.finding_id || finding.id) || findingFingerprint(finding);
 }
 
 function taskSourceFindingIds(task: Record<string, unknown> = Object()): string[] {
@@ -148,89 +152,224 @@ function taskSourceFindingIds(task: Record<string, unknown> = Object()): string[
   ].filter(Boolean).map(String);
 }
 
-function reviewFixTaskCompletedForFinding({
-  prd,
-  taskResults,
-  finding,
-}: {
-  prd?: Prd | null;
-  taskResults?: TaskResults | null;
-  finding: Record<string, unknown>;
-}): boolean {
-  const sourceId = findingFingerprint(finding);
-  const completedIds = new Set([
-    ...((taskResults?.completed as unknown[]) || []),
-    ...((taskResults?.skipped as unknown[]) || []),
-  ]);
-  const tasks = Array.isArray(prd?.tasks) ? (prd?.tasks as Task[]) : [];
-  return tasks.some((task) => {
-    if (task?.task_kind !== "review_fix") return false;
-    if (!taskSourceFindingIds(task).includes(sourceId)) return false;
-    const status = String(task.status || "").toLowerCase();
-    return ["completed", "done"].includes(status) || completedIds.has(task.id);
-  });
-}
-
-type PersistedFindingOutcome = {
-  id: string;
-  status: "blocked";
-  reason: string;
-  message: string;
-  humanNeeded: boolean;
-  meta: Record<string, unknown>;
+type FindingFixHistoryItem = {
+  round: number;
+  task_type: "AUTO_FIX" | "CLAUDE_FIX";
+  task_ids: string[];
+  review_report_path: string;
+  prd_path: string;
 };
 
-function persistentFindingBlock({
-  round,
-  findings = [],
-  persistence = new Map(),
-  prd,
-  taskResults,
-  maxRounds,
-}: {
+type FindingPersistenceState = {
+  count: number;
   round: number;
-  findings?: Array<Record<string, unknown>>;
-  persistence?: Map<string, { count: number; round?: number }>;
-  prd?: Prd | null;
-  taskResults?: TaskResults | null;
-  maxRounds: number;
-}): PersistedFindingOutcome | null {
-  const persisted = findings
-    .map((finding) => {
-      const fingerprint = findingFingerprint(finding);
-      const state = persistence.get(fingerprint) || { count: 0 };
-      return {
-        finding,
-        fingerprint,
-        count: state.count || 0,
-        completed_review_fix: reviewFixTaskCompletedForFinding({ prd, taskResults, finding }),
-      };
-    })
-    .filter((item) => item.count >= maxRounds || (item.count > 1 && item.completed_review_fix));
+  firstRound: number;
+  appearances: Array<{ fingerprint: string }>;
+  fixHistory: FindingFixHistoryItem[];
+  unresolvable?: boolean;
+};
 
-  if (persisted.length === 0) return null;
+type AutoFixUnresolvableFinding = {
+  status: "auto_fix_unresolvable";
+  action: "ASK_HUMAN";
+  reason: "repeated_review_finding";
+  finding_id: string | null;
+  fingerprint: string;
+  scanner_id: unknown;
+  file: unknown;
+  line: unknown;
+  attempts: number;
+  threshold: number;
+  first_seen_round: number;
+  last_seen_round: number;
+  fix_history: FindingFixHistoryItem[];
+  remediation: {
+    action: "ASK_HUMAN";
+    reason: "auto_fix_unresolvable";
+  };
+};
+
+function sameFindingKey(entry: { fingerprint: string }): string {
+  return entry.fingerprint;
+}
+
+function appendUnresolvableFinding(
+  target: AutoFixUnresolvableFinding[],
+  item: AutoFixUnresolvableFinding,
+): AutoFixUnresolvableFinding[] {
+  const index = target.findIndex((existing) => existing.fingerprint === item.fingerprint);
+  if (index >= 0) target[index] = item;
+  else target.push(item);
+  return target;
+}
+
+function markAutoFixUnresolvable({
+  taskResults,
+  items = [],
+}: {
+  taskResults?: TaskResults | null;
+  items?: AutoFixUnresolvableFinding[];
+}): void {
+  if (!taskResults || items.length === 0) return;
+  const existing = Array.isArray(taskResults.review_unresolvable_findings)
+    ? taskResults.review_unresolvable_findings as AutoFixUnresolvableFinding[]
+    : [];
+  const merged = [...existing];
+  for (const item of items) appendUnresolvableFinding(merged, item);
+  taskResults.review_unresolvable_findings = merged;
+  taskResults.review_human_actions = merged.map((item) => ({
+    action: item.action,
+    finding_id: item.finding_id,
+    fingerprint: item.fingerprint,
+    reason: item.reason,
+    status: item.status,
+  }));
+}
+
+function unresolvableOutcome(items: AutoFixUnresolvableFinding[], round?: number) {
   return {
-    id: "REVIEW-FINDINGS-PERSISTED",
+    id: "REVIEW-FINDINGS-ASK-HUMAN",
     status: "blocked",
-    reason: "review_findings_persisted",
-    message: `Review findings persisted across ${round} round(s); human review is required.`,
+    reason: "auto_fix_unresolvable",
+    message: "Review findings repeated after automatic fix attempts; human review is required.",
     humanNeeded: true,
     meta: {
       round,
-      phase: "REVIEW_FINDINGS_PERSISTED",
-      max_persistent_finding_rounds: maxRounds,
-      persisted_findings: persisted.map((item) => ({
-        finding_id: item.finding.finding_id || item.finding.id || null,
-        fingerprint: item.fingerprint,
-        scanner_id: item.finding.scanner_id || item.finding.rule_id || null,
-        file: item.finding.file || null,
-        line: item.finding.line || null,
-        count: item.count,
-        completed_review_fix: item.completed_review_fix,
-      })),
+      phase: "REVIEW_FINDINGS_ASK_HUMAN",
+      action: "ASK_HUMAN",
       human_needed: true,
+      unresolvable_findings: items,
     },
   };
+}
+
+function unresolvableFindingFor({
+  finding,
+  fingerprint,
+  state,
+  threshold,
+  round,
+}: {
+  finding: Record<string, unknown>;
+  fingerprint: string;
+  state: FindingPersistenceState;
+  threshold: number;
+  round: number;
+}): AutoFixUnresolvableFinding {
+  const attemptRounds = new Set(state.fixHistory.map((item) => item.round));
+  return {
+    status: "auto_fix_unresolvable",
+    action: "ASK_HUMAN",
+    reason: "repeated_review_finding",
+    finding_id: cleanString(finding.finding_id || finding.id) || null,
+    fingerprint,
+    scanner_id: finding.scanner_id || finding.rule_id || null,
+    file: finding.file || finding.path || null,
+    line: finding.line || null,
+    attempts: attemptRounds.size,
+    threshold,
+    first_seen_round: state.firstRound,
+    last_seen_round: round,
+    fix_history: state.fixHistory,
+    remediation: {
+      action: "ASK_HUMAN",
+      reason: "auto_fix_unresolvable",
+    },
+  };
+}
+
+function splitAutoFixUnresolvableFindings({
+  round,
+  findings = [],
+  persistence,
+  threshold,
+}: {
+  round: number;
+  findings?: NormalizedReviewFinding[];
+  persistence: Map<string, FindingPersistenceState>;
+  threshold: number;
+}): { activeFindings: NormalizedReviewFinding[]; unresolvable: AutoFixUnresolvableFinding[] } {
+  const activeFindings: NormalizedReviewFinding[] = [];
+  const unresolvable: AutoFixUnresolvableFinding[] = [];
+
+  for (const finding of findings) {
+    const fingerprint = findingFingerprint(finding as Record<string, unknown>);
+    const state = persistence.get(fingerprint);
+    const repeated = state ? hasRepeatedFailure(state.appearances, threshold, sameFindingKey) : false;
+    const attemptRounds = state ? new Set(state.fixHistory.map((item) => item.round)).size : 0;
+    if (state && attemptRounds >= threshold && repeated) {
+      state.unresolvable = true;
+      const item = unresolvableFindingFor({
+        finding: finding as Record<string, unknown>,
+        fingerprint,
+        state,
+        threshold,
+        round,
+      });
+      Object.assign(finding, {
+        auto_fix_unresolvable: true,
+        status: item.status,
+        resolution: item.status,
+        action: item.action,
+        remediation: item.remediation,
+        fix_history: item.fix_history,
+      });
+      unresolvable.push(item);
+    } else {
+      activeFindings.push(finding);
+    }
+  }
+
+  return {
+    activeFindings,
+    unresolvable,
+  };
+}
+
+function recordFixHistoryForTasks({
+  findings = [],
+  persistence,
+  tasks = [],
+  round,
+  taskType,
+  reviewReportPath,
+  prdPath,
+}: {
+  findings?: NormalizedReviewFinding[];
+  persistence: Map<string, FindingPersistenceState>;
+  tasks?: Array<Record<string, unknown>>;
+  round: number;
+  taskType: "AUTO_FIX" | "CLAUDE_FIX";
+  reviewReportPath: string;
+  prdPath: string;
+}): void {
+  if (tasks.length === 0) return;
+  const sourceToFingerprint = new Map<string, string>();
+  for (const finding of findings) {
+    sourceToFingerprint.set(findingSourceId(finding as Record<string, unknown>), findingFingerprint(finding as Record<string, unknown>));
+  }
+
+  for (const task of tasks) {
+    const taskId = cleanString(task.id);
+    if (!taskId) continue;
+    for (const sourceId of taskSourceFindingIds(task)) {
+      const fingerprint = sourceToFingerprint.get(sourceId) || sourceId;
+      const state = persistence.get(fingerprint);
+      if (!state) continue;
+      const existing = state.fixHistory.find((item) => item.round === round && item.task_type === taskType);
+      if (existing) {
+        if (!existing.task_ids.includes(taskId)) existing.task_ids.push(taskId);
+      } else {
+        state.fixHistory.push({
+          round,
+          task_type: taskType,
+          task_ids: [taskId],
+          review_report_path: reviewReportPath,
+          prd_path: prdPath,
+        });
+      }
+    }
+  }
 }
 
 export async function runReviewLoop({
@@ -248,7 +387,7 @@ export async function runReviewLoop({
   normalizeRepoPath = (value: unknown) => value,
   maxReviewRounds = 5,
   maxReviewTasksPerRound = 5,
-  maxPersistentFindingRounds = 2,
+  maxPersistentFindingRounds,
   config = Object(),
   execFileSync,
   processExecPath = process.execPath,
@@ -298,9 +437,11 @@ export async function runReviewLoop({
     message: string;
     meta: Record<string, unknown>;
   } | null = null;
-  const findingPersistence = new Map<string, { count: number; round: number }>();
+  const findingPersistence = new Map<string, FindingPersistenceState>();
   let lastRoundFindings: NormalizedReviewFinding[] = [];
   const reviewReportPath = defaultReviewReportPath(prdPath);
+  const repeatedFindingThreshold = maxPersistentFindingRounds
+    ?? circuitBreakerThreshold(config, { warn: () => undefined });
   const loadLatestPrd = (): Prd => {
     try {
       return prdPath ? loadPRD(prdPath) : (prd as Prd);
@@ -428,10 +569,15 @@ export async function runReviewLoop({
       for (const finding of findings) {
         const fingerprint = findingFingerprint(finding as Record<string, unknown>);
         const previous = findingPersistence.get(fingerprint);
+        const consecutive = previous?.round === round - 1;
         currentFingerprints.add(fingerprint);
         findingPersistence.set(fingerprint, {
-          count: previous?.round === round - 1 ? previous.count + 1 : 1,
+          count: consecutive ? previous.count + 1 : 1,
           round,
+          firstRound: consecutive ? previous.firstRound : round,
+          appearances: consecutive ? [...previous.appearances, { fingerprint }] : [{ fingerprint }],
+          fixHistory: consecutive ? previous.fixHistory : [],
+          unresolvable: consecutive ? previous.unresolvable : false,
         });
       }
       for (const [fingerprint, state] of findingPersistence.entries()) {
@@ -480,18 +626,49 @@ export async function runReviewLoop({
       logProgress("REVIEW", "", `Scanner 发现 ${findings.length} 条`);
       logReviewGate("review-scanner", "pass", reviewLogMeta({ round, total_findings: findings.length }));
 
-      const persistedBlock = persistentFindingBlock({
+      const { activeFindings, unresolvable } = splitAutoFixUnresolvableFindings({
         round,
-        findings: findings as Array<Record<string, unknown>>,
         persistence: findingPersistence,
-        prd,
-        taskResults,
-        maxRounds: maxPersistentFindingRounds,
+        findings,
+        threshold: repeatedFindingThreshold,
       });
-      if (persistedBlock) {
-        logProgress("REVIEW", "BLOCKED", persistedBlock.message);
-        logReviewError("review finding 持续存在", persistedBlock.message, reviewLogMeta(persistedBlock.meta));
-        recordReviewOutcome(persistedBlock);
+      if (unresolvable.length > 0) {
+        markAutoFixUnresolvable({ taskResults, items: unresolvable });
+        logProgress("REVIEW", "ASK_HUMAN", `${unresolvable.length} 条 finding 已标记 auto_fix_unresolvable`);
+        logReviewGate("review-convergence", "ask_human", reviewLogMeta({
+          round,
+          threshold: repeatedFindingThreshold,
+          unresolvable_findings: unresolvable,
+        }));
+      }
+
+      for (const finding of findings) {
+        const issue = reviewIssueLogInput(finding);
+        const fingerprint = findingFingerprint(finding as Record<string, unknown>);
+        const blocked = unresolvable.some((item) => item.fingerprint === fingerprint);
+        logReviewIssue(
+          issue.severity,
+          issue.file,
+          issue.line,
+          issue.message,
+          reviewLogMeta({
+            round,
+            fix_type: issue.fix_type,
+            finding_id: issue.finding_id,
+            rule_id: issue.rule_id,
+            status: blocked ? "auto_fix_unresolvable" : "found",
+            action: blocked ? "ASK_HUMAN" : undefined,
+          }),
+        );
+      }
+
+      if (activeFindings.length === 0) {
+        const recorded = Array.isArray(taskResults.review_unresolvable_findings)
+          ? taskResults.review_unresolvable_findings as AutoFixUnresolvableFinding[]
+          : unresolvable;
+        const outcome = unresolvableOutcome(recorded, round);
+        logReviewError("review finding 需人工处理", outcome.message, reviewLogMeta(outcome.meta));
+        recordReviewOutcome(outcome);
         break;
       }
 
@@ -503,39 +680,35 @@ export async function runReviewLoop({
           round?: number,
           options?: Record<string, unknown>,
         ) => { autoFixTasks: Array<Record<string, unknown>>; claudeFixTasks: Array<Record<string, unknown>>; infoCount: number };
-        classified = scannerToTasks(findings, round, { reviewReportPath });
+        classified = scannerToTasks(activeFindings, round, { reviewReportPath });
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
         logProgress("REVIEW", "", `scanner-to-task 不可用 (${errMsg})，全部转为 CLAUDE_FIX`);
-        classified = fallbackClassifyFindings(findings, round, { reviewReportPath }) as typeof classified;
+        classified = fallbackClassifyFindings(activeFindings, round, { reviewReportPath }) as typeof classified;
       }
 
       const { autoFixTasks, claudeFixTasks, infoCount } = classified;
 
       logProgress("REVIEW", "", `${autoFixTasks.length} AUTO_FIX, ${claudeFixTasks.length} CLAUDE_FIX, ${infoCount} INFO`);
       logReviewGate("review-classifier", "pass", reviewLogMeta(
-        reviewClassifierMeta({ round, findings, autoFixTasks, claudeFixTasks, infoCount }),
+        {
+          ...reviewClassifierMeta({ round, findings: activeFindings, autoFixTasks, claudeFixTasks, infoCount }),
+          skipped_unresolvable: unresolvable.length,
+        },
       ));
-      for (const finding of findings) {
-        const issue = reviewIssueLogInput(finding);
-        logReviewIssue(
-          issue.severity,
-          issue.file,
-          issue.line,
-          issue.message,
-          reviewLogMeta({
-            round,
-            fix_type: issue.fix_type,
-            finding_id: issue.finding_id,
-            rule_id: issue.rule_id,
-            status: "found",
-          }),
-        );
-      }
 
       let escalatedFromAuto: Array<Record<string, unknown>> = [];
       let autoFixedCount = 0;
       if (autoFixTasks.length > 0) {
+        recordFixHistoryForTasks({
+          findings: activeFindings,
+          persistence: findingPersistence,
+          tasks: autoFixTasks,
+          round,
+          taskType: "AUTO_FIX",
+          reviewReportPath,
+          prdPath,
+        });
         logProgress("REVIEW", "", `执行 ${autoFixTasks.length} 个 AUTO_FIX 任务...`);
         try {
           const mod = await importFromRoot(yoloRoot, "lib/auto-fix.js");
@@ -572,6 +745,15 @@ export async function runReviewLoop({
           logReviewDone("auto_fix_applied", findings.length, autoFixedCount, reviewLogMeta({ round, status: "auto_fix_applied" }));
           continue;
         }
+        const recorded = Array.isArray(taskResults.review_unresolvable_findings)
+          ? taskResults.review_unresolvable_findings as AutoFixUnresolvableFinding[]
+          : [];
+        if (recorded.length > 0) {
+          const outcome = unresolvableOutcome(recorded, round);
+          logReviewError("review finding 需人工处理", outcome.message, reviewLogMeta(outcome.meta));
+          recordReviewOutcome(outcome);
+          break;
+        }
         logProgress("REVIEW", "", "无 CLAUDE_FIX 任务且无 AUTO_FIX 改动，review 完成");
         logReviewDone("pass", findings.length, 0, reviewLogMeta({ round, status: "clean" }));
         reviewCompleted = true;
@@ -607,6 +789,15 @@ export async function runReviewLoop({
         progress,
         tasks: allClaudeTasks,
         ensureTaskShape: ensureReviewTaskShape,
+      });
+      recordFixHistoryForTasks({
+        findings: activeFindings,
+        persistence: findingPersistence,
+        tasks: allClaudeTasks,
+        round,
+        taskType: "CLAUDE_FIX",
+        reviewReportPath,
+        prdPath,
       });
       for (const task of addedReviewTasks) {
         logProgress(String(task.id ?? ""), "ADDED", `${String(task.priority ?? "")} ${String(task.title ?? "")}`);
@@ -717,6 +908,12 @@ export async function runReviewLoop({
         exhausted_review_rounds: true,
       },
     });
+  }
+  const recordedUnresolvableFindings = Array.isArray(taskResults.review_unresolvable_findings)
+    ? taskResults.review_unresolvable_findings as AutoFixUnresolvableFinding[]
+    : [];
+  if (!reviewOutcomeRecorded && !reviewCompleted && recordedUnresolvableFindings.length > 0) {
+    recordReviewOutcome(unresolvableOutcome(recordedUnresolvableFindings));
   }
   if (!reviewOutcomeRecorded && !reviewCompleted && lastRoundFindings.length > 0) {
     recordReviewOutcome({
