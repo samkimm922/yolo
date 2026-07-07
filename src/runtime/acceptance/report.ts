@@ -652,6 +652,14 @@ function summarizeIssues(issues: AcceptanceIssue[] = []): IssueSummary {
 
 const STATUS_FIELDS = new Set(["status", "verdict", "outcome"]);
 
+function isRecoveredAutomationRemediation(record: AcceptanceRecord, field: string, key: string, status: string): boolean {
+  if (key !== "status" || status !== "remediation_required") return false;
+  if (!/^remediation\.items\.\d+\.status$/.test(field)) return false;
+  return record.automation_can_continue === true
+    && record.requires_human !== true
+    && record.unsafe_stop !== true;
+}
+
 function collectReportStatuses(report: unknown, depth = 0, field = "", seen: Set<unknown> = new Set()): StatusEntry[] {
   if (Array.isArray(report)) {
     return report.flatMap((item, index) =>
@@ -664,12 +672,15 @@ function collectReportStatuses(report: unknown, depth = 0, field = "", seen: Set
   const statuses: StatusEntry[] = [];
   for (const [key, value] of Object.entries(record)) {
     const nextField = field ? `${field}.${key}` : key;
+    if (nextField.includes("recent_events") || nextField.includes("recentEvents")) continue;
     if (STATUS_FIELDS.has(key)) {
       const status = clean(value).toLowerCase();
       const wrapperStatus = key === "status" &&
         ["completed", "done"].includes(status) &&
         Boolean(record.report || record.result || record.run_report || record.runReport);
-      if (status && !wrapperStatus) statuses.push({ field: nextField, status });
+      if (status && !wrapperStatus && !isRecoveredAutomationRemediation(record, nextField, key, status)) {
+        statuses.push({ field: nextField, status });
+      }
     }
     if (value && typeof value === "object") {
       statuses.push(...collectReportStatuses(value, depth + 1, nextField, seen));

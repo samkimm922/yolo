@@ -78,6 +78,50 @@ describe("runner core helper execution", () => {
     }
   });
 
+  test("uses the executor default floor for automated acceptance test generation tasks", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-timeout-acceptance-"));
+    try {
+      assert.equal(
+        computeTaskTimeout(
+          [{ file: "test/cli-acceptance.test.ts" }],
+          {
+            rootDir: root,
+            config: { runner: { task_timeout_m: 30, task_timeout_floor_s: 120 } },
+            scope: { max_lines_per_file: 120 },
+            task: {
+              id: "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001",
+              task_kind: "demand_atomic_task",
+              test_generation: { mode: "add_minimal" },
+            },
+          },
+        ),
+        600000,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("does not raise ordinary demand task timeouts to the executor floor", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-timeout-demand-"));
+    try {
+      assert.equal(
+        computeTaskTimeout(
+          [{ file: "src/new-cli.ts" }],
+          {
+            rootDir: root,
+            config: { runner: { task_timeout_m: 30, task_timeout_floor_s: 120 } },
+            scope: { max_lines_per_file: 120 },
+            task: { id: "DEMAND-REQ-001-0010101", task_kind: "demand_atomic_task" },
+          },
+        ),
+        300000,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("allows the task timeout floor to be configured", () => {
     const root = mkdtempSync(join(tmpdir(), "yolo-task-timeout-floor-"));
     try {

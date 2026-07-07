@@ -62,6 +62,9 @@ interface SpecGovernanceSummary extends JsonRecord {
 
 interface RemediationSummary extends JsonRecord {
   item_count: number;
+  active_item_count?: number;
+  historical_item_count?: number;
+  recovered_count?: number;
   automation_continuable_count: number;
   human_required_count: number;
   unsafe_stop_count: number;
@@ -249,6 +252,11 @@ function cleanReviewResult(value: unknown): string {
   return status === "clean" ? "pass" : status;
 }
 
+function reviewIssueBlocksShip(issue: JsonRecord): boolean {
+  const severity = String(issue.severity || "").trim().toUpperCase();
+  return issue.must_fix_before_ship === true || severity === "CRITICAL" || severity === "HIGH";
+}
+
 function stringOrNull(value: unknown): string | null {
   return value == null ? null : String(value);
 }
@@ -366,9 +374,8 @@ function summarizeReviewEvidence(taskLogEntries: JsonRecord[]): ReviewSummary {
     }));
   const done = last(reviewEntries.filter((entry) => entry.type === "DONE"));
   const latestResult = cleanReviewResult(done?.result || done?.status);
-  const latestIssuesFound = asNumber(done?.issues_found);
-  const latestClean = latestResult === "pass" && (latestIssuesFound == null || latestIssuesFound === 0);
-  const activeIssues = latestClean ? [] : issues;
+  const latestPassed = latestResult === "pass";
+  const activeIssues = latestPassed ? issues.filter(reviewIssueBlocksShip) : issues;
   return {
     issue_count: activeIssues.length,
     error_count: errors.length,
@@ -549,7 +556,15 @@ function readTaskResultsFromDisk(stateDir: string, runId: unknown = null): TaskB
   return buckets;
 }
 
-function summarizeRemediation({ taskResults = Object(), stateEvents = [] }: { taskResults?: TaskResultsInput; stateEvents?: JsonRecord[] } = Object()): RemediationSummary {
+function summarizeRemediation({
+  taskResults = Object(),
+  stateEvents = [],
+  recoveredTasks = new Set<unknown>(),
+}: {
+  taskResults?: TaskResultsInput;
+  stateEvents?: JsonRecord[];
+  recoveredTasks?: Set<unknown>;
+} = Object()): RemediationSummary {
   const remediationEntries = Array.isArray(taskResults.remediation) ? taskResults.remediation : [];
   const fromTaskResults = remediationEntries.map((entry) => ({
     source: "task-results",
@@ -574,19 +589,26 @@ function summarizeRemediation({ taskResults = Object(), stateEvents = [] }: { ta
       ts: entry.ts || null,
     }));
   const items = [...fromTaskResults, ...fromEvents];
+  const activeItems = items.filter((item) => !item.task_id || !recoveredTasks.has(item.task_id));
+  const recoveredItems = items.filter((item) => item.task_id && recoveredTasks.has(item.task_id));
   const action_counts: Record<string, number> = Object();
-  for (const item of items) {
+  for (const item of activeItems) {
     const action = String(item.action || "UNKNOWN");
     action_counts[action] = (action_counts[action] || 0) + 1;
   }
   return {
-    item_count: items.length,
-    automation_continuable_count: items.filter((item) => item.automation_can_continue === true).length,
-    human_required_count: items.filter((item) => item.requires_human === true).length,
-    unsafe_stop_count: items.filter((item) => item.unsafe_stop === true).length,
+    item_count: activeItems.length,
+    active_item_count: activeItems.length,
+    historical_item_count: items.length,
+    recovered_count: recoveredItems.length,
+    automation_continuable_count: activeItems.filter((item) => item.automation_can_continue === true).length,
+    human_required_count: activeItems.filter((item) => item.requires_human === true).length,
+    unsafe_stop_count: activeItems.filter((item) => item.unsafe_stop === true).length,
     action_counts,
-    tasks: unique(items.map((item) => item.task_id)),
-    items: items.slice(-20),
+    tasks: unique(activeItems.map((item) => item.task_id)),
+    recovered_tasks: unique(recoveredItems.map((item) => item.task_id)),
+    items: activeItems.slice(-20),
+    recovered_items: recoveredItems.slice(-20),
   };
 }
 
@@ -651,7 +673,7 @@ export function buildRunReport({
     ...(diskBuckets.merged_into || []),
   ]);
   const gates = summarizeGateEvidence({ stateEvents, taskLogEntries, recoveredTasks: recoveredGateTasks });
-  const remediation = summarizeRemediation({ taskResults, stateEvents });
+  const remediation = summarizeRemediation({ taskResults, stateEvents, recoveredTasks: recoveredGateTasks });
   const review = summarizeReviewEvidence(taskLogEntries);
   const fixtures = summarizeFixtureEvidence(stateEvents);
   const specGovernance = summarizeSpecGovernance(stateEvents);

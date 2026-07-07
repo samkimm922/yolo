@@ -2067,7 +2067,7 @@ describe("demand runtime", () => {
       assert.match(syntheticAcceptanceText, /--repo/);
       assert.match(syntheticAcceptanceText, /--output/);
       assert.match(syntheticAcceptanceText, /bad repo/i);
-      for (const requiredText of ["spawnSync", "--repo", "--since", "--until", "--output", "bad repo"]) {
+      for (const requiredText of ["spawnSync", "--repo", "--since", "--until", "--output", "bad repo", "GIT_AUTHOR_DATE", "GIT_COMMITTER_DATE"]) {
         assert.ok(syntheticAcceptance.post_conditions.some((condition) =>
           condition.type === "code_contains" &&
           condition.params?.file === "test/cli-git-weekly.test.ts" &&
@@ -2082,6 +2082,20 @@ describe("demand runtime", () => {
       assert.ok(gitInitCondition, "synthetic acceptance task must gate argv-style git init calls");
       const gitInitPattern = String(gitInitCondition.params?.pattern || gitInitCondition.params?.text || "");
       assert.match('spawnSync("git", ["init"], { cwd: repo });', new RegExp(gitInitPattern));
+      const addedStatsCondition = syntheticAcceptance.post_conditions.find((condition) =>
+        condition.type === "code_matches" && String(condition.message || "").includes("numeric added lines")
+      );
+      const deletedStatsCondition = syntheticAcceptance.post_conditions.find((condition) =>
+        condition.type === "code_matches" && String(condition.message || "").includes("numeric deleted lines")
+      );
+      assert.ok(addedStatsCondition, "synthetic acceptance task must gate concrete added-line assertions");
+      assert.ok(deletedStatsCondition, "synthetic acceptance task must gate concrete deleted-line assertions");
+      const addedStatsPattern = String(addedStatsCondition.params?.pattern || addedStatsCondition.params?.text || "");
+      const deletedStatsPattern = String(deletedStatsCondition.params?.pattern || deletedStatsCondition.params?.text || "");
+      assert.doesNotMatch("assert.ok(result.stdout.includes('Lines Added:'));", new RegExp(addedStatsPattern));
+      assert.doesNotMatch("assert.ok(result.stdout.includes('Lines Deleted:'));", new RegExp(deletedStatsPattern));
+      assert.match("assert.match(stdout, /Lines Added:\\s*[1-9]/);", new RegExp(addedStatsPattern));
+      assert.match("assert.match(stdout, /Lines Deleted:\\s*[1-9]/);", new RegExp(deletedStatsPattern));
       assert.equal(downstreamTypeOrTestTasks.length > 0, true);
       assert.equal(downstreamTypeOrTestTasks.every((task) => task.depends_on.includes(scaffold.id)), true);
     } finally {
@@ -2116,6 +2130,58 @@ describe("demand runtime", () => {
       const scaffold = requirePrdTasks(result.prd)[0];
       assert.equal(scaffold.task_kind, "greenfield_scaffold");
       assertNodeScaffoldToolchain(scaffold);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("git-weekly exact proof is carried into synthetic acceptance gates", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-demand-gitweekly-exact-proof-"));
+    try {
+      const discuss = runDemandDiscussRuntime({
+        ...taskcliDemandInput(root),
+        demand_id: "DEMAND-GIT-WEEKLY-EXACT-PROOF",
+        title: "git-weekly",
+        idea: "Build git-weekly, a local Node.js CLI that summarizes git commits into Markdown.",
+        target_users: ["engineering lead preparing a weekly local repository report"],
+        success_criteria: [
+          "npm test creates a fixture git repository and verifies stdout markdown, --output file writing, author commit list, conventional commit stats, Total commits: 2, Added lines, Deleted lines, and bad --repo nonzero exit.",
+        ],
+        proof: [
+          "The fixture has fixed commit dates in 2026-06-01 to 2026-06-07, Alice makes a feat commit and Bob makes a fix commit; tests assert Alice, Bob, Total commits: 2, feat/fix counts, and numeric added/deleted line stats.",
+        ],
+        non_goals: ["No network calls, no GitHub API, no GUI, and no npm publishing."],
+        decisions: ["Use node:test and spawnSync for CLI acceptance coverage."],
+      });
+
+      const result = runDemandPrdRuntime({
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+        demandPath: discuss.demand_dir,
+        writeArtifacts: false,
+      });
+
+      assert.equal(result.status, "success", JSON.stringify(result.blockers, null, 2));
+      requirePrd(result);
+      const syntheticAcceptance = requirePrdTasks(result.prd).find((task) => task.id === "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001");
+      assert.ok(syntheticAcceptance, "exact git-weekly demand must include synthetic acceptance");
+      const syntheticAcceptanceText = [
+        scaffoldInstructionText(syntheticAcceptance),
+        JSON.stringify(syntheticAcceptance.handoff || {}),
+      ].join("\n");
+      assert.match(syntheticAcceptanceText, /concrete proof values/);
+      for (const requiredText of ["Alice", "Bob", "GIT_AUTHOR_DATE", "GIT_COMMITTER_DATE"]) {
+        assert.ok(syntheticAcceptance.post_conditions.some((condition) =>
+          condition.type === "code_contains" &&
+          condition.params?.text === requiredText
+        ), `synthetic acceptance task must gate test file on ${requiredText}`);
+      }
+      const totalCondition = syntheticAcceptance.post_conditions.find((condition) =>
+        condition.type === "code_matches" && String(condition.message || "").includes("Total commits: 2")
+      );
+      assert.ok(totalCondition, "synthetic acceptance task must gate exact commit total assertions");
+      const totalPattern = String(totalCondition.params?.pattern || totalCondition.params?.text || "");
+      assert.match("assert.match(stdout, /Total Commits:\\s*2/);", new RegExp(totalPattern));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
