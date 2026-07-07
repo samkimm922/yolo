@@ -1659,6 +1659,7 @@ function syntheticAcceptanceBehaviorSpec(taskId = "", proofText = "", testFile =
   return {
     instructions: [
       "This is behavior acceptance, not helper-unit coverage: import spawnSync from node:child_process and execute the CLI process from the test.",
+      "Use node:assert/strict or another throwing assertion API; do not use console.assert because it does not fail node:test.",
       "Create a temporary git fixture repository in the test with git init and dated commits before running the CLI.",
       "Cover a stdout sample by running the CLI with --repo, --since, and --until, then assert the Markdown includes the report title, authors/commits, conventional type counts, totals, and line stats.",
       "Cover --output by passing --output and asserting the Markdown file is written.",
@@ -1783,6 +1784,7 @@ function buildSyntheticAutomatedAcceptanceTask(session = Object(), tasks = [], c
       ].join(" "),
       verification_hint: [
         "Use the approved PRD as the source of behavior; npm test must execute at least one node:test test.",
+        "Use node:assert/strict or another throwing assertion API; do not use console.assert because it does not fail node:test.",
         ...behaviorSpec.instructions,
       ].join(" "),
       project_facts: {

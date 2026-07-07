@@ -38,9 +38,10 @@ function runCommand(command: string, ROOT: string, timeout: number, kind: "test"
       message: `command rejected: ${result.reject_detail}`,
     };
   }
+  const combinedOutput = [result.stdout, result.stderr].filter(Boolean).join("\n");
   return {
     ok: result.ok,
-    out: result.stdout,
+    out: combinedOutput,
     message: result.ok ? "" : (result.command_not_found ? commandUnavailableDetail(kind, command, ROOT) : (result.stderr || result.error || "")),
   };
 }
@@ -58,6 +59,10 @@ function testOutputLooksEmpty(output = ""): boolean {
       || /^(?:#|ℹ)?\s*0\s+tests?\b(?:\s+(?:found|run|executed|passed|total))?$/i.test(trimmed)
       || /^no tests? (?:found|run|executed)\b/i.test(trimmed);
   });
+}
+
+function testOutputHasAssertionFailure(output = ""): boolean {
+  return String(output || "").split(/\r?\n/).some((line) => /\bAssertion failed\b/i.test(line.trim()));
 }
 
 function commandConfig(kind: BuildCommandKind, command: string): Record<string, unknown> {
@@ -102,6 +107,13 @@ export function evalTestsPass(params: EvalParams = {}, _taskScope: TaskScope, RO
     return {
       passed: false,
       detail: `测试命令通过但测试套件为空或报告 0 tests: ${commandWithFile}`,
+      type: "tests_pass",
+    };
+  }
+  if (result.ok && requiresNonEmptyTests(params) && testOutputHasAssertionFailure(result.out)) {
+    return {
+      passed: false,
+      detail: `测试命令通过但输出包含 Assertion failed，可能使用了不会使 node:test 失败的 console.assert: ${commandWithFile}`,
       type: "tests_pass",
     };
   }
