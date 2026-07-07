@@ -61,6 +61,30 @@ function computeTaskTimeoutBounds(runtimeConfig) {
   return { floorMs, capMs };
 }
 
+function cleanTaskSignal(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function hasObject(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isTestOrAcceptanceGenerationTask(task = Object(), scope = Object()) {
+  if (hasObject(task.test_generation) || hasObject(task.testGeneration)) return true;
+  const taskKind = cleanTaskSignal(task.task_kind || task.taskKind || scope.task_kind || scope.taskKind);
+  if (/(^|[_-])(test|tests|testing|acceptance|verification)([_-]|$)/.test(taskKind)) return true;
+  const signals = [
+    task.id,
+    task.title,
+    task.description,
+    task.handoff?.category,
+    task.handoff?.touchpoint,
+  ].map(cleanTaskSignal).join(" ");
+  return /automated[-_\s]?acceptance[-_\s]?test/.test(signals)
+    || /acceptance[-_\s]?test/.test(signals)
+    || /test[-_\s]?generation/.test(signals);
+}
+
 function declaredTargetLineBudget(target, scope = Object()) {
   return positiveFiniteNumber(target?.max_lines_per_file)
     ?? positiveFiniteNumber(target?.maxLinesPerFile)
@@ -69,7 +93,7 @@ function declaredTargetLineBudget(target, scope = Object()) {
     ?? null;
 }
 
-export function computeTaskTimeout(targets, { rootDir, config = loadedConfig, scope = Object() } = Object()) {
+export function computeTaskTimeout(targets, { rootDir, config = loadedConfig, scope = Object(), task = Object() } = Object()) {
   let totalLines = 0;
   for (const target of (targets || [])) {
     const declaredLines = declaredTargetLineBudget(target, scope);
@@ -84,7 +108,11 @@ export function computeTaskTimeout(targets, { rootDir, config = loadedConfig, sc
       if (declaredLines) totalLines += declaredLines;
     }
   }
-  const { floorMs, capMs } = computeTaskTimeoutBounds(config);
+  const bounds = computeTaskTimeoutBounds(config);
+  const floorMs = isTestOrAcceptanceGenerationTask(task, scope)
+    ? Math.max(bounds.floorMs, DEFAULT_EXECUTOR_TIMEOUT_MS)
+    : bounds.floorMs;
+  const capMs = Math.max(bounds.capMs, floorMs);
   const scaledMs = totalLines * TASK_TIMEOUT_MS_PER_LINE;
   return Math.max(floorMs, Math.min(scaledMs, capMs));
 }

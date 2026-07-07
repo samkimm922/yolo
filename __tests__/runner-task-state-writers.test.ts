@@ -12,6 +12,7 @@ import {
   passTaskTransition,
   skipTaskTransition,
 } from "../src/runtime/task-state/transitions.js";
+import { inspectSpecGovernance } from "../src/spec/traceability.js";
 
 describe("runner task state writers", () => {
   test("appends task result JSONL with default timestamp", () => {
@@ -147,8 +148,73 @@ describe("runner task state writers", () => {
 
       assert.equal(result.wrote, true);
       const prd = JSON.parse(readFileSync(prdPath, "utf8"));
-      assert.deepEqual(prd.tasks[0], { id: "FIX-STATE-003", status: "done", phase: "done" });
+      assert.deepEqual(prd.tasks[0], {
+        id: "FIX-STATE-003",
+        status: "done",
+        phase: "done",
+        evidence_files: [".yolo/state/task-results.jsonl#FIX-STATE-003"],
+      });
       assert.deepEqual(prd.tasks[1], { id: "FIX-STATE-004", status: "pending" });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("terminal PRD updates add task result evidence for spec governance", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-state-"));
+    try {
+      const prdPath = join(root, "prd.json");
+      writeFileSync(prdPath, JSON.stringify({
+        requirements: [{ id: "REQ-1", text: "Known requirement." }],
+        designs: [{ id: "DES-1", text: "Known design." }],
+        tasks: [{
+          id: "FIX-STATE-EVIDENCE-001",
+          status: "pending",
+          requirement_ids: ["REQ-1"],
+          design_ids: ["DES-1"],
+        }],
+      }), "utf8");
+
+      const result = updatePrdTaskStatusFile(prdPath, "FIX-STATE-EVIDENCE-001", {
+        status: "done",
+        phase: "done",
+      });
+
+      assert.equal(result.wrote, true);
+      const prd = JSON.parse(readFileSync(prdPath, "utf8"));
+      assert.deepEqual(prd.tasks[0].evidence_files, [
+        ".yolo/state/task-results.jsonl#FIX-STATE-EVIDENCE-001",
+      ]);
+      assert.equal(inspectSpecGovernance(prd, {
+        requireRequirements: true,
+        requireDesign: true,
+        requireEvidenceForTerminal: true,
+      }).status, "pass");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("terminal PRD updates preserve existing evidence refs", () => {
+    const root = mkdtempSync(join(tmpdir(), "yolo-task-state-"));
+    try {
+      const prdPath = join(root, "prd.json");
+      writeFileSync(prdPath, JSON.stringify({
+        tasks: [{
+          id: "FIX-STATE-EVIDENCE-002",
+          status: "pending",
+          evidence_files: ["state/evidence/custom.json#FIX-STATE-EVIDENCE-002"],
+        }],
+      }), "utf8");
+
+      const result = updatePrdTaskStatusFile(prdPath, "FIX-STATE-EVIDENCE-002", {
+        status: "done",
+        phase: "done",
+      });
+
+      assert.equal(result.wrote, true);
+      const prd = JSON.parse(readFileSync(prdPath, "utf8"));
+      assert.deepEqual(prd.tasks[0].evidence_files, ["state/evidence/custom.json#FIX-STATE-EVIDENCE-002"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -198,7 +264,12 @@ describe("runner task state writers", () => {
       assert.equal(result.wrote, true, "must write when target task is valid even with null siblings");
       assert.equal(result.reason, undefined);
       const prd = JSON.parse(readFileSync(prdPath, "utf8"));
-      assert.deepEqual(prd.tasks[1], { id: "FIX-STATE-NULL-001", status: "done", phase: "done" });
+      assert.deepEqual(prd.tasks[1], {
+        id: "FIX-STATE-NULL-001",
+        status: "done",
+        phase: "done",
+        evidence_files: [".yolo/state/task-results.jsonl#FIX-STATE-NULL-001"],
+      });
       // Untouched sibling slots stay as-is; we only update the matched task.
       assert.equal(prd.tasks[0], null);
       assert.equal(prd.tasks[2], "not-an-object");

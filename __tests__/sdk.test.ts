@@ -1545,6 +1545,9 @@ describe("yolo sdk", () => {
       writeFileSync(join(root, "src/cli.ts"), [
         "function main(markdown: string) {",
         "  console.log(markdown);",
+        "  console.log(`Usage: cli [options]",
+        "",
+        "Options:`);",
         "  console.log('debug');",
         "}",
       ].join("\n"), "utf8");
@@ -1558,7 +1561,7 @@ describe("yolo sdk", () => {
 
       const consoleFindings = result.findings.filter((finding) => finding.scanner_id === "debug-console-log");
       assert.equal(consoleFindings.length, 1);
-      assert.equal(consoleFindings[0].line, 3);
+      assert.equal(consoleFindings[0].line, 6);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

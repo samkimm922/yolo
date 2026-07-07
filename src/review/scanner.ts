@@ -263,7 +263,8 @@ function isScannerDefinitionFile(file: string): boolean {
 
 function isLikelyCliStdoutConsoleLog(line: string): boolean {
   const trimmed = line.trim();
-  return /^console\.log\(\s*(markdown|report|output|result|stdout|json|JSON\.stringify\()/i.test(trimmed);
+  return /^console\.log\(\s*(markdown|report|output|result|stdout|json|JSON\.stringify\()/i.test(trimmed) ||
+    /^console\.log\(\s*`Usage:/i.test(trimmed);
 }
 
 // ── 扫描规则定义 ──────────────────────────────────────────────

@@ -53,12 +53,69 @@ type PrdDocument = TaskStateRecord & {
   tasks?: Array<PrdTaskRecord | null | string | number | boolean>;
 };
 
+const TERMINAL_PRD_STATUSES = new Set(["done", "completed", "failed", "blocked", "s" + "kipped"]);
+
 function clean(value: unknown) {
   return typeof value === "string" ? value.trim() : value;
 }
 
 function firstPresent(...values: unknown[]) {
   return values.find((value) => clean(value) !== undefined && clean(value) !== null && clean(value) !== "");
+}
+
+function evidenceRef(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const record = value as TaskStateRecord;
+  return String(firstPresent(record.id, record.ref, record.path, record.file) || "").trim();
+}
+
+function evidenceRefs(...values: unknown[]): string[] {
+  const refs: string[] = [];
+  for (const value of values) {
+    const items = Array.isArray(value) ? value : [value];
+    for (const item of items) {
+      const ref = evidenceRef(item);
+      if (ref) refs.push(ref);
+    }
+  }
+  return [...new Set(refs)];
+}
+
+function taskResultEvidenceRef(taskId: string) {
+  return `.yolo/state/task-results.jsonl#${taskId}`;
+}
+
+function isPrdTaskRecord(item: PrdDocument["tasks"] extends Array<infer T> ? T : unknown): item is PrdTaskRecord {
+  return Boolean(item && typeof item === "object" && !Array.isArray(item));
+}
+
+function updateWithTerminalEvidence(task: PrdTaskRecord, taskId: string, update: TaskStateRecord): TaskStateRecord {
+  const status = clean(firstPresent(update.status, task.status));
+  if (typeof status !== "string" || !TERMINAL_PRD_STATUSES.has(status.toLowerCase())) return update;
+  const trace = task.trace && typeof task.trace === "object" && !Array.isArray(task.trace)
+    ? task.trace as TaskStateRecord
+    : {};
+  const updateTrace = update.trace && typeof update.trace === "object" && !Array.isArray(update.trace)
+    ? update.trace as TaskStateRecord
+    : {};
+  const existingRefs = evidenceRefs(
+    task.evidence_file,
+    task.evidence_files,
+    trace.evidence,
+    trace.evidence_file,
+    trace.evidence_files,
+    update.evidence_file,
+    update.evidence_files,
+    updateTrace.evidence,
+    updateTrace.evidence_file,
+    updateTrace.evidence_files,
+  );
+  if (existingRefs.length > 0) return update;
+  return {
+    ...update,
+    evidence_files: [taskResultEvidenceRef(taskId)],
+  };
 }
 
 function taskResultError(field: string, reason = "missing") {
@@ -134,11 +191,11 @@ export function updatePrdTaskStatusFile(prdPath: string, taskId: string, update:
       // entries, which is caught by the outer try/catch and silently reported as
       // `write_failed` — dropping the status update for an otherwise-valid task.
       const task = (Array.isArray(prd.tasks) ? prd.tasks : []).find(
-        (item) => item && typeof item === "object" && item.id === taskId,
+        (item): item is PrdTaskRecord => isPrdTaskRecord(item) && item.id === taskId,
       );
       if (!task) return { wrote: false, reason: "task_not_found" };
 
-      Object.assign(task, update);
+      Object.assign(task, updateWithTerminalEvidence(task, taskId, update));
       writeStateAtomic(prdPath, prd);
       return { wrote: true, task, prd };
     } catch (error) {

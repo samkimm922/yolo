@@ -191,6 +191,10 @@ describe("session attempt helpers", () => {
           rootDir: "/repo",
           config: { build: { type_check: "npm run typecheck" } },
           scope: { targets: [{ file: "src/a.ts" }] },
+          task: {
+            id: "FIX-SESSION-ATTEMPT",
+            scope: { targets: [{ file: "src/a.ts" }] },
+          },
         });
         return 12345;
       },

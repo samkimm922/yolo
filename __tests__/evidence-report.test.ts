@@ -497,6 +497,121 @@ describe("evidence run report", () => {
     }
   });
 
+  test("buildRunReport keeps non-blocking review findings historical after pass", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", {
+        run_id: "RUN-REVIEW-ADVISORY",
+        prd: "data/prd.json",
+        tasks: 1,
+      }, { now: "2026-06-05T12:05:00.000Z" });
+      const taskLogsDir = join(stateDir, "runtime", "task-logs");
+      mkdirSync(taskLogsDir, { recursive: true });
+      writeFileSync(join(taskLogsDir, "_review.jsonl"), [
+        JSON.stringify({
+          ts: "2026-06-05T12:05:10.000Z",
+          run_id: "RUN-REVIEW-ADVISORY",
+          task_id: "_review",
+          type: "REVIEW_ISSUE",
+          severity: "LOW",
+          fix_type: "AUTO_FIX",
+          file: "src/cli.ts",
+          line: 18,
+          message: "advisory cleanup",
+          must_fix_before_ship: false,
+        }),
+        JSON.stringify({
+          ts: "2026-06-05T12:05:20.000Z",
+          run_id: "RUN-REVIEW-ADVISORY",
+          task_id: "_review",
+          type: "DONE",
+          result: "pass",
+          issues_found: 1,
+          issues_fixed: 0,
+        }),
+      ].join("\n") + "\n", "utf8");
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-REVIEW-ADVISORY",
+        taskResults: {
+          completed: ["FIX-1"],
+          failed: [],
+          skipped: [],
+          blocked: [],
+        },
+        progressTotal: 1,
+      });
+
+      assert.equal(report.status, "success");
+      assert.equal(report.summary.evidence_failures, 0);
+      assert.equal(report.review.issue_count, 0);
+      assert.equal(report.review.historical_issue_count, 1);
+      assert.equal(report.review.latest_result, "pass");
+      assert.equal(report.review.latest_issues_found, 1);
+      const finalAnswer = buildRunFinalAnswer(report);
+      assert.equal(finalAnswer.outcome, "success");
+      assert.ok(finalAnswer.checks.some((check) => check.name === "review" && check.status === "pass"));
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("buildRunReport keeps blocking review findings active after pass", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", {
+        run_id: "RUN-REVIEW-BLOCKING",
+        prd: "data/prd.json",
+        tasks: 1,
+      }, { now: "2026-06-05T12:06:00.000Z" });
+      const taskLogsDir = join(stateDir, "runtime", "task-logs");
+      mkdirSync(taskLogsDir, { recursive: true });
+      writeFileSync(join(taskLogsDir, "_review.jsonl"), [
+        JSON.stringify({
+          ts: "2026-06-05T12:06:10.000Z",
+          run_id: "RUN-REVIEW-BLOCKING",
+          task_id: "_review",
+          type: "REVIEW_ISSUE",
+          severity: "HIGH",
+          file: "src/server.ts",
+          line: 4,
+          message: "blocking finding",
+        }),
+        JSON.stringify({
+          ts: "2026-06-05T12:06:20.000Z",
+          run_id: "RUN-REVIEW-BLOCKING",
+          task_id: "_review",
+          type: "DONE",
+          result: "pass",
+          issues_found: 1,
+          issues_fixed: 0,
+        }),
+      ].join("\n") + "\n", "utf8");
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-REVIEW-BLOCKING",
+        taskResults: {
+          completed: ["FIX-1"],
+          failed: [],
+          skipped: [],
+          blocked: [],
+        },
+        progressTotal: 1,
+      });
+
+      assert.equal(report.status, "error");
+      assert.equal(report.summary.evidence_failures, 1);
+      assert.equal(report.review.issue_count, 1);
+      const finalAnswer = buildRunFinalAnswer(report);
+      assert.equal(finalAnswer.outcome, "needs_attention");
+      assert.ok(finalAnswer.blockers.some((blocker) => blocker.includes("review issues: 1")));
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
   test("buildRunReport fails evidence integrity when ledger hash chain is invalid", () => {
     const stateDir = tempStateDir();
     try {
@@ -818,11 +933,56 @@ describe("evidence run report", () => {
       assert.equal(report.summary.evidence_failures, 0);
       assert.equal(report.gates.failed_count, 0);
       assert.deepEqual(report.gates.failed_tasks, []);
-      assert.equal(report.remediation.item_count, 1);
+      assert.equal(report.remediation.item_count, 0);
+      assert.equal(report.remediation.historical_item_count, 1);
+      assert.equal(report.remediation.recovered_count, 1);
       const finalAnswer = buildRunFinalAnswer(report);
       assert.equal(finalAnswer.outcome, "success");
       assert.deepEqual(finalAnswer.blockers, []);
       assert.equal(finalAnswer.checks.find((check) => check.name === "remediation")?.status, "pass");
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("buildRunReport does not block on human or unsafe remediation recovered by later task pass", () => {
+    const stateDir = tempStateDir();
+    try {
+      appendRunEvent(stateDir, "run_start", { run_id: "RUN-RECOVERED-REMEDIATION", prd: "data/prd.json", tasks: 1 }, { now: "2026-05-24T10:00:00.000Z" });
+      appendStateEvent(stateDir, "gate_remediation", {
+        run_id: "RUN-RECOVERED-REMEDIATION",
+        task_id: "ACCEPTANCE-1",
+        status: "remediation_required",
+        action: "ASK_HUMAN",
+        automation_can_continue: false,
+        requires_human: true,
+        unsafe_stop: true,
+      }, { now: "2026-05-24T10:00:20.000Z", source: "runner-gate" });
+      appendRunEvent(stateDir, "run_end", { run_id: "RUN-RECOVERED-REMEDIATION", duration_sec: "5" }, { now: "2026-05-24T10:01:00.000Z" });
+
+      const runtimeDir = join(stateDir, "runtime");
+      mkdirSync(runtimeDir, { recursive: true });
+      writeFileSync(join(runtimeDir, "task-results.jsonl"), [
+        JSON.stringify({ task_id: "ACCEPTANCE-1", run_id: "RUN-RECOVERED-REMEDIATION", status: "FAIL", timestamp: "2026-05-24T10:00:25.000Z" }),
+        JSON.stringify({ task_id: "ACCEPTANCE-1", run_id: "RUN-RECOVERED-REMEDIATION", status: "PASS", timestamp: "2026-05-24T10:00:45.000Z" }),
+      ].join("\n") + "\n", "utf8");
+
+      const report = buildRunReport({
+        stateDir,
+        runId: "RUN-RECOVERED-REMEDIATION",
+        progressTotal: 1,
+      });
+      const finalAnswer = buildRunFinalAnswer(report);
+
+      assert.equal(report.status, "success");
+      assert.equal(report.summary.evidence_failures, 0);
+      assert.equal(report.remediation.item_count, 0);
+      assert.equal(report.remediation.historical_item_count, 1);
+      assert.equal(report.remediation.recovered_count, 1);
+      assert.equal(report.remediation.human_required_count, 0);
+      assert.equal(report.remediation.unsafe_stop_count, 0);
+      assert.equal(finalAnswer.outcome, "success");
+      assert.deepEqual(finalAnswer.blockers, []);
     } finally {
       rmSync(stateDir, { recursive: true, force: true });
     }

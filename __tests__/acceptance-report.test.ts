@@ -900,6 +900,99 @@ describe("acceptance report", () => {
     }
   });
 
+  test("accepts recovered automation remediation as clean run history", () => {
+    const root = tempProject();
+    try {
+      const autoRemediation = {
+        source: "state",
+        task_id: "DEMAND-AUTOMATED-ACCEPTANCE-TEST-001",
+        action: "REROUTE_REVIEW_FIX",
+        status: "remediation_required",
+        automation_can_continue: true,
+        requires_human: false,
+        unsafe_stop: false,
+      };
+      const report = buildAcceptanceReport({
+        prd: prd({
+          scope: { targets: [{ file: "src/services/inventory.ts" }] },
+          post_conditions: [{
+            id: "POST-SERVICE",
+            type: "target_file_modified",
+            severity: "FAIL",
+            params: { file: "src/services/inventory.ts" },
+          }],
+        }),
+        runReport: {
+          run_id: "run-recovered-remediation",
+          status: "success",
+          summary: { planned: 1, completed: 1, failed: 0, blocked: 0, skipped: 0, evidence_failures: 0 },
+          gates: { failed_count: 0, failures: [] },
+          review: { issue_count: 0, error_count: 0 },
+          remediation: {
+            item_count: 1,
+            automation_continuable_count: 1,
+            human_required_count: 0,
+            unsafe_stop_count: 0,
+            items: [autoRemediation],
+          },
+          recent_events: [{ event: "gate_remediation", status: "remediation_required" }],
+        },
+        reviewReport: { status: "completed", findings: [] },
+        uiEvidence: {
+          page_reachable: true,
+          critical_path_passed: true,
+          required_state_present: true,
+          screenshots: ["state/evidence/ui.png"],
+        },
+        resolver: { selected: { acceptance_adapter: { id: "local-browser" } }, blockers: [] },
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+      });
+
+      assert.equal(report.status, "pass", JSON.stringify(report.issues, null, 2));
+      assert.equal(report.issues.some((item) => item.code === "RUN_REPORT_NOT_CLEAN"), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("still blocks run reports with unresolved human remediation", () => {
+    const root = tempProject();
+    try {
+      const report = buildAcceptanceReport({
+        prd: prd({ scope: { targets: [{ file: "src/services/inventory.ts" }] } }),
+        runReport: {
+          status: "success",
+          summary: { completed: 1, failed: 0, blocked: 0, evidence_failures: 0 },
+          remediation: {
+            item_count: 1,
+            automation_continuable_count: 0,
+            human_required_count: 1,
+            unsafe_stop_count: 0,
+            items: [{
+              task_id: "T-HUMAN",
+              action: "ASK_HUMAN",
+              status: "remediation_required",
+              automation_can_continue: false,
+              requires_human: true,
+              unsafe_stop: false,
+            }],
+          },
+        },
+        reviewReport: { findings: [] },
+        projectRoot: root,
+        stateRoot: join(root, ".yolo"),
+      });
+
+      assert.equal(report.status, "blocked");
+      const issue = report.issues.find((item) => item.code === "RUN_REPORT_NOT_CLEAN");
+      assert.ok(issue, JSON.stringify(report.issues, null, 2));
+      assert.equal(issue.non_pass_statuses.some((entry) => entry.field === "remediation.items.0.status"), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("blocks warning dry-run and nested non-pass run reports", () => {
     const root = tempProject();
     try {

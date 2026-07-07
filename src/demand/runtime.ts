@@ -1640,7 +1640,7 @@ function syntheticAcceptanceBehaviorSpec(taskId = "", proofText = "", testFile =
     return { instructions: [], criteria: [], postConditions: [] };
   }
 
-  const behaviorMarkers = [
+  const behaviorMarkers: Array<{ label: string; type: string; params: Record<string, unknown> }> = [
     { label: "spawnSync", type: "code_contains", params: { file: testFile, text: "spawnSync" } },
     {
       label: "git init",
@@ -1656,6 +1656,40 @@ function syntheticAcceptanceBehaviorSpec(taskId = "", proofText = "", testFile =
     { label: "--output", type: "code_contains", params: { file: testFile, text: "--output" } },
     { label: "bad repo", type: "code_contains", params: { file: testFile, text: "bad repo" } },
   ];
+  const proofSpecificInstructions: string[] = [];
+  const isGitWeeklyProof = /git[-_\s]?weekly|weekly report|周报|conventional|commit 类型|Total commits|总 commit|总提交|insertions|deletions|added\/deleted|增删行|line stats/i.test(text);
+  if (isGitWeeklyProof) {
+    proofSpecificInstructions.push(
+      "For git weekly reports, assert concrete proof values instead of headings only: distinct fixture authors, conventional type counts, total commit count, and numeric added/deleted line stats.",
+      "Set both GIT_AUTHOR_DATE and GIT_COMMITTER_DATE on fixture commits so date-window assertions are deterministic.",
+      "Make the fixture include both an addition and a deletion when line stats are part of the proof, then assert non-zero added and deleted counts.",
+    );
+    if (/Alice/i.test(text)) behaviorMarkers.push({ label: "Alice fixture author", type: "code_contains", params: { file: testFile, text: "Alice" } });
+    if (/Bob/i.test(text)) behaviorMarkers.push({ label: "Bob fixture author", type: "code_contains", params: { file: testFile, text: "Bob" } });
+    if (/(?:fixed|dated|固定).*commit|GIT_AUTHOR_DATE|2026-\d{2}-\d{2}|日期/i.test(text)) {
+      behaviorMarkers.push({ label: "GIT_AUTHOR_DATE", type: "code_contains", params: { file: testFile, text: "GIT_AUTHOR_DATE" } });
+      behaviorMarkers.push({ label: "GIT_COMMITTER_DATE", type: "code_contains", params: { file: testFile, text: "GIT_COMMITTER_DATE" } });
+    }
+    if (/(?:Total commits|Total Commits|总 commit|总提交)[^\n]{0,40}\b2\b/i.test(text)) {
+      behaviorMarkers.push({
+        label: "Total commits: 2 assertion",
+        type: "code_matches",
+        params: { file: testFile, pattern: String.raw`Total\s+[Cc]ommits[\s\S]{0,120}(?:\b2\b|toMatch\([^)]*2|match\([^)]*2)` },
+      });
+    }
+    if (/(?:insertions|deletions|added\/deleted|added lines|deleted lines|Lines Added|Lines Deleted|增删行|line stats|行数)/i.test(text)) {
+      behaviorMarkers.push({
+        label: "numeric added lines assertion",
+        type: "code_matches",
+        params: { file: testFile, pattern: String.raw`(?:Lines Added|Added lines|insertions|added)[\s\S]{0,160}(?:\\\[1-9\\\]|\b[1-9]\d*\b)` },
+      });
+      behaviorMarkers.push({
+        label: "numeric deleted lines assertion",
+        type: "code_matches",
+        params: { file: testFile, pattern: String.raw`(?:Lines Deleted|Deleted lines|deletions|deleted)[\s\S]{0,160}(?:\\\[1-9\\\]|\b[1-9]\d*\b)` },
+      });
+    }
+  }
   return {
     instructions: [
       "This is behavior acceptance, not helper-unit coverage: import spawnSync from node:child_process and execute the CLI process from the test.",
@@ -1665,10 +1699,12 @@ function syntheticAcceptanceBehaviorSpec(taskId = "", proofText = "", testFile =
       "Cover --output by passing --output and asserting the Markdown file is written.",
       "Cover bad repo by running a bad repo path and asserting a non-zero exit status.",
       "Do not duplicate implementation helper functions in the test instead of invoking the CLI.",
+      ...proofSpecificInstructions,
     ],
     criteria: [
       "The node:test file executes the CLI process with spawnSync against a git init fixture repository.",
       "The test asserts stdout Markdown for --repo/--since/--until, --output file writing, and bad repo non-zero exit behavior.",
+      ...(isGitWeeklyProof ? ["Git weekly tests assert concrete author, type-count, commit-count, and numeric line-stat values from the approved proof."] : []),
     ],
     postConditions: behaviorMarkers.map((marker, index) => ({
       id: `POST-${taskId}-BEHAVIOR-${index + 1}`,
